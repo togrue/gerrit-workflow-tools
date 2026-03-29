@@ -7,10 +7,9 @@ from pathlib import Path
 from gerrit_workflow_tools.config import default_push_mode, stop_patterns
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import (
-    commit_subject_and_body,
-    list_stack_commits,
     merge_base_with_target,
     parse_change_id,
+    stack_commits_metadata_one_log,
     stack_shas_and_subjects_one_log,
 )
 
@@ -176,8 +175,8 @@ def change_id_rows_for_range(
     *,
     head: str = "HEAD",
 ) -> list[tuple[str, str, str | None]]:
-    shas = list_stack_commits(cwd, merge_base, head=head)
-    return _rows_for_shas(cwd, shas)
+    meta = stack_commits_metadata_one_log(cwd, f"{merge_base}..{head}")
+    return [(sha, short, parse_change_id(raw)) for sha, short, _sub, raw in meta]
 
 
 def change_id_rows_for_rev_range(
@@ -185,18 +184,7 @@ def change_id_rows_for_rev_range(
     start_exclusive: str,
     end_inclusive: str,
 ) -> list[tuple[str, str, str | None]]:
-    from gerrit_workflow_tools.stack import rev_list_reverse
-
-    shas = rev_list_reverse(cwd, start_exclusive, end_inclusive)
-    return _rows_for_shas(cwd, shas)
-
-
-def _rows_for_shas(
-    cwd: Path | str | None, shas: list[str]
-) -> list[tuple[str, str, str | None]]:
-    rows: list[tuple[str, str, str | None]] = []
-    for sha in shas:
-        short = git_out("rev-parse", "--short", sha, cwd=cwd)
-        _, body = commit_subject_and_body(cwd, sha)
-        rows.append((sha, short, parse_change_id(body)))
-    return rows
+    meta = stack_commits_metadata_one_log(
+        cwd, f"{start_exclusive}..{end_inclusive}"
+    )
+    return [(sha, short, parse_change_id(raw)) for sha, short, _sub, raw in meta]

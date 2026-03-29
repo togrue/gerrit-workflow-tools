@@ -65,6 +65,50 @@ def rev_list_reverse(
     return [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
 
 
+# Field separator in `git log --format` (ASCII RS). Avoids NUL in argv (Windows
+# subprocess rejects embedded nulls); %x1e is expanded by git, not by the shell.
+_RS = "\x1e"
+
+
+def _parse_rs_metadata_records(stdout: str) -> list[tuple[str, str, str, str]]:
+    """Parse git log output from stack_commits_metadata_one_log format."""
+    parts = stdout.split(_RS)
+    while parts and parts[-1] == "":
+        parts.pop()
+    out: list[tuple[str, str, str, str]] = []
+    for i in range(0, len(parts), 4):
+        if i + 3 >= len(parts):
+            break
+        a, b, c, d = (parts[i].strip(), parts[i + 1].strip(), parts[i + 2].strip(), parts[i + 3].strip())
+        out.append((a, b, c, d))
+    return out
+
+
+def stack_commits_metadata_one_log(
+    cwd: Path | str | None,
+    rev_range: str,
+) -> list[tuple[str, str, str, str]]:
+    """
+    Oldest-first commits in rev_range (e.g. 'merge_base..HEAD').
+
+    One ``git log`` call. Each tuple is (full_sha, short_sha, subject, raw_message)
+    where raw_message is the same as ``git log -1 --format=%B`` for that commit.
+    """
+    # Git expands %x1e to ASCII RS; keeps argv free of NUL (required on Windows).
+    fmt = "%H%x1e%h%x1e%s%x1e%B%x1e"
+    p = git(
+        "log",
+        "--reverse",
+        rev_range,
+        f"--format={fmt}",
+        cwd=cwd,
+        check=False,
+    )
+    if p.returncode != 0:
+        return []
+    return _parse_rs_metadata_records(p.stdout)
+
+
 def stack_shas_and_subjects_one_log(
     cwd: Path | str | None,
     merge_base: str,
@@ -74,30 +118,17 @@ def stack_shas_and_subjects_one_log(
     """
     Oldest-first SHAs and subject lines for merge_base..head using one git log.
     """
-    p = git(
-        "log",
-        "--reverse",
-        f"{merge_base}..{head}",
-        "--format=%H%n%s",
-        cwd=cwd,
-        check=False,
-    )
-    if p.returncode != 0:
-        return [], []
-    lines = p.stdout.splitlines()
-    shas: list[str] = []
-    subjects: list[str] = []
-    for i in range(0, len(lines), 2):
-        if i + 1 < len(lines):
-            shas.append(lines[i].strip())
-            subjects.append(lines[i + 1])
+    rows = stack_commits_metadata_one_log(cwd, f"{merge_base}..{head}")
+    shas = [r[0] for r in rows]
+    subjects = [r[2] for r in rows]
     return shas, subjects
 
 
 def commit_subject_and_body(cwd: Path | str | None, sha: str) -> tuple[str, str]:
-    sub = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
-    body = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
-    return sub, body
+    raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
+    lines = raw.splitlines()
+    sub = lines[0] if lines else ""
+    return sub, raw
 
 
 def _first_blocking_pattern(subject: str, patterns: list[str]) -> str | None:
@@ -148,29 +179,22 @@ def build_stack(
     """
     mb, target_display, _base_ref = merge_base_with_target(cwd, branch)
     pats = patterns if patterns is not None else stop_patterns(cwd)
-    shas = list_stack_commits(cwd, mb)
-    subjects: list[str] = []
-    bodies: list[str] = []
-    for sha in shas:
-        sub, body = commit_subject_and_body(cwd, sha)
-        subjects.append(sub)
-        bodies.append(body)
+    rows = stack_commits_metadata_one_log(cwd, f"{mb}..HEAD")
+    subjects = [r[2] for r in rows]
     labels = (
         _ready_labels_for_stack(subjects, pats)
         if with_ready_state
-        else ["ready"] * len(shas)
+        else ["ready"] * len(rows)
     )
     commits: list[StackCommit] = []
-    for i, sha in enumerate(shas, start=1):
-        sub = subjects[i - 1]
-        body = bodies[i - 1]
-        cid = parse_change_id(body)
+    for i, (sha, short, sub, raw) in enumerate(rows, start=1):
+        cid = parse_change_id(raw)
         st = labels[i - 1]
         commits.append(
             StackCommit(
                 index=i,
                 sha=sha,
-                short_sha=git_out("rev-parse", "--short", sha, cwd=cwd),
+                short_sha=short,
                 subject=sub,
                 change_id=cid,
                 ready_state=st,
@@ -198,20 +222,21 @@ def resolve_stack_commit(
     if CHANGE_ID_VALUE_RE.match(s):
         mb, _, _ = merge_base_with_target(cwd, branch)
         want = s.lower()
-        matches: list[str] = []
-        for sha in list_stack_commits(cwd, mb):
-            _, body = commit_subject_and_body(cwd, sha)
-            cid = parse_change_id(body)
+        matches: list[tuple[str, str]] = []
+        for sha, short, _sub, raw in stack_commits_metadata_one_log(
+            cwd, f"{mb}..HEAD"
+        ):
+            cid = parse_change_id(raw)
             if cid and cid.lower() == want:
-                matches.append(sha)
+                matches.append((sha, short))
         if not matches:
             raise GitError(f"no commit in current stack with Change-Id {s}")
         if len(matches) > 1:
-            shorts = [git_out("rev-parse", "--short", x, cwd=cwd) for x in matches]
+            shorts = [m[1] for m in matches]
             raise GitError(
                 f"ambiguous Change-Id {s} in stack ({', '.join(shorts)})"
             )
-        return matches[0]
+        return matches[0][0]
     return git_out("rev-parse", s, cwd=cwd)
 
 
