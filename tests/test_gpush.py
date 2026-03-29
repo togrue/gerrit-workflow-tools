@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from gerrit_workflow_tools.cli_gpush import main as gpush_main
 from tests.conftest import run_cli
-from tests.fixtures import make_stack_repo
 
 
 def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch):
@@ -14,16 +13,16 @@ def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch)
     assert "[dry-run]" in err
 
 
-def test_gpush_requires_target(tmp_path, monkeypatch):
-    repo = make_stack_repo(tmp_path / "r")
+def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
+    repo = stack_repo_unconfigured
     # no configure_gerrit_target
     code, out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "Gerrit target" in err or "target" in out.lower()
 
 
-def test_gpush_accepts_explicit_target_without_config(tmp_path, monkeypatch):
-    repo = make_stack_repo(tmp_path / "r")
+def test_gpush_accepts_explicit_target_without_config(stack_repo_unconfigured, monkeypatch):
+    repo = stack_repo_unconfigured
     code, out, err = run_cli(
         repo,
         gpush_main,
