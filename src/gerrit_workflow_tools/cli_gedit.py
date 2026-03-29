@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 
@@ -34,8 +35,9 @@ def main(argv: list[str] | None = None) -> int:
     env["GEDIT_FULL_SHA"] = full
     env["GEDIT_SHORT_SHA"] = short
     env["GEDIT_ACTION"] = action
+    # Quoted for paths with spaces (typical when Python is not from a venv).
     env["GIT_SEQUENCE_EDITOR"] = (
-        f"{sys.executable} -m gerrit_workflow_tools.rebase_sequence_editor"
+        f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
     )
 
     r = subprocess.run(
