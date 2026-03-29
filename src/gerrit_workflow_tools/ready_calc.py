@@ -11,6 +11,7 @@ from gerrit_workflow_tools.stack import (
     list_stack_commits,
     merge_base_with_target,
     parse_change_id,
+    stack_shas_and_subjects_one_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,8 +75,7 @@ def compute_ready(
         no_config=no_config_patterns,
         ignore_exact=list(ignore_patterns or []),
     )
-    shas = list_stack_commits(cwd, mb)
-    subjects = [commit_subject_and_body(cwd, s)[0] for s in shas]
+    shas, subjects = stack_shas_and_subjects_one_log(cwd, mb)
     logger.debug(
         "compute_ready merge_base=%s commits=%d push_mode=%s all_commits=%s stop_patterns=%d",
         mb[:8],

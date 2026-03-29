@@ -65,6 +65,35 @@ def rev_list_reverse(
     return [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
 
 
+def stack_shas_and_subjects_one_log(
+    cwd: Path | str | None,
+    merge_base: str,
+    *,
+    head: str = "HEAD",
+) -> tuple[list[str], list[str]]:
+    """
+    Oldest-first SHAs and subject lines for merge_base..head using one git log.
+    """
+    p = git(
+        "log",
+        "--reverse",
+        f"{merge_base}..{head}",
+        "--format=%H%n%s",
+        cwd=cwd,
+        check=False,
+    )
+    if p.returncode != 0:
+        return [], []
+    lines = p.stdout.splitlines()
+    shas: list[str] = []
+    subjects: list[str] = []
+    for i in range(0, len(lines), 2):
+        if i + 1 < len(lines):
+            shas.append(lines[i].strip())
+            subjects.append(lines[i + 1])
+    return shas, subjects
+
+
 def commit_subject_and_body(cwd: Path | str | None, sha: str) -> tuple[str, str]:
     sub = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
     body = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
