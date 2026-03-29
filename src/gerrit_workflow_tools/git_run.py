@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+
+class GitError(RuntimeError):
+    """Git command failed."""
+
+    def __init__(self, message: str, *, stderr: str = "", returncode: int = -1) -> None:
+        super().__init__(message)
+        self.stderr = stderr
+        self.returncode = returncode
+
+
+def git(
+    *args: str,
+    cwd: Path | str | None = None,
+    env: dict[str, str] | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Run git with given args; cwd defaults to current directory."""
+    cmd = ("git",) + args
+    merged = {**os.environ, **env} if env else None
+    p = subprocess.run(
+        cmd,
+        cwd=cwd,
+        env=merged,
+        text=True,
+        capture_output=True,
+    )
+    if check and p.returncode != 0:
+        raise GitError(
+            f"git {' '.join(args)} failed: {p.stderr.strip() or p.stdout.strip()}",
+            stderr=p.stderr,
+            returncode=p.returncode,
+        )
+    return p
+
+
+def git_out(*args: str, cwd: Path | str | None = None) -> str:
+    """Return stripped stdout from git."""
+    return git(*args, cwd=cwd).stdout.strip()

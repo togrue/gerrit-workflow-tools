@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gerrit-workflow-tools"
+version = "0.1.0"
+description = "Local git helpers for Gerrit stacked workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=7.0"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[project.scripts]
+git-gstack = "gerrit_workflow_tools.cli_gstack:main"
+git-gready = "gerrit_workflow_tools.cli_gready:main"
+git-gchangeid-check = "gerrit_workflow_tools.cli_gchangeid_check:main"
+git-gbranch = "gerrit_workflow_tools.cli_gbranch:main"
+git-gpush = "gerrit_workflow_tools.cli_gpush:main"
+git-gedit = "gerrit_workflow_tools.cli_gedit:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gerrit_workflow_tools"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/gerrit_workflow_tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
