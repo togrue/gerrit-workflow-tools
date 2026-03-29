@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 
-from gerrit_workflow_tools.cli_common import cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.stack import build_stack
+
+logger = logging.getLogger(__name__)
 
 
 def _symbol(state: str) -> str:
@@ -36,9 +39,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--with-ready-state", action="store_true", help="show ready/blocked state"
     )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log git commands and stack resolution to stderr",
+    )
     args = p.parse_args(argv)
+    configure_logging(args.verbose)
     cwd = cwd_from_env()
     show_cid = args.with_change_id and not args.no_change_id
+    logger.debug(
+        "gstack cwd=%s oneline=%s json=%s with_change_id=%s with_ready_state=%s",
+        cwd,
+        args.oneline,
+        args.json_,
+        show_cid,
+        args.with_ready_state,
+    )
 
     try:
         mb, target, _base_label, commits = build_stack(
@@ -47,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
         )
     except GitError as e:
         return handle_git_error(e)
+
+    logger.debug(
+        "gstack merge_base=%s target=%s commits=%d",
+        mb[:8],
+        target,
+        len(commits),
+    )
 
     if args.json_:
         payload = {

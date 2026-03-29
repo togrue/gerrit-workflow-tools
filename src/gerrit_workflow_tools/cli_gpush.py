@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import subprocess
 import sys
 
 from gerrit_workflow_tools.change_id import classify_issues
-from gerrit_workflow_tools.cli_common import cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
 from gerrit_workflow_tools.config import (
     branch_gerrit_target,
     gerrit_remote,
@@ -14,6 +15,8 @@ from gerrit_workflow_tools.config import (
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.ready_calc import change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.stack import merge_base_with_target
+
+logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,8 +50,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--reviewer", action="append", default=[], help="(reserved) Gerrit reviewers"
     )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log git commands and push steps to stderr",
+    )
     args = p.parse_args(argv)
+    configure_logging(args.verbose)
     cwd = cwd_from_env()
+    logger.debug(
+        "gpush cwd=%s dry_run=%s all=%s until=%s target=%s save_target=%s",
+        cwd,
+        args.dry_run,
+        args.all_,
+        args.until,
+        args.target,
+        args.save_target,
+    )
 
     if args.i:
         print(
@@ -76,11 +95,18 @@ def main(argv: list[str] | None = None) -> int:
             ignore_patterns=args.ignore_pattern or None,
             until=args.until,
         )
+        logger.debug(
+            "gpush ready tip=%s range=%s boundary=%s",
+            r.push_tip_sha,
+            r.push_range,
+            r.boundary_reason,
+        )
 
         mb, _, _ = merge_base_with_target(cwd)
         rows = change_id_rows_for_range(cwd, mb)
         items = [(a, b, c) for a, b, c in rows]
         _, cid_exit = classify_issues(items, strict=True)
+        logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
         if cid_exit >= 2:
             print(
                 "error: Change-Id check failed; fix with git gchangeid-check",
@@ -110,7 +136,9 @@ def main(argv: list[str] | None = None) -> int:
             print("[dry-run] not executing push", file=sys.stderr)
             return 0
 
+        logger.debug("gpush executing: %s", " ".join(cmd))
         proc = subprocess.run(cmd, cwd=cwd)
+        logger.debug("gpush push finished with return code %s", proc.returncode)
         return proc.returncode
     except GitError as e:
         return handle_git_error(e)

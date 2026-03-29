@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from gerrit_workflow_tools.stack import (
     merge_base_with_target,
     parse_change_id,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,6 +76,14 @@ def compute_ready(
     )
     shas = list_stack_commits(cwd, mb)
     subjects = [commit_subject_and_body(cwd, s)[0] for s in shas]
+    logger.debug(
+        "compute_ready merge_base=%s commits=%d push_mode=%s all_commits=%s stop_patterns=%d",
+        mb[:8],
+        len(shas),
+        pm,
+        all_commits,
+        len(patterns),
+    )
 
     until_sha: str | None = None
     if until:
@@ -96,6 +107,11 @@ def compute_ready(
         )
 
     block_idx, matched_pat = _first_block_index(subjects, patterns)
+    logger.debug(
+        "compute_ready block_idx=%s matched_pat=%s",
+        block_idx,
+        matched_pat,
+    )
 
     if block_idx is None:
         # all ready

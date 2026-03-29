@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
 from gerrit_workflow_tools.config import (
     branch_gerrit_push_mode,
     branch_gerrit_reviewers,
@@ -13,6 +14,8 @@ from gerrit_workflow_tools.config import (
     set_branch_config,
 )
 from gerrit_workflow_tools.git_run import GitError
+
+logger = logging.getLogger(__name__)
 
 
 def _cmd_show(cwd: Path) -> int:
@@ -63,6 +66,12 @@ def _cmd_set_push_mode(ns: argparse.Namespace, cwd: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="git gbranch")
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log git commands and config writes to stderr",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("show", help="show Gerrit metadata for current branch")
@@ -84,7 +93,9 @@ def main(argv: list[str] | None = None) -> int:
     sm.add_argument("value", metavar="MODE")
 
     args = p.parse_args(argv)
+    configure_logging(args.verbose)
     cwd = cwd_from_env()
+    logger.debug("gbranch cmd=%s cwd=%s", args.cmd, cwd)
 
     try:
         if args.cmd == "show":

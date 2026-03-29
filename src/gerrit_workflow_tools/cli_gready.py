@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 
-from gerrit_workflow_tools.cli_common import cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.ready_calc import compute_ready
+
+logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,8 +34,23 @@ def main(argv: list[str] | None = None) -> int:
         metavar="REV",
         help="limit pushable tip to this commit (must be before boundary)",
     )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log git commands and ready calculation to stderr",
+    )
     args = p.parse_args(argv)
+    configure_logging(args.verbose)
     cwd = cwd_from_env()
+    logger.debug(
+        "gready cwd=%s all=%s no_config_patterns=%s ignore_pattern=%s until=%s",
+        cwd,
+        args.all_,
+        args.no_config_patterns,
+        args.ignore_pattern,
+        args.until,
+    )
 
     try:
         r = compute_ready(
@@ -44,6 +62,15 @@ def main(argv: list[str] | None = None) -> int:
         )
     except GitError as e:
         return handle_git_error(e)
+
+    logger.debug(
+        "gready result push_mode=%s pushable=%s boundary=%s tip=%s range=%s",
+        r.push_mode,
+        r.pushable_count,
+        r.boundary_sha,
+        r.push_tip_sha,
+        r.push_range,
+    )
 
     if args.json_:
         print(
