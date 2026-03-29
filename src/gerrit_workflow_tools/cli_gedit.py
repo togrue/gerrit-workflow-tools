@@ -8,12 +8,19 @@ import sys
 
 from gerrit_workflow_tools.cli_common import cwd_from_env, handle_git_error
 from gerrit_workflow_tools.git_run import GitError, git_out
-from gerrit_workflow_tools.stack import commit_in_stack, merge_base_with_target
+from gerrit_workflow_tools.stack import (
+    commit_in_stack,
+    merge_base_with_target,
+    resolve_stack_commit,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="git gedit")
-    p.add_argument("commit", help="commit to edit/reword/drop (in current stack)")
+    p.add_argument(
+        "commit",
+        help="commit ref or Change-Id (I…); must be in the current stack",
+    )
     g = p.add_mutually_exclusive_group()
     g.add_argument("--reword", action="store_true", help="reword commit message")
     g.add_argument("--drop", action="store_true", help="drop commit")
@@ -23,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     action = "reword" if args.reword else "drop" if args.drop else "edit"
 
     try:
-        full = git_out("rev-parse", args.commit.strip(), cwd=cwd)
+        full = resolve_stack_commit(cwd, args.commit.strip())
         if not commit_in_stack(cwd, full):
             raise GitError(f"commit {args.commit} is not in the current local stack")
         mb, _, _ = merge_base_with_target(cwd)

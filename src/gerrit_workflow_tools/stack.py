@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.config import resolve_local_base_ref, stop_patterns
 from gerrit_workflow_tools.git_run import GitError, git, git_out
 
@@ -154,6 +155,37 @@ def is_ancestor(cwd: Path | str | None, maybe_desc: str, maybe_anc: str) -> bool
     return p.returncode == 0
 
 
+def resolve_stack_commit(
+    cwd: Path | str | None,
+    ref: str,
+    *,
+    branch: str | None = None,
+) -> str:
+    """
+    Resolve ref to a full SHA. If ref is a Gerrit Change-Id (I + 40 hex), find the
+    unique commit in merge_base..HEAD whose message contains that Change-Id.
+    """
+    s = ref.strip()
+    if CHANGE_ID_VALUE_RE.match(s):
+        mb, _, _ = merge_base_with_target(cwd, branch)
+        want = s.lower()
+        matches: list[str] = []
+        for sha in list_stack_commits(cwd, mb):
+            _, body = commit_subject_and_body(cwd, sha)
+            cid = parse_change_id(body)
+            if cid and cid.lower() == want:
+                matches.append(sha)
+        if not matches:
+            raise GitError(f"no commit in current stack with Change-Id {s}")
+        if len(matches) > 1:
+            shorts = [git_out("rev-parse", "--short", x, cwd=cwd) for x in matches]
+            raise GitError(
+                f"ambiguous Change-Id {s} in stack ({', '.join(shorts)})"
+            )
+        return matches[0]
+    return git_out("rev-parse", s, cwd=cwd)
+
+
 def commit_in_stack(
     cwd: Path | str | None,
     commit: str,
@@ -165,6 +197,6 @@ def commit_in_stack(
         mb, _, _ = merge_base_with_target(cwd, branch)
     except GitError:
         return False
-    c = git_out("rev-parse", commit, cwd=cwd)
+    c = resolve_stack_commit(cwd, commit, branch=branch)
     stack = list_stack_commits(cwd, mb)
     return c in stack
