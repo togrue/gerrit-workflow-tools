@@ -3,7 +3,76 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from gerrit_workflow_tools.git_run import git_out
+from gerrit_workflow_tools.git_run import git, git_out
+
+# Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
+_GERRIT_STOP_PATTERN_CANONICAL = "gerrit.stoppattern"
+
+# In-memory snapshot: one `git config --list` per process per resolved cwd (lazy first access).
+_snapshot: dict[str, str] | None = None
+_snapshot_multi: dict[str, list[str]] | None = None
+_snapshot_cwd: str | None = None
+
+
+def clear_gerrit_git_config_cache() -> None:
+    """Drop cached config so the next read loads from git again."""
+    global _snapshot, _snapshot_multi, _snapshot_cwd
+    _snapshot = None
+    _snapshot_multi = None
+    _snapshot_cwd = None
+
+
+def _canonical_cfg_key(key: str) -> str:
+    """Match key normalization used in `git config --list` (last segment lowercased)."""
+    if "." not in key:
+        return key.lower()
+    head, tail = key.rsplit(".", 1)
+    return f"{head}.{tail.lower()}"
+
+
+def _resolve_cwd_key(cwd: Path | str | None) -> str:
+    p = Path.cwd() if cwd is None else Path(cwd)
+    return str(p.resolve())
+
+
+def _load_git_config_maps(cwd: Path | str | None) -> tuple[dict[str, str], dict[str, list[str]]]:
+    """Parse `git config --list` once; last value wins for single-valued keys."""
+    p = git("config", "--list", cwd=cwd, check=False)
+    single: dict[str, str] = {}
+    multi: dict[str, list[str]] = {}
+    if p.returncode != 0 or not p.stdout:
+        return single, multi
+    for raw in p.stdout.splitlines():
+        if not raw.strip() or "=" not in raw:
+            continue
+        k, v = raw.split("=", 1)
+        ck = _canonical_cfg_key(k)
+        if ck == _GERRIT_STOP_PATTERN_CANONICAL:
+            multi.setdefault(ck, []).append(v)
+        else:
+            single[ck] = v
+    return single, multi
+
+
+def _ensure_snapshot(cwd: Path | str | None) -> None:
+    global _snapshot, _snapshot_multi, _snapshot_cwd
+    key = _resolve_cwd_key(cwd)
+    if _snapshot is not None and _snapshot_cwd == key:
+        return
+    s, m = _load_git_config_maps(cwd)
+    _snapshot = s
+    _snapshot_multi = m
+    _snapshot_cwd = key
+
+
+def _config_get(cwd: Path | str | None, key: str) -> str | None:
+    _ensure_snapshot(cwd)
+    assert _snapshot is not None
+    ck = _canonical_cfg_key(key)
+    if ck == _GERRIT_STOP_PATTERN_CANONICAL:
+        return None
+    v = _snapshot.get(ck)
+    return v.strip() if v else None
 
 
 def current_branch(cwd: Path | str | None) -> str:
@@ -42,23 +111,36 @@ def gerrit_remote(cwd: Path | str | None) -> str:
     return v or "origin"
 
 
+def gerrit_web_url(cwd: Path | str | None) -> str | None:
+    """Optional override for Gerrit HTTPS base (scheme + host, optional port); no path."""
+    return _config_get(cwd, "gerrit.webUrl")
+
+
+def gerrit_url(cwd: Path | str | None) -> str | None:
+    """Preferred Gerrit base URL for commands that talk to Gerrit HTTP API."""
+    return _config_get(cwd, "gerrit.url")
+
+
+def gerrit_user(cwd: Path | str | None) -> str | None:
+    return _config_get(cwd, "gerrit.user")
+
+
+def gerrit_password(cwd: Path | str | None) -> str | None:
+    return _config_get(cwd, "gerrit.password")
+
+
+def gerrit_token(cwd: Path | str | None) -> str | None:
+    return _config_get(cwd, "gerrit.token")
+
+
 def stop_patterns(cwd: Path | str | None) -> list[str]:
-    from gerrit_workflow_tools.git_run import git
-
-    p = git("config", "--get-all", "gerrit.stopPattern", cwd=cwd, check=False)
-    if p.returncode != 0 or not p.stdout.strip():
+    _ensure_snapshot(cwd)
+    assert _snapshot_multi is not None
+    lines = _snapshot_multi.get(_GERRIT_STOP_PATTERN_CANONICAL, [])
+    lines = [ln.strip() for ln in lines if ln.strip()]
+    if not lines:
         return [r"^dropme!", r"^TODO\b", r"^test!"]
-    lines = [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
     return lines
-
-
-def _config_get(cwd: Path | str | None, key: str) -> str | None:
-    from gerrit_workflow_tools.git_run import git
-
-    p = git("config", "--get", key, cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    return p.stdout.strip() or None
 
 
 def set_branch_config(
@@ -69,14 +151,13 @@ def set_branch_config(
     gerrit_reviewers: str | None = None,
     gerrit_push_mode: str | None = None,
 ) -> None:
-    from gerrit_workflow_tools.git_run import git
-
     if gerrit_target is not None:
         git("config", f"branch.{branch}.gerritTarget", gerrit_target, cwd=cwd)
     if gerrit_reviewers is not None:
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
     if gerrit_push_mode is not None:
         git("config", f"branch.{branch}.gerritPushMode", gerrit_push_mode, cwd=cwd)
+    clear_gerrit_git_config_cache()
 
 
 def set_global_gerrit(
@@ -86,8 +167,6 @@ def set_global_gerrit(
     default_push_mode: str | None = None,
     stop_patterns: list[str] | None = None,
 ) -> None:
-    from gerrit_workflow_tools.git_run import git
-
     if remote is not None:
         git("config", "gerrit.remote", remote, cwd=cwd)
     if default_push_mode is not None:
@@ -96,6 +175,7 @@ def set_global_gerrit(
         git("config", "--unset-all", "gerrit.stopPattern", cwd=cwd, check=False)
         for pat in stop_patterns:
             git("config", "--add", "gerrit.stopPattern", pat, cwd=cwd)
+    clear_gerrit_git_config_cache()
 
 
 def escape_branch_for_config(branch: str) -> str:
@@ -112,7 +192,7 @@ def resolve_local_base_ref(
     Return (ref_for_merge_base, display_name) for merge-base, e.g. ('main', 'main').
     Order: branch.gerritTarget -> @{upstream} -> main -> master.
     """
-    from gerrit_workflow_tools.git_run import GitError, git
+    from gerrit_workflow_tools.git_run import GitError
 
     b = branch or current_branch(cwd)
     target = branch_gerrit_target(cwd, b)

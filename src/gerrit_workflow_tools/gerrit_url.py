@@ -28,9 +28,10 @@ def push_url_to_gerrit_web_base(push_url: str) -> str:
         if not host and parsed.netloc:
             host = parsed.netloc.split("@")[-1].split(":")[0]
         # Typical Gerrit git port 29418; HTTPS is usually on 443.
-        if parsed.port and parsed.port not in (22, 29418):
-            return f"https://{host}:{parsed.port}"
-        return f"https://{host}"
+        # if parsed.port and parsed.port not in (22, 29418):
+        #     return f"https://{host}:{parsed.port}"
+        # return f"https://{host}:"
+        return f"http://{host}:8080"
     if parsed.scheme in ("http", "https"):
         return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
     raise ValueError(f"unsupported remote URL for Gerrit base: {push_url!r}")
