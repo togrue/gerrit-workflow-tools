@@ -2,11 +2,59 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.config import resolve_local_base_ref, stop_patterns
 from gerrit_workflow_tools.git_run import GitError, git, git_out
+
+
+def _cwd_key(cwd: Path | str | None) -> str:
+    p = Path.cwd() if cwd is None else Path(cwd)
+    return str(p.resolve())
+
+
+@dataclass(frozen=True)
+class StackSnapshot:
+    """Merge-base + ``merge_base..HEAD`` commits from one ``git log`` range."""
+
+    merge_base: str
+    target_display: str
+    base_ref: str
+    rows: tuple[tuple[str, str, str, str], ...]
+
+
+def clear_stack_snapshot_cache() -> None:
+    """Drop memoized stack snapshots (e.g. between tests or after mutating the repo)."""
+    _cached_stack_snapshot.cache_clear()
+
+
+def _merge_base_with_target_impl(
+    cwd: Path | str | None, branch: str | None = None
+) -> tuple[str, str, str]:
+    base_ref, display = resolve_local_base_ref(cwd, branch)
+    mb = git_out("merge-base", "HEAD", base_ref, cwd=cwd)
+    return mb, display, base_ref
+
+
+@lru_cache(maxsize=64)
+def _cached_stack_snapshot(cwd_key: str, branch: str) -> StackSnapshot:
+    cwd = Path(cwd_key)
+    mb, display, base_ref = _merge_base_with_target_impl(cwd, branch or None)
+    rows_list = stack_commits_metadata_one_log(cwd, f"{mb}..HEAD")
+    rows_t = tuple(tuple(r) for r in rows_list)
+    return StackSnapshot(mb, display, base_ref, rows_t)
+
+
+def get_stack_snapshot(
+    cwd: Path | str | None, branch: str | None = None
+) -> StackSnapshot:
+    """
+    Resolve merge-base with target and list commits in ``merge_base..HEAD`` using
+    one ``git log`` (memoized per resolved cwd + branch for the process).
+    """
+    return _cached_stack_snapshot(_cwd_key(cwd), branch or "")
 
 
 @dataclass
@@ -33,10 +81,10 @@ def merge_base_with_target(
     """
     Returns (merge_base_sha, target_display_name, base_ref_commit).
     base_ref_commit is the resolved ref used with merge-base (second argument).
+    Uses the same memoized snapshot as :func:`get_stack_snapshot`.
     """
-    base_ref, display = resolve_local_base_ref(cwd, branch)
-    mb = git_out("merge-base", "HEAD", base_ref, cwd=cwd)
-    return mb, display, base_ref
+    snap = get_stack_snapshot(cwd, branch)
+    return snap.merge_base, snap.target_display, snap.base_ref
 
 
 def list_stack_commits(
@@ -114,10 +162,18 @@ def stack_shas_and_subjects_one_log(
     merge_base: str,
     *,
     head: str = "HEAD",
+    branch: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """
     Oldest-first SHAs and subject lines for merge_base..head using one git log.
+    When ``head`` is ``HEAD``, reuses :func:`get_stack_snapshot` when merge_base matches.
     """
+    if head == "HEAD":
+        snap = get_stack_snapshot(cwd, branch)
+        if snap.merge_base == merge_base:
+            shas = [r[0] for r in snap.rows]
+            subjects = [r[2] for r in snap.rows]
+            return shas, subjects
     rows = stack_commits_metadata_one_log(cwd, f"{merge_base}..{head}")
     shas = [r[0] for r in rows]
     subjects = [r[2] for r in rows]
@@ -177,9 +233,11 @@ def build_stack(
     """
     Returns (merge_base_sha, target_display_name, target_display_name, commits).
     """
-    mb, target_display, _base_ref = merge_base_with_target(cwd, branch)
+    snap = get_stack_snapshot(cwd, branch)
+    mb = snap.merge_base
+    target_display = snap.target_display
     pats = patterns if patterns is not None else stop_patterns(cwd)
-    rows = stack_commits_metadata_one_log(cwd, f"{mb}..HEAD")
+    rows = list(snap.rows)
     subjects = [r[2] for r in rows]
     labels = (
         _ready_labels_for_stack(subjects, pats)
@@ -220,12 +278,10 @@ def resolve_stack_commit(
     """
     s = ref.strip()
     if CHANGE_ID_VALUE_RE.match(s):
-        mb, _, _ = merge_base_with_target(cwd, branch)
+        snap = get_stack_snapshot(cwd, branch)
         want = s.lower()
         matches: list[tuple[str, str]] = []
-        for sha, short, _sub, raw in stack_commits_metadata_one_log(
-            cwd, f"{mb}..HEAD"
-        ):
+        for sha, short, _sub, raw in snap.rows:
             cid = parse_change_id(raw)
             if cid and cid.lower() == want:
                 matches.append((sha, short))
@@ -248,9 +304,9 @@ def commit_in_stack(
 ) -> bool:
     """True if commit is in merge_base..HEAD stack."""
     try:
-        mb, _, _ = merge_base_with_target(cwd, branch)
+        snap = get_stack_snapshot(cwd, branch)
     except GitError:
         return False
     c = resolve_stack_commit(cwd, commit, branch=branch)
-    stack = list_stack_commits(cwd, mb)
-    return c in stack
+    stack_shas = [r[0] for r in snap.rows]
+    return c in stack_shas

@@ -74,7 +74,7 @@ def compute_ready(
         no_config=no_config_patterns,
         ignore_exact=list(ignore_patterns or []),
     )
-    shas, subjects = stack_shas_and_subjects_one_log(cwd, mb)
+    shas, subjects = stack_shas_and_subjects_one_log(cwd, mb, branch=branch)
     logger.debug(
         "compute_ready merge_base=%s commits=%d push_mode=%s all_commits=%s stop_patterns=%d",
         mb[:8],

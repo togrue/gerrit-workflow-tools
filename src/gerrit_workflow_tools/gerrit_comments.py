@@ -13,9 +13,9 @@ from gerrit_workflow_tools.gerrit_client import (
 )
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import (
-    merge_base_with_target,
+    StackSnapshot,
+    get_stack_snapshot,
     parse_change_id,
-    stack_commits_metadata_one_log,
 )
 
 
@@ -36,24 +36,38 @@ def select_commit_for_comments(
     explicit_rev: str | None,
     skip_fixups: bool,
     branch: str | None = None,
+    snapshot: StackSnapshot | None = None,
 ) -> str:
-    mb, _, _ = merge_base_with_target(cwd, branch)
-    head = explicit_rev or "HEAD"
-    head_sha = git_out("rev-parse", head, cwd=cwd)
-    shas = _rev_list_newest_first(cwd, mb, head_sha)
+    snap = snapshot or get_stack_snapshot(cwd, branch)
+    mb = snap.merge_base
+    by_sha = {r[0]: r[2] for r in snap.rows}
+
+    if explicit_rev:
+        head_sha = git_out("rev-parse", explicit_rev, cwd=cwd)
+        shas = _rev_list_newest_first(cwd, mb, head_sha)
+    else:
+        head_sha = git_out("rev-parse", "HEAD", cwd=cwd)
+        shas = [r[0] for r in reversed(snap.rows)]
+        if snap.rows and snap.rows[-1][0] != head_sha:
+            shas = _rev_list_newest_first(cwd, mb, head_sha)
+
     if not shas:
         raise GitError("no commits in local stack for gcomments (empty range)")
     if not skip_fixups:
         return shas[0]
     for sha in shas:
-        sub = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
+        sub = by_sha.get(sha)
+        if sub is None:
+            sub = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
         if not _is_fixup_or_squash_subject(sub):
             return sha
     raise GitError("no non-fixup/squash commit found in stack (try --no-skip-fixups)")
 
 
-def change_id_for_sha(cwd: Path | str | None, sha: str) -> str:
-    raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
+def change_id_for_sha(
+    cwd: Path | str | None, sha: str, *, raw_message: str | None = None
+) -> str:
+    raw = raw_message if raw_message is not None else git_out("log", "-1", "--format=%B", sha, cwd=cwd)
     cid = parse_change_id(raw)
     if not cid or not CHANGE_ID_VALUE_RE.match(cid.strip()):
         raise GitError(f"no valid Change-Id in commit {sha[:8]}")
@@ -248,17 +262,22 @@ def comment_thread_url(
 
 
 def commit_display(cwd: Path | str | None, sha: str) -> tuple[str, str, str]:
-    sub = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
-    body = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
+    combined = git_out("log", "-1", "--format=%s%x1e%B", sha, cwd=cwd)
+    if "\x1e" in combined:
+        sub, body = combined.split("\x1e", 1)
+    else:
+        sub, body = combined, ""
     return sha, sub, body
 
 
 def local_change_map_from_stack(
     cwd: Path | str | None,
+    *,
+    snapshot: StackSnapshot | None = None,
 ) -> dict[str, tuple[str, str, str]]:
     """Map Change-Id -> (full_sha, subject, full_message body) for merge_base..HEAD."""
-    mb, _, _ = merge_base_with_target(cwd)
-    rows = stack_commits_metadata_one_log(cwd, f"{mb}..HEAD")
+    snap = snapshot or get_stack_snapshot(cwd)
+    rows = snap.rows
     out: dict[str, tuple[str, str, str]] = {}
     for sha, _short, subj, raw in rows:
         cid = parse_change_id(raw)

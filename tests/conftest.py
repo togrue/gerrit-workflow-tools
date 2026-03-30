@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.stack import clear_stack_snapshot_cache
 from tests.fixtures import (
     configure_gerrit_target,
     make_repo_duplicate_change_id,
@@ -91,3 +92,10 @@ def run_cli(
 
 def json_stdout(stdout: str) -> dict:
     return json.loads(stdout)
+
+
+@pytest.fixture(autouse=True)
+def _clear_stack_snapshot_cache_fixture():
+    clear_stack_snapshot_cache()
+    yield
+    clear_stack_snapshot_cache()

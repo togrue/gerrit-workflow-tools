@@ -23,6 +23,7 @@ from gerrit_workflow_tools.gerrit_comments import (
     select_commit_for_comments,
 )
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.stack import get_stack_snapshot
 from gerrit_workflow_tools.git_run import GitError
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         client = GerritClient(web_base, cwd=str(cwd))
-        local_map = local_change_map_from_stack(cwd)
+        stack_snap = get_stack_snapshot(cwd)
+        local_map = local_change_map_from_stack(cwd, snapshot=stack_snap)
 
         if args.change:
             first = resolve_change_for_gcomments(
@@ -97,8 +99,10 @@ def main(argv: list[str] | None = None) -> int:
                 cwd,
                 explicit_rev=args.rev,
                 skip_fixups=not args.no_skip_fixups,
+                snapshot=stack_snap,
             )
-            cid = change_id_for_sha(cwd, sha)
+            raw_msg = next((r[3] for r in stack_snap.rows if r[0] == sha), None)
+            cid = change_id_for_sha(cwd, sha, raw_message=raw_msg)
             first = resolve_change_for_gcomments(
                 client, change_arg=None, local_change_id=cid
             )
