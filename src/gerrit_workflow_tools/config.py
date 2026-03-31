@@ -112,13 +112,8 @@ def gerrit_remote(cwd: Path | str | None) -> str:
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
-    """Optional override for Gerrit HTTPS base (scheme + host, optional port); no path."""
+    """Gerrit HTTPS base for HTTP API and UI links (scheme + host, optional port); no path."""
     return _config_get(cwd, "gerrit.webUrl")
-
-
-def gerrit_url(cwd: Path | str | None) -> str | None:
-    """Preferred Gerrit base URL for commands that talk to Gerrit HTTP API."""
-    return _config_get(cwd, "gerrit.url")
 
 
 def gerrit_user(cwd: Path | str | None) -> str | None:

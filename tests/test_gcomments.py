@@ -7,7 +7,11 @@ import pytest
 
 from gerrit_workflow_tools.cli_gcomments import main as gcomments_main
 from gerrit_workflow_tools.git_run import git, git_out
-from gerrit_workflow_tools.gerrit_url import push_url_to_gerrit_web_base
+from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.gerrit_url import (
+    push_url_to_gerrit_web_base,
+    resolve_gerrit_web_base,
+)
 from gerrit_workflow_tools.gerrit_comments import format_human, select_commit_for_comments
 from tests.conftest import json_stdout, run_cli
 
@@ -80,6 +84,13 @@ def test_format_human_prints_comments_when_present() -> None:
     assert "fix me" in out
 
 
+def test_resolve_gerrit_web_base_uses_web_url(stack_repo: Path) -> None:
+    """gerrit.webUrl supplies the Gerrit base."""
+    git("config", "gerrit.webUrl", "https://reviews.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    assert resolve_gerrit_web_base(stack_repo) == "https://reviews.example"
+
+
 def test_select_commit_skips_fixup(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -127,23 +138,25 @@ def test_gcomments_json_mocked(
         ]
     }
 
-    with patch(
-        "gerrit_workflow_tools.cli_gcomments.resolve_gerrit_web_base",
-        return_value="https://g.example",
+    with (
+        patch(
+            "gerrit_workflow_tools.cli_gcomments.resolve_gerrit_web_base",
+            return_value="https://g.example",
+        ),
+        patch("gerrit_workflow_tools.cli_gcomments.GerritClient") as client_cls,
     ):
-        with patch("gerrit_workflow_tools.cli_gcomments.GerritClient") as client_cls:
-            inst = MagicMock()
-            client_cls.return_value = inst
-            inst.query_changes.return_value = [ch]
-            inst.get_related.return_value = []
-            inst.get_comments.return_value = comments
+        inst = MagicMock()
+        client_cls.return_value = inst
+        inst.query_changes.return_value = [ch]
+        inst.get_related.return_value = []
+        inst.get_comments.return_value = comments
 
-            code, out, err = run_cli(
-                stack_repo,
-                gcomments_main,
-                ["--json"],
-                monkeypatch,
-            )
+        code, out, err = run_cli(
+            stack_repo,
+            gcomments_main,
+            ["--json"],
+            monkeypatch,
+        )
     assert code == 0
     data = json_stdout(out)
     assert "changes" in data

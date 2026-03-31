@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
-from gerrit_workflow_tools.config import gerrit_remote, gerrit_url, gerrit_web_url
+from gerrit_workflow_tools.config import gerrit_remote, gerrit_web_url
 from gerrit_workflow_tools.git_run import git_out
 
 
@@ -27,20 +27,22 @@ def push_url_to_gerrit_web_base(push_url: str) -> str:
         host = parsed.hostname or ""
         if not host and parsed.netloc:
             host = parsed.netloc.split("@")[-1].split(":")[0]
+        port = parsed.port
         # Typical Gerrit git port 29418; HTTPS is usually on 443.
-        # if parsed.port and parsed.port not in (22, 29418):
-        #     return f"https://{host}:{parsed.port}"
-        # return f"https://{host}:"
-        return f"http://{host}:8080"
+        if port and port not in (22, 29418):
+            return f"https://{host}:{port}"
+        return f"https://{host}"
     if parsed.scheme in ("http", "https"):
         return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
     raise ValueError(f"unsupported remote URL for Gerrit base: {push_url!r}")
 
 
 def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
-    direct = gerrit_url(cwd)
-    if direct:
-        return direct.rstrip("/")
+    """
+    Gerrit HTTPS base for the REST API and web links.
+
+    Uses ``gerrit.webUrl`` when set; otherwise derives from the Gerrit remote push URL.
+    """
     override = gerrit_web_url(cwd)
     if override:
         return override.rstrip("/")
