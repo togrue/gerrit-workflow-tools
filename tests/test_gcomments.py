@@ -8,33 +8,9 @@ import pytest
 from gerrit_workflow_tools.cli_gcomments import main as gcomments_main
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.gerrit_url import (
-    push_url_to_gerrit_web_base,
-    resolve_gerrit_web_base,
-)
+from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.gerrit_comments import format_human, select_commit_for_comments
 from tests.conftest import json_stdout, run_cli
-
-
-def test_push_url_to_gerrit_web_base_https() -> None:
-    assert (
-        push_url_to_gerrit_web_base("https://gerrit.example.com/a/foo/bar")
-        == "https://gerrit.example.com"
-    )
-
-
-def test_push_url_to_gerrit_web_base_git_at() -> None:
-    assert (
-        push_url_to_gerrit_web_base("git@gerrit.corp:proj/repo.git")
-        == "https://gerrit.corp"
-    )
-
-
-def test_push_url_to_gerrit_web_base_ssh() -> None:
-    assert (
-        push_url_to_gerrit_web_base("ssh://user@gerrit.corp:29418/foo/bar")
-        == "https://gerrit.corp"
-    )
 
 
 def test_format_human_full_no_duplicate_subject_line() -> None:
@@ -89,6 +65,21 @@ def test_resolve_gerrit_web_base_uses_web_url(stack_repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://reviews.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     assert resolve_gerrit_web_base(stack_repo) == "https://reviews.example"
+
+
+def test_resolve_gerrit_web_base_missing_raises(stack_repo: Path) -> None:
+    clear_gerrit_git_config_cache()
+    with pytest.raises(ValueError, match="gerrit.webUrl"):
+        resolve_gerrit_web_base(stack_repo)
+
+
+def test_gcomments_exits_when_web_url_missing(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clear_gerrit_git_config_cache()
+    code, _out, err = run_cli(stack_repo, gcomments_main, ["--json"], monkeypatch)
+    assert code != 0
+    assert "gerrit.webUrl" in err
 
 
 def test_select_commit_skips_fixup(

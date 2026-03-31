@@ -112,7 +112,7 @@ def gerrit_remote(cwd: Path | str | None) -> str:
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
-    """Gerrit HTTPS base for HTTP API and UI links (scheme + host, optional port); no path."""
+    """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``git gcomments``)."""
     return _config_get(cwd, "gerrit.webUrl")
 
 

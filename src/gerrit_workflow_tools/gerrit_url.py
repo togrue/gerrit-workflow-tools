@@ -1,49 +1,20 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
 
-from gerrit_workflow_tools.config import gerrit_remote, gerrit_web_url
-from gerrit_workflow_tools.git_run import git_out
-
-
-def remote_push_url(cwd: Path | str | None, remote: str | None = None) -> str:
-    r = remote or gerrit_remote(cwd)
-    return git_out("remote", "get-url", r, cwd=cwd)
-
-
-def push_url_to_gerrit_web_base(push_url: str) -> str:
-    """
-    Derive Gerrit web/API host base (no trailing slash, no /a/) from a git remote URL.
-    """
-    u = push_url.strip()
-    if u.startswith("git@"):
-        m = re.match(r"git@([^:]+):(.+)", u)
-        if m:
-            return f"https://{m.group(1)}"
-    parsed = urlparse(u)
-    if parsed.scheme in ("ssh", "git+ssh"):
-        host = parsed.hostname or ""
-        if not host and parsed.netloc:
-            host = parsed.netloc.split("@")[-1].split(":")[0]
-        port = parsed.port
-        # Typical Gerrit git port 29418; HTTPS is usually on 443.
-        if port and port not in (22, 29418):
-            return f"https://{host}:{port}"
-        return f"https://{host}"
-    if parsed.scheme in ("http", "https"):
-        return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-    raise ValueError(f"unsupported remote URL for Gerrit base: {push_url!r}")
+from gerrit_workflow_tools.config import gerrit_web_url
 
 
 def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
     """
     Gerrit HTTPS base for the REST API and web links.
 
-    Uses ``gerrit.webUrl`` when set; otherwise derives from the Gerrit remote push URL.
+    Requires ``gerrit.webUrl`` in git config (no inference from remotes).
     """
     override = gerrit_web_url(cwd)
     if override:
         return override.rstrip("/")
-    return push_url_to_gerrit_web_base(remote_push_url(cwd))
+    raise ValueError(
+        "gerrit.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
+        "`git config gerrit.webUrl https://gerrit.example.com`"
+    )
