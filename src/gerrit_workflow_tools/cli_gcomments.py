@@ -50,13 +50,13 @@ def main(argv: list[str] | None = None) -> int:
         help="do not skip fixup!/squash! commits when resolving Change-Id",
     )
     p.add_argument(
-        "--all",
+        "--all-comments",
         action="store_true",
-        dest="all_",
-        help="include resolved comments",
+        dest="all_comments",
+        help="include resolved and unresolved comments",
     )
     p.add_argument(
-        "--open",
+        "--unresolved",
         action="store_true",
         help="only strictly unresolved comments",
     )
@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.verbose)
     cwd = cwd_from_env()
 
-    if args.all_ and args.open:
+    if args.all_comments and args.unresolved:
         print("error: --all and --open are mutually exclusive", file=sys.stderr)
         return 1
 
@@ -109,8 +109,8 @@ def main(argv: list[str] | None = None) -> int:
 
         chain = ordered_relation_chain(client, first) if args.whole_chain else [first]
 
-        strict_open = args.open
-        include_all = args.all_
+        only_unresolved_comments = args.unresolved
+        all_comments = args.all_comments
 
         comments_by_change = []
         for ch in chain:
@@ -122,8 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                 web_base,
                 ch,
                 raw_map,
-                include_all=include_all,
-                strict_open=strict_open,
+                include_all=all_comments,
+                strict_open=only_unresolved_comments,
             )
             comments_by_change.append(flattened)
 
