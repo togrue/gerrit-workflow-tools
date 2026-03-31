@@ -346,48 +346,54 @@ def format_human(
         if sha:
             lines.append(f"commit {sha}")
             lines.append("")
-        if subj:
-            lines.append(f"  {subj}")
-            lines.append("")
+        # Full message from git %B includes the subject as the first line; do not
+        # print subject again above it (avoids duplicate title with --full).
         if full and body and isinstance(body, str) and body.strip():
             for bline in body.strip().splitlines():
                 lines.append(f"  {bline}")
             lines.append("")
-        for c in ch.get("comments") or []:
-            if not isinstance(c, dict):
-                continue
-            path = c.get("path")
-            line = c.get("line")
-            loc = ""
-            if path and line is not None:
-                loc = f"{path}:{line}"
-            elif path:
-                loc = str(path)
-            else:
-                loc = "(change)"
-            u = c.get("unresolved")
-            st = "Unresolved" if u is not False else "Resolved"
-            msg = c.get("message") or ""
-            first = msg.strip().splitlines()[0] if msg.strip() else ""
-            if not full and len(first) > 160:
-                first = first[:157] + "..."
-            link = c.get("url") or ""
-            if oneline:
-                lines.append(f"{loc}  [{st}]  {first}  {link}".rstrip())
-                continue
-            lines.append(f"  {loc} - {st} Comment")
-            if link:
-                lines.append(f"  Link: {link}")
-            auth = c.get("author") or ""
-            ps = c.get("patchSet")
-            ps_txt = f"Patch set {ps}" if ps is not None else ""
-            meta_bits = [b for b in (auth, ps_txt, c.get("updated") or "") if b]
-            lines.append(f"    {' -- '.join(meta_bits)}")
-            msg_out = msg if full else (first if first else msg[:200])
-            if msg_out:
-                for ml in msg_out.splitlines():
-                    lines.append(f"      {ml}")
+        else:
+            if subj:
+                lines.append(f"  {subj}")
+                lines.append("")
+        valid_comments = [c for c in (ch.get("comments") or []) if isinstance(c, dict)]
+        if not valid_comments:
+            lines.append("  No comments")
             lines.append("")
+        else:
+            for c in valid_comments:
+                path = c.get("path")
+                line = c.get("line")
+                loc = ""
+                if path and line is not None:
+                    loc = f"{path}:{line}"
+                elif path:
+                    loc = str(path)
+                else:
+                    loc = "(change)"
+                u = c.get("unresolved")
+                st = "Unresolved" if u is not False else "Resolved"
+                msg = c.get("message") or ""
+                first = msg.strip().splitlines()[0] if msg.strip() else ""
+                if not full and len(first) > 160:
+                    first = first[:157] + "..."
+                link = c.get("url") or ""
+                if oneline:
+                    lines.append(f"{loc}  [{st}]  {first}  {link}".rstrip())
+                    continue
+                lines.append(f"  {loc} - {st} Comment")
+                if link:
+                    lines.append(f"  Link: {link}")
+                auth = c.get("author") or ""
+                ps = c.get("patchSet")
+                ps_txt = f"Patch set {ps}" if ps is not None else ""
+                meta_bits = [b for b in (auth, ps_txt, c.get("updated") or "") if b]
+                lines.append(f"    {' -- '.join(meta_bits)}")
+                msg_out = msg if full else (first if first else msg[:200])
+                if msg_out:
+                    for ml in msg_out.splitlines():
+                        lines.append(f"      {ml}")
+                lines.append("")
         lines.append("")
     return "\n".join(lines).rstrip() + ("\n" if lines else "")
 

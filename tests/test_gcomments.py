@@ -8,7 +8,7 @@ import pytest
 from gerrit_workflow_tools.cli_gcomments import main as gcomments_main
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.gerrit_url import push_url_to_gerrit_web_base
-from gerrit_workflow_tools.gerrit_comments import select_commit_for_comments
+from gerrit_workflow_tools.gerrit_comments import format_human, select_commit_for_comments
 from tests.conftest import json_stdout, run_cli
 
 
@@ -31,6 +31,53 @@ def test_push_url_to_gerrit_web_base_ssh() -> None:
         push_url_to_gerrit_web_base("ssh://user@gerrit.corp:29418/foo/bar")
         == "https://gerrit.corp"
     )
+
+
+def test_format_human_full_no_duplicate_subject_line() -> None:
+    """%B-style body includes subject as first line; --full must not print it twice."""
+    out = format_human(
+        [
+            {
+                "commit": {
+                    "sha": "9663dae33ea6ba94ddcc0b8fe25b74f4d8fcc27f",
+                    "subject": "docs: note change 9998",
+                    "body": "docs: note change 9998\n\nChange-Id: Ief8fa7cdbbc0dbb47127eb3e2f3c8cb82a9fa97b\n",
+                },
+                "comments": [],
+            }
+        ],
+        full=True,
+        oneline=False,
+    )
+    assert out.count("docs: note change 9998") == 1
+    assert "  No comments" in out
+
+
+def test_format_human_prints_comments_when_present() -> None:
+    out = format_human(
+        [
+            {
+                "commit": {"sha": "abc", "subject": "sub", "body": None},
+                "comments": [
+                    {
+                        "path": "a.py",
+                        "line": 1,
+                        "unresolved": True,
+                        "message": "fix me",
+                        "url": "",
+                        "author": "A",
+                        "patchSet": 1,
+                        "updated": "t",
+                    }
+                ],
+            }
+        ],
+        full=False,
+        oneline=False,
+    )
+    assert "No comments" not in out
+    assert "a.py:1" in out
+    assert "fix me" in out
 
 
 def test_select_commit_skips_fixup(
