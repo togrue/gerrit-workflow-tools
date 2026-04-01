@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.gerrit_client import (
@@ -105,9 +106,8 @@ def ordered_relation_chain(
         i = ch.get("id")
         if isinstance(i, str) and i:
             merged[i] = ch
-    fid = first.get("id")
-    if isinstance(fid, str) and fid and fid not in merged:
-        merged[fid] = first
+    if isinstance(cid, str) and cid and cid not in merged:
+        merged[cid] = first
     ordered = sorted(
         merged.values(),
         key=lambda c: c.get("_number") if isinstance(c.get("_number"), int) else 0,
@@ -183,6 +183,12 @@ def _should_include_comment(
     return u is not False
 
 
+def _path_for_comment_key(key: str) -> str | None:
+    if "PATCHSET_LEVEL" in key or "COMMIT_MSG" in key:
+        return None
+    return key or None
+
+
 def flatten_change_comments(
     web_base: str,
     change: dict[str, Any],
@@ -197,13 +203,8 @@ def flatten_change_comments(
     cn = num if isinstance(num, int) else None
     out: list[FlatComment] = []
 
-    def path_for_key(key: str) -> str | None:
-        if "PATCHSET_LEVEL" in key or "COMMIT_MSG" in key:
-            return None
-        return key or None
-
     for key, items in file_map.items():
-        p = path_for_key(key)
+        p = _path_for_comment_key(key)
         for c in items:
             if not _should_include_comment(
                 c, strict_open=strict_open, include_all=include_all
@@ -212,24 +213,20 @@ def flatten_change_comments(
             cid = c.get("id")
             cid_s = cid if isinstance(cid, str) else None
             link = comment_thread_url(web_base, project_str, cn, cid_s)
+            c_unresolved = c.get("unresolved")
+            c_patch_set = c.get("patch_set")
+            c_author = c.get("author")
+            c_message = c.get("message")
             out.append(
                 FlatComment(
                     path=p,
                     line=_comment_line(c),
                     side=_comment_side(c),
-                    unresolved=c.get("unresolved")
-                    if isinstance(c.get("unresolved"), bool)
-                    else None,
-                    patch_set=c.get("patch_set")
-                    if isinstance(c.get("patch_set"), int)
-                    else None,
-                    author=_author_display(
-                        c.get("author") if isinstance(c.get("author"), dict) else None
-                    ),
+                    unresolved=c_unresolved if isinstance(c_unresolved, bool) else None,
+                    patch_set=c_patch_set if isinstance(c_patch_set, int) else None,
+                    author=_author_display(c_author if isinstance(c_author, dict) else None),
                     updated=_comment_timestamp(c),
-                    message=c.get("message")
-                    if isinstance(c.get("message"), str)
-                    else "",
+                    message=c_message if isinstance(c_message, str) else "",
                     url=link,
                     comment_id=cid_s,
                     change_number=cn,
@@ -255,8 +252,6 @@ def comment_thread_url(
     base = web_base.rstrip("/")
     if not project or change_number is None or not comment_id:
         return base
-    from urllib.parse import quote
-
     proj_seg = quote(project, safe="")
     return f"{base}/c/{proj_seg}/+/{change_number}/comment/{comment_id}/"
 
@@ -287,6 +282,20 @@ def local_change_map_from_stack(
     return out
 
 
+def _resolve_commit_display(
+    ch: dict[str, Any],
+    local: dict[str, tuple[str, str, str]],
+) -> tuple[str | None, str | None, str | None]:
+    """Return (sha, subject, body), preferring local git data over Gerrit API data."""
+    cid = ch.get("change_id")
+    if isinstance(cid, str) and cid and cid in local:
+        return local[cid]
+    rev = ch.get("current_revision")
+    sha: str | None = rev[:40] if isinstance(rev, str) and len(rev) >= 40 else (rev if isinstance(rev, str) else None)
+    subj = ch.get("subject")
+    return sha, (subj if isinstance(subj, str) else None), None
+
+
 def build_human_display_payload(
     chain: list[dict[str, Any]],
     comments_by_change: list[list[FlatComment]],
@@ -296,37 +305,21 @@ def build_human_display_payload(
     local = local_commit_by_change_id or {}
     out: list[dict[str, Any]] = []
     for ch, flats in zip(chain, comments_by_change):
-        cid = ch.get("change_id") if isinstance(ch.get("change_id"), str) else None
-        commit_block: dict[str, Any] = {}
-        if cid and cid in local:
-            sha, sub, body = local[cid]
-            commit_block = {"sha": sha, "subject": sub, "body": body}
-        else:
-            rev = (
-                ch.get("current_revision")
-                if isinstance(ch.get("current_revision"), str)
-                else None
-            )
-            subj = ch.get("subject") if isinstance(ch.get("subject"), str) else None
-            commit_block = {
-                "sha": rev[:40] if rev and len(rev) >= 40 else rev,
-                "subject": subj,
-                "body": None,
+        sha, subj, body = _resolve_commit_display(ch, local)
+        commit_block: dict[str, Any] = {"sha": sha, "subject": subj, "body": body}
+        comments: list[dict[str, Any]] = [
+            {
+                "path": fc.path,
+                "line": fc.line,
+                "unresolved": fc.unresolved,
+                "patchSet": fc.patch_set,
+                "author": fc.author,
+                "updated": fc.updated,
+                "message": fc.message,
+                "url": fc.url,
             }
-        comments: list[dict[str, Any]] = []
-        for fc in flats:
-            comments.append(
-                {
-                    "path": fc.path,
-                    "line": fc.line,
-                    "unresolved": fc.unresolved,
-                    "patchSet": fc.patch_set,
-                    "author": fc.author,
-                    "updated": fc.updated,
-                    "message": fc.message,
-                    "url": fc.url,
-                }
-            )
+            for fc in flats
+        ]
         out.append({"commit": commit_block, "comments": comments})
     return out
 
@@ -339,10 +332,11 @@ def format_human(
 ) -> str:
     lines: list[str] = []
     for ch in changes_payload:
-        commit = ch.get("commit") or {}
-        sha = commit.get("sha") if isinstance(commit, dict) else None
-        subj = commit.get("subject") if isinstance(commit, dict) else None
-        body = commit.get("body") if isinstance(commit, dict) else None
+        raw_commit = ch.get("commit")
+        commit: dict[str, Any] = raw_commit if isinstance(raw_commit, dict) else {}
+        sha = commit.get("sha")
+        subj = commit.get("subject")
+        body = commit.get("body")
         if sha:
             lines.append(f"commit {sha}")
             lines.append("")
@@ -408,42 +402,33 @@ def build_json_payload(
     local = local_commit_by_change_id or {}
     out_changes: list[dict[str, Any]] = []
     for ch, flats in zip(chain, comments_by_change):
-        cid = ch.get("change_id") if isinstance(ch.get("change_id"), str) else None
-        num = ch.get("_number") if isinstance(ch.get("_number"), int) else None
-        proj = ch.get("project") if isinstance(ch.get("project"), str) else None
-        subj = ch.get("subject") if isinstance(ch.get("subject"), str) else None
-        rev = (
-            ch.get("current_revision")
-            if isinstance(ch.get("current_revision"), str)
-            else None
-        )
-        sha_txt: str | None = rev[:40] if rev and len(rev) >= 7 else rev
-        sub_txt: str | None = subj
-        body_txt: str | None = None
-        if cid and cid in local:
-            sha_txt, sub_txt, body_txt = local[cid]
-        comments_json: list[dict[str, Any]] = []
-        for fc in flats:
-            comments_json.append(
-                {
-                    "path": fc.path,
-                    "line": fc.line,
-                    "side": fc.side,
-                    "unresolved": fc.unresolved,
-                    "patchSet": fc.patch_set,
-                    "author": fc.author,
-                    "updated": fc.updated,
-                    "message": fc.message,
-                    "url": fc.url,
-                    "id": fc.comment_id,
-                }
-            )
+        raw_cid = ch.get("change_id")
+        cid = raw_cid if isinstance(raw_cid, str) else None
+        raw_num = ch.get("_number")
+        num = raw_num if isinstance(raw_num, int) else None
+        raw_proj = ch.get("project")
+        proj = raw_proj if isinstance(raw_proj, str) else None
+        sha_txt, sub_txt, body_txt = _resolve_commit_display(ch, local)
+        comments_json: list[dict[str, Any]] = [
+            {
+                "path": fc.path,
+                "line": fc.line,
+                "side": fc.side,
+                "unresolved": fc.unresolved,
+                "patchSet": fc.patch_set,
+                "author": fc.author,
+                "updated": fc.updated,
+                "message": fc.message,
+                "url": fc.url,
+                "id": fc.comment_id,
+            }
+            for fc in flats
+        ]
         out_changes.append(
             {
                 "changeId": cid,
                 "changeNumber": num,
                 "project": proj,
-                "subject": sub_txt,
                 "commit": {
                     "sha": sha_txt,
                     "subject": sub_txt,

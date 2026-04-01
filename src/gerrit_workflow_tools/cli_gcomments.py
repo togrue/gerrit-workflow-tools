@@ -101,16 +101,16 @@ def main(argv: list[str] | None = None) -> int:
                 skip_fixups=not args.no_skip_fixups,
                 snapshot=stack_snap,
             )
-            raw_msg = next((r[3] for r in stack_snap.rows if r[0] == sha), None)
+            raw_msg = next(
+                (raw for full_sha, _short, _subj, raw in stack_snap.rows if full_sha == sha),
+                None,
+            )
             cid = change_id_for_sha(cwd, sha, raw_message=raw_msg)
             first = resolve_change_for_gcomments(
                 client, change_arg=None, local_change_id=cid
             )
 
         chain = ordered_relation_chain(client, first) if args.whole_chain else [first]
-
-        only_unresolved_comments = args.unresolved
-        all_comments = args.all_comments
 
         comments_by_change = []
         for ch in chain:
@@ -122,8 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                 web_base,
                 ch,
                 raw_map,
-                include_all=all_comments,
-                strict_open=only_unresolved_comments,
+                include_all=args.all_comments,
+                strict_open=args.unresolved,
             )
             comments_by_change.append(flattened)
 
