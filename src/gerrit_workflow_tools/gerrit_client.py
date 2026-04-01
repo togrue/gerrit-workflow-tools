@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -9,6 +10,8 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from gerrit_workflow_tools.config import gerrit_password, gerrit_token, gerrit_user
+
+logger = logging.getLogger(__name__)
 
 
 class GerritApiError(RuntimeError):
@@ -45,6 +48,7 @@ class GerritClient:
     def _request_json(self, path: str, *, params: dict[str, str] | None = None) -> Any:
         q = f"?{urlencode(params)}" if params else ""
         url = f"{self.web_base}/a/{path.lstrip('/')}{q}"
+        logger.info("GET %s", url)
         # headers: dict[str, str] = {"Accept": "application/json"}
         headers: dict[str, str] = {"Accept": "*/*"}
         auth = _basic_auth_header(self.cwd)
@@ -68,9 +72,11 @@ class GerritClient:
             raise GerritApiError(f"Gerrit request failed: {e.reason!r}") from e
 
         try:
-            return json.loads(_strip_magic_json_prefix(body))
+            parsed = json.loads(_strip_magic_json_prefix(body))
         except json.JSONDecodeError as e:
             raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
+        logger.debug("response body: %s", json.dumps(parsed, indent=2))
+        return parsed
 
     def query_changes(self, query: str, *, n: int = 25) -> list[dict[str, Any]]:
         data = self._request_json(
@@ -79,6 +85,7 @@ class GerritClient:
         )
         if not isinstance(data, list):
             raise GerritApiError("unexpected changes query response")
+        logger.info("query_changes %r -> %d result(s)", query, len(data))
         return data
 
     def get_change(self, change_id: str) -> dict[str, Any]:
@@ -86,6 +93,12 @@ class GerritClient:
         data = self._request_json(f"changes/{enc}/detail")
         if not isinstance(data, dict):
             raise GerritApiError("unexpected change detail response")
+        logger.info(
+            "get_change %r -> #%s %r",
+            change_id,
+            data.get("_number"),
+            data.get("subject"),
+        )
         return data
 
     def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
@@ -97,6 +110,13 @@ class GerritClient:
         for k, v in data.items():
             if isinstance(v, list):
                 out[k] = [x for x in v if isinstance(x, dict)]
+        total = sum(len(v) for v in out.values())
+        logger.info(
+            "get_comments %r -> %d file(s), %d comment(s)",
+            change_id,
+            len(out),
+            total,
+        )
         return out
 
     def get_related(
@@ -117,7 +137,9 @@ class GerritClient:
         ch = data.get("changes")
         if not isinstance(ch, list):
             return []
-        return [x for x in ch if isinstance(x, dict)]
+        result = [x for x in ch if isinstance(x, dict)]
+        logger.info("get_related %r -> %d related change(s)", change_id, len(result))
+        return result
 
 
 def resolve_change_ref(arg: str) -> str:

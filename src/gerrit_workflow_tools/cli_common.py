@@ -12,10 +12,22 @@ _LOG = logging.getLogger("gerrit_workflow_tools")
 _CONFIGURED = False
 
 
-def configure_logging(verbose: bool) -> None:
-    """Enable DEBUG on package loggers; stderr handler is attached once."""
+def configure_logging(verbosity: int | bool) -> None:
+    """Set package log level based on verbosity count.
+
+    0 / False  → WARNING (silent)
+    1 / True   → INFO    (counts and resolution steps)
+    2+         → DEBUG   (full API response bodies)
+    """
     global _CONFIGURED
-    _LOG.setLevel(logging.DEBUG if verbose else logging.WARNING)
+    v = int(verbosity)
+    if v >= 2:
+        level = logging.DEBUG
+    elif v == 1:
+        level = logging.INFO
+    else:
+        level = logging.WARNING
+    _LOG.setLevel(level)
     if not _CONFIGURED:
         h = logging.StreamHandler(sys.stderr)
         h.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))

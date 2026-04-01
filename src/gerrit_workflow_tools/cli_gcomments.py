@@ -66,8 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "-v",
         "--verbose",
-        action="store_true",
-        help="log resolution steps to stderr",
+        action="count",
+        default=0,
+        help="log resolution steps to stderr; repeat (-vv) for full API responses",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)

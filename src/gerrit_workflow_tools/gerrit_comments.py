@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ from gerrit_workflow_tools.stack import (
     get_stack_snapshot,
     parse_change_id,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _is_fixup_or_squash_subject(subject: str) -> bool:
@@ -54,13 +57,16 @@ def select_commit_for_comments(
 
     if not shas:
         raise GitError("no commits in local stack for gcomments (empty range)")
+    logger.debug("candidate SHAs (newest first): %s", shas)
     if not skip_fixups:
+        logger.info("select_commit: picked %s (skip_fixups=False)", shas[0][:12])
         return shas[0]
     for sha in shas:
         sub = by_sha.get(sha)
         if sub is None:
             sub = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
         if not _is_fixup_or_squash_subject(sub):
+            logger.info("select_commit: picked %s %r (skipped fixup/squash commits)", sha[:12], sub)
             return sha
     raise GitError("no non-fixup/squash commit found in stack (try --no-skip-fixups)")
 
@@ -72,7 +78,9 @@ def change_id_for_sha(
     cid = parse_change_id(raw)
     if not cid or not CHANGE_ID_VALUE_RE.match(cid.strip()):
         raise GitError(f"no valid Change-Id in commit {sha[:8]}")
-    return cid.strip()
+    cid = cid.strip()
+    logger.info("change_id_for_sha %s -> %s", sha[:12], cid)
+    return cid
 
 
 def resolve_change_for_gcomments(
@@ -84,11 +92,20 @@ def resolve_change_for_gcomments(
     if change_arg:
         q = resolve_change_ref(change_arg)
         rows = client.query_changes(q, n=10)
-        return pick_change_from_query_result(rows)
-    if local_change_id:
+        ch = pick_change_from_query_result(rows)
+    elif local_change_id:
         rows = client.query_changes(f"change:{local_change_id}", n=10)
-        return pick_change_from_query_result(rows)
-    raise GitError("internal: no change specified")
+        ch = pick_change_from_query_result(rows)
+    else:
+        raise GitError("internal: no change specified")
+    logger.info(
+        "resolved change -> #%s %r (id=%s)",
+        ch.get("_number"),
+        ch.get("subject"),
+        ch.get("id"),
+    )
+    logger.debug("resolved change detail: %s", ch)
+    return ch
 
 
 def ordered_relation_chain(
@@ -111,6 +128,11 @@ def ordered_relation_chain(
     ordered = sorted(
         merged.values(),
         key=lambda c: c.get("_number") if isinstance(c.get("_number"), int) else 0,
+    )
+    logger.info(
+        "relation chain: %d change(s): %s",
+        len(ordered),
+        ", ".join(f"#{c.get('_number')} {c.get('subject', '')!r}" for c in ordered),
     )
     return ordered
 
@@ -240,7 +262,22 @@ def flatten_change_comments(
         ps = fc.patch_set if fc.patch_set is not None else 0
         return (pl, ln, ps, fc.updated)
 
-    return sorted(out, key=sort_key)
+    result = sorted(out, key=sort_key)
+    logger.info(
+        "flatten_change_comments #%s -> %d comment(s) (include_all=%s, strict_open=%s)",
+        cn,
+        len(result),
+        include_all,
+        strict_open,
+    )
+    logger.debug(
+        "flattened comments: %s",
+        [
+            {"path": fc.path, "line": fc.line, "author": fc.author, "message": fc.message[:80]}
+            for fc in result
+        ],
+    )
+    return result
 
 
 def comment_thread_url(
