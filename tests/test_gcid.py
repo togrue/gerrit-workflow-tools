@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from gerrit_workflow_tools.cli_gcid import (
+    CHANGE_ID_RE,
+    extract_change_id_from_msg,
+    is_change_id,
+    main as gcid_main,
+    _parse_sha_body_rs,
+)
+from gerrit_workflow_tools.git_run import git
+from tests.conftest import run_cli
+
+# Bundled repo with real history and Gerrit-style Change-Ids on the last line.
+_GIT_GRAPH_REPO = Path(__file__).resolve().parent.parent / "test-git-graph-repo"
+
+# Known SHAs and Change-Ids from test-git-graph-repo (branch change-105, tip at time of fixture).
+_HEAD_SHA = "f8078f8bf03263d27dfa6010611e2caab459c6a0"
+_HEAD_CID = "Ief8fa7cdbbc0dbb47127eb3e2f3c8cb82a9fa97b"
+_PARENT_CID = "If7a5c187870e6b26109b6ab380a97b26dcee949e"
+
+
+@pytest.fixture(scope="module")
+def git_graph_repo() -> Path:
+    if not (_GIT_GRAPH_REPO / ".git").is_dir():
+        pytest.skip(f"missing bundled repo: {_GIT_GRAPH_REPO}")
+    return _GIT_GRAPH_REPO
+
+
+def _make_repo_no_change_id_footer(path: Path) -> Path:
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    path.mkdir(parents=True, exist_ok=True)
+    git("init", "-b", "main", cwd=path, env=env)
+    (path / "README.md").write_text("x\n", encoding="utf-8")
+    git("add", "README.md", cwd=path, env=env)
+    git("commit", "-m", "no change-id footer here", cwd=path, env=env)
+    return path
+
+
+def _make_repo_malformed_change_id_last_line(path: Path) -> Path:
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    path.mkdir(parents=True, exist_ok=True)
+    git("init", "-b", "main", cwd=path, env=env)
+    (path / "README.md").write_text("x\n", encoding="utf-8")
+    git("add", "README.md", cwd=path, env=env)
+    git(
+        "commit",
+        "-m",
+        "subject\n\nChange-Id: Ibad",
+        cwd=path,
+        env=env,
+    )
+    return path
+
+
+def _make_repo_change_id_not_last_line(path: Path) -> Path:
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    path.mkdir(parents=True, exist_ok=True)
+    git("init", "-b", "main", cwd=path, env=env)
+    (path / "README.md").write_text("x\n", encoding="utf-8")
+    git("add", "README.md", cwd=path, env=env)
+    cid = "I" + "a" * 40
+    git(
+        "commit",
+        "-m",
+        f"subject\n\nChange-Id: {cid}\n\nSigned-off-by: test@example.com",
+        cwd=path,
+        env=env,
+    )
+    return path
+
+
+# --- Pure helpers ---
+
+
+def test_is_change_id_accepts_gerrit_form():
+    assert is_change_id("I" + "a" * 40)
+    assert is_change_id("I" + "f" * 40)
+
+
+def test_is_change_id_rejects_wrong_length_or_charset():
+    assert not is_change_id("I" + "a" * 39)
+    assert not is_change_id("I" + "a" * 41)
+    assert not is_change_id("I" + "A" * 40)
+    assert not is_change_id("x" + "a" * 40)
+
+
+def test_extract_change_id_from_msg_last_line_only():
+    cid = "I" + "b" * 40
+    assert extract_change_id_from_msg(f"title\n\nChange-Id: {cid}\n") == cid
+    assert extract_change_id_from_msg(f"title\n\nChange-Id: {cid}") == cid
+
+
+def test_extract_change_id_from_msg_not_on_last_line():
+    cid = "I" + "c" * 40
+    msg = f"title\n\nChange-Id: {cid}\n\nSigned-off-by: x\n"
+    assert extract_change_id_from_msg(msg) is None
+
+
+def test_extract_change_id_from_msg_missing():
+    assert extract_change_id_from_msg("only a subject") is None
+
+
+def test_parse_sha_body_rs_trailing_rs_stripped():
+    raw = f"aaa\x1ebody1\x1ebbb\x1ebody2\x1e\x1e"
+    pairs = _parse_sha_body_rs(raw)
+    assert pairs == [("aaa", "body1"), ("bbb", "body2")]
+
+
+def test_change_id_regex_full_line():
+    m = CHANGE_ID_RE.match("Change-Id: I" + "d" * 40)
+    assert m is not None
+    assert m.group(1) == "I" + "d" * 40
+
+
+# --- CLI: test-git-graph-repo ---
+
+
+def test_gcid_defaults_to_head(git_graph_repo, monkeypatch):
+    code, out, err = run_cli(git_graph_repo, gcid_main, [], monkeypatch)
+    assert code == 0
+    assert err == ""
+    assert out.strip() == _HEAD_CID
+
+
+def test_gcid_explicit_sha(git_graph_repo, monkeypatch):
+    code, out, err = run_cli(
+        git_graph_repo, gcid_main, [_HEAD_SHA], monkeypatch
+    )
+    assert code == 0
+    assert out.strip() == _HEAD_CID
+    assert err == ""
+
+
+def test_gcid_range_two_commits_order(git_graph_repo, monkeypatch):
+    code, out, err = run_cli(
+        git_graph_repo,
+        gcid_main,
+        [f"{_HEAD_SHA}~2..{_HEAD_SHA}"],
+        monkeypatch,
+    )
+    assert code == 0
+    assert err == ""
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert lines == [_HEAD_CID, _PARENT_CID]
+
+
+def test_gcid_single_commit_range_syntax(git_graph_repo, monkeypatch):
+    """HEAD~1..HEAD is one commit; still uses range mode (.. present)."""
+    code, out, err = run_cli(
+        git_graph_repo,
+        gcid_main,
+        [f"{_HEAD_SHA}~1..{_HEAD_SHA}"],
+        monkeypatch,
+    )
+    assert code == 0
+    assert out.strip() == _HEAD_CID
+
+
+def test_gcid_passthrough_change_id_no_git(git_graph_repo, monkeypatch):
+    code, out, err = run_cli(
+        git_graph_repo, gcid_main, [_HEAD_CID], monkeypatch
+    )
+    assert code == 0
+    assert out.strip() == _HEAD_CID
+    assert err == ""
+
+
+def test_gcid_invalid_ref(git_graph_repo, monkeypatch):
+    code, out, err = run_cli(
+        git_graph_repo,
+        gcid_main,
+        ["not-a-valid-ref-99999999"],
+        monkeypatch,
+    )
+    assert code == 1
+    assert out == ""
+    assert "git" in err.lower() or "unknown" in err.lower() or err.strip()
+
+
+def test_gcid_verbose(git_graph_repo, monkeypatch):
+    code, out, err = run_cli(
+        git_graph_repo, gcid_main, ["-v", "HEAD"], monkeypatch
+    )
+    assert code == 0
+    assert _HEAD_CID in out
+
+
+# --- CLI: synthetic repos ---
+
+
+def test_gcid_missing_change_id_exits_1(tmp_path, monkeypatch):
+    repo = _make_repo_no_change_id_footer(tmp_path / "r")
+    code, out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
+    assert code == 1
+    assert out == ""
+    assert "no Change-Id" in err
+
+
+def test_gcid_change_id_not_last_line_exits_1(tmp_path, monkeypatch):
+    repo = _make_repo_change_id_not_last_line(tmp_path / "r2")
+    code, out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
+    assert code == 1
+    assert "no Change-Id" in err
+
+
+def test_gcid_malformed_change_id_last_line_exits_1(tmp_path, monkeypatch):
+    repo = _make_repo_malformed_change_id_last_line(tmp_path / "r3")
+    code, out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
+    assert code == 1
+    assert "no Change-Id" in err
+
+
+def test_gcid_string_that_is_not_change_id_tries_git(git_graph_repo, monkeypatch):
+    """Too-short I… is not passthrough; git log fails for unknown object."""
+    bad = "I" + "a" * 39
+    code, out, err = run_cli(git_graph_repo, gcid_main, [bad], monkeypatch)
+    assert code == 1
+    assert out == ""
