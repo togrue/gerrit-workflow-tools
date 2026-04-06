@@ -50,13 +50,13 @@ def main(argv: list[str] | None = None) -> int:
         help="do not skip fixup!/squash! commits when resolving Change-Id",
     )
     p.add_argument(
-        "--all-comments",
+        "--all",
         action="store_true",
-        dest="all_comments",
-        help="include resolved and unresolved comments",
+        dest="all_",
+        help="include resolved comments",
     )
     p.add_argument(
-        "--unresolved",
+        "--open",
         action="store_true",
         help="only strictly unresolved comments",
     )
@@ -66,15 +66,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "-v",
         "--verbose",
-        action="count",
-        default=0,
-        help="log resolution steps to stderr; repeat (-vv) for full API responses",
+        action="store_true",
+        help="log resolution steps to stderr",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
     cwd = cwd_from_env()
 
-    if args.all_comments and args.unresolved:
+    if args.all_ and args.open:
         print("error: --all and --open are mutually exclusive", file=sys.stderr)
         return 1
 
@@ -102,16 +101,16 @@ def main(argv: list[str] | None = None) -> int:
                 skip_fixups=not args.no_skip_fixups,
                 snapshot=stack_snap,
             )
-            raw_msg = next(
-                (raw for full_sha, _short, _subj, raw in stack_snap.rows if full_sha == sha),
-                None,
-            )
+            raw_msg = next((r[3] for r in stack_snap.rows if r[0] == sha), None)
             cid = change_id_for_sha(cwd, sha, raw_message=raw_msg)
             first = resolve_change_for_gcomments(
                 client, change_arg=None, local_change_id=cid
             )
 
         chain = ordered_relation_chain(client, first) if args.whole_chain else [first]
+
+        strict_open = args.open
+        include_all = args.all_
 
         comments_by_change = []
         for ch in chain:
@@ -123,8 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                 web_base,
                 ch,
                 raw_map,
-                include_all=args.all_comments,
-                strict_open=args.unresolved,
+                include_all=include_all,
+                strict_open=strict_open,
             )
             comments_by_change.append(flattened)
 
