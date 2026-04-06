@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_gcid import (
 )
 from gerrit_workflow_tools.git_run import git
 from tests.conftest import run_cli
+from tests.fixtures import _cid
 
 # Bundled repo with real history and Gerrit-style Change-Ids on the last line.
 _GIT_GRAPH_REPO = Path(__file__).resolve().parent.parent / "test-git-graph-repo"
@@ -202,6 +203,49 @@ def test_gcid_verbose(git_graph_repo, monkeypatch):
     )
     assert code == 0
     assert _HEAD_CID in out
+
+
+# --- CLI: --start-at-remote (stack_repo: main + feature with 4 commits) ---
+
+
+def test_gcid_start_at_remote_lists_stack_newest_first(stack_repo, monkeypatch):
+    code, out, err = run_cli(
+        stack_repo, gcid_main, ["--start-at-remote"], monkeypatch
+    )
+    assert code == 0
+    assert err == ""
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    assert lines == [_cid("4"), _cid("3"), _cid("2"), _cid("1")]
+
+
+def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
+    code, out, err = run_cli(
+        stack_repo, gcid_main, ["--start-at-remote", "HEAD~2"], monkeypatch
+    )
+    assert code == 0
+    assert err == ""
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    assert lines == [_cid("2"), _cid("1")]
+
+
+def test_gcid_start_at_remote_range_ignores_left_endpoint(stack_repo, monkeypatch):
+    """``--start-at-remote`` always uses merge-base..RIGHT (same as ``gchangeid-check`` stack)."""
+    full = run_cli(stack_repo, gcid_main, ["--start-at-remote"], monkeypatch)
+    ranged = run_cli(
+        stack_repo, gcid_main, ["--start-at-remote", "HEAD~3..HEAD"], monkeypatch
+    )
+    assert full[0] == 0 and ranged[0] == 0
+    assert full[1] == ranged[1]
+
+
+def test_gcid_start_at_remote_change_id_passthrough(stack_repo, monkeypatch):
+    cid = _cid("4")
+    code, out, err = run_cli(
+        stack_repo, gcid_main, ["--start-at-remote", cid], monkeypatch
+    )
+    assert code == 0
+    assert err == ""
+    assert out.strip() == cid
 
 
 # --- CLI: synthetic repos ---

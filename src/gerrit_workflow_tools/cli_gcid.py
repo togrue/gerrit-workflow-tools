@@ -9,6 +9,7 @@
 # Parse each commit message (last non-empty line must be the Change-Id).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
+# With ``--start-at-remote``, log ``merge_base..END`` (same merge-base resolution as ``stack`` / ``gchangeid-check``).
 
 import argparse
 import re
@@ -21,6 +22,7 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 from gerrit_workflow_tools.git_run import GitError, git_out
+from gerrit_workflow_tools.stack import merge_base_with_target
 
 CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE)
 
@@ -74,6 +76,18 @@ def _parse_sha_body_rs(raw: str) -> list[tuple[str, str]]:
     return out
 
 
+def _rev_spec_start_at_remote(cwd: Path, input_arg: str) -> str:
+    """``merge_base..END`` where END is ``input_arg`` or the right side of ``left..right``."""
+    mb, _, _ = merge_base_with_target(cwd)
+    if ".." not in input_arg:
+        end = git_out("rev-parse", input_arg, cwd=cwd)
+        return f"{mb}..{end}"
+    idx = input_arg.index("..")
+    right = input_arg[idx + 2 :].strip() or "HEAD"
+    end = git_out("rev-parse", right, cwd=cwd)
+    return f"{mb}..{end}"
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="git gcid")
     p.add_argument(
@@ -83,7 +97,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Commit SHA, Change-Id (I…), or range (sha1..sha2). Defaults to HEAD if not given.",
     )
     p.add_argument(
-        "-v", "--verbose", action="store_true", help="log git commands to stderr"
+        "-v", "--verbose", action="store_true", help="Log git commands to stderr."
+    )
+    p.add_argument(
+        "--start-at-remote",
+        action="store_true",
+        help="Start at the merged remote branch, where the current commit is based on.",
+    )
+    p.add_argument(
+        "--check-duplicates",
+        action="store_true",
+        help="Check for duplicate Change-Ids in the current chain. Start at the merged remote branch, where the current commit is based on.",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
@@ -95,9 +119,13 @@ def main(argv: list[str] | None = None) -> int:
         print(input_arg)
         return 0
 
-    single = ".." not in input_arg
     try:
-        raw = _git_log_sha_body(cwd, input_arg, single=single)
+        if args.start_at_remote:
+            rev_spec = _rev_spec_start_at_remote(cwd, input_arg)
+            raw = _git_log_sha_body(cwd, rev_spec, single=False)
+        else:
+            single = ".." not in input_arg
+            raw = _git_log_sha_body(cwd, input_arg, single=single)
     except GitError as e:
         return handle_git_error(e)
 
