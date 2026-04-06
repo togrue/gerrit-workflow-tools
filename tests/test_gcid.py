@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+import logging
+import sys
 from pathlib import Path
 
 import pytest
@@ -203,6 +206,27 @@ def test_gcid_verbose(git_graph_repo, monkeypatch):
     )
     assert code == 0
     assert _HEAD_CID in out
+
+
+def test_gcid_vv_logs_git_subprocess(git_graph_repo, monkeypatch):
+    """With -vv, git_run logs each subprocess at DEBUG on the package logger (propagate=False)."""
+    buf = io.StringIO()
+    extra = logging.StreamHandler(buf)
+    extra.setLevel(logging.DEBUG)
+    pkg = logging.getLogger("gerrit_workflow_tools")
+    pkg.addHandler(extra)
+    pkg.setLevel(logging.DEBUG)
+    try:
+        monkeypatch.chdir(git_graph_repo)
+        out_buf = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", out_buf)
+        monkeypatch.setattr(sys, "stderr", io.StringIO())
+        code = gcid_main(["-vv", "HEAD"])
+    finally:
+        pkg.removeHandler(extra)
+    assert code == 0
+    assert _HEAD_CID in out_buf.getvalue()
+    assert "run: git" in buf.getvalue()
 
 
 # --- CLI: --start-at-remote (stack_repo: main + feature with 4 commits) ---

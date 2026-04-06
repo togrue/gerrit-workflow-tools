@@ -14,6 +14,7 @@
 # ``--check-duplicates`` exits 0 if all footers are valid and unique, 1 if a footer is missing, 2 on duplicates.
 
 import argparse
+import logging
 import re
 import sys
 from pathlib import Path
@@ -25,6 +26,8 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import merge_base_with_target
+
+logger = logging.getLogger(__name__)
 
 CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE)
 
@@ -62,6 +65,7 @@ def _git_log_sha_body(cwd: Path, rev_spec: str, *, single: bool) -> str:
         args.extend(["-1", rev_spec])
     else:
         args.append(rev_spec)
+    logger.debug("gcid git log rev_spec=%r single=%s", rev_spec, single)
     return git_out(*args, cwd=cwd)
 
 
@@ -82,10 +86,12 @@ def _rev_spec_start_at_remote(cwd: Path, input_arg: str) -> str:
     """``merge_base..END`` where END is ``input_arg`` or the right side of ``left..right``."""
     mb, _, _ = merge_base_with_target(cwd)
     if ".." not in input_arg:
+        logger.debug("gcid git rev-parse %r (end ref for start-at-remote)", input_arg)
         end = git_out("rev-parse", input_arg, cwd=cwd)
         return f"{mb}..{end}"
     idx = input_arg.index("..")
     right = input_arg[idx + 2 :].strip() or "HEAD"
+    logger.debug("gcid git rev-parse %r (range right for start-at-remote)", right)
     end = git_out("rev-parse", right, cwd=cwd)
     return f"{mb}..{end}"
 
@@ -99,7 +105,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Commit SHA, Change-Id (I…), or range (sha1..sha2). Defaults to HEAD if not given.",
     )
     p.add_argument(
-        "-v", "--verbose", action="store_true", help="Log git commands to stderr."
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase stderr verbosity (-v: INFO; -vv: log each git subprocess).",
     )
     p.add_argument(
         "--start-at-remote",
