@@ -5,8 +5,8 @@
 # Implementation
 # Identify if the supplied argument is a valid Change-Id.
 # If it is, output the Change-Id.
-# Else use git-rev-parse to resolve the commit(s) or range of commits to the Change-Id.
-# For that parse the commit message of each commit (last non-empty line must be the Change-Id).
+# Else use one ``git log`` over the revision or range (same RS-delimited %H / %B pattern as stack.py).
+# Parse each commit message (last non-empty line must be the Change-Id).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
 
@@ -24,10 +24,10 @@ from gerrit_workflow_tools.git_run import GitError, git_out
 
 CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE)
 
-# Record separator in `git log --format` (ASCII RS). Same as stack.py; avoids NUL in argv on Windows.
+# Field separator in `git log --format` (ASCII RS). Same as stack.py; %x1e in --format avoids NUL in argv on Windows.
 _RS = "\x1e"
-# Stay under typical Windows ~8191 char command-line limits when passing many full SHAs.
-_LOG_CHUNK = 80
+# Git expands %x1e in --format; keep in sync with stack_commits_metadata_one_log style.
+_LOG_SHA_BODY_FMT = "%H%x1e%B%x1e"
 
 
 def is_change_id(s: str) -> bool:
@@ -51,56 +51,27 @@ def extract_change_id_from_msg(msg: str) -> str | None:
     return None
 
 
-def _change_ids_one_per_commit(commits: list[str], cwd: Path) -> dict[str, str | None]:
-    ids: dict[str, str | None] = {}
-    for c in commits:
-        try:
-            msg = git_out("log", "-1", "--format=%B", c, cwd=cwd)
-            ids[c] = extract_change_id_from_msg(msg)
-        except GitError:
-            ids[c] = None
-    return ids
+def _git_log_sha_body(cwd: Path, rev_spec: str, *, single: bool) -> str:
+    """One ``git log``; stdout is RS-delimited %H / %B records (see ``_parse_sha_body_rs``)."""
+    args: list[str] = ["log", f"--format={_LOG_SHA_BODY_FMT}"]
+    if single:
+        args.extend(["-1", rev_spec])
+    else:
+        args.append(rev_spec)
+    return git_out(*args, cwd=cwd)
 
 
-def _change_ids_batch(commits: list[str], cwd: Path) -> dict[str, str | None] | None:
-    """Parse one ``git log --no-walk`` batch. Returns None if git failed (caller may fall back)."""
-    fmt = f"%H{_RS}%B{_RS}"
-    try:
-        raw = git_out(
-            "log",
-            "--no-walk=unsorted",
-            f"--format={fmt}",
-            *commits,
-            cwd=cwd,
-        )
-    except GitError:
-        return None
+def _parse_sha_body_rs(raw: str) -> list[tuple[str, str]]:
     parts = raw.split(_RS)
     while parts and parts[-1] == "":
         parts.pop()
-    ids: dict[str, str | None] = {}
+    out: list[tuple[str, str]] = []
     for i in range(0, len(parts), 2):
         if i + 1 >= len(parts):
             break
         sha, msg = parts[i].strip(), parts[i + 1]
-        ids[sha] = extract_change_id_from_msg(msg)
-    return ids
-
-
-def change_ids_for_commits(commits: list[str], cwd: Path) -> dict[str, str | None]:
-    """Map each commit ref to Change-Id or None. Uses one ``git log`` per chunk when possible."""
-    if not commits:
-        return {}
-    merged: dict[str, str | None] = {}
-    for off in range(0, len(commits), _LOG_CHUNK):
-        chunk = commits[off : off + _LOG_CHUNK]
-        ids = _change_ids_batch(chunk, cwd)
-        if ids is None:
-            merged.update(_change_ids_one_per_commit(chunk, cwd))
-        else:
-            for c in chunk:
-                merged[c] = ids.get(c)
-    return merged
+        out.append((sha, msg))
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -124,25 +95,19 @@ def main(argv: list[str] | None = None) -> int:
         print(input_arg)
         return 0
 
+    single = ".." not in input_arg
     try:
-        # If it's a range, expand to all shas (inclusive)
-        if ".." in input_arg:
-            # git rev-list expands ranges inclusive of left, exclusive of right
-            shas = git_out("rev-list", input_arg, cwd=cwd).splitlines()
-        else:
-            # Single commit, resolve sha
-            sha = git_out("rev-parse", input_arg, cwd=cwd).strip()
-            shas = [sha]
+        raw = _git_log_sha_body(cwd, input_arg, single=single)
     except GitError as e:
         return handle_git_error(e)
 
-    results = change_ids_for_commits(shas, cwd)
-    for ref in shas:
-        cid = results.get(ref)
+    pairs = _parse_sha_body_rs(raw)
+    for sha, msg in pairs:
+        cid = extract_change_id_from_msg(msg)
         if cid:
             print(cid)
         else:
-            print(f"error: no Change-Id found in commit {ref}", file=sys.stderr)
+            print(f"error: no Change-Id found in commit {sha}", file=sys.stderr)
             return 1
     return 0
 
