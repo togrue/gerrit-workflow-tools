@@ -248,6 +248,44 @@ def test_gcid_start_at_remote_change_id_passthrough(stack_repo, monkeypatch):
     assert out.strip() == cid
 
 
+# --- CLI: --check-duplicates ---
+
+
+def test_gcid_check_duplicates_ok(stack_repo, monkeypatch):
+    code, out, err = run_cli(
+        stack_repo, gcid_main, ["--check-duplicates"], monkeypatch
+    )
+    assert code == 0
+    assert out == ""
+    assert err == ""
+
+
+def test_gcid_check_duplicates_fails_on_dup(dup_repo, monkeypatch):
+    code, out, err = run_cli(dup_repo, gcid_main, ["--check-duplicates"], monkeypatch)
+    assert code == 2
+    assert out == ""
+    assert "duplicate" in err.lower()
+
+
+def test_gcid_check_duplicates_rejects_change_id_arg(stack_repo, monkeypatch):
+    cid = _cid("4")
+    code, out, err = run_cli(
+        stack_repo, gcid_main, ["--check-duplicates", cid], monkeypatch
+    )
+    assert code == 2
+    assert out == ""
+    assert "change-id" in err.lower() or "Change-Id" in err
+
+
+def test_gcid_check_duplicates_end_ref(stack_repo, monkeypatch):
+    code, out, err = run_cli(
+        stack_repo, gcid_main, ["--check-duplicates", "HEAD~2"], monkeypatch
+    )
+    assert code == 0
+    assert out == ""
+    assert err == ""
+
+
 # --- CLI: synthetic repos ---
 
 

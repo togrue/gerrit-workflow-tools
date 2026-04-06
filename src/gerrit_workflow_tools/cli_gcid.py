@@ -9,7 +9,9 @@
 # Parse each commit message (last non-empty line must be the Change-Id).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
-# With ``--start-at-remote``, log ``merge_base..END`` (same merge-base resolution as ``stack`` / ``gchangeid-check``).
+# With ``--start-at-remote`` or ``--check-duplicates``, log ``merge_base..END``
+# (same merge-base resolution as ``stack`` / ``gchangeid-check``).
+# ``--check-duplicates`` exits 0 if all footers are valid and unique, 1 if a footer is missing, 2 on duplicates.
 
 import argparse
 import re
@@ -114,6 +116,41 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
 
     input_arg = args.arg or "HEAD"
+
+    if args.check_duplicates:
+        if is_change_id(input_arg):
+            print(
+                "error: --check-duplicates needs a commit or range, not a Change-Id",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            rev_spec = _rev_spec_start_at_remote(cwd, input_arg)
+            raw = _git_log_sha_body(cwd, rev_spec, single=False)
+        except GitError as e:
+            return handle_git_error(e)
+        pairs = _parse_sha_body_rs(raw)
+        seen: dict[str, str] = {}
+        for sha, msg in pairs:
+            cid = extract_change_id_from_msg(msg)
+            if not cid:
+                print(
+                    f"error: no Change-Id found in commit {sha}",
+                    file=sys.stderr,
+                )
+                return 1
+            if cid in seen:
+                short = sha[:8]
+                first = seen[cid][:8]
+                print(
+                    f"error: duplicate Change-Id {cid} "
+                    f"(commit {short}, also on {first})",
+                    file=sys.stderr,
+                )
+                return 2
+            seen[cid] = sha
+        return 0
+
     # If arg looks like a Change-Id, just output it
     if is_change_id(input_arg):
         print(input_arg)
