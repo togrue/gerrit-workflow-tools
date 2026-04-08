@@ -4,7 +4,11 @@ import argparse
 import json
 import logging
 
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import (
+    configure_logging,
+    cwd_from_env,
+    handle_git_error,
+)
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.stack import build_stack
 
@@ -21,7 +25,6 @@ def _symbol(state: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="git gstack")
-    p.add_argument("--oneline", action="store_true", help="compact one line per commit")
     p.add_argument(
         "--json", action="store_true", dest="json_", help="machine-readable JSON"
     )
@@ -50,9 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
     show_cid = args.with_change_id and not args.no_change_id
     logger.debug(
-        "gstack cwd=%s oneline=%s json=%s with_change_id=%s with_ready_state=%s",
+        "gstack cwd=%s json=%s with_change_id=%s with_ready_state=%s",
         cwd,
-        args.oneline,
         args.json_,
         show_cid,
         args.with_ready_state,
@@ -108,12 +110,8 @@ def main(argv: list[str] | None = None) -> int:
             cid_txt = c.change_id or "(none)"
             cid_part = f"  Change-Id: {cid_txt}"
         ready_part = f"  [{c.ready_state}]" if args.with_ready_state else ""
-        if args.oneline:
-            extra = cid_part + ready_part
-            print(f"{c.index} {sym} {c.short_sha} {c.subject}{extra}")
-        else:
-            subj = c.subject[:48].ljust(48)
-            print(f"{c.index:2} {sym} {c.short_sha} {subj}{cid_part}{ready_part}")
+        subj = c.subject[:48].ljust(48)
+        print(f"{c.index:3} {sym} {c.short_sha} {subj}{cid_part}{ready_part}")
 
     return 0
 
