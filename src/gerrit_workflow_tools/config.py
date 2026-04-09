@@ -232,5 +232,10 @@ def resolve_local_base_ref(
             return (p2.stdout.strip(), name)
 
     raise GitError(
-        "No base branch: set branch.<name>.gerritTarget, configure @{upstream}, or create main/master."
+        f"No base branch found for '{b}'.\n"
+        "Fix with one of:\n"
+        f"  git config branch.{b}.gerritTarget <target-branch>\n"
+        f"  git branch --set-upstream-to=origin/<target-branch>\n"
+        "Or search all commits instead:\n"
+        "  git gsha --all <change-id>"
     )
