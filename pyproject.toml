@@ -26,6 +26,7 @@ git-gedit = "gerrit_workflow_tools.cli_gedit:main"
 git-gcomments = "gerrit_workflow_tools.cli_gcomments:main"
 git-gcid = "gerrit_workflow_tools.cli_gcid:main"
 git-gsha = "gerrit_workflow_tools.cli_gsha:main"
+git-glog = "gerrit_workflow_tools.cli_glog:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gerrit_workflow_tools"]
