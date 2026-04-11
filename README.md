@@ -52,7 +52,7 @@ Editable install inside the venv: `uv sync` already links the package. For ad-ho
 
 ## Design
 
-See [Gerrit-Workflow-Tools.md](Gerrit-Workflow-Tools.md).
+See [docu/README.md](docu/README.md) for the full documentation index and command reference.
 
 ## Gerrit HTTP (`git gcomments`)
 
