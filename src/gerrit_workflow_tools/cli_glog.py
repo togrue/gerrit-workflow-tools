@@ -77,24 +77,39 @@ def _extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
     label = labels.get(label_name)
     if not isinstance(label, dict):
         return None
+
+    def _all_vote_values() -> list[int]:
+        out: list[int] = []
+        for vote in label.get("all") or []:
+            if isinstance(vote, dict) and vote.get("value") is not None:
+                try:
+                    out.append(int(vote["value"]))
+                except (TypeError, ValueError):
+                    pass
+        return out
+
+    all_vals = _all_vote_values()
+    non_zero = [x for x in all_vals if x != 0]
+
     v = label.get("value")
     if v is not None:
         try:
             iv = int(v)
             # A "value" of 0 with no "all" votes means no vote was cast.
-            all_votes = label.get("all", [])
-            real_votes = [
-                int(vote["value"])
-                for vote in (all_votes or [])
-                if isinstance(vote, dict)
-                and vote.get("value") is not None
-                and int(vote["value"]) != 0
-            ]
-            if iv == 0 and not real_votes:
+            if iv == 0 and not non_zero:
                 return None
             return iv
         except (TypeError, ValueError):
             pass
+
+    # Gerrit often omits top-level ``value`` when the score is +2 (approved) or -2
+    # (rejected); votes only appear under ``all``. Use the same max rule as
+    # MaxWithBlock-style labels.
+    if all_vals:
+        m = max(all_vals)
+        if m == 0 and not non_zero:
+            return None
+        return m
     return None
 
 
