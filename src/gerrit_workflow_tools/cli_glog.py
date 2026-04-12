@@ -384,6 +384,10 @@ def _fmt_comments(count: int, *, use_color: bool) -> str:
     return "   "
 
 
+def _url_line(url: str, *, use_color: bool) -> str:
+    return _color(url, _DIM, use_color=use_color)
+
+
 def _detail_lines(commit: GlogCommit, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     if commit.ci_failures:
@@ -409,8 +413,12 @@ def _primary_line(commit: GlogCommit, *, use_color: bool) -> str:
     return f"{sha} {push} {verified} {cr} {comments}  # {commit.summary}"
 
 
-def _oneline_line(commit: GlogCommit, *, use_color: bool) -> str:
+def _oneline_line(
+    commit: GlogCommit, *, use_color: bool, include_url: bool
+) -> str:
     base = _primary_line(commit, use_color=use_color)
+    if include_url and commit.gerrit_url:
+        base = f"{base}  {_url_line(commit.gerrit_url, use_color=use_color)}"
     extras = _detail_lines(commit, use_color=False)  # strip color for inline
     if extras:
         suffix = "  " + "  ".join(extras)
@@ -495,6 +503,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--range", dest="range_", metavar="REVSET", help="override commit range (e.g. origin/main..HEAD)")
     p.add_argument("--no-color", action="store_true", help="disable colored output")
     p.add_argument("--compact", action="store_true", help="compact single-character status representation")
+    p.add_argument(
+        "--url",
+        action="store_true",
+        help="include each change's Gerrit web URL in text output (JSON always includes gerrit_url)",
+    )
     p.add_argument("-v", "--verbose", action="store_true", help="log git commands to stderr")
     args = p.parse_args(argv)
     configure_logging(args.verbose)
@@ -568,16 +581,20 @@ def main(argv: list[str] | None = None) -> int:
             print()
         if args.compact:
             print(_compact_line(commit))
+            if args.url and commit.gerrit_url:
+                print(_url_line(commit.gerrit_url, use_color=use_color))
             prev_had_details = False
         elif args.oneline:
-            print(_oneline_line(commit, use_color=use_color))
+            print(_oneline_line(commit, use_color=use_color, include_url=args.url))
             prev_had_details = False
         else:
             print(_primary_line(commit, use_color=use_color))
+            if args.url and commit.gerrit_url:
+                print(_url_line(commit.gerrit_url, use_color=use_color))
             details = _detail_lines(commit, use_color=use_color)
             for d in details:
                 print(d)
-            prev_had_details = bool(details)
+            prev_had_details = bool(details) or bool(args.url and commit.gerrit_url)
 
     # Summary section (suppressed for --oneline and --compact)
     if not args.oneline and not args.compact:
