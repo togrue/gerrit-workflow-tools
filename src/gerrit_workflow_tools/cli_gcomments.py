@@ -10,7 +10,11 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.gerrit_client import (
+    GerritApiError,
+    GerritClient,
+    resolve_change_ref,
+)
 from gerrit_workflow_tools.gerrit_comments import (
     build_human_display_payload,
     build_json_payload,
@@ -32,6 +36,16 @@ logger = logging.getLogger(__name__)
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gcomments``: fetch and display Gerrit review comments for the stack or a change."""
     p = argparse.ArgumentParser(prog="git gcomments")
+    p.add_argument(
+        "ref_or_change",
+        nargs="?",
+        default=None,
+        metavar="REF_OR_CHANGE",
+        help=(
+            "optional git revision (commit, branch, etc.) or Gerrit change "
+            "(numeric id or Change-Id I…); same as --rev or --change"
+        ),
+    )
     p.add_argument(
         "--rev", metavar="COMMIT", help="resolve Change-Id from this revision"
     )
@@ -78,6 +92,19 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --all and --open are mutually exclusive", file=sys.stderr)
         return 1
 
+    if args.ref_or_change is not None and args.change:
+        print(
+            "error: use either a positional REF_OR_CHANGE or --change, not both",
+            file=sys.stderr,
+        )
+        return 1
+    if args.ref_or_change is not None and args.rev:
+        print(
+            "error: use either a positional REF_OR_CHANGE or --rev, not both",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
         web_base = resolve_gerrit_web_base(cwd)
     except (GitError, ValueError) as e:
@@ -95,6 +122,28 @@ def main(argv: list[str] | None = None) -> int:
             first = resolve_change_for_gcomments(
                 client, change_arg=args.change, local_change_id=None
             )
+        elif args.ref_or_change is not None:
+            pos = args.ref_or_change.strip()
+            if not pos:
+                print("error: empty positional REF_OR_CHANGE", file=sys.stderr)
+                return 1
+            # Same rules as ``--change`` vs ``--rev``: numeric / I+40 → Gerrit query; else git rev.
+            if resolve_change_ref(pos) != pos:
+                first = resolve_change_for_gcomments(
+                    client, change_arg=pos, local_change_id=None
+                )
+            else:
+                sha = select_commit_for_comments(
+                    cwd,
+                    explicit_rev=pos,
+                    skip_fixups=not args.no_skip_fixups,
+                    snapshot=stack_snap,
+                )
+                raw_msg = next((r[3] for r in stack_snap.rows if r[0] == sha), None)
+                cid = change_id_for_sha(cwd, sha, raw_message=raw_msg)
+                first = resolve_change_for_gcomments(
+                    client, change_arg=None, local_change_id=cid
+                )
         else:
             sha = select_commit_for_comments(
                 cwd,
