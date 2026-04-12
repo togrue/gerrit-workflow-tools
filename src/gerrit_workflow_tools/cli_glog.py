@@ -73,43 +73,56 @@ class GlogCommit:
 
 
 def _extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
-    """Return the effective vote value for a Gerrit label, or None if no vote."""
+    """
+    Return the effective vote value for a Gerrit label, or None if no vote.
+    This examines the top-level "value" if present, else aggregates votes from "all" key
+    (max value), handling "no vote" (value=0 and no nonzero in "all") as None.
+    Example input (from REST API docs):
+
+      "Verified": {
+          "all": [
+            {"value": 0, ...},
+            {"value": 0, ...}
+          ],
+          "values": { "-1": "Fails", " 0": "No score", "+1": "Verified" }
+      },
+
+    In recent Gerrit, "value" is usually provided alongside "all" with an aggregate vote
+    for the current user, but not always.
+    """
     label = labels.get(label_name)
     if not isinstance(label, dict):
         return None
 
-    def _all_vote_values() -> list[int]:
-        out: list[int] = []
-        for vote in label.get("all") or []:
-            if isinstance(vote, dict) and vote.get("value") is not None:
-                try:
-                    out.append(int(vote["value"]))
-                except (TypeError, ValueError):
-                    pass
-        return out
-
-    all_vals = _all_vote_values()
-    non_zero = [x for x in all_vals if x != 0]
-
+    # Prefer top-level "value" if set (preferred by UI and recent API versions)
     v = label.get("value")
     if v is not None:
         try:
             iv = int(v)
-            # A "value" of 0 with no "all" votes means no vote was cast.
-            if iv == 0 and not non_zero:
-                return None
+            # Gerrit will omit "value" if literally no votes; but "value": 0 and all votes zero means no vote
+            if iv == 0:
+                all_vals = [int(vote.get("value", 0))
+                            for vote in label.get("all", [])
+                            if isinstance(vote, dict) and vote.get("value") is not None]
+                if not any(x != 0 for x in all_vals):
+                    return None
             return iv
         except (TypeError, ValueError):
             pass
 
-    # Gerrit often omits top-level ``value`` when the score is +2 (approved) or -2
-    # (rejected); votes only appear under ``all``. Use the same max rule as
-    # MaxWithBlock-style labels.
+    # Aggregate logic: take max value if none is zero
+    all_vals = [
+        int(vote.get("value", 0))
+        for vote in label.get("all", [])
+        if isinstance(vote, dict) and vote.get("value") is not None
+    ]
     if all_vals:
-        m = max(all_vals)
-        if m == 0 and not non_zero:
+        max_val = max(all_vals, default=0)
+        if max_val == 0 and not any(x != 0 for x in all_vals):
             return None
-        return m
+        return max_val
+
+    # No value and no votes → no vote
     return None
 
 
