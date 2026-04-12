@@ -5,7 +5,8 @@
 # Implementation
 # Identify if the supplied argument is a valid Change-Id.
 # If it is, output the Change-Id.
-# Else use one ``git log`` over the revision or range (RS-delimited %H / %B: :func:`stack.git_log_sha_body`).
+# Else normalize the revision with ``git rev-parse --verify`` (each side of ``..`` / ``...``), then run one
+# ``git log`` over the revision or range (RS-delimited %H / %B: :func:`stack.git_log_sha_body`).
 # Parse each commit message (last non-empty line must be the Change-Id: :func:`change_id.extract_change_id_from_msg`).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
@@ -28,7 +29,7 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 
-from gerrit_workflow_tools.git_run import GitError
+from gerrit_workflow_tools.git_run import GitError, git_out
 
 from gerrit_workflow_tools.stack import (
     git_log_sha_body,
@@ -45,6 +46,62 @@ is_change_id = is_change_id_token
 _parse_sha_body_rs = parse_git_log_sha_body_rs
 
 
+def resolve_gcid_user_arg(cwd: str, arg: str) -> str:
+    """Resolve *arg* to a form ``git log`` accepts: each ref via ``git rev-parse --verify``.
+
+    Supports the same revisions as ``git rev-parse --verify`` (branches, tags, SHAs, ``HEAD~n``, etc.),
+    plus two- and three-dot ranges. Does not handle Change-Ids; callers must treat those separately.
+    """
+    s = arg.strip()
+
+    def one(ref: str) -> str:
+        r = ref.strip()
+        if not r:
+            raise GitError(
+                "git rev-parse --verify failed: empty revision",
+                stderr="",
+                returncode=-1,
+            )
+        # Use ``--`` only so refs starting with ``-`` are not parsed as options (plain ``--``
+        # before a normal ref breaks ``git rev-parse`` on Git for Windows).
+        if r.startswith("-"):
+            return git_out("rev-parse", "--verify", "--", r, cwd=cwd)
+        return git_out("rev-parse", "--verify", r, cwd=cwd)
+
+    if "..." in s:
+        left, _, right = s.partition("...")
+        if not left.strip() or not right.strip():
+            raise GitError(
+                f"git rev-parse --verify failed: invalid symmetric range {arg!r}",
+                stderr="",
+                returncode=-1,
+            )
+        return f"{one(left)}...{one(right)}"
+    if ".." in s:
+        i = s.find("..")
+        left, right = s[:i], s[i + 2 :]
+        ls, rs = left.strip(), right.strip()
+        if ls and rs:
+            return f"{one(ls)}..{one(rs)}"
+        if rs:
+            return f"..{one(rs)}"
+        if ls:
+            return f"{one(ls)}.."
+        raise GitError(
+            f"git rev-parse --verify failed: invalid range {arg!r}",
+            stderr="",
+            returncode=-1,
+        )
+    return one(s)
+
+
+def _gcid_log_single_commit(rev_spec: str) -> bool:
+    """True if *rev_spec* is a single revision (one ``git log -1``), not a range."""
+    if "..." in rev_spec:
+        return False
+    return ".." not in rev_spec
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gcid``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
     p = argparse.ArgumentParser(prog="git gcid")
@@ -52,7 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         "arg",
         nargs="?",
         default=None,
-        help="Commit SHA, Change-Id (I…), or range (sha1..sha2). Defaults to HEAD if not given.",
+        help=(
+            "Revision (anything git rev-parse --verify accepts), Change-Id (I…, passthrough), "
+            "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD."
+        ),
     )
     p.add_argument(
         "-v",
@@ -85,7 +145,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         try:
-            rev_spec = rev_spec_merge_base_to_end(cwd, input_arg)
+            resolved = resolve_gcid_user_arg(cwd, input_arg)
+            rev_spec = rev_spec_merge_base_to_end(cwd, resolved)
             raw = git_log_sha_body(cwd, rev_spec, single=False)
         except GitError as e:
             return handle_git_error(e)
@@ -117,12 +178,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
+        resolved = resolve_gcid_user_arg(cwd, input_arg)
         if args.start_at_remote:
-            rev_spec = rev_spec_merge_base_to_end(cwd, input_arg)
+            rev_spec = rev_spec_merge_base_to_end(cwd, resolved)
             raw = git_log_sha_body(cwd, rev_spec, single=False)
         else:
-            single = ".." not in input_arg
-            raw = git_log_sha_body(cwd, input_arg, single=single)
+            raw = git_log_sha_body(
+                cwd, resolved, single=_gcid_log_single_commit(resolved)
+            )
     except GitError as e:
         return handle_git_error(e)
 
