@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -8,6 +9,8 @@ from pathlib import Path
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.config import resolve_local_base_ref, stop_patterns
 from gerrit_workflow_tools.git_run import GitError, git, git_out
+
+logger = logging.getLogger(__name__)
 
 
 def _cwd_key(cwd: Path | str | None) -> str:
@@ -81,6 +84,20 @@ def merge_base_with_target(
     return snap.merge_base, snap.target_display, snap.base_ref
 
 
+def rev_spec_merge_base_to_end(cwd: Path | str | None, input_arg: str) -> str:
+    """``merge_base..END`` where END is *input_arg* or the right side of ``left..right``."""
+    mb, _, _ = merge_base_with_target(cwd)
+    if ".." not in input_arg:
+        logger.debug("rev_spec_merge_base_to_end rev-parse %r (end ref)", input_arg)
+        end = git_out("rev-parse", input_arg, cwd=cwd)
+        return f"{mb}..{end}"
+    idx = input_arg.index("..")
+    right = input_arg[idx + 2 :].strip() or "HEAD"
+    logger.debug("rev_spec_merge_base_to_end rev-parse %r (range right)", right)
+    end = git_out("rev-parse", right, cwd=cwd)
+    return f"{mb}..{end}"
+
+
 def list_stack_commits(
     cwd: Path | str | None,
     merge_base: str,
@@ -110,6 +127,38 @@ def rev_list_reverse(
 # Field separator in `git log --format` (ASCII RS). Avoids NUL in argv (Windows
 # subprocess rejects embedded nulls); %x1e is expanded by git, not by the shell.
 _RS = "\x1e"
+# Git expands %x1e in --format; same RS style as :func:`stack_commits_metadata_one_log`.
+_LOG_SHA_BODY_FMT = "%H%x1e%B%x1e"
+
+
+def parse_git_log_sha_body_rs(raw: str) -> list[tuple[str, str]]:
+    """Parse RS-delimited ``git log`` output with format ``%H%x1e%B%x1e`` (see :func:`git_log_sha_body`)."""
+    parts = raw.split(_RS)
+    while parts and parts[-1] == "":
+        parts.pop()
+    out: list[tuple[str, str]] = []
+    for i in range(0, len(parts), 2):
+        if i + 1 >= len(parts):
+            break
+        sha, msg = parts[i].strip(), parts[i + 1]
+        out.append((sha, msg))
+    return out
+
+
+def git_log_sha_body(
+    cwd: Path | str | None,
+    rev_spec: str,
+    *,
+    single: bool,
+) -> str:
+    """One ``git log``; stdout is RS-delimited full SHA and raw body per commit."""
+    args: list[str] = ["log", f"--format={_LOG_SHA_BODY_FMT}"]
+    if single:
+        args.extend(["-1", rev_spec])
+    else:
+        args.append(rev_spec)
+    logger.debug("git_log_sha_body rev_spec=%r single=%s", rev_spec, single)
+    return git_out(*args, cwd=cwd)
 
 
 def _parse_rs_metadata_records(stdout: str) -> list[tuple[str, str, str, str]]:
@@ -121,7 +170,12 @@ def _parse_rs_metadata_records(stdout: str) -> list[tuple[str, str, str, str]]:
     for i in range(0, len(parts), 4):
         if i + 3 >= len(parts):
             break
-        a, b, c, d = (parts[i].strip(), parts[i + 1].strip(), parts[i + 2].strip(), parts[i + 3].strip())
+        a, b, c, d = (
+            parts[i].strip(),
+            parts[i + 1].strip(),
+            parts[i + 2].strip(),
+            parts[i + 3].strip(),
+        )
         out.append((a, b, c, d))
     return out
 
@@ -280,9 +334,7 @@ def resolve_stack_commit(
             raise GitError(f"no commit in current stack with Change-Id {s}")
         if len(matches) > 1:
             shorts = [m[1] for m in matches]
-            raise GitError(
-                f"ambiguous Change-Id {s} in stack ({', '.join(shorts)})"
-            )
+            raise GitError(f"ambiguous Change-Id {s} in stack ({', '.join(shorts)})")
         return matches[0][0]
     return git_out("rev-parse", s, cwd=cwd)
 

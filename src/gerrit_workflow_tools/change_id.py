@@ -6,6 +6,11 @@ from dataclasses import dataclass
 # Gerrit Change-Id line value: I + 40 hex digits
 CHANGE_ID_VALUE_RE = re.compile(r"^I[0-9a-f]{40}$", re.IGNORECASE)
 
+# Footer line as used by git gcid: last line must be ``Change-Id: I…`` with lowercase hex.
+CHANGE_ID_LAST_LINE_FOOTER_RE = re.compile(
+    r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE
+)
+
 
 @dataclass
 class ChangeIdIssue:
@@ -14,6 +19,30 @@ class ChangeIdIssue:
     short_sha: str
     detail: str
     severity: str  # "error" | "warning"
+
+
+def is_change_id_token(s: str) -> bool:
+    """Return True if *s* is a Change-Id token (``I`` + 40 lowercase hex digits).
+
+    Stricter than :data:`CHANGE_ID_VALUE_RE`: used for CLI passthrough (e.g. ``git gcid``)
+    where uppercase hex is not accepted as a bare argument.
+    """
+    return (
+        s.startswith("I")
+        and len(s) == 41
+        and all(c in "0123456789abcdef" for c in s[1:])
+    )
+
+
+def extract_change_id_from_msg(msg: str) -> str | None:
+    """Return the Change-Id from the last non-empty line of *msg*, if it matches ``Change-Id: I…``."""
+    s = msg.rstrip("\n")
+    i = s.rfind("\n")
+    line = (s[i + 1 :] if i >= 0 else s).strip()
+    if line:
+        m = CHANGE_ID_LAST_LINE_FOOTER_RE.match(line)
+        return m.group(1) if m else None
+    return None
 
 
 def validate_change_id_value(raw: str | None) -> tuple[bool, bool]:
