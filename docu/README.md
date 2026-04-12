@@ -27,7 +27,8 @@ Local git helpers for Gerrit stacked review workflows. Each command is invokable
 | [`git gready`](commands/gready.md) | Compute the pushable prefix of the stack according to stop-pattern policy |
 | [`git gchangeid-check`](commands/gchangeid-check.md) | Validate Change-Id presence and uniqueness in the local stack |
 | [`git gpush`](commands/gpush.md) | Push the ready prefix (or full stack) to Gerrit |
-| [`git gedit`](commands/gedit.md) | Edit, reword, or drop a commit in the middle of the stack |
+| [`git gedit`](commands/gedit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
+| [`git gshow`](commands/gedit.md) | Show the status of the checked out commit, it's change-id or sha |
 | [`git gcomments`](commands/gcomments.md) | Fetch and display Gerrit review comments for the current or selected change |
 | [`git gsha` / `git gcid`](commands/gsha-gcid.md) | Translate between Change-Ids and commit SHAs |
 | [`git glog`](commands/glog.md) | Compact actionable overview of the commit chain vs Gerrit (CI, votes, comments) |
