@@ -1,6 +1,6 @@
 # Gerrit workflow tools (local)
 
-Python CLIs installed as **`git-gstack`**, **`git-gready`**, **`git-gchangeid-check`**, **`git-gbranch`**, **`git-gpush`**, and **`git-gedit`**. Git dispatches `git <name>` by running an executable `git-<name>` on your `PATH`, so after install you can run **`git gstack`** from any repository without a virtual environment or `uv`.
+Python CLIs installed as **`git-gstack`**, **`git-gready`**, **`git-gbranch`**, **`git-gpush`**, **`git-gedit`**, **`git-gcid`**, **`git-gsha`**, **`git-glog`**, and **`git-gcomments`**. Git dispatches `git <name>` by running an executable `git-<name>` on your `PATH`, so after install you can run **`git gstack`** from any repository without a virtual environment or `uv`.
 
 ## Install into your user environment (recommended)
 

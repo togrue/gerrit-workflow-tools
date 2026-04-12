@@ -19,7 +19,6 @@ default-groups = ["dev"]
 [project.scripts]
 git-gstack = "gerrit_workflow_tools.cli_gstack:main"
 git-gready = "gerrit_workflow_tools.cli_gready:main"
-git-gchangeid-check = "gerrit_workflow_tools.cli_gchangeid_check:main"
 git-gbranch = "gerrit_workflow_tools.cli_gbranch:main"
 git-gpush = "gerrit_workflow_tools.cli_gpush:main"
 git-gedit = "gerrit_workflow_tools.cli_gedit:main"

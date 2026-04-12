@@ -10,7 +10,7 @@
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
 # With ``--start-at-remote`` or ``--check-duplicates``, log ``merge_base..END``
-# (same merge-base resolution as ``stack`` / ``gchangeid-check``).
+# (same merge-base resolution as ``stack``).
 # ``--check-duplicates`` exits 0 if all footers are valid and unique, 1 if a footer is missing, 2 on duplicates.
 
 import argparse

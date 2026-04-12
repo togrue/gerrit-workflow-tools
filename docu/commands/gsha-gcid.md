@@ -136,5 +136,4 @@ git gcid --check-duplicates
 ## See also
 
 - [`git gedit`](gedit.md) — accepts a Change-Id as the commit argument
-- [`git gchangeid-check`](gchangeid-check.md) — full validation of the stack's Change-Ids
 - [`git gcomments`](gcomments.md) — fetch Gerrit comments by Change-Id

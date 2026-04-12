@@ -55,5 +55,5 @@ JSON fields per commit: `index`, `sha`, `short_sha`, `subject`, `change_id`, `re
 ## See also
 
 - [`git gready`](gready.md) — computes the push boundary
-- [`git gchangeid-check`](gchangeid-check.md) — validates the Change-Ids shown here
+- [`git gcid --check-duplicates`](gsha-gcid.md) — validates the Change-Ids shown here
 - [`git glog`](glog.md) — adds Gerrit status columns to the stack view

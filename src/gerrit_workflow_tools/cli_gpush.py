@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
         if cid_exit >= 2:
             print(
-                "error: Change-Id check failed; fix with git gchangeid-check",
+                "error: Change-Id check failed; fix with git gcid --check-duplicates",
                 file=sys.stderr,
             )
             return 2

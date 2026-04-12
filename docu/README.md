@@ -12,7 +12,7 @@ Local git helpers for Gerrit stacked review workflows. Each command is invokable
 
 **Gerrit target branch** — stored per local branch in git config (`branch.<name>.gerritTarget`). Required for any push or Gerrit-API command. Set with `git gbranch init --target <branch>`.
 
-**Change-Id** — the Gerrit footer (`Change-Id: I…`) in each commit message. All commands depend on this being present and unique within the stack. Validate with `git gchangeid-check`.
+**Change-Id** — the Gerrit footer (`Change-Id: I…`) in each commit message. All commands depend on this being present and unique within the stack. Validate with `git gcid --check-duplicates` (or list footers with `git gcid --start-at-remote`).
 
 ---
 
@@ -25,12 +25,11 @@ Local git helpers for Gerrit stacked review workflows. Each command is invokable
 | [`git gbranch`](commands/gbranch.md) | Manage branch-local Gerrit metadata (target, reviewers, push mode) |
 | [`git gstack`](commands/gstack.md) | Inspect the local commit stack from merge-base upward |
 | [`git gready`](commands/gready.md) | Compute the pushable prefix of the stack according to stop-pattern policy |
-| [`git gchangeid-check`](commands/gchangeid-check.md) | Validate Change-Id presence and uniqueness in the local stack |
 | [`git gpush`](commands/gpush.md) | Push the ready prefix (or full stack) to Gerrit |
 | [`git gedit`](commands/gedit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
 | [`git gshow`](commands/gedit.md) | Show the status of the checked out commit, it's change-id or sha |
 | [`git gcomments`](commands/gcomments.md) | Fetch and display Gerrit review comments for the current or selected change |
-| [`git gsha` / `git gcid`](commands/gsha-gcid.md) | Translate between Change-Ids and commit SHAs |
+| [`git gsha` / `git gcid`](commands/gsha-gcid.md) | Translate between Change-Ids and commit SHAs; `gcid --check-duplicates` validates the stack |
 | [`git glog`](commands/glog.md) | Compact actionable overview of the commit chain vs Gerrit (CI, votes, comments) |
 
 ### Planned (not yet implemented)
@@ -95,7 +94,7 @@ git gstack
 git gready
 
 # 4. Validate Change-Ids before pushing
-git gchangeid-check
+git gcid --check-duplicates
 
 # 5. Push the ready prefix
 git gpush --dry-run
@@ -108,7 +107,7 @@ git gpush
 
 | Phase | Status | Commands |
 |-------|--------|---------|
-| 1 — local only | Done | `gbranch`, `gstack`, `gready`, `gchangeid-check`, `gpush`, `gedit`, `gsha`, `gcid` |
+| 1 — local only | Done | `gbranch`, `gstack`, `gready`, `gpush`, `gedit`, `gsha`, `gcid` |
 | 2 — Gerrit navigation | In progress | `gcomments` (done), `glog` (done), `gstatus` (planned) |
 | 3 — Gerrit mutation | Planned | `gmove` |
 
