@@ -152,7 +152,7 @@ def compute_ready(
         uidx = shas.index(until_sha)
         if uidx >= block_idx:
             raise GitError(
-                f"--until {until} is at or after the ready boundary; "
+                f"revision {until!r} is at or after the ready boundary; "
                 "choose a commit before the blocking commit."
             )
         tip_idx = uidx

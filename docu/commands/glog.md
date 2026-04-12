@@ -4,7 +4,7 @@
 
 Compact, actionable overview of the local commit chain vs Gerrit. Answers: *What do I need to do next?*
 
-Shows only commits that require attention by default (CI failures, negative votes, unresolved comments, not yet pushed, blocked by an earlier commit). All commits visible with `--full`.
+Shows only commits that require attention by default (CI failures, negative votes, unresolved comments, missing or non-matching Gerrit patch set, blocked by an earlier commit). All commits visible with `--full`.
 
 Requires `gerrit.webUrl` in git config.
 
@@ -13,8 +13,10 @@ Requires `gerrit.webUrl` in git config.
 ## Usage
 
 ```
-git glog [options]
+git glog [options] [REVSET]
 ```
+
+`REVSET` — optional commit range (e.g. `origin/main..HEAD`). Default is merge-base..`HEAD`.
 
 ---
 
@@ -26,7 +28,6 @@ git glog [options]
 | `--oneline` | One line per commit; detail lines inlined |
 | `--compact` | Minimal single-character status columns |
 | `--json` | Machine-readable JSON output |
-| `--range REVSET` | Override commit range (e.g. `origin/main..HEAD`) |
 | `--no-color` | Disable colored output |
 | `-v`, `--verbose` | Log git commands to stderr |
 
@@ -45,38 +46,44 @@ Default — one primary line per commit, with optional detail lines:
 Example:
 
 ```
-a1b2c3d p v+1 cr+2        # Base cleanup
+a1b2c3d p v+1 cr+2        # Base cleanup (local SHA = current patch set)
 b2c3d4e p v-1 cr+2        # Color scheme
 # failed: style
 c3d4e5f p v+1 cr+1 com    # Add status characters
 # comments: 2 unresolved
-d4e5f6a n                  # Refactor output formatting
+d4e5f6a n v+1 cr+2        # Amended locally; labels are for Gerrit's current revision
+e5f6a7b o v+1 cr+2        # Local tree is an old patch set; server has a newer revision
+f6a7b8c -                 # Change not on Gerrit yet (no matching change)
 
 summary:
-ready-to-push: 1
+ready-to-push: 2
 ci-failures: 1
 unresolved-comments: 1
-awaiting-review: 1
+awaiting-review: 3
 ```
 
 ### Column definitions
 
 | Column | Meaning |
 |--------|---------|
-| `p` / `n` | Pushed to Gerrit / not yet pushed |
-| `v+1` / `v-1` / (blank) | CI passed / failed / no vote |
-| `cr+2` / `cr+1` / `cr-1` / `cr-2` / (blank) | Code-Review vote |
+| `p` | Local commit SHA is Gerrit's **current** patch set (votes apply to this commit). |
+| `n` | A change exists, but this SHA is **not** on the server (e.g. amended or rewritten locally)—newer than the remote patch set. |
+| `o` | This SHA was uploaded but is **not** the current patch set (outdated vs the change tip). |
+| `-` | No Gerrit change for this commit (nothing pushed for this Change-Id yet). |
+| `v+1` / `v-1` / (blank) | CI passed / failed / no vote (from the change's **current** revision). |
+| `cr+2` / `cr+1` / `cr-1` / `cr-2` / (blank) | Code-Review vote (same caveat: current revision on the server). |
 | `com` / (blank) | Unresolved comments exist |
+
+When the first column is not `p`, **Verified** / **Code-Review** still reflect Gerrit's current patch set, not necessarily your local SHA.
 
 ### Color coding
 
 | Color | Meaning |
 |-------|---------|
-| green | Progress toward merge (`v+1`, `cr+2`) |
-| red | Blocking issue (`v-1`, `cr-2`, CI failure detail lines) |
-| yellow | Needs attention (comments, `cr-1`) |
-| cyan | Not yet pushed |
-| dim | Pushed and stable |
+| green | Current patch set (`p`), or progress toward merge (`v+1`, `cr+2`) |
+| red | Outdated patch set (`o`), blocking issue (`v-1`, `cr-2`, CI failure detail lines) |
+| yellow | Local ahead of Gerrit (`n`), or needs attention (comments, `cr-1`) |
+| dim | Not on Gerrit (`-`) |
 
 ### Compact format (`--compact`)
 
@@ -84,7 +91,9 @@ awaiting-review: 1
 a1b2c3d p +1 +2 .
 b2c3d4e p -1 +2 .
 c3d4e5f p +1 +1 c
-d4e5f6a n .  .  .
+d4e5f6a n +1 +2 .
+e5f6a7b o +1 +2 .
+f6a7b8c - .  .  .
 ```
 
 ---
@@ -92,12 +101,16 @@ d4e5f6a n .  .  .
 ## Attention detection
 
 A commit requires attention if **any** of the following:
-- Not pushed
+- Not on Gerrit (`-` / no change for this Change-Id)
+- Local commit is ahead of the server's current revision (`n` / ahead-of-gerrit)
+- Local commit is a non-current patch set (`o` / outdated-patchset)
 - `v-1` (CI failed)
 - `cr-1` or `cr-2`
 - Lacks `cr+2` (awaiting review)
 - Has unresolved comments
 - Depends on an earlier commit that is not submittable (chain-blocked)
+
+The **ready-to-push** summary count includes commits that are absent on Gerrit or ahead of Gerrit (`-` and `n`).
 
 ---
 
@@ -110,6 +123,7 @@ Each commit object:
   "sha": "...",
   "summary": "...",
   "pushed": true,
+  "patchset_status": "active",
   "verified": 1,
   "code_review": 2,
   "comments_unresolved": 0,
@@ -119,6 +133,8 @@ Each commit object:
   "attention_reasons": []
 }
 ```
+
+`patchset_status` is one of `active`, `newer`, `outdated`, or `absent` (see the first output column above). `pushed` is `true` when a Gerrit change exists for the Change-Id (`active`, `newer`, or `outdated`).
 
 ---
 

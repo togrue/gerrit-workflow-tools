@@ -9,8 +9,10 @@ Compute the pushable prefix of the local stack according to stop-pattern policy.
 ## Usage
 
 ```
-git gready [options]
+git gready [options] [REV]
 ```
+
+`REV` — optional; limit pushable tip to this commit (must be before the boundary).
 
 ---
 
@@ -19,7 +21,6 @@ git gready [options]
 | Option | Description |
 |--------|-------------|
 | `--all` | Treat the entire stack as pushable (ignore stop patterns) |
-| `--until REV` | Limit pushable tip to a specific commit (must be before the boundary) |
 | `--ignore-pattern REGEX` | Disable a specific configured stop pattern (repeatable) |
 | `--no-config-patterns` | Do not use `gerrit.stopPattern` values from git config |
 | `--json` | Machine-readable JSON output |

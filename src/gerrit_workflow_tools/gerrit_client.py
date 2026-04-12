@@ -170,7 +170,7 @@ class GerritClient:
 
 
 def resolve_change_ref(arg: str) -> str:
-    """Build a ``changes/`` query string for ``--change`` (numeric id, Change-Id, or passthrough)."""
+    """Build a ``changes/`` query string (numeric id, Change-Id, or passthrough)."""
     s = arg.strip()
     if re.fullmatch(r"\d+", s):
         return f"change:{s}"

@@ -34,7 +34,6 @@ def main(argv: list[str] | None = None) -> int:
         dest="all_",
         help="push full stack (ignore stop patterns)",
     )
-    p.add_argument("--until", metavar="REV", help="push only through this commit")
     p.add_argument(
         "--target", metavar="BRANCH", help="Gerrit target branch for this push"
     )
@@ -57,9 +56,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="log git commands and push steps to stderr",
     )
+    p.add_argument(
+        "until",
+        nargs="?",
+        default=None,
+        metavar="REV",
+        help="push only through this commit",
+    )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
     cwd = cwd_from_env()
+
     logger.debug(
         "gpush cwd=%s dry_run=%s all=%s until=%s target=%s save_target=%s",
         cwd,

@@ -91,7 +91,7 @@ def resolve_change_for_gcomments(
     change_arg: str | None,
     local_change_id: str | None,
 ) -> dict[str, Any]:
-    """Resolve ``--change`` or *local_change_id* to a single Gerrit change dict."""
+    """Resolve a Gerrit change query *change_arg* or *local_change_id* to a single change dict."""
     if change_arg:
         q = resolve_change_ref(change_arg)
         rows = client.query_changes(q, n=10)

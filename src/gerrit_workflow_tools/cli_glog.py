@@ -22,15 +22,19 @@ from gerrit_workflow_tools.stack import (
 
 logger = logging.getLogger(__name__)
 
-# Batched change query: labels + submittable in one round trip (no separate /detail).
-_GLOG_QUERY_OPTIONS = ("DETAILED_LABELS", "SUBMITTABLE")
+# Batched change query: labels + submittable + revisions in one round trip (no separate /detail).
+_GLOG_QUERY_OPTIONS = (
+    "DETAILED_LABELS",
+    "SUBMITTABLE",
+    "CURRENT_REVISION",
+    "ALL_REVISIONS",
+)
 _BATCH_OR_CHUNK = 25
 _PARALLEL_IO = 8
 
 # ANSI color codes
 _RESET = "\033[0m"
 _DIM = "\033[2m"
-_CYAN = "\033[36m"
 _GREEN = "\033[32m"
 _RED = "\033[31m"
 _LIGHT_GREEN = "\033[92m"
@@ -57,7 +61,8 @@ class GlogCommit:
     short_sha: str
     summary: str
     change_id: str | None
-    pushed: bool
+    pushed: bool  # True if a Gerrit change exists for this Change-Id (any patchset state)
+    patchset_status: str  # "active" | "newer" | "outdated" | "absent"
     verified: int | None  # -1, 0, +1; None = no vote
     code_review: int | None  # -2, -1, 0, +1, +2; None = no vote
     comments_unresolved: int
@@ -137,6 +142,40 @@ def _count_unresolved(file_map: dict[str, list[dict[str, Any]]]) -> int:
 
 def _norm_change_id(change_id: str) -> str:
     return change_id.lower()
+
+
+def _norm_sha(sha: str) -> str:
+    return sha.strip().lower()
+
+
+def _patchset_status(local_sha: str, detail: dict[str, Any]) -> str:
+    """
+    Compare local commit SHA to Gerrit ``current_revision`` / ``revisions``.
+
+    Returns one of:
+    - ``active`` — local SHA is the current patch set (labels apply to this commit).
+    - ``newer`` — a change exists but this SHA is not on the server (e.g. amended locally).
+    - ``outdated`` — this SHA is a non-current patch set on the change.
+    - ``absent`` — no change on Gerrit (caller: no *detail*).
+    """
+    ls = _norm_sha(local_sha)
+    cur = detail.get("current_revision")
+    cur_n = _norm_sha(cur) if isinstance(cur, str) else None
+    revs = detail.get("revisions")
+    rev_keys: set[str] = set()
+    if isinstance(revs, dict):
+        for k in revs.keys():
+            if isinstance(k, str):
+                rev_keys.add(_norm_sha(k))
+    if cur_n is None and len(rev_keys) == 1:
+        cur_n = next(iter(rev_keys))
+    if cur_n and ls == cur_n:
+        return "active"
+    if rev_keys and ls in rev_keys and cur_n and ls != cur_n:
+        return "outdated"
+    if cur_n or rev_keys:
+        return "newer"
+    return "newer"
 
 
 def _count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
@@ -251,6 +290,7 @@ def _fetch_gerrit_data(
                     summary=summary,
                     change_id=None,
                     pushed=False,
+                    patchset_status="absent",
                     verified=None,
                     code_review=None,
                     comments_unresolved=0,
@@ -274,6 +314,7 @@ def _fetch_gerrit_data(
                     summary=summary,
                     change_id=change_id,
                     pushed=False,
+                    patchset_status="absent",
                     verified=None,
                     code_review=None,
                     comments_unresolved=0,
@@ -300,6 +341,7 @@ def _fetch_gerrit_data(
         if verified is not None and verified < 0:
             needs_checks.append((len(result), api_id))
 
+        ps = _patchset_status(sha, detail)
         result.append(
             GlogCommit(
                 sha=sha,
@@ -307,6 +349,7 @@ def _fetch_gerrit_data(
                 summary=summary,
                 change_id=change_id,
                 pushed=True,
+                patchset_status=ps,
                 verified=verified,
                 code_review=code_review,
                 comments_unresolved=unresolved,
@@ -355,9 +398,13 @@ def _fetch_gerrit_data(
 def _determine_attention(commit: GlogCommit, *, chain_blocked: bool) -> list[str]:
     """Return list of reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []
-    if not commit.pushed:
+    if commit.patchset_status == "absent":
         reasons.append("not-pushed")
         return reasons
+    if commit.patchset_status == "newer":
+        reasons.append("ahead-of-gerrit")
+    if commit.patchset_status == "outdated":
+        reasons.append("outdated-patchset")
     if commit.verified == -1:
         reasons.append("ci-failed")
     if commit.code_review is not None and commit.code_review < 0:
@@ -391,10 +438,15 @@ def _annotate_attention(commits: list[GlogCommit]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fmt_push(pushed: bool, *, use_color: bool) -> str:
-    if pushed:
-        return _color("p", _DIM, use_color=use_color)
-    return _color("n", _CYAN, use_color=use_color)
+def _fmt_patchset_column(status: str, *, use_color: bool) -> str:
+    """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
+    if status == "active":
+        return _color("p", _GREEN, use_color=use_color)
+    if status == "newer":
+        return _color("n", _YELLOW, use_color=use_color)
+    if status == "outdated":
+        return _color("o", _RED, use_color=use_color)
+    return _color("-", _DIM, use_color=use_color)
 
 
 def _fmt_verified(v: int | None, *, use_color: bool) -> str:
@@ -430,7 +482,7 @@ def _fmt_comments(count: int, *, use_color: bool) -> str:
 def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
     """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
     sha = commit.short_sha
-    push = _fmt_push(commit.pushed, use_color=use_color)
+    push = _fmt_patchset_column(commit.patchset_status, use_color=use_color)
     verified = _fmt_verified(commit.verified, use_color=use_color)
     cr = _fmt_code_review(commit.code_review, use_color=use_color)
     comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
@@ -459,7 +511,7 @@ def _detail_lines(commit: GlogCommit, *, use_color: bool) -> list[str]:
     return lines
 
 
-# Primary line format: {sha} {push} {verified} {code_review} {comments}  # {summary}
+# Primary line format: {sha} {patchset p/n/o/-} {verified} {code_review} {comments}  # {summary}
 # Continuation indent = visible width of that prefix (colors ignored), so it stays aligned with ``_fmt_*``.
 
 
@@ -478,7 +530,7 @@ def _oneline_line(commit: GlogCommit, *, use_color: bool, include_url: bool) -> 
     return base
 
 
-# Compact format: {sha:7} {push:1} {v} {cr} {com}
+# Compact format: {sha:7} {p|n|o|-} {v} {cr} {com}
 #   verified: +1 / -1 / .
 #   code_review: +2 / +1 / -1 / -2 / .
 #   comments: c / .
@@ -508,8 +560,18 @@ def _compact_cr(cr: int | None) -> str:
     return "."
 
 
+def _compact_patchset_letter(status: str) -> str:
+    if status == "active":
+        return "p"
+    if status == "newer":
+        return "n"
+    if status == "outdated":
+        return "o"
+    return "-"
+
+
 def _compact_line(commit: GlogCommit) -> str:
-    push = "p" if commit.pushed else "n"
+    push = _compact_patchset_letter(commit.patchset_status)
     v = _compact_verified(commit.verified)
     cr = _compact_cr(commit.code_review)
     com = "c" if commit.comments_unresolved else "."
@@ -529,7 +591,7 @@ def _build_summary(commits: list[GlogCommit]) -> dict[str, int]:
         "awaiting-review": 0,
     }
     for c in commits:
-        if not c.pushed:
+        if c.patchset_status in ("absent", "newer"):
             counts["ready-to-push"] += 1
         if c.pushed and c.verified is not None and c.verified <= -1:
             counts["ci-failures"] += 1
@@ -565,12 +627,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--json", action="store_true", dest="json_", help="machine-readable JSON output"
     )
-    p.add_argument(
-        "--range",
-        dest="range_",
-        metavar="REVSET",
-        help="override commit range (e.g. origin/main..HEAD)",
-    )
     p.add_argument("--no-color", action="store_true", help="disable colored output")
     p.add_argument(
         "--compact",
@@ -585,6 +641,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "-v", "--verbose", action="store_true", help="log git commands to stderr"
     )
+    p.add_argument(
+        "revset",
+        nargs="?",
+        default=None,
+        metavar="REVSET",
+        help="commit range (e.g. origin/main..HEAD); default merge-base..HEAD",
+    )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
 
@@ -592,8 +655,8 @@ def main(argv: list[str] | None = None) -> int:
     use_color = not args.no_color and sys.stdout.isatty()
 
     # Determine commit range
-    if args.range_:
-        rev_range = args.range_
+    if args.revset:
+        rev_range = args.revset
     else:
         try:
             mb, _target, _base_ref = merge_base_with_target(cwd)
@@ -637,6 +700,7 @@ def main(argv: list[str] | None = None) -> int:
                 "sha": c.sha,
                 "summary": c.summary,
                 "pushed": c.pushed,
+                "patchset_status": c.patchset_status,
                 "verified": c.verified,
                 "code_review": c.code_review,
                 "comments_unresolved": c.comments_unresolved,

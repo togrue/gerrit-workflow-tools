@@ -11,8 +11,10 @@ The push is always a single-tip push: `<tip>:refs/for/<target>`. Gerrit sees all
 ## Usage
 
 ```
-git gpush [options]
+git gpush [options] [REV]
 ```
+
+`REV` — optional; push only through this commit (must be before the ready boundary).
 
 ---
 
@@ -23,7 +25,6 @@ git gpush [options]
 | `--dry-run` | Print what would be pushed without executing |
 | `--all` | Push the entire stack, ignoring stop patterns |
 | `--force-boundary` | Same as `--all` |
-| `--until REV` | Push only through a specific commit |
 | `--target BRANCH` | Override the Gerrit target branch for this push |
 | `--save-target` | Persist `--target` into branch config for future pushes |
 | `--ignore-pattern REGEX` | Disable a specific stop pattern (repeatable) |

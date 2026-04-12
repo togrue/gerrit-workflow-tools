@@ -31,19 +31,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--json", action="store_true", dest="json_", help="JSON output")
     p.add_argument(
-        "--until",
-        metavar="REV",
-        help="limit pushable tip to this commit (must be before boundary)",
-    )
-    p.add_argument(
         "-v",
         "--verbose",
         action="store_true",
         help="log git commands and ready calculation to stderr",
     )
+    p.add_argument(
+        "until",
+        nargs="?",
+        default=None,
+        metavar="REV",
+        help="limit pushable tip to this commit (must be before boundary)",
+    )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
     cwd = cwd_from_env()
+
     logger.debug(
         "gready cwd=%s all=%s no_config_patterns=%s ignore_pattern=%s until=%s",
         cwd,

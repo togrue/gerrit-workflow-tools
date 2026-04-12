@@ -11,8 +11,10 @@ Requires `gerrit.webUrl` in git config.
 ## Usage
 
 ```
-git gcomments [options]
+git gcomments [options] [REF_OR_CHANGE]
 ```
+
+`REF_OR_CHANGE` — optional git revision, Gerrit change number, Change-Id (`I…`), or query string.
 
 ---
 
@@ -20,8 +22,6 @@ git gcomments [options]
 
 | Option | Description |
 |--------|-------------|
-| `--rev COMMIT` | Resolve Change-Id from this revision instead of HEAD |
-| `--change ID` | Bypass local commit resolution; fetch by Change-Id, change number, or query |
 | `--whole-chain` | Include all related changes in the Gerrit dependency chain (oldest → newest) |
 | `--no-skip-fixups` | Do not skip `fixup!` / `squash!` commits when resolving the Change-Id |
 | `--all` | Include resolved/historical comments |
@@ -35,7 +35,7 @@ git gcomments [options]
 
 ## Default commit selection
 
-Without `--rev` or `--change`, the command walks from `HEAD` toward the merge base and selects the first commit that is **not** a `fixup!` or `squash!` commit. This reflects that review discussion lives on the parent logical change, not on the fixup commit.
+Without a positional `REF_OR_CHANGE`, the command walks from `HEAD` toward the merge base and selects the first commit that is **not** a `fixup!` or `squash!` commit. This reflects that review discussion lives on the parent logical change, not on the fixup commit.
 
 Override with `--no-skip-fixups` to use `HEAD`'s Change-Id as-is.
 
