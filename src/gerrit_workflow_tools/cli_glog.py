@@ -4,8 +4,8 @@ import argparse
 import json
 import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -20,6 +20,11 @@ from gerrit_workflow_tools.stack import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Batched change query: labels + submittable in one round trip (no separate /detail).
+_GLOG_QUERY_OPTIONS = ("DETAILED_LABELS", "SUBMITTABLE")
+_BATCH_OR_CHUNK = 25
+_PARALLEL_IO = 8
 
 # ANSI color codes
 _RESET = "\033[0m"
@@ -91,6 +96,71 @@ def _count_unresolved(file_map: dict[str, list[dict[str, Any]]]) -> int:
     return count
 
 
+def _norm_change_id(change_id: str) -> str:
+    return change_id.lower()
+
+
+def _count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
+    try:
+        file_map = client.get_comments(api_change_id)
+        return _count_unresolved(file_map)
+    except GerritApiError as e:
+        logger.warning("Gerrit comments failed for %s: %s", api_change_id, e)
+        return 0
+
+
+def _batch_load_change_details(
+    client: GerritClient, change_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Map normalized Change-Id to ChangeInfo using chunked ``change:I1 OR change:I2`` queries."""
+    out: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    unique: list[str] = []
+    for cid in change_ids:
+        k = _norm_change_id(cid)
+        if k not in seen:
+            seen.add(k)
+            unique.append(cid)
+
+    opts = list(_GLOG_QUERY_OPTIONS)
+    for i in range(0, len(unique), _BATCH_OR_CHUNK):
+        chunk = unique[i : i + _BATCH_OR_CHUNK]
+        q = " OR ".join(f"change:{c}" for c in chunk)
+        try:
+            rows = client.query_changes(q, n=len(chunk) + 10, options=opts)
+        except GerritApiError as e:
+            logger.warning("batched Gerrit query failed (%s), falling back per change", e)
+            for c in chunk:
+                one = _query_single_change(client, c)
+                if one:
+                    cid = one.get("change_id")
+                    if isinstance(cid, str):
+                        out[_norm_change_id(cid)] = one
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            cid = row.get("change_id")
+            if isinstance(cid, str):
+                out[_norm_change_id(cid)] = row
+    return out
+
+
+def _query_single_change(
+    client: GerritClient, change_id: str
+) -> dict[str, Any] | None:
+    try:
+        rows = client.query_changes(
+            f"change:{change_id}", n=5, options=list(_GLOG_QUERY_OPTIONS)
+        )
+    except GerritApiError as e:
+        logger.warning("Gerrit query failed for %s: %s", change_id, e)
+        return None
+    if not rows:
+        return None
+    return rows[0]
+
+
 def _gerrit_change_url(web_base: str, change: dict[str, Any]) -> str | None:
     proj = change.get("project")
     num = change.get("_number")
@@ -127,6 +197,11 @@ def _fetch_gerrit_data(
 ) -> list[GlogCommit]:
     """Query Gerrit for each commit and return populated GlogCommit objects."""
     result: list[GlogCommit] = []
+    ids_in_range = [cid for _, _, _, cid in commits if cid]
+    cache = _batch_load_change_details(client, ids_in_range)
+
+    needs_comment_count: list[tuple[int, str]] = []
+    needs_checks: list[tuple[int, str]] = []
 
     for sha, short, summary, change_id in commits:
         if not change_id:
@@ -144,10 +219,15 @@ def _fetch_gerrit_data(
             )
             continue
 
-        try:
-            rows = client.query_changes(f"change:{change_id}", n=5)
-        except GerritApiError as e:
-            logger.warning("Gerrit query failed for %s: %s", change_id, e)
+        detail = cache.get(_norm_change_id(change_id))
+        if detail is None:
+            detail = _query_single_change(client, change_id)
+            if detail:
+                cid = detail.get("change_id")
+                if isinstance(cid, str):
+                    cache[_norm_change_id(cid)] = detail
+
+        if not detail:
             result.append(
                 GlogCommit(
                     sha=sha,
@@ -161,52 +241,25 @@ def _fetch_gerrit_data(
                 )
             )
             continue
-
-        if not rows:
-            result.append(
-                GlogCommit(
-                    sha=sha,
-                    short_sha=short,
-                    summary=summary,
-                    change_id=change_id,
-                    pushed=False,
-                    verified=None,
-                    code_review=None,
-                    comments_unresolved=0,
-                )
-            )
-            continue
-
-        change = rows[0]
-
-        # Fetch full detail (includes labels, submittable)
-        try:
-            detail = client.get_change(change.get("id") or change_id)
-        except GerritApiError as e:
-            logger.warning("Gerrit detail failed for %s: %s", change_id, e)
-            detail = change
 
         labels = detail.get("labels") or {}
         verified = _extract_label_value(labels, "Verified")
         code_review = _extract_label_value(labels, "Code-Review")
         submittable = bool(detail.get("submittable"))
         url = _gerrit_change_url(web_base, detail)
+        api_id = str(detail.get("id") or change_id)
 
-        # Unresolved comments
-        unresolved = 0
-        try:
-            file_map = client.get_comments(detail.get("id") or change_id)
-            unresolved = _count_unresolved(file_map)
-        except GerritApiError as e:
-            logger.warning("Gerrit comments failed for %s: %s", change_id, e)
+        # Prefer ChangeInfo.unresolved_comment_count (unresolved *threads*). Fallback:
+        # GET .../comments and count CommentInfo rows with unresolved==True (older Gerrit).
+        raw_u = detail.get("unresolved_comment_count")
+        if isinstance(raw_u, int):
+            unresolved = raw_u
+        else:
+            unresolved = 0
+            needs_comment_count.append((len(result), api_id))
 
-        # CI failure job names (best-effort via Checks API)
-        ci_failures: list[str] = []
         if verified is not None and verified < 0:
-            try:
-                ci_failures = _fetch_check_failures(client, detail.get("id") or change_id)
-            except Exception as e:
-                logger.debug("checks API failed for %s: %s", change_id, e)
+            needs_checks.append((len(result), api_id))
 
         result.append(
             GlogCommit(
@@ -218,11 +271,39 @@ def _fetch_gerrit_data(
                 verified=verified,
                 code_review=code_review,
                 comments_unresolved=unresolved,
-                ci_failures=ci_failures,
+                ci_failures=[],
                 gerrit_url=url,
                 submittable=submittable,
             )
         )
+
+    workers = min(_PARALLEL_IO, max(len(needs_comment_count), len(needs_checks), 1))
+
+    if needs_comment_count:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            future_to_idx = {
+                ex.submit(_count_unresolved_via_comments, client, aid): idx
+                for idx, aid in needs_comment_count
+            }
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                try:
+                    result[idx].comments_unresolved = fut.result()
+                except Exception as e:
+                    logger.debug("unresolved comment count failed: %s", e)
+
+    if needs_checks:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            future_to_idx = {
+                ex.submit(_fetch_check_failures, client, aid): idx
+                for idx, aid in needs_checks
+            }
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                try:
+                    result[idx].ci_failures = fut.result()
+                except Exception as e:
+                    logger.debug("checks API failed: %s", e)
 
     return result
 

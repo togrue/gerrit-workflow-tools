@@ -48,8 +48,18 @@ class GerritClient:
         self.web_base = web_base.rstrip("/")
         self.cwd = cwd
 
-    def _request_json(self, path: str, *, params: dict[str, str] | None = None) -> Any:
-        q = f"?{urlencode(params)}" if params else ""
+    def _request_json(
+        self,
+        path: str,
+        *,
+        params: dict[str, str] | list[tuple[str, str]] | None = None,
+    ) -> Any:
+        if params is None:
+            q = ""
+        elif isinstance(params, list):
+            q = f"?{urlencode(params, doseq=True)}"
+        else:
+            q = f"?{urlencode(params)}"
         url = f"{self.web_base}/a/{path.lstrip('/')}{q}"
         logger.info("GET %s", url)
         # headers: dict[str, str] = {"Accept": "application/json"}
@@ -81,12 +91,22 @@ class GerritClient:
         logger.debug("response body: %s", json.dumps(parsed, indent=2))
         return parsed
 
-    def query_changes(self, query: str, *, n: int = 25) -> list[dict[str, Any]]:
-        """GET ``changes/?q=...`` and return a list of change dicts."""
-        data = self._request_json(
-            "changes/",
-            params={"q": query, "n": str(n)},
-        )
+    def query_changes(
+        self,
+        query: str,
+        *,
+        n: int = 25,
+        options: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET ``changes/?q=...`` and return a list of change dicts.
+
+        *options* are passed as repeated ``o=`` query parameters (e.g. ``DETAILED_LABELS``).
+        """
+        parts: list[tuple[str, str]] = [("q", query), ("n", str(n))]
+        if options:
+            for opt in options:
+                parts.append(("o", opt))
+        data = self._request_json("changes/", params=parts)
         if not isinstance(data, list):
             raise GerritApiError("unexpected changes query response")
         logger.info("query_changes %r -> %d result(s)", query, len(data))
