@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -35,6 +36,14 @@ _RED = "\033[31m"
 _LIGHT_GREEN = "\033[92m"
 _YELLOW = "\033[33m"
 
+# Terminal SGR sequences (same family as ``_color``); used only to measure visible width.
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _visible_len(s: str) -> int:
+    """Length of ``s`` as displayed in a terminal (ANSI color codes omitted)."""
+    return len(_ANSI_ESCAPE_RE.sub("", s))
+
 
 def _color(text: str, code: str, *, use_color: bool) -> str:
     if not use_color:
@@ -62,6 +71,7 @@ class GlogCommit:
 # Gerrit data extraction helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
     """Return the effective vote value for a Gerrit label, or None if no vote."""
     label = labels.get(label_name)
@@ -76,7 +86,8 @@ def _extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
             real_votes = [
                 int(vote["value"])
                 for vote in (all_votes or [])
-                if isinstance(vote, dict) and vote.get("value") is not None
+                if isinstance(vote, dict)
+                and vote.get("value") is not None
                 and int(vote["value"]) != 0
             ]
             if iv == 0 and not real_votes:
@@ -129,7 +140,9 @@ def _batch_load_change_details(
         try:
             rows = client.query_changes(q, n=len(chunk) + 10, options=opts)
         except GerritApiError as e:
-            logger.warning("batched Gerrit query failed (%s), falling back per change", e)
+            logger.warning(
+                "batched Gerrit query failed (%s), falling back per change", e
+            )
             for c in chunk:
                 one = _query_single_change(client, c)
                 if one:
@@ -146,9 +159,7 @@ def _batch_load_change_details(
     return out
 
 
-def _query_single_change(
-    client: GerritClient, change_id: str
-) -> dict[str, Any] | None:
+def _query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] | None:
     try:
         rows = client.query_changes(
             f"change:{change_id}", n=5, options=list(_GLOG_QUERY_OPTIONS)
@@ -312,6 +323,7 @@ def _fetch_gerrit_data(
 # Attention detection
 # ---------------------------------------------------------------------------
 
+
 def _determine_attention(commit: GlogCommit, *, chain_blocked: bool) -> list[str]:
     """Return list of reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []
@@ -341,12 +353,15 @@ def _annotate_attention(commits: list[GlogCommit]) -> None:
                 if earlier.pushed and not earlier.submittable:
                     chain_blocked = True
                     break
-        commit.attention_reasons = _determine_attention(commit, chain_blocked=chain_blocked)
+        commit.attention_reasons = _determine_attention(
+            commit, chain_blocked=chain_blocked
+        )
 
 
 # ---------------------------------------------------------------------------
 # Rendering helpers
 # ---------------------------------------------------------------------------
+
 
 def _fmt_push(pushed: bool, *, use_color: bool) -> str:
     if pushed:
@@ -384,6 +399,21 @@ def _fmt_comments(count: int, *, use_color: bool) -> str:
     return "   "
 
 
+def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
+    """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
+    sha = commit.short_sha
+    push = _fmt_push(commit.pushed, use_color=use_color)
+    verified = _fmt_verified(commit.verified, use_color=use_color)
+    cr = _fmt_code_review(commit.code_review, use_color=use_color)
+    comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
+    return f"{sha} {push} {verified} {cr} {comments}  # "
+
+
+def _continuation_indent(commit: GlogCommit, *, use_color: bool) -> int:
+    """Column where the subject starts; continuation lines align using :func:`_visible_len` on the prefix."""
+    return _visible_len(_primary_line_prefix(commit, use_color=use_color))
+
+
 def _url_line(url: str, *, use_color: bool) -> str:
     return _color(url, _DIM, use_color=use_color)
 
@@ -401,21 +431,15 @@ def _detail_lines(commit: GlogCommit, *, use_color: bool) -> list[str]:
     return lines
 
 
-# Primary line format: {sha:7} {push:1} {verified:3} {code_review:4} {comments:3}  # {summary}
-# Total fixed-width prefix = 7+1+1+1+3+1+4+1+3+2 = 24 chars before "# "
+# Primary line format: {sha} {push} {verified} {code_review} {comments}  # {summary}
+# Continuation indent = visible width of that prefix (colors ignored), so it stays aligned with ``_fmt_*``.
+
 
 def _primary_line(commit: GlogCommit, *, use_color: bool) -> str:
-    sha = commit.short_sha
-    push = _fmt_push(commit.pushed, use_color=use_color)
-    verified = _fmt_verified(commit.verified, use_color=use_color)
-    cr = _fmt_code_review(commit.code_review, use_color=use_color)
-    comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
-    return f"{sha} {push} {verified} {cr} {comments}  # {commit.summary}"
+    return f"{_primary_line_prefix(commit, use_color=use_color)}{commit.summary}"
 
 
-def _oneline_line(
-    commit: GlogCommit, *, use_color: bool, include_url: bool
-) -> str:
+def _oneline_line(commit: GlogCommit, *, use_color: bool, include_url: bool) -> str:
     base = _primary_line(commit, use_color=use_color)
     if include_url and commit.gerrit_url:
         base = f"{base}  {_url_line(commit.gerrit_url, use_color=use_color)}"
@@ -430,6 +454,7 @@ def _oneline_line(
 #   verified: +1 / -1 / .
 #   code_review: +2 / +1 / -1 / -2 / .
 #   comments: c / .
+
 
 def _compact_verified(v: int | None) -> str:
     if v is None:
@@ -467,6 +492,7 @@ def _compact_line(commit: GlogCommit) -> str:
 # Summary
 # ---------------------------------------------------------------------------
 
+
 def _build_summary(commits: list[GlogCommit]) -> dict[str, int]:
     counts: dict[str, int] = {
         "ready-to-push": 0,
@@ -491,24 +517,46 @@ def _build_summary(commits: list[GlogCommit]) -> dict[str, int]:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git glog``: show local commits vs Gerrit labels, comments, and CI status."""
     p = argparse.ArgumentParser(
         prog="git glog",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
-    p.add_argument("--full", action="store_true", help="show all commits, not just attention-required")
-    p.add_argument("--oneline", action="store_true", help="one line per commit (suppress detail lines)")
-    p.add_argument("--json", action="store_true", dest="json_", help="machine-readable JSON output")
-    p.add_argument("--range", dest="range_", metavar="REVSET", help="override commit range (e.g. origin/main..HEAD)")
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help="show all commits, not just attention-required",
+    )
+    p.add_argument(
+        "--oneline",
+        action="store_true",
+        help="one line per commit (suppress detail lines)",
+    )
+    p.add_argument(
+        "--json", action="store_true", dest="json_", help="machine-readable JSON output"
+    )
+    p.add_argument(
+        "--range",
+        dest="range_",
+        metavar="REVSET",
+        help="override commit range (e.g. origin/main..HEAD)",
+    )
     p.add_argument("--no-color", action="store_true", help="disable colored output")
-    p.add_argument("--compact", action="store_true", help="compact single-character status representation")
+    p.add_argument(
+        "--compact",
+        action="store_true",
+        help="compact single-character status representation",
+    )
     p.add_argument(
         "--url",
         action="store_true",
         help="include each change's Gerrit web URL in text output (JSON always includes gerrit_url)",
     )
-    p.add_argument("-v", "--verbose", action="store_true", help="log git commands to stderr")
+    p.add_argument(
+        "-v", "--verbose", action="store_true", help="log git commands to stderr"
+    )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
 
@@ -580,20 +628,23 @@ def main(argv: list[str] | None = None) -> int:
         if prev_had_details:
             print()
         if args.compact:
-            print(_compact_line(commit))
+            primary = _compact_line(commit)
+            print(primary)
             if args.url and commit.gerrit_url:
-                print(_url_line(commit.gerrit_url, use_color=use_color))
+                ind = " " * (_visible_len(primary) + 2)
+                print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
             prev_had_details = False
         elif args.oneline:
             print(_oneline_line(commit, use_color=use_color, include_url=args.url))
             prev_had_details = False
         else:
             print(_primary_line(commit, use_color=use_color))
+            ind = " " * _continuation_indent(commit, use_color=use_color)
             if args.url and commit.gerrit_url:
-                print(_url_line(commit.gerrit_url, use_color=use_color))
+                print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
             details = _detail_lines(commit, use_color=use_color)
             for d in details:
-                print(d)
+                print(f"{ind}{d}")
             prev_had_details = bool(details) or bool(args.url and commit.gerrit_url)
 
     # Summary section (suppressed for --oneline and --compact)
