@@ -65,6 +65,7 @@ def _cmd_set_push_mode(ns: argparse.Namespace, cwd: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gbranch``: show or set branch-local Gerrit target, reviewers, and push mode."""
     p = argparse.ArgumentParser(prog="git gbranch")
     p.add_argument(
         "-v",

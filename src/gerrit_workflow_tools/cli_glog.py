@@ -403,6 +403,7 @@ def _build_summary(commits: list[GlogCommit]) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git glog``: show local commits vs Gerrit labels, comments, and CI status."""
     p = argparse.ArgumentParser(
         prog="git glog",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",

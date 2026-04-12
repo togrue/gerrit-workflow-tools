@@ -37,14 +37,17 @@ def configure_logging(verbosity: int | bool) -> None:
 
 
 def cwd_from_env() -> Path:
+    """Return the current working directory (repository root for CLI commands)."""
     return Path.cwd()
 
 
 def print_json(obj: Any) -> None:
+    """Print *obj* as indented JSON to stdout."""
     print(json.dumps(obj, indent=2))
 
 
 def handle_git_error(e: Exception) -> int:
+    """Print a :class:`~gerrit_workflow_tools.git_run.GitError` and return 1; re-raise other exceptions."""
     if isinstance(e, GitError):
         print(e.args[0], file=sys.stderr)
         return 1

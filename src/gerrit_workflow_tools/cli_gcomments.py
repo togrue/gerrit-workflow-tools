@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gcomments``: fetch and display Gerrit review comments for the stack or a change."""
     p = argparse.ArgumentParser(prog="git gcomments")
     p.add_argument(
         "--rev", metavar="COMMIT", help="resolve Change-Id from this revision"

@@ -38,6 +38,7 @@ _LOG_SHA_BODY_FMT = "%H%x1e%B%x1e"
 
 
 def is_change_id(s: str) -> bool:
+    """Return True if *s* looks like a Gerrit Change-Id (``I`` + 40 lowercase hex digits)."""
     return (
         s.startswith("I")
         and len(s) == 41
@@ -46,9 +47,7 @@ def is_change_id(s: str) -> bool:
 
 
 def extract_change_id_from_msg(msg: str) -> str | None:
-    """
-    Extract the Change-Id only if it is present in the last non-empty line of the commit message.
-    """
+    """Return the Change-Id from the last non-empty line of *msg*, if it matches ``Change-Id: I…``."""
     s = msg.rstrip("\n")
     i = s.rfind("\n")
     line = (s[i + 1 :] if i >= 0 else s).strip()
@@ -97,6 +96,7 @@ def _rev_spec_start_at_remote(cwd: Path, input_arg: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gcid``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
     p = argparse.ArgumentParser(prog="git gcid")
     p.add_argument(
         "arg",

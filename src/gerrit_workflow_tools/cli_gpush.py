@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gpush``: compute ready range, validate Change-Ids, and push to Gerrit."""
     p = argparse.ArgumentParser(prog="git gpush")
     p.add_argument(
         "-i", action="store_true", help="interactive (not implemented in CLI stub)"

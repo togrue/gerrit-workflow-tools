@@ -76,12 +76,14 @@ def _config_get(cwd: Path | str | None, key: str) -> str | None:
 
 
 def current_branch(cwd: Path | str | None) -> str:
+    """Return the current branch name (``git rev-parse --abbrev-ref HEAD``)."""
     return git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
 
 
 def branch_gerrit_target(
     cwd: Path | str | None, branch: str | None = None
 ) -> str | None:
+    """Return ``branch.<name>.gerritTarget`` (review branch for pushes), if set."""
     b = branch or current_branch(cwd)
     key = f"branch.{b}.gerritTarget"
     return _config_get(cwd, key)
@@ -90,6 +92,7 @@ def branch_gerrit_target(
 def branch_gerrit_reviewers(
     cwd: Path | str | None, branch: str | None = None
 ) -> str | None:
+    """Return ``branch.<name>.gerritReviewers`` (comma-separated list), if set."""
     b = branch or current_branch(cwd)
     return _config_get(cwd, f"branch.{b}.gerritReviewers")
 
@@ -97,16 +100,19 @@ def branch_gerrit_reviewers(
 def branch_gerrit_push_mode(
     cwd: Path | str | None, branch: str | None = None
 ) -> str | None:
+    """Return ``branch.<name>.gerritPushMode``, if set."""
     b = branch or current_branch(cwd)
     return _config_get(cwd, f"branch.{b}.gerritPushMode")
 
 
 def default_push_mode(cwd: Path | str | None) -> str:
+    """Return ``gerrit.defaultPushMode`` or the default ``ready``."""
     v = _config_get(cwd, "gerrit.defaultPushMode")
     return v or "ready"
 
 
 def gerrit_remote(cwd: Path | str | None) -> str:
+    """Return ``gerrit.remote`` or ``origin``."""
     v = _config_get(cwd, "gerrit.remote")
     return v or "origin"
 
@@ -117,18 +123,22 @@ def gerrit_web_url(cwd: Path | str | None) -> str | None:
 
 
 def gerrit_user(cwd: Path | str | None) -> str | None:
+    """Return ``gerrit.user`` for HTTP Basic auth, if set."""
     return _config_get(cwd, "gerrit.user")
 
 
 def gerrit_password(cwd: Path | str | None) -> str | None:
+    """Return ``gerrit.password`` for HTTP Basic auth, if set."""
     return _config_get(cwd, "gerrit.password")
 
 
 def gerrit_token(cwd: Path | str | None) -> str | None:
+    """Return ``gerrit.token`` (preferred over password for Basic auth), if set."""
     return _config_get(cwd, "gerrit.token")
 
 
 def stop_patterns(cwd: Path | str | None) -> list[str]:
+    """Return ``gerrit.stopPattern`` lines as regex strings, or built-in defaults if none are configured."""
     _ensure_snapshot(cwd)
     assert _snapshot_multi is not None
     lines = _snapshot_multi.get(_GERRIT_STOP_PATTERN_CANONICAL, [])
@@ -146,6 +156,7 @@ def set_branch_config(
     gerrit_reviewers: str | None = None,
     gerrit_push_mode: str | None = None,
 ) -> None:
+    """Write branch-scoped Gerrit settings via ``git config`` and clear the config cache."""
     if gerrit_target is not None:
         git("config", f"branch.{branch}.gerritTarget", gerrit_target, cwd=cwd)
     if gerrit_reviewers is not None:
@@ -162,6 +173,7 @@ def set_global_gerrit(
     default_push_mode: str | None = None,
     stop_patterns: list[str] | None = None,
 ) -> None:
+    """Set global ``gerrit.*`` keys (remote, default push mode, stop patterns) and clear the cache."""
     if remote is not None:
         git("config", "gerrit.remote", remote, cwd=cwd)
     if default_push_mode is not None:

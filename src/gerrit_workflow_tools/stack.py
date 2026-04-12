@@ -50,10 +50,7 @@ def _cached_stack_snapshot(cwd_key: str, branch: str) -> StackSnapshot:
 def get_stack_snapshot(
     cwd: Path | str | None, branch: str | None = None
 ) -> StackSnapshot:
-    """
-    Resolve merge-base with target and list commits in ``merge_base..HEAD`` using
-    one ``git log`` (memoized per resolved cwd + branch for the process).
-    """
+    """Return merge-base and oldest-first commits for ``merge_base..HEAD`` (cached per cwd/branch)."""
     return _cached_stack_snapshot(_cwd_key(cwd), branch or "")
 
 
@@ -71,6 +68,7 @@ CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECA
 
 
 def parse_change_id(message: str) -> str | None:
+    """Extract ``Change-Id: …`` from a commit message body, or return None."""
     m = CHANGE_ID_RE.search(message)
     return m.group(1) if m else None
 
@@ -78,11 +76,7 @@ def parse_change_id(message: str) -> str | None:
 def merge_base_with_target(
     cwd: Path | str | None, branch: str | None = None
 ) -> tuple[str, str, str]:
-    """
-    Returns (merge_base_sha, target_display_name, base_ref_commit).
-    base_ref_commit is the resolved ref used with merge-base (second argument).
-    Uses the same memoized snapshot as :func:`get_stack_snapshot`.
-    """
+    """Return ``(merge_base_sha, target_display_name, base_ref_commit)`` from the memoized stack snapshot."""
     snap = get_stack_snapshot(cwd, branch)
     return snap.merge_base, snap.target_display, snap.base_ref
 
@@ -181,6 +175,7 @@ def stack_shas_and_subjects_one_log(
 
 
 def commit_subject_and_body(cwd: Path | str | None, sha: str) -> tuple[str, str]:
+    """Return ``(first_line_subject, full_message_body)`` for *sha*."""
     raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
     lines = raw.splitlines()
     sub = lines[0] if lines else ""
@@ -230,9 +225,7 @@ def build_stack(
     with_ready_state: bool = False,
     patterns: list[str] | None = None,
 ) -> tuple[str, str, str, list[StackCommit]]:
-    """
-    Returns (merge_base_sha, target_display_name, target_display_name, commits).
-    """
+    """Return merge-base, target label, and :class:`StackCommit` rows (optional per-commit ready/blocked labels)."""
     snap = get_stack_snapshot(cwd, branch)
     mb = snap.merge_base
     target_display = snap.target_display
@@ -262,6 +255,7 @@ def build_stack(
 
 
 def is_ancestor(cwd: Path | str | None, maybe_desc: str, maybe_anc: str) -> bool:
+    """Return True if *maybe_anc* is an ancestor of *maybe_desc*."""
     p = git("merge-base", "--is-ancestor", maybe_anc, maybe_desc, cwd=cwd, check=False)
     return p.returncode == 0
 
@@ -272,10 +266,7 @@ def resolve_stack_commit(
     *,
     branch: str | None = None,
 ) -> str:
-    """
-    Resolve ref to a full SHA. If ref is a Gerrit Change-Id (I + 40 hex), find the
-    unique commit in merge_base..HEAD whose message contains that Change-Id.
-    """
+    """Resolve *ref* to a full SHA, or map a Change-Id to the unique commit on the current stack."""
     s = ref.strip()
     if CHANGE_ID_VALUE_RE.match(s):
         snap = get_stack_snapshot(cwd, branch)

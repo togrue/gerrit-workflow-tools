@@ -24,6 +24,7 @@ def _symbol(state: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gstack``: list commits from merge-base to HEAD with optional Change-Id and ready state."""
     p = argparse.ArgumentParser(prog="git gstack")
     p.add_argument(
         "--json", action="store_true", dest="json_", help="machine-readable JSON"

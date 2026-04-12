@@ -17,10 +17,7 @@ class ChangeIdIssue:
 
 
 def validate_change_id_value(raw: str | None) -> tuple[bool, bool]:
-    """
-    Returns (is_valid, is_malformed_present).
-    None -> missing (not malformed).
-    """
+    """Return whether ``raw`` is a valid Gerrit Change-Id value and whether it is malformed vs missing."""
     if raw is None:
         return False, False
     s = raw.strip()
@@ -36,10 +33,7 @@ def classify_issues(
     *,
     strict: bool = True,
 ) -> tuple[list[ChangeIdIssue], int]:
-    """
-    items: (full_sha, short_sha, change_id_or_none)
-    Returns (issues, worst_exit) where worst_exit is 0, 1, or 2.
-    """
+    """Scan commit Change-Ids for missing, malformed, or duplicate values; return issues and a worst exit code."""
     issues: list[ChangeIdIssue] = []
     seen: dict[str, str] = {}
     for full_sha, short_sha, cid in items:

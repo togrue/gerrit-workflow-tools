@@ -42,6 +42,7 @@ def select_commit_for_comments(
     branch: str | None = None,
     snapshot: StackSnapshot | None = None,
 ) -> str:
+    """Pick the commit whose comments to show (newest on stack, optionally skipping fixup!/squash!)."""
     snap = snapshot or get_stack_snapshot(cwd, branch)
     mb = snap.merge_base
     by_sha = {r[0]: r[2] for r in snap.rows}
@@ -74,6 +75,7 @@ def select_commit_for_comments(
 def change_id_for_sha(
     cwd: Path | str | None, sha: str, *, raw_message: str | None = None
 ) -> str:
+    """Return the validated Change-Id from *sha*'s message (or from *raw_message* if provided)."""
     raw = raw_message if raw_message is not None else git_out("log", "-1", "--format=%B", sha, cwd=cwd)
     cid = parse_change_id(raw)
     if not cid or not CHANGE_ID_VALUE_RE.match(cid.strip()):
@@ -89,6 +91,7 @@ def resolve_change_for_gcomments(
     change_arg: str | None,
     local_change_id: str | None,
 ) -> dict[str, Any]:
+    """Resolve ``--change`` or *local_change_id* to a single Gerrit change dict."""
     if change_arg:
         q = resolve_change_ref(change_arg)
         rows = client.query_changes(q, n=10)
@@ -112,6 +115,7 @@ def ordered_relation_chain(
     client: GerritClient,
     first: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    """Return *first* plus related changes, ordered by change number (dependency chain)."""
     cid = first.get("id")
     if not isinstance(cid, str) or not cid:
         raise GerritApiError("change has no id")
@@ -219,6 +223,7 @@ def flatten_change_comments(
     include_all: bool,
     strict_open: bool,
 ) -> list[FlatComment]:
+    """Normalize Gerrit comment API output into sorted :class:`FlatComment` rows with thread URLs."""
     proj = change.get("project")
     project_str = proj if isinstance(proj, str) else None
     num = change.get("_number")
@@ -286,6 +291,7 @@ def comment_thread_url(
     change_number: int | None,
     comment_id: str | None,
 ) -> str:
+    """Build the Gerrit web URL for a comment thread, or *web_base* if data is incomplete."""
     base = web_base.rstrip("/")
     if not project or change_number is None or not comment_id:
         return base
@@ -294,6 +300,7 @@ def comment_thread_url(
 
 
 def commit_display(cwd: Path | str | None, sha: str) -> tuple[str, str, str]:
+    """Return ``(sha, subject, full_message_body)`` for *sha*."""
     combined = git_out("log", "-1", "--format=%s%x1e%B", sha, cwd=cwd)
     if "\x1e" in combined:
         sub, body = combined.split("\x1e", 1)
@@ -307,7 +314,7 @@ def local_change_map_from_stack(
     *,
     snapshot: StackSnapshot | None = None,
 ) -> dict[str, tuple[str, str, str]]:
-    """Map Change-Id -> (full_sha, subject, full_message body) for merge_base..HEAD."""
+    """Map Change-Id → ``(full_sha, subject, message_body)`` for commits on the current stack."""
     snap = snapshot or get_stack_snapshot(cwd)
     rows = snap.rows
     out: dict[str, tuple[str, str, str]] = {}
@@ -339,6 +346,7 @@ def build_human_display_payload(
     *,
     local_commit_by_change_id: dict[str, tuple[str, str, str]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Build a list of per-change dicts (commit info + comments) for text rendering."""
     local = local_commit_by_change_id or {}
     out: list[dict[str, Any]] = []
     for ch, flats in zip(chain, comments_by_change):
@@ -367,6 +375,7 @@ def format_human(
     full: bool,
     oneline: bool,
 ) -> str:
+    """Format *changes_payload* as human-readable text (full message and/or one line per comment)."""
     lines: list[str] = []
     for ch in changes_payload:
         raw_commit = ch.get("commit")
@@ -435,7 +444,7 @@ def build_json_payload(
     *,
     local_commit_by_change_id: dict[str, tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
-    """local_commit_by_change_id maps Change-Id -> (full_sha, subject, body)."""
+    """Build the ``git gcomments --json`` structure: changes with commit metadata and comments."""
     local = local_commit_by_change_id or {}
     out_changes: list[dict[str, Any]] = []
     for ch, flats in zip(chain, comments_by_change):

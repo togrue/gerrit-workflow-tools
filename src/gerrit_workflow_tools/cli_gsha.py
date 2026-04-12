@@ -75,6 +75,7 @@ def _commits_all(cwd: Path) -> list[tuple[str, str, str, str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gsha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
     ap = argparse.ArgumentParser(
         prog="git gsha",
         description="Resolve a Gerrit Change-Id to a Git commit SHA.",

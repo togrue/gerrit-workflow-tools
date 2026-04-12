@@ -41,7 +41,10 @@ def _basic_auth_header(cwd: str | None) -> str | None:
 
 
 class GerritClient:
+    """HTTP client for Gerrit REST ``/a/`` endpoints using git-config credentials."""
+
     def __init__(self, web_base: str, *, cwd: str | None = None) -> None:
+        """Use *web_base* (HTTPS origin) and optional *cwd* for resolving ``gerrit.user`` / token config."""
         self.web_base = web_base.rstrip("/")
         self.cwd = cwd
 
@@ -79,6 +82,7 @@ class GerritClient:
         return parsed
 
     def query_changes(self, query: str, *, n: int = 25) -> list[dict[str, Any]]:
+        """GET ``changes/?q=...`` and return a list of change dicts."""
         data = self._request_json(
             "changes/",
             params={"q": query, "n": str(n)},
@@ -89,6 +93,7 @@ class GerritClient:
         return data
 
     def get_change(self, change_id: str) -> dict[str, Any]:
+        """GET change detail (labels, submittable, etc.) for *change_id*."""
         enc = quote(change_id, safe="")
         data = self._request_json(f"changes/{enc}/detail")
         if not isinstance(data, dict):
@@ -102,6 +107,7 @@ class GerritClient:
         return data
 
     def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+        """GET inline comments grouped by file path (or special keys) for *change_id*."""
         enc = quote(change_id, safe="")
         data = self._request_json(f"changes/{enc}/comments")
         if not isinstance(data, dict):
@@ -122,6 +128,7 @@ class GerritClient:
     def get_related(
         self, change_id: str, *, revision_id: str = "current"
     ) -> list[dict[str, Any]]:
+        """GET related changes for *change_id* at *revision_id* (empty if 404)."""
         enc = quote(change_id, safe="")
         rev_enc = quote(revision_id, safe="")
         try:
@@ -143,9 +150,7 @@ class GerritClient:
 
 
 def resolve_change_ref(arg: str) -> str:
-    """
-    Build a Gerrit query fragment for --change (Change-Id, numeric id, or passthrough).
-    """
+    """Build a ``changes/`` query string for ``--change`` (numeric id, Change-Id, or passthrough)."""
     s = arg.strip()
     if re.fullmatch(r"\d+", s):
         return f"change:{s}"
@@ -155,6 +160,7 @@ def resolve_change_ref(arg: str) -> str:
 
 
 def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the single change from *rows* or raise :class:`GerritApiError` if none or ambiguous."""
     if not rows:
         raise GerritApiError("no matching change")
     if len(rows) > 1:

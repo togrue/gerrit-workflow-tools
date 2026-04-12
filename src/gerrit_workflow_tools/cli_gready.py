@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``git gready``: report how many commits are pushable and where the ready boundary is."""
     p = argparse.ArgumentParser(prog="git gready")
     p.add_argument(
         "--ignore-pattern",

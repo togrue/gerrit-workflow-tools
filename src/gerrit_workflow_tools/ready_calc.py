@@ -66,6 +66,7 @@ def compute_ready(
     ignore_patterns: list[str] | None = None,
     until: str | None = None,
 ) -> ReadyResult:
+    """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
     pm = push_mode or default_push_mode(cwd)
     mb, _target, _ = merge_base_with_target(cwd, branch)
     raw_patterns = stop_patterns(cwd)
@@ -175,6 +176,7 @@ def change_id_rows_for_range(
     *,
     head: str = "HEAD",
 ) -> list[tuple[str, str, str | None]]:
+    """Return ``(full_sha, short_sha, change_id)`` for each commit in ``merge_base..head``."""
     meta = stack_commits_metadata_one_log(cwd, f"{merge_base}..{head}")
     return [(sha, short, parse_change_id(raw)) for sha, short, _sub, raw in meta]
 
@@ -184,6 +186,7 @@ def change_id_rows_for_rev_range(
     start_exclusive: str,
     end_inclusive: str,
 ) -> list[tuple[str, str, str | None]]:
+    """Return ``(full_sha, short_sha, change_id)`` for ``start_exclusive..end_inclusive``."""
     meta = stack_commits_metadata_one_log(
         cwd, f"{start_exclusive}..{end_inclusive}"
     )
