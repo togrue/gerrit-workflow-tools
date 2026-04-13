@@ -44,7 +44,7 @@ def _cached_stack_snapshot(cwd_key: str, branch: str) -> StackSnapshot:
     cwd = Path(cwd_key)
     mb, display, base_ref = _merge_base_with_target_impl(cwd, branch or None)
     rows_list = stack_commits_metadata_one_log(cwd, f"{mb}..HEAD")
-    rows_t = tuple(tuple(r) for r in rows_list)
+    rows_t: tuple[tuple[str, str, str, str], ...] = tuple(rows_list)
     return StackSnapshot(mb, display, base_ref, rows_t)
 
 
