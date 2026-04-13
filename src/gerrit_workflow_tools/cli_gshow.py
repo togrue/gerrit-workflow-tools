@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
@@ -79,7 +80,7 @@ def _collect_unresolved_comments(
 
 
 def resolve_row_for_gshow(
-    cwd: str,
+    cwd: Path | str,
     arg: str | None,
     client: GerritClient,
 ) -> tuple[tuple[str, str, str, str | None], bool]:
@@ -90,29 +91,33 @@ def resolve_row_for_gshow(
 
     if _looks_like_change_id(a) or _is_numeric_change(a):
         ch = resolve_change_for_gcomments(client, change_arg=a, local_change_id=None)
-        sha = ch.get("current_revision") if isinstance(ch.get("current_revision"), str) else ""
-        cid = ch.get("change_id")
-        if not isinstance(cid, str):
+        rev = ch.get("current_revision")
+        sha = rev if isinstance(rev, str) else ""
+        chg_id = ch.get("change_id")
+        if not isinstance(chg_id, str):
             raise GitError("Gerrit change has no change_id")
-        summary = ch.get("subject") if isinstance(ch.get("subject"), str) else ""
+        subj = ch.get("subject")
+        summary = subj if isinstance(subj, str) else ""
         short = sha[:8] if len(sha) >= 8 else "?" * min(8, max(1, len(sha) or 1))
         if not sha:
             short = "????????"
-        return (sha, short, summary, cid), False
+        return (sha, short, summary, chg_id), False
 
     try:
         resolved = resolve_gcid_user_arg(cwd, a)
     except GitError:
         ch = resolve_change_for_gcomments(client, change_arg=a, local_change_id=None)
-        sha = ch.get("current_revision") if isinstance(ch.get("current_revision"), str) else ""
-        cid = ch.get("change_id")
-        if not isinstance(cid, str):
+        rev = ch.get("current_revision")
+        sha = rev if isinstance(rev, str) else ""
+        chg_id = ch.get("change_id")
+        if not isinstance(chg_id, str):
             raise GitError("Gerrit change has no change_id") from None
-        summary = ch.get("subject") if isinstance(ch.get("subject"), str) else ""
+        subj = ch.get("subject")
+        summary = subj if isinstance(subj, str) else ""
         short = sha[:8] if len(sha) >= 8 else "????????"
         if not sha:
             short = "????????"
-        return (sha, short, summary, cid), False
+        return (sha, short, summary, chg_id), False
 
     if ".." in resolved or "..." in resolved:
         raise GitError(f"gshow does not support revision ranges: {arg!r}")
@@ -224,7 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_:
         comment_payload: list[dict[str, Any]] = []
         for path, line, c in unresolved_rows:
-            msg = c.get("message") if isinstance(c.get("message"), str) else ""
+            raw_msg = c.get("message")
+            msg = raw_msg if isinstance(raw_msg, str) else ""
             body, truncated = _apply_comment_tail(msg, tail_n, full=args.full)
             comment_payload.append(
                 {
@@ -282,7 +288,8 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("unresolved comments:")
         for path, line, c in unresolved_rows:
-            msg = c.get("message") if isinstance(c.get("message"), str) else ""
+            raw_msg = c.get("message")
+            msg = raw_msg if isinstance(raw_msg, str) else ""
             body, _trunc = _apply_comment_tail(msg, tail_n, full=args.full)
             loc = f"{path}:{line}" if line is not None else path
             print(f"  {loc}")
