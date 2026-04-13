@@ -1,0 +1,15 @@
+# Tests are run manually (see README / `uv run pytest`).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.10
+    hooks:
+      - id: ruff-format
+        args: [--check]
+      - id: ruff-check
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.20.1
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
+        # Match `uv run mypy` (packages in pyproject); tests use pytest without stubs here.
+        files: ^src/
