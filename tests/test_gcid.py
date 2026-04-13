@@ -124,7 +124,7 @@ def test_extract_change_id_from_msg_missing():
 
 
 def test_parse_sha_body_rs_trailing_rs_stripped():
-    raw = f"aaa\x1ebody1\x1ebbb\x1ebody2\x1e\x1e"
+    raw = "aaa\x1ebody1\x1ebbb\x1ebody2\x1e\x1e"
     pairs = _parse_sha_body_rs(raw)
     assert pairs == [("aaa", "body1"), ("bbb", "body2")]
 
