@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from gerrit_workflow_tools.cli_gcomments import main as gcomments_main
-from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.gerrit_comments import format_human, select_commit_for_comments
+from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.git_run import git, git_out
 from tests.conftest import json_stdout, run_cli
 
 
@@ -69,7 +69,7 @@ def test_resolve_gerrit_web_base_uses_web_url(stack_repo: Path) -> None:
 
 def test_resolve_gerrit_web_base_missing_raises(stack_repo: Path) -> None:
     clear_gerrit_git_config_cache()
-    with pytest.raises(ValueError, match="gerrit.webUrl"):
+    with pytest.raises(ValueError, match=r"gerrit\.webUrl"):
         resolve_gerrit_web_base(stack_repo)
 
 
@@ -136,7 +136,7 @@ def test_gcomments_json_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch
         inst.get_related.return_value = []
         inst.get_comments.return_value = comments
 
-        code, out, err = run_cli(
+        code, out, _err = run_cli(
             stack_repo,
             gcomments_main,
             ["--json"],

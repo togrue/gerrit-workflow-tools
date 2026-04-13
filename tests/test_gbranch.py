@@ -9,7 +9,7 @@ def test_gbranch_show_after_init(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
     monkeypatch.chdir(repo)
     assert gbranch_main(["init", "--target", "main", "--reviewers", "alice,bob"]) == 0
-    code, out, err = run_cli(repo, gbranch_main, ["show"], monkeypatch)
+    code, out, _err = run_cli(repo, gbranch_main, ["show"], monkeypatch)
     assert code == 0
     assert "feature" in out
     assert "main" in out
@@ -18,7 +18,7 @@ def test_gbranch_show_after_init(stack_repo_unconfigured, monkeypatch):
 
 def test_gbranch_init_requires_target(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
-    code, out, err = run_cli(repo, gbranch_main, ["init"], monkeypatch)
+    code, _out, err = run_cli(repo, gbranch_main, ["init"], monkeypatch)
     assert code == 1
     assert "target" in err.lower()
 
@@ -26,8 +26,8 @@ def test_gbranch_init_requires_target(stack_repo_unconfigured, monkeypatch):
 def test_gbranch_set_target(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
     configure_gerrit_target(repo, "main")
-    code, out, err = run_cli(repo, gbranch_main, ["set-target", "release/1.0"], monkeypatch)
+    code, out, _err = run_cli(repo, gbranch_main, ["set-target", "release/1.0"], monkeypatch)
     assert code == 0
-    code, out, err = run_cli(repo, gbranch_main, ["show"], monkeypatch)
+    code, out, _err = run_cli(repo, gbranch_main, ["show"], monkeypatch)
     assert code == 0
     assert "release/1.0" in out

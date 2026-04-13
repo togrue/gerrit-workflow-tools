@@ -107,7 +107,7 @@ def resolve_row_for_gshow(
         sha = ch.get("current_revision") if isinstance(ch.get("current_revision"), str) else ""
         cid = ch.get("change_id")
         if not isinstance(cid, str):
-            raise GitError("Gerrit change has no change_id")
+            raise GitError("Gerrit change has no change_id") from None
         summary = ch.get("subject") if isinstance(ch.get("subject"), str) else ""
         short = sha[:8] if len(sha) >= 8 else "????????"
         if not sha:

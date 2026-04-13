@@ -62,7 +62,7 @@ def test_glog_full_text_contains_commit_lines_and_summary(stack_repo: Path, monk
         code, out, err = run_cli(stack_repo, glog_main, ["--full"], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
-    for sha, short, subj, _raw in rows:
+    for _sha, short, subj, _raw in rows:
         assert short in out
         assert subj in out
 

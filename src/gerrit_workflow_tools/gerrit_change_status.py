@@ -101,7 +101,7 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> str:
     revs = detail.get("revisions")
     rev_keys: set[str] = set()
     if isinstance(revs, dict):
-        for k in revs.keys():
+        for k in revs:
             if isinstance(k, str):
                 rev_keys.add(norm_sha(k))
     if cur_n is None and len(rev_keys) == 1:

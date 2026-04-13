@@ -24,7 +24,7 @@ def git(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run git with given args; cwd defaults to current directory."""
-    cmd = ("git",) + args
+    cmd = ("git", *args)
     cwd_str = str(cwd) if cwd is not None else None
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd_str or ".")
     merged = {**os.environ, **env} if env else None

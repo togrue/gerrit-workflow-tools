@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def _is_fixup_or_squash_subject(subject: str) -> bool:
-    return subject.startswith("fixup!") or subject.startswith("squash!")
+    return subject.startswith(("fixup!", "squash!"))
 
 
 def _rev_list_newest_first(cwd: Path | str | None, merge_base: str, head: str) -> list[str]:
@@ -340,7 +340,7 @@ def build_human_display_payload(
     """Build a list of per-change dicts (commit info + comments) for text rendering."""
     local = local_commit_by_change_id or {}
     out: list[dict[str, Any]] = []
-    for ch, flats in zip(chain, comments_by_change):
+    for ch, flats in zip(chain, comments_by_change, strict=False):
         sha, subj, body = _resolve_commit_display(ch, local)
         commit_block: dict[str, Any] = {"sha": sha, "subject": subj, "body": body}
         comments: list[dict[str, Any]] = [
@@ -438,7 +438,7 @@ def build_json_payload(
     """Build the ``git gcomments --json`` structure: changes with commit metadata and comments."""
     local = local_commit_by_change_id or {}
     out_changes: list[dict[str, Any]] = []
-    for ch, flats in zip(chain, comments_by_change):
+    for ch, flats in zip(chain, comments_by_change, strict=False):
         raw_cid = ch.get("change_id")
         cid = raw_cid if isinstance(raw_cid, str) else None
         raw_num = ch.get("_number")

@@ -9,7 +9,7 @@ from tests.conftest import run_cli
 
 
 def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, err = run_cli(stack_repo, gpush_main, ["--help"], monkeypatch, catch_sys_exit=True)
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "gpush" in out.lower() or "git gpush" in out
     assert "--dry-run" in out
@@ -34,7 +34,7 @@ def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
 
 def test_gpush_accepts_explicit_target_without_config(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
-    code, out, err = run_cli(
+    code, out, _err = run_cli(
         repo,
         gpush_main,
         ["--dry-run", "--target", "main"],
@@ -45,7 +45,7 @@ def test_gpush_accepts_explicit_target_without_config(stack_repo_unconfigured, m
 
 
 def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
-    code, out, err = run_cli(dup_repo, gpush_main, ["--dry-run", "--target", "main"], monkeypatch)
+    code, _out, err = run_cli(dup_repo, gpush_main, ["--dry-run", "--target", "main"], monkeypatch)
     assert code == 2
     assert "Change-Id" in err
 

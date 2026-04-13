@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-
 from gerrit_workflow_tools.cli_gready import main as gready_main
 from tests.conftest import json_stdout, run_cli
 
 
 def test_gready_default_stops_at_test_bang(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gready_main, ["--json"], monkeypatch)
+    code, out, _err = run_cli(stack_repo, gready_main, ["--json"], monkeypatch)
     assert code == 0
     data = json_stdout(out)
     assert data["pushable_commits"] == 2
@@ -19,7 +18,7 @@ def test_gready_default_stops_at_test_bang(stack_repo, monkeypatch):
 
 
 def test_gready_all_ignores_boundary(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gready_main, ["--json", "--all"], monkeypatch)
+    code, out, _err = run_cli(stack_repo, gready_main, ["--json", "--all"], monkeypatch)
     assert code == 0
     data = json_stdout(out)
     assert data["pushable_commits"] == 4
@@ -27,7 +26,7 @@ def test_gready_all_ignores_boundary(stack_repo, monkeypatch):
 
 
 def test_gready_ignore_pattern_removes_test_stop(stack_repo, monkeypatch):
-    code, out, err = run_cli(
+    code, out, _err = run_cli(
         stack_repo,
         gready_main,
         ["--json", "--ignore-pattern", r"^test!"],
@@ -39,7 +38,7 @@ def test_gready_ignore_pattern_removes_test_stop(stack_repo, monkeypatch):
 
 
 def test_gready_no_config_patterns(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gready_main, ["--json", "--no-config-patterns"], monkeypatch)
+    code, out, _err = run_cli(stack_repo, gready_main, ["--json", "--no-config-patterns"], monkeypatch)
     assert code == 0
     data = json_stdout(out)
     assert data["pushable_commits"] == 4

@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import sys
+
 from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env
 from gerrit_workflow_tools.gerrit_change_status import (
     GlogCommit,

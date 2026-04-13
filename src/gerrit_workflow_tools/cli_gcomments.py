@@ -27,8 +27,8 @@ from gerrit_workflow_tools.gerrit_comments import (
     select_commit_for_comments,
 )
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
-from gerrit_workflow_tools.stack import get_stack_snapshot
 from gerrit_workflow_tools.git_run import GitError
+from gerrit_workflow_tools.stack import get_stack_snapshot
 
 logger = logging.getLogger(__name__)
 

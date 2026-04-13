@@ -253,9 +253,7 @@ def _ready_labels_for_stack(
             break
     out: list[str] = []
     for i, _sub in enumerate(subjects):
-        if first_idx is None:
-            out.append("ready")
-        elif i < first_idx:
+        if first_idx is None or i < first_idx:
             out.append("ready")
         elif i == first_idx:
             out.append(f"blocked({matched_pat})")

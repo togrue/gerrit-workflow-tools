@@ -9,10 +9,12 @@ import pytest
 
 from gerrit_workflow_tools.cli_gcid import (
     CHANGE_ID_RE,
+    _parse_sha_body_rs,
     extract_change_id_from_msg,
     is_change_id,
+)
+from gerrit_workflow_tools.cli_gcid import (
     main as gcid_main,
-    _parse_sha_body_rs,
 )
 from gerrit_workflow_tools.git_run import git
 from tests.conftest import run_cli
@@ -167,7 +169,7 @@ def test_gcid_range_two_commits_order(git_graph_repo, monkeypatch):
 
 def test_gcid_single_commit_range_syntax(git_graph_repo, monkeypatch):
     """HEAD~1..HEAD is one commit; still uses range mode (.. present)."""
-    code, out, err = run_cli(
+    code, out, _err = run_cli(
         git_graph_repo,
         gcid_main,
         [f"{_HEAD_SHA}~1..{_HEAD_SHA}"],
@@ -197,7 +199,7 @@ def test_gcid_invalid_ref(git_graph_repo, monkeypatch):
 
 
 def test_gcid_verbose(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(git_graph_repo, gcid_main, ["-v", "HEAD"], monkeypatch)
+    code, out, _err = run_cli(git_graph_repo, gcid_main, ["-v", "HEAD"], monkeypatch)
     assert code == 0
     assert _HEAD_CID in out
 
@@ -303,14 +305,14 @@ def test_gcid_missing_change_id_exits_1(tmp_path, monkeypatch):
 
 def test_gcid_change_id_not_last_line_exits_1(tmp_path, monkeypatch):
     repo = _make_repo_change_id_not_last_line(tmp_path / "r2")
-    code, out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
+    code, _out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
     assert code == 1
     assert "no Change-Id" in err
 
 
 def test_gcid_malformed_change_id_last_line_exits_1(tmp_path, monkeypatch):
     repo = _make_repo_malformed_change_id_last_line(tmp_path / "r3")
-    code, out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
+    code, _out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
     assert code == 1
     assert "no Change-Id" in err
 
@@ -318,6 +320,6 @@ def test_gcid_malformed_change_id_last_line_exits_1(tmp_path, monkeypatch):
 def test_gcid_string_that_is_not_change_id_tries_git(git_graph_repo, monkeypatch):
     """Too-short I… is not passthrough; git log fails for unknown object."""
     bad = "I" + "a" * 39
-    code, out, err = run_cli(git_graph_repo, gcid_main, [bad], monkeypatch)
+    code, out, _err = run_cli(git_graph_repo, gcid_main, [bad], monkeypatch)
     assert code == 1
     assert out == ""
