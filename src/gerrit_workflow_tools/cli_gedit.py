@@ -57,9 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.verbose:
         env["GEDIT_VERBOSE"] = "1"
     # Quoted for paths with spaces (typical when Python is not from a venv).
-    env["GIT_SEQUENCE_EDITOR"] = (
-        f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
-    )
+    env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
 
     logger.debug(
         "gedit starting interactive rebase onto merge_base=%s full=%s short=%s",

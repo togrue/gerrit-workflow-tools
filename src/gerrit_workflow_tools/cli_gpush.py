@@ -22,24 +22,16 @@ logger = logging.getLogger(__name__)
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gpush``: compute ready range, validate Change-Ids, and push to Gerrit."""
     p = argparse.ArgumentParser(prog="git gpush")
-    p.add_argument(
-        "-i", action="store_true", help="interactive (not implemented in CLI stub)"
-    )
-    p.add_argument(
-        "--dry-run", action="store_true", help="print actions only, do not push"
-    )
+    p.add_argument("-i", action="store_true", help="interactive (not implemented in CLI stub)")
+    p.add_argument("--dry-run", action="store_true", help="print actions only, do not push")
     p.add_argument(
         "--all",
         action="store_true",
         dest="all_",
         help="push full stack (ignore stop patterns)",
     )
-    p.add_argument(
-        "--target", metavar="BRANCH", help="Gerrit target branch for this push"
-    )
-    p.add_argument(
-        "--save-target", action="store_true", help="store --target for this branch"
-    )
+    p.add_argument("--target", metavar="BRANCH", help="Gerrit target branch for this push")
+    p.add_argument("--save-target", action="store_true", help="store --target for this branch")
     p.add_argument(
         "--force-boundary",
         action="store_true",
@@ -47,9 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--ignore-pattern", action="append", default=[], metavar="REGEX")
     p.add_argument("--no-config-patterns", action="store_true")
-    p.add_argument(
-        "--reviewer", action="append", default=[], help="(reserved) Gerrit reviewers"
-    )
+    p.add_argument("--reviewer", action="append", default=[], help="(reserved) Gerrit reviewers")
     p.add_argument(
         "-v",
         "--verbose",

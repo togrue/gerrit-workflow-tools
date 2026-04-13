@@ -56,9 +56,7 @@ def _comment_line(c: dict[str, Any]) -> int | None:
     return None
 
 
-def _apply_comment_tail(
-    text: str, tail_lines: int, *, full: bool
-) -> tuple[str, bool]:
+def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
     if full:
         return text, False
     lines = text.splitlines()

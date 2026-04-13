@@ -50,9 +50,7 @@ def test_gshow_rejects_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "range" in err.lower()
 
 
-def test_gshow_json_numeric_change_mocked(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -83,9 +81,7 @@ def test_gshow_json_numeric_change_mocked(
     assert data["attention_reasons"] == []
 
 
-def test_gshow_json_attention_mocked(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -113,9 +109,7 @@ def test_gshow_json_attention_mocked(
     assert "awaiting-review" in data["attention_reasons"]
 
 
-def test_gshow_comment_tail_in_json(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_comment_tail_in_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -155,9 +149,7 @@ def test_gshow_comment_tail_in_json(
     assert "line14" in data["comments"][0]["body"]
 
 
-def test_gshow_full_comment_json(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -203,16 +195,12 @@ def _configure_gshow_repo(stack_repo: Path) -> None:
 
 
 def test_gshow_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, _err = run_cli(
-        stack_repo, gshow_main, ["--help"], monkeypatch, catch_sys_exit=True
-    )
+    code, out, _err = run_cli(stack_repo, gshow_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "gshow" in out.lower() or "git gshow" in out
 
 
-def test_gshow_human_head_formatting(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Text mode includes commit line, subject, and status prefix (no TTY colors)."""
     _configure_gshow_repo(stack_repo)
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
@@ -220,9 +208,7 @@ def test_gshow_human_head_formatting(
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=77)
     details = {norm_change_id(cid): detail}
-    with patch_gerrit_client_for_queries(
-        "gerrit_workflow_tools.cli_gshow", details_by_change_id=details
-    ):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gshow", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch)
     assert code == 0, err
     assert "commit:" in out
@@ -240,16 +226,12 @@ def test_gshow_human_head_formatting(
         ["HEAD", "--verbose"],
     ],
 )
-def test_gshow_smoke_argv_head_mocked(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
-) -> None:
+def test_gshow_smoke_argv_head_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
     _configure_gshow_repo(stack_repo)
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=88)
     details = {norm_change_id(cid): detail}
-    with patch_gerrit_client_for_queries(
-        "gerrit_workflow_tools.cli_gshow", details_by_change_id=details
-    ):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gshow", details_by_change_id=details):
         code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch)
     assert code in (0, 1), err

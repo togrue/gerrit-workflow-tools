@@ -77,9 +77,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("show", help="show Gerrit metadata for current branch")
 
-    ip = sub.add_parser(
-        "init", help="set branch-local Gerrit targets (non-interactive)"
-    )
+    ip = sub.add_parser("init", help="set branch-local Gerrit targets (non-interactive)")
     ip.add_argument("--target", help="Gerrit review branch (e.g. main)")
     ip.add_argument("--reviewers", default=None, help="comma-separated reviewers")
     ip.add_argument("--push-mode", default="ready", dest="push_mode")

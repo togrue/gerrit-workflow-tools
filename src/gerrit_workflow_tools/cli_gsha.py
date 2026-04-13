@@ -44,6 +44,7 @@ EXIT STATUS
     3  multiple matching commits found
     4  git/repository error
 """
+
 from __future__ import annotations
 
 import argparse
@@ -102,9 +103,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out_group = ap.add_mutually_exclusive_group()
     out_group.add_argument("--short", action="store_true", help="Print abbreviated SHA")
-    out_group.add_argument(
-        "--subject", action="store_true", help="Print abbreviated SHA and commit subject"
-    )
+    out_group.add_argument("--subject", action="store_true", help="Print abbreviated SHA and commit subject")
     out_group.add_argument("--json", action="store_true", dest="json_out", help="Print JSON output")
 
     ap.add_argument("-v", "--verbose", action="count", default=0)

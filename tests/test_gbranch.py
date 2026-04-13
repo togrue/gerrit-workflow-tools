@@ -26,9 +26,7 @@ def test_gbranch_init_requires_target(stack_repo_unconfigured, monkeypatch):
 def test_gbranch_set_target(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
     configure_gerrit_target(repo, "main")
-    code, out, err = run_cli(
-        repo, gbranch_main, ["set-target", "release/1.0"], monkeypatch
-    )
+    code, out, err = run_cli(repo, gbranch_main, ["set-target", "release/1.0"], monkeypatch)
     assert code == 0
     code, out, err = run_cli(repo, gbranch_main, ["show"], monkeypatch)
     assert code == 0

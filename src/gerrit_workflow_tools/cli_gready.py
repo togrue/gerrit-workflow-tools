@@ -26,9 +26,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not use gerrit.stopPattern values",
     )
-    p.add_argument(
-        "--all", action="store_true", dest="all_", help="treat entire stack as pushable"
-    )
+    p.add_argument("--all", action="store_true", dest="all_", help="treat entire stack as pushable")
     p.add_argument("--json", action="store_true", dest="json_", help="JSON output")
     p.add_argument(
         "-v",

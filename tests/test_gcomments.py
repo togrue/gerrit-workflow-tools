@@ -73,18 +73,14 @@ def test_resolve_gerrit_web_base_missing_raises(stack_repo: Path) -> None:
         resolve_gerrit_web_base(stack_repo)
 
 
-def test_gcomments_exits_when_web_url_missing(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gcomments_exits_when_web_url_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gcomments_main, ["--json"], monkeypatch)
     assert code != 0
     assert "gerrit.webUrl" in err
 
 
-def test_select_commit_skips_fixup(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_select_commit_skips_fixup(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     env = {
         "GIT_AUTHOR_NAME": "Test",
         "GIT_AUTHOR_EMAIL": "test@example.com",
@@ -104,9 +100,7 @@ def test_select_commit_skips_fixup(
     assert not sub.startswith("fixup!")
 
 
-def test_gcomments_json_mocked(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gcomments_json_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ch = {
         "id": "myproject~master~Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "change_id": "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

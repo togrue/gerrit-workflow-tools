@@ -24,9 +24,7 @@ def test_gstack_json_lists_commits_and_merge_base(stack_repo, monkeypatch):
 
 
 def test_gstack_with_ready_state_marks_blocked_and_after(stack_repo, monkeypatch):
-    code, out, err = run_cli(
-        stack_repo, gstack_main, ["--json", "--with-ready-state"], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gstack_main, ["--json", "--with-ready-state"], monkeypatch)
     assert code == 0
     data = json.loads(out)
     states = [c["ready_state"] for c in data["commits"]]

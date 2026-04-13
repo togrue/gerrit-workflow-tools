@@ -80,26 +80,20 @@ def current_branch(cwd: Path | str | None) -> str:
     return git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
 
 
-def branch_gerrit_target(
-    cwd: Path | str | None, branch: str | None = None
-) -> str | None:
+def branch_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> str | None:
     """Return ``branch.<name>.gerritTarget`` (review branch for pushes), if set."""
     b = branch or current_branch(cwd)
     key = f"branch.{b}.gerritTarget"
     return _config_get(cwd, key)
 
 
-def branch_gerrit_reviewers(
-    cwd: Path | str | None, branch: str | None = None
-) -> str | None:
+def branch_gerrit_reviewers(cwd: Path | str | None, branch: str | None = None) -> str | None:
     """Return ``branch.<name>.gerritReviewers`` (comma-separated list), if set."""
     b = branch or current_branch(cwd)
     return _config_get(cwd, f"branch.{b}.gerritReviewers")
 
 
-def branch_gerrit_push_mode(
-    cwd: Path | str | None, branch: str | None = None
-) -> str | None:
+def branch_gerrit_push_mode(cwd: Path | str | None, branch: str | None = None) -> str | None:
     """Return ``branch.<name>.gerritPushMode``, if set."""
     b = branch or current_branch(cwd)
     return _config_get(cwd, f"branch.{b}.gerritPushMode")
@@ -206,9 +200,7 @@ def escape_branch_for_config(branch: str) -> str:
     return branch
 
 
-def resolve_local_base_ref(
-    cwd: Path | str | None, branch: str | None = None
-) -> tuple[str, str]:
+def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
     """
     Return (ref_for_merge_base, display_name) for merge-base, e.g. ('main', 'main').
     Order: branch.gerritTarget -> @{upstream} -> main -> master.
@@ -220,9 +212,7 @@ def resolve_local_base_ref(
     if target:
         p = git("rev-parse", "--verify", target, cwd=cwd, check=False)
         if p.returncode != 0:
-            p = git(
-                "rev-parse", "--verify", f"refs/heads/{target}", cwd=cwd, check=False
-            )
+            p = git("rev-parse", "--verify", f"refs/heads/{target}", cwd=cwd, check=False)
         if p.returncode == 0:
             return (p.stdout.strip(), target)
         raise GitError(
@@ -235,9 +225,7 @@ def resolve_local_base_ref(
         upstream = p.stdout.strip()
         if "/" in upstream:
             _remote, name = upstream.split("/", 1)
-            p2 = git(
-                "rev-parse", "--verify", f"refs/heads/{name}", cwd=cwd, check=False
-            )
+            p2 = git("rev-parse", "--verify", f"refs/heads/{name}", cwd=cwd, check=False)
             if p2.returncode == 0:
                 return (p2.stdout.strip(), name)
         p3 = git("rev-parse", "--verify", upstream, cwd=cwd, check=False)

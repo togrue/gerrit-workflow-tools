@@ -9,9 +9,7 @@ from tests.conftest import run_cli
 
 
 def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, err = run_cli(
-        stack_repo, gpush_main, ["--help"], monkeypatch, catch_sys_exit=True
-    )
+    code, out, err = run_cli(stack_repo, gpush_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "gpush" in out.lower() or "git gpush" in out
     assert "--dry-run" in out
@@ -47,9 +45,7 @@ def test_gpush_accepts_explicit_target_without_config(stack_repo_unconfigured, m
 
 
 def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
-    code, out, err = run_cli(
-        dup_repo, gpush_main, ["--dry-run", "--target", "main"], monkeypatch
-    )
+    code, out, err = run_cli(dup_repo, gpush_main, ["--dry-run", "--target", "main"], monkeypatch)
     assert code == 2
     assert "Change-Id" in err
 
@@ -65,12 +61,8 @@ def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
         ["-v"],
     ],
 )
-def test_gpush_dry_run_variants_exit_zero(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]
-) -> None:
-    code, out, err = run_cli(
-        stack_repo, gpush_main, ["--dry-run", *extra], monkeypatch
-    )
+def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]) -> None:
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", *extra], monkeypatch)
     assert code == 0, (code, out, err)
     assert "refs/for/main" in out
     assert "git push" in out

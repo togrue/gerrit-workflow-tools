@@ -27,9 +27,7 @@ def _is_fixup_or_squash_subject(subject: str) -> bool:
     return subject.startswith("fixup!") or subject.startswith("squash!")
 
 
-def _rev_list_newest_first(
-    cwd: Path | str | None, merge_base: str, head: str
-) -> list[str]:
+def _rev_list_newest_first(cwd: Path | str | None, merge_base: str, head: str) -> list[str]:
     out = git_out("rev-list", f"{merge_base}..{head}", cwd=cwd)
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
@@ -72,9 +70,7 @@ def select_commit_for_comments(
     raise GitError("no non-fixup/squash commit found in stack (try --no-skip-fixups)")
 
 
-def change_id_for_sha(
-    cwd: Path | str | None, sha: str, *, raw_message: str | None = None
-) -> str:
+def change_id_for_sha(cwd: Path | str | None, sha: str, *, raw_message: str | None = None) -> str:
     """Return the validated Change-Id from *sha*'s message (or from *raw_message* if provided)."""
     raw = raw_message if raw_message is not None else git_out("log", "-1", "--format=%B", sha, cwd=cwd)
     cid = parse_change_id(raw)
@@ -233,9 +229,7 @@ def flatten_change_comments(
     for key, items in file_map.items():
         p = _path_for_comment_key(key)
         for c in items:
-            if not _should_include_comment(
-                c, strict_open=strict_open, include_all=include_all
-            ):
+            if not _should_include_comment(c, strict_open=strict_open, include_all=include_all):
                 continue
             cid = c.get("id")
             cid_s = cid if isinstance(cid, str) else None
@@ -277,10 +271,7 @@ def flatten_change_comments(
     )
     logger.debug(
         "flattened comments: %s",
-        [
-            {"path": fc.path, "line": fc.line, "author": fc.author, "message": fc.message[:80]}
-            for fc in result
-        ],
+        [{"path": fc.path, "line": fc.line, "author": fc.author, "message": fc.message[:80]} for fc in result],
     )
     return result
 

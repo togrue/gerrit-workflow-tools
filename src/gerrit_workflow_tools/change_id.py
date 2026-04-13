@@ -7,9 +7,7 @@ from dataclasses import dataclass
 CHANGE_ID_VALUE_RE = re.compile(r"^I[0-9a-f]{40}$", re.IGNORECASE)
 
 # Footer line as used by git gcid: last line must be ``Change-Id: I…`` with lowercase hex.
-CHANGE_ID_LAST_LINE_FOOTER_RE = re.compile(
-    r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE
-)
+CHANGE_ID_LAST_LINE_FOOTER_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE)
 
 
 @dataclass
@@ -27,11 +25,7 @@ def is_change_id_token(s: str) -> bool:
     Stricter than :data:`CHANGE_ID_VALUE_RE`: used for CLI passthrough (e.g. ``git gcid``)
     where uppercase hex is not accepted as a bare argument.
     """
-    return (
-        s.startswith("I")
-        and len(s) == 41
-        and all(c in "0123456789abcdef" for c in s[1:])
-    )
+    return s.startswith("I") and len(s) == 41 and all(c in "0123456789abcdef" for c in s[1:])
 
 
 def extract_change_id_from_msg(msg: str) -> str | None:

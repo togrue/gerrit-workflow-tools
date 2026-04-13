@@ -39,9 +39,7 @@ def test_gready_ignore_pattern_removes_test_stop(stack_repo, monkeypatch):
 
 
 def test_gready_no_config_patterns(stack_repo, monkeypatch):
-    code, out, err = run_cli(
-        stack_repo, gready_main, ["--json", "--no-config-patterns"], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gready_main, ["--json", "--no-config-patterns"], monkeypatch)
     assert code == 0
     data = json_stdout(out)
     assert data["pushable_commits"] == 4

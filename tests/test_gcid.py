@@ -146,9 +146,7 @@ def test_gcid_defaults_to_head(git_graph_repo, monkeypatch):
 
 
 def test_gcid_explicit_sha(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(
-        git_graph_repo, gcid_main, [_HEAD_SHA], monkeypatch
-    )
+    code, out, err = run_cli(git_graph_repo, gcid_main, [_HEAD_SHA], monkeypatch)
     assert code == 0
     assert out.strip() == _HEAD_CID
     assert err == ""
@@ -180,9 +178,7 @@ def test_gcid_single_commit_range_syntax(git_graph_repo, monkeypatch):
 
 
 def test_gcid_passthrough_change_id_no_git(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(
-        git_graph_repo, gcid_main, [_HEAD_CID], monkeypatch
-    )
+    code, out, err = run_cli(git_graph_repo, gcid_main, [_HEAD_CID], monkeypatch)
     assert code == 0
     assert out.strip() == _HEAD_CID
     assert err == ""
@@ -201,9 +197,7 @@ def test_gcid_invalid_ref(git_graph_repo, monkeypatch):
 
 
 def test_gcid_verbose(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(
-        git_graph_repo, gcid_main, ["-v", "HEAD"], monkeypatch
-    )
+    code, out, err = run_cli(git_graph_repo, gcid_main, ["-v", "HEAD"], monkeypatch)
     assert code == 0
     assert _HEAD_CID in out
 
@@ -233,9 +227,7 @@ def test_gcid_vv_logs_git_subprocess(git_graph_repo, monkeypatch):
 
 
 def test_gcid_start_at_remote_lists_stack_newest_first(stack_repo, monkeypatch):
-    code, out, err = run_cli(
-        stack_repo, gcid_main, ["--start-at-remote"], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gcid_main, ["--start-at-remote"], monkeypatch)
     assert code == 0
     assert err == ""
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
@@ -243,9 +235,7 @@ def test_gcid_start_at_remote_lists_stack_newest_first(stack_repo, monkeypatch):
 
 
 def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
-    code, out, err = run_cli(
-        stack_repo, gcid_main, ["--start-at-remote", "HEAD~2"], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gcid_main, ["--start-at-remote", "HEAD~2"], monkeypatch)
     assert code == 0
     assert err == ""
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
@@ -255,18 +245,14 @@ def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
 def test_gcid_start_at_remote_range_ignores_left_endpoint(stack_repo, monkeypatch):
     """``--start-at-remote`` always uses merge-base..RIGHT (same stack window as ``gstack``)."""
     full = run_cli(stack_repo, gcid_main, ["--start-at-remote"], monkeypatch)
-    ranged = run_cli(
-        stack_repo, gcid_main, ["--start-at-remote", "HEAD~3..HEAD"], monkeypatch
-    )
+    ranged = run_cli(stack_repo, gcid_main, ["--start-at-remote", "HEAD~3..HEAD"], monkeypatch)
     assert full[0] == 0 and ranged[0] == 0
     assert full[1] == ranged[1]
 
 
 def test_gcid_start_at_remote_change_id_passthrough(stack_repo, monkeypatch):
     cid = _cid("4")
-    code, out, err = run_cli(
-        stack_repo, gcid_main, ["--start-at-remote", cid], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gcid_main, ["--start-at-remote", cid], monkeypatch)
     assert code == 0
     assert err == ""
     assert out.strip() == cid
@@ -276,9 +262,7 @@ def test_gcid_start_at_remote_change_id_passthrough(stack_repo, monkeypatch):
 
 
 def test_gcid_check_duplicates_ok(stack_repo, monkeypatch):
-    code, out, err = run_cli(
-        stack_repo, gcid_main, ["--check-duplicates"], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check-duplicates"], monkeypatch)
     assert code == 0
     assert out == ""
     assert err == ""
@@ -293,18 +277,14 @@ def test_gcid_check_duplicates_fails_on_dup(dup_repo, monkeypatch):
 
 def test_gcid_check_duplicates_rejects_change_id_arg(stack_repo, monkeypatch):
     cid = _cid("4")
-    code, out, err = run_cli(
-        stack_repo, gcid_main, ["--check-duplicates", cid], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check-duplicates", cid], monkeypatch)
     assert code == 2
     assert out == ""
     assert "change-id" in err.lower() or "Change-Id" in err
 
 
 def test_gcid_check_duplicates_end_ref(stack_repo, monkeypatch):
-    code, out, err = run_cli(
-        stack_repo, gcid_main, ["--check-duplicates", "HEAD~2"], monkeypatch
-    )
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check-duplicates", "HEAD~2"], monkeypatch)
     assert code == 0
     assert out == ""
     assert err == ""

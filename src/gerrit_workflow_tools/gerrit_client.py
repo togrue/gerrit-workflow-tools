@@ -69,8 +69,7 @@ class GerritClient:
             headers["Authorization"] = auth
         else:
             raise GerritApiError(
-                "missing Gerrit credentials in git config; set gerrit.user and "
-                "gerrit.password (or gerrit.token)"
+                "missing Gerrit credentials in git config; set gerrit.user and gerrit.password (or gerrit.token)"
             )
         req = Request(url, headers=headers, method="GET")
         try:
@@ -145,9 +144,7 @@ class GerritClient:
         )
         return out
 
-    def get_related(
-        self, change_id: str, *, revision_id: str = "current"
-    ) -> list[dict[str, Any]]:
+    def get_related(self, change_id: str, *, revision_id: str = "current") -> list[dict[str, Any]]:
         """GET related changes for *change_id* at *revision_id* (empty if 404)."""
         enc = quote(change_id, safe="")
         rev_enc = quote(revision_id, safe="")
@@ -185,7 +182,5 @@ def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
         raise GerritApiError("no matching change")
     if len(rows) > 1:
         nums = [str(r.get("_number", "?")) for r in rows[:5]]
-        raise GerritApiError(
-            f"ambiguous change query ({len(rows)} matches): {', '.join(nums)}"
-        )
+        raise GerritApiError(f"ambiguous change query ({len(rows)} matches): {', '.join(nums)}")
     return rows[0]

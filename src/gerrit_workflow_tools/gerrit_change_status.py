@@ -124,9 +124,7 @@ def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> i
         return 0
 
 
-def batch_load_change_details(
-    client: GerritClient, change_ids: list[str]
-) -> dict[str, dict[str, Any]]:
+def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:
     """Map normalized Change-Id to ChangeInfo using chunked ``change:I1 OR change:I2`` queries."""
     out: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
@@ -144,9 +142,7 @@ def batch_load_change_details(
         try:
             rows = client.query_changes(q, n=len(chunk) + 10, options=opts)
         except GerritApiError as e:
-            logger.warning(
-                "batched Gerrit query failed (%s), falling back per change", e
-            )
+            logger.warning("batched Gerrit query failed (%s), falling back per change", e)
             for c in chunk:
                 one = query_single_change(client, c)
                 if one:
@@ -165,9 +161,7 @@ def batch_load_change_details(
 
 def query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] | None:
     try:
-        rows = client.query_changes(
-            f"change:{change_id}", n=5, options=list(GLOG_QUERY_OPTIONS)
-        )
+        rows = client.query_changes(f"change:{change_id}", n=5, options=list(GLOG_QUERY_OPTIONS))
     except GerritApiError as e:
         logger.warning("Gerrit query failed for %s: %s", change_id, e)
         return None
@@ -299,8 +293,7 @@ def fetch_gerrit_data(
     if needs_comment_count:
         with ThreadPoolExecutor(max_workers=workers) as ex:
             future_to_idx = {
-                ex.submit(count_unresolved_via_comments, client, aid): idx
-                for idx, aid in needs_comment_count
+                ex.submit(count_unresolved_via_comments, client, aid): idx for idx, aid in needs_comment_count
             }
             for fut in as_completed(future_to_idx):
                 idx = future_to_idx[fut]
@@ -311,10 +304,7 @@ def fetch_gerrit_data(
 
     if needs_checks:
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            future_to_idx = {
-                ex.submit(fetch_check_failures, client, aid): idx
-                for idx, aid in needs_checks
-            }
+            future_to_idx = {ex.submit(fetch_check_failures, client, aid): idx for idx, aid in needs_checks}
             for fut in as_completed(future_to_idx):
                 idx = future_to_idx[fut]
                 try:

@@ -164,8 +164,7 @@ def main(argv: list[str] | None = None) -> int:
                 short = sha[:8]
                 first = seen[cid][:8]
                 print(
-                    f"error: duplicate Change-Id {cid} "
-                    f"(commit {short}, also on {first})",
+                    f"error: duplicate Change-Id {cid} (commit {short}, also on {first})",
                     file=sys.stderr,
                 )
                 return 2
@@ -183,9 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             rev_spec = rev_spec_merge_base_to_end(cwd, resolved)
             raw = git_log_sha_body(cwd, rev_spec, single=False)
         else:
-            raw = git_log_sha_body(
-                cwd, resolved, single=_gcid_log_single_commit(resolved)
-            )
+            raw = git_log_sha_body(cwd, resolved, single=_gcid_log_single_commit(resolved))
     except GitError as e:
         return handle_git_error(e)
 

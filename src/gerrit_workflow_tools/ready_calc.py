@@ -41,9 +41,7 @@ def _filter_patterns(
     return out
 
 
-def _first_block_index(
-    subjects: list[str], patterns: list[str]
-) -> tuple[int | None, str | None]:
+def _first_block_index(subjects: list[str], patterns: list[str]) -> tuple[int | None, str | None]:
     import re
 
     for i, sub in enumerate(subjects):
@@ -152,8 +150,7 @@ def compute_ready(
         uidx = shas.index(until_sha)
         if uidx >= block_idx:
             raise GitError(
-                f"revision {until!r} is at or after the ready boundary; "
-                "choose a commit before the blocking commit."
+                f"revision {until!r} is at or after the ready boundary; choose a commit before the blocking commit."
             )
         tip_idx = uidx
         tip = until_sha
@@ -187,7 +184,5 @@ def change_id_rows_for_rev_range(
     end_inclusive: str,
 ) -> list[tuple[str, str, str | None]]:
     """Return ``(full_sha, short_sha, change_id)`` for ``start_exclusive..end_inclusive``."""
-    meta = stack_commits_metadata_one_log(
-        cwd, f"{start_exclusive}..{end_inclusive}"
-    )
+    meta = stack_commits_metadata_one_log(cwd, f"{start_exclusive}..{end_inclusive}")
     return [(sha, short, parse_change_id(raw)) for sha, short, _sub, raw in meta]

@@ -41,10 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="?",
         default=None,
         metavar="REF_OR_CHANGE",
-        help=(
-            "optional git revision (commit, branch, etc.) or Gerrit change "
-            "(numeric id, Change-Id I…, or query)"
-        ),
+        help=("optional git revision (commit, branch, etc.) or Gerrit change (numeric id, Change-Id I…, or query)"),
     )
     p.add_argument(
         "--whole-chain",
@@ -104,9 +101,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             # Numeric / I+40 → Gerrit query; else git rev.
             if resolve_change_ref(pos) != pos:
-                first = resolve_change_for_gcomments(
-                    client, change_arg=pos, local_change_id=None
-                )
+                first = resolve_change_for_gcomments(client, change_arg=pos, local_change_id=None)
             else:
                 sha = select_commit_for_comments(
                     cwd,
@@ -116,9 +111,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 raw_msg = next((r[3] for r in stack_snap.rows if r[0] == sha), None)
                 cid = change_id_for_sha(cwd, sha, raw_message=raw_msg)
-                first = resolve_change_for_gcomments(
-                    client, change_arg=None, local_change_id=cid
-                )
+                first = resolve_change_for_gcomments(client, change_arg=None, local_change_id=cid)
         else:
             sha = select_commit_for_comments(
                 cwd,
@@ -128,9 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             raw_msg = next((r[3] for r in stack_snap.rows if r[0] == sha), None)
             cid = change_id_for_sha(cwd, sha, raw_message=raw_msg)
-            first = resolve_change_for_gcomments(
-                client, change_arg=None, local_change_id=cid
-            )
+            first = resolve_change_for_gcomments(client, change_arg=None, local_change_id=cid)
 
         chain = ordered_relation_chain(client, first) if args.whole_chain else [first]
 

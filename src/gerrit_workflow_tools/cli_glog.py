@@ -54,9 +54,7 @@ def _annotate_attention(commits: list[GlogCommit]) -> None:
                 if earlier.pushed and not earlier.submittable:
                     chain_blocked = True
                     break
-        commit.attention_reasons = determine_attention(
-            commit, chain_blocked=chain_blocked
-        )
+        commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
 
 
 # ---------------------------------------------------------------------------
@@ -250,9 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="one line per commit (suppress detail lines)",
     )
-    p.add_argument(
-        "--json", action="store_true", dest="json_", help="machine-readable JSON output"
-    )
+    p.add_argument("--json", action="store_true", dest="json_", help="machine-readable JSON output")
     p.add_argument("--no-color", action="store_true", help="disable colored output")
     p.add_argument(
         "--compact",
@@ -264,9 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="include each change's Gerrit web URL in text output (JSON always includes gerrit_url)",
     )
-    p.add_argument(
-        "-v", "--verbose", action="store_true", help="log git commands to stderr"
-    )
+    p.add_argument("-v", "--verbose", action="store_true", help="log git commands to stderr")
     p.add_argument(
         "revset",
         nargs="?",

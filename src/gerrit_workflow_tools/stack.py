@@ -33,9 +33,7 @@ def clear_stack_snapshot_cache() -> None:
     _cached_stack_snapshot.cache_clear()
 
 
-def _merge_base_with_target_impl(
-    cwd: Path | str | None, branch: str | None = None
-) -> tuple[str, str, str]:
+def _merge_base_with_target_impl(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
     base_ref, display = resolve_local_base_ref(cwd, branch)
     mb = git_out("merge-base", "HEAD", base_ref, cwd=cwd)
     return mb, display, base_ref
@@ -50,9 +48,7 @@ def _cached_stack_snapshot(cwd_key: str, branch: str) -> StackSnapshot:
     return StackSnapshot(mb, display, base_ref, rows_t)
 
 
-def get_stack_snapshot(
-    cwd: Path | str | None, branch: str | None = None
-) -> StackSnapshot:
+def get_stack_snapshot(cwd: Path | str | None, branch: str | None = None) -> StackSnapshot:
     """Return merge-base and oldest-first commits for ``merge_base..HEAD`` (cached per cwd/branch)."""
     return _cached_stack_snapshot(_cwd_key(cwd), branch or "")
 
@@ -76,9 +72,7 @@ def parse_change_id(message: str) -> str | None:
     return m.group(1) if m else None
 
 
-def merge_base_with_target(
-    cwd: Path | str | None, branch: str | None = None
-) -> tuple[str, str, str]:
+def merge_base_with_target(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
     """Return ``(merge_base_sha, target_display_name, base_ref_commit)`` from the memoized stack snapshot."""
     snap = get_stack_snapshot(cwd, branch)
     return snap.merge_base, snap.target_display, snap.base_ref
@@ -108,9 +102,7 @@ def list_stack_commits(
     return rev_list_reverse(cwd, merge_base, head)
 
 
-def rev_list_reverse(
-    cwd: Path | str | None, start_exclusive: str, end_inclusive: str
-) -> list[str]:
+def rev_list_reverse(cwd: Path | str | None, start_exclusive: str, end_inclusive: str) -> list[str]:
     """Commits reachable from end_inclusive but not start_exclusive, oldest first."""
     p = git(
         "rev-list",
@@ -286,11 +278,7 @@ def build_stack(
     pats = patterns if patterns is not None else stop_patterns(cwd)
     rows = list(snap.rows)
     subjects = [r[2] for r in rows]
-    labels = (
-        _ready_labels_for_stack(subjects, pats)
-        if with_ready_state
-        else ["ready"] * len(rows)
-    )
+    labels = _ready_labels_for_stack(subjects, pats) if with_ready_state else ["ready"] * len(rows)
     commits: list[StackCommit] = []
     for i, (sha, short, sub, raw) in enumerate(rows, start=1):
         cid = parse_change_id(raw)
