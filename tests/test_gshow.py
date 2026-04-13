@@ -7,7 +7,13 @@ import pytest
 
 from gerrit_workflow_tools.cli_gshow import main as gshow_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.git_run import git
+from gerrit_workflow_tools.gerrit_change_status import norm_change_id
+from gerrit_workflow_tools.git_run import git, git_out
+from tests.cli_gerrit_mocks import (
+    change_info_for_sha,
+    head_change_id,
+    patch_gerrit_client_for_queries,
+)
 from tests.conftest import json_stdout, run_cli
 
 
@@ -189,3 +195,61 @@ def test_gshow_full_comment_json(
     assert data["comments"][0]["truncated"] is False
     assert "line0" in data["comments"][0]["body"]
     assert "line14" in data["comments"][0]["body"]
+
+
+def _configure_gshow_repo(stack_repo: Path) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+
+
+def test_gshow_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = run_cli(
+        stack_repo, gshow_main, ["--help"], monkeypatch, catch_sys_exit=True
+    )
+    assert code == 0
+    assert "gshow" in out.lower() or "git gshow" in out
+
+
+def test_gshow_human_head_formatting(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Text mode includes commit line, subject, and status prefix (no TTY colors)."""
+    _configure_gshow_repo(stack_repo)
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
+    cid = head_change_id(stack_repo)
+    detail = change_info_for_sha(sha, cid, number=77)
+    details = {norm_change_id(cid): detail}
+    with patch_gerrit_client_for_queries(
+        "gerrit_workflow_tools.cli_gshow", details_by_change_id=details
+    ):
+        code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch)
+    assert code == 0, err
+    assert "commit:" in out
+    assert sha[:8] in out
+    assert "subject:" in out
+    assert subj in out
+    assert "g.example/c/" in out or "/+/" in out
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "HEAD"],
+        ["HEAD", "--no-color"],
+        ["HEAD", "--verbose"],
+    ],
+)
+def test_gshow_smoke_argv_head_mocked(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    _configure_gshow_repo(stack_repo)
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    cid = head_change_id(stack_repo)
+    detail = change_info_for_sha(sha, cid, number=88)
+    details = {norm_change_id(cid): detail}
+    with patch_gerrit_client_for_queries(
+        "gerrit_workflow_tools.cli_gshow", details_by_change_id=details
+    ):
+        code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch)
+    assert code in (0, 1), err

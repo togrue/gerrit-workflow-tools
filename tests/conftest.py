@@ -76,8 +76,14 @@ def run_cli(
     main_fn: Callable[[list[str] | None], int],
     argv: Sequence[str],
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    catch_sys_exit: bool = False,
 ) -> tuple[int, str, str]:
-    """Run a CLI main with cwd set; capture stdout and stderr."""
+    """Run a CLI main with cwd set; capture stdout and stderr.
+
+    If *catch_sys_exit* is true, ``SystemExit`` (e.g. from ``--help``) is
+    turned into a return code instead of propagating.
+    """
     import io
     import sys
 
@@ -86,7 +92,20 @@ def run_cli(
     err_buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", out_buf)
     monkeypatch.setattr(sys, "stderr", err_buf)
-    code = main_fn(list(argv))
+    try:
+        code = main_fn(list(argv))
+    except SystemExit as e:
+        if not catch_sys_exit:
+            raise
+        if isinstance(e.code, int):
+            code = e.code
+        elif e.code is None:
+            code = 0
+        else:
+            try:
+                code = int(e.code)
+            except (TypeError, ValueError):
+                code = 1
     return code, out_buf.getvalue(), err_buf.getvalue()
 
 
