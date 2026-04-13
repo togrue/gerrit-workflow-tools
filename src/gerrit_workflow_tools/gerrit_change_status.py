@@ -146,16 +146,16 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
             for c in chunk:
                 one = query_single_change(client, c)
                 if one:
-                    cid = one.get("change_id")
-                    if isinstance(cid, str):
-                        out[norm_change_id(cid)] = one
+                    raw_id = one.get("change_id")
+                    if isinstance(raw_id, str):
+                        out[norm_change_id(raw_id)] = one
             continue
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            cid = row.get("change_id")
-            if isinstance(cid, str):
-                out[norm_change_id(cid)] = row
+            raw_id = row.get("change_id")
+            if isinstance(raw_id, str):
+                out[norm_change_id(raw_id)] = row
     return out
 
 
