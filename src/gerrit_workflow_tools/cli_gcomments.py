@@ -130,10 +130,10 @@ def main(argv: list[str] | None = None) -> int:
 
         comments_by_change = []
         for ch in chain:
-            cid = ch.get("id")
-            if not isinstance(cid, str) or not cid:
+            chg_id = ch.get("id")
+            if not isinstance(chg_id, str) or not chg_id:
                 raise GerritApiError("change has no id in API response")
-            raw_map = client.get_comments(cid)
+            raw_map = client.get_comments(chg_id)
             flattened = flatten_change_comments(
                 web_base,
                 ch,
