@@ -292,23 +292,23 @@ def fetch_gerrit_data(
 
     if needs_comment_count:
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            future_to_idx = {
+            comment_future_to_idx = {
                 ex.submit(count_unresolved_via_comments, client, aid): idx for idx, aid in needs_comment_count
             }
-            for fut in as_completed(future_to_idx):
-                idx = future_to_idx[fut]
+            for comment_fut in as_completed(comment_future_to_idx):
+                idx = comment_future_to_idx[comment_fut]
                 try:
-                    result[idx].comments_unresolved = fut.result()
+                    result[idx].comments_unresolved = comment_fut.result()
                 except Exception as e:
                     logger.debug("unresolved comment count failed: %s", e)
 
     if needs_checks:
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            future_to_idx = {ex.submit(fetch_check_failures, client, aid): idx for idx, aid in needs_checks}
-            for fut in as_completed(future_to_idx):
-                idx = future_to_idx[fut]
+            check_future_to_idx = {ex.submit(fetch_check_failures, client, aid): idx for idx, aid in needs_checks}
+            for check_fut in as_completed(check_future_to_idx):
+                idx = check_future_to_idx[check_fut]
                 try:
-                    result[idx].ci_failures = fut.result()
+                    result[idx].ci_failures = check_fut.result()
                 except Exception as e:
                     logger.debug("checks API failed: %s", e)
 
