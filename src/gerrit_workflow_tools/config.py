@@ -137,6 +137,20 @@ def gerrit_token(cwd: Path | str | None) -> str | None:
     return _config_get(cwd, "gerrit.token")
 
 
+def gshow_comment_tail_lines(cwd: Path | str | None) -> int:
+    """Return ``gerrit.gshowCommentTailLines`` (positive integer), or default ``10`` if unset or invalid."""
+    v = _config_get(cwd, "gerrit.gshowCommentTailLines")
+    if not v:
+        return 10
+    try:
+        n = int(v.strip())
+    except ValueError:
+        return 10
+    if n < 1:
+        return 10
+    return n
+
+
 def stop_patterns(cwd: Path | str | None) -> list[str]:
     """Return ``gerrit.stopPattern`` lines as regex strings, or built-in defaults if none are configured."""
     _ensure_snapshot(cwd)
