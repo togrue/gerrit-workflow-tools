@@ -16,6 +16,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from gerrit_workflow_tools.change_id import (
     CHANGE_ID_LAST_LINE_FOOTER_RE,
@@ -42,7 +43,7 @@ is_change_id = is_change_id_token
 _parse_sha_body_rs = parse_git_log_sha_body_rs
 
 
-def resolve_gcid_user_arg(cwd: str, arg: str) -> str:
+def resolve_gcid_user_arg(cwd: Path | str, arg: str) -> str:
     """Resolve *arg* to a form ``git log`` accepts: each ref via ``git rev-parse --verify``.
 
     Supports the same revisions as ``git rev-parse --verify`` (branches, tags, SHAs, ``HEAD~n``, etc.),
