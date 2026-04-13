@@ -125,10 +125,12 @@ def ordered_relation_chain(
             merged[i] = ch
     if isinstance(cid, str) and cid and cid not in merged:
         merged[cid] = first
-    ordered = sorted(
-        merged.values(),
-        key=lambda c: c.get("_number") if isinstance(c.get("_number"), int) else 0,
-    )
+
+    def _change_number(c: dict[str, Any]) -> int:
+        n = c.get("_number")
+        return n if isinstance(n, int) else 0
+
+    ordered = sorted(merged.values(), key=_change_number)
     logger.info(
         "relation chain: %d change(s): %s",
         len(ordered),
