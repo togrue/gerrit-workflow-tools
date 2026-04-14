@@ -4,7 +4,12 @@ import argparse
 import json
 import logging
 
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import (
+    HELP_JSON,
+    configure_logging,
+    cwd_from_env,
+    handle_git_error,
+)
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.ready_calc import compute_ready
 
@@ -27,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
         help="do not use gerrit.stopPattern values",
     )
     p.add_argument("--all", action="store_true", dest="all_", help="treat entire stack as pushable")
-    p.add_argument("--json", action="store_true", dest="json_", help="JSON output")
+    p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument(
         "-v",
         "--verbose",

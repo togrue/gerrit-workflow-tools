@@ -6,7 +6,7 @@ import logging
 import re
 import sys
 
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
 from gerrit_workflow_tools.gerrit_change_status import (
     GlogCommit,
     determine_attention,
@@ -249,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="one line per commit (suppress detail lines)",
     )
-    p.add_argument("--json", action="store_true", dest="json_", help="machine-readable JSON output")
+    p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument("--no-color", action="store_true", help="disable colored output")
     p.add_argument(
         "--compact",

@@ -5,6 +5,7 @@ import json
 import logging
 
 from gerrit_workflow_tools.cli_common import (
+    HELP_JSON,
     configure_logging,
     cwd_from_env,
     handle_git_error,
@@ -26,7 +27,7 @@ def _symbol(state: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gstack``: list commits from merge-base to HEAD with optional Change-Id and ready state."""
     p = argparse.ArgumentParser(prog="git gstack")
-    p.add_argument("--json", action="store_true", dest="json_", help="machine-readable JSON")
+    p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument(
         "--with-change-id",
         action="store_true",

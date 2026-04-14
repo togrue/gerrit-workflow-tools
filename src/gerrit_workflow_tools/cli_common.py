@@ -8,6 +8,8 @@ from typing import Any
 
 from gerrit_workflow_tools.git_run import GitError
 
+HELP_JSON = "Write machine-readable JSON to stdout."
+
 _LOG = logging.getLogger("gerrit_workflow_tools")
 _CONFIGURED = False
 

@@ -6,6 +6,7 @@ import logging
 import sys
 
 from gerrit_workflow_tools.cli_common import (
+    HELP_JSON,
     configure_logging,
     cwd_from_env,
     handle_git_error,
@@ -67,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="only strictly unresolved comments",
     )
-    p.add_argument("--json", action="store_true", dest="json_", help="JSON to stdout")
+    p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument("--full", action="store_true", help="full comment and commit text")
     p.add_argument("--oneline", action="store_true", help="one line per comment")
     p.add_argument(

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
 from gerrit_workflow_tools.cli_gcid import resolve_gcid_user_arg
 from gerrit_workflow_tools.cli_glog import _detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         "--json",
         action="store_true",
         dest="json_",
-        help="machine-readable JSON on stdout",
+        help=HELP_JSON,
     )
     p.add_argument("--no-color", action="store_true", help="disable colored output")
     p.add_argument(
