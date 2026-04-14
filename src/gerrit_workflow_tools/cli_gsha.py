@@ -106,7 +106,13 @@ def main(argv: list[str] | None = None) -> int:
     out_group.add_argument("--subject", action="store_true", help="Print abbreviated SHA and commit subject")
     out_group.add_argument("--json", action="store_true", dest="json_out", help=HELP_JSON)
 
-    ap.add_argument("-v", "--verbose", action="count", default=0)
+    ap.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase stderr verbosity (-v: INFO; -vv: log each git subprocess).",
+    )
 
     args = ap.parse_args(argv)
     configure_logging(args.verbose)
