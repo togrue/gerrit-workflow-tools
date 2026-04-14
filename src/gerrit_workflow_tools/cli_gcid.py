@@ -103,9 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gcid``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
     p = argparse.ArgumentParser(prog="git gcid")
     p.add_argument(
-        "arg",
+        "rev_or_range",
         nargs="?",
         default=None,
+        metavar="REV_OR_RANGE",
         help=(
             "Revision (anything git rev-parse --verify accepts), Change-Id (I…, passthrough), "
             "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD."
@@ -132,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.verbose)
     cwd = cwd_from_env()
 
-    input_arg = args.arg or "HEAD"
+    input_arg = args.rev_or_range or "HEAD"
 
     if args.check_duplicates:
         if is_change_id_token(input_arg):

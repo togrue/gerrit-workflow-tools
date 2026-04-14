@@ -22,8 +22,9 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gedit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
     p = argparse.ArgumentParser(prog="git gedit")
     p.add_argument(
-        "commit",
-        help="commit ref or Change-Id (I…); must be in the current stack",
+        "rev",
+        metavar="REV",
+        help="Git ref or Change-Id (I…); must be in the current stack",
     )
     g = p.add_mutually_exclusive_group()
     g.add_argument("--reword", action="store_true", help="reword commit message")
@@ -39,12 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
 
     action = "reword" if args.reword else "drop" if args.drop else "edit"
-    logger.debug("gedit cwd=%s commit_arg=%r action=%s", cwd, args.commit, action)
+    logger.debug("gedit cwd=%s rev_arg=%r action=%s", cwd, args.rev, action)
 
     try:
-        full = resolve_stack_commit(cwd, args.commit.strip())
+        full = resolve_stack_commit(cwd, args.rev.strip())
         if not commit_in_stack(cwd, full):
-            raise GitError(f"commit {args.commit} is not in the current local stack")
+            raise GitError(f"commit {args.rev} is not in the current local stack")
         mb, _, _ = merge_base_with_target(cwd)
         short = git_out("rev-parse", "--short", full, cwd=cwd)
     except GitError as e:

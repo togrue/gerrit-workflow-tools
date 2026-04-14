@@ -73,6 +73,15 @@ def test_resolve_gerrit_web_base_missing_raises(stack_repo: Path) -> None:
         resolve_gerrit_web_base(stack_repo)
 
 
+def test_gcomments_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = run_cli(
+        stack_repo, gcomments_main, ["--help"], monkeypatch, catch_sys_exit=True
+    )
+    assert code == 0
+    assert "REF" in out
+    assert "[REF]" in out
+
+
 def test_gcomments_exits_when_web_url_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gcomments_main, ["--json"], monkeypatch)

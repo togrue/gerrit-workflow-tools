@@ -263,10 +263,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("-v", "--verbose", action="store_true", help="log git commands to stderr")
     p.add_argument(
-        "revset",
+        "rev_range",
         nargs="?",
         default=None,
-        metavar="REVSET",
+        metavar="REV_RANGE",
         help="commit range (e.g. origin/main..HEAD); default merge-base..HEAD",
     )
     args = p.parse_args(argv)
@@ -276,8 +276,8 @@ def main(argv: list[str] | None = None) -> int:
     use_color = not args.no_color and sys.stdout.isatty()
 
     # Determine commit range
-    if args.revset:
-        rev_range = args.revset
+    if args.rev_range:
+        rev_range = args.rev_range
     else:
         try:
             mb, _target, _base_ref = merge_base_with_target(cwd)

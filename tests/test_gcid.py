@@ -137,6 +137,14 @@ def test_change_id_regex_full_line():
     assert m.group(1) == "I" + "d" * 40
 
 
+def test_gcid_help(git_graph_repo, monkeypatch):
+    code, out, _err = run_cli(
+        git_graph_repo, gcid_main, ["--help"], monkeypatch, catch_sys_exit=True
+    )
+    assert code == 0
+    assert "REV_OR_RANGE" in out
+
+
 # --- CLI: test-git-graph-repo ---
 
 

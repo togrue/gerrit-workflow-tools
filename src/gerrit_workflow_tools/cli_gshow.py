@@ -141,7 +141,8 @@ def main(argv: list[str] | None = None) -> int:
         "rev",
         nargs="?",
         default=None,
-        help="revision, Change-Id, change number, or Gerrit query (default: HEAD)",
+        metavar="REV",
+        help="Git ref, Change-Id, change number, or Gerrit query (default: HEAD)",
     )
     p.add_argument(
         "--full",

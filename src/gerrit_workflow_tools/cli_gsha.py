@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument(
         "change_id",
-        metavar="<change-id>",
+        metavar="CHANGE_ID",
         help="Gerrit Change-Id to look up (I + 40 hex digits)",
     )
 
