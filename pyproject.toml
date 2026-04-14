@@ -7,6 +7,7 @@ name = "gerrit-workflow-tools"
 version = "0.1.0"
 description = "Local git helpers for Gerrit stacked workflows"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []
 
