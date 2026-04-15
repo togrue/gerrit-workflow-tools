@@ -47,7 +47,7 @@ git gbranch init --target <branch> [--reviewers <list>] [--push-mode <mode>]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--target BRANCH` | (required) | Gerrit target review branch |
-| `--reviewers LIST` | (none) | Comma-separated list of reviewer accounts |
+| `--reviewers LIST` | (none) | Comma-separated list of Gerrit reviewer accounts |
 | `--push-mode MODE` | `ready` | Push mode: `ready` or `all` |
 
 ---
