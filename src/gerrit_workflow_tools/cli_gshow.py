@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--comment-tail-lines",
         type=int,
-        metavar="N",
+        metavar="LINES",
         default=None,
         help="show only the last N lines of each comment body (positive integer; overrides config)",
     )

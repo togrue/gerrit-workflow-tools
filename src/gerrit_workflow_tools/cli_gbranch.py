@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     ip.add_argument(
         "--reviewers",
         default=None,
-        metavar="LIST",
+        metavar="REVIEWERS",
         help="comma-separated Gerrit reviewer accounts",
     )
     ip.add_argument("--push-mode", default="ready", dest="push_mode")
@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("value", metavar="BRANCH")
 
     sr = sub.add_parser("set-reviewers", help="set gerritReviewers for current branch")
-    sr.add_argument("value", metavar="LIST")
+    sr.add_argument("value", metavar="REVIEWERS")
 
     sm = sub.add_parser("set-push-mode", help="set gerritPushMode for current branch")
     sm.add_argument("value", metavar="MODE")

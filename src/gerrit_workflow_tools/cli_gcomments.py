@@ -38,10 +38,10 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gcomments``: fetch and display Gerrit review comments for the stack or a change."""
     p = argparse.ArgumentParser(prog="git gcomments")
     p.add_argument(
-        "ref",
+        "rev",
         nargs="?",
         default=None,
-        metavar="REF",
+        metavar="REV",
         help=(
             "optional git revision (commit, branch, etc.) or Gerrit change "
             "(numeric id, Change-Id I…, or query)"
@@ -98,10 +98,10 @@ def main(argv: list[str] | None = None) -> int:
         stack_snap = get_stack_snapshot(cwd)
         local_map = local_change_map_from_stack(cwd, snapshot=stack_snap)
 
-        if args.ref is not None:
-            pos = args.ref.strip()
+        if args.rev is not None:
+            pos = args.rev.strip()
             if not pos:
-                print("error: empty positional REF", file=sys.stderr)
+                print("error: empty positional REV", file=sys.stderr)
                 return 1
             # Numeric / I+40 → Gerrit query; else git rev.
             if resolve_change_ref(pos) != pos:

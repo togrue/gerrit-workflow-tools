@@ -16,3 +16,4 @@ def test_gsha_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert code == 0
     assert "CHANGE_ID" in out
+    assert "REV_RANGE" in out

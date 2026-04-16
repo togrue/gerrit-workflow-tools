@@ -2,7 +2,7 @@
 gsha — resolve a commit SHA from a Gerrit Change-Id in the current commit chain
 
 USAGE
-    gsha [--range <rev-range>] [--all] [--short | --subject | --json] <change-id>
+    gsha [--range REV_RANGE] [--all] [--short | --subject | --json] CHANGE_ID
 
 DESCRIPTION
     Searches commits in the selected revision range for a commit message footer
@@ -13,7 +13,7 @@ DESCRIPTION
     If exactly one matching commit is found, prints its full commit SHA.
 
 OPTIONS
-    --range <rev-range>
+    --range REV_RANGE
         Git revision range to search, e.g.
             origin/main..HEAD
             main@{upstream}..HEAD
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     range_group = ap.add_mutually_exclusive_group()
     range_group.add_argument(
         "--range",
-        metavar="<rev-range>",
+        metavar="REV_RANGE",
         dest="rev_range",
         help="Git revision range to search",
     )

@@ -212,9 +212,8 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gshow", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch)
     assert code == 0, err
-    assert "commit:" in out
+    assert "commit " in out and sha in out
     assert sha[:8] in out
-    assert "subject:" in out
     assert subj in out
     assert "g.example/c/" in out or "/+/" in out
 

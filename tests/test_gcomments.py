@@ -78,8 +78,8 @@ def test_gcomments_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> No
         stack_repo, gcomments_main, ["--help"], monkeypatch, catch_sys_exit=True
     )
     assert code == 0
-    assert "REF" in out
-    assert "[REF]" in out
+    assert "REV" in out
+    assert "[REV]" in out
 
 
 def test_gcomments_exits_when_web_url_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
