@@ -24,16 +24,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "rev",
         metavar="REV",
-        help="Git ref or Change-Id (I…); must be in the current stack",
+        help="Git ref or Change-Id (I…); must be in the current stack.",
     )
     g = p.add_mutually_exclusive_group()
-    g.add_argument("--reword", action="store_true", help="reword commit message")
-    g.add_argument("--drop", action="store_true", help="drop commit")
+    g.add_argument("--reword", action="store_true", help="Reword commit message.")
+    g.add_argument("--drop", action="store_true", help="Drop commit.")
     p.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="log git commands and rebase sequence editor steps to stderr",
+        help="Log git commands and rebase sequence editor steps to stderr.",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)

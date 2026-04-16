@@ -142,19 +142,21 @@ def main(argv: list[str] | None = None) -> int:
         nargs="?",
         default=None,
         metavar="REV",
-        help="Git ref, Change-Id, change number, or Gerrit query (default: HEAD)",
+        help="Git ref, Change-Id, change number, or Gerrit query (default: HEAD).",
     )
     p.add_argument(
         "--full",
         action="store_true",
-        help="show full comment bodies (no tail truncation)",
+        help="Show full comment bodies without tail truncation.",
     )
     p.add_argument(
         "--comment-tail-lines",
         type=int,
         metavar="LINES",
         default=None,
-        help="show only the last N lines of each comment body (positive integer; overrides config)",
+        help=(
+            "Show only the last N lines of each comment body (positive integer; overrides config)."
+        ),
     )
     p.add_argument(
         "--json",
@@ -162,12 +164,12 @@ def main(argv: list[str] | None = None) -> int:
         dest="json_",
         help=HELP_JSON,
     )
-    p.add_argument("--no-color", action="store_true", help="disable colored output")
+    p.add_argument("--no-color", action="store_true", help="Disable colored output.")
     p.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="log Gerrit resolution to stderr",
+        help="Log Gerrit resolution to stderr.",
     )
     args = p.parse_args(argv)
     configure_logging(1 if args.verbose else 0)

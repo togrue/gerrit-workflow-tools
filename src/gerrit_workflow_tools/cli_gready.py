@@ -21,20 +21,25 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gready``: report how many commits are pushable and where the ready boundary is."""
     p = argparse.ArgumentParser(prog="git gready")
     add_stop_pattern_args(p)
-    p.add_argument("--all", action="store_true", dest="all_", help="treat entire stack as pushable")
+    p.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_",
+        help="Treat the entire stack as pushable.",
+    )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="log git commands and ready calculation to stderr",
+        help="Log git commands and ready calculation to stderr.",
     )
     p.add_argument(
         "until",
         nargs="?",
         default=None,
         metavar="REV",
-        help="limit pushable tip to this commit (must be before boundary)",
+        help="Limit pushable tip to this commit (must be before boundary).",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)

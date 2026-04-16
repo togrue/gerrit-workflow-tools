@@ -43,43 +43,43 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         metavar="REV",
         help=(
-            "optional git revision (commit, branch, etc.) or Gerrit change "
-            "(numeric id, Change-Id I…, or query)"
+            "Optional git revision (commit, branch, etc.) or Gerrit change "
+            "(numeric id, Change-Id I…, or query)."
         ),
     )
     p.add_argument(
         "--whole-chain",
         action="store_true",
-        help="include related changes (dependency chain) oldest to newest",
+        help="Include related changes in dependency order (oldest to newest).",
     )
     p.add_argument(
         "--no-skip-fixups",
         action="store_true",
-        help="do not skip fixup!/squash! commits when resolving Change-Id",
+        help="Do not skip fixup!/squash! commits when resolving Change-Id.",
     )
     p.add_argument(
         "--all",
         action="store_true",
         dest="all_",
-        help="include resolved comments",
+        help="Include resolved comments.",
     )
     p.add_argument(
         "--open",
         action="store_true",
-        help="only strictly unresolved comments",
+        help="Show only strictly unresolved comments.",
     )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument(
         "--full",
         action="store_true",
-        help="show full comment and commit body text",
+        help="Show full comment and commit body text.",
     )
-    p.add_argument("--oneline", action="store_true", help="one line per comment")
+    p.add_argument("--oneline", action="store_true", help="Use one line per comment.")
     p.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="log resolution steps to stderr",
+        help="Log resolution steps to stderr.",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)

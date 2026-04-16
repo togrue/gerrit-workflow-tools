@@ -117,17 +117,20 @@ def main(argv: list[str] | None = None) -> int:
         "--verbose",
         action="count",
         default=0,
-        help="Increase stderr verbosity (-v: INFO; -vv: log each git subprocess).",
+        help="Log to stderr with increased verbosity (-v: INFO; -vv: each git subprocess).",
     )
     p.add_argument(
         "--start-at-remote",
         action="store_true",
-        help="Start at the merged remote branch, where the current commit is based on.",
+        help=(
+            "Use merge_base..END from the stack merge base instead of the default revision "
+            "resolution."
+        ),
     )
     p.add_argument(
         "--check-duplicates",
         action="store_true",
-        help="Check for duplicate Change-Ids in the current chain. Start at the merged remote branch, where the current commit is based on.",
+        help="Check for duplicate Change-Ids across merge_base..END (same range as --start-at-remote).",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)

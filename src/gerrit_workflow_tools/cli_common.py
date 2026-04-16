@@ -1,3 +1,12 @@
+"""Shared CLI helpers and argparse conventions for ``gerrit_workflow_tools`` CLIs.
+
+Help text style (``help=`` on parsers and arguments):
+
+- Imperative mood, sentence case, and end each string with a period (consistent).
+- When a flag only affects package logging, phrase it as "Log … to stderr".
+- Shared flag text lives in ``HELP_*`` constants in this module; CLIs should use them.
+"""
+
 from __future__ import annotations
 
 import argparse

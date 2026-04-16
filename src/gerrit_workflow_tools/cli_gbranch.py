@@ -71,29 +71,29 @@ def main(argv: list[str] | None = None) -> int:
         "-v",
         "--verbose",
         action="store_true",
-        help="log git commands and config writes to stderr",
+        help="Log git commands and config writes to stderr.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("show", help="show Gerrit metadata for current branch")
+    sub.add_parser("show", help="Show Gerrit metadata for the current branch.")
 
-    ip = sub.add_parser("init", help="set branch-local Gerrit targets (non-interactive)")
-    ip.add_argument("--target", help="Gerrit review branch (e.g. main)")
+    ip = sub.add_parser("init", help="Set branch-local Gerrit targets (non-interactive).")
+    ip.add_argument("--target", help="Gerrit review branch (e.g. main).")
     ip.add_argument(
         "--reviewers",
         default=None,
         metavar="REVIEWERS",
-        help="comma-separated Gerrit reviewer accounts",
+        help="Comma-separated Gerrit reviewer accounts.",
     )
     ip.add_argument("--push-mode", default="ready", dest="push_mode")
 
-    st = sub.add_parser("set-target", help="set gerritTarget for current branch")
+    st = sub.add_parser("set-target", help="Set gerritTarget for the current branch.")
     st.add_argument("value", metavar="BRANCH")
 
-    sr = sub.add_parser("set-reviewers", help="set gerritReviewers for current branch")
+    sr = sub.add_parser("set-reviewers", help="Set gerritReviewers for the current branch.")
     sr.add_argument("value", metavar="REVIEWERS")
 
-    sm = sub.add_parser("set-push-mode", help="set gerritPushMode for current branch")
+    sm = sub.add_parser("set-push-mode", help="Set gerritPushMode for the current branch.")
     sm.add_argument("value", metavar="MODE")
 
     args = p.parse_args(argv)

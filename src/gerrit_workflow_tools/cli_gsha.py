@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "change_id",
         metavar="CHANGE_ID",
-        help="Gerrit Change-Id to look up (I + 40 hex digits)",
+        help="Gerrit Change-Id to look up (I + 40 hex digits).",
     )
 
     range_group = ap.add_mutually_exclusive_group()
@@ -92,18 +92,22 @@ def main(argv: list[str] | None = None) -> int:
         "--range",
         metavar="REV_RANGE",
         dest="rev_range",
-        help="Git revision range to search",
+        help="Git revision range to search.",
     )
     range_group.add_argument(
         "--all",
         action="store_true",
         dest="all_commits",
-        help="Search all commits reachable from any ref",
+        help="Search all commits reachable from any ref.",
     )
 
     out_group = ap.add_mutually_exclusive_group()
-    out_group.add_argument("--short", action="store_true", help="Print abbreviated SHA")
-    out_group.add_argument("--subject", action="store_true", help="Print abbreviated SHA and commit subject")
+    out_group.add_argument("--short", action="store_true", help="Print abbreviated SHA.")
+    out_group.add_argument(
+        "--subject",
+        action="store_true",
+        help="Print abbreviated SHA and commit subject.",
+    )
     out_group.add_argument("--json", action="store_true", dest="json_out", help=HELP_JSON)
 
     ap.add_argument(
@@ -111,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         "--verbose",
         action="count",
         default=0,
-        help="Increase stderr verbosity (-v: INFO; -vv: log each git subprocess).",
+        help="Log to stderr with increased verbosity (-v: INFO; -vv: each git subprocess).",
     )
 
     args = ap.parse_args(argv)

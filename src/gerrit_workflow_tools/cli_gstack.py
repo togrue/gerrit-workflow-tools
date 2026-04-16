@@ -32,19 +32,23 @@ def main(argv: list[str] | None = None) -> int:
         "--with-change-id",
         action="store_true",
         default=True,
-        help="include Change-Id column (default: on)",
+        help="Include the Change-Id column (default: on).",
     )
     p.add_argument(
         "--no-change-id",
         action="store_true",
-        help="omit Change-Id column",
+        help="Omit the Change-Id column.",
     )
-    p.add_argument("--with-ready-state", action="store_true", help="show ready/blocked state")
+    p.add_argument(
+        "--with-ready-state",
+        action="store_true",
+        help="Show ready or blocked state.",
+    )
     p.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="log git commands and stack resolution to stderr",
+        help="Log git commands and stack resolution to stderr.",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)

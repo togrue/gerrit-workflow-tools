@@ -242,32 +242,39 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--full",
         action="store_true",
-        help="show all commits in the range, not only attention-required",
+        help="Show all commits in the range, not only attention-required ones.",
     )
     p.add_argument(
         "--oneline",
         action="store_true",
-        help="one line per commit (suppress detail lines)",
+        help="Use one line per commit (suppress detail lines).",
     )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
-    p.add_argument("--no-color", action="store_true", help="disable colored output")
+    p.add_argument("--no-color", action="store_true", help="Disable colored output.")
     p.add_argument(
         "--compact",
         action="store_true",
-        help="compact single-character status representation",
+        help="Use compact single-character status representation.",
     )
     p.add_argument(
         "--url",
         action="store_true",
-        help="include each change's Gerrit web URL in text output (JSON always includes gerrit_url)",
+        help=(
+            "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url)."
+        ),
     )
-    p.add_argument("-v", "--verbose", action="store_true", help="log git commands to stderr")
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Log git commands to stderr.",
+    )
     p.add_argument(
         "rev_range",
         nargs="?",
         default=None,
         metavar="REV_RANGE",
-        help="commit range (e.g. origin/main..HEAD); default merge-base..HEAD",
+        help="Commit range (e.g. origin/main..HEAD); default merge-base..HEAD.",
     )
     args = p.parse_args(argv)
     configure_logging(args.verbose)
