@@ -260,13 +260,6 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, indent=2))
         return _EXIT_ATTENTION if attention else 0
 
-    # Human output
-    if commit.sha:
-        print(f"commit: {commit.short_sha}  {commit.sha}")
-    else:
-        print("commit: (no local revision)")
-    print(f"subject: {commit.summary}")
-
     if is_local and commit.sha:
         try:
             msg = git_out("show", "-s", "--no-patch", "--pretty=medium", commit.sha, cwd=cwd)
@@ -276,13 +269,13 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print(msg.rstrip())
 
+    ind = " " * 4
     print()
-    print(_primary_line(commit, use_color=use_color))
-    ind = " " * 8
     if commit.gerrit_url:
         print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
     for d in _detail_lines(commit, use_color=use_color):
         print(f"{ind}{d}")
+    print(f"{ind}{_primary_line(commit, use_color=use_color)}")
 
     url = commit.gerrit_url or ""
     if unresolved_rows:
