@@ -152,5 +152,5 @@ Each commit object:
 ## See also
 
 - [`git gcomments`](gcomments.md) — full comment text for a single change
-- [`git gstack`](gstack.md) — local-only stack view (no Gerrit API)
+- `git log` over `merge-base..HEAD` — local commit list only (no Gerrit API)
 - [Testing guide](../Howto_Test.md) — how to run `glog` against a real Gerrit instance

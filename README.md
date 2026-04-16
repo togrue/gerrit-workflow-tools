@@ -1,6 +1,6 @@
 # Gerrit workflow tools (local)
 
-Python CLIs installed as **`git-gstack`**, **`git-gready`**, **`git-gbranch`**, **`git-gpush`**, **`git-gedit`**, **`git-gcid`**, **`git-gsha`**, **`git-glog`**, and **`git-gcomments`**. Git dispatches `git <name>` by running an executable `git-<name>` on your `PATH`, so after install you can run **`git gstack`** from any repository without a virtual environment or `uv`.
+Python CLIs installed as **`git-gbranch`**, **`git-gpush`**, **`git-gedit`**, **`git-gcid`**, **`git-gsha`**, **`git-glog`**, **`git-gshow`**, and **`git-gcomments`**. Git dispatches `git <name>` by running an executable `git-<name>` on your `PATH`, so after install you can run **`git gpush`** from any repository without a virtual environment or `uv`.
 
 ## Install into your user environment (recommended)
 
@@ -29,13 +29,13 @@ Then ensure your **user binary directory** is on `PATH`:
 |----------|----------------|
 | Linux / macOS | `~/.local/bin` |
 | Windows (pip `--user`) | `%APPDATA%\Python\Python3x\Scripts` or `Python3x\Scripts` under your user profile (see `python -m site --user-site` and parent `Scripts`) |
-| Windows (Git Bash) | same as above; add the `Scripts` folder that contains `git-gstack.exe` |
+| Windows (Git Bash) | same as above; add the `Scripts` folder that contains `git-gpush.exe` |
 
 Verify:
 
 ```bash
-git gstack --help
-# or:  git-gstack --help
+git gpush --help
+# or:  git-gpush --help
 ```
 
 ## Development (this repository)
@@ -48,7 +48,7 @@ uv sync
 uv run pytest
 ```
 
-Editable install inside the venv: `uv sync` already links the package. For ad-hoc runs without activating: `uv run git-gstack`, `uv run pytest`.
+Editable install inside the venv: `uv sync` already links the package. For ad-hoc runs without activating: `uv run git-gpush`, `uv run pytest`.
 
 ## Design
 

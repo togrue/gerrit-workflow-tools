@@ -96,5 +96,4 @@ git gpush --target main --save-target
 ## See also
 
 - [`git gbranch`](gbranch.md) — configure target, reviewers, push mode
-- [`git gready`](gready.md) — inspect the ready boundary without pushing
 - [`git gcid --check-duplicates`](gsha-gcid.md) — run the Change-Id check manually

@@ -23,8 +23,6 @@ Local git helpers for Gerrit stacked review workflows. Each command is invokable
 | Command | Purpose |
 |---------|---------|
 | [`git gbranch`](commands/gbranch.md) | Manage branch-local Gerrit metadata (target, reviewers, push mode) |
-| [`git gstack`](commands/gstack.md) | Inspect the local commit stack from merge-base upward |
-| [`git gready`](commands/gready.md) | Compute the pushable prefix of the stack according to stop-pattern policy |
 | [`git gpush`](commands/gpush.md) | Push the ready prefix (or full stack) to Gerrit |
 | [`git gedit`](commands/gedit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
 | [`git gshow`](commands/gedit.md) | Show the status of the checked out commit, it's change-id or sha |
@@ -89,9 +87,8 @@ git config --global gerrit.webUrl https://gerrit.example.com
 # 2. Configure current branch
 git gbranch init --target main --reviewers alice,bob
 
-# 3. Inspect stack and push readiness
-git gstack
-git gready
+# 3. Inspect the stack vs Gerrit (optional)
+git glog
 
 # 4. Validate Change-Ids before pushing
 git gcid --check-duplicates
@@ -107,7 +104,7 @@ git gpush
 
 | Phase | Status | Commands |
 |-------|--------|---------|
-| 1 — local only | Done | `gbranch`, `gstack`, `gready`, `gpush`, `gedit`, `gsha`, `gcid` |
+| 1 — local only | Done | `gbranch`, `gpush`, `gedit`, `gsha`, `gcid` |
 | 2 — Gerrit navigation | In progress | `gcomments` (done), `glog` (done), `gstatus` (planned) |
 | 3 — Gerrit mutation | Planned | `gmove` |
 

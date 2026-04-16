@@ -66,5 +66,5 @@ git gedit a1b2c3d --drop
 
 ## See also
 
-- [`git gstack`](gstack.md) — find the SHA or Change-Id of the commit to edit
+- [`git glog`](glog.md) — see the stack and Change-Ids before choosing a commit
 - [`git gsha`](gsha-gcid.md) — resolve a Change-Id to a SHA before editing

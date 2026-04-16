@@ -24,7 +24,7 @@ HELP_NO_CONFIG_PATTERNS = "Do not use gerrit.stopPattern values from config."
 
 
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
-    """Register ``--ignore-pattern`` and ``--no-config-patterns`` (shared by gready and gpush)."""
+    """Register ``--ignore-pattern`` and ``--no-config-patterns`` (used by ``git gpush``)."""
     parser.add_argument(
         "--ignore-pattern",
         action="append",

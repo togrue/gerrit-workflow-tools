@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
-from gerrit_workflow_tools.config import resolve_local_base_ref, stop_patterns
+from gerrit_workflow_tools.config import resolve_local_base_ref
 from gerrit_workflow_tools.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
@@ -51,16 +51,6 @@ def _cached_stack_snapshot(cwd_key: str, branch: str) -> StackSnapshot:
 def get_stack_snapshot(cwd: Path | str | None, branch: str | None = None) -> StackSnapshot:
     """Return merge-base and oldest-first commits for ``merge_base..HEAD`` (cached per cwd/branch)."""
     return _cached_stack_snapshot(_cwd_key(cwd), branch or "")
-
-
-@dataclass
-class StackCommit:
-    index: int
-    sha: str
-    short_sha: str
-    subject: str
-    change_id: str | None
-    ready_state: str  # "ready" | "blocked(...)" | "after-blocked"
 
 
 CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
@@ -226,72 +216,6 @@ def commit_subject_and_body(cwd: Path | str | None, sha: str) -> tuple[str, str]
     lines = raw.splitlines()
     sub = lines[0] if lines else ""
     return sub, raw
-
-
-def _first_blocking_pattern(subject: str, patterns: list[str]) -> str | None:
-    for pat in patterns:
-        try:
-            if re.search(pat, subject):
-                return pat
-        except re.error:
-            continue
-    return None
-
-
-def _ready_labels_for_stack(
-    subjects: list[str],
-    patterns: list[str],
-) -> list[str]:
-    """Bottom-up: first subject matching any pattern blocks that commit; later are after-blocked."""
-    first_idx: int | None = None
-    matched_pat: str | None = None
-    for i, sub in enumerate(subjects):
-        mp = _first_blocking_pattern(sub, patterns)
-        if mp is not None:
-            first_idx = i
-            matched_pat = mp
-            break
-    out: list[str] = []
-    for i, _sub in enumerate(subjects):
-        if first_idx is None or i < first_idx:
-            out.append("ready")
-        elif i == first_idx:
-            out.append(f"blocked({matched_pat})")
-        else:
-            out.append("after-blocked")
-    return out
-
-
-def build_stack(
-    cwd: Path | str | None,
-    *,
-    branch: str | None = None,
-    with_ready_state: bool = False,
-    patterns: list[str] | None = None,
-) -> tuple[str, str, str, list[StackCommit]]:
-    """Return merge-base, target label, and :class:`StackCommit` rows (optional per-commit ready/blocked labels)."""
-    snap = get_stack_snapshot(cwd, branch)
-    mb = snap.merge_base
-    target_display = snap.target_display
-    pats = patterns if patterns is not None else stop_patterns(cwd)
-    rows = list(snap.rows)
-    subjects = [r[2] for r in rows]
-    labels = _ready_labels_for_stack(subjects, pats) if with_ready_state else ["ready"] * len(rows)
-    commits: list[StackCommit] = []
-    for i, (sha, short, sub, raw) in enumerate(rows, start=1):
-        cid = parse_change_id(raw)
-        st = labels[i - 1]
-        commits.append(
-            StackCommit(
-                index=i,
-                sha=sha,
-                short_sha=short,
-                subject=sub,
-                change_id=cid,
-                ready_state=st,
-            )
-        )
-    return mb, target_display, target_display, commits
 
 
 def is_ancestor(cwd: Path | str | None, maybe_desc: str, maybe_anc: str) -> bool:

@@ -103,5 +103,4 @@ git gbranch set-push-mode ready
 
 ## See also
 
-- [`git gpush`](gpush.md) — uses the target and push mode set here
-- [`git gready`](gready.md) — reads `gerritPushMode` and stop patterns
+- [`git gpush`](gpush.md) — uses the target, push mode, and stop patterns from `gbranch` / config

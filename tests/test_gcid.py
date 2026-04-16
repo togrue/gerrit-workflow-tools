@@ -253,7 +253,7 @@ def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
 
 
 def test_gcid_start_at_remote_range_ignores_left_endpoint(stack_repo, monkeypatch):
-    """``--start-at-remote`` always uses merge-base..RIGHT (same stack window as ``gstack``)."""
+    """``--start-at-remote`` always uses merge-base..RIGHT (same stack window as `git glog` / merge-base..HEAD)."""
     full = run_cli(stack_repo, gcid_main, ["--start-at-remote"], monkeypatch)
     ranged = run_cli(stack_repo, gcid_main, ["--start-at-remote", "HEAD~3..HEAD"], monkeypatch)
     assert full[0] == 0 and ranged[0] == 0
