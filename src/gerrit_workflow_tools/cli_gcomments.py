@@ -69,7 +69,11 @@ def main(argv: list[str] | None = None) -> int:
         help="only strictly unresolved comments",
     )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
-    p.add_argument("--full", action="store_true", help="full comment and commit text")
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help="show full comment and commit body text",
+    )
     p.add_argument("--oneline", action="store_true", help="one line per comment")
     p.add_argument(
         "-v",

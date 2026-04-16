@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--full",
         action="store_true",
-        help="show all commits, not just attention-required",
+        help="show all commits in the range, not only attention-required",
     )
     p.add_argument(
         "--oneline",
