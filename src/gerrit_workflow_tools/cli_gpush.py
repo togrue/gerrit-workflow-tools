@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gpush``: compute ready range, validate Change-Ids, and push to Gerrit."""
     p = argparse.ArgumentParser(prog="git gpush")
-    p.add_argument("-i", action="store_true", help="Interactive mode (not implemented in this CLI stub).")
+    p.add_argument("-i", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
     p.add_argument(
         "--all",
