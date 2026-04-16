@@ -6,6 +6,7 @@ import logging
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
+    add_stop_pattern_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
@@ -19,18 +20,7 @@ logger = logging.getLogger(__name__)
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gready``: report how many commits are pushable and where the ready boundary is."""
     p = argparse.ArgumentParser(prog="git gready")
-    p.add_argument(
-        "--ignore-pattern",
-        action="append",
-        default=[],
-        metavar="REGEX",
-        help="ignore this configured stop pattern (repeatable)",
-    )
-    p.add_argument(
-        "--no-config-patterns",
-        action="store_true",
-        help="do not use gerrit.stopPattern values",
-    )
+    add_stop_pattern_args(p)
     p.add_argument("--all", action="store_true", dest="all_", help="treat entire stack as pushable")
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument(

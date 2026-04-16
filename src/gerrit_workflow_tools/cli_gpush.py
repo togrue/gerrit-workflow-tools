@@ -6,7 +6,12 @@ import subprocess
 import sys
 
 from gerrit_workflow_tools.change_id import classify_issues
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import (
+    add_stop_pattern_args,
+    configure_logging,
+    cwd_from_env,
+    handle_git_error,
+)
 from gerrit_workflow_tools.config import (
     branch_gerrit_target,
     gerrit_remote,
@@ -37,8 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="ignore ready boundary (like --all)",
     )
-    p.add_argument("--ignore-pattern", action="append", default=[], metavar="REGEX")
-    p.add_argument("--no-config-patterns", action="store_true")
+    add_stop_pattern_args(p)
     p.add_argument("--reviewer", action="append", default=[], help="(reserved) Gerrit reviewers")
     p.add_argument(
         "-v",

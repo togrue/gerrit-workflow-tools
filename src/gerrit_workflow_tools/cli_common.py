@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
@@ -9,6 +10,24 @@ from typing import Any
 from gerrit_workflow_tools.git_run import GitError
 
 HELP_JSON = "Write machine-readable JSON to stdout."
+HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
+HELP_NO_CONFIG_PATTERNS = "Do not use gerrit.stopPattern values from config."
+
+
+def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
+    """Register ``--ignore-pattern`` and ``--no-config-patterns`` (shared by gready and gpush)."""
+    parser.add_argument(
+        "--ignore-pattern",
+        action="append",
+        default=[],
+        metavar="REGEX",
+        help=HELP_IGNORE_PATTERN,
+    )
+    parser.add_argument(
+        "--no-config-patterns",
+        action="store_true",
+        help=HELP_NO_CONFIG_PATTERNS,
+    )
 
 _LOG = logging.getLogger("gerrit_workflow_tools")
 _CONFIGURED = False
