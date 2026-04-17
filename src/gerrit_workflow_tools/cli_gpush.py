@@ -15,6 +15,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.config import (
     branch_gerrit_target,
     gerrit_remote,
+    refs_for_push_branch_name,
     set_branch_config,
 )
 from gerrit_workflow_tools.git_run import GitError, git_out
@@ -93,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             raise GitError(
                 "No Gerrit target: run `git gbranch init --target <branch>` or `git gpush --target <branch>`."
             )
+        push_branch = refs_for_push_branch_name(cwd, target)
 
         r = compute_ready(
             cwd,
@@ -127,12 +129,12 @@ def main(argv: list[str] | None = None) -> int:
             print("error: nothing to push (empty ready prefix)", file=sys.stderr)
             return 1
 
-        refspec = f"{tip}:refs/for/{target}"
+        refspec = f"{tip}:refs/for/{push_branch}"
         cmd = ["git", "push", remote, refspec]
 
         print("Summary")
         print(f"  branch:       {b}")
-        print(f"  target:       {target}")
+        print(f"  target:       {push_branch}")
         print(f"  remote:       {remote}")
         print(f"  push tip:     {tip}")
         print(f"  ready reason: {r.boundary_reason}")

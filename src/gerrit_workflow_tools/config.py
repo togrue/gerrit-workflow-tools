@@ -111,6 +111,20 @@ def gerrit_remote(cwd: Path | str | None) -> str:
     return v or "origin"
 
 
+def refs_for_push_branch_name(cwd: Path | str | None, target: str) -> str:
+    """Branch segment for Gerrit ``refs/for/<branch>``.
+
+    When *target* is ``<remote>/<branch>`` and *remote* equals :func:`gerrit_remote`,
+    returns *branch* only (e.g. ``origin/dev`` → ``dev``). Otherwise returns *target*
+    unchanged (e.g. ``main``, ``release/1.0``).
+    """
+    r = gerrit_remote(cwd)
+    prefix = f"{r}/"
+    if target.startswith(prefix):
+        return target[len(prefix) :]
+    return target
+
+
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
     """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``git gcomments``)."""
     return _config_get(cwd, "gerrit.webUrl")
