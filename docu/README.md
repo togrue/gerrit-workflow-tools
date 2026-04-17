@@ -114,6 +114,7 @@ git gpush
 
 ## See also
 
+- [Bash completion](Completion.md) — tab-complete `git gpush`, `git glog`, etc.
 - [Workflow scenarios](../Gerrit-Workflow-Scenarios.md) — the real-world problems these tools solve
 - [MVP feature list](../MVP.md)
 - [Testing guide](Howto_Test.md)

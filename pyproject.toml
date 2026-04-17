@@ -34,6 +34,7 @@ git-gshow = "gerrit_workflow_tools.cli_gshow:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gerrit_workflow_tools"]
+force-include = { "contrib/completion/git-gerrit-workflow-tools.bash" = "gerrit_workflow_tools/completion/git-gerrit-workflow-tools.bash" }
 
 [tool.hatch.build.targets.sdist]
 include = ["src/gerrit_workflow_tools"]

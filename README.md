@@ -38,6 +38,10 @@ git gpush --help
 # or:  git-gpush --help
 ```
 
+### Bash completion (optional)
+
+See [docu/Completion.md](docu/Completion.md). Source `contrib/completion/git-gerrit-workflow-tools.bash` after Git’s bash completion, or use the copy under `gerrit_workflow_tools/completion/` after `pip install`.
+
 ## Development (this repository)
 
 Use [uv](https://docs.astral.sh/uv/) for a local venv and optional lockfile; this is **not** required for end users.
