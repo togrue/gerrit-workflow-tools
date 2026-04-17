@@ -177,6 +177,13 @@ def glog_defaults(cwd: Path | str | None) -> dict[str, bool]:
     }
 
 
+def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
+    """Defaults for ``git gpush`` from ``gerrit.gpush*`` keys (CLI flags override when passed)."""
+    return {
+        "show_attributes": config_bool(cwd, "gerrit.gpushShowAttributes"),
+    }
+
+
 def stop_patterns(cwd: Path | str | None) -> list[str]:
     """Return ``gerrit.stopPattern`` lines as regex strings, or built-in defaults if none are configured."""
     _ensure_snapshot(cwd)

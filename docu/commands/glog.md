@@ -33,7 +33,7 @@ git glog [options] [REVSET]
 | `--no-color` | Disable colored output |
 | `-v`, `--verbose` | Log git commands to stderr |
 
-**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.glogShowUrl`, `gerrit.glogShowChangeId`, `gerrit.glogOneline`, `gerrit.glogCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults.
+**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.glogShowUrl`, `gerrit.glogShowChangeId`, `gerrit.glogOneline`, `gerrit.glogCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults. See [Configuration.md](../Configuration.md#glog--gerritglog).
 
 ---
 

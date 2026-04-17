@@ -25,7 +25,8 @@ git gpush [options] [REV]
 | `--dry-run` | Print what would be pushed without executing |
 | `-y`, `--yes` | Push without confirmation (required when stdin is not a terminal) |
 | `-i` | Prompt for reviewers on a TTY; merged after branch config and `--reviewers` (cannot be combined with `--yes`) |
-| `--show-attributes` | After the usual preview, query Gerrit and show current vs proposed review attributes per commit (see below) |
+| `--show-attributes` | After the usual preview, query Gerrit and show current vs proposed review attributes per commit (see below). Default: `gerrit.gpushShowAttributes` |
+| `--no-show-attributes` | Disable attribute preview when `gerrit.gpushShowAttributes` is set |
 | `--all` | Push the entire stack, ignoring stop patterns |
 | `--force-boundary` | Deprecated: same as `--all` — prefer `--all` |
 | `--target BRANCH` | Override the Gerrit target branch for this push |
@@ -120,3 +121,4 @@ git gpush -i
 
 - [`git gbranch`](gbranch.md) — configure target, reviewers, push mode
 - [`git gcid --check-duplicates`](gsha-gcid.md) — run the Change-Id check manually
+- [Configuration reference](../Configuration.md) — `gerrit.gpushShowAttributes`, `gerrit.stopPattern`, credentials

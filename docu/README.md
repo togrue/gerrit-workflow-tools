@@ -43,6 +43,8 @@ Local git helpers for Gerrit stacked review workflows. Each command is invokable
 
 ## Configuration
 
+**Full reference:** [Configuration.md](Configuration.md) — all `gerrit.*` keys, `gerrit.glog*`, `gerrit.gpush*`, branch-local keys, and `gerrit.stopPattern` (repeatable regexes for the ready boundary).
+
 ### Global (`~/.gitconfig` or repo `.git/config`)
 
 ```ini
@@ -55,7 +57,7 @@ Local git helpers for Gerrit stacked review workflows. Each command is invokable
     stopPattern = ^test!
 ```
 
-`gerrit.webUrl` is **required** for any command that contacts the Gerrit REST API (`gcomments`, `glog`).
+`gerrit.webUrl` is **required** for any command that contacts the Gerrit REST API (`gcomments`, `glog`, `gpush --show-attributes`, …).
 
 Authentication for the REST API:
 

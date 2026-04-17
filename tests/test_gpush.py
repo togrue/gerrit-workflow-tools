@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gerrit_workflow_tools.cli_gpush import main as gpush_main
-from gerrit_workflow_tools.config import set_branch_config
+from gerrit_workflow_tools.config import clear_gerrit_git_config_cache, set_branch_config
 from gerrit_workflow_tools.git_run import git, git_out
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -22,6 +22,7 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--reviewers" in out
     assert "--reviewer" not in out.replace("--reviewers", "")
     assert "--show-attributes" in out
+    assert "--no-show-attributes" in out
     assert "-i" in out
 
 
@@ -239,6 +240,64 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     assert "`r=alice` -> `r=alice,r=bob`" in out
     assert "%r=alice" in out
     assert "%r=bob" in out
+
+
+def test_gpush_config_default_show_attributes(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "gerrit.gpushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(
+        rows,
+        per_index_overrides=[
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {},
+            {},
+        ],
+    )
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gpush", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--dry-run", "--reviewers", "alice"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert "`r=alice`" in out
+
+
+def test_gpush_no_show_attributes_overrides_config(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "gerrit.gpushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(
+        rows,
+        per_index_overrides=[
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {},
+            {},
+        ],
+    )
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gpush", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--dry-run", "--no-show-attributes", "--reviewers", "alice"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert "`r=alice`" not in out
 
 
 def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
