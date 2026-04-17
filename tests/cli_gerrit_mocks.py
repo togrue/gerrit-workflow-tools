@@ -28,9 +28,12 @@ def change_info_for_sha(
     verified: int = 1,
     submittable: bool = True,
     unresolved_comment_count: int = 0,
+    reviewers: list[dict[str, Any]] | None = None,
+    work_in_progress: bool = False,
+    private: bool = False,
 ) -> dict[str, Any]:
     """Minimal ChangeInfo for :func:`batch_load_change_details` / ``query_changes``."""
-    return {
+    out: dict[str, Any] = {
         "id": f"{project}~main~{change_id}",
         "change_id": change_id,
         "project": project,
@@ -40,11 +43,16 @@ def change_info_for_sha(
         "submittable": submittable,
         "unresolved_comment_count": unresolved_comment_count,
         "revisions": {sha: {"_number": 1}},
+        "work_in_progress": work_in_progress,
+        "private": private,
         "labels": {
             "Verified": {"value": verified, "all": [{"value": verified}]},
             "Code-Review": {"value": cr, "all": [{"value": cr}]},
         },
     }
+    if reviewers is not None:
+        out["reviewers"] = reviewers
+    return out
 
 
 def stack_rows_mb_to_head(repo: Path) -> list[tuple[str, str, str, str]]:
@@ -77,6 +85,9 @@ def build_details_by_change_id(
             verified=int(ov.get("verified", 1)),
             submittable=bool(ov.get("submittable", True)),
             unresolved_comment_count=int(ov.get("unresolved_comment_count", 0)),
+            reviewers=ov.get("reviewers"),
+            work_in_progress=bool(ov.get("work_in_progress", False)),
+            private=bool(ov.get("private", False)),
         )
         out[norm_change_id(cid)] = detail
     return out
