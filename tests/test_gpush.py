@@ -9,6 +9,7 @@ import pytest
 from gerrit_workflow_tools.cli_gpush import main as gpush_main
 from gerrit_workflow_tools.config import set_branch_config
 from gerrit_workflow_tools.git_run import git, git_out
+from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
 
@@ -20,6 +21,8 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--dry-run" in out
     assert "--reviewers" in out
     assert "--reviewer" not in out.replace("--reviewers", "")
+    assert "--show-attributes" in out
+    assert "-i" in out
 
 
 def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch):
@@ -166,3 +169,148 @@ def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.
     assert code == 0, (code, out, err)
     assert "refs/for/main" in out
     assert "git push" in out
+
+
+def test_gpush_show_attributes_fails_without_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--show-attributes"], monkeypatch)
+    assert code == 1
+    assert "gerrit.webUrl" in err or "webUrl" in err
+
+
+def test_gpush_show_attributes_fails_without_credentials(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--show-attributes"], monkeypatch)
+    assert code == 1
+    assert "credentials" in err.lower()
+
+
+def test_gpush_show_attributes_unchanged_when_matching_reviewers(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(
+        rows,
+        per_index_overrides=[
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {},
+            {},
+        ],
+    )
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gpush", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--dry-run", "--show-attributes", "--reviewers", "alice"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert "Updated commits:" in out
+    assert "`r=alice`" in out
+    assert "->" not in out
+
+
+def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(
+        rows,
+        per_index_overrides=[
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
+            {},
+            {},
+        ],
+    )
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gpush", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--dry-run", "--show-attributes", "--reviewers", "alice", "--reviewers", "bob"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert "->" in out
+    assert "`r=alice` -> `r=alice,r=bob`" in out
+    assert "%r=alice" in out
+    assert "%r=bob" in out
+
+
+def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(
+        rows,
+        per_index_overrides=[
+            {
+                "reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}],
+                "work_in_progress": True,
+            },
+            {
+                "reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}],
+                "work_in_progress": True,
+            },
+            {},
+            {},
+        ],
+    )
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gpush", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--dry-run", "--show-attributes", "--reviewers", "alice"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert "`r=alice,wip`" in out
+    assert "->" not in out
+
+
+def test_gpush_interactive_reviewers_merges_and_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._prompt_interactive_reviewers", lambda: "bob")
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._prompt_save_reviewers", lambda: False)
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
+    assert code == 0
+    assert "%r=bob" in out
+
+
+def test_gpush_interactive_reviewers_order_after_branch_and_cli(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
+    set_branch_config(stack_repo, b, gerrit_reviewers="carol")
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._prompt_interactive_reviewers", lambda: "bob")
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._prompt_save_reviewers", lambda: False)
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "-i", "--reviewers", "alice"],
+        monkeypatch,
+    )
+    assert code == 0
+    i = out.index("%r=carol")
+    j = out.index("%r=alice")
+    k = out.index("%r=bob")
+    assert i < j < k
+
+
+def test_gpush_interactive_requires_tty(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
+    assert code == 1
+    assert "tty" in err.lower()
+
+
+def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i", "--yes"], monkeypatch)
+    assert code == 1
+    assert "-i" in err

@@ -17,13 +17,19 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
     branch_gerrit_target,
+    gerrit_password,
     gerrit_remote,
+    gerrit_token,
+    gerrit_user,
     refs_for_push_branch_name,
     set_branch_config,
 )
+from gerrit_workflow_tools.gerrit_change_status import batch_load_change_details, norm_change_id
+from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
-from gerrit_workflow_tools.stack import merge_base_with_target, stack_commits_metadata_one_log
+from gerrit_workflow_tools.stack import merge_base_with_target, parse_change_id, stack_commits_metadata_one_log
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +46,14 @@ _ANSI_RESET = "\033[0m"
 _SUBJECT_MARKER_RE = re.compile(r"\b(todo|dropme)\b", re.IGNORECASE)
 
 
-def _merge_reviewers(cwd: Path, branch: str, reviewer_flag_segments: list[str]) -> list[str]:
-    """Merge branch config reviewers with CLI ``--reviewers`` values; dedupe preserving order."""
+def _merge_reviewers(
+    cwd: Path,
+    branch: str,
+    reviewer_flag_segments: list[str],
+    *,
+    interactive: str | None = None,
+) -> list[str]:
+    """Merge branch config, ``--reviewers``, then optional ``-i`` input; dedupe preserving order."""
     seen: set[str] = set()
     ordered: list[str] = []
     cfg = branch_gerrit_reviewers(cwd, branch)
@@ -57,7 +69,93 @@ def _merge_reviewers(cwd: Path, branch: str, reviewer_flag_segments: list[str]) 
             if s and s not in seen:
                 seen.add(s)
                 ordered.append(s)
+    if interactive:
+        for part in interactive.split(","):
+            s = part.strip()
+            if s and s not in seen:
+                seen.add(s)
+                ordered.append(s)
     return ordered
+
+
+def _gerrit_credentials_configured(cwd: Path) -> bool:
+    u = gerrit_user(cwd)
+    secret = gerrit_token(cwd) or gerrit_password(cwd)
+    return bool(u and secret is not None)
+
+
+def _account_slug_from_gerrit(account: dict[str, object]) -> str | None:
+    u = account.get("username")
+    if isinstance(u, str) and u.strip():
+        return u.strip()
+    email = account.get("email")
+    if isinstance(email, str) and "@" in email:
+        return email.split("@", 1)[0].strip()
+    name = account.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return None
+
+
+def _reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[str]:
+    """Return reviewer account slugs in Gerrit API order (REVIEWER and CC entries)."""
+    out: list[str] = []
+    revs = detail.get("reviewers")
+    if not isinstance(revs, list):
+        return out
+    for entry in revs:
+        if not isinstance(entry, dict):
+            continue
+        st = entry.get("state")
+        if st not in ("REVIEWER", "CC"):
+            continue
+        acc = entry.get("account")
+        if isinstance(acc, dict):
+            slug = _account_slug_from_gerrit(acc)
+            if slug:
+                out.append(slug)
+    return out
+
+
+def _format_gpush_attribute_string(reviewers: list[str], wip: bool, private: bool) -> str:
+    parts: list[str] = [f"r={name}" for name in reviewers]
+    if wip:
+        parts.append("wip")
+    if private:
+        parts.append("private")
+    if not parts:
+        return "(none)"
+    return ",".join(parts)
+
+
+def _gpush_attribute_suffix(
+    detail: dict[str, object] | None,
+    merged_reviewers: list[str],
+) -> str:
+    """Append `` - `…` `` or `` - `…` -> `…` `` for ``--show-attributes`` lines."""
+    if detail is None:
+        cur = "(none)"
+        new = _format_gpush_attribute_string(merged_reviewers, wip=False, private=False)
+        if cur == new:
+            return f" - `{cur}`"
+        return f" - `{cur}` -> `{new}`"
+    wip = bool(detail.get("work_in_progress"))
+    priv = bool(detail.get("private"))
+    cur_revs = _reviewer_accounts_from_change_info(detail)
+    cur_s = _format_gpush_attribute_string(cur_revs, wip, priv)
+    new_s = _format_gpush_attribute_string(merged_reviewers, wip, priv)
+    if cur_s == new_s:
+        return f" - `{cur_s}`"
+    return f" - `{cur_s}` -> `{new_s}`"
+
+
+def _prompt_interactive_reviewers() -> str:
+    return input("Reviewers (comma-separated; empty keeps branch/CLI defaults): ")
+
+
+def _prompt_save_reviewers() -> bool:
+    ans = input("Save reviewers to branch config? [y/N]: ").strip().lower()
+    return ans in ("y", "yes")
 
 
 def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str]) -> str:
@@ -82,14 +180,44 @@ def _commit_lines_for_preview(
     r: ReadyResult,
     *,
     tty_out: bool,
+    show_attributes: bool,
+    merged_reviewers: list[str],
 ) -> list[str]:
     if not r.push_range:
         return []
     rows = stack_commits_metadata_one_log(cwd, r.push_range)
+    details_by_cid: dict[str, dict[str, object]] | None = None
+    if show_attributes:
+        ids: list[str] = []
+        for _f, _s, _sub, raw in rows:
+            cid = parse_change_id(raw)
+            if cid:
+                ids.append(cid)
+        if ids:
+            try:
+                web_base = resolve_gerrit_web_base(cwd)
+            except ValueError as e:
+                raise ValueError(str(e)) from e
+            if not _gerrit_credentials_configured(cwd):
+                raise ValueError(
+                    "Gerrit credentials are not configured; set gerrit.user and "
+                    "gerrit.token (or gerrit.password) for REST access."
+                )
+            client = GerritClient(web_base, cwd=str(cwd))
+            details_by_cid = batch_load_change_details(client, ids)
+        else:
+            details_by_cid = {}
+
     lines: list[str] = []
-    for _full, short_sha, subj, _raw in rows:
+    for _full, short_sha, subj, raw in rows:
         disp = _format_subject_line(subj, tty=tty_out)
-        lines.append(f"    {short_sha} # {disp}")
+        line = f"    {short_sha} # {disp}"
+        if show_attributes and details_by_cid is not None:
+            cid = parse_change_id(raw)
+            if cid:
+                detail = details_by_cid.get(norm_change_id(cid))
+                line += _gpush_attribute_suffix(detail if isinstance(detail, dict) else None, merged_reviewers)
+        lines.append(line)
     return lines
 
 
@@ -123,7 +251,16 @@ def _confirm_push_interactive() -> bool:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``git gpush``: compute ready range, validate Change-Ids, and push to Gerrit."""
     p = argparse.ArgumentParser(prog="git gpush")
-    p.add_argument("-i", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument(
+        "-i",
+        action="store_true",
+        help="Prompt for reviewers (TTY only; merged after branch config and --reviewers; cannot be used with --yes).",
+    )
+    p.add_argument(
+        "--show-attributes",
+        action="store_true",
+        help="Show per-commit Gerrit attributes vs this push (reviewers, wip, private); needs gerrit.webUrl and credentials.",
+    )
     p.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
     p.add_argument(
         "-y",
@@ -170,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
 
     logger.debug(
-        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s",
+        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s show_attributes=%s i=%s",
         cwd,
         args.dry_run,
         args.yes,
@@ -178,13 +315,15 @@ def main(argv: list[str] | None = None) -> int:
         args.until,
         args.target,
         args.save_target,
+        args.show_attributes,
+        args.i,
     )
 
-    if args.i:
-        print(
-            "error: interactive mode is not implemented; use git gbranch init and git gpush",
-            file=sys.stderr,
-        )
+    if args.i and args.yes:
+        print("error: -i cannot be used with --yes (-y)", file=sys.stderr)
+        return 1
+    if args.i and not sys.stdin.isatty():
+        print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
         return 1
 
     try:
@@ -198,7 +337,15 @@ def main(argv: list[str] | None = None) -> int:
                 "No Gerrit target: run `git gbranch init --target <branch>` or `git gpush --target <branch>`."
             )
         push_branch = refs_for_push_branch_name(cwd, target)
-        reviewers = _merge_reviewers(cwd, b, list(args.reviewers))
+
+        interactive: str | None = None
+        if args.i:
+            interactive = _prompt_interactive_reviewers().strip()
+            reviewers = _merge_reviewers(cwd, b, list(args.reviewers), interactive=interactive or None)
+            if _prompt_save_reviewers():
+                set_branch_config(cwd, b, gerrit_reviewers=",".join(reviewers))
+        else:
+            reviewers = _merge_reviewers(cwd, b, list(args.reviewers))
 
         r = compute_ready(
             cwd,
@@ -237,7 +384,21 @@ def main(argv: list[str] | None = None) -> int:
         cmd = ["git", "push", remote, refspec]
 
         tty_out = sys.stdout.isatty()
-        commit_lines = _commit_lines_for_preview(cwd, r, tty_out=tty_out)
+        try:
+            commit_lines = _commit_lines_for_preview(
+                cwd,
+                r,
+                tty_out=tty_out,
+                show_attributes=args.show_attributes,
+                merged_reviewers=reviewers,
+            )
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        except GerritApiError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+
         _print_gpush_preview(cmd, r, commit_lines)
 
         if args.dry_run:
