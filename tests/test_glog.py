@@ -9,6 +9,7 @@ import pytest
 from gerrit_workflow_tools.cli_glog import main as glog_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.git_run import git, git_out
+from gerrit_workflow_tools.stack import parse_change_id
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     patch_gerrit_client_for_queries,
@@ -29,6 +30,8 @@ def test_glog_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "REV_RANGE" in out
     assert "--full" in out
     assert "--json" in out
+    assert "--show-change-id" in out
+    assert "--show-url" in out
 
 
 @pytest.mark.parametrize(
@@ -63,6 +66,7 @@ def test_glog_full_text_contains_commit_lines_and_summary(stack_repo: Path, monk
         code, out, err = run_cli(stack_repo, glog_main, ["--full"], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
+    assert "ready-to-push:" in out and " / " in out
     for _sha, short, subj, _raw in rows:
         assert short in out
         assert subj in out
@@ -82,6 +86,7 @@ def test_glog_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.
         assert "sha" in item
         assert "patchset_status" in item
         assert "attention_reasons" in item
+        assert "change_id" in item
 
 
 def test_glog_default_hides_when_all_green(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,3 +136,28 @@ def test_glog_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     code, _out, err = run_cli(stack_repo, glog_main, ["--full"], monkeypatch)
     assert code == 3
     assert "error" in err.lower()
+
+
+def test_glog_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, glog_main, ["--full", "--show-change-id", "--no-color"], monkeypatch)
+    assert code == 0, err
+    _, _short, _subj, raw = rows[0]
+    cid = parse_change_id(raw)
+    assert cid
+    assert cid[:12] in out
+
+
+def test_glog_config_default_show_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    git("config", "gerrit.glogShowUrl", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, glog_main, ["--full", "--no-color"], monkeypatch)
+    assert code == 0, err
+    assert "g.example" in out or "/+/" in out

@@ -25,11 +25,15 @@ git glog [options] [REVSET]
 | Option | Description |
 |--------|-------------|
 | `--full` | Show all commits, not just attention-required |
-| `--oneline` | One line per commit; detail lines inlined |
-| `--compact` | Minimal single-character status columns |
+| `--oneline` | One line per commit; detail lines inlined (default: `gerrit.glogOneline`; use `--no-oneline` to force full rows) |
+| `--compact` | Minimal single-character status columns (default: `gerrit.glogCompact`; use `--no-compact` to force full rows) |
+| `--url`, `--show-url` | Print each change’s Gerrit web URL (default: `gerrit.glogShowUrl`) |
+| `--show-change-id` | Append Change-Id on each text line (default: `gerrit.glogShowChangeId`) |
 | `--json` | Machine-readable JSON output |
 | `--no-color` | Disable colored output |
 | `-v`, `--verbose` | Log git commands to stderr |
+
+**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.glogShowUrl`, `gerrit.glogShowChangeId`, `gerrit.glogOneline`, `gerrit.glogCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults.
 
 ---
 
@@ -38,10 +42,12 @@ git glog [options] [REVSET]
 Default — one primary line per commit, with optional detail lines:
 
 ```
-<sha> <push> <verified> <code-review> <comments>  # <subject>
+<sha> <push> <verified> <code-review> <comments> <sub> # <subject> [<change-id>]
 [# failed: <job-name>, ...]
 [# comments: N unresolved]
 ```
+
+`<sub>` is a submittability hint: `✓` when the change is submittable, `·` when it is not (dim), or two spaces when there is no Gerrit change yet. Missing **Verified** / **Code-Review** votes are shown as dim `·` placeholders instead of blank space.
 
 Example:
 
@@ -56,7 +62,7 @@ e5f6a7b o v+1 cr+2        # Local tree is an old patch set; server has a newer r
 f6a7b8c -                 # Change not on Gerrit yet (no matching change)
 
 summary:
-ready-to-push: 2
+ready-to-push: 2 / 6
 ci-failures: 1
 unresolved-comments: 1
 awaiting-review: 3
@@ -73,6 +79,7 @@ awaiting-review: 3
 | `v+1` / `v-1` / (blank) | CI passed / failed / no vote (from the change's **current** revision). |
 | `cr+2` / `cr+1` / `cr-1` / `cr-2` / (blank) | Code-Review vote (same caveat: current revision on the server). |
 | `com` / (blank) | Unresolved comments exist |
+| `✓` / `·` | Change is submittable / not (blank column if not on Gerrit) |
 
 When the first column is not `p`, **Verified** / **Code-Review** still reflect Gerrit's current patch set, not necessarily your local SHA.
 
@@ -87,13 +94,15 @@ When the first column is not `p`, **Verified** / **Code-Review** still reflect G
 
 ### Compact format (`--compact`)
 
+Extra column before comment flag: `+` submittable, `.` not, `-` not on Gerrit.
+
 ```
-a1b2c3d p +1 +2 .
-b2c3d4e p -1 +2 .
-c3d4e5f p +1 +1 c
-d4e5f6a n +1 +2 .
-e5f6a7b o +1 +2 .
-f6a7b8c - .  .  .
+a1b2c3d p +1 +2 + .
+b2c3d4e p -1 +2 + .
+c3d4e5f p +1 +1 + c
+d4e5f6a n +1 +2 + .
+e5f6a7b o +1 +2 + .
+f6a7b8c - .  .  - .
 ```
 
 ---
@@ -130,6 +139,7 @@ Each commit object:
   "ci_failures": [],
   "gerrit_url": "https://...",
   "submittable": true,
+  "change_id": "I…",
   "attention_reasons": []
 }
 ```

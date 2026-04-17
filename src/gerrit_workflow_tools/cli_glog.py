@@ -7,6 +7,7 @@ import re
 import sys
 
 from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
+from gerrit_workflow_tools.config import glog_defaults
 from gerrit_workflow_tools.gerrit_change_status import (
     GlogCommit,
     determine_attention,
@@ -76,7 +77,7 @@ def _fmt_patchset_column(status: str, *, use_color: bool) -> str:
 
 def _fmt_verified(v: int | None, *, use_color: bool) -> str:
     if v is None:
-        return "   "
+        return _color(" · ", _DIM, use_color=use_color) if use_color else " · "
     if v >= 1:
         return _color("v+1", _GREEN, use_color=use_color)
     if v <= -1:
@@ -86,7 +87,7 @@ def _fmt_verified(v: int | None, *, use_color: bool) -> str:
 
 def _fmt_code_review(cr: int | None, *, use_color: bool) -> str:
     if cr is None:
-        return "    "
+        return _color("  · ", _DIM, use_color=use_color) if use_color else "  · "
     if cr >= 2:
         return _color("cr+2", _GREEN, use_color=use_color)
     if cr == 1:
@@ -104,6 +105,15 @@ def _fmt_comments(count: int, *, use_color: bool) -> str:
     return "   "
 
 
+def _fmt_submittable(commit: GlogCommit, *, use_color: bool) -> str:
+    """Narrow column: submittable checkmark vs not, or blank when not on Gerrit."""
+    if not commit.pushed:
+        return "  "
+    if commit.submittable:
+        return _color("✓", _GREEN, use_color=use_color) + " "
+    return _color("·", _DIM, use_color=use_color) + " "
+
+
 def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
     """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
     sha = commit.short_sha
@@ -111,7 +121,8 @@ def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
     verified = _fmt_verified(commit.verified, use_color=use_color)
     cr = _fmt_code_review(commit.code_review, use_color=use_color)
     comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
-    return f"{sha} {push} {verified} {cr} {comments}  # "
+    subm = _fmt_submittable(commit, use_color=use_color)
+    return f"{sha} {push} {verified} {cr} {comments} {subm} # "
 
 
 def _continuation_indent(commit: GlogCommit, *, use_color: bool) -> int:
@@ -140,12 +151,28 @@ def _detail_lines(commit: GlogCommit, *, use_color: bool) -> list[str]:
 # Continuation indent = visible width of that prefix (colors ignored), so it stays aligned with ``_fmt_*``.
 
 
-def _primary_line(commit: GlogCommit, *, use_color: bool) -> str:
-    return f"{_primary_line_prefix(commit, use_color=use_color)}{commit.summary}"
+def _fmt_change_id_suffix(change_id: str | None, *, use_color: bool) -> str:
+    if not change_id:
+        return ""
+    disp = change_id if len(change_id) <= 14 else change_id[:12] + "…"
+    return _color(f"  {disp}", _DIM, use_color=use_color)
 
 
-def _oneline_line(commit: GlogCommit, *, use_color: bool, include_url: bool) -> str:
-    base = _primary_line(commit, use_color=use_color)
+def _primary_line(commit: GlogCommit, *, use_color: bool, show_change_id: bool = False) -> str:
+    line = f"{_primary_line_prefix(commit, use_color=use_color)}{commit.summary}"
+    if show_change_id:
+        line += _fmt_change_id_suffix(commit.change_id, use_color=use_color)
+    return line
+
+
+def _oneline_line(
+    commit: GlogCommit,
+    *,
+    use_color: bool,
+    include_url: bool,
+    show_change_id: bool = False,
+) -> str:
+    base = _primary_line(commit, use_color=use_color, show_change_id=show_change_id)
     if include_url and commit.gerrit_url:
         base = f"{base}  {_url_line(commit.gerrit_url, use_color=use_color)}"
     extras = _detail_lines(commit, use_color=False)  # strip color for inline
@@ -195,12 +222,24 @@ def _compact_patchset_letter(status: str) -> str:
     return "-"
 
 
-def _compact_line(commit: GlogCommit) -> str:
+def _compact_line(commit: GlogCommit, *, show_change_id: bool = False) -> str:
     push = _compact_patchset_letter(commit.patchset_status)
     v = _compact_verified(commit.verified)
     cr = _compact_cr(commit.code_review)
+    if not commit.pushed:
+        sub = "-"
+    elif commit.submittable:
+        sub = "+"
+    else:
+        sub = "."
     com = "c" if commit.comments_unresolved else "."
-    return f"{commit.short_sha} {push} {v} {cr} {com}"
+    line = f"{commit.short_sha} {push} {v} {cr} {sub}{com}"
+    if show_change_id and commit.change_id:
+        cid = commit.change_id
+        if len(cid) > 14:
+            cid = cid[:12] + "…"
+        line += f"  {cid}"
+    return line
 
 
 # ---------------------------------------------------------------------------
@@ -208,16 +247,18 @@ def _compact_line(commit: GlogCommit) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_summary(commits: list[GlogCommit]) -> dict[str, int]:
+def _build_summary(commits: list[GlogCommit]) -> tuple[dict[str, int], int, int]:
+    """Return (per-category counts, ready count, total commits) for summary printing."""
     counts: dict[str, int] = {
-        "ready-to-push": 0,
         "ci-failures": 0,
         "unresolved-comments": 0,
         "awaiting-review": 0,
     }
+    ready = 0
+    total = len(commits)
     for c in commits:
         if c.patchset_status in ("absent", "newer"):
-            counts["ready-to-push"] += 1
+            ready += 1
         if c.pushed and c.verified is not None and c.verified <= -1:
             counts["ci-failures"] += 1
         if c.comments_unresolved > 0:
@@ -225,7 +266,7 @@ def _build_summary(commits: list[GlogCommit]) -> dict[str, int]:
         # awaiting-review = pushed commits that still need attention
         if c.pushed and c.attention_reasons:
             counts["awaiting-review"] += 1
-    return counts
+    return counts, ready, total
 
 
 # ---------------------------------------------------------------------------
@@ -258,10 +299,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument(
         "--url",
+        "--show-url",
         action="store_true",
+        dest="url",
         help=(
-            "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url)."
+            "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url). "
+            "Default: ``gerrit.glogShowUrl``."
         ),
+    )
+    p.add_argument(
+        "--show-change-id",
+        action="store_true",
+        help="Append Change-Id to each text line. Default: ``gerrit.glogShowChangeId``.",
+    )
+    p.add_argument(
+        "--no-oneline",
+        action="store_true",
+        help="Override ``gerrit.glogOneline`` when set.",
+    )
+    p.add_argument(
+        "--no-compact",
+        action="store_true",
+        help="Override ``gerrit.glogCompact`` when set.",
     )
     p.add_argument(
         "-v",
@@ -281,6 +340,11 @@ def main(argv: list[str] | None = None) -> int:
 
     cwd = cwd_from_env()
     use_color = not args.no_color and sys.stdout.isatty()
+    gdef = glog_defaults(cwd)
+    show_url = bool(args.url) or gdef["show_url"]
+    show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
+    use_oneline = bool(args.oneline) or (gdef["oneline"] and not args.no_oneline)
+    use_compact = bool(args.compact) or (gdef["compact"] and not args.no_compact)
 
     # Determine commit range
     if args.rev_range:
@@ -335,6 +399,7 @@ def main(argv: list[str] | None = None) -> int:
                 "ci_failures": c.ci_failures,
                 "gerrit_url": c.gerrit_url,
                 "submittable": c.submittable,
+                "change_id": c.change_id,
                 "attention_reasons": c.attention_reasons,
             }
             for c in visible
@@ -347,31 +412,39 @@ def main(argv: list[str] | None = None) -> int:
     for commit in visible:
         if prev_had_details:
             print()
-        if args.compact:
-            primary = _compact_line(commit)
+        if use_compact:
+            primary = _compact_line(commit, show_change_id=show_change_id)
             print(primary)
-            if args.url and commit.gerrit_url:
+            if show_url and commit.gerrit_url:
                 ind = " " * (_visible_len(primary) + 2)
                 print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
             prev_had_details = False
-        elif args.oneline:
-            print(_oneline_line(commit, use_color=use_color, include_url=args.url))
+        elif use_oneline:
+            print(
+                _oneline_line(
+                    commit,
+                    use_color=use_color,
+                    include_url=show_url,
+                    show_change_id=show_change_id,
+                )
+            )
             prev_had_details = False
         else:
-            print(_primary_line(commit, use_color=use_color))
+            print(_primary_line(commit, use_color=use_color, show_change_id=show_change_id))
             ind = " " * _continuation_indent(commit, use_color=use_color)
-            if args.url and commit.gerrit_url:
+            if show_url and commit.gerrit_url:
                 print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
             details = _detail_lines(commit, use_color=use_color)
             for d in details:
                 print(f"{ind}{d}")
-            prev_had_details = bool(details) or bool(args.url and commit.gerrit_url)
+            prev_had_details = bool(details) or bool(show_url and commit.gerrit_url)
 
     # Summary section (suppressed for --oneline and --compact)
-    if not args.oneline and not args.compact:
-        summary = _build_summary(commits)
+    if not use_oneline and not use_compact:
+        summary, ready_n, total_n = _build_summary(commits)
         print()
         print("summary:")
+        print(f"ready-to-push: {ready_n} / {total_n}")
         for key, val in summary.items():
             if val:
                 print(f"{key}: {val}")

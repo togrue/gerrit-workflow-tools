@@ -159,6 +159,24 @@ def gshow_comment_tail_lines(cwd: Path | str | None) -> int:
     return n
 
 
+def config_bool(cwd: Path | str | None, key: str, *, default: bool = False) -> bool:
+    """Return True if ``git config`` *key* is truthy (``1``, ``true``, ``yes``, ``on``); case-insensitive."""
+    v = _config_get(cwd, key)
+    if v is None or not str(v).strip():
+        return default
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+def glog_defaults(cwd: Path | str | None) -> dict[str, bool]:
+    """Defaults for ``git glog`` from ``gerrit.glog*`` keys (CLI flags override when passed)."""
+    return {
+        "show_url": config_bool(cwd, "gerrit.glogShowUrl"),
+        "show_change_id": config_bool(cwd, "gerrit.glogShowChangeId"),
+        "oneline": config_bool(cwd, "gerrit.glogOneline"),
+        "compact": config_bool(cwd, "gerrit.glogCompact"),
+    }
+
+
 def stop_patterns(cwd: Path | str | None) -> list[str]:
     """Return ``gerrit.stopPattern`` lines as regex strings, or built-in defaults if none are configured."""
     _ensure_snapshot(cwd)
