@@ -12,7 +12,7 @@ from typing import Any
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
 from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
 from gerrit_workflow_tools.cli_gcid import resolve_gcid_user_arg
-from gerrit_workflow_tools.cli_glog import _detail_lines, _primary_line, _url_line
+from gerrit_workflow_tools.cli_glog import _compact_line, _detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
@@ -277,7 +277,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
     for d in _detail_lines(commit, use_color=use_color):
         print(f"{ind}{d}")
-    print(f"{ind}{_primary_line(commit, use_color=use_color)}")
+    # Local commits already printed subject via `git show`; avoid repeating it on the glog line.
+    if is_local:
+        print(f"{ind}{_compact_line(commit)}")
+    else:
+        print(f"{ind}{_primary_line(commit, use_color=use_color)}")
 
     url = commit.gerrit_url or ""
     if unresolved_rows:
