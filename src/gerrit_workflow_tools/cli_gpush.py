@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import subprocess
 import sys
+from pathlib import Path
 
 from gerrit_workflow_tools.change_id import classify_issues
 from gerrit_workflow_tools.cli_common import (
@@ -13,16 +15,109 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 from gerrit_workflow_tools.config import (
+    branch_gerrit_reviewers,
     branch_gerrit_target,
     gerrit_remote,
     refs_for_push_branch_name,
     set_branch_config,
 )
 from gerrit_workflow_tools.git_run import GitError, git_out
-from gerrit_workflow_tools.ready_calc import change_id_rows_for_range, compute_ready
-from gerrit_workflow_tools.stack import merge_base_with_target
+from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
+from gerrit_workflow_tools.stack import merge_base_with_target, stack_commits_metadata_one_log
 
 logger = logging.getLogger(__name__)
+
+
+def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:
+    """Run ``git push`` (separate hook so tests can monkeypatch without affecting other subprocess use)."""
+    return subprocess.run(cmd, cwd=cwd)
+
+
+# Dim yellow foreground, reset (used when stdout is a TTY).
+_ANSI_DIM_YELLOW = "\033[2;33m"
+_ANSI_RESET = "\033[0m"
+
+_SUBJECT_MARKER_RE = re.compile(r"\b(todo|dropme)\b", re.IGNORECASE)
+
+
+def _merge_reviewers(cwd: Path, branch: str, reviewer_flag_segments: list[str]) -> list[str]:
+    """Merge branch config reviewers with CLI ``--reviewers`` values; dedupe preserving order."""
+    seen: set[str] = set()
+    ordered: list[str] = []
+    cfg = branch_gerrit_reviewers(cwd, branch)
+    if cfg:
+        for part in cfg.split(","):
+            s = part.strip()
+            if s and s not in seen:
+                seen.add(s)
+                ordered.append(s)
+    for seg in reviewer_flag_segments:
+        for part in seg.split(","):
+            s = part.strip()
+            if s and s not in seen:
+                seen.add(s)
+                ordered.append(s)
+    return ordered
+
+
+def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str]) -> str:
+    ref = f"{tip}:refs/for/{push_branch}"
+    for r in reviewers:
+        ref += f"%r={r}"
+    return ref
+
+
+def _format_subject_line(subject: str, *, tty: bool) -> str:
+    if not tty:
+        return subject
+
+    def _sub(m: re.Match[str]) -> str:
+        return f"{_ANSI_DIM_YELLOW}{m.group(0)}{_ANSI_RESET}"
+
+    return _SUBJECT_MARKER_RE.sub(_sub, subject)
+
+
+def _commit_lines_for_preview(
+    cwd: Path,
+    r: ReadyResult,
+    *,
+    tty_out: bool,
+) -> list[str]:
+    if not r.push_range:
+        return []
+    rows = stack_commits_metadata_one_log(cwd, r.push_range)
+    lines: list[str] = []
+    for _full, short_sha, subj, _raw in rows:
+        disp = _format_subject_line(subj, tty=tty_out)
+        lines.append(f"    {short_sha} # {disp}")
+    return lines
+
+
+def _print_gpush_preview(cmd: list[str], r: ReadyResult, commit_lines: list[str]) -> None:
+    print(" ".join(cmd))
+    print()
+    print(f"ready reason: {r.boundary_reason}")
+    print("Updated commits:")
+    for ln in commit_lines:
+        print(ln)
+
+
+def _parse_confirm_answer(raw: str) -> bool | None:
+    """Return True to push, False to cancel, None if user should be asked again."""
+    s = raw.strip().lower()
+    if s in ("n", "no"):
+        return False
+    if s in ("", "y", "yes"):
+        return True
+    return None
+
+
+def _confirm_push_interactive() -> bool:
+    while True:
+        ans = input("Do you want to push these commits? [Y/n]: ")
+        parsed = _parse_confirm_answer(ans)
+        if parsed is not None:
+            return parsed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,6 +125,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="git gpush")
     p.add_argument("-i", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
+    p.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Push without confirmation (required when stdin is not a terminal).",
+    )
     p.add_argument(
         "--all",
         action="store_true",
@@ -41,14 +142,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--force-boundary",
         action="store_true",
-        help="Ignore ready boundary (same as --all).",
+        help="Deprecated: same as --all (prefer --all).",
     )
     add_stop_pattern_args(p)
     p.add_argument(
-        "--reviewer",
+        "--reviewers",
         action="append",
         default=[],
-        help="Reserved for Gerrit reviewers.",
+        metavar="ACCOUNTS",
+        help="Comma-separated Gerrit reviewer accounts (repeat to merge). Appended as ref options %%r=…",
     )
     p.add_argument(
         "-v",
@@ -68,9 +170,10 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
 
     logger.debug(
-        "gpush cwd=%s dry_run=%s all=%s until=%s target=%s save_target=%s",
+        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s",
         cwd,
         args.dry_run,
+        args.yes,
         args.all_,
         args.until,
         args.target,
@@ -95,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
                 "No Gerrit target: run `git gbranch init --target <branch>` or `git gpush --target <branch>`."
             )
         push_branch = refs_for_push_branch_name(cwd, target)
+        reviewers = _merge_reviewers(cwd, b, list(args.reviewers))
 
         r = compute_ready(
             cwd,
@@ -129,24 +233,32 @@ def main(argv: list[str] | None = None) -> int:
             print("error: nothing to push (empty ready prefix)", file=sys.stderr)
             return 1
 
-        refspec = f"{tip}:refs/for/{push_branch}"
+        refspec = _refs_for_spec(tip, push_branch, reviewers)
         cmd = ["git", "push", remote, refspec]
 
-        print("Summary")
-        print(f"  branch:       {b}")
-        print(f"  target:       {push_branch}")
-        print(f"  remote:       {remote}")
-        print(f"  push tip:     {tip}")
-        print(f"  ready reason: {r.boundary_reason}")
-        print(f"  push range:   {r.push_range or '(n/a)'}")
-        print()
-        print(" ".join(cmd))
+        tty_out = sys.stdout.isatty()
+        commit_lines = _commit_lines_for_preview(cwd, r, tty_out=tty_out)
+        _print_gpush_preview(cmd, r, commit_lines)
+
         if args.dry_run:
             print("[dry-run] not executing push", file=sys.stderr)
             return 0
 
+        if not sys.stdin.isatty() and not args.yes:
+            print(
+                "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
+                file=sys.stderr,
+            )
+            return 1
+
+        if not args.yes:
+            print()
+            if not _confirm_push_interactive():
+                print("Push cancelled.", file=sys.stderr)
+                return 0
+
         logger.debug("gpush executing: %s", " ".join(cmd))
-        proc = subprocess.run(cmd, cwd=cwd)
+        proc = _run_git_push(cmd, cwd)
         logger.debug("gpush push finished with return code %s", proc.returncode)
         return proc.returncode
     except GitError as e:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from gerrit_workflow_tools.cli_gpush import main as gpush_main
+from gerrit_workflow_tools.config import set_branch_config
 from gerrit_workflow_tools.git_run import git, git_out
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
@@ -15,6 +18,8 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert code == 0
     assert "gpush" in out.lower() or "git gpush" in out
     assert "--dry-run" in out
+    assert "--reviewers" in out
+    assert "--reviewer" not in out.replace("--reviewers", "")
 
 
 def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch):
@@ -22,7 +27,18 @@ def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch)
     assert code == 0
     assert "refs/for/main" in out
     assert "git push" in out
-    assert "Summary" in out
+    assert "ready reason:" in out
+    assert "Updated commits:" in out
+    assert "[dry-run]" in err
+
+
+def test_gpush_dry_run_does_not_call_input(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(*_a: object, **_k: object) -> str:
+        raise AssertionError("input should not be called in --dry-run")
+
+    monkeypatch.setattr("builtins.input", _boom)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
     assert "[dry-run]" in err
 
 
@@ -46,7 +62,6 @@ def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     assert code == 0, (out, err)
     assert "refs/for/main" in out
     assert "refs/for/origin/main" not in out
-    assert "target:       main" in out
 
 
 def test_gpush_accepts_explicit_target_without_config(stack_repo_unconfigured, monkeypatch):
@@ -65,6 +80,74 @@ def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
     code, _out, err = run_cli(dup_repo, gpush_main, ["--dry-run", "--target", "main"], monkeypatch)
     assert code == 2
     assert "Change-Id" in err
+
+
+class _StdinNonTTY:
+    def isatty(self) -> bool:
+        return False
+
+
+class _StdinTTY:
+    def isatty(self) -> bool:
+        return True
+
+
+def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 1
+    assert "non-interactive" in err.lower() or "--yes" in err
+    mock_run.assert_not_called()
+
+
+def test_gpush_noninteractive_yes_runs_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 0
+    mock_run.assert_called_once()
+
+
+def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr("builtins.input", lambda _p="": "n")
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    assert "cancel" in err.lower()
+    mock_run.assert_not_called()
+
+
+def test_gpush_reviewers_append_to_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice,bob"],
+        monkeypatch,
+    )
+    assert code == 0
+    assert "%r=alice" in out
+    assert "%r=bob" in out
+
+
+def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
+    set_branch_config(stack_repo, b, gerrit_reviewers="carol")
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice", "--reviewers", "alice,bob"],
+        monkeypatch,
+    )
+    assert code == 0
+    i = out.index("%r=carol")
+    j = out.index("%r=alice")
+    k = out.index("%r=bob")
+    assert i < j < k
 
 
 @pytest.mark.parametrize(
