@@ -24,6 +24,8 @@ git gpush [options] [REV]
 |--------|-------------|
 | `--dry-run` | Print what would be pushed without executing |
 | `-y`, `--yes` | Push without confirmation (required when stdin is not a terminal) |
+| `-i` | Prompt for reviewers on a TTY; merged after branch config and `--reviewers` (cannot be combined with `--yes`) |
+| `--show-attributes` | After the usual preview, query Gerrit and show current vs proposed review attributes per commit (see below) |
 | `--all` | Push the entire stack, ignoring stop patterns |
 | `--force-boundary` | Deprecated: same as `--all` — prefer `--all` |
 | `--target BRANCH` | Override the Gerrit target branch for this push |
@@ -33,7 +35,11 @@ git gpush [options] [REV]
 | `--reviewers ACCOUNTS` | Comma-separated Gerrit reviewer accounts (repeatable; merged with `branch.<name>.gerritReviewers`, deduplicated) |
 | `-v`, `--verbose` | Log git commands and push steps to stderr |
 
-> **Note:** `-i` (interactive mode) is not yet implemented. Use `git gbranch init` to configure the branch first.
+**`-i` (interactive reviewers)** — Only when stdin is a TTY. You are prompted for comma-separated reviewers (empty keeps branch and CLI defaults). Order after merge: branch `gerritReviewers`, then each `--reviewers` argument, then the interactive line (duplicates removed, first occurrence wins). A second prompt asks whether to save the merged reviewer list to `branch.<name>.gerritReviewers`. `-i` cannot be used with `-y`/`--yes` (use one or the other).
+
+**`--show-attributes`** — For each commit in the push range that has a Change-Id, the tool batches Gerrit `change:` queries (same path as `git glog`) and appends a column to the “Updated commits” lines: `` `current` `` or `` `current` -> `new` `` when the proposed push would change reviewers on the refspec. Tokens are comma-separated: one `r=<account>` per reviewer (order matches Gerrit’s `reviewers` list for **current**; merged push order for **new**), then `wip` and `private` when set on the change. The push does not send `%wip`/`%private` in the refspec, so **proposed** wip/private always match the server for existing changes (only reviewer differences produce an arrow). New changes (no match in Gerrit) show `` `(none)` -> `r=…` `` when you add reviewers.
+
+**Prerequisites for `--show-attributes`:** `git config gerrit.webUrl <https://…>` and REST credentials (`gerrit.user` with `gerrit.token` or `gerrit.password`). If either is missing, the command exits with code `1` after validation (before the push confirmation prompt). With `--dry-run`, Gerrit is still queried for the display.
 
 ---
 
@@ -94,6 +100,18 @@ Add reviewers on the command line (merged with branch config):
 
 ```bash
 git gpush --reviewers alice,bob
+```
+
+Preview how Gerrit reviewers / wip / private compare to this push (requires `gerrit.webUrl` and credentials):
+
+```bash
+git gpush --dry-run --show-attributes
+```
+
+Prompt for extra reviewers (TTY only), then push with confirmation:
+
+```bash
+git gpush -i
 ```
 
 ---
