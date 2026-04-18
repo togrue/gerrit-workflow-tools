@@ -28,7 +28,7 @@ from gerrit_workflow_tools.config import (
 from gerrit_workflow_tools.gerrit_change_status import batch_load_change_details, norm_change_id
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
-from gerrit_workflow_tools.git_run import GitError, git_out
+from gerrit_workflow_tools.git_run import GitError, git, git_out
 from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.stack import merge_base_with_target, parse_change_id, stack_commits_metadata_one_log
 
@@ -270,6 +270,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Override gerrit.gpushShowAttributes when set.",
     )
+    p.add_argument(
+        "--update-last-pushed",
+        action="store_true",
+        help="After a successful push, move local branch lastPush/<current-branch> to the pushed tip. Default: gerrit.lastPushedBranch.",
+    )
+    p.add_argument(
+        "--no-update-last-pushed",
+        action="store_true",
+        help="Do not update lastPush/<current-branch> after push (overrides gerrit.lastPushedBranch).",
+    )
     p.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
     p.add_argument(
         "-y",
@@ -316,9 +326,11 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
     gdef = gpush_defaults(cwd)
     show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
+    update_last_pushed = (bool(args.update_last_pushed) or gdef["last_pushed_branch"]) and not args.no_update_last_pushed
 
     logger.debug(
-        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s show_attributes=%s i=%s",
+        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s show_attributes=%s "
+        "update_last_pushed=%s i=%s",
         cwd,
         args.dry_run,
         args.yes,
@@ -327,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
         args.target,
         args.save_target,
         show_attributes,
+        update_last_pushed,
         args.i,
     )
 
@@ -430,6 +443,12 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("gpush executing: %s", " ".join(cmd))
         proc = _run_git_push(cmd, cwd)
         logger.debug("gpush push finished with return code %s", proc.returncode)
+        if proc.returncode == 0 and update_last_pushed:
+            marker = f"lastPush/{b}"
+            try:
+                git("branch", "-f", marker, tip, cwd=cwd)
+            except GitError as e:
+                print(f"warning: could not update {marker}: {e}", file=sys.stderr)
         return proc.returncode
     except GitError as e:
         return handle_git_error(e)

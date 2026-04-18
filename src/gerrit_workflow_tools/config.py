@@ -178,9 +178,10 @@ def glog_defaults(cwd: Path | str | None) -> dict[str, bool]:
 
 
 def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger push`` from ``gerrit.gpush*`` keys (CLI flags override when passed)."""
+    """Defaults for ``ger push`` from ``gerrit.gpush*`` / ``gerrit.lastPushedBranch`` (CLI flags override)."""
     return {
         "show_attributes": config_bool(cwd, "gerrit.gpushShowAttributes"),
+        "last_pushed_branch": config_bool(cwd, "gerrit.lastPushedBranch", default=True),
     }
 
 

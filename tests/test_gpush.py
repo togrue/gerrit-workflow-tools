@@ -9,9 +9,15 @@ import pytest
 from gerrit_workflow_tools.cli_gpush import main as gpush_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache, set_branch_config
 from gerrit_workflow_tools.git_run import git, git_out
+from gerrit_workflow_tools.ready_calc import compute_ready
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
+
+
+def _ref_exists(repo: Path, ref: str) -> bool:
+    p = git("rev-parse", "--verify", ref, cwd=repo, check=False)
+    return p.returncode == 0
 
 
 def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -23,6 +29,8 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--reviewer" not in out.replace("--reviewers", "")
     assert "--show-attributes" in out
     assert "--no-show-attributes" in out
+    assert "--update-last-pushed" in out
+    assert "--no-update-last-pushed" in out
     assert "-i" in out
 
 
@@ -371,3 +379,83 @@ def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pyt
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i", "--yes"], monkeypatch)
     assert code == 1
     assert "-i" in err
+
+
+def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    expected_tip = compute_ready(stack_repo).push_tip_sha
+    assert expected_tip
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 0
+    assert git_out("rev-parse", "lastPush/feature", cwd=stack_repo) == expected_tip
+
+
+def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 0
+    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+
+
+def test_gpush_dry_run_does_not_create_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
+    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+
+
+def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock(return_value=MagicMock(returncode=1))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 1
+    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+
+
+def test_gpush_no_update_last_pushed_overrides_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes", "--no-update-last-pushed"], monkeypatch)
+    assert code == 0
+    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+
+
+def test_gpush_update_last_pushed_flag_enables_when_config_false(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    expected_tip = compute_ready(stack_repo).push_tip_sha
+    assert expected_tip
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes", "--update-last-pushed"], monkeypatch)
+    assert code == 0
+    assert git_out("rev-parse", "lastPush/feature", cwd=stack_repo) == expected_tip
+
+
+def test_gpush_cancel_at_prompt_does_not_create_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr("builtins.input", lambda _p="": "n")
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.cli_gpush._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    mock_run.assert_not_called()
+    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")

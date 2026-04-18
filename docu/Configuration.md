@@ -31,11 +31,12 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 
 ---
 
-## `ger push` — `gerrit.gpush*`
+## `ger push` — `gerrit.gpush*` and related
 
 | Key | Effect |
 |-----|--------|
 | `gerrit.gpushShowAttributes` | Default on: include Gerrit reviewer / wip / private preview (`--show-attributes`). Use `--no-show-attributes` to disable when this is set. |
+| `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. Override per run with `--update-last-pushed` / `--no-update-last-pushed`. |
 
 ---
 
@@ -63,6 +64,7 @@ Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_con
     stopPattern = ^WIP:
     glogShowUrl = true
     gpushShowAttributes = true
+    lastPushedBranch = true
 ```
 
 ```bash
