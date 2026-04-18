@@ -1,4 +1,4 @@
-# `git gshow` — deferred / follow-up work
+# `ger show` — deferred / follow-up work
 
 Items intentionally **out of v1**; track here until promoted into the main spec or implementation.
 
@@ -12,7 +12,7 @@ Items intentionally **out of v1**; track here until promoted into the main spec 
 
 ## UX / workflow
 
-- **`--next-attention-commit`** — align with `gedit` so `gshow` can target the same “next attention” commit as the rebase workflow.
+- **`--next-attention-commit`** — align with `edit` so `show` can target the same “next attention” commit as the rebase workflow.
 
 ## Docs
 

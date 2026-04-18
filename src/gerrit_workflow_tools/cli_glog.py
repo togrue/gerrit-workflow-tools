@@ -275,9 +275,9 @@ def _build_summary(commits: list[GlogCommit]) -> tuple[dict[str, int], int, int]
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``git glog``: show local commits vs Gerrit labels, comments, and CI status."""
+    """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     p = argparse.ArgumentParser(
-        prog="git glog",
+        prog="ger log",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
     p.add_argument(

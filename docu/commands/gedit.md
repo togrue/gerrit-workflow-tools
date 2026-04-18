@@ -1,4 +1,4 @@
-# git gedit
+# ger edit
 
 **Status:** Implemented
 
@@ -9,7 +9,7 @@ Edit, reword, or drop a commit in the middle of the current local stack without 
 ## Usage
 
 ```
-git gedit <commit> [--reword | --drop] [-v]
+ger edit <commit> [--reword | --drop] [-v]
 ```
 
 ---
@@ -50,21 +50,21 @@ For `edit`, amend the commit normally, then `git rebase --continue`.
 
 ```bash
 # Edit a commit by short SHA
-git gedit a1b2c3d
+ger edit a1b2c3d
 
 # Edit a commit by Change-Id
-git gedit Iabc1234...
+ger edit Iabc1234...
 
 # Only reword the commit message
-git gedit a1b2c3d --reword
+ger edit a1b2c3d --reword
 
 # Drop a commit from the stack
-git gedit a1b2c3d --drop
+ger edit a1b2c3d --drop
 ```
 
 ---
 
 ## See also
 
-- [`git glog`](glog.md) — see the stack and Change-Ids before choosing a commit
-- [`git gsha`](gsha-gcid.md) — resolve a Change-Id to a SHA before editing
+- [`ger log`](glog.md) — see the stack and Change-Ids before choosing a commit
+- [`ger sha`](gsha-gcid.md) — resolve a Change-Id to a SHA before editing

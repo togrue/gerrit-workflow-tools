@@ -250,8 +250,8 @@ def _confirm_push_interactive() -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``git gpush``: compute ready range, validate Change-Ids, and push to Gerrit."""
-    p = argparse.ArgumentParser(prog="git gpush")
+    """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
+    p = argparse.ArgumentParser(prog="ger push")
     p.add_argument(
         "-i",
         action="store_true",
@@ -344,9 +344,7 @@ def main(argv: list[str] | None = None) -> int:
 
         target = args.target or branch_gerrit_target(cwd, b)
         if not target:
-            raise GitError(
-                "No Gerrit target: run `git gbranch init --target <branch>` or `git gpush --target <branch>`."
-            )
+            raise GitError("No Gerrit target: run `ger branch init --target <branch>` or `ger push --target <branch>`.")
         push_branch = refs_for_push_branch_name(cwd, target)
 
         interactive: str | None = None
@@ -380,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
         if cid_exit >= 2:
             print(
-                "error: Change-Id check failed; fix with git gcid --check-duplicates",
+                "error: Change-Id check failed; fix with ger cid --check-duplicates",
                 file=sys.stderr,
             )
             return 2

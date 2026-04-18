@@ -1,4 +1,4 @@
-"""Shared Gerrit change status for local commits (used by ``git glog`` and ``git gshow``)."""
+"""Shared Gerrit change status for local commits (used by ``ger log`` and ``ger show``)."""
 
 from __future__ import annotations
 

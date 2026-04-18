@@ -138,9 +138,7 @@ def test_change_id_regex_full_line():
 
 
 def test_gcid_help(git_graph_repo, monkeypatch):
-    code, out, _err = run_cli(
-        git_graph_repo, gcid_main, ["--help"], monkeypatch, catch_sys_exit=True
-    )
+    code, out, _err = run_cli(git_graph_repo, gcid_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "REV_OR_RANGE" in out
 
@@ -253,7 +251,7 @@ def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
 
 
 def test_gcid_start_at_remote_range_ignores_left_endpoint(stack_repo, monkeypatch):
-    """``--start-at-remote`` always uses merge-base..RIGHT (same stack window as `git glog` / merge-base..HEAD)."""
+    """``--start-at-remote`` always uses merge-base..RIGHT (same stack window as `ger log` / merge-base..HEAD)."""
     full = run_cli(stack_repo, gcid_main, ["--start-at-remote"], monkeypatch)
     ranged = run_cli(stack_repo, gcid_main, ["--start-at-remote", "HEAD~3..HEAD"], monkeypatch)
     assert full[0] == 0 and ranged[0] == 0

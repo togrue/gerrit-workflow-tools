@@ -100,8 +100,8 @@ def _gcid_log_single_commit(rev_spec: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``git gcid``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
-    p = argparse.ArgumentParser(prog="git gcid")
+    """CLI entry for ``ger cid``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
+    p = argparse.ArgumentParser(prog="ger cid")
     p.add_argument(
         "rev_or_range",
         nargs="?",
@@ -122,10 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--start-at-remote",
         action="store_true",
-        help=(
-            "Use merge_base..END from the stack merge base instead of the default revision "
-            "resolution."
-        ),
+        help=("Use merge_base..END from the stack merge base instead of the default revision resolution."),
     )
     p.add_argument(
         "--check-duplicates",

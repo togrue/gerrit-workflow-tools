@@ -74,9 +74,7 @@ def test_resolve_gerrit_web_base_missing_raises(stack_repo: Path) -> None:
 
 
 def test_gcomments_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, _err = run_cli(
-        stack_repo, gcomments_main, ["--help"], monkeypatch, catch_sys_exit=True
-    )
+    code, out, _err = run_cli(stack_repo, gcomments_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "REV" in out
     assert "[REV]" in out

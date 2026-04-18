@@ -35,17 +35,14 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``git gcomments``: fetch and display Gerrit review comments for the stack or a change."""
-    p = argparse.ArgumentParser(prog="git gcomments")
+    """CLI entry for ``ger comments``: fetch and display Gerrit review comments for the stack or a change."""
+    p = argparse.ArgumentParser(prog="ger comments")
     p.add_argument(
         "rev",
         nargs="?",
         default=None,
         metavar="REV",
-        help=(
-            "Optional git revision (commit, branch, etc.) or Gerrit change "
-            "(numeric id, Change-Id I…, or query)."
-        ),
+        help=("Optional git revision (commit, branch, etc.) or Gerrit change (numeric id, Change-Id I…, or query)."),
     )
     p.add_argument(
         "--whole-chain",

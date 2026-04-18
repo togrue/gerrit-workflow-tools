@@ -19,12 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``git gedit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
+    """CLI entry for ``ger edit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
     p = argparse.ArgumentParser(
-        prog="git gedit",
-        description=(
-            "Start an interactive rebase to edit, reword, or drop a commit in the current stack."
-        ),
+        prog="ger edit",
+        description=("Start an interactive rebase to edit, reword, or drop a commit in the current stack."),
     )
     p.add_argument(
         "rev",

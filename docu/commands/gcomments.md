@@ -1,4 +1,4 @@
-# git gcomments
+# ger comments
 
 **Status:** Implemented
 
@@ -11,7 +11,7 @@ Requires `gerrit.webUrl` in git config.
 ## Usage
 
 ```
-git gcomments [options] [REF_OR_CHANGE]
+ger comments [options] [REF_OR_CHANGE]
 ```
 
 `REF_OR_CHANGE` — optional git revision, Gerrit change number, Change-Id (`I…`), or query string.
@@ -92,5 +92,5 @@ Each comment entry: `path`, `line`, `side`, `unresolved`, `patchSet`, `author`, 
 
 ## See also
 
-- [`git glog`](glog.md) — unresolved comment counts across the full stack at a glance
-- [`git gsha`](gsha-gcid.md) — resolve a Change-Id to navigate to a specific commit
+- [`ger log`](glog.md) — unresolved comment counts across the full stack at a glance
+- [`ger sha`](gsha-gcid.md) — resolve a Change-Id to navigate to a specific commit

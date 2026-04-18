@@ -24,7 +24,7 @@ HELP_NO_CONFIG_PATTERNS = "Do not use gerrit.stopPattern values from config."
 
 
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
-    """Register ``--ignore-pattern`` and ``--no-config-patterns`` (used by ``git gpush``)."""
+    """Register ``--ignore-pattern`` and ``--no-config-patterns`` (used by ``ger push``)."""
     parser.add_argument(
         "--ignore-pattern",
         action="append",
@@ -37,6 +37,7 @@ def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help=HELP_NO_CONFIG_PATTERNS,
     )
+
 
 _LOG = logging.getLogger("gerrit_workflow_tools")
 _CONFIGURED = False

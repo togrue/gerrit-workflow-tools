@@ -1,4 +1,4 @@
-# git gsha / git gcid
+# ger sha / ger cid
 
 **Status:** Implemented
 
@@ -6,21 +6,21 @@ Two complementary identifier-translation commands:
 
 | Command | Direction |
 |---------|-----------|
-| `git gsha` | Change-Id → commit SHA |
-| `git gcid` | commit / SHA / range → Change-Id |
+| `ger sha` | Change-Id → commit SHA |
+| `ger cid` | commit / SHA / range → Change-Id |
 
 Both operate on local git history (no Gerrit API required).
 
 ---
 
-## git gsha
+## ger sha
 
 Resolve a Gerrit Change-Id to the corresponding Git commit SHA in the current stack (or a specified range).
 
 ### Usage
 
 ```
-git gsha [--range <rev-range> | --all] [--short | --subject | --json] [-v] <change-id>
+ger sha [--range <rev-range> | --all] [--short | --subject | --json] [-v] <change-id>
 ```
 
 ### Arguments
@@ -63,32 +63,32 @@ If `--range` is omitted, searches the current Gerrit stack using:
 
 ```bash
 # Print full SHA
-git gsha Iabc1234...
+ger sha Iabc1234...
 
 # Print short SHA and subject
-git gsha --subject Iabc1234...
+ger sha --subject Iabc1234...
 
 # Use in a pipeline
-git show $(git gsha Iabc1234...)
-git checkout $(git gsha Iabc1234...)
+git show $(ger sha Iabc1234...)
+git checkout $(ger sha Iabc1234...)
 
 # Search entire repo history
-git gsha --all Iabc1234...
+ger sha --all Iabc1234...
 
 # JSON output (for scripting)
-git gsha --json Iabc1234...
+ger sha --json Iabc1234...
 ```
 
 ---
 
-## git gcid
+## ger cid
 
 Return the Change-Id for a commit, SHA, or range of commits.
 
 ### Usage
 
 ```
-git gcid [options] [<commit-or-range>]
+ger cid [options] [<commit-or-range>]
 ```
 
 ### Arguments
@@ -119,21 +119,21 @@ If `arg` is already a valid Change-Id (`I` + 40 hex digits), it is echoed back u
 
 ```bash
 # Get Change-Id of HEAD
-git gcid
+ger cid
 
 # Get Change-Id of a specific commit
-git gcid a1b2c3d
+ger cid a1b2c3d
 
 # Get Change-Ids for a range
-git gcid origin/main..HEAD
+ger cid origin/main..HEAD
 
 # Check entire stack for duplicates / missing footers
-git gcid --check-duplicates
+ger cid --check-duplicates
 ```
 
 ---
 
 ## See also
 
-- [`git gedit`](gedit.md) — accepts a Change-Id as the commit argument
-- [`git gcomments`](gcomments.md) — fetch Gerrit comments by Change-Id
+- [`ger edit`](gedit.md) — accepts a Change-Id as the commit argument
+- [`ger comments`](gcomments.md) — fetch Gerrit comments by Change-Id

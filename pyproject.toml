@@ -23,18 +23,11 @@ dev = [
 default-groups = ["dev"]
 
 [project.scripts]
-git-gbranch = "gerrit_workflow_tools.cli_gbranch:main"
-git-gpush = "gerrit_workflow_tools.cli_gpush:main"
-git-gedit = "gerrit_workflow_tools.cli_gedit:main"
-git-gcomments = "gerrit_workflow_tools.cli_gcomments:main"
-git-gcid = "gerrit_workflow_tools.cli_gcid:main"
-git-gsha = "gerrit_workflow_tools.cli_gsha:main"
-git-glog = "gerrit_workflow_tools.cli_glog:main"
-git-gshow = "gerrit_workflow_tools.cli_gshow:main"
+ger = "gerrit_workflow_tools.cli_ger:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gerrit_workflow_tools"]
-force-include = { "contrib/completion/git-gerrit-workflow-tools.bash" = "gerrit_workflow_tools/completion/git-gerrit-workflow-tools.bash" }
+force-include = { "contrib/completion/ger.bash" = "gerrit_workflow_tools/completion/ger.bash" }
 
 [tool.hatch.build.targets.sdist]
 include = ["src/gerrit_workflow_tools"]

@@ -126,7 +126,7 @@ def refs_for_push_branch_name(cwd: Path | str | None, target: str) -> str:
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
-    """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``git gcomments``)."""
+    """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``ger comments``)."""
     return _config_get(cwd, "gerrit.webUrl")
 
 
@@ -168,7 +168,7 @@ def config_bool(cwd: Path | str | None, key: str, *, default: bool = False) -> b
 
 
 def glog_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``git glog`` from ``gerrit.glog*`` keys (CLI flags override when passed)."""
+    """Defaults for ``ger log`` from ``gerrit.glog*`` keys (CLI flags override when passed)."""
     return {
         "show_url": config_bool(cwd, "gerrit.glogShowUrl"),
         "show_change_id": config_bool(cwd, "gerrit.glogShowChangeId"),
@@ -178,7 +178,7 @@ def glog_defaults(cwd: Path | str | None) -> dict[str, bool]:
 
 
 def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``git gpush`` from ``gerrit.gpush*`` keys (CLI flags override when passed)."""
+    """Defaults for ``ger push`` from ``gerrit.gpush*`` keys (CLI flags override when passed)."""
     return {
         "show_attributes": config_bool(cwd, "gerrit.gpushShowAttributes"),
     }
@@ -290,5 +290,5 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         f"  git config branch.{b}.gerritTarget <target-branch>\n"
         f"  git branch --set-upstream-to=origin/<target-branch>\n"
         "Or search all commits instead:\n"
-        "  git gsha --all <change-id>"
+        "  ger sha --all <change-id>"
     )

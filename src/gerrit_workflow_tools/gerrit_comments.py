@@ -437,7 +437,7 @@ def build_json_payload(
     *,
     local_commit_by_change_id: dict[str, tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Build the ``git gcomments --json`` structure: changes with commit metadata and comments."""
+    """Build the ``ger comments --json`` structure: changes with commit metadata and comments."""
     local = local_commit_by_change_id or {}
     out_changes: list[dict[str, Any]] = []
     for ch, flats in zip(chain, comments_by_change, strict=False):

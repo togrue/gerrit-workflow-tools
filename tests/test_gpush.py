@@ -17,7 +17,7 @@ from tests.fixtures import configure_gerrit_target
 def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = run_cli(stack_repo, gpush_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
-    assert "gpush" in out.lower() or "git gpush" in out
+    assert "gpush" in out.lower() or "ger push" in out
     assert "--dry-run" in out
     assert "--reviewers" in out
     assert "--reviewer" not in out.replace("--reviewers", "")
@@ -242,9 +242,7 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     assert "%r=bob" in out
 
 
-def test_gpush_config_default_show_attributes(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gpush_config_default_show_attributes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
@@ -271,9 +269,7 @@ def test_gpush_config_default_show_attributes(
     assert "`r=alice`" in out
 
 
-def test_gpush_no_show_attributes_overrides_config(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gpush_no_show_attributes_overrides_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
@@ -342,7 +338,9 @@ def test_gpush_interactive_reviewers_merges_and_refspec(stack_repo: Path, monkey
     assert "%r=bob" in out
 
 
-def test_gpush_interactive_reviewers_order_after_branch_and_cli(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_interactive_reviewers_order_after_branch_and_cli(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
     set_branch_config(stack_repo, b, gerrit_reviewers="carol")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())

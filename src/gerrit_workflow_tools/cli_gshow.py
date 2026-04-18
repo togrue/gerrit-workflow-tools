@@ -1,4 +1,4 @@
-"""CLI for ``git gshow``: one commit vs Gerrit (status + unresolved comments)."""
+"""CLI for ``ger show``: one commit vs Gerrit (status + unresolved comments)."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def resolve_row_for_gshow(
     """Return ``(sha, short, summary, change_id), is_local_git`` for :func:`fetch_gerrit_data`."""
     a = (arg or "HEAD").strip()
     if _arg_has_range(a):
-        raise GitError(f"gshow does not support revision ranges: {arg!r}")
+        raise GitError(f"ger show does not support revision ranges: {arg!r}")
 
     if _looks_like_change_id(a) or _is_numeric_change(a):
         ch = resolve_change_for_gcomments(client, change_arg=a, local_change_id=None)
@@ -120,7 +120,7 @@ def resolve_row_for_gshow(
         return (sha, short, summary, chg_id), False
 
     if ".." in resolved or "..." in resolved:
-        raise GitError(f"gshow does not support revision ranges: {arg!r}")
+        raise GitError(f"ger show does not support revision ranges: {arg!r}")
 
     sha = git_out("rev-parse", "--verify", resolved, cwd=cwd)
     raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
@@ -134,7 +134,7 @@ def resolve_row_for_gshow(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
-        prog="git gshow",
+        prog="ger show",
         description="Show one commit and its Gerrit status (labels, comments, CI).",
     )
     p.add_argument(
@@ -154,9 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         metavar="LINES",
         default=None,
-        help=(
-            "Show only the last N lines of each comment body (positive integer; overrides config)."
-        ),
+        help=("Show only the last N lines of each comment body (positive integer; overrides config)."),
     )
     p.add_argument(
         "--json",

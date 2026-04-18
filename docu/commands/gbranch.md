@@ -1,17 +1,17 @@
-# git gbranch
+# ger branch
 
 **Status:** Implemented
 
 Manage branch-local Gerrit metadata: target review branch, default reviewers, and push mode. Settings are stored in `.git/config` under `branch.<name>.*` keys.
 
-Run `git gbranch init --target <branch>` once per local branch before using `git gpush`.
+Run `ger branch init --target <branch>` once per local branch before using `ger push`.
 
 ---
 
 ## Usage
 
 ```
-git gbranch <subcommand> [options]
+ger branch <subcommand> [options]
 ```
 
 ---
@@ -23,7 +23,7 @@ git gbranch <subcommand> [options]
 Print current branch's Gerrit metadata.
 
 ```bash
-git gbranch show
+ger branch show
 ```
 
 Output:
@@ -41,7 +41,7 @@ Push mode: ready
 Set branch-local Gerrit config (non-interactive).
 
 ```bash
-git gbranch init --target <branch> [--reviewers <list>] [--push-mode <mode>]
+ger branch init --target <branch> [--reviewers <list>] [--push-mode <mode>]
 ```
 
 | Option | Default | Description |
@@ -57,7 +57,7 @@ git gbranch init --target <branch> [--reviewers <list>] [--push-mode <mode>]
 Update `gerritTarget` for the current branch.
 
 ```bash
-git gbranch set-target <branch>
+ger branch set-target <branch>
 ```
 
 ---
@@ -67,7 +67,7 @@ git gbranch set-target <branch>
 Update `gerritReviewers` for the current branch.
 
 ```bash
-git gbranch set-reviewers alice,bob
+ger branch set-reviewers alice,bob
 ```
 
 ---
@@ -77,7 +77,7 @@ git gbranch set-reviewers alice,bob
 Update `gerritPushMode` for the current branch.
 
 ```bash
-git gbranch set-push-mode ready
+ger branch set-push-mode ready
 ```
 
 ---
@@ -103,4 +103,4 @@ git gbranch set-push-mode ready
 
 ## See also
 
-- [`git gpush`](gpush.md) — uses the target, push mode, and stop patterns from `gbranch` / config
+- [`ger push`](gpush.md) — uses the target, push mode, and stop patterns from `gbranch` / config

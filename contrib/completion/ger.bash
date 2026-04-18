@@ -1,13 +1,9 @@
-# Bash completion for gerrit-workflow-tools git wrappers (git gpush, git glog, …).
+# Bash completion for the unified `ger` CLI (ger push, ger log, …).
 # shellcheck disable=SC2207,SC2154
 #
-# Install: source this file from ~/.bashrc after git's bash completion, or see docu/Completion.md
+# Install: source this file from ~/.bashrc, or see docu/Completion.md
 #
-# Requires: Git's bash completion (for __git_complete). Optional: __git_complete_refs for revision args.
-
-__gwt_have_git_complete() {
-    declare -F __git_complete >/dev/null 2>&1
-}
+# Optional: Git's bash completion for __git_complete_refs on revision arguments.
 
 __gwt_flags() {
     local cur=$1
@@ -15,7 +11,7 @@ __gwt_flags() {
     COMPREPLY=( $(compgen -W "$*" -- "$cur") )
 }
 
-_git_gpush() {
+_ger_push() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
@@ -39,7 +35,7 @@ _git_gpush() {
     fi
 }
 
-_git_glog() {
+_ger_log() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
@@ -59,7 +55,7 @@ _git_glog() {
     fi
 }
 
-_git_gbranch() {
+_ger_branch() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 2 ]; then
         __gwt_flags "$cur" show init set-target set-reviewers set-push-mode
@@ -82,7 +78,7 @@ _git_gbranch() {
     fi
 }
 
-_git_gedit() {
+_ger_edit() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" --help --reword --drop -v --verbose
@@ -93,7 +89,7 @@ _git_gedit() {
     fi
 }
 
-_git_gcid() {
+_ger_cid() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" --help --check-duplicates --start-at-remote -v --verbose
@@ -104,7 +100,7 @@ _git_gcid() {
     fi
 }
 
-_git_gsha() {
+_ger_sha() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
@@ -122,7 +118,7 @@ _git_gsha() {
     fi
 }
 
-_git_gshow() {
+_ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
@@ -139,7 +135,7 @@ _git_gshow() {
     fi
 }
 
-_git_gcomments() {
+_ger_comments() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
@@ -159,49 +155,23 @@ _git_gcomments() {
     fi
 }
 
-# Register with git's completion dispatcher (git 1.7+; needs git's bash completion loaded first).
-if __gwt_have_git_complete; then
-    __git_complete gpush _git_gpush
-    __git_complete glog _git_glog
-    __git_complete gbranch _git_gbranch
-    __git_complete gedit _git_gedit
-    __git_complete gcid _git_gcid
-    __git_complete gsha _git_gsha
-    __git_complete gshow _git_gshow
-    __git_complete gcomments _git_gcomments
-fi
-
-# Standalone launchers: git-gpush etc. (COMP_WORDS[0] is the executable name)
-__gwt_wrap_git_sub() {
-    local fn=$1
-    shift
-    local exe=$1
-    local base=${exe##*/}
-    base=${base%.exe}
-    local sub=${base#git-}
-    local _w=( "${COMP_WORDS[@]}" )
-    local _cw=$COMP_CWORD
-    COMP_WORDS=(git "$sub" "${_w[@]:1}")
-    COMP_CWORD=$((_cw + 1))
-    "$fn"
-    COMP_WORDS=( "${_w[@]}" )
-    COMP_CWORD=$_cw
+_ger() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [ "${COMP_CWORD:-0}" -eq 1 ]; then
+        __gwt_flags "$cur" branch comments cid edit log push sha show
+        return
+    fi
+    local sub="${COMP_WORDS[1]}"
+    case "$sub" in
+        push) _ger_push ;;
+        log) _ger_log ;;
+        branch) _ger_branch ;;
+        edit) _ger_edit ;;
+        cid) _ger_cid ;;
+        sha) _ger_sha ;;
+        show) _ger_show ;;
+        comments) _ger_comments ;;
+    esac
 }
 
-_git_gpush_standalone() { __gwt_wrap_git_sub _git_gpush "${COMP_WORDS[0]}"; }
-_git_glog_standalone() { __gwt_wrap_git_sub _git_glog "${COMP_WORDS[0]}"; }
-_git_gbranch_standalone() { __gwt_wrap_git_sub _git_gbranch "${COMP_WORDS[0]}"; }
-_git_gedit_standalone() { __gwt_wrap_git_sub _git_gedit "${COMP_WORDS[0]}"; }
-_git_gcid_standalone() { __gwt_wrap_git_sub _git_gcid "${COMP_WORDS[0]}"; }
-_git_gsha_standalone() { __gwt_wrap_git_sub _git_gsha "${COMP_WORDS[0]}"; }
-_git_gshow_standalone() { __gwt_wrap_git_sub _git_gshow "${COMP_WORDS[0]}"; }
-_git_gcomments_standalone() { __gwt_wrap_git_sub _git_gcomments "${COMP_WORDS[0]}"; }
-
-complete -o default -F _git_gpush_standalone git-gpush
-complete -o default -F _git_glog_standalone git-glog
-complete -o default -F _git_gbranch_standalone git-gbranch
-complete -o default -F _git_gedit_standalone git-gedit
-complete -o default -F _git_gcid_standalone git-gcid
-complete -o default -F _git_gsha_standalone git-gsha
-complete -o default -F _git_gshow_standalone git-gshow
-complete -o default -F _git_gcomments_standalone git-gcomments
+complete -o default -F _ger ger

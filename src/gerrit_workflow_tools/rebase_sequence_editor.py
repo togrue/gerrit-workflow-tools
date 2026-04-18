@@ -1,4 +1,4 @@
-"""Invoked as GIT_SEQUENCE_EDITOR to patch a single `pick` line for git gedit."""
+"""Invoked as GIT_SEQUENCE_EDITOR to patch a single `pick` line for ger edit."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Rewrite the interactive-rebase todo for one commit (``git gedit`` via ``GIT_SEQUENCE_EDITOR``)."""
+    """Rewrite the interactive-rebase todo for one commit (``ger edit`` via ``GIT_SEQUENCE_EDITOR``)."""
     if os.environ.get("GEDIT_VERBOSE"):
         configure_logging(True)
     args = argv if argv is not None else sys.argv

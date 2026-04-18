@@ -1,4 +1,4 @@
-"""Tests for ``git glog`` (mocked Gerrit)."""
+"""Tests for ``ger log`` (mocked Gerrit)."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _configure_repo(repo: Path) -> None:
 def test_glog_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = run_cli(stack_repo, glog_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
-    assert "git glog" in out or "glog" in out
+    assert "ger log" in out or "glog" in out
     assert "REV_RANGE" in out
     assert "--full" in out
     assert "--json" in out

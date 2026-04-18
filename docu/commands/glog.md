@@ -1,4 +1,4 @@
-# git glog
+# ger log
 
 **Status:** Implemented
 
@@ -13,7 +13,7 @@ Requires `gerrit.webUrl` in git config.
 ## Usage
 
 ```
-git glog [options] [REVSET]
+ger log [options] [REVSET]
 ```
 
 `REVSET` — optional commit range (e.g. `origin/main..HEAD`). Default is merge-base..`HEAD`.
@@ -33,7 +33,7 @@ git glog [options] [REVSET]
 | `--no-color` | Disable colored output |
 | `-v`, `--verbose` | Log git commands to stderr |
 
-**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.glogShowUrl`, `gerrit.glogShowChangeId`, `gerrit.glogOneline`, `gerrit.glogCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults. See [Configuration.md](../Configuration.md#glog--gerritglog).
+**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.glogShowUrl`, `gerrit.glogShowChangeId`, `gerrit.glogOneline`, `gerrit.glogCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults. See [Configuration.md](../Configuration.md#ger-log--gerritglog).
 
 ---
 
@@ -161,6 +161,6 @@ Each commit object:
 
 ## See also
 
-- [`git gcomments`](gcomments.md) — full comment text for a single change
+- [`ger comments`](gcomments.md) — full comment text for a single change
 - `git log` over `merge-base..HEAD` — local commit list only (no Gerrit API)
-- [Testing guide](../Howto_Test.md) — how to run `glog` against a real Gerrit instance
+- [Testing guide](../Howto_Test.md) — how to run `ger log` against a real Gerrit instance
