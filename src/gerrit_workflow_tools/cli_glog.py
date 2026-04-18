@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # ANSI color codes
 _RESET = "\033[0m"
 _DIM = "\033[2m"
+_STRIKE = "\033[9m"
 _GREEN = "\033[32m"
 _RED = "\033[31m"
 _LIGHT_GREEN = "\033[92m"
@@ -47,6 +48,13 @@ def _color(text: str, code: str, *, use_color: bool) -> str:
     return f"{code}{text}{_RESET}"
 
 
+def _fmt_summary_strike(summary: str, *, use_color: bool) -> str:
+    """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
+    if use_color:
+        return f"{_STRIKE}{summary}{_RESET}"
+    return "".join(f"{c}\u0336" for c in summary)
+
+
 def _annotate_attention(commits: list[GlogCommit]) -> None:
     """Populate attention_reasons on each commit, including chain-blocking."""
     for i, commit in enumerate(commits):
@@ -64,8 +72,11 @@ def _annotate_attention(commits: list[GlogCommit]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fmt_patchset_column(status: str, *, use_color: bool) -> str:
+def _fmt_patchset_column(commit: GlogCommit, *, use_color: bool) -> str:
     """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
+    if commit.abandoned:
+        return _color("a", _DIM, use_color=use_color)
+    status = commit.patchset_status
     if status == "active":
         return _color("p", _GREEN, use_color=use_color)
     if status == "newer":
@@ -117,7 +128,7 @@ def _fmt_submittable(commit: GlogCommit, *, use_color: bool) -> str:
 def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
     """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
     sha = commit.short_sha
-    push = _fmt_patchset_column(commit.patchset_status, use_color=use_color)
+    push = _fmt_patchset_column(commit, use_color=use_color)
     verified = _fmt_verified(commit.verified, use_color=use_color)
     cr = _fmt_code_review(commit.code_review, use_color=use_color)
     comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
@@ -159,7 +170,10 @@ def _fmt_change_id_suffix(change_id: str | None, *, use_color: bool) -> str:
 
 
 def _primary_line(commit: GlogCommit, *, use_color: bool, show_change_id: bool = False) -> str:
-    line = f"{_primary_line_prefix(commit, use_color=use_color)}{commit.summary}"
+    summ = (
+        _fmt_summary_strike(commit.summary, use_color=use_color) if commit.abandoned else commit.summary
+    )
+    line = f"{_primary_line_prefix(commit, use_color=use_color)}{summ}"
     if show_change_id:
         line += _fmt_change_id_suffix(commit.change_id, use_color=use_color)
     return line
@@ -212,7 +226,10 @@ def _compact_cr(cr: int | None) -> str:
     return "."
 
 
-def _compact_patchset_letter(status: str) -> str:
+def _compact_patchset_letter(commit: GlogCommit) -> str:
+    if commit.abandoned:
+        return "a"
+    status = commit.patchset_status
     if status == "active":
         return "p"
     if status == "newer":
@@ -223,7 +240,7 @@ def _compact_patchset_letter(status: str) -> str:
 
 
 def _compact_line(commit: GlogCommit, *, show_change_id: bool = False) -> str:
-    push = _compact_patchset_letter(commit.patchset_status)
+    push = _compact_patchset_letter(commit)
     v = _compact_verified(commit.verified)
     cr = _compact_cr(commit.code_review)
     if not commit.pushed:
@@ -400,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
                 "gerrit_url": c.gerrit_url,
                 "submittable": c.submittable,
                 "change_id": c.change_id,
+                "abandoned": c.abandoned,
                 "attention_reasons": c.attention_reasons,
             }
             for c in visible

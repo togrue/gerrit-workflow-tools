@@ -30,6 +30,7 @@ class GlogCommit:
     summary: str
     change_id: str | None
     pushed: bool  # True if a Gerrit change exists for this Change-Id (any patchset state)
+    abandoned: bool  # True when Gerrit change status is ABANDONED
     patchset_status: str  # "active" | "newer" | "outdated" | "absent"
     verified: int | None  # -1, 0, +1; None = no vote
     code_review: int | None  # -2, -1, 0, +1, +2; None = no vote
@@ -221,6 +222,7 @@ def fetch_gerrit_data(
                     summary=summary,
                     change_id=None,
                     pushed=False,
+                    abandoned=False,
                     patchset_status="absent",
                     verified=None,
                     code_review=None,
@@ -245,6 +247,7 @@ def fetch_gerrit_data(
                     summary=summary,
                     change_id=change_id,
                     pushed=False,
+                    abandoned=False,
                     patchset_status="absent",
                     verified=None,
                     code_review=None,
@@ -257,6 +260,8 @@ def fetch_gerrit_data(
         verified = extract_label_value(labels, "Verified")
         code_review = extract_label_value(labels, "Code-Review")
         submittable = bool(detail.get("submittable"))
+        raw_status = detail.get("status")
+        abandoned = isinstance(raw_status, str) and raw_status.upper() == "ABANDONED"
         url = gerrit_change_url(web_base, detail)
         api_id = str(detail.get("id") or change_id)
 
@@ -278,6 +283,7 @@ def fetch_gerrit_data(
                 summary=summary,
                 change_id=change_id,
                 pushed=True,
+                abandoned=abandoned,
                 patchset_status=ps,
                 verified=verified,
                 code_review=code_review,
@@ -318,6 +324,9 @@ def fetch_gerrit_data(
 def determine_attention(commit: GlogCommit, *, chain_blocked: bool) -> list[str]:
     """Return reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []
+    if commit.abandoned:
+        reasons.append("abandoned")
+        return reasons
     if commit.patchset_status == "absent":
         reasons.append("not-pushed")
         return reasons

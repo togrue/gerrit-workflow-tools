@@ -151,6 +151,39 @@ def test_glog_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest
     assert cid[:12] in out
 
 
+def _unicode_strikethrough(s: str) -> str:
+    return "".join(f"{c}\u0336" for c in s)
+
+
+def test_glog_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Abandoned Gerrit changes render the subject with strike-through (no TTY: combining chars)."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    if overrides:
+        overrides[-1] = {"status": "ABANDONED"}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, glog_main, ["--full", "--no-color"], monkeypatch)
+    assert code == 1, err
+    _sha, _short, subj, _raw = rows[-1]
+    assert _unicode_strikethrough(subj) in out
+
+
+def test_glog_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides = [{}] * len(rows)
+    overrides[-1] = {"status": "ABANDONED"}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, glog_main, ["--json", "--full"], monkeypatch)
+    assert code == 1, err
+    data = json_stdout(out)
+    assert data[-1]["abandoned"] is True
+    assert data[0]["abandoned"] is False
+
+
 def test_glog_config_default_show_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     git("config", "gerrit.glogShowUrl", "true", cwd=stack_repo)
