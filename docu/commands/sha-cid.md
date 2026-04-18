@@ -135,5 +135,5 @@ ger cid --check-duplicates
 
 ## See also
 
-- [`ger edit`](gedit.md) — accepts a Change-Id as the commit argument
-- [`ger comments`](gcomments.md) — fetch Gerrit comments by Change-Id
+- [`ger edit`](edit.md) — accepts a Change-Id as the commit argument
+- [`ger comments`](comments.md) — fetch Gerrit comments by Change-Id

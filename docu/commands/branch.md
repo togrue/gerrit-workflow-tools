@@ -103,4 +103,4 @@ ger branch set-push-mode ready
 
 ## See also
 
-- [`ger push`](gpush.md) — uses the target, push mode, and stop patterns from `gbranch` / config
+- [`ger push`](push.md) — uses the target, push mode, and stop patterns from `gbranch` / config

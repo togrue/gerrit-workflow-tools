@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gerrit_workflow_tools.cli_gshow import main as gshow_main
+from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.gerrit_change_status import norm_change_id
+from gerrit_workflow_tools.gerrit_change_status import GLOG_QUERY_OPTIONS, norm_change_id
 from gerrit_workflow_tools.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
@@ -50,6 +50,41 @@ def test_gshow_rejects_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "range" in err.lower()
 
 
+def test_gshow_json_change_id_asks_gerrit_for_current_revision(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: bare ``changes/?q=`` omits ``current_revision`` unless ``o=CURRENT_REVISION``."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    with (
+        patch(
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
+            return_value="https://g.example",
+        ),
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
+    ):
+        inst = MagicMock()
+        client_cls.return_value = inst
+        inst.query_changes.return_value = [ch]
+        inst.get_comments.return_value = {}
+        code, out, _err = run_cli(
+            stack_repo,
+            gshow_main,
+            ["--json", cid],
+            monkeypatch,
+        )
+    assert code == 0
+    data = json_stdout(out)
+    assert data["sha"] == sha
+    # resolve_change_for_gcomments + fetch_gerrit_data batch_load each query the change
+    first = inst.query_changes.call_args_list[0]
+    assert first.kwargs.get("options") == list(GLOG_QUERY_OPTIONS)
+    assert all(
+        "CURRENT_REVISION" in (c.kwargs.get("options") or []) for c in inst.query_changes.call_args_list
+    )
+
+
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
@@ -58,10 +93,10 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
     with (
         patch(
-            "gerrit_workflow_tools.cli_gshow.resolve_gerrit_web_base",
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
             return_value="https://g.example",
         ),
-        patch("gerrit_workflow_tools.cli_gshow.GerritClient") as client_cls,
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
     ):
         inst = MagicMock()
         client_cls.return_value = inst
@@ -89,10 +124,10 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=1)
     with (
         patch(
-            "gerrit_workflow_tools.cli_gshow.resolve_gerrit_web_base",
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
             return_value="https://g.example",
         ),
-        patch("gerrit_workflow_tools.cli_gshow.GerritClient") as client_cls,
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
     ):
         inst = MagicMock()
         client_cls.return_value = inst
@@ -127,10 +162,10 @@ def test_gshow_comment_tail_in_json(stack_repo: Path, monkeypatch: pytest.Monkey
     }
     with (
         patch(
-            "gerrit_workflow_tools.cli_gshow.resolve_gerrit_web_base",
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
             return_value="https://g.example",
         ),
-        patch("gerrit_workflow_tools.cli_gshow.GerritClient") as client_cls,
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
     ):
         inst = MagicMock()
         client_cls.return_value = inst
@@ -167,10 +202,10 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     }
     with (
         patch(
-            "gerrit_workflow_tools.cli_gshow.resolve_gerrit_web_base",
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
             return_value="https://g.example",
         ),
-        patch("gerrit_workflow_tools.cli_gshow.GerritClient") as client_cls,
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
     ):
         inst = MagicMock()
         client_cls.return_value = inst
@@ -209,7 +244,7 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=77)
     details = {norm_change_id(cid): detail}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gshow", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch)
     assert code == 0, err
     assert "commit " in out and sha in out
@@ -232,6 +267,6 @@ def test_gshow_smoke_argv_head_mocked(stack_repo: Path, monkeypatch: pytest.Monk
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=88)
     details = {norm_change_id(cid): detail}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_gshow", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch)
     assert code in (0, 1), err

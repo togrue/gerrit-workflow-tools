@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_gedit import main as gedit_main
+from gerrit_workflow_tools.cli_edit import main as gedit_main
 from tests.conftest import run_cli
 
 

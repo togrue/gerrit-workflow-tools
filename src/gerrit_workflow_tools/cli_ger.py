@@ -5,14 +5,14 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 
-from gerrit_workflow_tools.cli_gbranch import main as main_branch
-from gerrit_workflow_tools.cli_gcid import main as main_cid
-from gerrit_workflow_tools.cli_gcomments import main as main_comments
-from gerrit_workflow_tools.cli_gedit import main as main_edit
-from gerrit_workflow_tools.cli_glog import main as main_log
-from gerrit_workflow_tools.cli_gpush import main as main_push
-from gerrit_workflow_tools.cli_gsha import main as main_sha
-from gerrit_workflow_tools.cli_gshow import main as main_show
+from gerrit_workflow_tools.cli_branch import main as main_branch
+from gerrit_workflow_tools.cli_cid import main as main_cid
+from gerrit_workflow_tools.cli_comments import main as main_comments
+from gerrit_workflow_tools.cli_edit import main as main_edit
+from gerrit_workflow_tools.cli_log import main as main_log
+from gerrit_workflow_tools.cli_push import main as main_push
+from gerrit_workflow_tools.cli_sha import main as main_sha
+from gerrit_workflow_tools.cli_show import main as main_show
 
 _Handler = Callable[[list[str] | None], int]
 

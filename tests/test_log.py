@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_glog import main as glog_main
+from gerrit_workflow_tools.cli_log import main as glog_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.stack import parse_change_id
@@ -53,7 +53,7 @@ def test_glog_smoke_argv_exits_zero(
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, _out, err = run_cli(stack_repo, glog_main, argv_extra, monkeypatch)
     assert code in (0, 1), (code, err)
 
@@ -62,7 +62,7 @@ def test_glog_full_text_contains_commit_lines_and_summary(stack_repo: Path, monk
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--full"], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
@@ -76,7 +76,7 @@ def test_glog_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--json", "--full"], monkeypatch)
     assert code == 0, err
     data = json_stdout(out)
@@ -94,7 +94,7 @@ def test_glog_default_hides_when_all_green(stack_repo: Path, monkeypatch: pytest
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, [], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
@@ -111,7 +111,7 @@ def test_glog_shows_attention_without_full(stack_repo: Path, monkeypatch: pytest
     if overrides:
         overrides[-1] = {"cr": 1}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, [], monkeypatch)
     assert code == 1, err
     last = rows[-1]
@@ -125,7 +125,7 @@ def test_glog_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch)
     revset = f"{mb}..HEAD"
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--full", revset], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
@@ -142,7 +142,7 @@ def test_glog_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--full", "--show-change-id", "--no-color"], monkeypatch)
     assert code == 0, err
     _, _short, _subj, raw = rows[0]
@@ -163,7 +163,7 @@ def test_glog_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.Mo
     if overrides:
         overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--full", "--no-color"], monkeypatch)
     assert code == 1, err
     _sha, _short, subj, _raw = rows[-1]
@@ -176,7 +176,7 @@ def test_glog_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.Monk
     overrides = [{}] * len(rows)
     overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--json", "--full"], monkeypatch)
     assert code == 1, err
     data = json_stdout(out)
@@ -190,7 +190,7 @@ def test_glog_config_default_show_url(stack_repo: Path, monkeypatch: pytest.Monk
     clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_glog", details_by_change_id=details):
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, glog_main, ["--full", "--no-color"], monkeypatch)
     assert code == 0, err
     assert "g.example" in out or "/+/" in out

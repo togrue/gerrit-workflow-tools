@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
+from gerrit_workflow_tools.cli_cid import resolve_gcid_user_arg
 from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
-from gerrit_workflow_tools.cli_gcid import resolve_gcid_user_arg
-from gerrit_workflow_tools.cli_glog import _compact_line, _detail_lines, _primary_line, _url_line
+from gerrit_workflow_tools.cli_log import _compact_line, _detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient

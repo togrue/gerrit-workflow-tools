@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gerrit_workflow_tools.cli_gbranch import main as gbranch_main
+from gerrit_workflow_tools.cli_branch import main as gbranch_main
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
 

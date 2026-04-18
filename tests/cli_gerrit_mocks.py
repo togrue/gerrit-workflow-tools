@@ -123,7 +123,7 @@ def patch_gerrit_client_for_queries(
     details_by_change_id: dict[str, dict[str, Any]],
     web_base: str = "https://g.example",
 ) -> Iterator[MagicMock]:
-    """Patch ``resolve_gerrit_web_base`` and ``GerritClient`` on *module* (e.g. ``cli_glog``)."""
+    """Patch ``resolve_gerrit_web_base`` and ``GerritClient`` on *module* (e.g. ``cli_log``)."""
     inst = MagicMock()
     inst.query_changes.side_effect = make_query_changes_impl(details_by_change_id)
     inst.get_comments.return_value = {}

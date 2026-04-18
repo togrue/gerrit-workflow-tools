@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_gcid import (
+from gerrit_workflow_tools.cli_cid import (
     CHANGE_ID_RE,
     _parse_sha_body_rs,
     extract_change_id_from_msg,
     is_change_id,
 )
-from gerrit_workflow_tools.cli_gcid import (
+from gerrit_workflow_tools.cli_cid import (
     main as gcid_main,
 )
 from gerrit_workflow_tools.git_run import git

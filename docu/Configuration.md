@@ -80,4 +80,4 @@ ger log --no-oneline
 ## See also
 
 - [Documentation index](README.md) — command list and first-time setup
-- [`ger push`](commands/gpush.md), [`ger log`](commands/glog.md) — command-specific options
+- [`ger push`](commands/push.md), [`ger log`](commands/log.md) — command-specific options

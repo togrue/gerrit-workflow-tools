@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_gsha import main as gsha_main
+from gerrit_workflow_tools.cli_sha import main as gsha_main
 from tests.conftest import run_cli
 
 

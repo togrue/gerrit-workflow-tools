@@ -22,13 +22,13 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 
 | Command | Purpose |
 |---------|---------|
-| [`ger branch`](commands/gbranch.md) | Manage branch-local Gerrit metadata (target, reviewers, push mode) |
-| [`ger push`](commands/gpush.md) | Push the ready prefix (or full stack) to Gerrit |
-| [`ger edit`](commands/gedit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
-| [`ger show`](commands/gshow-todos.md) | Show Gerrit status (votes, comments, CI) for a single commit or Change-Id |
-| [`ger comments`](commands/gcomments.md) | Fetch and display Gerrit review comments for the current or selected change |
-| [`ger sha` / `ger cid`](commands/gsha-gcid.md) | Translate between Change-Ids and commit SHAs; `ger cid --check-duplicates` validates the stack |
-| [`ger log`](commands/glog.md) | Compact actionable overview of the commit chain vs Gerrit (CI, votes, comments) |
+| [`ger branch`](commands/branch.md) | Manage branch-local Gerrit metadata (target, reviewers, push mode) |
+| [`ger push`](commands/push.md) | Push the ready prefix (or full stack) to Gerrit |
+| [`ger edit`](commands/edit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
+| [`ger show`](commands/show-todos.md) | Show Gerrit status (votes, comments, CI) for a single commit or Change-Id |
+| [`ger comments`](commands/comments.md) | Fetch and display Gerrit review comments for the current or selected change |
+| [`ger sha` / `ger cid`](commands/sha-cid.md) | Translate between Change-Ids and commit SHAs; `ger cid --check-duplicates` validates the stack |
+| [`ger log`](commands/log.md) | Compact actionable overview of the commit chain vs Gerrit (CI, votes, comments) |
 
 ### Planned (not yet implemented)
 

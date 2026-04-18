@@ -161,6 +161,6 @@ Each commit object:
 
 ## See also
 
-- [`ger comments`](gcomments.md) — full comment text for a single change
+- [`ger comments`](comments.md) — full comment text for a single change
 - `git log` over `merge-base..HEAD` — local commit list only (no Gerrit API)
 - [Testing guide](../Howto_Test.md) — how to run `ger log` against a real Gerrit instance

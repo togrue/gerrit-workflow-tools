@@ -66,5 +66,5 @@ ger edit a1b2c3d --drop
 
 ## See also
 
-- [`ger log`](glog.md) — see the stack and Change-Ids before choosing a commit
-- [`ger sha`](gsha-gcid.md) — resolve a Change-Id to a SHA before editing
+- [`ger log`](log.md) — see the stack and Change-Ids before choosing a commit
+- [`ger sha`](sha-cid.md) — resolve a Change-Id to a SHA before editing

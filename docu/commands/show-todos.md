@@ -16,4 +16,4 @@ Items intentionally **out of v1**; track here until promoted into the main spec 
 
 ## Docs
 
-- Full command doc (e.g. `docu/commands/gshow.md`) mirroring [`glog.md`](glog.md) once behavior stabilizes.
+- Full command doc (e.g. `docu/commands/show.md`) mirroring [`log.md`](log.md) once behavior stabilizes.

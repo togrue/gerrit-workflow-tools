@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gerrit_workflow_tools.cli_gcomments import main as gcomments_main
+from gerrit_workflow_tools.cli_comments import main as gcomments_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.gerrit_comments import format_human, select_commit_for_comments
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
@@ -132,10 +132,10 @@ def test_gcomments_json_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 
     with (
         patch(
-            "gerrit_workflow_tools.cli_gcomments.resolve_gerrit_web_base",
+            "gerrit_workflow_tools.cli_comments.resolve_gerrit_web_base",
             return_value="https://g.example",
         ),
-        patch("gerrit_workflow_tools.cli_gcomments.GerritClient") as client_cls,
+        patch("gerrit_workflow_tools.cli_comments.GerritClient") as client_cls,
     ):
         inst = MagicMock()
         client_cls.return_value = inst

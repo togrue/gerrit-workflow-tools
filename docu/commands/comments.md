@@ -92,5 +92,5 @@ Each comment entry: `path`, `line`, `side`, `unresolved`, `patchSet`, `author`, 
 
 ## See also
 
-- [`ger log`](glog.md) — unresolved comment counts across the full stack at a glance
-- [`ger sha`](gsha-gcid.md) — resolve a Change-Id to navigate to a specific commit
+- [`ger log`](log.md) — unresolved comment counts across the full stack at a glance
+- [`ger sha`](sha-cid.md) — resolve a Change-Id to navigate to a specific commit
