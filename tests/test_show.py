@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from gerrit_workflow_tools.cli_show import main as gshow_main
-from gerrit_workflow_tools.cli_style import ANSI_DIM_YELLOW
+from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.gerrit_change_status import LOG_QUERY_OPTIONS, norm_change_id
 from gerrit_workflow_tools.git_run import git, git_out
@@ -269,7 +269,7 @@ def test_gshow_highlights_warning_pattern_on_summary_line(stack_repo: Path, monk
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, ["--color", "always"], monkeypatch)
     assert code == 0, err
-    assert ANSI_DIM_YELLOW in out
+    assert ANSI_YELLOW in out
     assert subj in out
 
 

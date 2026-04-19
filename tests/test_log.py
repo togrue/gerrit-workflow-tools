@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.cli_style import ANSI_DIM_YELLOW
+from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.stack import parse_change_id
@@ -86,7 +86,7 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, log_main, ["--full", "--color", "always"], monkeypatch)
     assert code == 0, err
-    assert ANSI_DIM_YELLOW in out
+    assert ANSI_YELLOW in out
     assert first_subject in out
 
 

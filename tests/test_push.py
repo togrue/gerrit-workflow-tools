@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gerrit_workflow_tools.cli_push import main as gpush_main
-from gerrit_workflow_tools.cli_style import ANSI_DIM_YELLOW, ANSI_YELLOW
+from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache, set_branch_config
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.ready_calc import compute_ready
@@ -219,7 +219,7 @@ def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch
     clear_gerrit_git_config_cache()
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all", "--color", "always"], monkeypatch)
     assert code == 0
-    assert ANSI_DIM_YELLOW in out
+    assert ANSI_YELLOW in out
     assert first_subject in out
 
 

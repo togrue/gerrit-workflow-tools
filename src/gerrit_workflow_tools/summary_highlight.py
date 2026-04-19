@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_style import ANSI_YELLOW, ANSI_RED, color_text, is_color_enabled
+from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 from gerrit_workflow_tools.config import stop_patterns, warning_patterns
 
 
