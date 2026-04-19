@@ -269,9 +269,9 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
 
     raise GitError(
         f"No base branch found for '{b}'.\n"
-        "Fix with one of:\n"
+        "Initialize this branch first:\n"
+        "  ger branch init --target <target-branch>\n"
+        "Or set it manually:\n"
         f"  git config branch.{b}.gerritTarget <target-branch>\n"
-        f"  git branch --set-upstream-to=origin/<target-branch>\n"
-        "Or search all commits instead:\n"
-        "  ger sha --all <change-id>"
+        f"  git branch --set-upstream-to=origin/<target-branch>"
     )
