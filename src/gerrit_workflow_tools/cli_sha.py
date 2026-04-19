@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)
         return 2
 
-    if len(matches) > 1:
+    if len(matches) > 1 and not args.all_commits:
         shorts = ", ".join(m[1] for m in matches)
         print(
             f"error: multiple commits with Change-Id {args.change_id}: {shorts}",
@@ -162,16 +162,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 3
 
-    sha, short_sha, subject = matches[0]
-
-    if args.json_out:
-        print(json.dumps({"change_id": args.change_id, "sha": sha, "subject": subject}))
-    elif args.subject:
-        print(f"{short_sha} {subject}")
-    elif args.short:
-        print(short_sha)
-    else:
-        print(sha)
+    for sha, short_sha, subject in matches:
+        if args.json_out:
+            print(json.dumps({"change_id": args.change_id, "sha": sha, "subject": subject}))
+        elif args.subject:
+            print(f"{short_sha} {subject}")
+        elif args.short:
+            print(short_sha)
+        else:
+            print(sha)
 
     return 0
 
