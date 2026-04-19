@@ -40,7 +40,7 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         [],
         ["--full"],
         ["--full", "--oneline"],
-        ["--full", "--compact"],
+        ["--full", "--no-compact"],
         ["--full", "--url"],
         ["--full", "--no-color"],
     ],

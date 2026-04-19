@@ -308,11 +308,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     p.add_argument("--no-color", action="store_true", help="Disable colored output.")
     p.add_argument(
-        "--compact",
-        action="store_true",
-        help="Use compact single-character status representation.",
-    )
-    p.add_argument(
         "--url",
         "--show-url",
         action="store_true",
@@ -359,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
     show_url = bool(args.url) or gdef["show_url"]
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
     use_oneline = bool(args.oneline) or (gdef["oneline"] and not args.no_oneline)
-    use_compact = bool(args.compact) or (gdef["compact"] and not args.no_compact)
+    use_compact = gdef["compact"] and not args.no_compact
 
     # Determine commit range
     if args.rev_range:
@@ -455,7 +450,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{ind}{d}")
             prev_had_details = bool(details) or bool(show_url and commit.gerrit_url)
 
-    # Summary section (suppressed for --oneline and --compact)
+    # Summary section (suppressed for --oneline and compact text mode)
     if not use_oneline and not use_compact:
         summary, ready_n, total_n = _build_summary(commits)
         print()

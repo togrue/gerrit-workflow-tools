@@ -26,7 +26,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.logShowUrl` | Default on: include Gerrit URLs in text output (same as `--url` / `--show-url`). |
 | `gerrit.logShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
 | `gerrit.logOneline` | Default on: one-line format (`--oneline`). Use `--no-oneline` to show full rows. |
-| `gerrit.logCompact` | Default on: compact columns (`--compact`). Use `--no-compact` for full rows. |
+| `gerrit.logCompact` | Default on: compact columns. Use `--no-compact` for full rows. |
 
 ---
 

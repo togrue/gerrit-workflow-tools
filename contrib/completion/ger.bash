@@ -42,7 +42,6 @@ _ger_log() {
             --help \
             --full \
             --oneline --no-oneline \
-            --compact --no-compact \
             --json \
             --no-color \
             --url --show-url \
