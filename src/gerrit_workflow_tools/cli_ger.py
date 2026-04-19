@@ -11,6 +11,7 @@ from gerrit_workflow_tools.cli_comments import main as main_comments
 from gerrit_workflow_tools.cli_edit import main as main_edit
 from gerrit_workflow_tools.cli_log import main as main_log
 from gerrit_workflow_tools.cli_push import main as main_push
+from gerrit_workflow_tools.cli_rebase import main as main_rebase
 from gerrit_workflow_tools.cli_sha import main as main_sha
 from gerrit_workflow_tools.cli_show import main as main_show
 
@@ -23,6 +24,7 @@ _COMMANDS: dict[str, tuple[str, _Handler]] = {
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", main_edit),
     "log": ("Overview of the local commit chain vs Gerrit (CI, votes, comments).", main_log),
     "push": ("Push the ready prefix or full stack to Gerrit.", main_push),
+    "rebase": ("Interactive rebase with Gerrit status annotations.", main_rebase),
     "sha": ("Resolve a Change-Id to a commit SHA.", main_sha),
     "show": ("One commit vs Gerrit (status and unresolved comments).", main_show),
 }
