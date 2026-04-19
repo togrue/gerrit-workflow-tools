@@ -11,8 +11,9 @@ from typing import Any
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
 from gerrit_workflow_tools.cli_cid import resolve_gcid_user_arg
-from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import HELP_JSON, add_color_args, configure_logging, cwd_from_env
 from gerrit_workflow_tools.cli_log import _compact_line, _detail_lines, _primary_line, _url_line
+from gerrit_workflow_tools.cli_style import init_color_mode, is_color_enabled
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         dest="json_",
         help=HELP_JSON,
     )
-    p.add_argument("--no-color", action="store_true", help="Disable colored output.")
+    add_color_args(p)
     p.add_argument(
         "-v",
         "--verbose",
@@ -172,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     configure_logging(1 if args.verbose else 0)
     cwd = cwd_from_env()
-    use_color = not args.no_color and sys.stdout.isatty()
+    init_color_mode(no_color=args.no_color)
+    use_color = is_color_enabled()
 
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
         print(

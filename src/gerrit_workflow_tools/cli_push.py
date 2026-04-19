@@ -9,10 +9,18 @@ from pathlib import Path
 
 from gerrit_workflow_tools.change_id import classify_issues
 from gerrit_workflow_tools.cli_common import (
+    add_color_args,
     add_stop_pattern_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
+)
+from gerrit_workflow_tools.cli_style import (
+    ANSI_DIM_GRAY,
+    ANSI_DIM_YELLOW,
+    ANSI_YELLOW,
+    color_text,
+    init_color_mode,
 )
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
@@ -39,12 +47,6 @@ def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.Complete
     """Run ``git push`` (separate hook so tests can monkeypatch without affecting other subprocess use)."""
     return subprocess.run(cmd, cwd=cwd)
 
-
-# Dim yellow foreground, reset (used when stdout is a TTY).
-_ANSI_DIM_YELLOW = "\033[2;33m"
-_ANSI_DIM_GRAY = "\033[2;37m"
-_ANSI_YELLOW = "\033[33m"
-_ANSI_RESET = "\033[0m"
 
 _SUBJECT_MARKER_RE = re.compile(r"\b(todo|dropme)\b", re.IGNORECASE)
 
@@ -168,33 +170,25 @@ def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str]) -> str:
     return ref
 
 
-def _format_subject_line(subject: str, *, tty: bool) -> str:
-    if not tty:
-        return subject
-
+def _format_subject_line(subject: str) -> str:
     def _sub(m: re.Match[str]) -> str:
-        return f"{_ANSI_DIM_YELLOW}{m.group(0)}{_ANSI_RESET}"
+        return color_text(m.group(0), ANSI_DIM_YELLOW)
 
     return _SUBJECT_MARKER_RE.sub(_sub, subject)
 
 
-def _format_warning_line(text: str, *, tty: bool) -> str:
-    if not tty:
-        return text
-    return f"{_ANSI_YELLOW}{text}{_ANSI_RESET}"
+def _format_warning_line(text: str) -> str:
+    return color_text(text, ANSI_YELLOW)
 
 
-def _format_command_line(text: str, *, tty: bool) -> str:
-    if not tty:
-        return text
-    return f"{_ANSI_DIM_GRAY}{text}{_ANSI_RESET}"
+def _format_command_line(text: str) -> str:
+    return color_text(text, ANSI_DIM_GRAY)
 
 
 def _commit_lines_for_preview(
     cwd: Path,
     r: ReadyResult,
     *,
-    tty_out: bool,
     show_attributes: bool,
     merged_reviewers: list[str],
 ) -> list[str]:
@@ -225,7 +219,7 @@ def _commit_lines_for_preview(
 
     lines: list[str] = []
     for _full, short_sha, subj, raw in rows:
-        disp = _format_subject_line(subj, tty=tty_out)
+        disp = _format_subject_line(subj)
         line = f"    {short_sha} # {disp}"
         if show_attributes and details_by_cid is not None:
             cid = parse_change_id(raw)
@@ -269,9 +263,11 @@ def _print_gpush_preview(
     r: ReadyResult,
     commit_lines: list[str],
     *,
-    tty_out: bool,
     show_push_command: bool,
 ) -> None:
+    if show_push_command:
+        print(_format_command_line(" ".join(cmd)))
+        print()
     print("About to push commits:")
     for ln in commit_lines:
         print(ln)
@@ -281,18 +277,12 @@ def _print_gpush_preview(
         if boundary_line and pat:
             print()
             stop_line = f'Stopped at commit "{boundary_line}", because it matches the stop pattern {pat}.'
-            print(_format_warning_line(stop_line, tty=tty_out))
+            print(_format_warning_line(stop_line))
             remain = _remaining_not_ready_count(cwd, r.boundary_sha)
             if remain > 0:
                 print(
-                    _format_warning_line(
-                        f"... {remain} not-ready commit(s) remain unpushed",
-                        tty=tty_out,
-                    )
+                    _format_warning_line(f"... {remain} not-ready commit(s) remain unpushed")
                 )
-    if show_push_command:
-        print()
-        print(_format_command_line(" ".join(cmd), tty=tty_out))
 
 
 def _parse_confirm_answer(raw: str) -> bool | None:
@@ -364,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Deprecated: same as --all (prefer --all).",
     )
+    add_color_args(p)
     add_stop_pattern_args(p)
     p.add_argument(
         "--reviewers",
@@ -388,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     configure_logging(args.verbose)
     cwd = cwd_from_env()
+    init_color_mode(no_color=args.no_color)
     gdef = gpush_defaults(cwd)
     show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
     update_last_pushed = (
@@ -471,12 +463,10 @@ def main(argv: list[str] | None = None) -> int:
         refspec = _refs_for_spec(tip, push_branch, reviewers)
         cmd = ["git", "push", remote, refspec]
 
-        tty_out = sys.stdout.isatty()
         try:
             commit_lines = _commit_lines_for_preview(
                 cwd,
                 r,
-                tty_out=tty_out,
                 show_attributes=show_attributes,
                 merged_reviewers=reviewers,
             )
@@ -492,7 +482,6 @@ def main(argv: list[str] | None = None) -> int:
             cmd,
             r,
             commit_lines,
-            tty_out=tty_out,
             show_push_command=True,
         )
 
