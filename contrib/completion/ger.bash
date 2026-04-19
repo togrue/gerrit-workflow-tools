@@ -11,6 +11,17 @@ __gwt_flags() {
     COMPREPLY=( $(compgen -W "$*" -- "$cur") )
 }
 
+_ger_rebase() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" --help -v --verbose --debug-log
+        return
+    fi
+    if declare -F __git_complete_refs >/dev/null 2>&1; then
+        __git_complete_refs
+    fi
+}
+
 _ger_push() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
@@ -157,12 +168,13 @@ _ger_comments() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" branch comments cid edit log push sha show
+        __gwt_flags "$cur" branch comments cid edit log push rebase sha show
         return
     fi
     local sub="${COMP_WORDS[1]}"
     case "$sub" in
         push) _ger_push ;;
+        rebase) _ger_rebase ;;
         log) _ger_log ;;
         branch) _ger_branch ;;
         edit) _ger_edit ;;
