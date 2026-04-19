@@ -1,6 +1,6 @@
 # Bash completion
 
-Tab completion for `ger` and its subcommands (`ger push`, `ger log`, …) is provided by a small bash script.
+Bash tab-completes `ger` and its subcommands via a bundled `ger.bash` script; run `ger bash-completion` to print the `source` line, or `ger bash-completion --install` to append that line to `~/.bashrc` (and `--uninstall` to remove it).
 
 ## Quick setup
 

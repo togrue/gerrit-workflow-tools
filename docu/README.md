@@ -111,7 +111,7 @@ ger push
 
 ## See also
 
-- [Bash completion](Completion.md) — tab-complete `ger` and subcommands
+- [Bash completion](Completion.md) — `ger bash-completion` / `--install` for `~/.bashrc`
 - [Workflow scenarios](../Gerrit-Workflow-Scenarios.md) — the real-world problems these tools solve
 - [MVP feature list](../MVP.md)
 - [Testing guide](Howto_Test.md)

@@ -40,7 +40,7 @@ ger push --help
 
 ### Bash completion (optional)
 
-See [docu/Completion.md](docu/Completion.md). After `pip install`, run `ger bash-completion` for the `source` line, or `ger bash-completion --install` to add it to `~/.bashrc`.
+Optional bash tab completion is described in [docu/Completion.md](docu/Completion.md): `ger bash-completion` prints the `source` line; `ger bash-completion --install` adds it to `~/.bashrc`.
 
 ## Development (this repository)
 
