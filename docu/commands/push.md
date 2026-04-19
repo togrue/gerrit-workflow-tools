@@ -25,8 +25,8 @@ ger push [options] [REV]
 | `--dry-run` | Print what would be pushed without executing |
 | `-y`, `--yes` | Push without confirmation (required when stdin is not a terminal) |
 | `-i` | Prompt for reviewers on a TTY; merged after branch config and `--reviewers` (cannot be combined with `--yes`) |
-| `--show-attributes` | After the usual preview, query Gerrit and show current vs proposed review attributes per commit (see below). Default: `gerrit.gpushShowAttributes` |
-| `--no-show-attributes` | Disable attribute preview when `gerrit.gpushShowAttributes` is set |
+| `--show-attributes` | After the usual preview, query Gerrit and show current vs proposed review attributes per commit (see below). Default: `gerrit.pushShowAttributes` |
+| `--no-show-attributes` | Disable attribute preview when `gerrit.pushShowAttributes` is set |
 | `--update-last-pushed` | After a successful push, update local branch `lastPush/<current-branch>` to the pushed tip. Default: `gerrit.lastPushedBranch` |
 | `--no-update-last-pushed` | Skip updating `lastPush/<current-branch>` (overrides `gerrit.lastPushedBranch`) |
 | `--all` | Push the entire stack, ignoring stop patterns |
@@ -125,4 +125,4 @@ ger push -i
 
 - [`ger branch`](branch.md) — configure target, reviewers, push mode
 - [`ger cid --check-duplicates`](sha-cid.md) — run the Change-Id check manually
-- [Configuration reference](../Configuration.md) — `gerrit.gpushShowAttributes`, `gerrit.lastPushedBranch`, `gerrit.stopPattern`, credentials
+- [Configuration reference](../Configuration.md) — `gerrit.pushShowAttributes`, `gerrit.lastPushedBranch`, `gerrit.stopPattern`, credentials

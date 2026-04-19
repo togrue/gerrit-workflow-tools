@@ -16,26 +16,26 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
 | `gerrit.defaultPushMode` | Default push mode label (e.g. `ready`); used by ready-boundary logic. |
 | `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` / `--no-config-patterns` to bypass without editing config. |
-| `gerrit.gshowCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
+| `gerrit.showCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
 
 ---
 
-## `ger log` — `gerrit.glog*`
+## `ger log` — `gerrit.log*`
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.glogShowUrl` | Default on: include Gerrit URLs in text output (same as `--url` / `--show-url`). |
-| `gerrit.glogShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
-| `gerrit.glogOneline` | Default on: one-line format (`--oneline`). Use `--no-oneline` to show full rows. |
-| `gerrit.glogCompact` | Default on: compact columns (`--compact`). Use `--no-compact` for full rows. |
+| `gerrit.logShowUrl` | Default on: include Gerrit URLs in text output (same as `--url` / `--show-url`). |
+| `gerrit.logShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
+| `gerrit.logOneline` | Default on: one-line format (`--oneline`). Use `--no-oneline` to show full rows. |
+| `gerrit.logCompact` | Default on: compact columns (`--compact`). Use `--no-compact` for full rows. |
 
 ---
 
-## `ger push` — `gerrit.gpush*` and related
+## `ger push` — `gerrit.push*` and related
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.gpushShowAttributes` | Default on: include Gerrit reviewer / wip / private preview (`--show-attributes`). Use `--no-show-attributes` to disable when this is set. |
+| `gerrit.pushShowAttributes` | Default on: include Gerrit reviewer / wip / private preview (`--show-attributes`). Use `--no-show-attributes` to disable when this is set. |
 | `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. Override per run with `--update-last-pushed` / `--no-update-last-pushed`. |
 
 ---
@@ -62,8 +62,8 @@ Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_con
     token = secret
     stopPattern = ^dropme!
     stopPattern = ^WIP:
-    glogShowUrl = true
-    gpushShowAttributes = true
+    logShowUrl = true
+    pushShowAttributes = true
     lastPushedBranch = true
 ```
 
@@ -71,7 +71,7 @@ Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_con
 # Append another stop pattern (repeatable key)
 git config --add gerrit.stopPattern '^hold:'
 
-# Turn off default glog one-line without changing other config
+# Turn off default log one-line without changing other config
 ger log --no-oneline
 ```
 

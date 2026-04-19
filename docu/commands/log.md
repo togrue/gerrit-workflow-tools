@@ -25,15 +25,15 @@ ger log [options] [REVSET]
 | Option | Description |
 |--------|-------------|
 | `--full` | Show all commits, not just attention-required |
-| `--oneline` | One line per commit; detail lines inlined (default: `gerrit.glogOneline`; use `--no-oneline` to force full rows) |
-| `--compact` | Minimal single-character status columns (default: `gerrit.glogCompact`; use `--no-compact` to force full rows) |
-| `--url`, `--show-url` | Print each change’s Gerrit web URL (default: `gerrit.glogShowUrl`) |
-| `--show-change-id` | Append Change-Id on each text line (default: `gerrit.glogShowChangeId`) |
+| `--oneline` | One line per commit; detail lines inlined (default: `gerrit.logOneline`; use `--no-oneline` to force full rows) |
+| `--compact` | Minimal single-character status columns (default: `gerrit.logCompact`; use `--no-compact` to force full rows) |
+| `--url`, `--show-url` | Print each change’s Gerrit web URL (default: `gerrit.logShowUrl`) |
+| `--show-change-id` | Append Change-Id on each text line (default: `gerrit.logShowChangeId`) |
 | `--json` | Machine-readable JSON output |
 | `--no-color` | Disable colored output |
 | `-v`, `--verbose` | Log git commands to stderr |
 
-**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.glogShowUrl`, `gerrit.glogShowChangeId`, `gerrit.glogOneline`, `gerrit.glogCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults. See [Configuration.md](../Configuration.md#ger-log--gerritglog).
+**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.logShowUrl`, `gerrit.logShowChangeId`, `gerrit.logOneline`, `gerrit.logCompact`. CLI flags override when present; `--no-oneline` / `--no-compact` defeat the oneline/compact defaults. See [Configuration.md](../Configuration.md#ger-log--gerritlog).
 
 ---
 

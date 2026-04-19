@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
     for d in _detail_lines(commit, use_color=use_color):
         print(f"{ind}{d}")
-    # Local commits already printed subject via `git show`; avoid repeating it on the glog line.
+    # Local commits already printed subject via `git show`; avoid repeating it on the log line.
     if is_local:
         print(f"{ind}{_compact_line(commit)}")
     else:

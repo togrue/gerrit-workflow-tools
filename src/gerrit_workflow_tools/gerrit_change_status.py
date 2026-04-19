@@ -13,7 +13,7 @@ from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 logger = logging.getLogger(__name__)
 
 # Batched change query: labels + submittable + revisions in one round trip (no separate /detail).
-GLOG_QUERY_OPTIONS = (
+LOG_QUERY_OPTIONS = (
     "DETAILED_LABELS",
     "SUBMITTABLE",
     "CURRENT_REVISION",
@@ -24,7 +24,7 @@ _PARALLEL_IO = 8
 
 
 @dataclass
-class GlogCommit:
+class LogCommit:
     sha: str
     short_sha: str
     summary: str
@@ -136,7 +136,7 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
             seen.add(k)
             unique.append(cid)
 
-    opts = list(GLOG_QUERY_OPTIONS)
+    opts = list(LOG_QUERY_OPTIONS)
     for i in range(0, len(unique), _BATCH_OR_CHUNK):
         chunk = unique[i : i + _BATCH_OR_CHUNK]
         q = " OR ".join(f"change:{c}" for c in chunk)
@@ -162,7 +162,7 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
 
 def query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] | None:
     try:
-        rows = client.query_changes(f"change:{change_id}", n=5, options=list(GLOG_QUERY_OPTIONS))
+        rows = client.query_changes(f"change:{change_id}", n=5, options=list(LOG_QUERY_OPTIONS))
     except GerritApiError as e:
         logger.warning("Gerrit query failed for %s: %s", change_id, e)
         return None
@@ -204,9 +204,9 @@ def fetch_gerrit_data(
     client: GerritClient,
     web_base: str,
     commits: list[tuple[str, str, str, str | None]],
-) -> list[GlogCommit]:
-    """Query Gerrit for each commit and return populated GlogCommit objects."""
-    result: list[GlogCommit] = []
+) -> list[LogCommit]:
+    """Query Gerrit for each commit and return populated LogCommit objects."""
+    result: list[LogCommit] = []
     ids_in_range = [cid for _, _, _, cid in commits if cid]
     cache = batch_load_change_details(client, ids_in_range)
 
@@ -216,7 +216,7 @@ def fetch_gerrit_data(
     for sha, short, summary, change_id in commits:
         if not change_id:
             result.append(
-                GlogCommit(
+                LogCommit(
                     sha=sha,
                     short_sha=short,
                     summary=summary,
@@ -241,7 +241,7 @@ def fetch_gerrit_data(
 
         if not detail:
             result.append(
-                GlogCommit(
+                LogCommit(
                     sha=sha,
                     short_sha=short,
                     summary=summary,
@@ -277,7 +277,7 @@ def fetch_gerrit_data(
 
         ps = patchset_status(sha, detail)
         result.append(
-            GlogCommit(
+            LogCommit(
                 sha=sha,
                 short_sha=short,
                 summary=summary,
@@ -321,7 +321,7 @@ def fetch_gerrit_data(
     return result
 
 
-def determine_attention(commit: GlogCommit, *, chain_blocked: bool) -> list[str]:
+def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
     """Return reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []
     if commit.abandoned:

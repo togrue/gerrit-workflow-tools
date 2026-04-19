@@ -7,9 +7,9 @@ import re
 import sys
 
 from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
-from gerrit_workflow_tools.config import glog_defaults
+from gerrit_workflow_tools.config import log_defaults
 from gerrit_workflow_tools.gerrit_change_status import (
-    GlogCommit,
+    LogCommit,
     determine_attention,
     fetch_gerrit_data,
 )
@@ -55,7 +55,7 @@ def _fmt_summary_strike(summary: str, *, use_color: bool) -> str:
     return "".join(f"{c}\u0336" for c in summary)
 
 
-def _annotate_attention(commits: list[GlogCommit]) -> None:
+def _annotate_attention(commits: list[LogCommit]) -> None:
     """Populate attention_reasons on each commit, including chain-blocking."""
     for i, commit in enumerate(commits):
         chain_blocked = False
@@ -72,7 +72,7 @@ def _annotate_attention(commits: list[GlogCommit]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fmt_patchset_column(commit: GlogCommit, *, use_color: bool) -> str:
+def _fmt_patchset_column(commit: LogCommit, *, use_color: bool) -> str:
     """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
     if commit.abandoned:
         return _color("a", _DIM, use_color=use_color)
@@ -116,7 +116,7 @@ def _fmt_comments(count: int, *, use_color: bool) -> str:
     return "   "
 
 
-def _fmt_submittable(commit: GlogCommit, *, use_color: bool) -> str:
+def _fmt_submittable(commit: LogCommit, *, use_color: bool) -> str:
     """Narrow column: submittable checkmark vs not, or blank when not on Gerrit."""
     if not commit.pushed:
         return "  "
@@ -125,7 +125,7 @@ def _fmt_submittable(commit: GlogCommit, *, use_color: bool) -> str:
     return _color("·", _DIM, use_color=use_color) + " "
 
 
-def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
+def _primary_line_prefix(commit: LogCommit, *, use_color: bool) -> str:
     """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
     sha = commit.short_sha
     push = _fmt_patchset_column(commit, use_color=use_color)
@@ -136,7 +136,7 @@ def _primary_line_prefix(commit: GlogCommit, *, use_color: bool) -> str:
     return f"{sha} {push} {verified} {cr} {comments} {subm} # "
 
 
-def _continuation_indent(commit: GlogCommit, *, use_color: bool) -> int:
+def _continuation_indent(commit: LogCommit, *, use_color: bool) -> int:
     """Column where the subject starts; continuation lines align using :func:`_visible_len` on the prefix."""
     return _visible_len(_primary_line_prefix(commit, use_color=use_color))
 
@@ -145,7 +145,7 @@ def _url_line(url: str, *, use_color: bool) -> str:
     return _color(url, _DIM, use_color=use_color)
 
 
-def _detail_lines(commit: GlogCommit, *, use_color: bool) -> list[str]:
+def _detail_lines(commit: LogCommit, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     if commit.ci_failures:
         text = f"# failed: {', '.join(commit.ci_failures)}"
@@ -169,10 +169,8 @@ def _fmt_change_id_suffix(change_id: str | None, *, use_color: bool) -> str:
     return _color(f"  {disp}", _DIM, use_color=use_color)
 
 
-def _primary_line(commit: GlogCommit, *, use_color: bool, show_change_id: bool = False) -> str:
-    summ = (
-        _fmt_summary_strike(commit.summary, use_color=use_color) if commit.abandoned else commit.summary
-    )
+def _primary_line(commit: LogCommit, *, use_color: bool, show_change_id: bool = False) -> str:
+    summ = _fmt_summary_strike(commit.summary, use_color=use_color) if commit.abandoned else commit.summary
     line = f"{_primary_line_prefix(commit, use_color=use_color)}{summ}"
     if show_change_id:
         line += _fmt_change_id_suffix(commit.change_id, use_color=use_color)
@@ -180,7 +178,7 @@ def _primary_line(commit: GlogCommit, *, use_color: bool, show_change_id: bool =
 
 
 def _oneline_line(
-    commit: GlogCommit,
+    commit: LogCommit,
     *,
     use_color: bool,
     include_url: bool,
@@ -226,7 +224,7 @@ def _compact_cr(cr: int | None) -> str:
     return "."
 
 
-def _compact_patchset_letter(commit: GlogCommit) -> str:
+def _compact_patchset_letter(commit: LogCommit) -> str:
     if commit.abandoned:
         return "a"
     status = commit.patchset_status
@@ -239,7 +237,7 @@ def _compact_patchset_letter(commit: GlogCommit) -> str:
     return "-"
 
 
-def _compact_line(commit: GlogCommit, *, show_change_id: bool = False) -> str:
+def _compact_line(commit: LogCommit, *, show_change_id: bool = False) -> str:
     push = _compact_patchset_letter(commit)
     v = _compact_verified(commit.verified)
     cr = _compact_cr(commit.code_review)
@@ -264,7 +262,7 @@ def _compact_line(commit: GlogCommit, *, show_change_id: bool = False) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_summary(commits: list[GlogCommit]) -> tuple[dict[str, int], int, int]:
+def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
     """Return (per-category counts, ready count, total commits) for summary printing."""
     counts: dict[str, int] = {
         "ci-failures": 0,
@@ -321,23 +319,23 @@ def main(argv: list[str] | None = None) -> int:
         dest="url",
         help=(
             "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url). "
-            "Default: ``gerrit.glogShowUrl``."
+            "Default: ``gerrit.logShowUrl``."
         ),
     )
     p.add_argument(
         "--show-change-id",
         action="store_true",
-        help="Append Change-Id to each text line. Default: ``gerrit.glogShowChangeId``.",
+        help="Append Change-Id to each text line. Default: ``gerrit.logShowChangeId``.",
     )
     p.add_argument(
         "--no-oneline",
         action="store_true",
-        help="Override ``gerrit.glogOneline`` when set.",
+        help="Override ``gerrit.logOneline`` when set.",
     )
     p.add_argument(
         "--no-compact",
         action="store_true",
-        help="Override ``gerrit.glogCompact`` when set.",
+        help="Override ``gerrit.logCompact`` when set.",
     )
     p.add_argument(
         "-v",
@@ -357,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cwd = cwd_from_env()
     use_color = not args.no_color and sys.stdout.isatty()
-    gdef = glog_defaults(cwd)
+    gdef = log_defaults(cwd)
     show_url = bool(args.url) or gdef["show_url"]
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
     use_oneline = bool(args.oneline) or (gdef["oneline"] and not args.no_oneline)

@@ -42,7 +42,7 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 
 ## Configuration
 
-**Full reference:** [Configuration.md](Configuration.md) — all `gerrit.*` keys, `gerrit.glog*`, `gerrit.gpush*`, `gerrit.lastPushedBranch` (`ger push` local marker branch), branch-local keys, and `gerrit.stopPattern` (repeatable regexes for the ready boundary).
+**Full reference:** [Configuration.md](Configuration.md) — all `gerrit.*` keys, `gerrit.log*`, `gerrit.push*`, `gerrit.lastPushedBranch` (`ger push` local marker branch), branch-local keys, and `gerrit.stopPattern` (repeatable regexes for the ready boundary).
 
 ### Global (`~/.gitconfig` or repo `.git/config`)
 

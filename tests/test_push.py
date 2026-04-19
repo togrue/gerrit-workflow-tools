@@ -254,7 +254,7 @@ def test_gpush_config_default_show_attributes(stack_repo: Path, monkeypatch: pyt
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.gpushShowAttributes", "true", cwd=stack_repo)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
@@ -281,7 +281,7 @@ def test_gpush_no_show_attributes_overrides_config(stack_repo: Path, monkeypatch
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.gpushShowAttributes", "true", cwd=stack_repo)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
@@ -435,7 +435,9 @@ def test_gpush_no_update_last_pushed_overrides_config(stack_repo: Path, monkeypa
     assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
-def test_gpush_update_last_pushed_flag_enables_when_config_false(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_update_last_pushed_flag_enables_when_config_false(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     expected_tip = compute_ready(stack_repo).push_tip_sha

@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import quote
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
-from gerrit_workflow_tools.gerrit_change_status import GLOG_QUERY_OPTIONS
+from gerrit_workflow_tools.gerrit_change_status import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.gerrit_client import (
     GerritApiError,
     GerritClient,
@@ -89,7 +89,7 @@ def resolve_change_for_gcomments(
     local_change_id: str | None,
 ) -> dict[str, Any]:
     """Resolve a Gerrit change query *change_arg* or *local_change_id* to a single change dict."""
-    opts = list(GLOG_QUERY_OPTIONS)
+    opts = list(LOG_QUERY_OPTIONS)
     if change_arg:
         q = resolve_change_ref(change_arg)
         rows = client.query_changes(q, n=10, options=opts)

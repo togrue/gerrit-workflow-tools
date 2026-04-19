@@ -262,13 +262,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=(
             "Show per-commit Gerrit attributes vs this push (reviewers, wip, private); needs gerrit.webUrl "
-            "and credentials. Default: gerrit.gpushShowAttributes."
+            "and credentials. Default: gerrit.pushShowAttributes."
         ),
     )
     p.add_argument(
         "--no-show-attributes",
         action="store_true",
-        help="Override gerrit.gpushShowAttributes when set.",
+        help="Override gerrit.pushShowAttributes when set.",
     )
     p.add_argument(
         "--update-last-pushed",
@@ -326,7 +326,9 @@ def main(argv: list[str] | None = None) -> int:
     cwd = cwd_from_env()
     gdef = gpush_defaults(cwd)
     show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
-    update_last_pushed = (bool(args.update_last_pushed) or gdef["last_pushed_branch"]) and not args.no_update_last_pushed
+    update_last_pushed = (
+        bool(args.update_last_pushed) or gdef["last_pushed_branch"]
+    ) and not args.no_update_last_pushed
 
     logger.debug(
         "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s show_attributes=%s "

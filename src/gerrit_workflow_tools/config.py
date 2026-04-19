@@ -146,8 +146,8 @@ def gerrit_token(cwd: Path | str | None) -> str | None:
 
 
 def gshow_comment_tail_lines(cwd: Path | str | None) -> int:
-    """Return ``gerrit.gshowCommentTailLines`` (positive integer), or default ``10`` if unset or invalid."""
-    v = _config_get(cwd, "gerrit.gshowCommentTailLines")
+    """Return ``gerrit.showCommentTailLines`` (positive integer), or default ``10`` if unset or invalid."""
+    v = _config_get(cwd, "gerrit.showCommentTailLines")
     if not v:
         return 10
     try:
@@ -167,20 +167,20 @@ def config_bool(cwd: Path | str | None, key: str, *, default: bool = False) -> b
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
-def glog_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger log`` from ``gerrit.glog*`` keys (CLI flags override when passed)."""
+def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
+    """Defaults for ``ger log`` from ``gerrit.log*`` keys (CLI flags override when passed)."""
     return {
-        "show_url": config_bool(cwd, "gerrit.glogShowUrl"),
-        "show_change_id": config_bool(cwd, "gerrit.glogShowChangeId"),
-        "oneline": config_bool(cwd, "gerrit.glogOneline"),
-        "compact": config_bool(cwd, "gerrit.glogCompact"),
+        "show_url": config_bool(cwd, "gerrit.logShowUrl"),
+        "show_change_id": config_bool(cwd, "gerrit.logShowChangeId"),
+        "oneline": config_bool(cwd, "gerrit.logOneline"),
+        "compact": config_bool(cwd, "gerrit.logCompact"),
     }
 
 
 def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger push`` from ``gerrit.gpush*`` / ``gerrit.lastPushedBranch`` (CLI flags override)."""
+    """Defaults for ``ger push`` from ``gerrit.push*`` / ``gerrit.lastPushedBranch`` (CLI flags override)."""
     return {
-        "show_attributes": config_bool(cwd, "gerrit.gpushShowAttributes"),
+        "show_attributes": config_bool(cwd, "gerrit.pushShowAttributes"),
         "last_pushed_branch": config_bool(cwd, "gerrit.lastPushedBranch", default=True),
     }
 

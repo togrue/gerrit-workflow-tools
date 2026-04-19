@@ -7,7 +7,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.gerrit_change_status import GLOG_QUERY_OPTIONS, norm_change_id
+from gerrit_workflow_tools.gerrit_change_status import LOG_QUERY_OPTIONS, norm_change_id
 from gerrit_workflow_tools.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
@@ -50,7 +50,9 @@ def test_gshow_rejects_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "range" in err.lower()
 
 
-def test_gshow_json_change_id_asks_gerrit_for_current_revision(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gshow_json_change_id_asks_gerrit_for_current_revision(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Regression: bare ``changes/?q=`` omits ``current_revision`` unless ``o=CURRENT_REVISION``."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
@@ -79,10 +81,8 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(stack_repo: Path,
     assert data["sha"] == sha
     # resolve_change_for_gcomments + fetch_gerrit_data batch_load each query the change
     first = inst.query_changes.call_args_list[0]
-    assert first.kwargs.get("options") == list(GLOG_QUERY_OPTIONS)
-    assert all(
-        "CURRENT_REVISION" in (c.kwargs.get("options") or []) for c in inst.query_changes.call_args_list
-    )
+    assert first.kwargs.get("options") == list(LOG_QUERY_OPTIONS)
+    assert all("CURRENT_REVISION" in (c.kwargs.get("options") or []) for c in inst.query_changes.call_args_list)
 
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -6,7 +6,7 @@ Items intentionally **out of v1**; track here until promoted into the main spec 
 
 - **`--stat`** — file change stats (`git show --stat` for local commits).
 - **`--patch` / `-p`** — full patch (`git show -p`).
-- Optional git config **`gerrit.gshowIncludeDiff`** (`stat` | `patch` | `none`) for a persistent default once flags exist.
+- Optional git config **`gerrit.showIncludeDiff`** (`stat` | `patch` | `none`) for a persistent default once flags exist.
 
 **Rule of thumb:** only apply when a **local** commit exists; Change-Id-only / no checkout should print a one-line hint or skip.
 
