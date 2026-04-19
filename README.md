@@ -40,7 +40,7 @@ ger push --help
 
 ### Bash completion (optional)
 
-See [docu/Completion.md](docu/Completion.md). Source `contrib/completion/ger.bash`, or use the copy under `gerrit_workflow_tools/completion/` after `pip install`.
+See [docu/Completion.md](docu/Completion.md). After `pip install`, run `ger bash-completion` for the `source` line, or `ger bash-completion --install` to add it to `~/.bashrc`.
 
 ## Development (this repository)
 

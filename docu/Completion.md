@@ -2,7 +2,23 @@
 
 Tab completion for `ger` and its subcommands (`ger push`, `ger log`, …) is provided by a small bash script.
 
-## Install
+## Quick setup
+
+After `pip install`, run:
+
+```bash
+ger bash-completion
+```
+
+That prints the exact `source "…/ger.bash"` line for your install. To append that line to `~/.bashrc` automatically (with log messages on stderr describing each step):
+
+```bash
+ger bash-completion --install
+```
+
+Use `ger bash-completion --uninstall` to remove the marked block from the same file. Override the file with `--rc-file PATH` (defaults to `~/.bashrc`).
+
+## Manual install
 
 1. Install the package so `ger` is on your `PATH`.
 2. Source the completion script from `~/.bashrc` (or another shell startup file):
