@@ -23,7 +23,7 @@ from gerrit_workflow_tools.cli_style import init_color_mode
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.gerrit_comments import resolve_change_for_gcomments
+from gerrit_workflow_tools.gerrit_comments import resolve_gerrit_change
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import parse_change_id
@@ -98,7 +98,7 @@ def resolve_row_for_gshow(
         raise GitError(f"ger show does not support revision ranges: {arg!r}")
 
     if _looks_like_change_id(a) or _is_numeric_change(a):
-        ch = resolve_change_for_gcomments(client, change_arg=a, local_change_id=None)
+        ch = resolve_gerrit_change(client, change_arg=a, local_change_id=None)
         rev = ch.get("current_revision")
         sha = rev if isinstance(rev, str) else ""
         chg_id = ch.get("change_id")
@@ -114,7 +114,7 @@ def resolve_row_for_gshow(
     try:
         resolved = resolve_gcid_user_arg(cwd, a)
     except GitError:
-        ch = resolve_change_for_gcomments(client, change_arg=a, local_change_id=None)
+        ch = resolve_gerrit_change(client, change_arg=a, local_change_id=None)
         rev = ch.get("current_revision")
         sha = rev if isinstance(rev, str) else ""
         chg_id = ch.get("change_id")

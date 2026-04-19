@@ -138,4 +138,4 @@ ger cid --check-duplicates
 ## See also
 
 - [`ger edit`](edit.md) — accepts a Change-Id as the commit argument
-- [`ger comments`](comments.md) — fetch Gerrit comments by Change-Id
+- [`ger show`](show-todos.md) — Gerrit status and comments for a commit or Change-Id

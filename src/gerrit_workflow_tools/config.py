@@ -115,7 +115,7 @@ def refs_for_push_branch_name(cwd: Path | str | None, target: str) -> str:
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
-    """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``ger comments``)."""
+    """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``ger log``, ``ger show``)."""
     return _config_get(cwd, "gerrit.webUrl")
 
 

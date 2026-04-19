@@ -80,7 +80,7 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     assert code == 0
     data = json_stdout(out)
     assert data["sha"] == sha
-    # resolve_change_for_gcomments + fetch_gerrit_data batch_load each query the change
+    # resolve_gerrit_change + fetch_gerrit_data batch_load each query the change
     first = inst.query_changes.call_args_list[0]
     assert first.kwargs.get("options") == list(LOG_QUERY_OPTIONS)
     assert all("CURRENT_REVISION" in (c.kwargs.get("options") or []) for c in inst.query_changes.call_args_list)

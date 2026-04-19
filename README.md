@@ -58,6 +58,6 @@ Editable install inside the venv: `uv sync` already links the package. For ad-ho
 
 See [docu/README.md](docu/README.md) for the full documentation index and command reference.
 
-## Gerrit HTTP (`ger comments`)
+## Gerrit HTTP
 
-Set **`gerrit.webUrl`** in git config to your Gerrit HTTPS base (scheme + host, optional port); it is required for `ger comments`. API authentication uses **`gerrit.user`** with **`gerrit.password`** or **`gerrit.token`**. Details: [gcomments section](Gerrit-Workflow-Scenarios.md) in the design doc.
+Set **`gerrit.webUrl`** in git config to your Gerrit HTTPS base (scheme + host, optional port); it is required for commands that call the Gerrit REST API (`ger log`, `ger show`, `ger push --show-attributes`, …). API authentication uses **`gerrit.user`** with **`gerrit.password`** or **`gerrit.token`**. Details: [gcomments section](Gerrit-Workflow-Scenarios.md) in the design doc.

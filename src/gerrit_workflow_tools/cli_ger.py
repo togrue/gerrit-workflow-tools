@@ -8,7 +8,6 @@ from collections.abc import Callable
 from gerrit_workflow_tools.cli_bash_completion import main as main_bash_completion
 from gerrit_workflow_tools.cli_branch import main as main_branch
 from gerrit_workflow_tools.cli_cid import main as main_cid
-from gerrit_workflow_tools.cli_comments import main as main_comments
 from gerrit_workflow_tools.cli_edit import main as main_edit
 from gerrit_workflow_tools.cli_log import main as main_log
 from gerrit_workflow_tools.cli_push import main as main_push
@@ -21,7 +20,6 @@ _Handler = Callable[[list[str] | None], int]
 _COMMANDS: dict[str, tuple[str, _Handler]] = {
     "bash-completion": ("Print or install bash tab-completion for ger.", main_bash_completion),
     "branch": ("Branch-local Gerrit target and reviewers.", main_branch),
-    "comments": ("Fetch and display Gerrit review comments.", main_comments),
     "cid": ("Print or validate Change-Ids for commits or ranges.", main_cid),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", main_edit),
     "log": ("Overview of the local commit chain vs Gerrit (CI, votes, comments).", main_log),
