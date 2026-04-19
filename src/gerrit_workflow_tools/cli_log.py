@@ -41,7 +41,8 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 def _visible_len(s: str) -> int:
     """Length of ``s`` as displayed in a terminal (ANSI color codes omitted)."""
-    return len(_ANSI_ESCAPE_RE.sub("", s))
+    plain = _ANSI_ESCAPE_RE.sub("", s)
+    return len(plain.replace("\u0336", ""))
 
 
 def _color(text: str, code: str, *, use_color: bool) -> str:
@@ -90,17 +91,17 @@ def _fmt_patchset_column(commit: LogCommit, *, use_color: bool) -> str:
 
 def _fmt_verified(v: int | None, *, use_color: bool) -> str:
     if v is None:
-        return _color(" · ", _DIM, use_color=use_color) if use_color else " · "
+        return _color("v? ", _DIM, use_color=use_color) if use_color else "v? "
     if v >= 1:
         return _color("v+1", _GREEN, use_color=use_color)
     if v <= -1:
         return _color("v-1", _RED, use_color=use_color)
-    return "   "
+    return "v0 "
 
 
 def _fmt_code_review(cr: int | None, *, use_color: bool) -> str:
     if cr is None:
-        return _color("  · ", _DIM, use_color=use_color) if use_color else "  · "
+        return _color("cr? ", _DIM, use_color=use_color) if use_color else "cr? "
     if cr >= 2:
         return _color("cr+2", _GREEN, use_color=use_color)
     if cr == 1:
@@ -109,22 +110,13 @@ def _fmt_code_review(cr: int | None, *, use_color: bool) -> str:
         return _color("cr-1", _YELLOW, use_color=use_color)
     if cr <= -2:
         return _color("cr-2", _RED, use_color=use_color)
-    return "    "
+    return "cr0 "
 
 
 def _fmt_comments(count: int, *, use_color: bool) -> str:
     if count > 0:
         return _color("com", _YELLOW, use_color=use_color)
     return "   "
-
-
-def _fmt_submittable(commit: LogCommit, *, use_color: bool) -> str:
-    """Narrow column: submittable checkmark vs not, or blank when not on Gerrit."""
-    if not commit.pushed:
-        return "  "
-    if commit.submittable:
-        return _color("✓", _GREEN, use_color=use_color) + " "
-    return _color("·", _DIM, use_color=use_color) + " "
 
 
 def _primary_line_prefix(commit: LogCommit, *, use_color: bool) -> str:
@@ -134,8 +126,7 @@ def _primary_line_prefix(commit: LogCommit, *, use_color: bool) -> str:
     verified = _fmt_verified(commit.verified, use_color=use_color)
     cr = _fmt_code_review(commit.code_review, use_color=use_color)
     comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
-    subm = _fmt_submittable(commit, use_color=use_color)
-    return f"{sha} {push} {verified} {cr} {comments} {subm} # "
+    return f"{sha} {push} {verified} {cr} {comments} # "
 
 
 def _continuation_indent(commit: LogCommit, *, use_color: bool) -> int:
@@ -179,20 +170,60 @@ def _primary_line(commit: LogCommit, *, use_color: bool, show_change_id: bool = 
     return line
 
 
+def _attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
+    if commit.abandoned:
+        return [("abandoned", _RED)]
+
+    tokens: list[tuple[str, str]] = []
+    if commit.ci_failures or (commit.verified is not None and commit.verified <= -1):
+        tokens.append(("build failed", _RED))
+    if commit.comments_unresolved > 0:
+        noun = "comment" if commit.comments_unresolved == 1 else "comments"
+        tokens.append((f"{commit.comments_unresolved} unresolved {noun}", _YELLOW))
+    if commit.submittable and not tokens:
+        tokens.append(("submittable", _GREEN))
+    return tokens
+
+
+def _attention_suffix(commit: LogCommit, *, use_color: bool) -> str:
+    tokens = _attention_tokens(commit)
+    if not tokens:
+        return ""
+
+    rendered: list[str] = [_color("# ", _DIM, use_color=use_color)]
+    for idx, (text, code) in enumerate(tokens):
+        if idx:
+            rendered.append(_color(", ", _DIM, use_color=use_color))
+        rendered.append(_color(text, code, use_color=use_color))
+    return "".join(rendered)
+
+
+def _attention_column(commits: list[LogCommit], *, use_color: bool, show_change_id: bool = False) -> int:
+    widths = [
+        _visible_len(_primary_line(commit, use_color=use_color, show_change_id=show_change_id))
+        for commit in commits
+        if _attention_tokens(commit)
+    ]
+    if not widths:
+        return 0
+    return max(widths) + 2
+
+
 def _oneline_line(
     commit: LogCommit,
     *,
     use_color: bool,
     include_url: bool,
     show_change_id: bool = False,
+    attention_column: int = 0,
 ) -> str:
     base = _primary_line(commit, use_color=use_color, show_change_id=show_change_id)
+    attention = _attention_suffix(commit, use_color=use_color)
+    if attention:
+        gap = max(2, attention_column - _visible_len(base)) if attention_column else 2
+        base = f"{base}{' ' * gap}{attention}"
     if include_url and commit.gerrit_url:
         base = f"{base}  {_url_line(commit.gerrit_url, use_color=use_color)}"
-    extras = _detail_lines(commit, use_color=False)  # strip color for inline
-    if extras:
-        suffix = "  " + "  ".join(extras)
-        return base + suffix
     return base
 
 
@@ -471,17 +502,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(c.attention_reasons for c in commits) else 0
 
     # Text output
-    prev_had_details = False
+    attention_column = _attention_column(visible, use_color=use_color, show_change_id=show_change_id)
     for commit in visible:
-        if prev_had_details:
-            print()
         if use_compact:
             primary = _compact_line(commit, show_change_id=show_change_id)
             print(primary)
             if show_url and commit.gerrit_url:
                 ind = " " * (_visible_len(primary) + 2)
                 print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
-            prev_had_details = False
         elif use_oneline:
             print(
                 _oneline_line(
@@ -489,18 +517,19 @@ def main(argv: list[str] | None = None) -> int:
                     use_color=use_color,
                     include_url=show_url,
                     show_change_id=show_change_id,
+                    attention_column=attention_column,
                 )
             )
-            prev_had_details = False
         else:
-            print(_primary_line(commit, use_color=use_color, show_change_id=show_change_id))
-            ind = " " * _continuation_indent(commit, use_color=use_color)
-            if show_url and commit.gerrit_url:
-                print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
-            details = _detail_lines(commit, use_color=use_color)
-            for d in details:
-                print(f"{ind}{d}")
-            prev_had_details = bool(details) or bool(show_url and commit.gerrit_url)
+            print(
+                _oneline_line(
+                    commit,
+                    use_color=use_color,
+                    include_url=show_url,
+                    show_change_id=show_change_id,
+                    attention_column=attention_column,
+                )
+            )
 
     # Summary section (suppressed for --oneline and compact text mode)
     if not use_oneline and not use_compact:

@@ -72,6 +72,27 @@ def test_log_full_text_contains_commit_lines_and_summary(stack_repo: Path, monke
         assert subj in out
 
 
+def test_log_full_text_uses_inline_attention_labels(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {"verified": -1, "submittable": False}
+    overrides[1] = {"verified": 0, "cr": 0, "unresolved_comment_count": 2, "submittable": False}
+    overrides[-1] = {"status": "ABANDONED", "submittable": False}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, log_main, ["--full", "--no-color"], monkeypatch)
+    assert code == 1, err
+    assert "v? " in out
+    assert "cr? " in out
+    assert "# submittable" in out
+    assert "# build failed" in out
+    assert "# 2 unresolved comments" in out
+    assert "# abandoned" in out
+    assert "✓" not in out
+    assert "# failed:" not in out
+
+
 def test_log_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
