@@ -5,7 +5,13 @@ import json
 import logging
 import sys
 
-from gerrit_workflow_tools.cli_common import HELP_JSON, add_color_args, configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import (
+    HELP_JSON,
+    add_color_args,
+    add_verbose_and_debug_log_args,
+    configure_logging,
+    cwd_from_env,
+)
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,
@@ -421,11 +427,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Override ``gerrit.logCompact`` when set.",
     )
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log git commands to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log git commands to stderr.",
     )
     p.add_argument(
         "rev_range",
@@ -435,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Commit range (e.g. origin/main..HEAD); default merge-base..HEAD.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
 
     cwd = cwd_from_env()
     init_color_mode(color=args.color)

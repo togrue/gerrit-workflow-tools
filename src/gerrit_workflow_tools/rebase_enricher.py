@@ -309,7 +309,7 @@ def _enrich_todo(text: str, cwd: Path) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """Invoked as ``GIT_SEQUENCE_EDITOR``: enrich the rebase todo then open the real editor."""
-    if os.environ.get("GREBASE_VERBOSE"):
+    if os.environ.get("GREBASE_DEBUG_LOG"):
         configure_logging(True)
 
     args = argv if argv is not None else sys.argv

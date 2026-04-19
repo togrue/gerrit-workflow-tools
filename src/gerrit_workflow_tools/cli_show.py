@@ -11,7 +11,13 @@ from typing import Any
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
 from gerrit_workflow_tools.cli_cid import resolve_gcid_user_arg
-from gerrit_workflow_tools.cli_common import HELP_JSON, add_color_args, configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import (
+    HELP_JSON,
+    add_color_args,
+    add_verbose_and_debug_log_args,
+    configure_logging,
+    cwd_from_env,
+)
 from gerrit_workflow_tools.cli_log import _detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.cli_style import init_color_mode
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
@@ -165,14 +171,12 @@ def main(argv: list[str] | None = None) -> int:
         help=HELP_JSON,
     )
     add_color_args(p)
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log Gerrit resolution to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log Gerrit resolution to stderr.",
     )
     args = p.parse_args(argv)
-    configure_logging(1 if args.verbose else 0)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
     init_color_mode(color=args.color)
     summary_highlighter = build_summary_highlighter(cwd)

@@ -36,7 +36,8 @@ ger push [options] [REV]
 | `--ignore-pattern REGEX` | Disable a specific stop pattern (repeatable) |
 | `--no-config-patterns` | Ignore all configured stop patterns |
 | `--reviewers ACCOUNTS` | Comma-separated Gerrit reviewer accounts (repeatable; merged with `branch.<name>.gerritReviewers`, deduplicated) |
-| `-v`, `--verbose` | Log git commands and push steps to stderr |
+| `--debug-log` | Log git commands and push steps to stderr. Repeat for more detail (git subprocesses and API bodies). |
+| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
 
 **`-i` (interactive reviewers)** — Only when stdin is a TTY. You are prompted for comma-separated reviewers (empty keeps branch and CLI defaults). Order after merge: branch `gerritReviewers`, then each `--reviewers` argument, then the interactive line (duplicates removed, first occurrence wins). A second prompt asks whether to save the merged reviewer list to `branch.<name>.gerritReviewers`. `-i` cannot be used with `-y`/`--yes` (use one or the other).
 

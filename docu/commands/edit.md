@@ -29,7 +29,8 @@ ger edit <commit> [--reword | --drop] [-v]
 | `--reword` | Reword the commit message only (opens `$EDITOR`) |
 | `--drop` | Drop the commit entirely from the stack |
 | (none) | Default: `edit` — stop at the commit for amending |
-| `-v`, `--verbose` | Log git commands and rebase sequence editor steps to stderr |
+| `--debug-log` | Log git commands and rebase sequence editor steps to stderr. Repeat for more detail (git subprocesses and API bodies). |
+| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
 
 `--reword` and `--drop` are mutually exclusive.
 

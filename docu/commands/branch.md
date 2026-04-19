@@ -74,7 +74,8 @@ ger branch set-reviewers alice,bob
 
 | Option | Description |
 |--------|-------------|
-| `-v`, `--verbose` | Log git commands and config writes to stderr |
+| `--debug-log` | Log git commands and config writes to stderr. Repeat for more detail (git subprocesses and API bodies). |
+| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
 
 ---
 

@@ -7,7 +7,12 @@ import shlex
 import subprocess
 import sys
 
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import (
+    add_verbose_and_debug_log_args,
+    configure_logging,
+    cwd_from_env,
+    handle_git_error,
+)
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import (
     commit_in_stack,
@@ -32,14 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     g = p.add_mutually_exclusive_group()
     g.add_argument("--reword", action="store_true", help="Reword commit message.")
     g.add_argument("--drop", action="store_true", help="Drop commit.")
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log git commands and rebase sequence editor steps to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log git commands and rebase sequence editor steps to stderr.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
     action = "reword" if args.reword else "drop" if args.drop else "edit"
@@ -58,8 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     env["GEDIT_FULL_SHA"] = full
     env["GEDIT_SHORT_SHA"] = short
     env["GEDIT_ACTION"] = action
-    if args.verbose:
-        env["GEDIT_VERBOSE"] = "1"
+    if args.debug_log:
+        env["GEDIT_DEBUG_LOG"] = "1"
     # Quoted for paths with spaces (typical when Python is not from a venv).
     env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
 

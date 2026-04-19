@@ -9,7 +9,12 @@ import shlex
 import subprocess
 import sys
 
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import (
+    add_verbose_and_debug_log_args,
+    configure_logging,
+    cwd_from_env,
+    handle_git_error,
+)
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.stack import merge_base_with_target, resolve_stack_commit
 
@@ -44,14 +49,12 @@ def main(argv: list[str] | None = None) -> int:
             "(default: merge base with the target branch)."
         ),
     )
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log git commands and enricher steps to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log git commands and enricher steps to stderr.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
     try:
@@ -69,8 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     env["GIT_SEQUENCE_EDITOR"] = (
         f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_enricher"
     )
-    if args.verbose:
-        env["GREBASE_VERBOSE"] = "1"
+    if args.debug_log:
+        env["GREBASE_DEBUG_LOG"] = "1"
 
     logger.debug("ger rebase: base=%s", base[:8])
     r = subprocess.run(["git", "rebase", "-i", base], cwd=cwd, env=env)

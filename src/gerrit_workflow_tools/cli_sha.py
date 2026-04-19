@@ -54,7 +54,12 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
-from gerrit_workflow_tools.cli_common import HELP_JSON, configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import (
+    HELP_JSON,
+    add_verbose_and_debug_log_args,
+    configure_logging,
+    cwd_from_env,
+)
 from gerrit_workflow_tools.git_run import GitError, git
 from gerrit_workflow_tools.stack import (
     _parse_rs_metadata_records,
@@ -110,16 +115,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     out_group.add_argument("--json", action="store_true", dest="json_out", help=HELP_JSON)
 
-    ap.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help="Log to stderr with increased verbosity (-v: INFO; -vv: each git subprocess).",
-    )
+    add_verbose_and_debug_log_args(ap)
 
     args = ap.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
     if not CHANGE_ID_VALUE_RE.match(args.change_id):

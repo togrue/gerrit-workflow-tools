@@ -199,7 +199,7 @@ def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: 
         ["--force-boundary"],
         ["--no-config-patterns"],
         ["--ignore-pattern", "^nope$"],
-        ["-v"],
+        ["--debug-log"],
     ],
 )
 def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]) -> None:

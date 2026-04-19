@@ -27,7 +27,7 @@ _ger_push() {
             --no-config-patterns \
             --ignore-pattern \
             --reviewers \
-            -v --verbose
+            -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -46,7 +46,7 @@ _ger_log() {
             --color \
             --url --show-url \
             --show-change-id \
-            -v --verbose
+            -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -64,13 +64,13 @@ _ger_branch() {
     if [[ "$cur" == -* ]]; then
         case "$sub" in
             init)
-                __gwt_flags "$cur" --help --target --reviewers -v --verbose
+                __gwt_flags "$cur" --help --target --reviewers -v --verbose --debug-log
                 ;;
             show|set-target|set-reviewers)
-                __gwt_flags "$cur" --help -v --verbose
+                __gwt_flags "$cur" --help -v --verbose --debug-log
                 ;;
             *)
-                __gwt_flags "$cur" --help -v --verbose
+                __gwt_flags "$cur" --help -v --verbose --debug-log
                 ;;
         esac
         return
@@ -80,7 +80,7 @@ _ger_branch() {
 _ger_edit() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" --help --reword --drop -v --verbose
+        __gwt_flags "$cur" --help --reword --drop -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -91,7 +91,7 @@ _ger_edit() {
 _ger_cid() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" --help --check-duplicates --start-at-remote -v --verbose
+        __gwt_flags "$cur" --help --check-duplicates --start-at-remote -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -109,7 +109,7 @@ _ger_sha() {
             --short \
             --subject \
             --json \
-            -v --verbose
+            -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -126,7 +126,7 @@ _ger_show() {
             --comment-tail-lines \
             --json \
             --color \
-            -v --verbose
+            -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -146,7 +146,7 @@ _ger_comments() {
             --json \
             --full \
             --oneline \
-            -v --verbose
+            -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then

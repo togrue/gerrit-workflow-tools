@@ -5,7 +5,12 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
+from gerrit_workflow_tools.cli_common import (
+    add_verbose_and_debug_log_args,
+    configure_logging,
+    cwd_from_env,
+    handle_git_error,
+)
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
     branch_gerrit_target,
@@ -57,11 +62,9 @@ def _cmd_set_reviewers(ns: argparse.Namespace, cwd: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
     p = argparse.ArgumentParser(prog="ger branch")
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log git commands and config writes to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log git commands and config writes to stderr.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -83,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     sr.add_argument("value", metavar="REVIEWERS")
 
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
     logger.debug("gbranch cmd=%s cwd=%s", args.cmd, cwd)
 

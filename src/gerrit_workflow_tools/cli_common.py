@@ -5,6 +5,8 @@ Help text style (``help=`` on parsers and arguments):
 - Imperative mood, sentence case, and end each string with a period (consistent).
 - When a flag only affects package logging, phrase it as "Log … to stderr".
 - Shared flag text lives in ``HELP_*`` constants in this module; CLIs should use them.
+- Use :func:`add_verbose_and_debug_log_args` for ``-v``/``--verbose`` (placeholder) and
+  ``--debug-log`` (diagnostic logging to stderr); do not use ``--verbose`` for logging.
 """
 
 from __future__ import annotations
@@ -22,6 +24,12 @@ HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
 HELP_NO_CONFIG_PATTERNS = "Do not use gerrit.stopPattern values from config."
 HELP_COLOR = "Colorize output: always, auto, or never."
+HELP_VERBOSE_PLACEHOLDER = (
+    "Reserved for richer command output in a future release (currently no effect)."
+)
+HELP_DEBUG_LOG = (
+    "Log diagnostics to stderr. Repeat for more detail (git subprocesses and API bodies)."
+)
 
 
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
@@ -48,6 +56,26 @@ def add_color_args(parser: argparse.ArgumentParser) -> None:
         default="auto",
         metavar="WHEN",
         help=HELP_COLOR,
+    )
+
+
+def add_verbose_and_debug_log_args(
+    parser: argparse.ArgumentParser,
+    *,
+    debug_log_help: str | None = None,
+) -> None:
+    """Register placeholder ``-v``/``--verbose`` and ``--debug-log`` (repeat for more detail)."""
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help=HELP_VERBOSE_PLACEHOLDER,
+    )
+    parser.add_argument(
+        "--debug-log",
+        action="count",
+        default=0,
+        help=debug_log_help or HELP_DEBUG_LOG,
     )
 
 

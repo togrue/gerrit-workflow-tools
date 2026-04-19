@@ -38,7 +38,8 @@ ger sha [--range <rev-range> | --all] [--short | --subject | --json] [-v] <chang
 | `--short` | Print abbreviated SHA instead of full SHA |
 | `--subject` | Print abbreviated SHA followed by commit subject |
 | `--json` | Print `{"change_id": …, "sha": …, "subject": …}` |
-| `-v`, `--verbose` | Log resolution steps to stderr |
+| `--debug-log` | Log diagnostics to stderr. Repeat for more detail (git subprocesses and API bodies). |
+| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
 
 `--range` and `--all` are mutually exclusive. `--short`, `--subject`, and `--json` are mutually exclusive.
 
@@ -105,7 +106,8 @@ If `arg` is already a valid Change-Id (`I` + 40 hex digits), it is echoed back u
 |--------|-------------|
 | `--start-at-remote` | Resolve from the merge-base with the configured Gerrit target branch |
 | `--check-duplicates` | Check all commits in the stack for duplicate or missing Change-Ids; exit 0=ok, 1=missing, 2=duplicate |
-| `-v`, `--verbose` | Log git commands to stderr |
+| `--debug-log` | Log diagnostics to stderr. Repeat for more detail (git subprocesses and API bodies). |
+| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
 
 ### Exit codes
 

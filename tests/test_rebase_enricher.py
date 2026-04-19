@@ -531,12 +531,12 @@ def test_cli_rebase_uses_given_rev(stack_repo: Path, monkeypatch):
     assert captured["cmd"][-1] == target_sha
 
 
-def test_cli_rebase_verbose_sets_env_flag(stack_repo: Path, monkeypatch):
+def test_cli_rebase_debug_log_sets_env_flag(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        rebase_main(["--verbose"])
+        rebase_main(["--debug-log"])
 
-    assert captured.get("env", {}).get("GREBASE_VERBOSE") == "1"
+    assert captured.get("env", {}).get("GREBASE_DEBUG_LOG") == "1"

@@ -24,6 +24,7 @@ from gerrit_workflow_tools.change_id import (
     is_change_id_token,
 )
 from gerrit_workflow_tools.cli_common import (
+    add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
@@ -112,13 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD."
         ),
     )
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help="Log to stderr with increased verbosity (-v: INFO; -vv: each git subprocess).",
-    )
+    add_verbose_and_debug_log_args(p)
     p.add_argument(
         "--start-at-remote",
         action="store_true",
@@ -130,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Check for duplicate Change-Ids across merge_base..END (same range as --start-at-remote).",
     )
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
     input_arg = args.rev_or_range or "HEAD"

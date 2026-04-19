@@ -29,7 +29,8 @@ ger comments [options] [REF_OR_CHANGE]
 | `--full` | Print full comment text and full commit body (default truncates) |
 | `--oneline` | One line per comment: `path:line` + status + first line + link |
 | `--json` | Machine-readable JSON to stdout |
-| `-v`, `--verbose` | Log resolution steps to stderr |
+| `--debug-log` | Log resolution steps to stderr. Repeat for more detail (git subprocesses and API bodies). |
+| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
 
 ---
 

@@ -7,6 +7,7 @@ import sys
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
+    add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
@@ -72,14 +73,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Show full comment and commit body text.",
     )
     p.add_argument("--oneline", action="store_true", help="Use one line per comment.")
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log resolution steps to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log resolution steps to stderr.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
     if args.all_ and args.open:

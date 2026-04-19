@@ -11,6 +11,7 @@ from gerrit_workflow_tools.change_id import classify_issues
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_stop_pattern_args,
+    add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
@@ -354,11 +355,9 @@ def main(argv: list[str] | None = None) -> int:
         metavar="ACCOUNTS",
         help="Comma-separated Gerrit reviewer accounts (repeat to merge). Appended as ref options %%r=…",
     )
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Log git commands and push steps to stderr.",
+    add_verbose_and_debug_log_args(
+        p,
+        debug_log_help="Log git commands and push steps to stderr.",
     )
     p.add_argument(
         "until",
@@ -368,7 +367,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Push only through this commit.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.verbose)
+    configure_logging(args.debug_log)
     cwd = cwd_from_env()
     init_color_mode(color=args.color)
     summary_highlighter = build_summary_highlighter(cwd)

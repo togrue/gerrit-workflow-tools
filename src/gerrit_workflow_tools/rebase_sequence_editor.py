@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def main(argv: list[str] | None = None) -> int:
     """Rewrite the interactive-rebase todo for one commit (``ger edit`` via ``GIT_SEQUENCE_EDITOR``)."""
-    if os.environ.get("GEDIT_VERBOSE"):
+    if os.environ.get("GEDIT_DEBUG_LOG"):
         configure_logging(True)
     args = argv if argv is not None else sys.argv
     if len(args) < 2:
