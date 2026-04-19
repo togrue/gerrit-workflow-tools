@@ -414,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.verbose)
 
     cwd = cwd_from_env()
-    init_color_mode(no_color=args.no_color)
+    init_color_mode(color=args.color)
 
     gdef = log_defaults(cwd)
     show_url = bool(args.url) or gdef["show_url"]

@@ -362,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     configure_logging(args.verbose)
     cwd = cwd_from_env()
-    init_color_mode(no_color=args.no_color)
+    init_color_mode(color=args.color)
     gdef = gpush_defaults(cwd)
     show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
     update_last_pushed = (

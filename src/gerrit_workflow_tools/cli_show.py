@@ -173,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     configure_logging(1 if args.verbose else 0)
     cwd = cwd_from_env()
-    init_color_mode(no_color=args.no_color)
+    init_color_mode(color=args.color)
 
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
         print(

@@ -43,7 +43,7 @@ _ger_log() {
             --full \
             --oneline --no-oneline \
             --json \
-            --no-color \
+            --color \
             --url --show-url \
             --show-change-id \
             -v --verbose
@@ -125,7 +125,7 @@ _ger_show() {
             --full \
             --comment-tail-lines \
             --json \
-            --no-color \
+            --color \
             -v --verbose
         return
     fi

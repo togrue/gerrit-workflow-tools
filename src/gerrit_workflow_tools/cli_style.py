@@ -33,11 +33,16 @@ def is_color_enabled() -> bool:
     return _COLOR_ENABLED
 
 
-def init_color_mode(*, no_color: bool, stream: TextIO | None = None) -> bool:
-    """Initialize global color mode from ``--no-color`` and output TTY capability."""
+def init_color_mode(*, color: str = "auto", stream: TextIO | None = None) -> bool:
+    """Initialize global color mode from ``--color`` and output TTY capability."""
     out = stream or sys.stdout
     tty = bool(getattr(out, "isatty", lambda: False)())
-    enabled = (not no_color) and tty
+    if color == "always":
+        enabled = True
+    elif color == "never":
+        enabled = False
+    else:
+        enabled = tty
     set_color_mode(enabled)
     return enabled
 

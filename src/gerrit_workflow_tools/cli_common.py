@@ -21,7 +21,7 @@ from gerrit_workflow_tools.git_run import GitError
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
 HELP_NO_CONFIG_PATTERNS = "Do not use gerrit.stopPattern values from config."
-HELP_NO_COLOR = "Disable colored output."
+HELP_COLOR = "Colorize output: always, auto, or never."
 
 
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
@@ -42,7 +42,13 @@ def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Register shared color-output flags."""
-    parser.add_argument("--no-color", action="store_true", help=HELP_NO_COLOR)
+    parser.add_argument(
+        "--color",
+        choices=("always", "auto", "never"),
+        default="auto",
+        metavar="WHEN",
+        help=HELP_COLOR,
+    )
 
 
 _LOG = logging.getLogger("gerrit_workflow_tools")

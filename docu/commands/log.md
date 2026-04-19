@@ -30,7 +30,7 @@ ger log [options] [REVSET]
 | `--url`, `--show-url` | Print each change’s Gerrit web URL (default: `gerrit.logShowUrl`) |
 | `--show-change-id` | Append Change-Id on each text line (default: `gerrit.logShowChangeId`) |
 | `--json` | Machine-readable JSON output |
-| `--no-color` | Disable colored output |
+| `--color WHEN` | Colorize output: `always`, `auto`, or `never` |
 | `-v`, `--verbose` | Log git commands to stderr |
 
 **git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.logShowUrl`, `gerrit.logShowChangeId`, `gerrit.logOneline`, `gerrit.logCompact`. CLI flags override when present; `--no-oneline` and `--no-compact` defeat the oneline and compact defaults. See [Configuration.md](../Configuration.md#ger-log--gerritlog).

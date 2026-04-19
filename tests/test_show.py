@@ -257,7 +257,7 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     "argv",
     [
         ["--json", "HEAD"],
-        ["HEAD", "--no-color"],
+        ["HEAD", "--color=never"],
         ["HEAD", "--verbose"],
     ],
 )
