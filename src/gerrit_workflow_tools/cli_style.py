@@ -42,10 +42,9 @@ def init_color_mode(*, no_color: bool, stream: TextIO | None = None) -> bool:
     return enabled
 
 
-def color_text(text: str, code: str, *, enabled: bool | None = None) -> str:
-    """Colorize text using ANSI SGR, honoring global mode by default."""
-    use_color = is_color_enabled() if enabled is None else bool(enabled)
-    if not use_color:
+def color_text(text: str, code: str) -> str:
+    """Colorize text using ANSI SGR when global color mode is enabled."""
+    if not is_color_enabled():
         return text
     return f"{code}{text}{ANSI_RESET}"
 

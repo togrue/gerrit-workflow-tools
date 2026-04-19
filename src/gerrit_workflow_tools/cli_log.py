@@ -38,16 +38,21 @@ from gerrit_workflow_tools.stack import (
 
 logger = logging.getLogger(__name__)
 
+
 def _visible_len(s: str) -> int:
     """Length of ``s`` as displayed in a terminal (ANSI color codes omitted)."""
     return visible_len(s)
 
 
-def _fmt_summary_strike(summary: str, *, use_color: bool) -> str:
+def _fmt_summary_strike(summary: str) -> str:
     """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
-    if use_color:
+    if is_color_enabled():
         return f"{ANSI_STRIKE}{summary}{ANSI_RESET}"
     return "".join(f"{c}\u0336" for c in summary)
+
+
+def _color(text: str, code: str) -> str:
+    return color_text(text, code)
 
 
 def _annotate_attention(commits: list[LogCommit]) -> None:
@@ -67,79 +72,79 @@ def _annotate_attention(commits: list[LogCommit]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fmt_patchset_column(commit: LogCommit, *, use_color: bool) -> str:
+def _fmt_patchset_column(commit: LogCommit) -> str:
     """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
     if commit.abandoned:
-        return color_text("a", ANSI_DIM, enabled=use_color)
+        return _color("a", ANSI_DIM)
     status = commit.patchset_status
     if status == "active":
-        return color_text("p", ANSI_GREEN, enabled=use_color)
+        return _color("p", ANSI_GREEN)
     if status == "newer":
-        return color_text("n", ANSI_YELLOW, enabled=use_color)
+        return _color("n", ANSI_YELLOW)
     if status == "outdated":
-        return color_text("o", ANSI_RED, enabled=use_color)
-    return color_text("-", ANSI_DIM, enabled=use_color)
+        return _color("o", ANSI_RED)
+    return _color("-", ANSI_DIM)
 
 
-def _fmt_verified(v: int | None, *, use_color: bool) -> str:
+def _fmt_verified(v: int | None) -> str:
     if v is None:
-        return color_text("v? ", ANSI_DIM, enabled=use_color) if use_color else "v? "
+        return _color("v? ", ANSI_DIM)
     if v >= 1:
-        return color_text("v+1", ANSI_GREEN, enabled=use_color)
+        return _color("v+1", ANSI_GREEN)
     if v <= -1:
-        return color_text("v-1", ANSI_RED, enabled=use_color)
+        return _color("v-1", ANSI_RED)
     return "v0 "
 
 
-def _fmt_code_review(cr: int | None, *, use_color: bool) -> str:
+def _fmt_code_review(cr: int | None) -> str:
     if cr is None:
-        return color_text("cr? ", ANSI_DIM, enabled=use_color) if use_color else "cr? "
+        return _color("cr? ", ANSI_DIM)
     if cr >= 2:
-        return color_text("cr+2", ANSI_GREEN, enabled=use_color)
+        return _color("cr+2", ANSI_GREEN)
     if cr == 1:
-        return color_text("cr+1", ANSI_LIGHT_GREEN, enabled=use_color)
+        return _color("cr+1", ANSI_LIGHT_GREEN)
     if cr == -1:
-        return color_text("cr-1", ANSI_YELLOW, enabled=use_color)
+        return _color("cr-1", ANSI_YELLOW)
     if cr <= -2:
-        return color_text("cr-2", ANSI_RED, enabled=use_color)
+        return _color("cr-2", ANSI_RED)
     return "cr0 "
 
 
-def _fmt_comments(count: int, *, use_color: bool) -> str:
+def _fmt_comments(count: int) -> str:
     if count > 0:
-        return color_text("com", ANSI_YELLOW, enabled=use_color)
+        return _color("com", ANSI_YELLOW)
     return "   "
 
 
-def _primary_line_prefix(commit: LogCommit, *, use_color: bool) -> str:
+def _primary_line_prefix(commit: LogCommit) -> str:
     """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
     sha = commit.short_sha
-    push = _fmt_patchset_column(commit, use_color=use_color)
-    verified = _fmt_verified(commit.verified, use_color=use_color)
-    cr = _fmt_code_review(commit.code_review, use_color=use_color)
-    comments = _fmt_comments(commit.comments_unresolved, use_color=use_color)
+    push = _fmt_patchset_column(commit)
+    verified = _fmt_verified(commit.verified)
+    cr = _fmt_code_review(commit.code_review)
+    comments = _fmt_comments(commit.comments_unresolved)
     return f"{sha} {push} {verified} {cr} {comments} # "
 
 
-def _continuation_indent(commit: LogCommit, *, use_color: bool) -> int:
+def _continuation_indent(commit: LogCommit) -> int:
     """Column where the subject starts; continuation lines align using :func:`_visible_len` on the prefix."""
-    return _visible_len(_primary_line_prefix(commit, use_color=use_color))
+    return _visible_len(_primary_line_prefix(commit))
 
 
-def _url_line(url: str, *, use_color: bool) -> str:
-    return color_text(url, ANSI_DIM, enabled=use_color)
+def _url_line(url: str) -> str:
+    return _color(url, ANSI_DIM)
 
 
-def _detail_lines(commit: LogCommit, *, use_color: bool) -> list[str]:
+def _detail_lines(commit: LogCommit) -> list[str]:
     lines: list[str] = []
     if commit.ci_failures:
         text = f"# failed: {', '.join(commit.ci_failures)}"
-        lines.append(color_text(text, ANSI_RED, enabled=use_color))
+        lines.append(_color(text, ANSI_RED))
     elif commit.verified is not None and commit.verified <= -1:
-        lines.append(color_text("# failed", ANSI_RED, enabled=use_color))
+        lines.append(_color("# failed", ANSI_RED))
     if commit.comments_unresolved > 0:
         text = f"# comments: {commit.comments_unresolved} unresolved"
-        lines.append(color_text(text, ANSI_YELLOW, enabled=use_color))
+        lines.append(_color(text, ANSI_YELLOW))
     return lines
 
 
@@ -147,18 +152,18 @@ def _detail_lines(commit: LogCommit, *, use_color: bool) -> list[str]:
 # Continuation indent = visible width of that prefix (colors ignored), so it stays aligned with ``_fmt_*``.
 
 
-def _fmt_change_id_suffix(change_id: str | None, *, use_color: bool) -> str:
+def _fmt_change_id_suffix(change_id: str | None) -> str:
     if not change_id:
         return ""
     disp = change_id if len(change_id) <= 14 else change_id[:12] + "…"
-    return color_text(f"  {disp}", ANSI_DIM, enabled=use_color)
+    return _color(f"  {disp}", ANSI_DIM)
 
 
-def _primary_line(commit: LogCommit, *, use_color: bool, show_change_id: bool = False) -> str:
-    summ = _fmt_summary_strike(commit.summary, use_color=use_color) if commit.abandoned else commit.summary
-    line = f"{_primary_line_prefix(commit, use_color=use_color)}{summ}"
+def _primary_line(commit: LogCommit, *, show_change_id: bool = False) -> str:
+    summ = _fmt_summary_strike(commit.summary) if commit.abandoned else commit.summary
+    line = f"{_primary_line_prefix(commit)}{summ}"
     if show_change_id:
-        line += _fmt_change_id_suffix(commit.change_id, use_color=use_color)
+        line += _fmt_change_id_suffix(commit.change_id)
     return line
 
 
@@ -177,22 +182,22 @@ def _attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
     return tokens
 
 
-def _attention_suffix(commit: LogCommit, *, use_color: bool) -> str:
+def _attention_suffix(commit: LogCommit) -> str:
     tokens = _attention_tokens(commit)
     if not tokens:
         return ""
 
-    rendered: list[str] = [color_text("# ", ANSI_DIM, enabled=use_color)]
+    rendered: list[str] = [_color("# ", ANSI_DIM)]
     for idx, (text, code) in enumerate(tokens):
         if idx:
-            rendered.append(color_text(", ", ANSI_DIM, enabled=use_color))
-        rendered.append(color_text(text, code, enabled=use_color))
+            rendered.append(_color(", ", ANSI_DIM))
+        rendered.append(_color(text, code))
     return "".join(rendered)
 
 
-def _attention_column(commits: list[LogCommit], *, use_color: bool, show_change_id: bool = False) -> int:
+def _attention_column(commits: list[LogCommit], *, show_change_id: bool = False) -> int:
     widths = [
-        _visible_len(_primary_line(commit, use_color=use_color, show_change_id=show_change_id))
+        _visible_len(_primary_line(commit, show_change_id=show_change_id))
         for commit in commits
         if _attention_tokens(commit)
     ]
@@ -204,18 +209,17 @@ def _attention_column(commits: list[LogCommit], *, use_color: bool, show_change_
 def _oneline_line(
     commit: LogCommit,
     *,
-    use_color: bool,
     include_url: bool,
     show_change_id: bool = False,
     attention_column: int = 0,
 ) -> str:
-    base = _primary_line(commit, use_color=use_color, show_change_id=show_change_id)
-    attention = _attention_suffix(commit, use_color=use_color)
+    base = _primary_line(commit, show_change_id=show_change_id)
+    attention = _attention_suffix(commit)
     if attention:
         gap = max(2, attention_column - _visible_len(base)) if attention_column else 2
         base = f"{base}{' ' * gap}{attention}"
     if include_url and commit.gerrit_url:
-        base = f"{base}  {_url_line(commit.gerrit_url, use_color=use_color)}"
+        base = f"{base}  {_url_line(commit.gerrit_url)}"
     return base
 
 
@@ -313,48 +317,34 @@ def _format_summary_dashboard_line(
     summary: dict[str, int],
     ready_n: int,
     total_n: int,
-    *,
-    use_color: bool,
 ) -> str:
     """Single-line summary: ``summary: ready N/M · …`` with optional ANSI styling."""
     sep = " · "
     parts: list[str] = []
 
     label = "summary:"
-    if use_color:
-        parts.append(color_text(label, f"{ANSI_BOLD}{ANSI_CYAN}", enabled=True))
-        parts.append(" ")
-        parts.append(color_text("ready ", ANSI_DIM, enabled=True))
-        parts.append(color_text(f"{ready_n}/{total_n}", ANSI_GREEN, enabled=True))
-    else:
-        parts.append(f"{label} ready {ready_n}/{total_n}")
+    parts.append(color_text(label, f"{ANSI_BOLD}{ANSI_CYAN}"))
+    parts.append(" ")
+    parts.append(color_text("ready ", ANSI_DIM))
+    parts.append(color_text(f"{ready_n}/{total_n}", ANSI_GREEN))
 
     ci = summary.get("ci-failures", 0)
     if ci:
-        if use_color:
-            parts.append(color_text(sep, ANSI_DIM, enabled=True))
-            parts.append(color_text("CI ", ANSI_DIM, enabled=True))
-            parts.append(color_text(str(ci), ANSI_RED, enabled=True))
-        else:
-            parts.append(f"{sep}CI {ci}")
+        parts.append(color_text(sep, ANSI_DIM))
+        parts.append(color_text("CI ", ANSI_DIM))
+        parts.append(color_text(str(ci), ANSI_RED))
 
     unres = summary.get("unresolved-comments", 0)
     if unres:
-        if use_color:
-            parts.append(color_text(sep, ANSI_DIM, enabled=True))
-            parts.append(color_text("comments ", ANSI_DIM, enabled=True))
-            parts.append(color_text(str(unres), ANSI_YELLOW, enabled=True))
-        else:
-            parts.append(f"{sep}comments {unres}")
+        parts.append(color_text(sep, ANSI_DIM))
+        parts.append(color_text("comments ", ANSI_DIM))
+        parts.append(color_text(str(unres), ANSI_YELLOW))
 
     review = summary.get("awaiting-review", 0)
     if review:
-        if use_color:
-            parts.append(color_text(sep, ANSI_DIM, enabled=True))
-            parts.append(color_text("review ", ANSI_DIM, enabled=True))
-            parts.append(color_text(str(review), ANSI_CYAN, enabled=True))
-        else:
-            parts.append(f"{sep}review {review}")
+        parts.append(color_text(sep, ANSI_DIM))
+        parts.append(color_text("review ", ANSI_DIM))
+        parts.append(color_text(str(review), ANSI_CYAN))
 
     return "".join(parts)
 
@@ -425,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cwd = cwd_from_env()
     init_color_mode(no_color=args.no_color)
-    use_color = is_color_enabled()
+
     gdef = log_defaults(cwd)
     show_url = bool(args.url) or gdef["show_url"]
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
@@ -495,19 +485,18 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(c.attention_reasons for c in commits) else 0
 
     # Text output
-    attention_column = _attention_column(visible, use_color=use_color, show_change_id=show_change_id)
+    attention_column = _attention_column(visible, show_change_id=show_change_id)
     for commit in visible:
         if use_compact:
             primary = _compact_line(commit, show_change_id=show_change_id)
             print(primary)
             if show_url and commit.gerrit_url:
                 ind = " " * (_visible_len(primary) + 2)
-                print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
+                print(f"{ind}{_url_line(commit.gerrit_url)}")
         elif use_oneline:
             print(
                 _oneline_line(
                     commit,
-                    use_color=use_color,
                     include_url=show_url,
                     show_change_id=show_change_id,
                     attention_column=attention_column,
@@ -517,7 +506,6 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 _oneline_line(
                     commit,
-                    use_color=use_color,
                     include_url=show_url,
                     show_change_id=show_change_id,
                     attention_column=attention_column,
@@ -533,7 +521,6 @@ def main(argv: list[str] | None = None) -> int:
                 summary,
                 ready_n,
                 total_n,
-                use_color=use_color,
             )
         )
 

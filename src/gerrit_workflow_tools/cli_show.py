@@ -13,7 +13,7 @@ from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_tok
 from gerrit_workflow_tools.cli_cid import resolve_gcid_user_arg
 from gerrit_workflow_tools.cli_common import HELP_JSON, add_color_args, configure_logging, cwd_from_env
 from gerrit_workflow_tools.cli_log import _compact_line, _detail_lines, _primary_line, _url_line
-from gerrit_workflow_tools.cli_style import init_color_mode, is_color_enabled
+from gerrit_workflow_tools.cli_style import init_color_mode
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
@@ -174,7 +174,6 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(1 if args.verbose else 0)
     cwd = cwd_from_env()
     init_color_mode(no_color=args.no_color)
-    use_color = is_color_enabled()
 
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
         print(
@@ -274,14 +273,14 @@ def main(argv: list[str] | None = None) -> int:
     ind = " " * 4
     print()
     if commit.gerrit_url:
-        print(f"{ind}{_url_line(commit.gerrit_url, use_color=use_color)}")
-    for d in _detail_lines(commit, use_color=use_color):
+        print(f"{ind}{_url_line(commit.gerrit_url)}")
+    for d in _detail_lines(commit):
         print(f"{ind}{d}")
     # Local commits already printed subject via `git show`; avoid repeating it on the log line.
     if is_local:
         print(f"{ind}{_compact_line(commit)}")
     else:
-        print(f"{ind}{_primary_line(commit, use_color=use_color)}")
+        print(f"{ind}{_primary_line(commit)}")
 
     url = commit.gerrit_url or ""
     if unresolved_rows:
