@@ -341,11 +341,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--target", metavar="BRANCH", help="Gerrit target branch for this push.")
     p.add_argument("--save-target", action="store_true", help="Store --target for this branch.")
-    p.add_argument(
-        "--force-boundary",
-        action="store_true",
-        help="Deprecated: same as --all (prefer --all).",
-    )
     add_color_args(p)
     add_stop_pattern_args(p)
     p.add_argument(
@@ -421,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
         r = compute_ready(
             cwd,
             branch=None,
-            all_commits=args.all_ or args.force_boundary,
+            all_commits=args.all_,
             no_config_patterns=args.no_config_patterns,
             ignore_patterns=args.ignore_pattern or None,
             until=args.until,

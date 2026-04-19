@@ -196,7 +196,6 @@ def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: 
     [
         [],
         ["--all"],
-        ["--force-boundary"],
         ["--no-config-patterns"],
         ["--ignore-pattern", "^nope$"],
         ["--debug-log"],

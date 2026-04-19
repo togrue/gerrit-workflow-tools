@@ -30,7 +30,6 @@ ger push [options] [REV]
 | `--update-last-pushed` | After a successful push, update local branch `lastPush/<current-branch>` to the pushed tip. Default: `gerrit.lastPushedBranch` |
 | `--no-update-last-pushed` | Skip updating `lastPush/<current-branch>` (overrides `gerrit.lastPushedBranch`) |
 | `--all` | Push the entire stack, ignoring stop patterns |
-| `--force-boundary` | Deprecated: same as `--all` — prefer `--all` |
 | `--target BRANCH` | Override the Gerrit target branch for this push |
 | `--save-target` | Persist `--target` into branch config for future pushes |
 | `--ignore-pattern REGEX` | Disable a specific stop pattern (repeatable) |
@@ -54,7 +53,7 @@ ger push [options] [REV]
 `ger push` runs the following automatically and aborts on failure:
 
 1. Gerrit target branch is configured (`gerritTarget` or `--target`).
-2. Ready boundary is computed — blocked commits are excluded unless `--all`/`--force-boundary`.
+2. Ready boundary is computed — blocked commits are excluded unless `--all`.
 3. Change-Id check — aborts with exit code `2` if any hard errors exist.
 
 ---

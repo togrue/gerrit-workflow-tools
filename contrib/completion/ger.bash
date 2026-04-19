@@ -34,7 +34,6 @@ _ger_push() {
             --all \
             --target \
             --save-target \
-            --force-boundary \
             --no-config-patterns \
             --ignore-pattern \
             --reviewers \
