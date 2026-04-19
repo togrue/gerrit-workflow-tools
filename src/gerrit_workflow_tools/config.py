@@ -93,18 +93,6 @@ def branch_gerrit_reviewers(cwd: Path | str | None, branch: str | None = None) -
     return _config_get(cwd, f"branch.{b}.gerritReviewers")
 
 
-def branch_gerrit_push_mode(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Return ``branch.<name>.gerritPushMode``, if set."""
-    b = branch or current_branch(cwd)
-    return _config_get(cwd, f"branch.{b}.gerritPushMode")
-
-
-def default_push_mode(cwd: Path | str | None) -> str:
-    """Return ``gerrit.defaultPushMode`` or the default ``ready``."""
-    v = _config_get(cwd, "gerrit.defaultPushMode")
-    return v or "ready"
-
-
 def gerrit_remote(cwd: Path | str | None) -> str:
     """Return ``gerrit.remote`` or ``origin``."""
     v = _config_get(cwd, "gerrit.remote")
@@ -202,15 +190,12 @@ def set_branch_config(
     *,
     gerrit_target: str | None = None,
     gerrit_reviewers: str | None = None,
-    gerrit_push_mode: str | None = None,
 ) -> None:
     """Write branch-scoped Gerrit settings via ``git config`` and clear the config cache."""
     if gerrit_target is not None:
         git("config", f"branch.{branch}.gerritTarget", gerrit_target, cwd=cwd)
     if gerrit_reviewers is not None:
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
-    if gerrit_push_mode is not None:
-        git("config", f"branch.{branch}.gerritPushMode", gerrit_push_mode, cwd=cwd)
     clear_gerrit_git_config_cache()
 
 
@@ -218,14 +203,11 @@ def set_global_gerrit(
     cwd: Path | str | None,
     *,
     remote: str | None = None,
-    default_push_mode: str | None = None,
     stop_patterns: list[str] | None = None,
 ) -> None:
-    """Set global ``gerrit.*`` keys (remote, default push mode, stop patterns) and clear the cache."""
+    """Set global ``gerrit.*`` keys (remote, stop patterns) and clear the cache."""
     if remote is not None:
         git("config", "gerrit.remote", remote, cwd=cwd)
-    if default_push_mode is not None:
-        git("config", "gerrit.defaultPushMode", default_push_mode, cwd=cwd)
     if stop_patterns is not None:
         git("config", "--unset-all", "gerrit.stopPattern", cwd=cwd, check=False)
         for pat in stop_patterns:

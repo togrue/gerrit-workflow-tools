@@ -22,7 +22,7 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 
 | Command | Purpose |
 |---------|---------|
-| [`ger branch`](commands/branch.md) | Manage branch-local Gerrit metadata (target, reviewers, push mode) |
+| [`ger branch`](commands/branch.md) | Manage branch-local Gerrit metadata (target, reviewers) |
 | [`ger push`](commands/push.md) | Push the ready prefix (or full stack) to Gerrit |
 | [`ger edit`](commands/edit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
 | [`ger show`](commands/show-todos.md) | Show Gerrit status (votes, comments, CI) for a single commit or Change-Id |
@@ -50,7 +50,6 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 [gerrit]
     remote = origin
     webUrl = https://gerrit.example.com
-    defaultPushMode = ready
     stopPattern = ^dropme!
     stopPattern = ^TODO\b
     stopPattern = ^test!
@@ -72,7 +71,6 @@ Authentication for the REST API:
 [branch "feature/my-work"]
     gerritTarget = main
     gerritReviewers = alice,bob
-    gerritPushMode = ready
 ```
 
 Set with `ger branch init --target <branch>` or individual `ger branch set-*` subcommands.

@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Manage branch-local Gerrit metadata: target review branch, default reviewers, and push mode. Settings are stored in `.git/config` under `branch.<name>.*` keys.
+Manage branch-local Gerrit metadata: target review branch and default reviewers. Settings are stored in `.git/config` under `branch.<name>.*` keys.
 
 Run `ger branch init --target <branch>` once per local branch before using `ger push`.
 
@@ -31,7 +31,6 @@ Output:
 Branch: feature/my-work
 Target branch: main
 Reviewers: alice,bob
-Push mode: ready
 ```
 
 ---
@@ -41,14 +40,13 @@ Push mode: ready
 Set branch-local Gerrit config (non-interactive).
 
 ```bash
-ger branch init --target <branch> [--reviewers <list>] [--push-mode <mode>]
+ger branch init --target <branch> [--reviewers <list>]
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--target BRANCH` | (required) | Gerrit target review branch |
 | `--reviewers LIST` | (none) | Comma-separated list of Gerrit reviewer accounts |
-| `--push-mode MODE` | `ready` | Push mode: `ready` or `all` |
 
 ---
 
@@ -72,16 +70,6 @@ ger branch set-reviewers alice,bob
 
 ---
 
-### `set-push-mode`
-
-Update `gerritPushMode` for the current branch.
-
-```bash
-ger branch set-push-mode ready
-```
-
----
-
 ## Global option
 
 | Option | Description |
@@ -96,11 +84,10 @@ ger branch set-push-mode ready
 [branch "feature/my-work"]
     gerritTarget = main
     gerritReviewers = alice,bob
-    gerritPushMode = ready
 ```
 
 ---
 
 ## See also
 
-- [`ger push`](push.md) — uses the target, push mode, and stop patterns from `gbranch` / config
+- [`ger push`](push.md) — uses the target, reviewers, and stop patterns from `gbranch` / config

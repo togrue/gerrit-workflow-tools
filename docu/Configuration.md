@@ -14,7 +14,6 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). |
 | `gerrit.user` | Username for HTTP Basic auth to the REST API. |
 | `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
-| `gerrit.defaultPushMode` | Default push mode label (e.g. `ready`); used by ready-boundary logic. |
 | `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` / `--no-config-patterns` to bypass without editing config. |
 | `gerrit.showCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
 
@@ -46,7 +45,6 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 |-----|--------|
 | `branch.<name>.gerritTarget` | Gerrit destination branch for pushes and merge-base resolution. |
 | `branch.<name>.gerritReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
-| `branch.<name>.gerritPushMode` | Stored push mode for the branch (see `ger branch`). |
 
 Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_config` in code.
 

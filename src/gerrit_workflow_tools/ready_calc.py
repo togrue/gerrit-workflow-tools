@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.config import default_push_mode, stop_patterns
+from gerrit_workflow_tools.config import stop_patterns
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import (
     merge_base_with_target,
@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ReadyResult:
-    push_mode: str
     pushable_count: int
     boundary_sha: str | None
     boundary_reason: str
@@ -58,14 +57,12 @@ def compute_ready(
     cwd: Path | str | None,
     *,
     branch: str | None = None,
-    push_mode: str | None = None,
     all_commits: bool = False,
     no_config_patterns: bool = False,
     ignore_patterns: list[str] | None = None,
     until: str | None = None,
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
-    pm = push_mode or default_push_mode(cwd)
     mb, _target, _ = merge_base_with_target(cwd, branch)
     raw_patterns = stop_patterns(cwd)
     patterns = _filter_patterns(
@@ -75,10 +72,9 @@ def compute_ready(
     )
     shas, subjects = stack_shas_and_subjects_one_log(cwd, mb, branch=branch)
     logger.debug(
-        "compute_ready merge_base=%s commits=%d push_mode=%s all_commits=%s stop_patterns=%d",
+        "compute_ready merge_base=%s commits=%d all_commits=%s stop_patterns=%d",
         mb[:8],
         len(shas),
-        pm,
         all_commits,
         len(patterns),
     )
@@ -95,7 +91,6 @@ def compute_ready(
             tip_idx = shas.index(until_sha)
         tip = shas[tip_idx] if tip_idx >= 0 else None
         return ReadyResult(
-            push_mode=pm,
             pushable_count=len(shas) if until_sha is None else tip_idx + 1,
             boundary_sha=None,
             boundary_reason="ignored (--all)",
@@ -119,7 +114,6 @@ def compute_ready(
         tip = shas[tip_idx] if tip_idx >= 0 else None
         n = tip_idx + 1 if tip_idx >= 0 else 0
         return ReadyResult(
-            push_mode=pm,
             pushable_count=n,
             boundary_sha=None,
             boundary_reason="no stop pattern matched",
@@ -135,7 +129,6 @@ def compute_ready(
 
     if pushable_count == 0:
         return ReadyResult(
-            push_mode=pm,
             pushable_count=0,
             boundary_sha=boundary_sha,
             boundary_reason=boundary_reason,
@@ -157,7 +150,6 @@ def compute_ready(
         pushable_count = tip_idx + 1
 
     return ReadyResult(
-        push_mode=pm,
         pushable_count=pushable_count,
         boundary_sha=boundary_sha,
         boundary_reason=boundary_reason,

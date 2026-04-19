@@ -123,6 +123,6 @@ ger push -i
 
 ## See also
 
-- [`ger branch`](branch.md) — configure target, reviewers, push mode
+- [`ger branch`](branch.md) — configure target and reviewers
 - [`ger cid --check-duplicates`](sha-cid.md) — run the Change-Id check manually
 - [Configuration reference](../Configuration.md) — `gerrit.pushShowAttributes`, `gerrit.lastPushedBranch`, `gerrit.stopPattern`, credentials

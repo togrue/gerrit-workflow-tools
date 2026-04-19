@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_show import main as main_show
 _Handler = Callable[[list[str] | None], int]
 
 _COMMANDS: dict[str, tuple[str, _Handler]] = {
-    "branch": ("Branch-local Gerrit target, reviewers, and push mode.", main_branch),
+    "branch": ("Branch-local Gerrit target and reviewers.", main_branch),
     "comments": ("Fetch and display Gerrit review comments.", main_comments),
     "cid": ("Print or validate Change-Ids for commits or ranges.", main_cid),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", main_edit),

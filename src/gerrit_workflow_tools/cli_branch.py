@@ -7,7 +7,6 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging, cwd_from_env, handle_git_error
 from gerrit_workflow_tools.config import (
-    branch_gerrit_push_mode,
     branch_gerrit_reviewers,
     branch_gerrit_target,
     current_branch,
@@ -22,11 +21,9 @@ def _cmd_show(cwd: Path) -> int:
     b = current_branch(cwd)
     t = branch_gerrit_target(cwd, b)
     r = branch_gerrit_reviewers(cwd, b)
-    m = branch_gerrit_push_mode(cwd, b)
     print(f"Branch: {b}")
     print(f"Target branch: {t or '(not set)'}")
     print(f"Reviewers: {r or '(none)'}")
-    print(f"Push mode: {m or '(default)'}")
     return 0
 
 
@@ -40,7 +37,6 @@ def _cmd_init(ns: argparse.Namespace, cwd: Path) -> int:
         b,
         gerrit_target=ns.target,
         gerrit_reviewers=ns.reviewers,
-        gerrit_push_mode=ns.push_mode or "ready",
     )
     print(f"Configured branch {b!r}: target={ns.target}", file=sys.stderr)
     return 0
@@ -58,14 +54,8 @@ def _cmd_set_reviewers(ns: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
-def _cmd_set_push_mode(ns: argparse.Namespace, cwd: Path) -> int:
-    b = current_branch(cwd)
-    set_branch_config(cwd, b, gerrit_push_mode=ns.value)
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger branch``: show or set branch-local Gerrit target, reviewers, and push mode."""
+    """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
     p = argparse.ArgumentParser(prog="ger branch")
     p.add_argument(
         "-v",
@@ -85,16 +75,12 @@ def main(argv: list[str] | None = None) -> int:
         metavar="REVIEWERS",
         help="Comma-separated Gerrit reviewer accounts.",
     )
-    ip.add_argument("--push-mode", default="ready", dest="push_mode")
 
     st = sub.add_parser("set-target", help="Set gerritTarget for the current branch.")
     st.add_argument("value", metavar="BRANCH")
 
     sr = sub.add_parser("set-reviewers", help="Set gerritReviewers for the current branch.")
     sr.add_argument("value", metavar="REVIEWERS")
-
-    sm = sub.add_parser("set-push-mode", help="Set gerritPushMode for the current branch.")
-    sm.add_argument("value", metavar="MODE")
 
     args = p.parse_args(argv)
     configure_logging(args.verbose)
@@ -110,8 +96,6 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_set_target(args, cwd)
         if args.cmd == "set-reviewers":
             return _cmd_set_reviewers(args, cwd)
-        if args.cmd == "set-push-mode":
-            return _cmd_set_push_mode(args, cwd)
     except GitError as e:
         return handle_git_error(e)
     return 1
