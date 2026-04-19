@@ -170,21 +170,6 @@ def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str]) -> str:
     return ref
 
 
-def _format_subject_line(subject: str) -> str:
-    def _sub(m: re.Match[str]) -> str:
-        return color_text(m.group(0), ANSI_DIM_YELLOW)
-
-    return _SUBJECT_MARKER_RE.sub(_sub, subject)
-
-
-def _format_warning_line(text: str) -> str:
-    return color_text(text, ANSI_YELLOW)
-
-
-def _format_command_line(text: str) -> str:
-    return color_text(text, ANSI_DIM_GRAY)
-
-
 def _commit_lines_for_preview(
     cwd: Path,
     r: ReadyResult,
@@ -219,7 +204,7 @@ def _commit_lines_for_preview(
 
     lines: list[str] = []
     for _full, short_sha, subj, raw in rows:
-        disp = _format_subject_line(subj)
+        disp = _SUBJECT_MARKER_RE.sub(lambda m: color_text(m.group(0), ANSI_DIM_YELLOW), subj)
         line = f"    {short_sha} # {disp}"
         if show_attributes and details_by_cid is not None:
             cid = parse_change_id(raw)
@@ -266,7 +251,7 @@ def _print_gpush_preview(
     show_push_command: bool,
 ) -> None:
     if show_push_command:
-        print(_format_command_line(" ".join(cmd)))
+        print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
     print("About to push commits:")
     for ln in commit_lines:
@@ -277,12 +262,10 @@ def _print_gpush_preview(
         if boundary_line and pat:
             print()
             stop_line = f'Stopped at commit "{boundary_line}", because it matches the stop pattern {pat}.'
-            print(_format_warning_line(stop_line))
+            print(color_text(stop_line, ANSI_YELLOW))
             remain = _remaining_not_ready_count(cwd, r.boundary_sha)
             if remain > 0:
-                print(
-                    _format_warning_line(f"... {remain} not-ready commit(s) remain unpushed")
-                )
+                print(color_text(f"... {remain} not-ready commit(s) remain unpushed", ANSI_YELLOW))
 
 
 def _parse_confirm_answer(raw: str) -> bool | None:

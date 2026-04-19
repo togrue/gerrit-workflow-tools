@@ -43,10 +43,6 @@ def _visible_len(s: str) -> int:
     return visible_len(s)
 
 
-def _color(text: str, code: str, *, use_color: bool) -> str:
-    return color_text(text, code, enabled=use_color)
-
-
 def _fmt_summary_strike(summary: str, *, use_color: bool) -> str:
     """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
     if use_color:
@@ -74,44 +70,44 @@ def _annotate_attention(commits: list[LogCommit]) -> None:
 def _fmt_patchset_column(commit: LogCommit, *, use_color: bool) -> str:
     """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
     if commit.abandoned:
-        return _color("a", ANSI_DIM, use_color=use_color)
+        return color_text("a", ANSI_DIM, enabled=use_color)
     status = commit.patchset_status
     if status == "active":
-        return _color("p", ANSI_GREEN, use_color=use_color)
+        return color_text("p", ANSI_GREEN, enabled=use_color)
     if status == "newer":
-        return _color("n", ANSI_YELLOW, use_color=use_color)
+        return color_text("n", ANSI_YELLOW, enabled=use_color)
     if status == "outdated":
-        return _color("o", ANSI_RED, use_color=use_color)
-    return _color("-", ANSI_DIM, use_color=use_color)
+        return color_text("o", ANSI_RED, enabled=use_color)
+    return color_text("-", ANSI_DIM, enabled=use_color)
 
 
 def _fmt_verified(v: int | None, *, use_color: bool) -> str:
     if v is None:
-        return _color("v? ", ANSI_DIM, use_color=use_color) if use_color else "v? "
+        return color_text("v? ", ANSI_DIM, enabled=use_color) if use_color else "v? "
     if v >= 1:
-        return _color("v+1", ANSI_GREEN, use_color=use_color)
+        return color_text("v+1", ANSI_GREEN, enabled=use_color)
     if v <= -1:
-        return _color("v-1", ANSI_RED, use_color=use_color)
+        return color_text("v-1", ANSI_RED, enabled=use_color)
     return "v0 "
 
 
 def _fmt_code_review(cr: int | None, *, use_color: bool) -> str:
     if cr is None:
-        return _color("cr? ", ANSI_DIM, use_color=use_color) if use_color else "cr? "
+        return color_text("cr? ", ANSI_DIM, enabled=use_color) if use_color else "cr? "
     if cr >= 2:
-        return _color("cr+2", ANSI_GREEN, use_color=use_color)
+        return color_text("cr+2", ANSI_GREEN, enabled=use_color)
     if cr == 1:
-        return _color("cr+1", ANSI_LIGHT_GREEN, use_color=use_color)
+        return color_text("cr+1", ANSI_LIGHT_GREEN, enabled=use_color)
     if cr == -1:
-        return _color("cr-1", ANSI_YELLOW, use_color=use_color)
+        return color_text("cr-1", ANSI_YELLOW, enabled=use_color)
     if cr <= -2:
-        return _color("cr-2", ANSI_RED, use_color=use_color)
+        return color_text("cr-2", ANSI_RED, enabled=use_color)
     return "cr0 "
 
 
 def _fmt_comments(count: int, *, use_color: bool) -> str:
     if count > 0:
-        return _color("com", ANSI_YELLOW, use_color=use_color)
+        return color_text("com", ANSI_YELLOW, enabled=use_color)
     return "   "
 
 
@@ -131,19 +127,19 @@ def _continuation_indent(commit: LogCommit, *, use_color: bool) -> int:
 
 
 def _url_line(url: str, *, use_color: bool) -> str:
-    return _color(url, ANSI_DIM, use_color=use_color)
+    return color_text(url, ANSI_DIM, enabled=use_color)
 
 
 def _detail_lines(commit: LogCommit, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     if commit.ci_failures:
         text = f"# failed: {', '.join(commit.ci_failures)}"
-        lines.append(_color(text, ANSI_RED, use_color=use_color))
+        lines.append(color_text(text, ANSI_RED, enabled=use_color))
     elif commit.verified is not None and commit.verified <= -1:
-        lines.append(_color("# failed", ANSI_RED, use_color=use_color))
+        lines.append(color_text("# failed", ANSI_RED, enabled=use_color))
     if commit.comments_unresolved > 0:
         text = f"# comments: {commit.comments_unresolved} unresolved"
-        lines.append(_color(text, ANSI_YELLOW, use_color=use_color))
+        lines.append(color_text(text, ANSI_YELLOW, enabled=use_color))
     return lines
 
 
@@ -155,7 +151,7 @@ def _fmt_change_id_suffix(change_id: str | None, *, use_color: bool) -> str:
     if not change_id:
         return ""
     disp = change_id if len(change_id) <= 14 else change_id[:12] + "…"
-    return _color(f"  {disp}", ANSI_DIM, use_color=use_color)
+    return color_text(f"  {disp}", ANSI_DIM, enabled=use_color)
 
 
 def _primary_line(commit: LogCommit, *, use_color: bool, show_change_id: bool = False) -> str:
@@ -186,11 +182,11 @@ def _attention_suffix(commit: LogCommit, *, use_color: bool) -> str:
     if not tokens:
         return ""
 
-    rendered: list[str] = [_color("# ", ANSI_DIM, use_color=use_color)]
+    rendered: list[str] = [color_text("# ", ANSI_DIM, enabled=use_color)]
     for idx, (text, code) in enumerate(tokens):
         if idx:
-            rendered.append(_color(", ", ANSI_DIM, use_color=use_color))
-        rendered.append(_color(text, code, use_color=use_color))
+            rendered.append(color_text(", ", ANSI_DIM, enabled=use_color))
+        rendered.append(color_text(text, code, enabled=use_color))
     return "".join(rendered)
 
 
@@ -326,37 +322,37 @@ def _format_summary_dashboard_line(
 
     label = "summary:"
     if use_color:
-        parts.append(_color(label, f"{ANSI_BOLD}{ANSI_CYAN}", use_color=True))
+        parts.append(color_text(label, f"{ANSI_BOLD}{ANSI_CYAN}", enabled=True))
         parts.append(" ")
-        parts.append(_color("ready ", ANSI_DIM, use_color=True))
-        parts.append(_color(f"{ready_n}/{total_n}", ANSI_GREEN, use_color=True))
+        parts.append(color_text("ready ", ANSI_DIM, enabled=True))
+        parts.append(color_text(f"{ready_n}/{total_n}", ANSI_GREEN, enabled=True))
     else:
         parts.append(f"{label} ready {ready_n}/{total_n}")
 
     ci = summary.get("ci-failures", 0)
     if ci:
         if use_color:
-            parts.append(_color(sep, ANSI_DIM, use_color=True))
-            parts.append(_color("CI ", ANSI_DIM, use_color=True))
-            parts.append(_color(str(ci), ANSI_RED, use_color=True))
+            parts.append(color_text(sep, ANSI_DIM, enabled=True))
+            parts.append(color_text("CI ", ANSI_DIM, enabled=True))
+            parts.append(color_text(str(ci), ANSI_RED, enabled=True))
         else:
             parts.append(f"{sep}CI {ci}")
 
     unres = summary.get("unresolved-comments", 0)
     if unres:
         if use_color:
-            parts.append(_color(sep, ANSI_DIM, use_color=True))
-            parts.append(_color("comments ", ANSI_DIM, use_color=True))
-            parts.append(_color(str(unres), ANSI_YELLOW, use_color=True))
+            parts.append(color_text(sep, ANSI_DIM, enabled=True))
+            parts.append(color_text("comments ", ANSI_DIM, enabled=True))
+            parts.append(color_text(str(unres), ANSI_YELLOW, enabled=True))
         else:
             parts.append(f"{sep}comments {unres}")
 
     review = summary.get("awaiting-review", 0)
     if review:
         if use_color:
-            parts.append(_color(sep, ANSI_DIM, use_color=True))
-            parts.append(_color("review ", ANSI_DIM, use_color=True))
-            parts.append(_color(str(review), ANSI_CYAN, use_color=True))
+            parts.append(color_text(sep, ANSI_DIM, enabled=True))
+            parts.append(color_text("review ", ANSI_DIM, enabled=True))
+            parts.append(color_text(str(review), ANSI_CYAN, enabled=True))
         else:
             parts.append(f"{sep}review {review}")
 
