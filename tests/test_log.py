@@ -66,7 +66,7 @@ def test_log_full_text_contains_commit_lines_and_summary(stack_repo: Path, monke
         code, out, err = run_cli(stack_repo, log_main, ["--full"], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
-    assert "ready-to-push:" in out and " / " in out
+    assert "ready" in out and "/" in out
     for _sha, short, subj, _raw in rows:
         assert short in out
         assert subj in out

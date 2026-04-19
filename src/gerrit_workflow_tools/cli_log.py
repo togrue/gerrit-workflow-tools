@@ -32,6 +32,8 @@ _GREEN = "\033[32m"
 _RED = "\033[31m"
 _LIGHT_GREEN = "\033[92m"
 _YELLOW = "\033[33m"
+_BOLD = "\033[1m"
+_CYAN = "\033[36m"
 
 # Terminal SGR sequences (same family as ``_color``); used only to measure visible width.
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -284,6 +286,56 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
     return counts, ready, total
 
 
+def _format_summary_dashboard_line(
+    summary: dict[str, int],
+    ready_n: int,
+    total_n: int,
+    *,
+    use_color: bool,
+) -> str:
+    """Single-line summary: ``summary: ready N/M · …`` with optional ANSI styling."""
+    sep = " · "
+    parts: list[str] = []
+
+    label = "summary:"
+    if use_color:
+        parts.append(_color(label, f"{_BOLD}{_CYAN}", use_color=True))
+        parts.append(" ")
+        parts.append(_color("ready ", _DIM, use_color=True))
+        parts.append(_color(f"{ready_n}/{total_n}", _GREEN, use_color=True))
+    else:
+        parts.append(f"{label} ready {ready_n}/{total_n}")
+
+    ci = summary.get("ci-failures", 0)
+    if ci:
+        if use_color:
+            parts.append(_color(sep, _DIM, use_color=True))
+            parts.append(_color("CI ", _DIM, use_color=True))
+            parts.append(_color(str(ci), _RED, use_color=True))
+        else:
+            parts.append(f"{sep}CI {ci}")
+
+    unres = summary.get("unresolved-comments", 0)
+    if unres:
+        if use_color:
+            parts.append(_color(sep, _DIM, use_color=True))
+            parts.append(_color("comments ", _DIM, use_color=True))
+            parts.append(_color(str(unres), _YELLOW, use_color=True))
+        else:
+            parts.append(f"{sep}comments {unres}")
+
+    review = summary.get("awaiting-review", 0)
+    if review:
+        if use_color:
+            parts.append(_color(sep, _DIM, use_color=True))
+            parts.append(_color("review ", _DIM, use_color=True))
+            parts.append(_color(str(review), _CYAN, use_color=True))
+        else:
+            parts.append(f"{sep}review {review}")
+
+    return "".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -454,11 +506,14 @@ def main(argv: list[str] | None = None) -> int:
     if not use_oneline and not use_compact:
         summary, ready_n, total_n = _build_summary(commits)
         print()
-        print("summary:")
-        print(f"ready-to-push: {ready_n} / {total_n}")
-        for key, val in summary.items():
-            if val:
-                print(f"{key}: {val}")
+        print(
+            _format_summary_dashboard_line(
+                summary,
+                ready_n,
+                total_n,
+                use_color=use_color,
+            )
+        )
 
     return 1 if any(c.attention_reasons for c in commits) else 0
 

@@ -61,11 +61,7 @@ d4e5f6a n v+1 cr+2        # Amended locally; labels are for Gerrit's current rev
 e5f6a7b o v+1 cr+2        # Local tree is an old patch set; server has a newer revision
 f6a7b8c -                 # Change not on Gerrit yet (no matching change)
 
-summary:
-ready-to-push: 2 / 6
-ci-failures: 1
-unresolved-comments: 1
-awaiting-review: 3
+summary: ready 2/6 · CI 1 · comments 1 · review 3
 ```
 
 ### Column definitions
