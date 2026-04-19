@@ -53,4 +53,4 @@ def build_summary_highlighter(cwd: Path | str | None) -> SummaryHighlighter:
     if not stop_groups and not warning_groups:
         return SummaryHighlighter(combined_re=None)
     combined = "|".join([*stop_groups, *warning_groups])
-    return SummaryHighlighter(combined_re=re.compile(combined))
+    return SummaryHighlighter(combined_re=re.compile(combined, re.IGNORECASE))
