@@ -39,8 +39,7 @@ def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch)
     assert code == 0
     assert "refs/for/main" in out
     assert "git push" in out
-    assert "ready reason:" in out
-    assert "Updated commits:" in out
+    assert "About to push commits:" in out
     assert "[dry-run]" in err
 
 
@@ -128,8 +127,36 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr("builtins.input", lambda _p="": "n")
     mock_run = MagicMock()
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
-    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    code, out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 0
+    assert "About to push commits:" in out
+    assert "Stopped at commit" in out
+    assert "git push" in out
+    assert "cancel" in err.lower()
+    mock_run.assert_not_called()
+
+
+def test_gpush_prompt_preview_order_matches_expected(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    prompts: list[str] = []
+
+    def _input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return "n"
+
+    monkeypatch.setattr("builtins.input", _input)
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    code, out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    i_cmd = out.index("git push")
+    i_push = out.index("About to push commits:")
+    i_stop = out.index("Stopped at commit")
+    i_remain = out.index("not-ready commit(s) remain unpushed")
+    assert i_cmd < i_push < i_stop < i_remain
+    assert prompts == ["Do you want to push these commits? [Y/n]: "]
+    assert "it matches the stop pattern" in out
+    assert "git push" in out
     assert "cancel" in err.lower()
     mock_run.assert_not_called()
 
@@ -216,7 +243,7 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
             monkeypatch,
         )
     assert code == 0
-    assert "Updated commits:" in out
+    assert "About to push commits:" in out
     assert "`r=alice`" in out
     assert "->" not in out
 

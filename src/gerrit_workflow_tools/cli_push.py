@@ -42,6 +42,8 @@ def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.Complete
 
 # Dim yellow foreground, reset (used when stdout is a TTY).
 _ANSI_DIM_YELLOW = "\033[2;33m"
+_ANSI_DIM_GRAY = "\033[2;37m"
+_ANSI_YELLOW = "\033[33m"
 _ANSI_RESET = "\033[0m"
 
 _SUBJECT_MARKER_RE = re.compile(r"\b(todo|dropme)\b", re.IGNORECASE)
@@ -176,6 +178,18 @@ def _format_subject_line(subject: str, *, tty: bool) -> str:
     return _SUBJECT_MARKER_RE.sub(_sub, subject)
 
 
+def _format_warning_line(text: str, *, tty: bool) -> str:
+    if not tty:
+        return text
+    return f"{_ANSI_YELLOW}{text}{_ANSI_RESET}"
+
+
+def _format_command_line(text: str, *, tty: bool) -> str:
+    if not tty:
+        return text
+    return f"{_ANSI_DIM_GRAY}{text}{_ANSI_RESET}"
+
+
 def _commit_lines_for_preview(
     cwd: Path,
     r: ReadyResult,
@@ -222,13 +236,63 @@ def _commit_lines_for_preview(
     return lines
 
 
-def _print_gpush_preview(cmd: list[str], r: ReadyResult, commit_lines: list[str]) -> None:
-    print(" ".join(cmd))
-    print()
-    print(f"ready reason: {r.boundary_reason}")
-    print("Updated commits:")
+def _stop_pattern_from_reason(boundary_reason: str) -> str | None:
+    m = re.search(r"stop pattern (.+)$", boundary_reason)
+    if not m:
+        return None
+    return m.group(1).strip()
+
+
+def _remaining_not_ready_count(cwd: Path, boundary_sha: str | None) -> int:
+    if not boundary_sha:
+        return 0
+    try:
+        return int(git_out("rev-list", "--count", f"{boundary_sha}..HEAD", cwd=cwd))
+    except (GitError, ValueError):
+        return 0
+
+
+def _format_boundary_commit_line(cwd: Path, boundary_sha: str | None) -> str | None:
+    if not boundary_sha:
+        return None
+    try:
+        short_sha = git_out("rev-parse", "--short", boundary_sha, cwd=cwd)
+        subject = git_out("show", "-s", "--format=%s", boundary_sha, cwd=cwd)
+    except GitError:
+        return None
+    return f"{short_sha} # {subject}"
+
+
+def _print_gpush_preview(
+    cwd: Path,
+    cmd: list[str],
+    r: ReadyResult,
+    commit_lines: list[str],
+    *,
+    tty_out: bool,
+    show_push_command: bool,
+) -> None:
+    print("About to push commits:")
     for ln in commit_lines:
         print(ln)
+    if r.boundary_sha:
+        boundary_line = _format_boundary_commit_line(cwd, r.boundary_sha)
+        pat = _stop_pattern_from_reason(r.boundary_reason)
+        if boundary_line and pat:
+            print()
+            stop_line = f'Stopped at commit "{boundary_line}", because it matches the stop pattern {pat}.'
+            print(_format_warning_line(stop_line, tty=tty_out))
+            remain = _remaining_not_ready_count(cwd, r.boundary_sha)
+            if remain > 0:
+                print(
+                    _format_warning_line(
+                        f"... {remain} not-ready commit(s) remain unpushed",
+                        tty=tty_out,
+                    )
+                )
+    if show_push_command:
+        print()
+        print(_format_command_line(" ".join(cmd), tty=tty_out))
 
 
 def _parse_confirm_answer(raw: str) -> bool | None:
@@ -423,7 +487,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 1
 
-        _print_gpush_preview(cmd, r, commit_lines)
+        _print_gpush_preview(
+            cwd,
+            cmd,
+            r,
+            commit_lines,
+            tty_out=tty_out,
+            show_push_command=True,
+        )
 
         if args.dry_run:
             print("[dry-run] not executing push", file=sys.stderr)
