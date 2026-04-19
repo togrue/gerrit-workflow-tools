@@ -35,6 +35,7 @@ from gerrit_workflow_tools.stack import (
     parse_change_id,
     stack_commits_metadata_one_log,
 )
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +160,15 @@ def _fmt_change_id_suffix(change_id: str | None) -> str:
     return _color(f"  {disp}", ANSI_DIM)
 
 
-def _primary_line(commit: LogCommit, *, show_change_id: bool = False) -> str:
+def _primary_line(
+    commit: LogCommit,
+    *,
+    summary_highlighter: SummaryHighlighter | None = None,
+    show_change_id: bool = False,
+) -> str:
     summ = _fmt_summary_strike(commit.summary) if commit.abandoned else commit.summary
+    if summary_highlighter is not None and not commit.abandoned:
+        summ = summary_highlighter.highlight(summ)
     line = f"{_primary_line_prefix(commit)}{summ}"
     if show_change_id:
         line += _fmt_change_id_suffix(commit.change_id)
@@ -195,9 +203,20 @@ def _attention_suffix(commit: LogCommit) -> str:
     return "".join(rendered)
 
 
-def _attention_column(commits: list[LogCommit], *, show_change_id: bool = False) -> int:
+def _attention_column(
+    commits: list[LogCommit],
+    *,
+    summary_highlighter: SummaryHighlighter | None = None,
+    show_change_id: bool = False,
+) -> int:
     widths = [
-        _visible_len(_primary_line(commit, show_change_id=show_change_id))
+        _visible_len(
+            _primary_line(
+                commit,
+                summary_highlighter=summary_highlighter,
+                show_change_id=show_change_id,
+            )
+        )
         for commit in commits
         if _attention_tokens(commit)
     ]
@@ -209,11 +228,16 @@ def _attention_column(commits: list[LogCommit], *, show_change_id: bool = False)
 def _oneline_line(
     commit: LogCommit,
     *,
+    summary_highlighter: SummaryHighlighter | None = None,
     include_url: bool,
     show_change_id: bool = False,
     attention_column: int = 0,
 ) -> str:
-    base = _primary_line(commit, show_change_id=show_change_id)
+    base = _primary_line(
+        commit,
+        summary_highlighter=summary_highlighter,
+        show_change_id=show_change_id,
+    )
     attention = _attention_suffix(commit)
     if attention:
         gap = max(2, attention_column - _visible_len(base)) if attention_column else 2
@@ -415,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cwd = cwd_from_env()
     init_color_mode(color=args.color)
+    summary_highlighter = build_summary_highlighter(cwd)
 
     gdef = log_defaults(cwd)
     show_url = bool(args.url) or gdef["show_url"]
@@ -485,7 +510,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(c.attention_reasons for c in commits) else 0
 
     # Text output
-    attention_column = _attention_column(visible, show_change_id=show_change_id)
+    attention_column = _attention_column(
+        visible,
+        summary_highlighter=summary_highlighter,
+        show_change_id=show_change_id,
+    )
     for commit in visible:
         if use_compact:
             primary = _compact_line(commit, show_change_id=show_change_id)
@@ -497,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 _oneline_line(
                     commit,
+                    summary_highlighter=summary_highlighter,
                     include_url=show_url,
                     show_change_id=show_change_id,
                     attention_column=attention_column,
@@ -506,6 +536,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 _oneline_line(
                     commit,
+                    summary_highlighter=summary_highlighter,
                     include_url=show_url,
                     show_change_id=show_change_id,
                     attention_column=attention_column,

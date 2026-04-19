@@ -64,7 +64,7 @@ Before the push, the command prints (in order):
 
 1. The exact `git push …` line (including `refs/for/<branch>` and any `%r=<reviewer>` options).
 2. A blank line, then `ready reason: <explanation>`.
-3. `Updated commits:` and one line per commit in the push range (oldest first): `    <short_sha> # <subject>`. Words `todo` and `dropme` in subjects are highlighted on a color terminal.
+3. `Updated commits:` and one line per commit in the push range (oldest first): `    <short_sha> # <subject>`. On color output, summary highlighting applies using `gerrit.stopPattern` (stop highlight) and `gerrit.warningPattern` (warning highlight, with stop taking precedence when both match).
 
 Unless `--dry-run` or `--yes`/`-y` is used and stdin is a terminal, you are prompted: `Do you want to push these commits? [Y/n]: ` — Enter or `y`/`yes` proceeds; `n`/`no` cancels (exit `0`, no push).
 
@@ -125,4 +125,4 @@ ger push -i
 
 - [`ger branch`](branch.md) — configure target and reviewers
 - [`ger cid --check-duplicates`](sha-cid.md) — run the Change-Id check manually
-- [Configuration reference](../Configuration.md) — `gerrit.pushShowAttributes`, `gerrit.lastPushedBranch`, `gerrit.stopPattern`, credentials
+- [Configuration reference](../Configuration.md) — `gerrit.pushShowAttributes`, `gerrit.lastPushedBranch`, `gerrit.stopPattern`, `gerrit.warningPattern`, credentials

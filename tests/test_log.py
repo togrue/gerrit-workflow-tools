@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
+from gerrit_workflow_tools.cli_style import ANSI_DIM_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.stack import parse_change_id
@@ -70,6 +71,23 @@ def test_log_full_text_contains_commit_lines_and_summary(stack_repo: Path, monke
     for _sha, short, subj, _raw in rows:
         assert short in out
         assert subj in out
+
+
+def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    first_subject = rows[0][2]
+    git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
+    git("config", "--add", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
+    git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
+    git("config", "--add", "gerrit.warningPattern", first_subject, cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    details = build_details_by_change_id(rows)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, log_main, ["--full", "--color", "always"], monkeypatch)
+    assert code == 0, err
+    assert ANSI_DIM_YELLOW in out
+    assert first_subject in out
 
 
 def test_log_full_text_uses_inline_attention_labels(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

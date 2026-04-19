@@ -7,6 +7,7 @@ from gerrit_workflow_tools.git_run import git, git_out
 
 # Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
 _GERRIT_STOP_PATTERN_CANONICAL = "gerrit.stoppattern"
+_GERRIT_WARNING_PATTERN_CANONICAL = "gerrit.warningpattern"
 
 # In-memory snapshot: one `git config --list` per process per resolved cwd (lazy first access).
 _snapshot: dict[str, str] | None = None
@@ -47,7 +48,7 @@ def _load_git_config_maps(cwd: Path | str | None) -> tuple[dict[str, str], dict[
             continue
         k, v = raw.split("=", 1)
         ck = _canonical_cfg_key(k)
-        if ck == _GERRIT_STOP_PATTERN_CANONICAL:
+        if ck in (_GERRIT_STOP_PATTERN_CANONICAL, _GERRIT_WARNING_PATTERN_CANONICAL):
             multi.setdefault(ck, []).append(v)
         else:
             single[ck] = v
@@ -69,7 +70,7 @@ def _config_get(cwd: Path | str | None, key: str) -> str | None:
     _ensure_snapshot(cwd)
     assert _snapshot is not None
     ck = _canonical_cfg_key(key)
-    if ck == _GERRIT_STOP_PATTERN_CANONICAL:
+    if ck in (_GERRIT_STOP_PATTERN_CANONICAL, _GERRIT_WARNING_PATTERN_CANONICAL):
         return None
     v = _snapshot.get(ck)
     return v.strip() if v else None
@@ -181,6 +182,17 @@ def stop_patterns(cwd: Path | str | None) -> list[str]:
     lines = [ln.strip() for ln in lines if ln.strip()]
     if not lines:
         return [r"^dropme!", r"^TODO\b", r"^test!"]
+    return lines
+
+
+def warning_patterns(cwd: Path | str | None) -> list[str]:
+    """Return ``gerrit.warningPattern`` lines as regex strings, or built-in defaults if none are configured."""
+    _ensure_snapshot(cwd)
+    assert _snapshot_multi is not None
+    lines = _snapshot_multi.get(_GERRIT_WARNING_PATTERN_CANONICAL, [])
+    lines = [ln.strip() for ln in lines if ln.strip()]
+    if not lines:
+        return [r"^[^\s]+$", r"(?i:\bwip\b)", r"(?i:\btodo\b)"]
     return lines
 
 

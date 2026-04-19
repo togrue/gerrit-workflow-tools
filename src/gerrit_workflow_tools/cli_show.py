@@ -12,7 +12,7 @@ from typing import Any
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
 from gerrit_workflow_tools.cli_cid import resolve_gcid_user_arg
 from gerrit_workflow_tools.cli_common import HELP_JSON, add_color_args, configure_logging, cwd_from_env
-from gerrit_workflow_tools.cli_log import _compact_line, _detail_lines, _primary_line, _url_line
+from gerrit_workflow_tools.cli_log import _detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.cli_style import init_color_mode
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
@@ -21,6 +21,7 @@ from gerrit_workflow_tools.gerrit_comments import resolve_change_for_gcomments
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import parse_change_id
+from gerrit_workflow_tools.summary_highlight import build_summary_highlighter
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(1 if args.verbose else 0)
     cwd = cwd_from_env()
     init_color_mode(color=args.color)
+    summary_highlighter = build_summary_highlighter(cwd)
 
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
         print(
@@ -276,11 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{ind}{_url_line(commit.gerrit_url)}")
     for d in _detail_lines(commit):
         print(f"{ind}{d}")
-    # Local commits already printed subject via `git show`; avoid repeating it on the log line.
-    if is_local:
-        print(f"{ind}{_compact_line(commit)}")
-    else:
-        print(f"{ind}{_primary_line(commit)}")
+    print(f"{ind}{_primary_line(commit, summary_highlighter=summary_highlighter)}")
 
     url = commit.gerrit_url or ""
     if unresolved_rows:

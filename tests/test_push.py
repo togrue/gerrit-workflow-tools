@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gerrit_workflow_tools.cli_push import main as gpush_main
+from gerrit_workflow_tools.cli_style import ANSI_DIM_YELLOW, ANSI_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache, set_branch_config
 from gerrit_workflow_tools.git_run import git, git_out
 from gerrit_workflow_tools.ready_calc import compute_ready
@@ -205,6 +207,34 @@ def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.
     assert code == 0, (code, out, err)
     assert "refs/for/main" in out
     assert "git push" in out
+
+
+def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(stack_repo)
+    first_subject = rows[0][2]
+    git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
+    git("config", "--add", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
+    git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
+    git("config", "--add", "gerrit.warningPattern", f"^{re.escape(first_subject)}$", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all", "--color", "always"], monkeypatch)
+    assert code == 0
+    assert ANSI_DIM_YELLOW in out
+    assert first_subject in out
+
+
+def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(stack_repo)
+    assert len(rows) >= 2
+    boundary_subject = rows[1][2]
+    git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
+    git("config", "--add", "gerrit.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--color", "always"], monkeypatch)
+    assert code == 0
+    assert "Stopped at commit" in out
+    assert ANSI_YELLOW in out
+    assert boundary_subject in out
 
 
 def test_gpush_show_attributes_fails_without_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -15,6 +15,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.user` | Username for HTTP Basic auth to the REST API. |
 | `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
 | `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` / `--no-config-patterns` to bypass without editing config. |
+| `gerrit.warningPattern` | **Repeatable.** Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, and `ger show` when color output is enabled. Defaults when unset: single-word subject (`^[^\\s]+$`), `wip`, `todo` (case-insensitive). Stop-pattern highlighting takes precedence when both match the same text span. |
 | `gerrit.showCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
 
 ---
@@ -60,6 +61,9 @@ Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_con
     token = secret
     stopPattern = ^dropme!
     stopPattern = ^WIP:
+    warningPattern = ^[^\\s]+$
+    warningPattern = (?i:\\bwip\\b)
+    warningPattern = (?i:\\btodo\\b)
     logShowUrl = true
     pushShowAttributes = true
     lastPushedBranch = true

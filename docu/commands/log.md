@@ -88,6 +88,8 @@ When the first column is not `p`, **Verified** / **Code-Review** still reflect G
 | yellow | Local ahead of Gerrit (`n`), or needs attention (comments, `cr-1`) |
 | dim | Not on Gerrit (`-`) |
 
+Commit subjects are also highlighted in color mode when they match configured summary patterns: stop matches (`gerrit.stopPattern`) and warning matches (`gerrit.warningPattern`). If both patterns match the same text, stop highlighting wins.
+
 ### Compact format (`gerrit.logCompact`)
 
 Extra column before comment flag: `+` submittable, `.` not, `-` not on Gerrit.

@@ -17,7 +17,6 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import (
     ANSI_DIM_GRAY,
-    ANSI_DIM_YELLOW,
     ANSI_YELLOW,
     color_text,
     init_color_mode,
@@ -39,6 +38,7 @@ from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git, git_out
 from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.stack import merge_base_with_target, parse_change_id, stack_commits_metadata_one_log
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,6 @@ logger = logging.getLogger(__name__)
 def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:
     """Run ``git push`` (separate hook so tests can monkeypatch without affecting other subprocess use)."""
     return subprocess.run(cmd, cwd=cwd)
-
-
-_SUBJECT_MARKER_RE = re.compile(r"\b(todo|dropme)\b", re.IGNORECASE)
 
 
 def _merge_reviewers(
@@ -174,6 +171,7 @@ def _commit_lines_for_preview(
     cwd: Path,
     r: ReadyResult,
     *,
+    summary_highlighter: SummaryHighlighter,
     show_attributes: bool,
     merged_reviewers: list[str],
 ) -> list[str]:
@@ -204,7 +202,7 @@ def _commit_lines_for_preview(
 
     lines: list[str] = []
     for _full, short_sha, subj, raw in rows:
-        disp = _SUBJECT_MARKER_RE.sub(lambda m: color_text(m.group(0), ANSI_DIM_YELLOW), subj)
+        disp = summary_highlighter.highlight(subj)
         line = f"    {short_sha} # {disp}"
         if show_attributes and details_by_cid is not None:
             cid = parse_change_id(raw)
@@ -231,7 +229,12 @@ def _remaining_not_ready_count(cwd: Path, boundary_sha: str | None) -> int:
         return 0
 
 
-def _format_boundary_commit_line(cwd: Path, boundary_sha: str | None) -> str | None:
+def _format_boundary_commit_line(
+    cwd: Path,
+    boundary_sha: str | None,
+    *,
+    summary_highlighter: SummaryHighlighter,
+) -> str | None:
     if not boundary_sha:
         return None
     try:
@@ -239,7 +242,7 @@ def _format_boundary_commit_line(cwd: Path, boundary_sha: str | None) -> str | N
         subject = git_out("show", "-s", "--format=%s", boundary_sha, cwd=cwd)
     except GitError:
         return None
-    return f"{short_sha} # {subject}"
+    return f"{short_sha} # {summary_highlighter.highlight(subject)}"
 
 
 def _print_gpush_preview(
@@ -248,6 +251,7 @@ def _print_gpush_preview(
     r: ReadyResult,
     commit_lines: list[str],
     *,
+    summary_highlighter: SummaryHighlighter,
     show_push_command: bool,
 ) -> None:
     if show_push_command:
@@ -257,7 +261,11 @@ def _print_gpush_preview(
     for ln in commit_lines:
         print(ln)
     if r.boundary_sha:
-        boundary_line = _format_boundary_commit_line(cwd, r.boundary_sha)
+        boundary_line = _format_boundary_commit_line(
+            cwd,
+            r.boundary_sha,
+            summary_highlighter=summary_highlighter,
+        )
         pat = _stop_pattern_from_reason(r.boundary_reason)
         if boundary_line and pat:
             print()
@@ -363,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.verbose)
     cwd = cwd_from_env()
     init_color_mode(color=args.color)
+    summary_highlighter = build_summary_highlighter(cwd)
     gdef = gpush_defaults(cwd)
     show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
     update_last_pushed = (
@@ -450,6 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             commit_lines = _commit_lines_for_preview(
                 cwd,
                 r,
+                summary_highlighter=summary_highlighter,
                 show_attributes=show_attributes,
                 merged_reviewers=reviewers,
             )
@@ -465,6 +475,7 @@ def main(argv: list[str] | None = None) -> int:
             cmd,
             r,
             commit_lines,
+            summary_highlighter=summary_highlighter,
             show_push_command=True,
         )
 
