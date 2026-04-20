@@ -45,7 +45,7 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_su
 
 logger = logging.getLogger(__name__)
 
-_REBASE_ONTO_REMOTE_HINT = "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."
+_REBASE_ONTO_REMOTE_HINT = "Hint: run `ger restack --onto-remote` to replay your commits on top of the latest target branch."
 
 
 def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:

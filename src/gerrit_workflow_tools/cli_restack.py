@@ -1,4 +1,4 @@
-"""CLI entry: ``ger rebase`` — interactive rebase with Gerrit status annotations."""
+"""CLI entry: ``ger restack`` — interactive rebase with Gerrit status annotations."""
 
 from __future__ import annotations
 
@@ -23,17 +23,17 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger rebase``: interactive rebase with Gerrit status annotations.
+    """CLI entry for ``ger restack``: interactive rebase with Gerrit status annotations.
 
     Sets ``GIT_SEQUENCE_EDITOR`` to the enricher wrapper
-    (:mod:`gerrit_workflow_tools.rebase_enricher`) which annotates each pick line with
+    (:mod:`gerrit_workflow_tools.restack_enricher`) which annotates each pick line with
     the commit's Gerrit verified/CR/comments status before opening the real editor.
 
     The real editor is resolved by the enricher from ``GIT_EDITOR``, ``core.editor``,
     ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
     """
     p = argparse.ArgumentParser(
-        prog="ger rebase",
+        prog="ger restack",
         description=(
             "Start an interactive rebase with Gerrit status annotations in the sequence editor.\n\n"
             "Each pick line is enriched with the commit's patchset status, Verified and Code-Review\n"
@@ -109,14 +109,14 @@ def main(argv: list[str] | None = None) -> int:
     # Point GIT_SEQUENCE_EDITOR at the enricher.  The enricher reads GIT_EDITOR /
     # core.editor / EDITOR from the environment to find the actual editor to open.
     env["GIT_SEQUENCE_EDITOR"] = (
-        f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_enricher"
+        f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.restack_enricher"
     )
     if args.debug_log:
         env["GREBASE_DEBUG_LOG"] = "1"
     if drop_merged:
         env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
 
-    logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
+    logger.debug("ger restack: base=%s onto_remote=%s", base[:8], use_onto_remote)
     r = subprocess.run(["git", "rebase", "-i", base], cwd=cwd, env=env)
     return r.returncode
 

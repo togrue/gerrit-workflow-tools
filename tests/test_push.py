@@ -544,7 +544,7 @@ def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch:
     assert code == 0
     assert "refs/for/main" in out
     assert "warning:" in err.lower()
-    assert "ger rebase --onto-remote" in err
+    assert "ger restack --onto-remote" in err
 
 
 def test_gpush_error_not_rebased_exits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -555,7 +555,7 @@ def test_gpush_error_not_rebased_exits(stack_repo: Path, monkeypatch: pytest.Mon
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "error:" in err.lower()
-    assert "ger rebase --onto-remote" in err
+    assert "ger restack --onto-remote" in err
 
 
 def test_gpush_no_rebase_check_bypasses_error_policy(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

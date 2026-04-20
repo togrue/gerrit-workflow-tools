@@ -204,7 +204,7 @@ def _resolve_editor(cwd: Path) -> str:
     """Find the real editor, following git's lookup order (skipping ``sequence.editor``).
 
     Priority:
-    1. ``GREBASE_EDITOR`` env var (explicit override; set by ``ger rebase`` if needed)
+    1. ``GREBASE_EDITOR`` env var (explicit override; set by ``ger restack`` if needed)
     2. ``GIT_EDITOR`` env var
     3. ``core.editor`` git config
     4. ``VISUAL`` env var
@@ -343,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = argv if argv is not None else sys.argv
     if len(args) < 2:
-        print("usage: GIT_SEQUENCE_EDITOR for ger rebase", file=sys.stderr)
+        print("usage: GIT_SEQUENCE_EDITOR for ger restack", file=sys.stderr)
         return 1
 
     todo = Path(args[1])
@@ -359,20 +359,20 @@ def main(argv: list[str] | None = None) -> int:
     error_header: str | None = None
     try:
         final_text = _enrich_todo(original_text, cwd)
-        logger.debug("rebase_enricher: todo enriched successfully")
+        logger.debug("restack_enricher: todo enriched successfully")
     except (GerritApiError, GitError, ValueError, OSError) as e:
-        logger.debug("rebase_enricher: enrichment failed: %s", e)
+        logger.debug("restack_enricher: enrichment failed: %s", e)
         final_text = original_text
         error_header = (
-            f"# ger rebase: Gerrit enrichment failed — {e}\n"
-            f"# ger rebase: Showing original todo without status annotations.\n"
+            f"# ger restack: Gerrit enrichment failed — {e}\n"
+            f"# ger restack: Showing original todo without status annotations.\n"
         )
     except Exception as e:  # noqa: BLE001
-        logger.debug("rebase_enricher: unexpected enrichment error: %s", e)
+        logger.debug("restack_enricher: unexpected enrichment error: %s", e)
         final_text = original_text
         error_header = (
-            f"# ger rebase: Unexpected error during enrichment — {e}\n"
-            f"# ger rebase: Showing original todo without status annotations.\n"
+            f"# ger restack: Unexpected error during enrichment — {e}\n"
+            f"# ger restack: Showing original todo without status annotations.\n"
         )
 
     if error_header:
@@ -387,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Launch the real editor.
     editor = _resolve_editor(cwd)
-    logger.debug("rebase_enricher: launching editor %r on %s", editor, todo)
+    logger.debug("restack_enricher: launching editor %r on %s", editor, todo)
     try:
         result = subprocess.run(shlex.split(editor) + [str(todo)])
         return result.returncode

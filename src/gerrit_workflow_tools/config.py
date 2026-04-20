@@ -203,7 +203,7 @@ def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str |
 
 
 def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger rebase`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
+    """Defaults for ``ger restack`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
     return {
         "onto_remote": config_bool(cwd, "gerrit.rebaseOntoRemote"),
         "drop_merged_equivalent": config_bool(cwd, "gerrit.rebaseDropMergedEquivalent"),
@@ -336,7 +336,7 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
 
 
 def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -> list[str]:
-    """Build refs to try for ``ger rebase --onto-remote`` from ``branch.*.gerritTarget``.
+    """Build refs to try for ``ger restack --onto-remote`` from ``branch.*.gerritTarget``.
 
     Accepts a bare branch name (``dev`` → ``<remote>/dev``) or an existing remote-tracking
     form (``origin/dev``) without doubling the remote (``origin/origin/dev``).
@@ -397,8 +397,8 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     if target:
         tried = ", ".join(_remote_tracking_ref_candidates_from_target(remote_name, target)) or f"{remote_name}/{target}"
         raise GitError(
-            f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}). {hint}"
+            f"No remote-tracking ref found for `ger restack --onto-remote` (tried {tried}). {hint}"
         )
     raise GitError(
-        f"No remote-tracking ref found for `ger rebase --onto-remote`. {hint}"
+        f"No remote-tracking ref found for `ger restack --onto-remote`. {hint}"
     )
