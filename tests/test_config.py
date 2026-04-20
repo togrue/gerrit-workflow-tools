@@ -4,11 +4,13 @@ from pathlib import Path
 
 from gerrit_workflow_tools.config import (
     clear_gerrit_git_config_cache,
+    gerrit_push_remote_policy,
+    head_is_linear_on_remote_gerrit_target,
     rebase_defaults,
     resolve_rebase_onto_remote_ref,
     warning_patterns,
 )
-from gerrit_workflow_tools.git_run import git
+from gerrit_workflow_tools.git_run import git, git_out
 
 
 def test_warning_patterns_defaults(stack_repo: Path) -> None:
@@ -37,6 +39,26 @@ def test_resolve_rebase_onto_remote_ref(stack_repo: Path) -> None:
     clear_gerrit_git_config_cache()
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
     assert resolve_rebase_onto_remote_ref(stack_repo) == "origin/main"
+
+
+def test_gerrit_push_remote_policy_defaults_and_aliases(stack_repo: Path) -> None:
+    clear_gerrit_git_config_cache()
+    assert gerrit_push_remote_policy(stack_repo) == "ignore-not-rebased"
+    git("config", "gerrit.push.remotePolicy", "WARN-NOT-REBASED", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    assert gerrit_push_remote_policy(stack_repo) == "warn-not-rebased"
+    git("config", "gerrit.push.remotePolicy", "bogus", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    assert gerrit_push_remote_policy(stack_repo) == "ignore-not-rebased"
+
+
+def test_head_is_linear_on_remote_gerrit_target(stack_repo: Path) -> None:
+    clear_gerrit_git_config_cache()
+    m = git_out("rev-parse", "main", cwd=stack_repo)
+    git("update-ref", "refs/remotes/origin/main", m, cwd=stack_repo)
+    ok, onto = head_is_linear_on_remote_gerrit_target(stack_repo)
+    assert ok
+    assert onto == "origin/main"
 
 
 def test_resolve_rebase_onto_remote_ref_gerrit_target_origin_slash_branch(tmp_path: Path) -> None:

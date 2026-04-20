@@ -33,6 +33,7 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--no-show-attributes" in out
     assert "--update-last-pushed" in out
     assert "--no-update-last-pushed" in out
+    assert "--no-rebase-check" in out
     assert "-i" in out
 
 
@@ -504,6 +505,77 @@ def test_gpush_update_last_pushed_flag_enables_when_config_false(
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes", "--update-last-pushed"], monkeypatch)
     assert code == 0
     assert git_out("rev-parse", "lastPush/feature", cwd=stack_repo) == expected_tip
+
+
+def _add_self_origin_and_fetch(repo: Path) -> None:
+    git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
+    git("fetch", "origin", cwd=repo)
+
+
+def _advance_main_with_commit(repo: Path) -> None:
+    git("checkout", "main", cwd=repo)
+    (repo / "ahead.txt").write_text("x\n", encoding="utf-8")
+    git("add", "ahead.txt", cwd=repo)
+    git(
+        "commit",
+        "-m",
+        f"main ahead\n\nChange-Id: I{'a' * 40}",
+        cwd=repo,
+    )
+    git("checkout", "feature", cwd=repo)
+
+
+def test_gpush_default_remote_policy_skips_rebase_check(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _add_self_origin_and_fetch(stack_repo)
+    _advance_main_with_commit(stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
+    assert "refs/for/main" in out
+    assert "not based directly" not in err.lower()
+
+
+def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _add_self_origin_and_fetch(stack_repo)
+    _advance_main_with_commit(stack_repo)
+    git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
+    assert "refs/for/main" in out
+    assert "warning:" in err.lower()
+    assert "ger rebase --onto-remote" in err
+
+
+def test_gpush_error_not_rebased_exits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _add_self_origin_and_fetch(stack_repo)
+    _advance_main_with_commit(stack_repo)
+    git("config", "gerrit.push.remotePolicy", "error-not-rebased", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 1
+    assert "error:" in err.lower()
+    assert "ger rebase --onto-remote" in err
+
+
+def test_gpush_no_rebase_check_bypasses_error_policy(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _add_self_origin_and_fetch(stack_repo)
+    _advance_main_with_commit(stack_repo)
+    git("config", "gerrit.push.remotePolicy", "error-not-rebased", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--no-rebase-check"], monkeypatch)
+    assert code == 0
+    assert "refs/for/main" in out
+    assert "not based directly" not in err.lower()
+
+
+def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
+    assert "refs/for/main" in out
+    assert "skipping remote rebase check" in err.lower()
 
 
 def test_gpush_cancel_at_prompt_does_not_create_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -174,6 +174,34 @@ def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
     }
 
 
+def gerrit_push_remote_policy(cwd: Path | str | None) -> str:
+    """Return ``gerrit.push.remotePolicy``: how to treat a branch not linearly on the fetched Gerrit target tip.
+
+    Values: ``ignore-not-rebased`` (default), ``warn-not-rebased``, ``error-not-rebased``.
+    Unknown or empty values behave like ``ignore-not-rebased``.
+    """
+    v = _config_get(cwd, "gerrit.push.remotePolicy")
+    if not v:
+        return "ignore-not-rebased"
+    s = v.strip().lower()
+    if s in ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased"):
+        return s
+    return "ignore-not-rebased"
+
+
+def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> tuple[bool, str]:
+    """Return whether ``HEAD`` contains the remote-tracking tip of the configured Gerrit target (linear stack).
+
+    After ``git fetch``, this is equivalent to ``merge-base(HEAD, R) == R`` for *R* the target tip, and to
+    ``git merge-base --is-ancestor R HEAD`` (the fetched target tip must be an ancestor of ``HEAD``).
+
+    Returns ``(ok, onto_ref)`` where *onto_ref* is the symbolic remote ref (e.g. ``origin/main``).
+    """
+    onto = resolve_rebase_onto_remote_ref(cwd, branch)
+    p = git("merge-base", "--is-ancestor", onto, "HEAD", cwd=cwd, check=False)
+    return (p.returncode == 0, onto)
+
+
 def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
     """Defaults for ``ger rebase`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
     return {
@@ -262,17 +290,14 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
             p = git("rev-parse", "--verify", f"refs/heads/{target}", cwd=cwd, check=False)
         if p.returncode == 0:
             return (p.stdout.strip(), target)
-        rn = gerrit_remote(cwd)
         raise GitError(
-            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for merge-base).\n\n"
-            f"Run `ger branch show`. If the value is wrong, use `ger branch set-target <branch>` "
-            f"(short Gerrit branch name).\n"
-            f"If it is correct, fetch so remote-tracking refs exist, e.g.:\n"
-            f"  git fetch {rn}\n"
-            f"  git fetch {rn} {target}\n\n"
-            f"Equivalent: `git config branch.{b}.gerritTarget <branch>`\n\n"
-            "Do not create a *local* branch named like `origin/<branch>`—that layout comes from fetch under "
-            "`refs/remotes/<remote>/<branch>`."
+            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for merge-base). "
+            f"Fetch from your Gerrit remote (`gerrit.remote`, often `origin`), e.g. "
+            f"`git fetch <remote>` or `git fetch <remote> <branch>`, so the branch exists as a "
+            f"remote-tracking ref when required. "
+            f"Set branch.{b}.gerritTarget to the destination branch name on Gerrit (e.g. `dev`); "
+            f"do not create a *local* branch whose name is `origin/<branch>`—that form should only "
+            f"appear as `refs/remotes/<remote>/<branch>` after fetching."
         )
 
     p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
@@ -301,10 +326,9 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
             return (p2.stdout.strip(), name)
 
     raise GitError(
-        f"No base branch found for '{b}'.\n\n"
-        "Initialize or set the Gerrit destination branch:\n"
+        f"No base branch found for '{b}'.\n"
+        "Initialize this branch first:\n"
         "  ger branch init --target <target-branch>\n"
-        "  ger branch set-target <target-branch>\n"
         "Or set it manually:\n"
         f"  git config branch.{b}.gerritTarget <target-branch>\n"
         f"  git branch --set-upstream-to=origin/<target-branch>"
@@ -365,23 +389,16 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         if p.returncode == 0:
             return cand
 
+    hint = (
+        f"Set branch.{b}.gerritTarget to the destination branch name, fetch from your Gerrit remote "
+        f"(`gerrit.remote`, often `{remote_name}`), e.g. `git fetch {remote_name}` so "
+        f"`refs/remotes/{remote_name}/<branch>` exists."
+    )
     if target:
         tried = ", ".join(_remote_tracking_ref_candidates_from_target(remote_name, target)) or f"{remote_name}/{target}"
         raise GitError(
-            f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}).\n\n"
-            f"Run `ger branch show` to see gerritTarget.\n"
-            f"If it is wrong, fix it with `ger branch set-target <branch>` "
-            f"(short Gerrit branch name, e.g. main or dev).\n"
-            f"If it is correct, update remote refs:\n"
-            f"  git fetch {remote_name}\n\n"
-            f"Equivalent: `git config branch.{b}.gerritTarget <branch>`"
+            f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}). {hint}"
         )
     raise GitError(
-        f"No remote-tracking ref found for `ger rebase --onto-remote`.\n\n"
-        f"No `branch.{b}.gerritTarget` and no usable upstream/main/master remote ref.\n\n"
-        f"Point this branch at the Gerrit destination, then fetch (`gerrit.remote` is `{remote_name}`):\n"
-        f"  ger branch init --target <branch>\n"
-        f"  ger branch set-target <branch>\n"
-        f"  git fetch {remote_name}\n\n"
-        f"So `refs/remotes/{remote_name}/<branch>` exists locally."
+        f"No remote-tracking ref found for `ger rebase --onto-remote`. {hint}"
     )

@@ -26,10 +26,12 @@ from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
     branch_gerrit_target,
     gerrit_password,
+    gerrit_push_remote_policy,
     gerrit_remote,
     gerrit_token,
     gerrit_user,
     gpush_defaults,
+    head_is_linear_on_remote_gerrit_target,
     refs_for_push_branch_name,
     set_branch_config,
 )
@@ -42,6 +44,8 @@ from gerrit_workflow_tools.stack import merge_base_with_target, parse_change_id,
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
+
+_REBASE_ONTO_REMOTE_HINT = "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."
 
 
 def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:
@@ -295,6 +299,64 @@ def _confirm_push_interactive() -> bool:
             return parsed
 
 
+def _maybe_check_rebased_onto_remote(
+    cwd: Path,
+    branch: str,
+    *,
+    policy: str,
+    no_rebase_check: bool,
+) -> int | None:
+    """If the branch is not linear on the fetched remote target, warn or error per *policy*. Return exit code or None."""
+    if no_rebase_check or policy == "ignore-not-rebased":
+        return None
+    remote_name = gerrit_remote(cwd)
+    try:
+        git("fetch", remote_name, cwd=cwd)
+    except GitError as e:
+        print(
+            f"warning: could not fetch `{remote_name}`; skipping remote rebase check: {e}",
+            file=sys.stderr,
+        )
+        return None
+    try:
+        ok, onto = head_is_linear_on_remote_gerrit_target(cwd, branch)
+    except GitError as e:
+        print(
+            f"warning: could not compare HEAD to remote target; skipping remote rebase check: {e}",
+            file=sys.stderr,
+        )
+        return None
+    if ok:
+        return None
+    short_onto = onto
+    try:
+        short_onto = git_out("rev-parse", "--abbrev-ref", onto, cwd=cwd)
+    except GitError:
+        try:
+            short_onto = git_out("rev-parse", "--short", onto, cwd=cwd)
+        except GitError:
+            pass
+    try:
+        tip = git_out("rev-parse", "--short", onto, cwd=cwd)
+        fork = git_out("merge-base", "HEAD", onto, cwd=cwd)
+        fork_s = git_out("rev-parse", "--short", fork, cwd=cwd)
+        detail = (
+            f"tip of `{short_onto}` ({tip}) is not an ancestor of HEAD "
+            f"(fork at {fork_s}; rebase onto the fetched target to linearize)"
+        )
+    except GitError:
+        detail = f"tip of `{short_onto}` is not an ancestor of HEAD"
+    msg = (
+        f"Local HEAD is not based directly on the current Gerrit target branch after fetch ({detail}). "
+        f"{_REBASE_ONTO_REMOTE_HINT}"
+    )
+    if policy == "error-not-rebased":
+        print(f"error: {msg}", file=sys.stderr)
+        return 1
+    print(f"warning: {msg}", file=sys.stderr)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
     p = argparse.ArgumentParser(prog="ger push")
@@ -327,6 +389,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not update lastPush/<current-branch> after push (overrides gerrit.lastPushedBranch).",
     )
     p.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
+    p.add_argument(
+        "--no-rebase-check",
+        action="store_true",
+        help="Do not fetch or verify that HEAD is linear on the remote Gerrit target (see gerrit.push.remotePolicy).",
+    )
     p.add_argument(
         "-y",
         "--yes",
@@ -367,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     init_color_mode(color=args.color)
     summary_highlighter = build_summary_highlighter(cwd)
     gdef = gpush_defaults(cwd)
+    remote_policy = gerrit_push_remote_policy(cwd)
     show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
     update_last_pushed = (
         bool(args.update_last_pushed) or gdef["last_pushed_branch"]
@@ -374,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.debug(
         "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s show_attributes=%s "
-        "update_last_pushed=%s i=%s",
+        "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s",
         cwd,
         args.dry_run,
         args.yes,
@@ -385,6 +453,8 @@ def main(argv: list[str] | None = None) -> int:
         show_attributes,
         update_last_pushed,
         args.i,
+        remote_policy,
+        args.no_rebase_check,
     )
 
     if args.i and args.yes:
@@ -401,15 +471,17 @@ def main(argv: list[str] | None = None) -> int:
 
         target = args.target or branch_gerrit_target(cwd, b)
         if not target:
-            raise GitError(
-                "No Gerrit target.\n\n"
-                "Configure the destination branch:\n"
-                "  ger branch init --target <branch>\n"
-                "  ger branch set-target <branch>\n\n"
-                "Or for this push only:\n"
-                "  ger push --target <branch>"
-            )
+            raise GitError("No Gerrit target: run `ger branch init --target <branch>` or `ger push --target <branch>`.")
         push_branch = refs_for_push_branch_name(cwd, target)
+
+        rc_early = _maybe_check_rebased_onto_remote(
+            cwd,
+            b,
+            policy=remote_policy,
+            no_rebase_check=bool(args.no_rebase_check),
+        )
+        if rc_early is not None:
+            return rc_early
 
         interactive: str | None = None
         if args.i:
