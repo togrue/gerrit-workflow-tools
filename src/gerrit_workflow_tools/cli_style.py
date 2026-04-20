@@ -54,6 +54,15 @@ def color_text(text: str, code: str) -> str:
     return f"{code}{text}{ANSI_RESET}"
 
 
+# Abbreviated (and inline) commit SHAs use one color everywhere in the CLIs.
+SHORT_SHA_SGR = ANSI_CYAN
+
+
+def color_short_sha(text: str) -> str:
+    """Colorize a displayed Git commit SHA for consistent status output (abbreviated or full)."""
+    return color_text(text, SHORT_SHA_SGR)
+
+
 def visible_len(text: str) -> int:
     """Length of terminal-visible characters (ANSI and strike combining chars ignored)."""
     plain = _ANSI_ESCAPE_RE.sub("", text)

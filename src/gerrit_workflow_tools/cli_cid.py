@@ -24,11 +24,13 @@ from gerrit_workflow_tools.change_id import (
     is_change_id_token,
 )
 from gerrit_workflow_tools.cli_common import (
+    add_color_args,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
 )
+from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import (
     git_log_sha_body,
@@ -124,8 +126,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Check for duplicate Change-Ids across merge_base..END (same range as --start-at-remote).",
     )
+    add_color_args(p)
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
+    init_color_mode(color=args.color)
     cwd = cwd_from_env()
 
     input_arg = args.rev_or_range or "HEAD"
@@ -149,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             cid = extract_change_id_from_msg(msg)
             if not cid:
                 print(
-                    f"error: no Change-Id found in commit {sha}",
+                    f"error: no Change-Id found in commit {color_short_sha(sha)}",
                     file=sys.stderr,
                 )
                 return 1
@@ -157,7 +161,8 @@ def main(argv: list[str] | None = None) -> int:
                 short = sha[:8]
                 first = seen[cid][:8]
                 print(
-                    f"error: duplicate Change-Id {cid} (commit {short}, also on {first})",
+                    f"error: duplicate Change-Id {cid} (commit {color_short_sha(short)}, "
+                    f"also on {color_short_sha(first)})",
                     file=sys.stderr,
                 )
                 return 2
@@ -185,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
         if cid:
             print(cid)
         else:
-            print(f"error: no Change-Id found in commit {sha}", file=sys.stderr)
+            print(f"error: no Change-Id found in commit {color_short_sha(sha)}", file=sys.stderr)
             return 1
     return 0
 

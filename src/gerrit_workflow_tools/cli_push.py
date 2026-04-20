@@ -17,8 +17,12 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 from gerrit_workflow_tools.cli_style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
     ANSI_DIM_GRAY,
     ANSI_YELLOW,
+    color_short_sha,
     color_text,
     init_color_mode,
 )
@@ -208,7 +212,12 @@ def _commit_lines_for_preview(
     lines: list[str] = []
     for _full, short_sha, subj, raw in rows:
         disp = summary_highlighter.highlight(subj)
-        line = f"    {short_sha} # {disp}"
+        sha_p = short_sha.ljust(8)
+        line = (
+            f"    {color_short_sha(sha_p)}"
+            f"{color_text(' # ', ANSI_DIM)}"
+            f"{disp}"
+        )
         if show_attributes and details_by_cid is not None:
             cid = parse_change_id(raw)
             if cid:
@@ -247,7 +256,12 @@ def _format_boundary_commit_line(
         subject = git_out("show", "-s", "--format=%s", boundary_sha, cwd=cwd)
     except GitError:
         return None
-    return f"{short_sha} # {summary_highlighter.highlight(subject)}"
+    sha_p = short_sha.ljust(8)
+    return (
+        f"{color_short_sha(sha_p)}"
+        f"{color_text(' # ', ANSI_DIM)}"
+        f"{summary_highlighter.highlight(subject)}"
+    )
 
 
 def _print_gpush_preview(
@@ -262,7 +276,7 @@ def _print_gpush_preview(
     if show_push_command:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
-    print("About to push commits:")
+    print(color_text("About to push commits:", f"{ANSI_BOLD}{ANSI_CYAN}"))
     for ln in commit_lines:
         print(ln)
     if r.boundary_sha:

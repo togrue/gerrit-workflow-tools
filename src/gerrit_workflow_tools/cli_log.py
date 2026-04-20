@@ -22,6 +22,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_RESET,
     ANSI_STRIKE,
     ANSI_YELLOW,
+    color_short_sha,
     color_text,
     init_color_mode,
     is_color_enabled,
@@ -45,6 +46,14 @@ from gerrit_workflow_tools.stack import (
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
+
+# Fixed width for the abbreviated SHA so status columns line up across commits.
+_STATUS_SHA_COL_WIDTH = 8
+
+
+def _status_sha_column(short_sha: str) -> str:
+    """Left-justify short SHA for a stable column (typical git abbrev is 7 characters)."""
+    return short_sha.ljust(_STATUS_SHA_COL_WIDTH)
 
 
 def _visible_len(s: str) -> int:
@@ -112,7 +121,7 @@ def _fmt_verified(v: int | None) -> str:
         return _color("v+1", ANSI_GREEN)
     if v <= -1:
         return _color("v-1", ANSI_RED)
-    return "v0 "
+    return _color("v0 ", ANSI_DIM)
 
 
 def _fmt_code_review(cr: int | None) -> str:
@@ -126,18 +135,18 @@ def _fmt_code_review(cr: int | None) -> str:
         return _color("cr-1", ANSI_YELLOW)
     if cr <= -2:
         return _color("cr-2", ANSI_RED)
-    return "cr0 "
+    return _color("cr0 ", ANSI_DIM)
 
 
 def _fmt_comments(count: int) -> str:
     if count > 0:
         return _color("com", ANSI_YELLOW)
-    return "   "
+    return _color("   ", ANSI_DIM)
 
 
 def _primary_line_prefix(commit: LogCommit) -> str:
     """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
-    sha = commit.short_sha
+    sha = color_short_sha(_status_sha_column(commit.short_sha))
     push = _fmt_patchset_column(commit)
     verified = _fmt_verified(commit.verified)
     cr = _fmt_code_review(commit.code_review)
@@ -331,7 +340,7 @@ def _compact_line(commit: LogCommit, *, show_change_id: bool = False) -> str:
     else:
         sub = "."
     com = "c" if commit.comments_unresolved else "."
-    line = f"{commit.short_sha} {push} {v} {cr} {sub}{com}"
+    line = f"{color_short_sha(_status_sha_column(commit.short_sha))} {push} {v} {cr} {sub}{com}"
     if show_change_id and commit.change_id:
         cid = commit.change_id
         if len(cid) > 14:

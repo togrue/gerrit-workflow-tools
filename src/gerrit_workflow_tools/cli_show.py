@@ -19,7 +19,14 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
 )
 from gerrit_workflow_tools.cli_log import _detail_lines, _primary_line, _url_line
-from gerrit_workflow_tools.cli_style import init_color_mode
+from gerrit_workflow_tools.cli_style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_YELLOW,
+    color_text,
+    init_color_mode,
+)
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
@@ -289,15 +296,17 @@ def main(argv: list[str] | None = None) -> int:
     url = commit.gerrit_url or ""
     if unresolved_rows:
         print()
-        print("unresolved comments:")
+        print(color_text("Unresolved comments", f"{ANSI_BOLD}{ANSI_CYAN}") + color_text(":", ANSI_DIM))
         for path, line, c in unresolved_rows:
             raw_msg = c.get("message")
             msg = raw_msg if isinstance(raw_msg, str) else ""
             body, _trunc = _apply_comment_tail(msg, tail_n, full=args.full)
             loc = f"{path}:{line}" if line is not None else path
-            print(f"  {loc}")
+            print(f"  {color_text(loc, ANSI_CYAN)}")
             if url:
-                print(f"  url: {url}")
+                print(
+                    f"  {color_text('url:', ANSI_DIM)} {color_text(url, ANSI_YELLOW)}"
+                )
             for ln in body.splitlines():
                 print(f"  {ln}")
             print()
