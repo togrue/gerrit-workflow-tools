@@ -45,7 +45,7 @@ ger branch init --target <branch> [--reviewers <list>]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--target BRANCH` | (required) | Gerrit target review branch |
+| `--target BRANCH` | (required) | Gerrit destination branch name (the branch reviews merge into), e.g. `main` or `dev` |
 | `--reviewers LIST` | (none) | Comma-separated list of Gerrit reviewer accounts |
 
 ---
@@ -86,6 +86,14 @@ ger branch set-reviewers alice,bob
     gerritTarget = main
     gerritReviewers = alice,bob
 ```
+
+---
+
+## Troubleshooting: gerritTarget missing locally
+
+Merge-base and push logic need the target to resolve with `git rev-parse`—as a local branch or (common case) as `refs/remotes/<remote>/<branch>` after you **fetch** from `gerrit.remote` (default `origin`). Run `git fetch origin` or `git fetch origin <branch>` before `ger push` if the destination exists on the server but you have not fetched it yet.
+
+Use the **short branch name** for `--target` / `gerritTarget` (e.g. `dev`). Do **not** create a local branch whose name looks like `origin/dev`; that pattern is for remote-tracking refs created by fetch, not a branch you should add manually under `refs/heads/`.
 
 ---
 

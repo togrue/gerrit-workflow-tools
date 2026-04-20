@@ -238,6 +238,11 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
     """
     Return (ref_for_merge_base, display_name) for merge-base, e.g. ('main', 'main').
     Order: branch.gerritTarget -> @{upstream} -> main -> master.
+
+    ``gerritTarget`` must be the Gerrit destination **branch name** (e.g. ``dev``). It must
+    resolve to an existing ref—usually a local branch or ``refs/remotes/<remote>/<branch>``
+    after ``git fetch``. Do not create a local branch whose name looks like ``origin/<branch>``;
+    that is a remote-tracking layout, populated by fetching from the Gerrit remote.
     """
     from gerrit_workflow_tools.git_run import GitError
 
@@ -250,8 +255,13 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         if p.returncode == 0:
             return (p.stdout.strip(), target)
         raise GitError(
-            f"gerritTarget '{target}' is configured but ref not found locally. "
-            f"Create branch '{target}' or fix branch.{b}.gerritTarget."
+            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for merge-base). "
+            f"Fetch from your Gerrit remote (`gerrit.remote`, often `origin`), e.g. "
+            f"`git fetch <remote>` or `git fetch <remote> <branch>`, so the branch exists as a "
+            f"remote-tracking ref when required. "
+            f"Set branch.{b}.gerritTarget to the destination branch name on Gerrit (e.g. `dev`); "
+            f"do not create a *local* branch whose name is `origin/<branch>`—that form should only "
+            f"appear as `refs/remotes/<remote>/<branch>` after fetching."
         )
 
     p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)

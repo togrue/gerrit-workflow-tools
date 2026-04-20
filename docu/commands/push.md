@@ -56,6 +56,8 @@ ger push [options] [REV]
 2. Ready boundary is computed — blocked commits are excluded unless `--all`.
 3. Change-Id check — aborts with exit code `2` if any hard errors exist.
 
+The configured target must also **resolve locally** (for merge-base). That usually means you have the destination as a local branch or as a remote-tracking ref after `git fetch` on `gerrit.remote`. If you see an error that the target is missing, fetch first—see [Troubleshooting](branch.md#troubleshooting-gerrittarget-missing-locally) under `ger branch`.
+
 ---
 
 ## Output

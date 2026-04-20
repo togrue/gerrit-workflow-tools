@@ -71,7 +71,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("show", help="Show Gerrit metadata for the current branch.")
 
     ip = sub.add_parser("init", help="Set branch-local Gerrit targets (non-interactive).")
-    ip.add_argument("--target", help="Gerrit review branch (e.g. main).")
+    ip.add_argument(
+        "--target",
+        help="Gerrit destination branch name on the server (e.g. main, dev); fetch the remote if missing locally.",
+    )
     ip.add_argument(
         "--reviewers",
         default=None,
@@ -79,8 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated Gerrit reviewer accounts.",
     )
 
-    st = sub.add_parser("set-target", help="Set gerritTarget for the current branch.")
-    st.add_argument("value", metavar="BRANCH")
+    st = sub.add_parser("set-target", help="Set gerritTarget (Gerrit destination branch name) for the current branch.")
+    st.add_argument(
+        "value",
+        metavar="BRANCH",
+        help="Destination branch on Gerrit (e.g. main, dev). Run `git fetch` on gerrit.remote if rev-parse fails.",
+    )
 
     sr = sub.add_parser("set-reviewers", help="Set gerritReviewers for the current branch.")
     sr.add_argument("value", metavar="REVIEWERS")

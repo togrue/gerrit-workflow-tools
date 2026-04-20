@@ -10,7 +10,7 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 
 **Ready boundary** — the first commit in the stack whose subject matches a configured stop pattern (e.g. `^dropme!`, `^TODO\b`, `^test!`). Commits before it are pushable by default; commits from it onward are blocked unless explicitly overridden.
 
-**Gerrit target branch** — stored per local branch in git config (`branch.<name>.gerritTarget`). Required for any push or Gerrit-API command. Set with `ger branch init --target <branch>`.
+**Gerrit target branch** — stored per local branch in git config (`branch.<name>.gerritTarget`). The value is the **branch name on the Gerrit server** (e.g. `main`, `dev`), not a made-up local branch name like `origin/dev`. Tools need that ref to exist locally for merge-base work—usually as your branch `dev` or as the remote-tracking ref `refs/remotes/origin/dev` after `git fetch`. Required for any push or Gerrit-API command. Set with `ger branch init --target <branch>`.
 
 **Change-Id** — the Gerrit footer (`Change-Id: I…`) in each commit message. All commands depend on this being present and unique within the stack. Validate with `ger cid --check-duplicates` (or list footers with `ger cid --start-at-remote`).
 
