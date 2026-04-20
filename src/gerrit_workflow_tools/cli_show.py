@@ -210,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
         return _EXIT_ERROR
 
     try:
-        commits = fetch_gerrit_data(client, web_base, [row])
+        commits = fetch_gerrit_data(client, web_base, [row], cwd=cwd)
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
         return _EXIT_ERROR
@@ -263,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
             "attention_reasons": attention,
             "comments": comment_payload,
             "local_commit": is_local,
+            "change_status": commit.change_status,
+            "merged_equivalent": commit.merged_equivalent,
         }
         print(json.dumps(payload, indent=2))
         return _EXIT_ATTENTION if attention else 0

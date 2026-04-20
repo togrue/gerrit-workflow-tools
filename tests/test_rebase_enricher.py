@@ -540,3 +540,114 @@ def test_cli_rebase_debug_log_sets_env_flag(stack_repo: Path, monkeypatch):
         rebase_main(["--debug-log"])
 
     assert captured.get("env", {}).get("GREBASE_DEBUG_LOG") == "1"
+
+
+def test_cli_rebase_onto_remote_passes_remote_ref(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.git_run import git
+
+    git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
+    captured: dict = {}
+    monkeypatch.chdir(stack_repo)
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        code = rebase_main(["--onto-remote"])
+
+    assert code == 0
+    assert captured["cmd"] == ["git", "rebase", "-i", "origin/main"]
+
+
+def test_cli_rebase_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.git_run import git
+
+    git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
+    captured: dict = {}
+    monkeypatch.chdir(stack_repo)
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        rebase_main(["--onto-remote", "--drop-merged-equivalent"])
+
+    assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") == "1"
+
+
+def test_cli_rebase_cannot_combine_onto_remote_with_rev(stack_repo: Path, monkeypatch):
+    import pytest
+
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+
+    monkeypatch.chdir(stack_repo)
+    with pytest.raises(SystemExit) as exc:
+        rebase_main(["--onto-remote", "HEAD"])
+    assert exc.value.code == 2
+
+
+def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monkeypatch):
+    """GREBASE_DROP_MERGED_EQUIVALENT turns pick into drop when merged-same."""
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
+
+    rows = stack_rows_mb_to_head(stack_repo)
+    n = len(rows)
+    details = build_details_by_change_id(
+        rows, per_index_overrides=[{"status": "MERGED", "submittable": False}] * n
+    )
+    text = _make_todo(rows)
+    monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
+    wg, wrgb, wgc = _patch_gerrit(details)
+    with wg, wrgb, wgc:
+        result = _enrich_todo(text, stack_repo)
+
+    for _, short, _, _ in rows:
+        assert f"drop {short} #" in result
+
+
+def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
+
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED"}])
+    text = _make_todo(rows).replace("pick ", "reword ", 1)
+    monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
+    wg, wrgb, wgc = _patch_gerrit(details)
+    with wg, wrgb, wgc:
+        result = _enrich_todo(text, stack_repo)
+
+    first_short = rows[0][1]
+    assert result.startswith(f"reword {first_short} #")
+
+
+def test_compute_merged_equivalent_sha_match(stack_repo: Path):
+    from gerrit_workflow_tools.gerrit_change_status import compute_merged_equivalent
+    from gerrit_workflow_tools.git_run import git_out
+
+    from tests.cli_gerrit_mocks import change_info_for_sha
+
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    cid = "I" + "a" * 40
+    d = change_info_for_sha(sha, cid, status="MERGED", submittable=False)
+    assert compute_merged_equivalent(sha, d, stack_repo) is True
+
+
+def test_commit_blocks_chain_for_submittability_merged():
+    from gerrit_workflow_tools.gerrit_change_status import LogCommit, commit_blocks_chain_for_submittability
+
+    def lc(**kw: object) -> LogCommit:
+        base = dict(
+            sha="a" * 40,
+            short_sha="aaa",
+            summary="s",
+            change_id="I" + "b" * 40,
+            pushed=True,
+            abandoned=False,
+            patchset_status="active",
+            verified=None,
+            code_review=None,
+            comments_unresolved=0,
+            submittable=False,
+        )
+        base.update(kw)
+        return LogCommit(**base)
+
+    assert commit_blocks_chain_for_submittability(lc(patchset_status="merged-same")) is False
+    assert commit_blocks_chain_for_submittability(lc(patchset_status="merged-drift")) is True
+    assert commit_blocks_chain_for_submittability(lc(patchset_status="merged-unknown")) is True
+    assert commit_blocks_chain_for_submittability(lc(patchset_status="active", submittable=True)) is False
+    assert commit_blocks_chain_for_submittability(lc(patchset_status="active", submittable=False)) is True

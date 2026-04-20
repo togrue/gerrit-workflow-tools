@@ -14,7 +14,11 @@ __gwt_flags() {
 _ger_rebase() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" --help -v --verbose --debug-log
+        __gwt_flags "$cur" \
+            --help \
+            --onto-remote --no-onto-remote \
+            --drop-merged-equivalent \
+            -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then

@@ -15,6 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
+from gerrit_workflow_tools.config import rebase_defaults, resolve_rebase_onto_remote_ref
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.stack import merge_base_with_target, resolve_stack_commit
 
@@ -46,7 +47,28 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "Base commit, Change-Id (I…), or git ref to rebase from "
-            "(default: merge base with the target branch)."
+            "(default: merge base with the target branch). Not with --onto-remote."
+        ),
+    )
+    p.add_argument(
+        "--onto-remote",
+        action="store_true",
+        help=(
+            "Rebase the current branch onto the fetched remote-tracking tip of the configured "
+            "target (see branch.gerritTarget and gerrit.remote). Default: gerrit.rebaseOntoRemote."
+        ),
+    )
+    p.add_argument(
+        "--no-onto-remote",
+        action="store_true",
+        help="Override gerrit.rebaseOntoRemote: use merge-base with the target (default behavior).",
+    )
+    p.add_argument(
+        "--drop-merged-equivalent",
+        action="store_true",
+        help=(
+            "Turn merged commits that are provably equivalent to the merged Gerrit revision into "
+            "drop lines in the todo. Default: gerrit.rebaseDropMergedEquivalent."
         ),
     )
     add_verbose_and_debug_log_args(
@@ -57,8 +79,25 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
+    if args.onto_remote and args.rev:
+        p.error("cannot combine --onto-remote with a REV argument")
+
+    rdef = rebase_defaults(cwd)
+    if args.no_onto_remote:
+        use_onto_remote = False
+    elif args.onto_remote:
+        use_onto_remote = True
+    elif args.rev:
+        use_onto_remote = False
+    else:
+        use_onto_remote = rdef["onto_remote"]
+
+    drop_merged = bool(args.drop_merged_equivalent or rdef["drop_merged_equivalent"])
+
     try:
-        if args.rev:
+        if use_onto_remote:
+            base = resolve_rebase_onto_remote_ref(cwd)
+        elif args.rev:
             # resolve_stack_commit handles both Change-Id (I…) and plain git refs.
             base = resolve_stack_commit(cwd, args.rev.strip())
         else:
@@ -74,8 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.debug_log:
         env["GREBASE_DEBUG_LOG"] = "1"
+    if drop_merged:
+        env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
 
-    logger.debug("ger rebase: base=%s", base[:8])
+    logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
     r = subprocess.run(["git", "rebase", "-i", base], cwd=cwd, env=env)
     return r.returncode
 

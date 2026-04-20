@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.config import gerrit_web_url
 from gerrit_workflow_tools.gerrit_change_status import (
     LogCommit,
+    commit_blocks_chain_for_submittability,
     determine_attention,
     fetch_gerrit_data,
 )
@@ -44,6 +45,12 @@ def _fmt_patchset(commit: LogCommit) -> str:
     if commit.abandoned:
         return "a"
     status = commit.patchset_status
+    if status == "merged-same":
+        return "m"
+    if status == "merged-drift":
+        return "!"
+    if status == "merged-unknown":
+        return "?"
     if status == "active":
         return "p"
     if status == "newer":
@@ -90,6 +97,12 @@ def _attention_text(commit: LogCommit) -> str:
         return "abandoned"
     if not commit.pushed:
         return "not-pushed"
+    if commit.patchset_status == "merged-same":
+        return ""
+    if commit.patchset_status == "merged-drift":
+        return "merged drift"
+    if commit.patchset_status == "merged-unknown":
+        return "merged (equiv. unknown)"
     parts: list[str] = []
     if commit.ci_failures:
         parts.append(f"CI failed: {commit.ci_failures[0]}")
@@ -267,20 +280,26 @@ def _enrich_todo(text: str, cwd: Path) -> str:
 
     web_base = resolve_gerrit_web_base(cwd)
     client = GerritClient(web_base, cwd=str(cwd))
-    commits = fetch_gerrit_data(client, web_base, commit_inputs)
+    commits = fetch_gerrit_data(client, web_base, commit_inputs, cwd=cwd)
 
     # Annotate attention (chain-blocked aware, oldest-first).
     for idx, commit in enumerate(commits):
         chain_blocked = False
         if commit.pushed:
             for earlier in commits[:idx]:
-                if earlier.pushed and not earlier.submittable:
+                if earlier.pushed and commit_blocks_chain_for_submittability(earlier):
                     chain_blocked = True
                     break
         commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
 
     # Build short_sha → LogCommit lookup.
     commit_by_sha: dict[str, LogCommit] = {c.short_sha: c for c in commits}
+
+    drop_merged = os.environ.get("GREBASE_DROP_MERGED_EQUIVALENT", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # Rewrite lines.
     out: list[str] = []
@@ -295,7 +314,17 @@ def _enrich_todo(text: str, cwd: Path) -> str:
             commit = commit_by_sha.get(short_sha)
             if commit is not None:
                 newline = "\n" if line.endswith("\n") else ""
-                out.append(f"{parts[0]} {short_sha} {_enriched_subject(commit)}{newline}")
+                action = parts[0]
+                if (
+                    drop_merged
+                    and commit.patchset_status == "merged-same"
+                    and commit.merged_equivalent is True
+                ):
+                    if action == "pick":
+                        action = "drop"
+                    elif action == "p":
+                        action = "d"
+                out.append(f"{action} {short_sha} {_enriched_subject(commit)}{newline}")
                 continue
         out.append(line)
 

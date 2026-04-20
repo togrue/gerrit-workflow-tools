@@ -30,6 +30,7 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.config import log_defaults
 from gerrit_workflow_tools.gerrit_change_status import (
     LogCommit,
+    commit_blocks_chain_for_submittability,
     determine_attention,
     fetch_gerrit_data,
 )
@@ -63,12 +64,17 @@ def _color(text: str, code: str) -> str:
 
 
 def _annotate_attention(commits: list[LogCommit]) -> None:
-    """Populate attention_reasons on each commit, including chain-blocking."""
+    """Populate attention_reasons on each commit, including chain-blocking.
+
+    Chain-blocking: an earlier pushed commit blocks later ones when
+    :func:`~gerrit_workflow_tools.gerrit_change_status.commit_blocks_chain_for_submittability`
+    says so (Gerrit submittable, plus MERGED equivalence rules).
+    """
     for i, commit in enumerate(commits):
         chain_blocked = False
         if commit.pushed:
             for earlier in commits[:i]:
-                if earlier.pushed and not earlier.submittable:
+                if earlier.pushed and commit_blocks_chain_for_submittability(earlier):
                     chain_blocked = True
                     break
         commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
@@ -84,6 +90,12 @@ def _fmt_patchset_column(commit: LogCommit) -> str:
     if commit.abandoned:
         return _color("a", ANSI_DIM)
     status = commit.patchset_status
+    if status == "merged-same":
+        return _color("m", ANSI_GREEN)
+    if status == "merged-drift":
+        return _color("!", ANSI_RED)
+    if status == "merged-unknown":
+        return _color("?", ANSI_YELLOW)
     if status == "active":
         return _color("p", ANSI_GREEN)
     if status == "newer":
@@ -184,6 +196,12 @@ def _primary_line(
 def _attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
     if commit.abandoned:
         return [("abandoned", ANSI_RED)]
+    if commit.patchset_status == "merged-drift":
+        return [("merged drift", ANSI_RED)]
+    if commit.patchset_status == "merged-unknown":
+        return [("merged (equiv. unknown)", ANSI_YELLOW)]
+    if commit.patchset_status == "merged-same":
+        return []
 
     tokens: list[tuple[str, str]] = []
     if commit.ci_failures or (commit.verified is not None and commit.verified <= -1):
@@ -287,6 +305,12 @@ def _compact_patchset_letter(commit: LogCommit) -> str:
     if commit.abandoned:
         return "a"
     status = commit.patchset_status
+    if status == "merged-same":
+        return "m"
+    if status == "merged-drift":
+        return "!"
+    if status == "merged-unknown":
+        return "?"
     if status == "active":
         return "p"
     if status == "newer":
@@ -331,7 +355,7 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
     ready = 0
     total = len(commits)
     for c in commits:
-        if c.patchset_status in ("absent", "newer"):
+        if c.patchset_status in ("absent", "newer", "merged-same"):
             ready += 1
         if c.pushed and c.verified is not None and c.verified <= -1:
             counts["ci-failures"] += 1
@@ -481,7 +505,7 @@ def main(argv: list[str] | None = None) -> int:
     client = GerritClient(web_base, cwd=str(cwd))
 
     try:
-        commits = fetch_gerrit_data(client, web_base, commit_data)
+        commits = fetch_gerrit_data(client, web_base, commit_data, cwd=cwd)
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
         return 3
@@ -507,6 +531,8 @@ def main(argv: list[str] | None = None) -> int:
                 "change_id": c.change_id,
                 "abandoned": c.abandoned,
                 "attention_reasons": c.attention_reasons,
+                "change_status": c.change_status,
+                "merged_equivalent": c.merged_equivalent,
             }
             for c in visible
         ]

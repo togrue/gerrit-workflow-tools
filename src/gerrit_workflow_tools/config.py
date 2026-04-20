@@ -174,6 +174,14 @@ def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
     }
 
 
+def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
+    """Defaults for ``ger rebase`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
+    return {
+        "onto_remote": config_bool(cwd, "gerrit.rebaseOntoRemote"),
+        "drop_merged_equivalent": config_bool(cwd, "gerrit.rebaseDropMergedEquivalent"),
+    }
+
+
 def stop_patterns(cwd: Path | str | None) -> list[str]:
     """Return ``gerrit.stopPattern`` lines as regex strings, or built-in defaults if none are configured."""
     _ensure_snapshot(cwd)
@@ -296,4 +304,73 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         "Or set it manually:\n"
         f"  git config branch.{b}.gerritTarget <target-branch>\n"
         f"  git branch --set-upstream-to=origin/<target-branch>"
+    )
+
+
+def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -> list[str]:
+    """Build refs to try for ``ger rebase --onto-remote`` from ``branch.*.gerritTarget``.
+
+    Accepts a bare branch name (``dev`` → ``<remote>/dev``) or an existing remote-tracking
+    form (``origin/dev``) without doubling the remote (``origin/origin/dev``).
+    ``refs/remotes/origin/dev`` is normalized to ``origin/dev``.
+    """
+    t = target.strip()
+    if not t:
+        return []
+    if t.startswith("refs/remotes/"):
+        t = t[len("refs/remotes/") :]
+    if "/" in t:
+        return [t]
+    return [f"{remote_name}/{t}"]
+
+
+def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = None) -> str:
+    """
+    Return a ref accepted by ``git rebase -i <ref>`` for rebasing onto the **latest fetched**
+    remote-tracking tip of the configured Gerrit target branch (e.g. ``origin/main``).
+
+    Unlike :func:`resolve_local_base_ref`, this returns a **remote-tracking symbolic ref**, not a
+    detached SHA, so ``git rebase`` replays local commits onto the remote tip.
+
+    Resolution order: ``branch.<name>.gerritTarget`` → ``refs/remotes/<gerrit.remote>/<target>``;
+    if unset, use ``@{upstream}`` when it looks like ``remote/branch``; else try
+    ``<gerrit.remote>/main`` and ``<gerrit.remote>/master``.
+    """
+    from gerrit_workflow_tools.git_run import GitError
+
+    b = branch or current_branch(cwd)
+    remote_name = gerrit_remote(cwd)
+    target = branch_gerrit_target(cwd, b)
+
+    candidates: list[str] = []
+    if target:
+        candidates.extend(_remote_tracking_ref_candidates_from_target(remote_name, target))
+    else:
+        p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
+        if p.returncode == 0:
+            candidates.append(p.stdout.strip())
+        for name in ("main", "master"):
+            candidates.append(f"{remote_name}/{name}")
+
+    seen: set[str] = set()
+    for cand in candidates:
+        if not cand or cand in seen:
+            continue
+        seen.add(cand)
+        p = git("rev-parse", "--verify", cand, cwd=cwd, check=False)
+        if p.returncode == 0:
+            return cand
+
+    hint = (
+        f"Set branch.{b}.gerritTarget to the destination branch name, fetch from your Gerrit remote "
+        f"(`gerrit.remote`, often `{remote_name}`), e.g. `git fetch {remote_name}` so "
+        f"`refs/remotes/{remote_name}/<branch>` exists."
+    )
+    if target:
+        tried = ", ".join(_remote_tracking_ref_candidates_from_target(remote_name, target)) or f"{remote_name}/{target}"
+        raise GitError(
+            f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}). {hint}"
+        )
+    raise GitError(
+        f"No remote-tracking ref found for `ger rebase --onto-remote`. {hint}"
     )
