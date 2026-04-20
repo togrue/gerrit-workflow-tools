@@ -401,7 +401,14 @@ def main(argv: list[str] | None = None) -> int:
 
         target = args.target or branch_gerrit_target(cwd, b)
         if not target:
-            raise GitError("No Gerrit target: run `ger branch init --target <branch>` or `ger push --target <branch>`.")
+            raise GitError(
+                "No Gerrit target.\n\n"
+                "Configure the destination branch:\n"
+                "  ger branch init --target <branch>\n"
+                "  ger branch set-target <branch>\n\n"
+                "Or for this push only:\n"
+                "  ger push --target <branch>"
+            )
         push_branch = refs_for_push_branch_name(cwd, target)
 
         interactive: str | None = None

@@ -262,14 +262,17 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
             p = git("rev-parse", "--verify", f"refs/heads/{target}", cwd=cwd, check=False)
         if p.returncode == 0:
             return (p.stdout.strip(), target)
+        rn = gerrit_remote(cwd)
         raise GitError(
-            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for merge-base). "
-            f"Fetch from your Gerrit remote (`gerrit.remote`, often `origin`), e.g. "
-            f"`git fetch <remote>` or `git fetch <remote> <branch>`, so the branch exists as a "
-            f"remote-tracking ref when required. "
-            f"Set branch.{b}.gerritTarget to the destination branch name on Gerrit (e.g. `dev`); "
-            f"do not create a *local* branch whose name is `origin/<branch>`—that form should only "
-            f"appear as `refs/remotes/<remote>/<branch>` after fetching."
+            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for merge-base).\n\n"
+            f"Run `ger branch show`. If the value is wrong, use `ger branch set-target <branch>` "
+            f"(short Gerrit branch name).\n"
+            f"If it is correct, fetch so remote-tracking refs exist, e.g.:\n"
+            f"  git fetch {rn}\n"
+            f"  git fetch {rn} {target}\n\n"
+            f"Equivalent: `git config branch.{b}.gerritTarget <branch>`\n\n"
+            "Do not create a *local* branch named like `origin/<branch>`—that layout comes from fetch under "
+            "`refs/remotes/<remote>/<branch>`."
         )
 
     p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
@@ -298,9 +301,10 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
             return (p2.stdout.strip(), name)
 
     raise GitError(
-        f"No base branch found for '{b}'.\n"
-        "Initialize this branch first:\n"
+        f"No base branch found for '{b}'.\n\n"
+        "Initialize or set the Gerrit destination branch:\n"
         "  ger branch init --target <target-branch>\n"
+        "  ger branch set-target <target-branch>\n"
         "Or set it manually:\n"
         f"  git config branch.{b}.gerritTarget <target-branch>\n"
         f"  git branch --set-upstream-to=origin/<target-branch>"
@@ -361,16 +365,23 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         if p.returncode == 0:
             return cand
 
-    hint = (
-        f"Set branch.{b}.gerritTarget to the destination branch name, fetch from your Gerrit remote "
-        f"(`gerrit.remote`, often `{remote_name}`), e.g. `git fetch {remote_name}` so "
-        f"`refs/remotes/{remote_name}/<branch>` exists."
-    )
     if target:
         tried = ", ".join(_remote_tracking_ref_candidates_from_target(remote_name, target)) or f"{remote_name}/{target}"
         raise GitError(
-            f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}). {hint}"
+            f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}).\n\n"
+            f"Run `ger branch show` to see gerritTarget.\n"
+            f"If it is wrong, fix it with `ger branch set-target <branch>` "
+            f"(short Gerrit branch name, e.g. main or dev).\n"
+            f"If it is correct, update remote refs:\n"
+            f"  git fetch {remote_name}\n\n"
+            f"Equivalent: `git config branch.{b}.gerritTarget <branch>`"
         )
     raise GitError(
-        f"No remote-tracking ref found for `ger rebase --onto-remote`. {hint}"
+        f"No remote-tracking ref found for `ger rebase --onto-remote`.\n\n"
+        f"No `branch.{b}.gerritTarget` and no usable upstream/main/master remote ref.\n\n"
+        f"Point this branch at the Gerrit destination, then fetch (`gerrit.remote` is `{remote_name}`):\n"
+        f"  ger branch init --target <branch>\n"
+        f"  ger branch set-target <branch>\n"
+        f"  git fetch {remote_name}\n\n"
+        f"So `refs/remotes/{remote_name}/<branch>` exists locally."
     )
