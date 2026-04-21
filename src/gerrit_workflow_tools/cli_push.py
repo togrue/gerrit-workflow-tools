@@ -351,11 +351,18 @@ def _maybe_check_rebased_onto_remote(
 ) -> int | None:
     """If the branch is not linear on the fetched remote target, warn or error per *policy*. Return exit code or None."""
     if no_rebase_check or policy == "ignore-not-rebased":
+        logger.debug(
+            "gpush rebase check skipped: no_rebase_check=%s policy=%r",
+            no_rebase_check,
+            policy,
+        )
         return None
     remote_name = gerrit_remote(cwd)
+    logger.debug("gpush rebase check: fetching remote %r", remote_name)
     try:
         git("fetch", remote_name, cwd=cwd)
     except GitError as e:
+        logger.debug("gpush rebase check: fetch failed: %s", e)
         print(
             f"warning: could not fetch `{remote_name}`; skipping remote rebase check: {e}",
             file=sys.stderr,
@@ -370,7 +377,9 @@ def _maybe_check_rebased_onto_remote(
         )
         return None
     if ok:
+        logger.debug("gpush rebase check: HEAD is linear on remote target (ok)")
         return None
+    logger.debug("gpush rebase check: HEAD not linear on remote target; policy=%r", policy)
     short_onto = onto
     try:
         short_onto = git_out("rev-parse", "--abbrev-ref", onto, cwd=cwd)
@@ -547,6 +556,14 @@ def main(argv: list[str] | None = None) -> int:
 
         refspec = _refs_for_spec(tip, push_branch, reviewers)
         cmd = ["git", "push", remote, refspec]
+        logger.debug(
+            "gpush resolved: remote=%r gerrit_target=%r push_branch=%r reviewers=%s refspec=%r",
+            remote,
+            target,
+            push_branch,
+            reviewers,
+            refspec,
+        )
 
         try:
             commit_lines = _commit_lines_for_preview(
@@ -591,9 +608,12 @@ def main(argv: list[str] | None = None) -> int:
                 print("Push cancelled.", file=sys.stderr)
                 return 0
 
-        logger.debug("gpush executing: %s", " ".join(cmd))
+        logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
         proc = _run_git_push(cmd, cwd)
-        logger.debug("gpush push finished with return code %s", proc.returncode)
+        logger.debug(
+            "gpush push finished: rc=%s (push output is not captured; see terminal)",
+            proc.returncode,
+        )
         if proc.returncode == 0 and update_last_pushed:
             marker = f"lastPush/{b}"
             try:

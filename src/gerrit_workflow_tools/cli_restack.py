@@ -115,7 +115,10 @@ def main(argv: list[str] | None = None) -> int:
         env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
 
     logger.debug("ger restack: base=%s onto_remote=%s", base[:8], use_onto_remote)
-    r = subprocess.run(["git", "rebase", "-i", base], cwd=cwd, env=env)
+    cmd = ["git", "rebase", "-i", base]
+    logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
+    r = subprocess.run(cmd, cwd=cwd, env=env)
+    logger.debug("ger restack: git rebase finished rc=%s", r.returncode)
     return r.returncode
 
 

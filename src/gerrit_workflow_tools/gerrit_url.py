@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from gerrit_workflow_tools.config import gerrit_web_url
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
@@ -13,7 +16,9 @@ def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
     """
     override = gerrit_web_url(cwd)
     if override:
-        return override.rstrip("/")
+        base = override.rstrip("/")
+        logger.debug("resolve_gerrit_web_base: gerrit.webUrl -> %s", base)
+        return base
     raise ValueError(
         "gerrit.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
         "`git config gerrit.webUrl https://gerrit.example.com`"

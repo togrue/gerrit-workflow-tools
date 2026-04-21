@@ -129,10 +129,7 @@ def _enriched_subject(commit: LogCommit) -> str:
     Git ignores the subject field when processing the rebase todo.
     """
     subj = commit.summary
-    if len(subj) > _SUBJECT_WIDTH:
-        subj = subj[: _SUBJECT_WIDTH - 1] + "\u2026"  # …
-    else:
-        subj = subj.ljust(_SUBJECT_WIDTH)
+    subj = subj[: _SUBJECT_WIDTH - 1] + "\u2026" if len(subj) > _SUBJECT_WIDTH else subj.ljust(_SUBJECT_WIDTH)
 
     ps = _fmt_patchset(commit)
     if commit.pushed:
@@ -307,16 +304,16 @@ def _enrich_todo(text: str, cwd: Path) -> str:
         parts = line.split(None, 2)
         if len(parts) >= 2 and parts[0] in _COMMIT_ACTIONS:
             short_sha = parts[1]
-            commit = commit_by_sha.get(short_sha)
-            if commit is not None:
+            log_commit = commit_by_sha.get(short_sha)
+            if log_commit is not None:
                 newline = "\n" if line.endswith("\n") else ""
                 action = parts[0]
-                if drop_merged and commit.patchset_status == "merged-same" and commit.merged_equivalent is True:
+                if drop_merged and log_commit.patchset_status == "merged-same" and log_commit.merged_equivalent is True:
                     if action == "pick":
                         action = "drop"
                     elif action == "p":
                         action = "d"
-                out.append(f"{action} {short_sha} {_enriched_subject(commit)}{newline}")
+                out.append(f"{action} {short_sha} {_enriched_subject(log_commit)}{newline}")
                 continue
         out.append(line)
 
@@ -359,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
             f"# ger restack: Gerrit enrichment failed — {e}\n"
             f"# ger restack: Showing original todo without status annotations.\n"
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.debug("restack_enricher: unexpected enrichment error: %s", e)
         final_text = original_text
         error_header = (
@@ -381,7 +378,10 @@ def main(argv: list[str] | None = None) -> int:
     editor = _resolve_editor(cwd)
     logger.debug("restack_enricher: launching editor %r on %s", editor, todo)
     try:
-        result = subprocess.run(shlex.split(editor) + [str(todo)])
+        ed_cmd = [*shlex.split(editor), str(todo)]
+        logger.debug("restack_enricher: run: %s", " ".join(ed_cmd))
+        result = subprocess.run(ed_cmd)
+        logger.debug("restack_enricher: editor finished rc=%s", result.returncode)
         return result.returncode
     except FileNotFoundError:
         print(f"error: editor not found: {editor!r}", file=sys.stderr)

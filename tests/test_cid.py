@@ -211,7 +211,7 @@ def test_gcid_verbose(git_graph_repo, monkeypatch):
 
 
 def test_gcid_vv_logs_git_subprocess(git_graph_repo, monkeypatch):
-    """With two --debug-log, git_run logs each subprocess at DEBUG on the package logger (propagate=False)."""
+    """With --debug-log, git_run logs each subprocess at DEBUG on the package logger (propagate=False)."""
     buf = io.StringIO()
     extra = logging.StreamHandler(buf)
     extra.setLevel(logging.DEBUG)
@@ -223,7 +223,7 @@ def test_gcid_vv_logs_git_subprocess(git_graph_repo, monkeypatch):
         out_buf = io.StringIO()
         monkeypatch.setattr(sys, "stdout", out_buf)
         monkeypatch.setattr(sys, "stderr", io.StringIO())
-        code = gcid_main(["--debug-log", "--debug-log", "HEAD"])
+        code = gcid_main(["--debug-log", "HEAD"])
     finally:
         pkg.removeHandler(extra)
     assert code == 0

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 from gerrit_workflow_tools.git_run import git, git_out
+
+logger = logging.getLogger(__name__)
 
 # Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
 _GERRIT_STOP_PATTERN_CANONICAL = "gerrit.stoppattern"
@@ -199,7 +202,14 @@ def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str |
     """
     onto = resolve_rebase_onto_remote_ref(cwd, branch)
     p = git("merge-base", "--is-ancestor", onto, "HEAD", cwd=cwd, check=False)
-    return (p.returncode == 0, onto)
+    ok = p.returncode == 0
+    logger.debug(
+        "head_is_linear_on_remote_gerrit_target: onto=%r linear=%s (merge-base --is-ancestor rc=%s)",
+        onto,
+        ok,
+        p.returncode,
+    )
+    return (ok, onto)
 
 
 def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
@@ -380,6 +390,13 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         for name in ("main", "master"):
             candidates.append(f"{remote_name}/{name}")
 
+    logger.debug(
+        "resolve_rebase_onto_remote_ref: branch=%r remote=%r gerritTarget=%r candidates=%s",
+        b,
+        remote_name,
+        target,
+        candidates,
+    )
     seen: set[str] = set()
     for cand in candidates:
         if not cand or cand in seen:
@@ -387,6 +404,7 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         seen.add(cand)
         p = git("rev-parse", "--verify", cand, cwd=cwd, check=False)
         if p.returncode == 0:
+            logger.debug("resolve_rebase_onto_remote_ref: using %r", cand)
             return cand
 
     hint = (

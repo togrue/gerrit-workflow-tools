@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+from gerrit_workflow_tools.cli_common import log_gerrit_response_bodies
 from gerrit_workflow_tools.config import gerrit_password, gerrit_token, gerrit_user
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,8 @@ class GerritClient:
             parsed = json.loads(_strip_magic_json_prefix(body))
         except json.JSONDecodeError as e:
             raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
-        logger.debug("response body: %s", json.dumps(parsed, indent=2))
+        if log_gerrit_response_bodies():
+            logger.debug("response body: %s", json.dumps(parsed, indent=2))
         return parsed
 
     def query_changes(

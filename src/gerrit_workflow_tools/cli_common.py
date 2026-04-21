@@ -24,7 +24,10 @@ HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_VERBOSE_PLACEHOLDER = "Reserved for richer command output in a future release (currently no effect)."
-HELP_DEBUG_LOG = "Log diagnostics to stderr. Repeat for more detail (git subprocesses and API bodies)."
+HELP_DEBUG_LOG = (
+    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions). "
+    "Repeat once more for full Gerrit API response bodies."
+)
 
 
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
@@ -71,23 +74,30 @@ def add_verbose_and_debug_log_args(
 
 _LOG = logging.getLogger("gerrit_workflow_tools")
 _CONFIGURED = False
+_DEBUG_LOG_COUNT = 0
+
+
+def debug_log_count() -> int:
+    """Number of ``--debug-log`` flags the active CLI passed to :func:`configure_logging`."""
+    return _DEBUG_LOG_COUNT
+
+
+def log_gerrit_response_bodies() -> bool:
+    """Whether to log full Gerrit JSON bodies (second ``--debug-log`` and above)."""
+    return _DEBUG_LOG_COUNT >= 2
 
 
 def configure_logging(verbosity: int | bool) -> None:
     """Set package log level based on verbosity count.
 
     0 / False  → WARNING (silent)
-    1 / True   → INFO    (counts and resolution steps)
-    2+         → DEBUG   (full API response bodies)
+    1+         → DEBUG   (git subprocesses, outcomes, resolved refs/URLs, HTTP URLs/summaries)
+    2+         → same level; use :func:`log_gerrit_response_bodies` for full API JSON bodies
     """
-    global _CONFIGURED
+    global _CONFIGURED, _DEBUG_LOG_COUNT
     v = int(verbosity)
-    if v >= 2:
-        level = logging.DEBUG
-    elif v == 1:
-        level = logging.INFO
-    else:
-        level = logging.WARNING
+    _DEBUG_LOG_COUNT = v
+    level = logging.DEBUG if v >= 1 else logging.WARNING
     _LOG.setLevel(level)
     if not _CONFIGURED:
         h = logging.StreamHandler(sys.stderr)

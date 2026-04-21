@@ -36,6 +36,12 @@ def clear_stack_snapshot_cache() -> None:
 def _merge_base_with_target_impl(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
     base_ref, display = resolve_local_base_ref(cwd, branch)
     mb = git_out("merge-base", "HEAD", base_ref, cwd=cwd)
+    logger.debug(
+        "merge_base_with_target: merge_base=%s target_display=%r base_ref=%r",
+        mb[:8],
+        display,
+        base_ref,
+    )
     return mb, display, base_ref
 
 
@@ -245,8 +251,11 @@ def resolve_stack_commit(
         if len(matches) > 1:
             shorts = [m[1] for m in matches]
             raise GitError(f"ambiguous Change-Id {s} in stack ({', '.join(shorts)})")
+        logger.debug("resolve_stack_commit: Change-Id %s -> %s", s, matches[0][0][:8])
         return matches[0][0]
-    return git_out("rev-parse", s, cwd=cwd)
+    full = git_out("rev-parse", s, cwd=cwd)
+    logger.debug("resolve_stack_commit: ref %r -> %s", s, full[:8])
+    return full
 
 
 def commit_in_stack(

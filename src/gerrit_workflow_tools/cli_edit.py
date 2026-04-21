@@ -72,11 +72,9 @@ def main(argv: list[str] | None = None) -> int:
         full[:8],
         short,
     )
-    r = subprocess.run(
-        ["git", "rebase", "-i", mb],
-        cwd=cwd,
-        env=env,
-    )
+    cmd = ["git", "rebase", "-i", mb]
+    logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
+    r = subprocess.run(cmd, cwd=cwd, env=env)
     logger.debug("gedit rebase finished with return code %s", r.returncode)
     return r.returncode
 
