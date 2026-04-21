@@ -178,15 +178,15 @@ def gerrit_push_remote_policy(cwd: Path | str | None) -> str:
     """Return ``gerrit.push.remotePolicy``: how to treat a branch not linearly on the fetched Gerrit target tip.
 
     Values: ``ignore-not-rebased`` (default), ``warn-not-rebased``, ``error-not-rebased``.
-    Unknown or empty values behave like ``ignore-not-rebased``.
+    Unknown or empty values behave like ``error-not-rebased``.
     """
     v = _config_get(cwd, "gerrit.push.remotePolicy")
     if not v:
-        return "ignore-not-rebased"
+        return "error-not-rebased"
     s = v.strip().lower()
     if s in ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased"):
         return s
-    return "ignore-not-rebased"
+    return "error-not-rebased"
 
 
 def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> tuple[bool, str]:
