@@ -54,7 +54,7 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
     stopPattern = ^test!
 ```
 
-`gerrit.webUrl` is **required** for any command that contacts the Gerrit REST API (`log`, `show`, `push --show-attributes`, …).
+`gerrit.webUrl` is **required** for any command that contacts the Gerrit REST API (`log`, `show`, `push` with `gerrit.pushShowAttributes`, …).
 
 Authentication for the REST API:
 

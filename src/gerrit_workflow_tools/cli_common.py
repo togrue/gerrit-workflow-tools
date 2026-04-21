@@ -22,25 +22,19 @@ from gerrit_workflow_tools.git_run import GitError
 
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
-HELP_NO_CONFIG_PATTERNS = "Do not use gerrit.stopPattern values from config."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_VERBOSE_PLACEHOLDER = "Reserved for richer command output in a future release (currently no effect)."
 HELP_DEBUG_LOG = "Log diagnostics to stderr. Repeat for more detail (git subprocesses and API bodies)."
 
 
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
-    """Register ``--ignore-pattern`` and ``--no-config-patterns`` (used by ``ger push``)."""
+    """Register ``--ignore-pattern`` (used by ``ger push``)."""
     parser.add_argument(
         "--ignore-pattern",
         action="append",
         default=[],
         metavar="REGEX",
         help=HELP_IGNORE_PATTERN,
-    )
-    parser.add_argument(
-        "--no-config-patterns",
-        action="store_true",
-        help=HELP_NO_CONFIG_PATTERNS,
     )
 
 

@@ -26,14 +26,7 @@ class ReadyResult:
     push_range: str | None  # "mb..tip"
 
 
-def _filter_patterns(
-    patterns: list[str],
-    *,
-    no_config: bool,
-    ignore_exact: list[str],
-) -> list[str]:
-    if no_config:
-        return []
+def _filter_patterns(patterns: list[str], *, ignore_exact: list[str]) -> list[str]:
     out = list(patterns)
     for ign in ignore_exact:
         out = [p for p in out if p != ign]
@@ -58,18 +51,13 @@ def compute_ready(
     *,
     branch: str | None = None,
     all_commits: bool = False,
-    no_config_patterns: bool = False,
     ignore_patterns: list[str] | None = None,
     until: str | None = None,
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
     mb, _target, _ = merge_base_with_target(cwd, branch)
     raw_patterns = stop_patterns(cwd)
-    patterns = _filter_patterns(
-        raw_patterns,
-        no_config=no_config_patterns,
-        ignore_exact=list(ignore_patterns or []),
-    )
+    patterns = _filter_patterns(raw_patterns, ignore_exact=list(ignore_patterns or []))
     shas, subjects = stack_shas_and_subjects_one_log(cwd, mb, branch=branch)
     logger.debug(
         "compute_ready merge_base=%s commits=%d all_commits=%s stop_patterns=%d",

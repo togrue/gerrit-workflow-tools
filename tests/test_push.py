@@ -29,8 +29,7 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--dry-run" in out
     assert "--reviewers" in out
     assert "--reviewer" not in out.replace("--reviewers", "")
-    assert "--show-attributes" in out
-    assert "--no-show-attributes" in out
+    assert "--ignore-pattern" in out
     assert "--update-last-pushed" in out
     assert "--no-update-last-pushed" in out
     assert "--no-rebase-check" in out
@@ -78,20 +77,8 @@ def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     assert "refs/for/origin/main" not in out
 
 
-def test_gpush_accepts_explicit_target_without_config(stack_repo_unconfigured, monkeypatch):
-    repo = stack_repo_unconfigured
-    code, out, _err = run_cli(
-        repo,
-        gpush_main,
-        ["--dry-run", "--target", "main"],
-        monkeypatch,
-    )
-    assert code == 0
-    assert "refs/for/main" in out
-
-
 def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
-    code, _out, err = run_cli(dup_repo, gpush_main, ["--dry-run", "--target", "main"], monkeypatch)
+    code, _out, err = run_cli(dup_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 2
     assert "Change-Id" in err
 
@@ -197,7 +184,6 @@ def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: 
     [
         [],
         ["--all"],
-        ["--no-config-patterns"],
         ["--ignore-pattern", "^nope$"],
         ["--debug-log"],
     ],
@@ -238,14 +224,18 @@ def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkey
 
 
 def test_gpush_show_attributes_fails_without_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--show-attributes"], monkeypatch)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "gerrit.webUrl" in err or "webUrl" in err
 
 
 def test_gpush_show_attributes_fails_without_credentials(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--show-attributes"], monkeypatch)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "credentials" in err.lower()
 
@@ -253,8 +243,11 @@ def test_gpush_show_attributes_fails_without_credentials(stack_repo: Path, monke
 def test_gpush_show_attributes_unchanged_when_matching_reviewers(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -269,7 +262,7 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
         code, out, _err = run_cli(
             stack_repo,
             gpush_main,
-            ["--dry-run", "--show-attributes", "--reviewers", "alice"],
+            ["--dry-run", "--reviewers", "alice"],
             monkeypatch,
         )
     assert code == 0
@@ -281,8 +274,11 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
 def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -297,7 +293,7 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
         code, out, _err = run_cli(
             stack_repo,
             gpush_main,
-            ["--dry-run", "--show-attributes", "--reviewers", "alice", "--reviewers", "bob"],
+            ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
             monkeypatch,
         )
     assert code == 0
@@ -334,11 +330,13 @@ def test_gpush_config_default_show_attributes(stack_repo: Path, monkeypatch: pyt
     assert "`r=alice`" in out
 
 
-def test_gpush_no_show_attributes_overrides_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_push_show_attributes_false_skips_attribute_suffix(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    git("config", "gerrit.pushShowAttributes", "false", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
@@ -354,7 +352,7 @@ def test_gpush_no_show_attributes_overrides_config(stack_repo: Path, monkeypatch
         code, out, _err = run_cli(
             stack_repo,
             gpush_main,
-            ["--dry-run", "--no-show-attributes", "--reviewers", "alice"],
+            ["--dry-run", "--reviewers", "alice"],
             monkeypatch,
         )
     assert code == 0
@@ -364,8 +362,11 @@ def test_gpush_no_show_attributes_overrides_config(stack_repo: Path, monkeypatch
 def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -386,7 +387,7 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
         code, out, _err = run_cli(
             stack_repo,
             gpush_main,
-            ["--dry-run", "--show-attributes", "--reviewers", "alice"],
+            ["--dry-run", "--reviewers", "alice"],
             monkeypatch,
         )
     assert code == 0

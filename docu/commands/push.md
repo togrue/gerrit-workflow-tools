@@ -25,15 +25,10 @@ ger push [options] [REV]
 | `--dry-run` | Print what would be pushed without executing |
 | `-y`, `--yes` | Push without confirmation (required when stdin is not a terminal) |
 | `-i` | Prompt for reviewers on a TTY; merged after branch config and `--reviewers` (cannot be combined with `--yes`) |
-| `--show-attributes` | After the usual preview, query Gerrit and show current vs proposed review attributes per commit (see below). Default: `gerrit.pushShowAttributes` |
-| `--no-show-attributes` | Disable attribute preview when `gerrit.pushShowAttributes` is set |
 | `--update-last-pushed` | After a successful push, update local branch `lastPush/<current-branch>` to the pushed tip. Default: `gerrit.lastPushedBranch` |
 | `--no-update-last-pushed` | Skip updating `lastPush/<current-branch>` (overrides `gerrit.lastPushedBranch`) |
 | `--all` | Push the entire stack, ignoring stop patterns |
-| `--target BRANCH` | Override the Gerrit target branch for this push |
-| `--save-target` | Persist `--target` into branch config for future pushes |
 | `--ignore-pattern REGEX` | Disable a specific stop pattern (repeatable) |
-| `--no-config-patterns` | Ignore all configured stop patterns |
 | `--reviewers ACCOUNTS` | Comma-separated Gerrit reviewer accounts (repeatable; merged with `branch.<name>.gerritReviewers`, deduplicated) |
 | `--debug-log` | Log git commands and push steps to stderr. Repeat for more detail (git subprocesses and API bodies). |
 | `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
@@ -42,9 +37,9 @@ ger push [options] [REV]
 
 **Last-pushed marker branch** — When enabled (`gerrit.lastPushedBranch`, default `true`), after `git push` exits successfully the tool runs `git branch -f lastPush/<name> <tip>` where `<name>` is the current branch (`git rev-parse --abbrev-ref HEAD`) and `<tip>` is the commit pushed (same SHA as in the printed refspec). This is a local convenience ref only; it is not sent to Gerrit. If updating that ref fails, a warning is printed and the command still exits with the push’s status code. Disable globally with `git config gerrit.lastPushedBranch false`, or pass `--no-update-last-pushed` for a single run. Use `--update-last-pushed` to force the update when the config is off.
 
-**`--show-attributes`** — For each commit in the push range that has a Change-Id, the tool batches Gerrit `change:` queries (same path as `ger log`) and appends a column to the “Updated commits” lines: `` `current` `` or `` `current` -> `new` `` when the proposed push would change reviewers on the refspec. Tokens are comma-separated: one `r=<account>` per reviewer (order matches Gerrit’s `reviewers` list for **current**; merged push order for **new**), then `wip` and `private` when set on the change. The push does not send `%wip`/`%private` in the refspec, so **proposed** wip/private always match the server for existing changes (only reviewer differences produce an arrow). New changes (no match in Gerrit) show `` `(none)` -> `r=…` `` when you add reviewers.
+**Attribute preview** (`gerrit.pushShowAttributes`) — When enabled, for each commit in the push range that has a Change-Id, the tool batches Gerrit `change:` queries (same path as `ger log`) and appends a column to the “Updated commits” lines: `` `current` `` or `` `current` -> `new` `` when the proposed push would change reviewers on the refspec. Tokens are comma-separated: one `r=<account>` per reviewer (order matches Gerrit’s `reviewers` list for **current**; merged push order for **new**), then `wip` and `private` when set on the change. The push does not send `%wip`/`%private` in the refspec, so **proposed** wip/private always match the server for existing changes (only reviewer differences produce an arrow). New changes (no match in Gerrit) show `` `(none)` -> `r=…` `` when you add reviewers.
 
-**Prerequisites for `--show-attributes`:** `git config gerrit.webUrl <https://…>` and REST credentials (`gerrit.user` with `gerrit.token` or `gerrit.password`). If either is missing, the command exits with code `1` after validation (before the push confirmation prompt). With `--dry-run`, Gerrit is still queried for the display.
+**Prerequisites for attribute preview:** `git config gerrit.webUrl <https://…>` and REST credentials (`gerrit.user` with `gerrit.token` or `gerrit.password`). If either is missing, the command exits with code `1` after validation (before the push confirmation prompt). With `--dry-run`, Gerrit is still queried for the display when preview is enabled.
 
 ---
 
@@ -52,7 +47,7 @@ ger push [options] [REV]
 
 `ger push` runs the following automatically and aborts on failure:
 
-1. Gerrit target branch is configured (`gerritTarget` or `--target`).
+1. Gerrit target branch is configured (`branch.<name>.gerritTarget`, e.g. via `ger branch init --target`).
 2. Ready boundary is computed — blocked commits are excluded unless `--all`.
 3. Change-Id check — aborts with exit code `2` if any hard errors exist.
 
@@ -97,22 +92,17 @@ ger branch init --target main --reviewers alice,bob
 ger push
 ```
 
-Or set the target inline and save it:
-
-```bash
-ger push --target main --save-target
-```
-
 Add reviewers on the command line (merged with branch config):
 
 ```bash
 ger push --reviewers alice,bob
 ```
 
-Preview how Gerrit reviewers / wip / private compare to this push (requires `gerrit.webUrl` and credentials):
+Preview how Gerrit reviewers / wip / private compare to this push (requires `gerrit.webUrl`, credentials, and `gerrit.pushShowAttributes`):
 
 ```bash
-ger push --dry-run --show-attributes
+git config gerrit.pushShowAttributes true
+ger push --dry-run
 ```
 
 Prompt for extra reviewers (TTY only), then push with confirmation:

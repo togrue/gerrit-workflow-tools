@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import re
 import subprocess
@@ -145,7 +146,7 @@ def _gpush_attribute_suffix(
     detail: dict[str, object] | None,
     merged_reviewers: list[str],
 ) -> str:
-    """Append `` - `…` `` or `` - `…` -> `…` `` for ``--show-attributes`` lines."""
+    """Append `` - `…` `` or `` - `…` -> `…` `` for attribute preview lines."""
     if detail is None:
         cur = "(none)"
         new = _format_gpush_attribute_string(merged_reviewers, wip=False, private=False)
@@ -352,10 +353,8 @@ def _maybe_check_rebased_onto_remote(
     try:
         short_onto = git_out("rev-parse", "--abbrev-ref", onto, cwd=cwd)
     except GitError:
-        try:
+        with contextlib.suppress(GitError):
             short_onto = git_out("rev-parse", "--short", onto, cwd=cwd)
-        except GitError:
-            pass
     try:
         tip = git_out("rev-parse", "--short", onto, cwd=cwd)
         fork = git_out("merge-base", "HEAD", onto, cwd=cwd)
@@ -386,19 +385,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Prompt for reviewers (TTY only; merged after branch config and --reviewers; cannot be used with --yes).",
     )
     p.add_argument(
-        "--show-attributes",
-        action="store_true",
-        help=(
-            "Show per-commit Gerrit attributes vs this push (reviewers, wip, private); needs gerrit.webUrl "
-            "and credentials. Default: gerrit.pushShowAttributes."
-        ),
-    )
-    p.add_argument(
-        "--no-show-attributes",
-        action="store_true",
-        help="Override gerrit.pushShowAttributes when set.",
-    )
-    p.add_argument(
         "--update-last-pushed",
         action="store_true",
         help="After a successful push, move local branch lastPush/<current-branch> to the pushed tip. Default: gerrit.lastPushedBranch.",
@@ -426,8 +412,6 @@ def main(argv: list[str] | None = None) -> int:
         dest="all_",
         help="Push the full stack (ignore stop patterns).",
     )
-    p.add_argument("--target", metavar="BRANCH", help="Gerrit target branch for this push.")
-    p.add_argument("--save-target", action="store_true", help="Store --target for this branch.")
     add_color_args(p)
     add_stop_pattern_args(p)
     p.add_argument(
@@ -455,21 +439,19 @@ def main(argv: list[str] | None = None) -> int:
     summary_highlighter = build_summary_highlighter(cwd)
     gdef = gpush_defaults(cwd)
     remote_policy = gerrit_push_remote_policy(cwd)
-    show_attributes = (bool(args.show_attributes) or gdef["show_attributes"]) and not args.no_show_attributes
+    show_attributes = gdef["show_attributes"]
     update_last_pushed = (
         bool(args.update_last_pushed) or gdef["last_pushed_branch"]
     ) and not args.no_update_last_pushed
 
     logger.debug(
-        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s target=%s save_target=%s show_attributes=%s "
+        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s show_attributes=%s "
         "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s",
         cwd,
         args.dry_run,
         args.yes,
         args.all_,
         args.until,
-        args.target,
-        args.save_target,
         show_attributes,
         update_last_pushed,
         args.i,
@@ -486,12 +468,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
-        if args.target and args.save_target:
-            set_branch_config(cwd, b, gerrit_target=args.target)
-
-        target = args.target or branch_gerrit_target(cwd, b)
+        target = branch_gerrit_target(cwd, b)
         if not target:
-            raise GitError("No Gerrit target: run `ger branch init --target <branch>` or `ger push --target <branch>`.")
+            raise GitError("No Gerrit target: run `ger branch init --target <branch>`.")
         push_branch = refs_for_push_branch_name(cwd, target)
 
         rc_early = _maybe_check_rebased_onto_remote(
@@ -516,7 +495,6 @@ def main(argv: list[str] | None = None) -> int:
             cwd,
             branch=None,
             all_commits=args.all_,
-            no_config_patterns=args.no_config_patterns,
             ignore_patterns=args.ignore_pattern or None,
             until=args.until,
         )

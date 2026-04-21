@@ -14,7 +14,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). |
 | `gerrit.user` | Username for HTTP Basic auth to the REST API. |
 | `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
-| `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` / `--no-config-patterns` to bypass without editing config. |
+| `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` to drop specific patterns without editing config. |
 | `gerrit.warningPattern` | **Repeatable.** Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, and `ger show` when color output is enabled. Defaults when unset: single-word subject (`^[^\\s]+$`), `wip`, `todo` (case-insensitive). Stop-pattern highlighting takes precedence when both match the same text span. |
 | `gerrit.showCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
 
@@ -35,7 +35,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.pushShowAttributes` | Default on: include Gerrit reviewer / wip / private preview (`--show-attributes`). Use `--no-show-attributes` to disable when this is set. |
+| `gerrit.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `gerrit.webUrl` and credentials). Default off when unset. |
 | `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. Override per run with `--update-last-pushed` / `--no-update-last-pushed`. |
 
 ---

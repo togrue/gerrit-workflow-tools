@@ -167,7 +167,7 @@ def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
 
 
 def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger push`` from ``gerrit.push*`` / ``gerrit.lastPushedBranch`` (CLI flags override)."""
+    """Defaults for ``ger push`` from ``gerrit.push*`` / ``gerrit.lastPushedBranch`` (``--update-last-pushed`` overrides)."""
     return {
         "show_attributes": config_bool(cwd, "gerrit.pushShowAttributes"),
         "last_pushed_branch": config_bool(cwd, "gerrit.lastPushedBranch", default=True),
@@ -178,15 +178,15 @@ def gerrit_push_remote_policy(cwd: Path | str | None) -> str:
     """Return ``gerrit.push.remotePolicy``: how to treat a branch not linearly on the fetched Gerrit target tip.
 
     Values: ``ignore-not-rebased`` (default), ``warn-not-rebased``, ``error-not-rebased``.
-    Unknown or empty values behave like ``error-not-rebased``.
+    Unset, empty, or unknown values use ``ignore-not-rebased``.
     """
     v = _config_get(cwd, "gerrit.push.remotePolicy")
     if not v:
-        return "error-not-rebased"
+        return "ignore-not-rebased"
     s = v.strip().lower()
     if s in ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased"):
         return s
-    return "error-not-rebased"
+    return "ignore-not-rebased"
 
 
 def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> tuple[bool, str]:
