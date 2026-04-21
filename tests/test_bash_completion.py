@@ -12,13 +12,7 @@ from tests.conftest import run_cli
 
 
 def test_strip_marked_blocks_removes_block() -> None:
-    text = (
-        "echo before\n"
-        f"{bc.MARKER_START}\n"
-        'source "/x/ger.bash"\n'
-        f"{bc.MARKER_END}\n"
-        "echo after\n"
-    )
+    text = f'echo before\n{bc.MARKER_START}\nsource "/x/ger.bash"\n{bc.MARKER_END}\necho after\n'
     assert "before" in bc._strip_marked_blocks(text)
     assert "after" in bc._strip_marked_blocks(text)
     assert bc.MARKER_START not in bc._strip_marked_blocks(text)

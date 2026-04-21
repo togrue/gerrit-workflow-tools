@@ -126,7 +126,7 @@ def test_enriched_subject_format():
     subj = _enriched_subject(commit)
     assert subj.startswith("# ")
     assert "perf: tweak hot path" in subj
-    assert "p" in subj       # patchset letter
+    assert "p" in subj  # patchset letter
     assert "v+1" in subj
     assert "cr+2" in subj
     assert "submittable" in subj
@@ -300,6 +300,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
 
     broken_client = MagicMock()
     from gerrit_workflow_tools.gerrit_client import GerritApiError
+
     broken_client.query_changes.side_effect = GerritApiError("timeout")
 
     with (
@@ -351,9 +352,7 @@ def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path
     assert str(todo) in cmd
 
 
-def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(
-    tmp_path: Path, stack_repo: Path, monkeypatch
-):
+def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: Path, stack_repo: Path, monkeypatch):
     """When _enrich_todo raises, main() prepends an error comment and opens the editor
     with the original (unenriched) todo — the rebase can still proceed."""
     from gerrit_workflow_tools.gerrit_client import GerritApiError
@@ -586,9 +585,7 @@ def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monke
 
     rows = stack_rows_mb_to_head(stack_repo)
     n = len(rows)
-    details = build_details_by_change_id(
-        rows, per_index_overrides=[{"status": "MERGED", "submittable": False}] * n
-    )
+    details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED", "submittable": False}] * n)
     text = _make_todo(rows)
     monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
     wg, wrgb, wgc = _patch_gerrit(details)

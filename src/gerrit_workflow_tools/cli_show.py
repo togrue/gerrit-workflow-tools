@@ -304,9 +304,7 @@ def main(argv: list[str] | None = None) -> int:
             loc = f"{path}:{line}" if line is not None else path
             print(f"  {color_text(loc, ANSI_CYAN)}")
             if url:
-                print(
-                    f"  {color_text('url:', ANSI_DIM)} {color_text(url, ANSI_YELLOW)}"
-                )
+                print(f"  {color_text('url:', ANSI_DIM)} {color_text(url, ANSI_YELLOW)}")
             for ln in body.splitlines():
                 print(f"  {ln}")
             print()

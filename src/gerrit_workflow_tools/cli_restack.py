@@ -108,9 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     env = os.environ.copy()
     # Point GIT_SEQUENCE_EDITOR at the enricher.  The enricher reads GIT_EDITOR /
     # core.editor / EDITOR from the environment to find the actual editor to open.
-    env["GIT_SEQUENCE_EDITOR"] = (
-        f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.restack_enricher"
-    )
+    env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.restack_enricher"
     if args.debug_log:
         env["GREBASE_DEBUG_LOG"] = "1"
     if drop_merged:

@@ -25,9 +25,7 @@ from gerrit_workflow_tools.stack import parse_change_id
 logger = logging.getLogger(__name__)
 
 # Actions that take a commit SHA as their second token.
-_COMMIT_ACTIONS = frozenset(
-    {"pick", "p", "reword", "r", "edit", "e", "squash", "s", "fixup", "f", "drop", "d"}
-)
+_COMMIT_ACTIONS = frozenset({"pick", "p", "reword", "r", "edit", "e", "squash", "s", "fixup", "f", "drop", "d"})
 
 # Width reserved for the commit subject in enriched lines.
 _SUBJECT_WIDTH = 50
@@ -157,9 +155,7 @@ def _enriched_subject(commit: LogCommit) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_commit_metadata(
-    short_shas: list[str], cwd: Path
-) -> dict[str, tuple[str, str, str | None]]:
+def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, tuple[str, str, str | None]]:
     """Return ``{todo_short_sha: (full_sha, subject, change_id)}`` for each SHA in the list.
 
     Uses a single ``git log --no-walk`` call with RS-separated fields, the same approach
@@ -315,11 +311,7 @@ def _enrich_todo(text: str, cwd: Path) -> str:
             if commit is not None:
                 newline = "\n" if line.endswith("\n") else ""
                 action = parts[0]
-                if (
-                    drop_merged
-                    and commit.patchset_status == "merged-same"
-                    and commit.merged_equivalent is True
-                ):
+                if drop_merged and commit.patchset_status == "merged-same" and commit.merged_equivalent is True:
                     if action == "pick":
                         action = "drop"
                     elif action == "p":

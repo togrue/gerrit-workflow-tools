@@ -396,9 +396,5 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     )
     if target:
         tried = ", ".join(_remote_tracking_ref_candidates_from_target(remote_name, target)) or f"{remote_name}/{target}"
-        raise GitError(
-            f"No remote-tracking ref found for `ger restack --onto-remote` (tried {tried}). {hint}"
-        )
-    raise GitError(
-        f"No remote-tracking ref found for `ger restack --onto-remote`. {hint}"
-    )
+        raise GitError(f"No remote-tracking ref found for `ger restack --onto-remote` (tried {tried}). {hint}")
+    raise GitError(f"No remote-tracking ref found for `ger restack --onto-remote`. {hint}")
