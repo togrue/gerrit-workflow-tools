@@ -6,10 +6,20 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
+    add_color_args,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
+)
+from gerrit_workflow_tools.cli_style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_GREEN,
+    ANSI_LIGHT_GREEN,
+    color_text,
+    init_color_mode,
 )
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
@@ -21,14 +31,30 @@ from gerrit_workflow_tools.git_run import GitError
 
 logger = logging.getLogger(__name__)
 
+# Label column width for ``show`` (longest label: "Reviewers").
+_BRANCH_SHOW_LABEL_W = 12
+
+
+def _branch_show_row(label: str, value_styled: str) -> None:
+    lab = label.ljust(_BRANCH_SHOW_LABEL_W)
+    print(f"  {color_text(lab, ANSI_DIM)}{value_styled}")
+
 
 def _cmd_show(cwd: Path) -> int:
     b = current_branch(cwd)
     t = branch_gerrit_target(cwd, b)
     r = branch_gerrit_reviewers(cwd, b)
-    print(f"Branch: {b}")
-    print(f"Target branch: {t or '(not set)'}")
-    print(f"Reviewers: {r or '(none)'}")
+    print(color_text("Branch configuration", f"{ANSI_BOLD}{ANSI_CYAN}"))
+    print()
+    _branch_show_row("Branch", color_text(b, f"{ANSI_BOLD}{ANSI_CYAN}"))
+    _branch_show_row(
+        "Target",
+        color_text(t, ANSI_GREEN) if t else color_text("(not set)", ANSI_DIM),
+    )
+    _branch_show_row(
+        "Reviewers",
+        color_text(r, ANSI_LIGHT_GREEN) if r else color_text("(none)", ANSI_DIM),
+    )
     return 0
 
 
@@ -62,6 +88,7 @@ def _cmd_set_reviewers(ns: argparse.Namespace, cwd: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
     p = argparse.ArgumentParser(prog="ger branch")
+    add_color_args(p)
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands and config writes to stderr.",
@@ -94,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
+    init_color_mode(color=args.color)
     cwd = cwd_from_env()
     logger.debug("gbranch cmd=%s cwd=%s", args.cmd, cwd)
 
