@@ -49,7 +49,9 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_su
 
 logger = logging.getLogger(__name__)
 
-_REBASE_ONTO_REMOTE_HINT = "Hint: run `ger restack --onto-remote` to replay your commits on top of the latest target branch."
+_REBASE_ONTO_REMOTE_HINT = (
+    "Hint: run `ger restack --onto-remote` to replay your commits on top of the latest target branch."
+)
 
 
 def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:
@@ -213,11 +215,7 @@ def _commit_lines_for_preview(
     for _full, short_sha, subj, raw in rows:
         disp = summary_highlighter.highlight(subj)
         sha_p = short_sha.ljust(8)
-        line = (
-            f"    {color_short_sha(sha_p)}"
-            f"{color_text(' # ', ANSI_DIM)}"
-            f"{disp}"
-        )
+        line = f"    {color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{disp}"
         if show_attributes and details_by_cid is not None:
             cid = parse_change_id(raw)
             if cid:
@@ -243,6 +241,19 @@ def _remaining_not_ready_count(cwd: Path, boundary_sha: str | None) -> int:
         return 0
 
 
+def _format_stop_pattern_notice(boundary_line: str, pat: str) -> str:
+    """Explain the ready boundary without wrapping highlighted commit text in warning color."""
+    return (
+        "Stopped at commit "
+        + color_text('"', ANSI_YELLOW)
+        + boundary_line
+        + color_text('"', ANSI_YELLOW)
+        + ", because it matches the stop pattern "
+        + color_text(pat, ANSI_DIM_GRAY)
+        + color_text(".", ANSI_YELLOW)
+    )
+
+
 def _format_boundary_commit_line(
     cwd: Path,
     boundary_sha: str | None,
@@ -257,11 +268,7 @@ def _format_boundary_commit_line(
     except GitError:
         return None
     sha_p = short_sha.ljust(8)
-    return (
-        f"{color_short_sha(sha_p)}"
-        f"{color_text(' # ', ANSI_DIM)}"
-        f"{summary_highlighter.highlight(subject)}"
-    )
+    return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{summary_highlighter.highlight(subject)}"
 
 
 def _print_gpush_preview(
@@ -288,8 +295,7 @@ def _print_gpush_preview(
         pat = _stop_pattern_from_reason(r.boundary_reason)
         if boundary_line and pat:
             print()
-            stop_line = f'Stopped at commit "{boundary_line}", because it matches the stop pattern {pat}.'
-            print(color_text(stop_line, ANSI_YELLOW))
+            print(_format_stop_pattern_notice(boundary_line, pat))
             remain = _remaining_not_ready_count(cwd, r.boundary_sha)
             if remain > 0:
                 print(color_text(f"... {remain} not-ready commit(s) remain unpushed", ANSI_YELLOW))
