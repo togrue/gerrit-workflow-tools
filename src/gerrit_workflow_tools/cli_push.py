@@ -22,6 +22,8 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_CYAN,
     ANSI_DIM,
     ANSI_DIM_GRAY,
+    ANSI_GREEN,
+    ANSI_LIGHT_GREEN,
     ANSI_YELLOW,
     color_short_sha,
     color_text,
@@ -312,6 +314,26 @@ def _parse_confirm_answer(raw: str) -> bool | None:
     return None
 
 
+def _print_gpush_confirm_status_line(
+    local_branch: str,
+    gerrit_target: str,
+    reviewers: list[str],
+) -> None:
+    """One-line summary in ``ger branch show`` colors before the push confirmation prompt."""
+    branch_v = color_text(local_branch, f"{ANSI_BOLD}{ANSI_CYAN}")
+    target_v = color_text(gerrit_target, ANSI_GREEN)
+    rev_v = color_text(", ".join(reviewers), ANSI_LIGHT_GREEN) if reviewers else color_text("(none)", ANSI_DIM)
+    sep = color_text("  ·  ", ANSI_DIM)
+    line = (
+        f"{color_text('Branch', ANSI_DIM)} {branch_v}"
+        f"{sep}"
+        f"{color_text('Target', ANSI_DIM)} {target_v}"
+        f"{sep}"
+        f"{color_text('Reviewers', ANSI_DIM)} {rev_v}"
+    )
+    print(line)
+
+
 def _confirm_push_interactive() -> bool:
     while True:
         ans = input("Do you want to push these commits? [Y/n]: ")
@@ -562,6 +584,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         if not args.yes:
+            print()
+            _print_gpush_confirm_status_line(b, target, reviewers)
             print()
             if not _confirm_push_interactive():
                 print("Push cancelled.", file=sys.stderr)
