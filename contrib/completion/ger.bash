@@ -144,10 +144,21 @@ _ger_show() {
     fi
 }
 
+_ger_fetch_api() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" \
+            --help \
+            --compact \
+            -v --verbose --debug-log
+        return
+    fi
+}
+
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" branch cid edit log push restack sha show
+        __gwt_flags "$cur" branch cid edit fetch-api log push restack sha show
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -160,6 +171,7 @@ _ger() {
         cid) _ger_cid ;;
         sha) _ger_sha ;;
         show) _ger_show ;;
+        fetch-api) _ger_fetch_api ;;
     esac
 }
 

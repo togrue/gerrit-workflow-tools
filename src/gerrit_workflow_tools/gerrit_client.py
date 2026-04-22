@@ -92,6 +92,15 @@ class GerritClient:
             logger.debug("response body: %s", json.dumps(parsed, indent=2))
         return parsed
 
+    def get_json(
+        self,
+        path: str,
+        *,
+        params: dict[str, str] | list[tuple[str, str]] | None = None,
+    ) -> Any:
+        """GET any path under ``/a/`` and return parsed JSON (same credentials as other methods)."""
+        return self._request_json(path, params=params)
+
     def query_changes(
         self,
         query: str,
