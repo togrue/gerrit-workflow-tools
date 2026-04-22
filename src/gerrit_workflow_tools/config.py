@@ -426,9 +426,9 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         f"No base branch found for '{b}'.\n"
         "Set an upstream, e.g.:\n"
         f"  git branch --set-upstream-to=<remote>/<branch>\n"
-        "Or configure a Gerrit destination:\n"
-        "  ger branch init --target <target-branch>\n"
-        f"  git config branch.{b}.gerritTarget <target-branch>"
+        "Or infer the nearest remote-tracking branch and set upstream:\n"
+        "  ger branch infer-upstream\n"
+        "Optional per-branch Gerrit destination overrides: see `ger branch --help`."
     )
 
 
@@ -469,8 +469,10 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     if not eff:
         raise GitError(
             f"No Gerrit destination branch for `ger restack --onto-remote` on branch {b!r}. "
-            f"Set branch.{b}.gerritTarget, or set upstream to a branch on `{remote_name}` (gerrit.remote), "
-            f"and fetch so `refs/remotes/{remote_name}/<branch>` exists."
+            f"Set upstream to a branch on `{remote_name}` (gerrit.remote), "
+            f"e.g. `ger branch infer-upstream` after `git fetch`, or `git branch --set-upstream-to={remote_name}/<branch>`. "
+            f"Fetch so `refs/remotes/{remote_name}/<branch>` exists. "
+            "Optional `gerritTarget` overrides: see `ger branch --help`."
         )
 
     candidates = _remote_tracking_ref_candidates_from_target(remote_name, eff)

@@ -506,8 +506,9 @@ def main(argv: list[str] | None = None) -> int:
         mode = ger_push_mode(cwd, b)
         if mode is None:
             raise GitError(
-                "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`) "
-                "or run `ger branch init --target <branch>` / `git config branch.<name>.gerritTarget`."
+                "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
+                "try `ger branch infer-upstream` after `git fetch`). "
+                "Optional Gerrit destination overrides: see `ger branch --help`."
             )
         if args.i and mode == "vanilla":
             print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)

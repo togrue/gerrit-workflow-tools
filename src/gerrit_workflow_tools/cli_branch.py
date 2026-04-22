@@ -35,6 +35,13 @@ from gerrit_workflow_tools.git_run import GitError, git
 
 logger = logging.getLogger(__name__)
 
+_GER_BRANCH_EPILOG = """\
+Optional Gerrit destination (when not inferred from upstream on gerrit.remote):
+  ger branch init --target <branch> [--reviewers LIST]   write gerritTarget / gerritReviewers
+  ger branch set-target <branch>                        update branch.<name>.gerritTarget
+  git config branch.<name>.gerritTarget <branch>         same key as set-target
+"""
+
 # ``ger branch show`` row labels (each string literal appears once).
 _BRANCH_SHOW_LOCAL = "Local branch"
 _BRANCH_SHOW_UPSTREAM = "upstream"
@@ -102,7 +109,7 @@ def _cmd_show(cwd: Path) -> int:
     mode_s = (
         "Gerrit (refs/for/…)"
         if mode == "gerrit"
-        else ("plain git push" if mode == "vanilla" else "(need upstream or override)")
+        else ("plain git push" if mode == "vanilla" else "(need upstream or override; try `ger branch infer-upstream`)")
     )
     _branch_show_row(_BRANCH_SHOW_PUSH_MODE, color_text(mode_s, ANSI_DIM), label_width=label_w)
     return 0
@@ -115,7 +122,8 @@ def _cmd_init(ns: argparse.Namespace, cwd: Path) -> int:
         return 1
     if not ns.target and not ns.reviewers:
         print(
-            "Nothing to set: use --target and/or --reviewers, or rely on upstream for Gerrit push.",
+            "Nothing to set: use --target and/or --reviewers, run `ger branch infer-upstream` to set upstream, "
+            "or rely on an existing upstream for Gerrit push.",
             file=sys.stderr,
         )
         return 0
@@ -189,7 +197,11 @@ def _cmd_infer_upstream(ns: argparse.Namespace, cwd: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
-    p = argparse.ArgumentParser(prog="ger branch")
+    p = argparse.ArgumentParser(
+        prog="ger branch",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_GER_BRANCH_EPILOG,
+    )
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,

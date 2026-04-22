@@ -78,6 +78,17 @@ ger branch set-reviewers alice,bob
 
 ---
 
+### `infer-upstream`
+
+Pick the remote-tracking ref under `refs/remotes/` with the smallest symmetric divergence from `HEAD`, then set it as this branch’s upstream (with confirmation, or **`--yes`** / **`-y`** when stdin is not a TTY). Requires a configured remote so `git branch --set-upstream-to` can succeed—run **`git fetch`** first when refs are missing.
+
+```bash
+ger branch infer-upstream
+ger branch infer-upstream --yes
+```
+
+---
+
 ## Global option
 
 | Option | Description |

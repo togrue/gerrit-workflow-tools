@@ -50,7 +50,7 @@ ger push [options] [REV]
 | **Gerrit** | `branch.<name>.gerritTarget` is set, **or** `@{upstream}` exists and its remote name equals `gerrit.remote` (default `origin`) | Full pipeline: ready range, Change-Id check, `refs/for/…`, optional `gerrit.push.remotePolicy` fetch/check, reviewers. |
 | **Vanilla** | `@{upstream}` exists and its remote is **not** `gerrit.remote` | Runs **`git push`** with **no extra arguments** (same as plain Git). `--until`, `--all`, `--reviewers`, `--ignore-pattern`, and `-i` are ignored (a warning is printed if any are set). No `refs/for/`, no Change-Id/ready pipeline, no remote-policy check. |
 
-If there is **no** upstream and **no** `gerritTarget` override, the command exits with an error (set upstream or configure a target).
+If there is **no** upstream and **no** `gerritTarget` override, the command exits with an error. Fix it by setting upstream manually or running **`ger branch infer-upstream`** (after `git fetch`) to pick the nearest remote-tracking branch. Optional destination overrides are listed under **`ger branch --help`**.
 
 ---
 
