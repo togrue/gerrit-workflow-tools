@@ -169,6 +169,53 @@ def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal[
     return "vanilla"
 
 
+def infer_nearest_remote_tracking_branch(
+    cwd: Path | str | None,
+    head: str = "HEAD",
+) -> tuple[str, int, int, int] | None:
+    """Pick the remote-tracking ref with minimum symmetric divergence from *head*.
+
+    For each ``refs/remotes/`` ref (excluding ``*/HEAD``), compute ``merge-base(head, ref)``
+    then ``ahead = |mb..head|`` and ``behind = |mb..ref|``; minimize ``ahead + behind``,
+    then *ahead*, then abbreviated ref name for stable tie-breaks.
+
+    Returns ``(abbrev_ref, symmetric_total, ahead, behind)`` where *abbrev_ref* is suitable for
+    ``git branch --set-upstream-to`` (e.g. ``origin/main``), or ``None`` if no candidate applies.
+    """
+    p = git("for-each-ref", "--format=%(refname)", "refs/remotes/", cwd=cwd, check=False)
+    if p.returncode != 0 or not (p.stdout or "").strip():
+        return None
+    best: tuple[tuple[int, int, str], tuple[str, int, int, int]] | None = None
+    for line in (p.stdout or "").splitlines():
+        ref = line.strip()
+        if not ref or ref.endswith("/HEAD"):
+            continue
+        mb_p = git("merge-base", head, ref, cwd=cwd, check=False)
+        if mb_p.returncode != 0:
+            continue
+        mb = mb_p.stdout.strip()
+        ahead_p = git("rev-list", "--count", f"{mb}..{head}", cwd=cwd, check=False)
+        behind_p = git("rev-list", "--count", f"{mb}..{ref}", cwd=cwd, check=False)
+        if ahead_p.returncode != 0 or behind_p.returncode != 0:
+            continue
+        try:
+            ahead = int(ahead_p.stdout.strip())
+            behind = int(behind_p.stdout.strip())
+        except ValueError:
+            continue
+        sym = ahead + behind
+        abbrev_p = git("rev-parse", "--abbrev-ref", ref, cwd=cwd, check=False)
+        if abbrev_p.returncode != 0:
+            continue
+        abbrev = abbrev_p.stdout.strip()
+        key = (sym, ahead, abbrev)
+        if best is None or key < best[0]:
+            best = (key, (abbrev, sym, ahead, behind))
+    if best is None:
+        return None
+    return best[1]
+
+
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
     """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``ger log``, ``ger show``)."""
     return _config_get(cwd, "gerrit.webUrl")

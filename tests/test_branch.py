@@ -31,3 +31,43 @@ def test_gbranch_set_target(stack_repo_unconfigured, monkeypatch):
     code, out, _err = run_cli(repo, gbranch_main, ["show"], monkeypatch)
     assert code == 0
     assert "release/1.0" in out
+
+
+def test_gbranch_infer_upstream_yes(tmp_path, monkeypatch):
+    from gerrit_workflow_tools.git_run import git as git_run
+    from gerrit_workflow_tools.git_run import git_out
+
+    bare = tmp_path / "upstream.git"
+    git_run("init", "--bare", str(bare))
+    repo = tmp_path / "infer"
+    repo.mkdir()
+    git_run("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("1\n", encoding="utf-8")
+    git_run("add", "f", cwd=repo)
+    git_run("commit", "-m", "init", cwd=repo)
+    git_run("remote", "add", "origin", str(bare), cwd=repo)
+    git_run("push", "-u", "origin", "main", cwd=repo)
+    git_run("checkout", "-b", "feature", cwd=repo)
+    (repo / "f").write_text("2\n", encoding="utf-8")
+    git_run("commit", "-am", "feat", cwd=repo)
+
+    code, _out, err = run_cli(repo, gbranch_main, ["infer-upstream", "--yes"], monkeypatch)
+    assert code == 0
+    assert "origin/main" in err
+    assert git_out("rev-parse", "--abbrev-ref", "@{upstream}", cwd=repo) == "origin/main"
+
+
+def test_gbranch_infer_upstream_no_remotes(tmp_path, monkeypatch):
+    from gerrit_workflow_tools.git_run import git as git_run
+
+    repo = tmp_path / "noremote"
+    repo.mkdir()
+    git_run("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("1\n", encoding="utf-8")
+    git_run("add", "f", cwd=repo)
+    git_run("commit", "-m", "init", cwd=repo)
+    git_run("checkout", "-b", "feature", cwd=repo)
+
+    code, _out, err = run_cli(repo, gbranch_main, ["infer-upstream", "--yes"], monkeypatch)
+    assert code == 1
+    assert "refs/remotes" in err.lower() or "remote-tracking" in err.lower()

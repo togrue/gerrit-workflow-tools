@@ -24,13 +24,15 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
     branch_gerrit_target,
+    clear_gerrit_git_config_cache,
     current_branch,
     effective_gerrit_destination_branch,
     ger_push_mode,
+    infer_nearest_remote_tracking_branch,
     refs_for_push_branch_name,
     set_branch_config,
 )
-from gerrit_workflow_tools.git_run import GitError
+from gerrit_workflow_tools.git_run import GitError, git
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,47 @@ def _cmd_set_reviewers(ns: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
+def _cmd_infer_upstream(ns: argparse.Namespace, cwd: Path) -> int:
+    b = current_branch(cwd)
+    if b == "HEAD":
+        print(
+            "error: ger branch infer-upstream requires a named branch (not detached HEAD).",
+            file=sys.stderr,
+        )
+        return 1
+    inferred = infer_nearest_remote_tracking_branch(cwd, "HEAD")
+    if not inferred:
+        print(
+            "error: no remote-tracking branches under refs/remotes/ (fetch remotes first).",
+            file=sys.stderr,
+        )
+        return 1
+    abbrev, sym, ahead, behind = inferred
+    summary = (
+        f"Inferred remote-tracking branch {abbrev!r} "
+        f"(symmetric divergence {sym}: {ahead} commit(s) on HEAD, {behind} on remote tip since merge-base)."
+    )
+    if not ns.yes:
+        if not sys.stdin.isatty():
+            print(
+                "error: not a terminal; use --yes to set upstream without a prompt.",
+                file=sys.stderr,
+            )
+            return 1
+        print(summary, file=sys.stderr)
+        ans = input(f"Set upstream of {b!r} to {abbrev!r}? [y/N]: ").strip().lower()
+        if ans not in ("y", "yes"):
+            print("Aborted.", file=sys.stderr)
+            return 1
+    else:
+        print(f"{summary} Applying (--yes).", file=sys.stderr)
+
+    git("branch", "--set-upstream-to", abbrev, b, cwd=cwd)
+    clear_gerrit_git_config_cache()
+    print(f"Upstream for {b!r} set to {abbrev}.", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
     p = argparse.ArgumentParser(prog="ger branch")
@@ -156,6 +199,17 @@ def main(argv: list[str] | None = None) -> int:
     sr = sub.add_parser("set-reviewers", help="Set gerritReviewers for the current branch.")
     sr.add_argument("value", metavar="REVIEWERS")
 
+    iu = sub.add_parser(
+        "infer-upstream",
+        help="Set upstream to the remote-tracking branch closest to HEAD (minimum symmetric divergence).",
+    )
+    iu.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Set upstream without confirmation (required when stdin is not a terminal).",
+    )
+
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     init_color_mode(color=args.color)
@@ -171,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_set_target(args, cwd)
         if args.cmd == "set-reviewers":
             return _cmd_set_reviewers(args, cwd)
+        if args.cmd == "infer-upstream":
+            return _cmd_infer_upstream(args, cwd)
     except GitError as e:
         return handle_git_error(e)
     return 1

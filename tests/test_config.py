@@ -9,6 +9,7 @@ from gerrit_workflow_tools.config import (
     effective_gerrit_destination_branch,
     gerrit_push_remote_policy,
     head_is_linear_on_remote_gerrit_target,
+    infer_nearest_remote_tracking_branch,
     rebase_defaults,
     resolve_local_base_ref,
     resolve_rebase_onto_remote_ref,
@@ -116,3 +117,35 @@ def test_resolve_rebase_onto_remote_ref_gerrit_target_origin_slash_branch(tmp_pa
     set_branch_config(repo, "dev2", gerrit_target="origin/dev")
     clear_gerrit_git_config_cache()
     assert resolve_rebase_onto_remote_ref(repo) == "origin/dev"
+
+
+def test_infer_nearest_remote_tracking_branch(tmp_path: Path) -> None:
+    """Symmetric divergence vs origin/main: one local commit on feature."""
+    clear_gerrit_git_config_cache()
+    repo = tmp_path / "r"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("1\n", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "init", cwd=repo)
+    main_sha = git_out("rev-parse", "HEAD", cwd=repo)
+    git("checkout", "-b", "feature", cwd=repo)
+    (repo / "f").write_text("2\n", encoding="utf-8")
+    git("commit", "-am", "feat", cwd=repo)
+    git("update-ref", "refs/remotes/origin/main", main_sha, cwd=repo)
+    got = infer_nearest_remote_tracking_branch(repo)
+    assert got is not None
+    abbrev, sym, ahead, behind = got
+    assert abbrev == "origin/main"
+    assert sym == 1 and ahead == 1 and behind == 0
+
+
+def test_infer_nearest_remote_tracking_branch_without_remotes(tmp_path: Path) -> None:
+    clear_gerrit_git_config_cache()
+    repo = tmp_path / "r2"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("1\n", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "init", cwd=repo)
+    assert infer_nearest_remote_tracking_branch(repo) is None
