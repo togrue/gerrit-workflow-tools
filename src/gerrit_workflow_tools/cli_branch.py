@@ -23,7 +23,6 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
-    branch_gerrit_target,
     clear_gerrit_git_config_cache,
     current_branch,
     effective_gerrit_destination_branch,
@@ -36,12 +35,23 @@ from gerrit_workflow_tools.git_run import GitError, git
 
 logger = logging.getLogger(__name__)
 
-# Label column width for ``show`` (longest label: "Reviewers").
-_BRANCH_SHOW_LABEL_W = 12
+# ``ger branch show`` row labels (each string literal appears once).
+_BRANCH_SHOW_LOCAL = "Local branch"
+_BRANCH_SHOW_UPSTREAM = "upstream"
+_BRANCH_SHOW_GERRIT_TARGET = "gerritTarget"
+_BRANCH_SHOW_REVIEWERS = "reviewers"
+_BRANCH_SHOW_PUSH_MODE = "Push mode"
+_BRANCH_SHOW_ALL_LABELS = (
+    _BRANCH_SHOW_LOCAL,
+    _BRANCH_SHOW_UPSTREAM,
+    _BRANCH_SHOW_GERRIT_TARGET,
+    _BRANCH_SHOW_REVIEWERS,
+    _BRANCH_SHOW_PUSH_MODE,
+)
 
 
-def _branch_show_row(label: str, value_styled: str) -> None:
-    lab = label.ljust(_BRANCH_SHOW_LABEL_W)
+def _branch_show_row(label: str, value_styled: str, *, label_width: int) -> None:
+    lab = label.ljust(label_width)
     print(f"  {color_text(lab, ANSI_DIM)}{value_styled}")
 
 
@@ -50,36 +60,51 @@ def _cmd_show(cwd: Path) -> int:
     if b == "HEAD":
         print("error: ger branch show requires a branch (detached HEAD).", file=sys.stderr)
         return 1
-    override = branch_gerrit_target(cwd, b)
+    label_w = max(len(s) for s in _BRANCH_SHOW_ALL_LABELS) + 1
     r = branch_gerrit_reviewers(cwd, b)
     mode = ger_push_mode(cwd, b)
-    inferred = effective_gerrit_destination_branch(cwd, b) if not override else None
-    push_segment = refs_for_push_branch_name(cwd, inferred) if inferred else None
+    eff = effective_gerrit_destination_branch(cwd, b)
+    push_branch = refs_for_push_branch_name(cwd, eff) if eff else None
+
+    up_p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
+    upstream_ref = up_p.stdout.strip() if up_p.returncode == 0 else None
+
     print(color_text("Branch configuration", f"{ANSI_BOLD}{ANSI_CYAN}"))
     print()
-    _branch_show_row("Branch", color_text(b, f"{ANSI_BOLD}{ANSI_CYAN}"))
-    if override:
+    _branch_show_row(
+        _BRANCH_SHOW_LOCAL,
+        color_text(b, f"{ANSI_BOLD}{ANSI_CYAN}"),
+        label_width=label_w,
+    )
+    _branch_show_row(
+        _BRANCH_SHOW_UPSTREAM,
+        color_text(upstream_ref, ANSI_GREEN) if upstream_ref else color_text("(none)", ANSI_DIM),
+        label_width=label_w,
+    )
+    # Same branch name ``ger push`` uses for ``refs/for/<branch>`` (not the raw upstream ref).
+    if push_branch:
         _branch_show_row(
-            "Target (override)",
-            color_text(override, ANSI_GREEN),
-        )
-    elif inferred and push_segment:
-        _branch_show_row(
-            "Inferred target",
-            color_text(f"{inferred} → {push_segment}", ANSI_GREEN),
+            _BRANCH_SHOW_GERRIT_TARGET,
+            color_text(push_branch, ANSI_GREEN),
+            label_width=label_w,
         )
     else:
-        _branch_show_row("Target", color_text("(not set)", ANSI_DIM))
+        _branch_show_row(
+            _BRANCH_SHOW_GERRIT_TARGET,
+            color_text("(not set)", ANSI_DIM),
+            label_width=label_w,
+        )
+    _branch_show_row(
+        _BRANCH_SHOW_REVIEWERS,
+        color_text(r, ANSI_LIGHT_GREEN) if r else color_text("(none)", ANSI_DIM),
+        label_width=label_w,
+    )
     mode_s = (
         "Gerrit (refs/for/…)"
         if mode == "gerrit"
         else ("plain git push" if mode == "vanilla" else "(need upstream or override)")
     )
-    _branch_show_row("Push mode", color_text(mode_s, ANSI_DIM))
-    _branch_show_row(
-        "Reviewers",
-        color_text(r, ANSI_LIGHT_GREEN) if r else color_text("(none)", ANSI_DIM),
-    )
+    _branch_show_row(_BRANCH_SHOW_PUSH_MODE, color_text(mode_s, ANSI_DIM), label_width=label_w)
     return 0
 
 
