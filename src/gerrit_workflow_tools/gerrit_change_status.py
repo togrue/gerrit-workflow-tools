@@ -262,6 +262,20 @@ def gerrit_change_url(web_base: str, change: dict[str, Any]) -> str | None:
     return f"{web_base}/c/{proj_enc}/+/{num}"
 
 
+def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | None) -> str | None:
+    """Build a PolyGerrit URL that opens the diff view focused on one inline comment.
+
+    Matches the ``/c/<project>/+/<changeNum>/comment/<commentId>/`` route (see Gerrit
+    ``gr-router`` COMMENT pattern). *comment_id* is the REST ``CommentInfo.id`` (URL-encoded
+    UUID string).
+    """
+    if not change_page_url or not comment_id or not str(comment_id).strip():
+        return None
+    base = change_page_url.rstrip("/")
+    cid_enc = quote(str(comment_id), safe="")
+    return f"{base}/comment/{cid_enc}/"
+
+
 def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
     """Attempt to retrieve failed CI check names via the Gerrit Checks API."""
     enc = quote(change_id, safe="")

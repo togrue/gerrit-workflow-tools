@@ -28,7 +28,11 @@ from gerrit_workflow_tools.cli_style import (
     init_color_mode,
 )
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
-from gerrit_workflow_tools.gerrit_change_status import determine_attention, fetch_gerrit_data
+from gerrit_workflow_tools.gerrit_change_status import (
+    determine_attention,
+    fetch_gerrit_data,
+    gerrit_inline_comment_url,
+)
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 from gerrit_workflow_tools.gerrit_comments import resolve_gerrit_change
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
@@ -247,12 +251,15 @@ def main(argv: list[str] | None = None) -> int:
             raw_msg = c.get("message")
             msg = raw_msg if isinstance(raw_msg, str) else ""
             body, truncated = _apply_comment_tail(msg, tail_n, full=args.full)
+            raw_cid = c.get("id")
+            cmt_id = raw_cid if isinstance(raw_cid, str) else None
             comment_payload.append(
                 {
                     "path": path,
                     "line": line,
                     "body": body,
                     "truncated": truncated,
+                    "url": gerrit_inline_comment_url(commit.gerrit_url, cmt_id),
                 }
             )
         payload = {
@@ -293,7 +300,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{ind}{d}")
     print(f"{ind}{_primary_line(commit, summary_highlighter=summary_highlighter)}")
 
-    url = commit.gerrit_url or ""
     if unresolved_rows:
         print()
         print(color_text("Unresolved comments", f"{ANSI_BOLD}{ANSI_CYAN}") + color_text(":", ANSI_DIM))
@@ -301,10 +307,13 @@ def main(argv: list[str] | None = None) -> int:
             raw_msg = c.get("message")
             msg = raw_msg if isinstance(raw_msg, str) else ""
             body, _trunc = _apply_comment_tail(msg, tail_n, full=args.full)
+            raw_cid = c.get("id")
+            cmt_id = raw_cid if isinstance(raw_cid, str) else None
+            comment_url = gerrit_inline_comment_url(commit.gerrit_url, cmt_id) or commit.gerrit_url
             loc = f"{path}:{line}" if line is not None else path
             print(f"  {color_text(loc, ANSI_CYAN)}")
-            if url:
-                print(f"  {color_text('url:', ANSI_DIM)} {color_text(url, ANSI_YELLOW)}")
+            if comment_url:
+                print(f"  {color_text('url:', ANSI_DIM)} {color_text(comment_url, ANSI_YELLOW)}")
             for ln in body.splitlines():
                 print(f"  {ln}")
             print()

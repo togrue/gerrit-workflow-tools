@@ -155,6 +155,7 @@ def test_gshow_comment_tail_in_json(stack_repo: Path, monkeypatch: pytest.Monkey
     comments = {
         "f.py": [
             {
+                "id": "TvcXrmjM",
                 "line": 1,
                 "message": long_msg,
                 "unresolved": True,
@@ -183,6 +184,7 @@ def test_gshow_comment_tail_in_json(stack_repo: Path, monkeypatch: pytest.Monkey
     assert data["comments"][0]["truncated"] is True
     assert "lines omitted above" in data["comments"][0]["body"]
     assert "line14" in data["comments"][0]["body"]
+    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
 
 
 def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -195,6 +197,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     comments = {
         "f.py": [
             {
+                "id": "TvcXrmjM",
                 "line": 1,
                 "message": long_msg,
                 "unresolved": True,
@@ -223,6 +226,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     assert data["comments"][0]["truncated"] is False
     assert "line0" in data["comments"][0]["body"]
     assert "line14" in data["comments"][0]["body"]
+    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
 
 
 def _configure_gshow_repo(stack_repo: Path) -> None:
