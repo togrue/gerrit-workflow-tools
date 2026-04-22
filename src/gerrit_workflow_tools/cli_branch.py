@@ -25,6 +25,9 @@ from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
     branch_gerrit_target,
     current_branch,
+    effective_gerrit_destination_branch,
+    ger_push_mode,
+    refs_for_push_branch_name,
     set_branch_config,
 )
 from gerrit_workflow_tools.git_run import GitError
@@ -42,15 +45,35 @@ def _branch_show_row(label: str, value_styled: str) -> None:
 
 def _cmd_show(cwd: Path) -> int:
     b = current_branch(cwd)
-    t = branch_gerrit_target(cwd, b)
+    if b == "HEAD":
+        print("error: ger branch show requires a branch (detached HEAD).", file=sys.stderr)
+        return 1
+    override = branch_gerrit_target(cwd, b)
     r = branch_gerrit_reviewers(cwd, b)
+    mode = ger_push_mode(cwd, b)
+    inferred = effective_gerrit_destination_branch(cwd, b) if not override else None
+    push_segment = refs_for_push_branch_name(cwd, inferred) if inferred else None
     print(color_text("Branch configuration", f"{ANSI_BOLD}{ANSI_CYAN}"))
     print()
     _branch_show_row("Branch", color_text(b, f"{ANSI_BOLD}{ANSI_CYAN}"))
-    _branch_show_row(
-        "Target",
-        color_text(t, ANSI_GREEN) if t else color_text("(not set)", ANSI_DIM),
+    if override:
+        _branch_show_row(
+            "Target (override)",
+            color_text(override, ANSI_GREEN),
+        )
+    elif inferred and push_segment:
+        _branch_show_row(
+            "Inferred target",
+            color_text(f"{inferred} → {push_segment}", ANSI_GREEN),
+        )
+    else:
+        _branch_show_row("Target", color_text("(not set)", ANSI_DIM))
+    mode_s = (
+        "Gerrit (refs/for/…)"
+        if mode == "gerrit"
+        else ("plain git push" if mode == "vanilla" else "(need upstream or override)")
     )
+    _branch_show_row("Push mode", color_text(mode_s, ANSI_DIM))
     _branch_show_row(
         "Reviewers",
         color_text(r, ANSI_LIGHT_GREEN) if r else color_text("(none)", ANSI_DIM),
@@ -60,16 +83,27 @@ def _cmd_show(cwd: Path) -> int:
 
 def _cmd_init(ns: argparse.Namespace, cwd: Path) -> int:
     b = current_branch(cwd)
-    if not ns.target:
-        print("error: ger branch init requires --target <branch>", file=sys.stderr)
+    if b == "HEAD":
+        print("error: ger branch init requires a branch (detached HEAD).", file=sys.stderr)
         return 1
+    if not ns.target and not ns.reviewers:
+        print(
+            "Nothing to set: use --target and/or --reviewers, or rely on upstream for Gerrit push.",
+            file=sys.stderr,
+        )
+        return 0
     set_branch_config(
         cwd,
         b,
         gerrit_target=ns.target,
         gerrit_reviewers=ns.reviewers,
     )
-    print(f"Configured branch {b!r}: target={ns.target}", file=sys.stderr)
+    parts: list[str] = []
+    if ns.target:
+        parts.append(f"target={ns.target!r}")
+    if ns.reviewers:
+        parts.append(f"reviewers={ns.reviewers!r}")
+    print(f"Configured branch {b!r}: {', '.join(parts)}", file=sys.stderr)
     return 0
 
 
@@ -100,7 +134,10 @@ def main(argv: list[str] | None = None) -> int:
     ip = sub.add_parser("init", help="Set branch-local Gerrit targets (non-interactive).")
     ip.add_argument(
         "--target",
-        help="Gerrit destination branch name on the server (e.g. main, dev); fetch the remote if missing locally.",
+        help=(
+            "Optional override for the Gerrit destination branch (e.g. main, dev). "
+            "If omitted, `ger push` uses upstream when it tracks `gerrit.remote`."
+        ),
     )
     ip.add_argument(
         "--reviewers",

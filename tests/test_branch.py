@@ -16,11 +16,11 @@ def test_gbranch_show_after_init(stack_repo_unconfigured, monkeypatch):
     assert "alice,bob" in out
 
 
-def test_gbranch_init_requires_target(stack_repo_unconfigured, monkeypatch):
+def test_gbranch_init_without_target_or_reviewers_noops(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
     code, _out, err = run_cli(repo, gbranch_main, ["init"], monkeypatch)
-    assert code == 1
-    assert "target" in err.lower()
+    assert code == 0
+    assert "nothing to set" in err.lower()
 
 
 def test_gbranch_set_target(stack_repo_unconfigured, monkeypatch):

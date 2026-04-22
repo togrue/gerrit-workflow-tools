@@ -2,9 +2,9 @@
 
 **Status:** Implemented
 
-Push the ready prefix of the local stack to Gerrit. Orchestrates: target branch resolution → ready boundary calculation → Change-Id validation → push.
+Push the ready prefix of the local stack to Gerrit, or run a plain **`git push`** when the current branch tracks a **non-Gerrit** remote (see **Push modes** below). Orchestrates: target resolution → (Gerrit mode only) ready boundary → Change-Id validation → push.
 
-The push is always a single-tip push: `<tip>:refs/for/<target>[%r=…]`. Gerrit sees all ancestor commits automatically.
+In **Gerrit** mode the push is a single-tip push: `<tip>:refs/for/<target>[%r=…]`. Gerrit sees all ancestor commits automatically.
 
 ---
 
@@ -43,15 +43,26 @@ ger push [options] [REV]
 
 ---
 
-## Pre-push checks
+## Push modes
+
+| Mode | When | Behavior |
+|------|------|----------|
+| **Gerrit** | `branch.<name>.gerritTarget` is set, **or** `@{upstream}` exists and its remote name equals `gerrit.remote` (default `origin`) | Full pipeline: ready range, Change-Id check, `refs/for/…`, optional `gerrit.push.remotePolicy` fetch/check, reviewers. |
+| **Vanilla** | `@{upstream}` exists and its remote is **not** `gerrit.remote` | Runs **`git push`** with **no extra arguments** (same as plain Git). `--until`, `--all`, `--reviewers`, `--ignore-pattern`, and `-i` are ignored (a warning is printed if any are set). No `refs/for/`, no Change-Id/ready pipeline, no remote-policy check. |
+
+If there is **no** upstream and **no** `gerritTarget` override, the command exits with an error (set upstream or configure a target).
+
+---
+
+## Pre-push checks (Gerrit mode only)
 
 `ger push` runs the following automatically and aborts on failure:
 
-1. Gerrit target branch is configured (`branch.<name>.gerritTarget`, e.g. via `ger branch init --target`).
+1. Effective Gerrit destination exists (`branch.<name>.gerritTarget` override, or upstream on `gerrit.remote`).
 2. Ready boundary is computed — blocked commits are excluded unless `--all`.
 3. Change-Id check — aborts with exit code `2` if any hard errors exist.
 
-The configured target must also **resolve locally** (for merge-base). That usually means you have the destination as a local branch or as a remote-tracking ref after `git fetch` on `gerrit.remote`. If you see an error that the target is missing, fetch first—see [Troubleshooting](branch.md#troubleshooting-gerrittarget-missing-locally) under `ger branch`.
+The effective target must **resolve locally** (for merge-base). That usually means you have the destination as a local branch or as a remote-tracking ref after `git fetch` on `gerrit.remote`. If you see an error that the target is missing, fetch first—see [Troubleshooting](branch.md#troubleshooting-gerrittarget-missing-locally) under `ger branch`.
 
 ---
 

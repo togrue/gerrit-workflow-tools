@@ -4,7 +4,7 @@
 
 Manage branch-local Gerrit metadata: target review branch and default reviewers. Settings are stored in `.git/config` under `branch.<name>.*` keys.
 
-Run `ger branch init --target <branch>` once per local branch before using `ger push`.
+Configure an optional Gerrit target override and/or reviewers. If you rely on upstream inference for `ger push`, you can skip `--target` once `@{upstream}` tracks `gerrit.remote`.
 
 ---
 
@@ -26,12 +26,18 @@ Print current branch's Gerrit metadata.
 ger branch show
 ```
 
-Output:
+Example output (fields vary with config):
+
 ```
-Branch: feature/my-work
-Target branch: main
-Reviewers: alice,bob
+Branch configuration
+
+  Branch          feature/my-work
+  Target (override)  main
+  Push mode       Gerrit (refs/for/…)
+  Reviewers       alice,bob
 ```
+
+With no override but an upstream on `origin`, **Inferred target** shows `origin/main → main` and **Push mode** is **Gerrit**. When upstream tracks another remote, **Push mode** is **plain git push**.
 
 ---
 
@@ -40,13 +46,15 @@ Reviewers: alice,bob
 Set branch-local Gerrit config (non-interactive).
 
 ```bash
-ger branch init --target <branch> [--reviewers <list>]
+ger branch init [--target <branch>] [--reviewers <list>]
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--target BRANCH` | (required) | Gerrit destination branch name (the branch reviews merge into), e.g. `main` or `dev` |
+| `--target BRANCH` | (optional) | Override Gerrit destination branch name (e.g. `main` or `dev`). If omitted, `ger push` uses upstream when it tracks `gerrit.remote`. |
 | `--reviewers LIST` | (none) | Comma-separated list of Gerrit reviewer accounts |
+
+If both `--target` and `--reviewers` are omitted, the command succeeds after printing a short hint (nothing is written to config).
 
 ---
 

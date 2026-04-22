@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Literal
 
 from gerrit_workflow_tools.git_run import git, git_out
 
@@ -85,7 +86,7 @@ def current_branch(cwd: Path | str | None) -> str:
 
 
 def branch_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Return ``branch.<name>.gerritTarget`` (review branch for pushes), if set."""
+    """Return ``branch.<name>.gerritTarget`` (optional override for Gerrit destination), if set."""
     b = branch or current_branch(cwd)
     key = f"branch.{b}.gerritTarget"
     return _config_get(cwd, key)
@@ -115,6 +116,57 @@ def refs_for_push_branch_name(cwd: Path | str | None, target: str) -> str:
     if target.startswith(prefix):
         return target[len(prefix) :]
     return target
+
+
+def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str] | None:
+    """Parse ``@{upstream}`` into ``(remote_name, branch_after_first_slash)``.
+
+    Uses the current branch's upstream (same as ``git rev-parse --abbrev-ref @{upstream}``).
+    Returns ``None`` if there is no upstream or the abbrev-ref has no ``/``.
+    """
+    del branch  # reserved for future branch-specific upstream resolution
+    p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return None
+    upstream = p.stdout.strip()
+    if "/" not in upstream:
+        return None
+    remote_name, rest = upstream.split("/", 1)
+    return (remote_name, rest)
+
+
+def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
+    """Gerrit destination for push/restack: ``gerritTarget`` override, or upstream ref when its remote matches :func:`gerrit_remote`.
+
+    Returns a value suitable for :func:`refs_for_push_branch_name` (e.g. ``main``, ``origin/main``).
+    Returns ``None`` when there is no override and no upstream on the Gerrit remote.
+    """
+    override = branch_gerrit_target(cwd, branch)
+    if override:
+        return override
+    parsed = resolve_upstream_parsed(cwd, branch)
+    if not parsed:
+        return None
+    remote_name, _rest = parsed
+    if remote_name != gerrit_remote(cwd):
+        return None
+    p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return None
+    return p.stdout.strip()
+
+
+def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal["gerrit", "vanilla"] | None:
+    """``gerrit`` (``refs/for/…``), ``vanilla`` (plain ``git push``), or ``None`` if destination cannot be determined."""
+    if branch_gerrit_target(cwd, branch):
+        return "gerrit"
+    parsed = resolve_upstream_parsed(cwd, branch)
+    if not parsed:
+        return None
+    remote_name, _rest = parsed
+    if remote_name == gerrit_remote(cwd):
+        return "gerrit"
+    return "vanilla"
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
@@ -283,7 +335,8 @@ def escape_branch_for_config(branch: str) -> str:
 def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
     """
     Return (ref_for_merge_base, display_name) for merge-base, e.g. ('main', 'main').
-    Order: branch.gerritTarget -> @{upstream} -> main -> master.
+    Order: ``branch.gerritTarget`` -> ``@{upstream}`` (any remote). There is **no** fallback
+    to local ``main`` / ``master`` when both are absent.
 
     ``gerritTarget`` must be the Gerrit destination **branch name** (e.g. ``dev``). It must
     resolve to an existing ref—usually a local branch or ``refs/remotes/<remote>/<branch>``
@@ -322,26 +375,13 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         if p3.returncode == 0:
             return (p3.stdout.strip(), upstream)
 
-    for name in ("main", "master"):
-        p = git(
-            "show-ref",
-            "--verify",
-            "--quiet",
-            f"refs/heads/{name}",
-            cwd=cwd,
-            check=False,
-        )
-        if p.returncode == 0:
-            p2 = git("rev-parse", "--verify", f"refs/heads/{name}", cwd=cwd)
-            return (p2.stdout.strip(), name)
-
     raise GitError(
         f"No base branch found for '{b}'.\n"
-        "Initialize this branch first:\n"
+        "Set an upstream, e.g.:\n"
+        f"  git branch --set-upstream-to=<remote>/<branch>\n"
+        "Or configure a Gerrit destination:\n"
         "  ger branch init --target <target-branch>\n"
-        "Or set it manually:\n"
-        f"  git config branch.{b}.gerritTarget <target-branch>\n"
-        f"  git branch --set-upstream-to=origin/<target-branch>"
+        f"  git config branch.{b}.gerritTarget <target-branch>"
     )
 
 
@@ -370,31 +410,28 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     Unlike :func:`resolve_local_base_ref`, this returns a **remote-tracking symbolic ref**, not a
     detached SHA, so ``git rebase`` replays local commits onto the remote tip.
 
-    Resolution order: ``branch.<name>.gerritTarget`` → ``refs/remotes/<gerrit.remote>/<target>``;
-    if unset, use ``@{upstream}`` when it looks like ``remote/branch``; else try
-    ``<gerrit.remote>/main`` and ``<gerrit.remote>/master``.
+    Uses the same effective Gerrit destination as :func:`effective_gerrit_destination_branch`
+    (``gerritTarget`` override, or upstream when its remote is ``gerrit.remote``). There is no
+    fallback to ``<gerrit.remote>/main`` when neither is available.
     """
     from gerrit_workflow_tools.git_run import GitError
 
     b = branch or current_branch(cwd)
     remote_name = gerrit_remote(cwd)
-    target = branch_gerrit_target(cwd, b)
+    eff = effective_gerrit_destination_branch(cwd, b)
+    if not eff:
+        raise GitError(
+            f"No Gerrit destination branch for `ger restack --onto-remote` on branch {b!r}. "
+            f"Set branch.{b}.gerritTarget, or set upstream to a branch on `{remote_name}` (gerrit.remote), "
+            f"and fetch so `refs/remotes/{remote_name}/<branch>` exists."
+        )
 
-    candidates: list[str] = []
-    if target:
-        candidates.extend(_remote_tracking_ref_candidates_from_target(remote_name, target))
-    else:
-        p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
-        if p.returncode == 0:
-            candidates.append(p.stdout.strip())
-        for name in ("main", "master"):
-            candidates.append(f"{remote_name}/{name}")
-
+    candidates = _remote_tracking_ref_candidates_from_target(remote_name, eff)
     logger.debug(
-        "resolve_rebase_onto_remote_ref: branch=%r remote=%r gerritTarget=%r candidates=%s",
+        "resolve_rebase_onto_remote_ref: branch=%r remote=%r effective=%r candidates=%s",
         b,
         remote_name,
-        target,
+        eff,
         candidates,
     )
     seen: set[str] = set()
@@ -407,12 +444,9 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
             logger.debug("resolve_rebase_onto_remote_ref: using %r", cand)
             return cand
 
+    tried = ", ".join(candidates) or f"{remote_name}/{eff}"
     hint = (
-        f"Set branch.{b}.gerritTarget to the destination branch name, fetch from your Gerrit remote "
-        f"(`gerrit.remote`, often `{remote_name}`), e.g. `git fetch {remote_name}` so "
-        f"`refs/remotes/{remote_name}/<branch>` exists."
+        f"Fetch from your Gerrit remote (`gerrit.remote`, often `{remote_name}`), e.g. "
+        f"`git fetch {remote_name}` so `refs/remotes/{remote_name}/<branch>` exists."
     )
-    if target:
-        tried = ", ".join(_remote_tracking_ref_candidates_from_target(remote_name, target)) or f"{remote_name}/{target}"
-        raise GitError(f"No remote-tracking ref found for `ger restack --onto-remote` (tried {tried}). {hint}")
-    raise GitError(f"No remote-tracking ref found for `ger restack --onto-remote`. {hint}")
+    raise GitError(f"No remote-tracking ref found for `ger restack --onto-remote` (tried {tried}). {hint}")

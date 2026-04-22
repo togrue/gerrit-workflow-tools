@@ -57,10 +57,49 @@ def test_gpush_dry_run_does_not_call_input(stack_repo: Path, monkeypatch: pytest
 
 def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
-    # no configure_gerrit_target
-    code, out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    # no configure_gerrit_target, no upstream → no push destination
+    code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
-    assert "Gerrit target" in err or "target" in out.lower()
+    assert "push destination" in err.lower() or "gerritTarget" in err.lower()
+
+
+def test_gpush_vanilla_upstream_runs_plain_git_push(
+    stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Upstream on a remote other than gerrit.remote → ``git push`` with no extra args (B1)."""
+    repo = stack_repo_unconfigured
+    git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
+    git("remote", "add", "fork", str(repo.resolve()), cwd=repo)
+    git("fetch", "fork", cwd=repo)
+    git("branch", "--set-upstream-to=fork/main", "feature", cwd=repo)
+    clear_gerrit_git_config_cache()
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, _err = run_cli(repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 0
+    mock_run.assert_called_once_with(["git", "push"], repo)
+
+
+def test_gpush_detached_head_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 1
+    assert "detached" in err.lower()
+
+
+def test_gpush_infers_gerrit_target_from_upstream(
+    stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No gerritTarget: upstream on gerrit.remote implies Gerrit push and refs/for/…."""
+    repo = stack_repo_unconfigured
+    _add_self_origin_and_fetch(repo)
+    git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
+    clear_gerrit_git_config_cache()
+    code, out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0, (out, err)
+    assert "refs/for/main" in out
 
 
 def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(

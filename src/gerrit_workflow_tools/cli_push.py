@@ -31,7 +31,8 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
-    branch_gerrit_target,
+    effective_gerrit_destination_branch,
+    ger_push_mode,
     gerrit_password,
     gerrit_push_remote_policy,
     gerrit_remote,
@@ -334,9 +335,10 @@ def _print_gpush_confirm_status_line(
     print(line)
 
 
-def _confirm_push_interactive() -> bool:
+def _confirm_push_interactive(*, vanilla: bool = False) -> bool:
+    prompt = "Do you want to run `git push`? [Y/n]: " if vanilla else "Do you want to push these commits? [Y/n]: "
     while True:
-        ans = input("Do you want to push these commits? [Y/n]: ")
+        ans = input(prompt)
         parsed = _parse_confirm_answer(ans)
         if parsed is not None:
             return parsed
@@ -499,10 +501,51 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
-        target = branch_gerrit_target(cwd, b)
-        if not target:
-            raise GitError("No Gerrit target: run `ger branch init --target <branch>`.")
-        push_branch = refs_for_push_branch_name(cwd, target)
+        if b == "HEAD":
+            raise GitError("ger push requires a branch (detached HEAD). Check out a branch first.")
+        mode = ger_push_mode(cwd, b)
+        if mode is None:
+            raise GitError(
+                "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`) "
+                "or run `ger branch init --target <branch>` / `git config branch.<name>.gerritTarget`."
+            )
+        if args.i and mode == "vanilla":
+            print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)
+            return 1
+
+        if mode == "vanilla":
+            if args.until or args.all_ or args.reviewers or args.ignore_pattern:
+                print(
+                    "warning: --until, --all, --reviewers, and --ignore-pattern apply only to Gerrit push; ignoring.",
+                    file=sys.stderr,
+                )
+            cmd_vanilla = ["git", "push"]
+            logger.debug("gpush vanilla: %s", cmd_vanilla)
+            if args.dry_run:
+                print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
+                print("[dry-run] not executing push", file=sys.stderr)
+                return 0
+            if not sys.stdin.isatty() and not args.yes:
+                print(
+                    "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
+                    file=sys.stderr,
+                )
+                return 1
+            if not args.yes:
+                print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
+                print()
+                if not _confirm_push_interactive(vanilla=True):
+                    print("Push cancelled.", file=sys.stderr)
+                    return 0
+            logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd_vanilla), cwd)
+            proc = _run_git_push(cmd_vanilla, cwd)
+            return proc.returncode
+
+        eff = effective_gerrit_destination_branch(cwd, b)
+        if not eff:
+            raise GitError("Internal error: Gerrit push mode without effective destination.")
+        push_branch = refs_for_push_branch_name(cwd, eff)
+        target = eff
 
         rc_early = _maybe_check_rebased_onto_remote(
             cwd,
@@ -602,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if not args.yes:
             print()
-            _print_gpush_confirm_status_line(b, target, reviewers)
+            _print_gpush_confirm_status_line(b, push_branch, reviewers)
             print()
             if not _confirm_push_interactive():
                 print("Push cancelled.", file=sys.stderr)
