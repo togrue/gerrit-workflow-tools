@@ -67,7 +67,7 @@ _ger_log() {
 _ger_branch() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 2 ]; then
-        __gwt_flags "$cur" show init set-target set-reviewers
+        __gwt_flags "$cur" show init set-target set-reviewers infer-upstream
         return
     fi
     local sub="${COMP_WORDS[2]}"
@@ -75,6 +75,9 @@ _ger_branch() {
         case "$sub" in
             init)
                 __gwt_flags "$cur" --help --target --reviewers -v --verbose --debug-log
+                ;;
+            infer-upstream)
+                __gwt_flags "$cur" --help -y --yes -v --verbose --debug-log
                 ;;
             show|set-target|set-reviewers)
                 __gwt_flags "$cur" --help -v --verbose --debug-log
