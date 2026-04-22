@@ -90,7 +90,8 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
     assert first_subject in out
 
 
-def test_log_full_text_uses_inline_attention_labels(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-oneline, non-compact mode prints ``# failed`` / ``# comments:`` on their own lines."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{} for _ in rows]
@@ -104,11 +105,12 @@ def test_log_full_text_uses_inline_attention_labels(stack_repo: Path, monkeypatc
     assert "v? " in out
     assert "cr? " in out
     assert "# submittable" in out
-    assert "# build failed" in out
-    assert "# 2 unresolved comments" in out
+    assert "# failed" in out
+    assert "# comments: 2 unresolved" in out
     assert "# abandoned" in out
     assert "✓" not in out
-    assert "# failed:" not in out
+    assert "# build failed" not in out
+    assert "# 2 unresolved comments" not in out
 
 
 def test_log_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

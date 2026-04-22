@@ -572,15 +572,37 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         else:
-            print(
-                _oneline_line(
-                    commit,
-                    summary_highlighter=summary_highlighter,
-                    include_url=show_url,
-                    show_change_id=show_change_id,
-                    attention_column=attention_column,
-                )
+            # Full rows: primary line plus indented `# failed:` / `# comments:` lines (see docu/commands/log.md).
+            primary = _primary_line(
+                commit,
+                summary_highlighter=summary_highlighter,
+                show_change_id=show_change_id,
             )
+            details = _detail_lines(commit)
+            ind = " " * _continuation_indent(commit)
+            if details:
+                print(primary)
+                for d in details:
+                    print(f"{ind}{d}")
+                if commit.abandoned or commit.patchset_status in (
+                    "merged-drift",
+                    "merged-unknown",
+                ):
+                    extra = _attention_suffix(commit)
+                    if extra:
+                        print(f"{ind}{extra}")
+                if show_url and commit.gerrit_url:
+                    print(f"{ind}{_url_line(commit.gerrit_url)}")
+            else:
+                print(
+                    _oneline_line(
+                        commit,
+                        summary_highlighter=summary_highlighter,
+                        include_url=show_url,
+                        show_change_id=show_change_id,
+                        attention_column=attention_column,
+                    )
+                )
 
     # Summary section (suppressed for --oneline and compact text mode)
     if not use_oneline and not use_compact:
