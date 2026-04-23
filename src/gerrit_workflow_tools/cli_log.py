@@ -310,7 +310,7 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
     counts: dict[str, int] = {
         "ci-failures": 0,
         "unresolved-comments": 0,
-        "awaiting-review": 0,
+        "on-gerrit": 0,
     }
     ready = 0
     total = len(commits)
@@ -322,8 +322,8 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
         if c.comments_unresolved > 0:
             counts["unresolved-comments"] += 1
         # awaiting-review = pushed commits that still need attention
-        if c.pushed and c.attention_reasons:
-            counts["awaiting-review"] += 1
+        if c.pushed:
+            counts["on-gerrit"] += 1
     return counts, ready, total
 
 
@@ -354,11 +354,11 @@ def _format_summary_dashboard_line(
         parts.append(color_text("comments ", ANSI_DIM))
         parts.append(color_text(str(unres), ANSI_YELLOW))
 
-    review = summary.get("awaiting-review", 0)
-    if review:
+    on_gerrit = summary.get("on-gerrit", 0)
+    if on_gerrit:
         parts.append(color_text(sep, ANSI_DIM))
-        parts.append(color_text("review ", ANSI_DIM))
-        parts.append(color_text(str(review), ANSI_CYAN))
+        parts.append(color_text("on-gerrit ", ANSI_DIM))
+        parts.append(color_text(str(on_gerrit), ANSI_CYAN))
 
     return "".join(parts)
 
