@@ -460,7 +460,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         rev_range = f"{mb}..HEAD"
 
-    rows = stack_commits_metadata_one_log(cwd, rev_range)
+    try:
+        rows = stack_commits_metadata_one_log(cwd, rev_range)
+    except GitError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     if not rows:
         print("(no commits in range)")
         return 0

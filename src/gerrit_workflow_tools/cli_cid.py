@@ -31,7 +31,7 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
-from gerrit_workflow_tools.git_run import GitError, git_out
+from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.stack import (
     git_log_sha_body,
     parse_git_log_sha_body_rs,
@@ -47,52 +47,20 @@ _parse_sha_body_rs = parse_git_log_sha_body_rs
 
 
 def resolve_gcid_user_arg(cwd: Path | str, arg: str) -> str:
-    """Resolve *arg* to a form ``git log`` accepts: each ref via ``git rev-parse --verify``.
+    """Return *arg* as a ``git log`` revision/range with minimal normalization.
 
-    Supports the same revisions as ``git rev-parse --verify`` (branches, tags, SHAs, ``HEAD~n``, etc.),
-    plus two- and three-dot ranges. Does not handle Change-Ids; callers must treat those separately.
+    We intentionally avoid pre-parsing revsets here and defer interpretation to
+    ``git log`` itself so behavior matches normal Git as closely as possible.
     """
+    del cwd  # kept for API compatibility
     s = arg.strip()
-
-    def one(ref: str) -> str:
-        r = ref.strip()
-        if not r:
-            raise GitError(
-                "git rev-parse --verify failed: empty revision",
-                stderr="",
-                returncode=-1,
-            )
-        # Use ``--`` only so refs starting with ``-`` are not parsed as options (plain ``--``
-        # before a normal ref breaks ``git rev-parse`` on Git for Windows).
-        if r.startswith("-"):
-            return git_out("rev-parse", "--verify", "--", r, cwd=cwd)
-        return git_out("rev-parse", "--verify", r, cwd=cwd)
-
-    if "..." in s:
-        left, _, right = s.partition("...")
-        if not left.strip() or not right.strip():
-            raise GitError(
-                f"git rev-parse --verify failed: invalid symmetric range {arg!r}",
-                stderr="",
-                returncode=-1,
-            )
-        return f"{one(left)}...{one(right)}"
-    if ".." in s:
-        i = s.find("..")
-        left, right = s[:i], s[i + 2 :]
-        ls, rs = left.strip(), right.strip()
-        if ls and rs:
-            return f"{one(ls)}..{one(rs)}"
-        if rs:
-            return f"..{one(rs)}"
-        if ls:
-            return f"{one(ls)}.."
+    if not s:
         raise GitError(
-            f"git rev-parse --verify failed: invalid range {arg!r}",
+            "git log failed: empty revision",
             stderr="",
             returncode=-1,
         )
-    return one(s)
+    return s
 
 
 def _gcid_log_single_commit(rev_spec: str) -> bool:
