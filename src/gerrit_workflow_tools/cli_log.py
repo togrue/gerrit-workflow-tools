@@ -300,75 +300,6 @@ def _oneline_line(
     return base
 
 
-# Compact format: {sha:7} {p|n|o|-} {v} {cr} {com}
-#   verified: +1 / -1 / .
-#   code_review: +2 / +1 / -1 / -2 / .
-#   comments: c / .
-
-
-def _compact_verified(v: int | None) -> str:
-    if v is None:
-        return "."
-    if v >= 1:
-        return "+1"
-    if v <= -1:
-        return "-1"
-    return "."
-
-
-def _compact_cr(cr: int | None) -> str:
-    if cr is None:
-        return "."
-    if cr >= 2:
-        return "+2"
-    if cr == 1:
-        return "+1"
-    if cr == -1:
-        return "-1"
-    if cr <= -2:
-        return "-2"
-    return "."
-
-
-def _compact_patchset_letter(commit: LogCommit) -> str:
-    if commit.abandoned:
-        return "a"
-    status = commit.patchset_status
-    if status == "merged-same":
-        return "m"
-    if status == "merged-drift":
-        return "!"
-    if status == "merged-unknown":
-        return "?"
-    if status == "active":
-        return "p"
-    if status == "newer":
-        return "n"
-    if status == "outdated":
-        return "o"
-    return "-"
-
-
-def _compact_line(commit: LogCommit, *, show_change_id: bool = False) -> str:
-    push = _compact_patchset_letter(commit)
-    v = _compact_verified(commit.verified)
-    cr = _compact_cr(commit.code_review)
-    if not commit.pushed:
-        sub = "-"
-    elif commit.submittable:
-        sub = "+"
-    else:
-        sub = "."
-    com = "c" if commit.comments_unresolved else "."
-    line = f"{color_short_sha(_status_sha_column(commit.short_sha))} {push} {v} {cr} {sub}{com}"
-    if show_change_id and commit.change_id:
-        cid = commit.change_id
-        if len(cid) > 14:
-            cid = cid[:12] + "…"
-        line += f"  {cid}"
-    return line
-
-
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
@@ -448,11 +379,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show all commits in the range, not only attention-required ones.",
     )
-    p.add_argument(
-        "--oneline",
-        action="store_true",
-        help="One line per commit (this is the default unless ``--verbose`` or ``--no-oneline``).",
-    )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     add_color_args(p)
     p.add_argument(
@@ -470,23 +396,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Append Change-Id to each text line. Default: ``gerrit.logShowChangeId``.",
     )
-    p.add_argument(
-        "--no-oneline",
-        action="store_true",
-        help=("Oneline row plus indented details (like ``-v``); URLs only if ``--url`` or ``gerrit.logShowUrl``."),
-    )
-    p.add_argument(
-        "--no-compact",
-        action="store_true",
-        help="Override ``gerrit.logCompact`` when set.",
-    )
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands to stderr.",
         verbose_action="count",
         verbose_help=(
-            "Oneline row plus indented details (CI failure names, etc.); Gerrit URL on the next line "
-            "when URLs are enabled. ``-vv`` also prints the commit message body. "
+            "Expanded layout: oneline summary, indented details, Gerrit URL on the next line when URLs are on. "
+            "``-vv`` adds the commit message body. "
             "Does not enable diagnostic logging; use ``--debug-log`` for that."
         ),
     )
@@ -509,8 +425,6 @@ def main(argv: list[str] | None = None) -> int:
     log_verbosity = int(v_raw) if isinstance(v_raw, int) else (1 if v_raw else 0)
     show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
-    use_compact = gdef["compact"] and not args.no_compact
-    pure_oneline = not use_compact and log_verbosity == 0 and not args.no_oneline
 
     # Determine commit range
     if args.rev_range:
@@ -583,23 +497,7 @@ def main(argv: list[str] | None = None) -> int:
         show_change_id=show_change_id,
     )
     for commit in visible:
-        if use_compact:
-            primary = _compact_line(commit, show_change_id=show_change_id)
-            print(primary)
-            if show_url and commit.gerrit_url:
-                ind_c = " " * (_visible_len(primary) + 2)
-                print(f"{ind_c}{_url_line(commit.gerrit_url)}")
-        elif pure_oneline:
-            print(
-                _oneline_line(
-                    commit,
-                    summary_highlighter=summary_highlighter,
-                    include_url=show_url,
-                    show_change_id=show_change_id,
-                    attention_column=attention_column,
-                )
-            )
-        else:
+        if log_verbosity >= 1:
             ind = " " * _continuation_indent(commit)
             intro = _oneline_line(
                 commit,
@@ -616,18 +514,26 @@ def main(argv: list[str] | None = None) -> int:
             if log_verbosity >= 2:
                 for b in _commit_body_detail_lines(cwd, commit):
                     print(f"{ind}{b}")
-
-    # Summary section (suppressed for compact text mode only)
-    if not use_compact:
-        summary, ready_n, total_n = _build_summary(commits)
-        print()
-        print(
-            _format_summary_dashboard_line(
-                summary,
-                ready_n,
-                total_n,
+        else:
+            print(
+                _oneline_line(
+                    commit,
+                    summary_highlighter=summary_highlighter,
+                    include_url=show_url,
+                    show_change_id=show_change_id,
+                    attention_column=attention_column,
+                )
             )
+
+    summary, ready_n, total_n = _build_summary(commits)
+    print()
+    print(
+        _format_summary_dashboard_line(
+            summary,
+            ready_n,
+            total_n,
         )
+    )
 
     return 1 if any(c.attention_reasons for c in commits) else 0
 

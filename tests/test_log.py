@@ -33,6 +33,7 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--json" in out
     assert "--show-change-id" in out
     assert "--show-url" in out
+    assert "--verbose" in out or "-v" in out
 
 
 @pytest.mark.parametrize(
@@ -40,8 +41,7 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     [
         [],
         ["--full"],
-        ["--full", "--oneline"],
-        ["--full", "--no-compact"],
+        ["--full", "-v"],
         ["--full", "--url"],
         ["--full", "--color=never"],
     ],

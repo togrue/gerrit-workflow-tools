@@ -51,7 +51,6 @@ _ger_log() {
         __gwt_flags "$cur" \
             --help \
             --full \
-            --oneline --no-oneline \
             --json \
             --color \
             --url --show-url \

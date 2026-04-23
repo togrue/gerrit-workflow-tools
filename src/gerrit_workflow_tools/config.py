@@ -263,8 +263,6 @@ def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
     return {
         "show_url": config_bool(cwd, "gerrit.logShowUrl"),
         "show_change_id": config_bool(cwd, "gerrit.logShowChangeId"),
-        "oneline": config_bool(cwd, "gerrit.logOneline"),
-        "compact": config_bool(cwd, "gerrit.logCompact"),
     }
 
 
