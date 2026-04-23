@@ -189,7 +189,7 @@ def stack_commits_metadata_one_log(
         check=False,
     )
     if p.returncode != 0:
-        return []
+        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
     return _parse_rs_metadata_records(p.stdout)
 
 

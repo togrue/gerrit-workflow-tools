@@ -172,6 +172,14 @@ def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "summary:" in out
 
 
+def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    code, out, err = run_cli(stack_repo, log_main, ["not-a-real-revision"], monkeypatch)
+    assert code == 2
+    assert out == ""
+    assert "error:" in err.lower()
+
+
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, log_main, ["--full"], monkeypatch)
