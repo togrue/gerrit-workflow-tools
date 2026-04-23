@@ -278,14 +278,14 @@ def _attention_column(
     return max(widths) + 2
 
 
-def _oneline_line(
+def _oneline_body(
     commit: LogCommit,
     *,
     summary_highlighter: SummaryHighlighter | None = None,
-    include_url: bool,
     show_change_id: bool = False,
     attention_column: int = 0,
 ) -> str:
+    """Oneline text through attention suffix; excludes Gerrit URL."""
     base = _primary_line(
         commit,
         summary_highlighter=summary_highlighter,
@@ -295,9 +295,32 @@ def _oneline_line(
     if attention:
         gap = max(2, attention_column - _visible_len(base)) if attention_column else 2
         base = f"{base}{' ' * gap}{attention}"
-    if include_url and commit.gerrit_url:
-        base = f"{base}  {_url_line(commit.gerrit_url)}"
     return base
+
+
+def _oneline_line(
+    commit: LogCommit,
+    *,
+    summary_highlighter: SummaryHighlighter | None = None,
+    include_url: bool,
+    show_change_id: bool = False,
+    attention_column: int = 0,
+    url_start_visible: int | None = None,
+) -> str:
+    body = _oneline_body(
+        commit,
+        summary_highlighter=summary_highlighter,
+        show_change_id=show_change_id,
+        attention_column=attention_column,
+    )
+    if include_url and commit.gerrit_url:
+        if url_start_visible is not None:
+            pad = url_start_visible - _visible_len(body)
+            if pad < 2:
+                pad = 2
+            return f"{body}{' ' * pad}{_url_line(commit.gerrit_url)}"
+        return f"{body}  {_url_line(commit.gerrit_url)}"
+    return body
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +519,23 @@ def main(argv: list[str] | None = None) -> int:
         summary_highlighter=summary_highlighter,
         show_change_id=show_change_id,
     )
+    url_start_visible: int | None = None
+    if show_url and log_verbosity < 1:
+        widths = [
+            _visible_len(
+                _oneline_body(
+                    c,
+                    summary_highlighter=summary_highlighter,
+                    show_change_id=show_change_id,
+                    attention_column=attention_column,
+                )
+            )
+            for c in visible
+            if c.gerrit_url
+        ]
+        if widths:
+            url_start_visible = max(widths) + 2
+
     for commit in visible:
         if log_verbosity >= 1:
             ind = " " * _continuation_indent(commit)
@@ -522,6 +562,7 @@ def main(argv: list[str] | None = None) -> int:
                     include_url=show_url,
                     show_change_id=show_change_id,
                     attention_column=attention_column,
+                    url_start_visible=url_start_visible,
                 )
             )
 
