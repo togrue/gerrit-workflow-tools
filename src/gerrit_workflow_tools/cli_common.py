@@ -56,14 +56,33 @@ def add_verbose_and_debug_log_args(
     parser: argparse.ArgumentParser,
     *,
     debug_log_help: str | None = None,
+    verbose_help: str | None = None,
+    verbose_action: str = "store_true",
 ) -> None:
-    """Register placeholder ``-v``/``--verbose`` and ``--debug-log`` (repeat for more detail)."""
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help=HELP_VERBOSE_PLACEHOLDER,
-    )
+    """Register ``-v``/``--verbose`` and ``--debug-log`` (repeat for more detail).
+
+    Pass *verbose_help* when a command uses ``--verbose`` for richer output instead of
+    the package-wide placeholder text.
+
+    *verbose_action*: ``\"store_true\"`` (default) or ``\"count\"`` (``-v``/``-vv`` adds
+    levels; default ``0`` when omitted).
+    """
+    v_help = verbose_help or HELP_VERBOSE_PLACEHOLDER
+    if verbose_action == "count":
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            default=0,
+            help=v_help,
+        )
+    else:
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help=v_help,
+        )
     parser.add_argument(
         "--debug-log",
         action="count",

@@ -91,7 +91,7 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
 
 
 def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Non-oneline, non-compact mode prints ``# failed`` / ``# comments:`` on their own lines."""
+    """``--verbose``: oneline row with attention; indented URL; no duplicate comment-count detail line."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{} for _ in rows]
@@ -100,17 +100,17 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     overrides[-1] = {"status": "ABANDONED", "submittable": False}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", "--color=never"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--full", "--verbose", "--color=never"], monkeypatch)
     assert code == 1, err
     assert "v? " in out
     assert "cr? " in out
     assert "# submittable" in out
-    assert "# failed" in out
-    assert "# comments: 2 unresolved" in out
+    assert "build failed" in out
+    assert "2 unresolved comments" in out
+    assert "# comments:" not in out
     assert "# abandoned" in out
+    assert "g.example" in out or "/+/" in out
     assert "✓" not in out
-    assert "# build failed" not in out
-    assert "# 2 unresolved comments" not in out
 
 
 def test_log_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
@@ -37,7 +38,7 @@ from gerrit_workflow_tools.gerrit_change_status import (
 )
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
-from gerrit_workflow_tools.git_run import GitError
+from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import (
     merge_base_with_target,
     parse_change_id,
@@ -163,17 +164,36 @@ def _url_line(url: str) -> str:
     return _color(url, ANSI_DIM)
 
 
-def _detail_lines(commit: LogCommit) -> list[str]:
-    lines: list[str] = []
-    if commit.ci_failures:
-        text = f"# failed: {', '.join(commit.ci_failures)}"
-        lines.append(_color(text, ANSI_RED))
-    elif commit.verified is not None and commit.verified <= -1:
-        lines.append(_color("# failed", ANSI_RED))
-    if commit.comments_unresolved > 0:
-        text = f"# comments: {commit.comments_unresolved} unresolved"
-        lines.append(_color(text, ANSI_YELLOW))
+def _extra_detail_lines(commit: LogCommit) -> list[str]:
+    """Indented detail lines only where they add information not already on the oneline row.
+
+    Attention tokens (``# build failed``, unresolved comment counts, etc.) stay on the
+    oneline introduction via :func:`_oneline_line`. Here we add structured CI failure
+    names (room for per-check URLs later) and avoid repeating comment counts.
+    """
+    failures = commit.ci_failures
+    if not failures:
+        return []
+    if len(failures) == 1:
+        return [_color(f"# failed: {failures[0]}", ANSI_RED)]
+    lines: list[str] = [_color("# failed checks:", ANSI_RED)]
+    for name in failures:
+        lines.append(_color(f"  · {name}", ANSI_RED))
     return lines
+
+
+def _commit_body_detail_lines(cwd: Path | str, commit: LogCommit) -> list[str]:
+    """Non-first lines of the commit message (subject already on the oneline row)."""
+    try:
+        raw = git_out("log", "-1", "--format=%B", commit.sha, cwd=cwd)
+    except GitError:
+        return []
+    lines = raw.splitlines()
+    if lines and lines[0].strip() == commit.summary.strip():
+        lines = lines[1:]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    return [ln if not ln.strip() else _color(ln, ANSI_DIM) for ln in lines]
 
 
 # Primary line format: {sha} {patchset p/n/o/-} {verified} {code_review} {comments}  # {summary}
@@ -431,7 +451,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--oneline",
         action="store_true",
-        help="Use one line per commit (suppress detail lines).",
+        help="One line per commit (this is the default unless ``--verbose`` or ``--no-oneline``).",
     )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     add_color_args(p)
@@ -453,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--no-oneline",
         action="store_true",
-        help="Override ``gerrit.logOneline`` when set.",
+        help=("Oneline row plus indented details (like ``-v``); URLs only if ``--url`` or ``gerrit.logShowUrl``."),
     )
     p.add_argument(
         "--no-compact",
@@ -463,6 +483,12 @@ def main(argv: list[str] | None = None) -> int:
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands to stderr.",
+        verbose_action="count",
+        verbose_help=(
+            "Oneline row plus indented details (CI failure names, etc.); Gerrit URL on the next line "
+            "when URLs are enabled. ``-vv`` also prints the commit message body. "
+            "Does not enable diagnostic logging; use ``--debug-log`` for that."
+        ),
     )
     p.add_argument(
         "rev_range",
@@ -479,10 +505,12 @@ def main(argv: list[str] | None = None) -> int:
     summary_highlighter = build_summary_highlighter(cwd)
 
     gdef = log_defaults(cwd)
-    show_url = bool(args.url) or gdef["show_url"]
+    v_raw = getattr(args, "verbose", 0)
+    log_verbosity = int(v_raw) if isinstance(v_raw, int) else (1 if v_raw else 0)
+    show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
-    use_oneline = bool(args.oneline) or (gdef["oneline"] and not args.no_oneline)
     use_compact = gdef["compact"] and not args.no_compact
+    pure_oneline = not use_compact and log_verbosity == 0 and not args.no_oneline
 
     # Determine commit range
     if args.rev_range:
@@ -559,9 +587,9 @@ def main(argv: list[str] | None = None) -> int:
             primary = _compact_line(commit, show_change_id=show_change_id)
             print(primary)
             if show_url and commit.gerrit_url:
-                ind = " " * (_visible_len(primary) + 2)
-                print(f"{ind}{_url_line(commit.gerrit_url)}")
-        elif use_oneline:
+                ind_c = " " * (_visible_len(primary) + 2)
+                print(f"{ind_c}{_url_line(commit.gerrit_url)}")
+        elif pure_oneline:
             print(
                 _oneline_line(
                     commit,
@@ -572,40 +600,25 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         else:
-            # Full rows: primary line plus indented `# failed:` / `# comments:` lines (see docu/commands/log.md).
-            primary = _primary_line(
+            ind = " " * _continuation_indent(commit)
+            intro = _oneline_line(
                 commit,
                 summary_highlighter=summary_highlighter,
+                include_url=False,
                 show_change_id=show_change_id,
+                attention_column=attention_column,
             )
-            details = _detail_lines(commit)
-            ind = " " * _continuation_indent(commit)
-            if details:
-                print(primary)
-                for d in details:
-                    print(f"{ind}{d}")
-                if commit.abandoned or commit.patchset_status in (
-                    "merged-drift",
-                    "merged-unknown",
-                ):
-                    extra = _attention_suffix(commit)
-                    if extra:
-                        print(f"{ind}{extra}")
-                if show_url and commit.gerrit_url:
-                    print(f"{ind}{_url_line(commit.gerrit_url)}")
-            else:
-                print(
-                    _oneline_line(
-                        commit,
-                        summary_highlighter=summary_highlighter,
-                        include_url=show_url,
-                        show_change_id=show_change_id,
-                        attention_column=attention_column,
-                    )
-                )
+            print(intro)
+            if show_url and commit.gerrit_url:
+                print(f"{ind}{_url_line(commit.gerrit_url)}")
+            for d in _extra_detail_lines(commit):
+                print(f"{ind}{d}")
+            if log_verbosity >= 2:
+                for b in _commit_body_detail_lines(cwd, commit):
+                    print(f"{ind}{b}")
 
-    # Summary section (suppressed for --oneline and compact text mode)
-    if not use_oneline and not use_compact:
+    # Summary section (suppressed for compact text mode only)
+    if not use_compact:
         summary, ready_n, total_n = _build_summary(commits)
         print()
         print(

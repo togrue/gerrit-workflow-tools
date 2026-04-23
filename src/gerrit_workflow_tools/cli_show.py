@@ -18,7 +18,7 @@ from gerrit_workflow_tools.cli_common import (
     configure_logging,
     cwd_from_env,
 )
-from gerrit_workflow_tools.cli_log import _detail_lines, _primary_line, _url_line
+from gerrit_workflow_tools.cli_log import _extra_detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,
@@ -296,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     print()
     if commit.gerrit_url:
         print(f"{ind}{_url_line(commit.gerrit_url)}")
-    for d in _detail_lines(commit):
+    for d in _extra_detail_lines(commit):
         print(f"{ind}{d}")
     print(f"{ind}{_primary_line(commit, summary_highlighter=summary_highlighter)}")
 
