@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 from typing import Literal
 
@@ -354,39 +353,13 @@ def set_branch_config(
     clear_gerrit_git_config_cache()
 
 
-def set_global_gerrit(
-    cwd: Path | str | None,
-    *,
-    remote: str | None = None,
-    stop_patterns: list[str] | None = None,
-) -> None:
-    """Set global ``gerrit.*`` keys (remote, stop patterns) and clear the cache."""
-    if remote is not None:
-        git("config", "gerrit.remote", remote, cwd=cwd)
-    if stop_patterns is not None:
-        git("config", "--unset-all", "gerrit.stopPattern", cwd=cwd, check=False)
-        for pat in stop_patterns:
-            git("config", "--add", "gerrit.stopPattern", pat, cwd=cwd)
-    clear_gerrit_git_config_cache()
-
-
-def escape_branch_for_config(branch: str) -> str:
-    """Quote branch name for use in git config section if needed."""
-    if re.search(r'[\s"\\\[\]]', branch):
-        return '"' + branch.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    return branch
-
-
 def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
     """
-    Return (ref_for_merge_base, display_name) for merge-base, e.g. ('main', 'main').
-    Order: ``branch.gerritTarget`` -> ``@{upstream}`` (any remote). There is **no** fallback
-    to local ``main`` / ``master`` when both are absent.
-
+    Return (ref_for_merge_base, display_name) for the remote target branch.
+    Order: ``branch.gerritTarget`` -> ``@{upstream}`` (any remote).
     ``gerritTarget`` must be the Gerrit destination **branch name** (e.g. ``dev``). It must
     resolve to an existing ref—usually a local branch or ``refs/remotes/<remote>/<branch>``
-    after ``git fetch``. Do not create a local branch whose name looks like ``origin/<branch>``;
-    that is a remote-tracking layout, populated by fetching from the Gerrit remote.
+    after ``git fetch``.
     """
     from gerrit_workflow_tools.git_run import GitError
 
@@ -408,17 +381,12 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
             f"appear as `refs/remotes/<remote>/<branch>` after fetching."
         )
 
-    p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
-    if p.returncode == 0:
-        upstream = p.stdout.strip()
-        if "/" in upstream:
-            _remote, name = upstream.split("/", 1)
-            p2 = git("rev-parse", "--verify", f"refs/heads/{name}", cwd=cwd, check=False)
-            if p2.returncode == 0:
-                return (p2.stdout.strip(), name)
-        p3 = git("rev-parse", "--verify", upstream, cwd=cwd, check=False)
-        if p3.returncode == 0:
-            return (p3.stdout.strip(), upstream)
+    upstream_name = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
+    if upstream_name.returncode == 0:
+        upstream = upstream_name.stdout.strip()
+        upstream_ref = git("rev-parse", "--verify", upstream, cwd=cwd, check=False)
+        if upstream_ref.returncode == 0:
+            return (upstream_ref.stdout.strip(), upstream)
 
     raise GitError(
         f"No base branch found for '{b}'.\n"
