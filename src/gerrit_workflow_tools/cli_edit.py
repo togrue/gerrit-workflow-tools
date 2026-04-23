@@ -6,6 +6,7 @@ import os
 import shlex
 import subprocess
 import sys
+from typing import Literal
 
 from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
@@ -23,20 +24,36 @@ from gerrit_workflow_tools.stack import (
 logger = logging.getLogger(__name__)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger edit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
-    p = argparse.ArgumentParser(
-        prog="ger edit",
-        description=("Start an interactive rebase to edit, reword, or drop a commit in the current stack."),
-    )
+def _run_interactive_stack_rebase(
+    argv: list[str] | None,
+    *,
+    prog: str,
+    description: str,
+    default_action: Literal["edit", "reword"],
+) -> int:
+    """Shared implementation for ``ger edit`` and ``ger reword``."""
+    p = argparse.ArgumentParser(prog=prog, description=description)
     p.add_argument(
         "rev",
         metavar="REV",
         help="Git ref or Change-Id (I…); must be in the current stack.",
     )
     g = p.add_mutually_exclusive_group()
-    g.add_argument("--reword", action="store_true", help="Reword commit message.")
-    g.add_argument("--drop", action="store_true", help="Drop commit.")
+    p.set_defaults(action_override=None)
+    if default_action == "edit":
+        g.add_argument(
+            "--reword", dest="action_override", action="store_const", const="reword", help="Reword commit message."
+        )
+        g.add_argument("--drop", dest="action_override", action="store_const", const="drop", help="Drop commit.")
+    else:
+        g.add_argument(
+            "--edit",
+            dest="action_override",
+            action="store_const",
+            const="edit",
+            help="Stop at commit to amend (interactive rebase edit).",
+        )
+        g.add_argument("--drop", dest="action_override", action="store_const", const="drop", help="Drop commit.")
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands and rebase sequence editor steps to stderr.",
@@ -45,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
-    action = "reword" if args.reword else "drop" if args.drop else "edit"
+    action = args.action_override or default_action
     logger.debug("gedit cwd=%s rev_arg=%r action=%s", cwd, args.rev, action)
 
     try:
@@ -77,6 +94,26 @@ def main(argv: list[str] | None = None) -> int:
     r = subprocess.run(cmd, cwd=cwd, env=env)
     logger.debug("gedit rebase finished with return code %s", r.returncode)
     return r.returncode
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger edit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
+    return _run_interactive_stack_rebase(
+        argv,
+        prog="ger edit",
+        description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
+        default_action="edit",
+    )
+
+
+def main_reword(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger reword``: interactive rebase with reword as the default action."""
+    return _run_interactive_stack_rebase(
+        argv,
+        prog="ger reword",
+        description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
+        default_action="reword",
+    )
 
 
 if __name__ == "__main__":
