@@ -8,21 +8,27 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from gerrit_workflow_tools.stack import Commit
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     make_query_changes_impl,
     stack_rows_mb_to_head,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_todo(rows: list[tuple[str, str, str, str]]) -> str:
-    """Minimal rebase todo from (sha, short, subject, raw) rows — oldest-first."""
-    lines = [f"pick {short} {subject}\n" for _, short, subject, _ in rows]
+def _make_todo(rows: list[Commit] | list[tuple[str, str, str, str]]) -> str:
+    """Minimal rebase todo from stack rows (Commit or legacy 4-tuples) — oldest-first."""
+    lines: list[str] = []
+    for row in rows:
+        if isinstance(row, Commit):
+            lines.append(f"pick {row.short_sha} {row.subject}\n")
+        else:
+            _, short, subject, _ = row
+            lines.append(f"pick {short} {subject}\n")
     lines.append("\n# Rebase a1b2c3..d4e5f6 onto a1b2c3 (N commands)\n# ...\n")
     return "".join(lines)
 
@@ -77,19 +83,19 @@ def test_attention_text_variants():
     from gerrit_workflow_tools.restack_enricher import _attention_text
 
     def _commit(**kw) -> LogCommit:
-        defaults = dict(
-            sha="abc" * 13 + "ab",
-            short_sha="abc1234",
-            summary="x",
-            change_id=None,
-            pushed=True,
-            abandoned=False,
-            patchset_status="active",
-            verified=1,
-            code_review=2,
-            comments_unresolved=0,
-            submittable=True,
-        )
+        defaults: dict = {
+            "sha": "abc" * 13 + "ab",
+            "short_sha": "abc1234",
+            "summary": "x",
+            "change_id": None,
+            "pushed": True,
+            "abandoned": False,
+            "patchset_status": "active",
+            "verified": 1,
+            "code_review": 2,
+            "comments_unresolved": 0,
+            "submittable": True,
+        }
         defaults.update(kw)
         return LogCommit(**defaults)
 
@@ -231,8 +237,8 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
         result = _enrich_todo(text, stack_repo)
 
     # Each original pick line must now contain enriched subject markers.
-    for _, short, _subject, _ in rows:
-        assert f"pick {short} # " in result
+    for c in rows:
+        assert f"pick {c.short_sha} # " in result
 
     # Default mock data: verified=+1, cr=+2, submittable=True.
     assert "v+1" in result
@@ -255,7 +261,7 @@ def test_enrich_todo_preserves_action_and_sha(stack_repo: Path):
     with wg, wrgb, wgc:
         result = _enrich_todo(text, stack_repo)
 
-    first_short = rows[0][1]
+    first_short = rows[0].short_sha
     assert result.startswith(f"drop {first_short} # ")
 
 
@@ -311,8 +317,8 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
         result = _enrich_todo(text, stack_repo)
 
     # Must not raise; each pick line must still be enriched (degraded to not-pushed).
-    for _, short, _subject, _ in rows:
-        assert f"pick {short} # " in result
+    for c in rows:
+        assert f"pick {c.short_sha} # " in result
     assert "not-pushed" in result
 
 
@@ -384,8 +390,8 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
     assert "enrichment failed" in text
 
     # Original pick lines must be intact (unenriched fallback).
-    for _, short, subject, _ in rows:
-        assert f"pick {short} {subject}" in text
+    for c in rows:
+        assert f"pick {c.short_sha} {c.subject}" in text
 
     # Editor was still launched despite the error.
     mock_run.assert_called_once()
@@ -519,12 +525,12 @@ def test_cli_restack_uses_given_rev(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_restack import main as restack_main
 
     rows = stack_rows_mb_to_head(stack_repo)
-    target_sha = rows[0][0]  # Full SHA of the first (oldest) stack commit.
+    target_sha = rows[0].sha  # Full SHA of the first (oldest) stack commit.
 
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        code = restack_main([rows[0][1]])  # pass short SHA; resolve_stack_commit expands it
+        code = restack_main([rows[0].short_sha])  # pass short SHA; resolve_stack_commit expands it
 
     assert code == 0
     assert captured["cmd"][-1] == target_sha
@@ -569,7 +575,6 @@ def test_cli_restack_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monke
 
 
 def test_cli_restack_cannot_combine_onto_remote_with_rev(stack_repo: Path, monkeypatch):
-    import pytest
 
     from gerrit_workflow_tools.cli_restack import main as restack_main
 
@@ -592,8 +597,8 @@ def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monke
     with wg, wrgb, wgc:
         result = _enrich_todo(text, stack_repo)
 
-    for _, short, _, _ in rows:
-        assert f"drop {short} #" in result
+    for c in rows:
+        assert f"drop {c.short_sha} #" in result
 
 
 def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monkeypatch):
@@ -607,14 +612,13 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
     with wg, wrgb, wgc:
         result = _enrich_todo(text, stack_repo)
 
-    first_short = rows[0][1]
+    first_short = rows[0].short_sha
     assert result.startswith(f"reword {first_short} #")
 
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
     from gerrit_workflow_tools.gerrit_change_status import compute_merged_equivalent
     from gerrit_workflow_tools.git_run import git_out
-
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
@@ -627,19 +631,19 @@ def test_commit_blocks_chain_for_submittability_merged():
     from gerrit_workflow_tools.gerrit_change_status import LogCommit, commit_blocks_chain_for_submittability
 
     def lc(**kw: object) -> LogCommit:
-        base = dict(
-            sha="a" * 40,
-            short_sha="aaa",
-            summary="s",
-            change_id="I" + "b" * 40,
-            pushed=True,
-            abandoned=False,
-            patchset_status="active",
-            verified=None,
-            code_review=None,
-            comments_unresolved=0,
-            submittable=False,
-        )
+        base: dict = {
+            "sha": "a" * 40,
+            "short_sha": "aaa",
+            "summary": "s",
+            "change_id": "I" + "b" * 40,
+            "pushed": True,
+            "abandoned": False,
+            "patchset_status": "active",
+            "verified": None,
+            "code_review": None,
+            "comments_unresolved": 0,
+            "submittable": False,
+        }
         base.update(kw)
         return LogCommit(**base)
 

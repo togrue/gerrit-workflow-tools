@@ -244,7 +244,7 @@ def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.
 
 def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
-    first_subject = rows[0][2]
+    first_subject = rows[0].subject
     git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
     git("config", "--add", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
     git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
@@ -259,7 +259,7 @@ def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch
 def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     assert len(rows) >= 2
-    boundary_subject = rows[1][2]
+    boundary_subject = rows[1].subject
     git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
     git("config", "--add", "gerrit.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
     clear_gerrit_git_config_cache()

@@ -10,7 +10,6 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.git_run import git, git_out
-from gerrit_workflow_tools.stack import parse_change_id
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     patch_gerrit_client_for_queries,
@@ -68,15 +67,15 @@ def test_log_full_text_contains_commit_lines_and_summary(stack_repo: Path, monke
     assert code == 0, err
     assert "summary:" in out
     assert "ready" in out and "/" in out
-    for _sha, short, subj, _raw in rows:
-        assert short in out
-        assert subj in out
+    for c in rows:
+        assert c.short_sha in out
+        assert c.subject in out
 
 
 def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
-    first_subject = rows[0][2]
+    first_subject = rows[0].subject
     git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
     git("config", "--add", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
     git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
@@ -139,9 +138,8 @@ def test_log_default_hides_when_all_green(stack_repo: Path, monkeypatch: pytest.
         code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
-    _, first_short, first_subj, _ = rows[0]
-    assert first_short not in out
-    assert first_subj not in out
+    assert rows[0].short_sha not in out
+    assert rows[0].subject not in out
 
 
 def test_log_shows_attention_without_full(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,7 +154,7 @@ def test_log_shows_attention_without_full(stack_repo: Path, monkeypatch: pytest.
         code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
     assert code == 1, err
     last = rows[-1]
-    assert last[1] in out
+    assert last.short_sha in out
     assert "cr+1" in out
 
 
@@ -194,8 +192,7 @@ def test_log_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest.
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, log_main, ["--full", "--show-change-id", "--color=never"], monkeypatch)
     assert code == 0, err
-    _, _short, _subj, raw = rows[0]
-    cid = parse_change_id(raw)
+    cid = rows[0].change_id
     assert cid
     assert cid[:12] in out
 
@@ -215,8 +212,7 @@ def test_log_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.Mon
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, log_main, ["--full", "--color=never"], monkeypatch)
     assert code == 1, err
-    _sha, _short, subj, _raw = rows[-1]
-    assert _unicode_strikethrough(subj) in out
+    assert _unicode_strikethrough(rows[-1].subject) in out
 
 
 def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
