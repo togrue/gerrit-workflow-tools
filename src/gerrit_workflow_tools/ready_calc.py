@@ -6,12 +6,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.config import stop_patterns
 from gerrit_workflow_tools.git_run import GitError, git_out
-from gerrit_workflow_tools.stack import (
-    merge_base_with_target,
-    parse_change_id,
-    stack_commits_metadata_one_log,
-    stack_shas_and_subjects_one_log,
-)
+from gerrit_workflow_tools.stack import commits_in_range, merge_base_with_target
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +16,9 @@ class ReadyResult:
     pushable_count: int
     boundary_sha: str | None
     boundary_reason: str
-    merge_base: str
+    target_tip: str
     push_tip_sha: str | None
-    push_range: str | None  # "mb..tip"
+    push_range: str | None  # "upstream_tip..tip" (target_tip field holds upstream tip SHA)
 
 
 def _filter_patterns(patterns: list[str], *, ignore_exact: list[str]) -> list[str]:
@@ -55,13 +50,15 @@ def compute_ready(
     until: str | None = None,
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
-    mb, _target, _ = merge_base_with_target(cwd, branch)
+    _fork, _display, target_tip = merge_base_with_target(cwd, branch)
     raw_patterns = stop_patterns(cwd)
     patterns = _filter_patterns(raw_patterns, ignore_exact=list(ignore_patterns or []))
-    shas, subjects = stack_shas_and_subjects_one_log(cwd, mb, branch=branch)
+    rows = commits_in_range(cwd, f"{target_tip}..HEAD")
+    shas = [r.sha for r in rows]
+    subjects = [r.subject for r in rows]
     logger.debug(
-        "compute_ready merge_base=%s commits=%d all_commits=%s stop_patterns=%d",
-        mb[:8],
+        "compute_ready target_tip=%s commits=%d all_commits=%s stop_patterns=%d",
+        target_tip[:8],
         len(shas),
         all_commits,
         len(patterns),
@@ -82,9 +79,9 @@ def compute_ready(
             pushable_count=len(shas) if until_sha is None else tip_idx + 1,
             boundary_sha=None,
             boundary_reason="ignored (--all)",
-            merge_base=mb,
+            target_tip=target_tip,
             push_tip_sha=tip,
-            push_range=f"{mb}..{tip}" if tip else None,
+            push_range=f"{target_tip}..{tip}" if tip else None,
         )
 
     block_idx, matched_pat = _first_block_index(subjects, patterns)
@@ -105,9 +102,9 @@ def compute_ready(
             pushable_count=n,
             boundary_sha=None,
             boundary_reason="no stop pattern matched",
-            merge_base=mb,
+            target_tip=target_tip,
             push_tip_sha=tip,
-            push_range=f"{mb}..{tip}" if tip else None,
+            push_range=f"{target_tip}..{tip}" if tip else None,
         )
 
     # Pushable: commits before block_idx
@@ -120,7 +117,7 @@ def compute_ready(
             pushable_count=0,
             boundary_sha=boundary_sha,
             boundary_reason=boundary_reason,
-            merge_base=mb,
+            target_tip=target_tip,
             push_tip_sha=None,
             push_range=None,
         )
@@ -141,21 +138,21 @@ def compute_ready(
         pushable_count=pushable_count,
         boundary_sha=boundary_sha,
         boundary_reason=boundary_reason,
-        merge_base=mb,
+        target_tip=target_tip,
         push_tip_sha=tip,
-        push_range=f"{mb}..{tip}",
+        push_range=f"{target_tip}..{tip}",
     )
 
 
 def change_id_rows_for_range(
     cwd: Path | str | None,
-    merge_base: str,
+    start_exclusive: str,
     *,
     head: str = "HEAD",
 ) -> list[tuple[str, str, str | None]]:
-    """Return ``(full_sha, short_sha, change_id)`` for each commit in ``merge_base..head``."""
-    meta = stack_commits_metadata_one_log(cwd, f"{merge_base}..{head}")
-    return [(sha, short, parse_change_id(raw)) for sha, short, _sub, raw in meta]
+    """Return ``(full_sha, short_sha, change_id)`` for each commit in ``start_exclusive..head``."""
+    meta = commits_in_range(cwd, f"{start_exclusive}..{head}")
+    return [(c.sha, c.short_sha, c.change_id) for c in meta]
 
 
 def change_id_rows_for_rev_range(
@@ -164,5 +161,5 @@ def change_id_rows_for_rev_range(
     end_inclusive: str,
 ) -> list[tuple[str, str, str | None]]:
     """Return ``(full_sha, short_sha, change_id)`` for ``start_exclusive..end_inclusive``."""
-    meta = stack_commits_metadata_one_log(cwd, f"{start_exclusive}..{end_inclusive}")
-    return [(sha, short, parse_change_id(raw)) for sha, short, _sub, raw in meta]
+    meta = commits_in_range(cwd, f"{start_exclusive}..{end_inclusive}")
+    return [(c.sha, c.short_sha, c.change_id) for c in meta]
