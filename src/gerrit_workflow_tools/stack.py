@@ -3,60 +3,74 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
-from gerrit_workflow_tools.config import resolve_local_base_ref
+from gerrit_workflow_tools.config import current_branch
 from gerrit_workflow_tools.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
 
 
-def _cwd_key(cwd: Path | str | None) -> str:
-    p = Path.cwd() if cwd is None else Path(cwd)
-    return str(p.resolve())
+def upstream_tracking_tip_and_display(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
+    """
+    Return ``(upstream_tip_sha, display_name)`` for the branch's **upstream** only.
+
+    The local stack is ``<sha>..HEAD`` (same *sha* as the first element here).
+    This does not consult ``branch.*.gerritTarget``; use :func:`resolve_local_base_ref`
+    in ``config`` when you need the configured Gerrit push destination tip instead.
+    """
+    b = branch or current_branch(cwd)
+    upstream_sym = f"{b}@{{upstream}}" if branch else "@{upstream}"
+    upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
+    if upstream_name.returncode != 0:
+        raise GitError(
+            f"No upstream configured for branch {b!r}.\n"
+            "Set an upstream, e.g.:\n"
+            "  git branch --set-upstream-to=<remote>/<branch>\n"
+            "Or infer the nearest remote-tracking branch and set upstream:\n"
+            "  ger branch infer-upstream\n"
+            "Optional per-branch Gerrit destination overrides: see `ger branch --help`."
+        )
+    display = upstream_name.stdout.strip()
+    upstream_ref = git("rev-parse", "--verify", display, cwd=cwd, check=False)
+    if upstream_ref.returncode != 0:
+        raise GitError(
+            f"Upstream {display!r} for branch {b!r} does not resolve to a ref. "
+            f"Fetch from your remote so the tracking branch exists."
+        )
+    return (upstream_ref.stdout.strip(), display)
+
+
+@dataclass(frozen=True)
+class Commit:
+    """One commit from a ``git log`` metadata line (subject + full message body)."""
+
+    sha: str
+    short_sha: str
+    subject: str
+    body: str
+    change_id: str | None
 
 
 @dataclass(frozen=True)
 class StackSnapshot:
-    """Merge-base + ``merge_base..HEAD`` commits from one ``git log`` range."""
+    """Upstream tracking tip + ``upstream_tip..HEAD`` commits (one ``git log``)."""
 
-    merge_base: str
-    target_display: str
-    base_ref: str
-    rows: tuple[tuple[str, str, str, str], ...]
-
-
-def clear_stack_snapshot_cache() -> None:
-    """Drop memoized stack snapshots (e.g. between tests or after mutating the repo)."""
-    _cached_stack_snapshot.cache_clear()
-
-
-def _merge_base_with_target_impl(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
-    base_ref, display = resolve_local_base_ref(cwd, branch)
-    mb = git_out("merge-base", "HEAD", base_ref, cwd=cwd)
-    logger.debug(
-        "merge_base_with_target: merge_base=%s target_display=%r base_ref=%r",
-        mb[:8],
-        display,
-        base_ref,
-    )
-    return mb, display, base_ref
-
-
-@lru_cache(maxsize=64)
-def _cached_stack_snapshot(cwd_key: str, branch: str) -> StackSnapshot:
-    cwd = Path(cwd_key)
-    mb, display, base_ref = _merge_base_with_target_impl(cwd, branch or None)
-    rows_list = stack_commits_metadata_one_log(cwd, f"{mb}..HEAD")
-    rows_t: tuple[tuple[str, str, str, str], ...] = tuple(rows_list)
-    return StackSnapshot(mb, display, base_ref, rows_t)
+    upstream_tip: str
+    upstream_display: str
+    commits: tuple[Commit, ...]
 
 
 def get_stack_snapshot(cwd: Path | str | None, branch: str | None = None) -> StackSnapshot:
-    """Return merge-base and oldest-first commits for ``merge_base..HEAD`` (cached per cwd/branch)."""
-    return _cached_stack_snapshot(_cwd_key(cwd), branch or "")
+    """Return the upstream tip SHA, display name, and oldest-first ``upstream_tip..HEAD`` commits."""
+    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch)
+    rows_list = commits_in_range(cwd, f"{upstream_tip}..HEAD")
+    return StackSnapshot(
+        upstream_tip=upstream_tip,
+        upstream_display=display,
+        commits=tuple(rows_list),
+    )
 
 
 CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
@@ -69,33 +83,53 @@ def parse_change_id(message: str) -> str | None:
 
 
 def merge_base_with_target(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
-    """Return ``(merge_base_sha, target_display_name, base_ref_commit)`` from the memoized stack snapshot."""
-    snap = get_stack_snapshot(cwd, branch)
-    return snap.merge_base, snap.target_display, snap.base_ref
+    """
+    Return ``(rebase_fork, upstream_display, upstream_tip_sha)``.
+
+    *upstream_tip_sha* is ``git rev-parse`` of the branch's ``@{upstream}``; the default
+    local stack is ``upstream_tip_sha..HEAD``.
+
+    *rebase_fork* is ``merge-base(HEAD, upstream_tip_sha)`` — the onto point for
+    ``git rebase -i <fork>`` (not the same commit as *upstream_tip_sha* when histories diverge).
+    """
+    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch)
+    rebase_fork = git_out("merge-base", "HEAD", upstream_tip, cwd=cwd)
+    logger.debug(
+        "merge_base_with_target: rebase_fork=%s upstream_display=%r upstream_tip=%r",
+        rebase_fork[:8],
+        display,
+        upstream_tip[:8],
+    )
+    return rebase_fork, display, upstream_tip
 
 
-def rev_spec_merge_base_to_end(cwd: Path | str | None, input_arg: str) -> str:
-    """``merge_base..END`` where END is *input_arg* or the right side of ``left..right``."""
-    mb, _, _ = merge_base_with_target(cwd)
+def rev_spec_stack_base_to_end(cwd: Path | str | None, input_arg: str, branch: str | None = None) -> str:
+    """``upstream_tip..END`` where END is *input_arg* or the right side of ``left..right``."""
+    _fork, _display, upstream_tip = merge_base_with_target(cwd, branch)
     if ".." not in input_arg:
-        logger.debug("rev_spec_merge_base_to_end rev-parse %r (end ref)", input_arg)
+        logger.debug("rev_spec_stack_base_to_end rev-parse %r (end ref)", input_arg)
         end = git_out("rev-parse", input_arg, cwd=cwd)
-        return f"{mb}..{end}"
+        return f"{upstream_tip}..{end}"
     idx = input_arg.index("..")
     right = input_arg[idx + 2 :].strip() or "HEAD"
-    logger.debug("rev_spec_merge_base_to_end rev-parse %r (range right)", right)
+    logger.debug("rev_spec_stack_base_to_end rev-parse %r (range right)", right)
     end = git_out("rev-parse", right, cwd=cwd)
-    return f"{mb}..{end}"
+    return f"{upstream_tip}..{end}"
+
+
+def rev_spec_target_tip_to_end(cwd: Path | str | None, input_arg: str) -> str:
+    """Backward-compatible alias for :func:`rev_spec_stack_base_to_end` (upstream-based stack base)."""
+    return rev_spec_stack_base_to_end(cwd, input_arg)
 
 
 def list_stack_commits(
     cwd: Path | str | None,
-    merge_base: str,
+    start_exclusive: str,
     *,
     head: str = "HEAD",
 ) -> list[str]:
-    """Oldest-first SHAs from merge_base..head (exclusive..exclusive range)."""
-    return rev_list_reverse(cwd, merge_base, head)
+    """Oldest-first SHAs in ``start_exclusive..head``."""
+    return rev_list_reverse(cwd, start_exclusive, head)
 
 
 def rev_list_reverse(cwd: Path | str | None, start_exclusive: str, end_inclusive: str) -> list[str]:
@@ -115,7 +149,7 @@ def rev_list_reverse(cwd: Path | str | None, start_exclusive: str, end_inclusive
 # Field separator in `git log --format` (ASCII RS). Avoids NUL in argv (Windows
 # subprocess rejects embedded nulls); %x1e is expanded by git, not by the shell.
 _RS = "\x1e"
-# Git expands %x1e in --format; same RS style as :func:`stack_commits_metadata_one_log`.
+# Git expands %x1e in --format; same RS style as :func:`commits_in_range`.
 _LOG_SHA_BODY_FMT = "%H%x1e%B%x1e"
 
 
@@ -149,34 +183,41 @@ def git_log_sha_body(
     return git_out(*args, cwd=cwd)
 
 
-def _parse_rs_metadata_records(stdout: str) -> list[tuple[str, str, str, str]]:
-    """Parse git log output from stack_commits_metadata_one_log format."""
+def _parse_rs_metadata_records(stdout: str) -> list[Commit]:
+    """Parse git log output from :func:`commits_in_range` format into :class:`Commit` rows."""
     parts = stdout.split(_RS)
     while parts and parts[-1] == "":
         parts.pop()
-    out: list[tuple[str, str, str, str]] = []
+    out: list[Commit] = []
     for i in range(0, len(parts), 4):
         if i + 3 >= len(parts):
             break
-        a, b, c, d = (
+        sha, short_s, subj, body = (
             parts[i].strip(),
             parts[i + 1].strip(),
             parts[i + 2].strip(),
             parts[i + 3].strip(),
         )
-        out.append((a, b, c, d))
+        out.append(
+            Commit(
+                sha=sha,
+                short_sha=short_s,
+                subject=subj,
+                body=body,
+                change_id=parse_change_id(body),
+            )
+        )
     return out
 
 
-def stack_commits_metadata_one_log(
+def commits_in_range(
     cwd: Path | str | None,
     rev_range: str,
-) -> list[tuple[str, str, str, str]]:
+) -> list[Commit]:
     """
-    Oldest-first commits in rev_range (e.g. 'merge_base..HEAD').
+    Oldest-first commits in *rev_range* (e.g. ``upstream_tip..HEAD``).
 
-    One ``git log`` call. Each tuple is (full_sha, short_sha, subject, raw_message)
-    where raw_message is the same as ``git log -1 --format=%B`` for that commit.
+    One ``git log`` call.
     """
     # Git expands %x1e to ASCII RS; keeps argv free of NUL (required on Windows).
     fmt = "%H%x1e%h%x1e%s%x1e%B%x1e"
@@ -191,29 +232,6 @@ def stack_commits_metadata_one_log(
     if p.returncode != 0:
         raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
     return _parse_rs_metadata_records(p.stdout)
-
-
-def stack_shas_and_subjects_one_log(
-    cwd: Path | str | None,
-    merge_base: str,
-    *,
-    head: str = "HEAD",
-    branch: str | None = None,
-) -> tuple[list[str], list[str]]:
-    """
-    Oldest-first SHAs and subject lines for merge_base..head using one git log.
-    When ``head`` is ``HEAD``, reuses :func:`get_stack_snapshot` when merge_base matches.
-    """
-    if head == "HEAD":
-        snap = get_stack_snapshot(cwd, branch)
-        if snap.merge_base == merge_base:
-            shas = [r[0] for r in snap.rows]
-            subjects = [r[2] for r in snap.rows]
-            return shas, subjects
-    rows = stack_commits_metadata_one_log(cwd, f"{merge_base}..{head}")
-    shas = [r[0] for r in rows]
-    subjects = [r[2] for r in rows]
-    return shas, subjects
 
 
 def commit_subject_and_body(cwd: Path | str | None, sha: str) -> tuple[str, str]:
@@ -235,17 +253,18 @@ def resolve_stack_commit(
     ref: str,
     *,
     branch: str | None = None,
+    _snap: StackSnapshot | None = None,
 ) -> str:
     """Resolve *ref* to a full SHA, or map a Change-Id to the unique commit on the current stack."""
     s = ref.strip()
     if CHANGE_ID_VALUE_RE.match(s):
-        snap = get_stack_snapshot(cwd, branch)
+        snap = _snap or get_stack_snapshot(cwd, branch)
         want = s.lower()
         matches: list[tuple[str, str]] = []
-        for sha, short, _sub, raw in snap.rows:
-            cid = parse_change_id(raw)
+        for c in snap.commits:
+            cid = c.change_id
             if cid and cid.lower() == want:
-                matches.append((sha, short))
+                matches.append((c.sha, c.short_sha))
         if not matches:
             raise GitError(f"no commit in current stack with Change-Id {s}")
         if len(matches) > 1:
@@ -264,11 +283,16 @@ def commit_in_stack(
     *,
     branch: str | None = None,
 ) -> bool:
-    """True if commit is in merge_base..HEAD stack."""
+    """True if commit is in the default ``upstream_tip..HEAD`` stack."""
     try:
         snap = get_stack_snapshot(cwd, branch)
     except GitError:
         return False
-    c = resolve_stack_commit(cwd, commit, branch=branch)
-    stack_shas = [r[0] for r in snap.rows]
+    c = resolve_stack_commit(cwd, commit, branch=branch, _snap=snap)
+    stack_shas = [x.sha for x in snap.commits]
     return c in stack_shas
+
+
+def current_stack_shas(cwd: Path | str | None, branch: str | None = None) -> list[str]:
+    """Full SHAs in the local stack (``@{upstream}..HEAD``), oldest first."""
+    return [c.sha for c in get_stack_snapshot(cwd, branch).commits]
