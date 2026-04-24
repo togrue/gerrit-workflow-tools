@@ -49,6 +49,9 @@ def make_stack_repo(path: Path) -> Path:
     commit("test! temporary experiment", _cid("3"), "c.txt")
     commit("Cleanup after experiment", _cid("4"), "d.txt")
 
+    # Stack commands use @{upstream}..HEAD; track local main from feature.
+    git("branch", "--set-upstream-to", "main", "feature", cwd=path, env=env, check=False)
+
     return path
 
 
@@ -71,6 +74,7 @@ def make_repo_duplicate_change_id(path: Path) -> Path:
         (path / name).write_text(f"{i}\n", encoding="utf-8")
         git("add", name, cwd=path, env=env)
         git("commit", "-m", f"dup {i}\n\nChange-Id: {cid}", cwd=path, env=env)
+    git("branch", "--set-upstream-to", "main", "bug", cwd=path, env=env, check=False)
     return path
 
 
@@ -90,6 +94,7 @@ def make_repo_malformed_cid(path: Path) -> Path:
     (path / "x.txt").write_text("1\n", encoding="utf-8")
     git("add", "x.txt", cwd=path, env=env)
     git("commit", "-m", "bad\n\nChange-Id: not-valid", cwd=path, env=env)
+    git("branch", "--set-upstream-to", "main", "bad", cwd=path, env=env, check=False)
     return path
 
 
@@ -99,3 +104,7 @@ def configure_gerrit_target(path: Path, target: str = "main") -> None:
 
     branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=path)
     set_branch_config(path, branch, gerrit_target=target)
+    # Local stack is @{upstream}..HEAD; align tests that set gerritTarget with a real upstream.
+    p = git("rev-parse", "--verify", target, cwd=path, check=False)
+    if p.returncode == 0:
+        git("branch", "--set-upstream-to", target, branch, cwd=path, check=False)
