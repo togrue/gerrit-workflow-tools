@@ -10,8 +10,8 @@
 # Parse each commit message (last non-empty line must be the Change-Id: :func:`change_id.extract_change_id_from_msg`).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
-# With ``--start-at-remote`` or ``--check-duplicates``, log ``merge_base..END``
-# (same merge-base resolution as ``stack``, :func:`stack.rev_spec_merge_base_to_end`).
+# With ``--start-at-remote`` or ``--check-duplicates``, log ``upstream_tip..END``
+# (same stack base as ``ger log`` default: :func:`stack.rev_spec_stack_base_to_end`).
 # ``--check-duplicates`` exits 0 if all footers are valid and unique, 1 if a footer is missing, 2 on duplicates.
 
 import argparse
@@ -35,7 +35,7 @@ from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.stack import (
     git_log_sha_body,
     parse_git_log_sha_body_rs,
-    rev_spec_merge_base_to_end,
+    rev_spec_target_tip_to_end,
 )
 
 # Re-export for tests and backwards compatibility.
@@ -87,12 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--start-at-remote",
         action="store_true",
-        help=("Use merge_base..END from the stack merge base instead of the default revision resolution."),
+        help=(
+            "Use upstream_tip..END (same stack window as default `ger log`) instead of the default revision resolution."
+        ),
     )
     p.add_argument(
         "--check-duplicates",
         action="store_true",
-        help="Check for duplicate Change-Ids across merge_base..END (same range as --start-at-remote).",
+        help="Check for duplicate Change-Ids across upstream_tip..END (same range as --start-at-remote).",
     )
     add_color_args(p)
     args = p.parse_args(argv)
@@ -111,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             resolved = resolve_gcid_user_arg(cwd, input_arg)
-            rev_spec = rev_spec_merge_base_to_end(cwd, resolved)
+            rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
             raw = git_log_sha_body(cwd, rev_spec, single=False)
         except GitError as e:
             return handle_git_error(e)
@@ -145,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         resolved = resolve_gcid_user_arg(cwd, input_arg)
         if args.start_at_remote:
-            rev_spec = rev_spec_merge_base_to_end(cwd, resolved)
+            rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
             raw = git_log_sha_body(cwd, rev_spec, single=False)
         else:
             raw = git_log_sha_body(cwd, resolved, single=_gcid_log_single_commit(resolved))
