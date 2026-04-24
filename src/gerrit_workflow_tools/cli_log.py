@@ -39,11 +39,7 @@ from gerrit_workflow_tools.gerrit_change_status import (
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git_out
-from gerrit_workflow_tools.stack import (
-    merge_base_with_target,
-    parse_change_id,
-    stack_commits_metadata_one_log,
-)
+from gerrit_workflow_tools.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
@@ -434,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="?",
         default=None,
         metavar="REV_RANGE",
-        help="Commit range (e.g. origin/main..HEAD); default merge-base..HEAD.",
+        help="Commit range (e.g. origin/main..HEAD); default upstream..HEAD (tracking @{upstream}).",
     )
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
@@ -454,14 +450,14 @@ def main(argv: list[str] | None = None) -> int:
         rev_range = args.rev_range
     else:
         try:
-            mb, _target, _base_ref = merge_base_with_target(cwd)
+            _fork, _target, target_tip = merge_base_with_target(cwd)
         except GitError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-        rev_range = f"{mb}..HEAD"
+        rev_range = f"{target_tip}..HEAD"
 
     try:
-        rows = stack_commits_metadata_one_log(cwd, rev_range)
+        rows = commits_in_range(cwd, rev_range)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -469,9 +465,7 @@ def main(argv: list[str] | None = None) -> int:
         print("(no commits in range)")
         return 0
 
-    commit_data: list[tuple[str, str, str, str | None]] = [
-        (sha, short, sub, parse_change_id(raw)) for sha, short, sub, raw in rows
-    ]
+    commit_data: list[tuple[str, str, str, str | None]] = [(c.sha, c.short_sha, c.subject, c.change_id) for c in rows]
 
     # Connect to Gerrit
     try:

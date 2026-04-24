@@ -63,19 +63,14 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
 from gerrit_workflow_tools.git_run import GitError, git
-from gerrit_workflow_tools.stack import (
-    _parse_rs_metadata_records,
-    merge_base_with_target,
-    parse_change_id,
-    stack_commits_metadata_one_log,
-)
+from gerrit_workflow_tools.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
 
 logger = logging.getLogger(__name__)
 
 _LOG_FMT = "%H%x1e%h%x1e%s%x1e%B%x1e"
 
 
-def _commits_all(cwd: Path) -> list[tuple[str, str, str, str]]:
+def _commits_all(cwd: Path):
     p = git("log", "--all", "--reverse", f"--format={_LOG_FMT}", cwd=cwd, check=False)
     if p.returncode != 0:
         raise GitError("git log --all failed", stderr=p.stderr, returncode=p.returncode)
@@ -137,21 +132,21 @@ def main(argv: list[str] | None = None) -> int:
             commits = _commits_all(cwd)
         elif args.rev_range:
             logger.debug("searching range: %s", args.rev_range)
-            commits = stack_commits_metadata_one_log(cwd, args.rev_range)
+            commits = commits_in_range(cwd, args.rev_range)
         else:
-            mb, display, _ = merge_base_with_target(cwd)
-            rev_range = f"{mb}..HEAD"
+            _fork, display, target_tip = merge_base_with_target(cwd)
+            rev_range = f"{target_tip}..HEAD"
             logger.debug("default range: %s (base: %s)", rev_range[:20], display)
-            commits = stack_commits_metadata_one_log(cwd, rev_range)
+            commits = commits_in_range(cwd, rev_range)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
         return 4
 
     matches: list[tuple[str, str, str]] = []
-    for sha, short_sha, subject, raw in commits:
-        cid = parse_change_id(raw)
+    for c in commits:
+        cid = c.change_id
         if cid and cid.lower() == want:
-            matches.append((sha, short_sha, subject))
+            matches.append((c.sha, c.short_sha, c.subject))
 
     if not matches:
         print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)

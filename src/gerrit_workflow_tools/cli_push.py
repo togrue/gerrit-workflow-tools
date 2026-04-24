@@ -48,7 +48,7 @@ from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git, git_out
 from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
-from gerrit_workflow_tools.stack import merge_base_with_target, parse_change_id, stack_commits_metadata_one_log
+from gerrit_workflow_tools.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
@@ -192,14 +192,13 @@ def _commit_lines_for_preview(
 ) -> list[str]:
     if not r.push_range:
         return []
-    rows = stack_commits_metadata_one_log(cwd, r.push_range)
+    rows = commits_in_range(cwd, r.push_range)
     details_by_cid: dict[str, dict[str, object]] | None = None
     if show_attributes:
         ids: list[str] = []
-        for _f, _s, _sub, raw in rows:
-            cid = parse_change_id(raw)
-            if cid:
-                ids.append(cid)
+        for c in rows:
+            if c.change_id:
+                ids.append(c.change_id)
         if ids:
             try:
                 web_base = resolve_gerrit_web_base(cwd)
@@ -216,12 +215,13 @@ def _commit_lines_for_preview(
             details_by_cid = {}
 
     lines: list[str] = []
-    for _full, short_sha, subj, raw in rows:
+    for c in rows:
+        short_sha, subj = c.short_sha, c.subject
         disp = summary_highlighter.highlight(subj)
         sha_p = short_sha.ljust(8)
         line = f"    {color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{disp}"
         if show_attributes and details_by_cid is not None:
-            cid = parse_change_id(raw)
+            cid = c.change_id
             if cid:
                 detail = details_by_cid.get(norm_change_id(cid))
                 line += _gpush_attribute_suffix(detail if isinstance(detail, dict) else None, merged_reviewers)
@@ -580,8 +580,8 @@ def main(argv: list[str] | None = None) -> int:
             r.boundary_reason,
         )
 
-        mb, _, _ = merge_base_with_target(cwd)
-        rows = change_id_rows_for_range(cwd, mb)
+        _fork, _, target_tip = merge_base_with_target(cwd)
+        rows = change_id_rows_for_range(cwd, target_tip)
         items = [(a, b, c) for a, b, c in rows]
         _, cid_exit = classify_issues(items, strict=True)
         logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
