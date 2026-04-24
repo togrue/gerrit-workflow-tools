@@ -355,8 +355,12 @@ def set_branch_config(
 
 def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
     """
-    Return (ref_for_merge_base, display_name) for the remote target branch.
-    Order: ``branch.gerritTarget`` -> ``@{upstream}`` (any remote).
+    Return ``(resolved_tip_commit, display_name)`` for the configured Gerrit push destination.
+
+    Order: ``branch.gerritTarget`` -> ``@{upstream}``. Use this when you need the same
+    **destination ref** as push (override or upstream), not for enumerating the local stack
+    (see :func:`~gerrit_workflow_tools.stack.upstream_tracking_tip_and_display`).
+
     ``gerritTarget`` must be the Gerrit destination **branch name** (e.g. ``dev``). It must
     resolve to an existing ref—usually a local branch or ``refs/remotes/<remote>/<branch>``
     after ``git fetch``.
@@ -372,7 +376,7 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         if p.returncode == 0:
             return (p.stdout.strip(), target)
         raise GitError(
-            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for merge-base). "
+            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for stack / merge-base). "
             f"Fetch from your Gerrit remote (`gerrit.remote`, often `origin`), e.g. "
             f"`git fetch <remote>` or `git fetch <remote> <branch>`, so the branch exists as a "
             f"remote-tracking ref when required. "
