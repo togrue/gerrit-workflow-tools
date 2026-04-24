@@ -11,11 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from gerrit_workflow_tools.gerrit_change_status import norm_change_id
 from gerrit_workflow_tools.git_run import git_out
-from gerrit_workflow_tools.stack import (
-    merge_base_with_target,
-    parse_change_id,
-    stack_commits_metadata_one_log,
-)
+from gerrit_workflow_tools.stack import Commit, commits_in_range, merge_base_with_target, parse_change_id
 
 
 def change_info_for_sha(
@@ -57,14 +53,14 @@ def change_info_for_sha(
     return out
 
 
-def stack_rows_mb_to_head(repo: Path) -> list[tuple[str, str, str, str]]:
-    """Oldest-first (sha, short, subject, raw_body) for merge-base..HEAD."""
-    mb, _, _ = merge_base_with_target(repo)
-    return stack_commits_metadata_one_log(repo, f"{mb}..HEAD")
+def stack_rows_mb_to_head(repo: Path) -> list[Commit]:
+    """Oldest-first commits for upstream_tip..HEAD (same window as the local stack)."""
+    _fork, _, target_tip = merge_base_with_target(repo)
+    return commits_in_range(repo, f"{target_tip}..HEAD")
 
 
 def build_details_by_change_id(
-    rows: list[tuple[str, str, str, str]],
+    rows: list[Commit] | list[tuple[str, str, str, str]],
     *,
     per_index_overrides: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
@@ -74,8 +70,13 @@ def build_details_by_change_id(
     *per_index_overrides* aligns with *rows* (e.g. ``[{"cr": 1}]`` to force attention).
     """
     out: dict[str, dict[str, Any]] = {}
-    for i, (sha, _short, _sub, raw) in enumerate(rows):
-        cid = parse_change_id(raw)
+    for i, row in enumerate(rows):
+        if isinstance(row, Commit):
+            sha = row.sha
+            cid = row.change_id
+        else:
+            sha, _short, _sub, raw = row
+            cid = parse_change_id(raw)
         if not cid:
             continue
         ov = per_index_overrides[i] if per_index_overrides and i < len(per_index_overrides) else {}
