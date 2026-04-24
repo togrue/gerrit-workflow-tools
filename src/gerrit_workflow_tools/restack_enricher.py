@@ -156,7 +156,7 @@ def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, tuple[s
     """Return ``{todo_short_sha: (full_sha, subject, change_id)}`` for each SHA in the list.
 
     Uses a single ``git log --no-walk`` call with RS-separated fields, the same approach
-    as :func:`~gerrit_workflow_tools.stack.stack_commits_metadata_one_log`.
+    as :func:`~gerrit_workflow_tools.stack.commits_in_range`.
     """
     if not short_shas:
         return {}

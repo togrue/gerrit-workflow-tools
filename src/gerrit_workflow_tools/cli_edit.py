@@ -69,7 +69,7 @@ def _run_interactive_stack_rebase(
         full = resolve_stack_commit(cwd, args.rev.strip())
         if not commit_in_stack(cwd, full):
             raise GitError(f"commit {args.rev} is not in the current local stack")
-        mb, _, _ = merge_base_with_target(cwd)
+        rebase_fork, _, _ = merge_base_with_target(cwd)
         short = git_out("rev-parse", "--short", full, cwd=cwd)
     except GitError as e:
         return handle_git_error(e)
@@ -84,12 +84,12 @@ def _run_interactive_stack_rebase(
     env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
 
     logger.debug(
-        "gedit starting interactive rebase onto merge_base=%s full=%s short=%s",
-        mb[:8],
+        "gedit starting interactive rebase onto rebase_fork=%s full=%s short=%s",
+        rebase_fork[:8],
         full[:8],
         short,
     )
-    cmd = ["git", "rebase", "-i", mb]
+    cmd = ["git", "rebase", "-i", rebase_fork]
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
     r = subprocess.run(cmd, cwd=cwd, env=env)
     logger.debug("gedit rebase finished with return code %s", r.returncode)
