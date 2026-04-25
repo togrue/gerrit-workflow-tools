@@ -12,7 +12,7 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 
 **Gerrit target branch** — optional per-branch override in git config (`branch.<name>.gerritTarget`). The value is the **branch name on the Gerrit server** (e.g. `main`, `dev`), not a made-up local branch name like `origin/dev`. When unset, `ger push` infers the destination from your upstream if it tracks `gerrit.remote` (default `origin`). Tools need the effective target ref to exist locally for merge-base work—usually as a local branch or as `refs/remotes/origin/…` after `git fetch`. To set upstream from the nearest remote branch, use `ger branch infer-upstream` (after `git fetch`). Set an explicit override with `ger branch init --target <branch>` or `ger branch set-target` when it must differ from upstream.
 
-**Change-Id** — the Gerrit footer (`Change-Id: I…`) in each commit message. All commands depend on this being present and unique within the stack. Validate with `ger cid --check-duplicates` (or list footers with `ger cid --start-at-remote`).
+**Change-Id** — the Gerrit footer (`Change-Id: I…`) in each commit message. All commands depend on this being present and unique within the stack. Validate with `ger change-id --check-duplicates` (or list footers with `ger change-id --start-at-remote`).
 
 ---
 
@@ -26,7 +26,7 @@ Local helpers for Gerrit stacked review workflows. After installation, run **`ge
 | [`ger push`](commands/push.md) | Push the ready prefix (or full stack) to Gerrit |
 | [`ger edit`](commands/edit.md) | Edit, reword, or drop a commit in the middle of the stack (interactive rebase) |
 | [`ger show`](commands/show-todos.md) | Show Gerrit status (votes, comments, CI) for a single commit or Change-Id |
-| [`ger sha` / `ger cid`](commands/sha-cid.md) | Translate between Change-Ids and commit SHAs; `ger cid --check-duplicates` validates the stack |
+| [`ger sha` / `ger change-id`](commands/sha-cid.md) | Translate between Change-Ids and commit SHAs; `ger change-id --check-duplicates` validates the stack |
 | [`ger log`](commands/log.md) | Compact actionable overview of the commit chain vs Gerrit (CI, votes, comments) |
 
 ### Planned (not yet implemented)
@@ -89,7 +89,7 @@ ger branch init --target main --reviewers alice,bob
 ger log
 
 # 4. Validate Change-Ids before pushing
-ger cid --check-duplicates
+ger change-id --check-duplicates
 
 # 5. Push the ready prefix
 ger push --dry-run
@@ -102,7 +102,7 @@ ger push
 
 | Phase | Status | Commands |
 |-------|--------|---------|
-| 1 — local only | Done | `branch`, `push`, `edit`, `sha`, `cid` |
+| 1 — local only | Done | `branch`, `push`, `edit`, `sha`, `change-id` |
 | 2 — Gerrit navigation | In progress | `log` (done), `show` (done), `status` (planned) |
 | 3 — Gerrit mutation | Planned | `move` |
 

@@ -587,7 +587,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
         if cid_exit >= 2:
             print(
-                "error: Change-Id check failed; fix with ger cid --check-duplicates",
+                "error: Change-Id check failed; fix with ger change-id --check-duplicates",
                 file=sys.stderr,
             )
             return 2

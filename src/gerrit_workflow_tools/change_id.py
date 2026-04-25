@@ -6,7 +6,7 @@ from dataclasses import dataclass
 # Gerrit Change-Id line value: I + 40 hex digits
 CHANGE_ID_VALUE_RE = re.compile(r"^I[0-9a-f]{40}$", re.IGNORECASE)
 
-# Footer line as used by ger cid: last line must be ``Change-Id: I…`` with lowercase hex.
+# Footer line as used by ger change-id: last line must be ``Change-Id: I...`` with lowercase hex.
 CHANGE_ID_LAST_LINE_FOOTER_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE)
 
 
@@ -22,7 +22,7 @@ class ChangeIdIssue:
 def is_change_id_token(s: str) -> bool:
     """Return True if *s* is a Change-Id token (``I`` + 40 lowercase hex digits).
 
-    Stricter than :data:`CHANGE_ID_VALUE_RE`: used for CLI passthrough (e.g. ``ger cid``)
+    Stricter than :data:`CHANGE_ID_VALUE_RE`: used for CLI passthrough (e.g. ``ger change-id``)
     where uppercase hex is not accepted as a bare argument.
     """
     return s.startswith("I") and len(s) == 41 and all(c in "0123456789abcdef" for c in s[1:])

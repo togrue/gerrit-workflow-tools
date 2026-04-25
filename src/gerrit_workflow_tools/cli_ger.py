@@ -22,7 +22,7 @@ _Handler = Callable[[list[str] | None], int]
 _COMMANDS: dict[str, tuple[str, _Handler]] = {
     "bash-completion": ("Print or install bash tab-completion for ger.", main_bash_completion),
     "branch": ("Branch-local Gerrit target and reviewers.", main_branch),
-    "cid": ("Print or validate Change-Ids for commits or ranges.", main_cid),
+    "change-id": ("Print or validate Change-Ids for commits or ranges.", main_cid),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", main_edit),
     "reword": ("Interactive rebase: reword, edit, or drop a stack commit.", main_reword),
     "fetch-api": ("GET a Gerrit REST path with configured user and token.", main_fetch_api),

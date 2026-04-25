@@ -71,8 +71,8 @@ def _gcid_log_single_commit(rev_spec: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger cid``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
-    p = argparse.ArgumentParser(prog="ger cid")
+    """CLI entry for ``ger change-id``: print or validate Change-Ids for commits or ranges (optional duplicate check)."""
+    p = argparse.ArgumentParser(prog="ger change-id")
     p.add_argument(
         "rev_or_range",
         nargs="?",

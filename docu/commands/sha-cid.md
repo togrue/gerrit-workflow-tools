@@ -1,4 +1,4 @@
-# ger sha / ger cid
+# ger sha / ger change-id
 
 **Status:** Implemented
 
@@ -7,7 +7,7 @@ Two complementary identifier-translation commands:
 | Command | Direction |
 |---------|-----------|
 | `ger sha` | Change-Id → commit SHA |
-| `ger cid` | commit / SHA / range → Change-Id |
+| `ger change-id` | commit / SHA / range -> Change-Id |
 
 Both operate on local git history (no Gerrit API required).
 
@@ -82,14 +82,14 @@ ger sha --json Iabc1234...
 
 ---
 
-## ger cid
+## ger change-id
 
 Return the Change-Id for a commit, SHA, or range of commits.
 
 ### Usage
 
 ```
-ger cid [options] [<commit-or-range>]
+ger change-id [options] [<commit-or-range>]
 ```
 
 ### Arguments
@@ -121,16 +121,16 @@ If `arg` is already a valid Change-Id (`I` + 40 hex digits), it is echoed back u
 
 ```bash
 # Get Change-Id of HEAD
-ger cid
+ger change-id
 
 # Get Change-Id of a specific commit
-ger cid a1b2c3d
+ger change-id a1b2c3d
 
 # Get Change-Ids for a range
-ger cid origin/main..HEAD
+ger change-id origin/main..HEAD
 
 # Check entire stack for duplicates / missing footers
-ger cid --check-duplicates
+ger change-id --check-duplicates
 ```
 
 ---
