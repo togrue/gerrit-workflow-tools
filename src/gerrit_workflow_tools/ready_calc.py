@@ -34,7 +34,7 @@ def _first_block_index(subjects: list[str], patterns: list[str]) -> tuple[int | 
     for i, sub in enumerate(subjects):
         for pat in patterns:
             try:
-                if re.search(pat, sub):
+                if re.search(pat, sub, re.IGNORECASE):
                     return i, pat
             except re.error:
                 continue
