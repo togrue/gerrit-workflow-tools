@@ -323,7 +323,7 @@ def stop_patterns(cwd: Path | str | None) -> list[str]:
     lines = _snapshot_multi.get(_GERRIT_STOP_PATTERN_CANONICAL, [])
     lines = [ln.strip() for ln in lines if ln.strip()]
     if not lines:
-        return [r"^dropme!", r"^TODO\b", r"^test!", r"^wip\b"]
+        return [r"^dropme!", r"^todo\b", r"^test!", r"^wip\b"]
     return lines
 
 
