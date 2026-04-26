@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from gerrit_workflow_tools.cli_style import init_color_mode
 from gerrit_workflow_tools.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -127,7 +128,6 @@ def cwd_from_env() -> Path:
 
 def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, SummaryHighlighter]:
     """Configure logging/color and return ``(cwd, summary_highlighter)`` for CLI commands."""
-    from gerrit_workflow_tools.cli_style import init_color_mode
 
     configure_logging(debug_log)
     cwd = cwd_from_env()

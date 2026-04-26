@@ -311,7 +311,7 @@ def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
     return failed
 
 
-# pylint: disable=too-many-branches,too-many-locals
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 def fetch_gerrit_data(
     client: GerritClient,
     web_base: str,
