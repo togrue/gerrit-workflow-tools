@@ -513,7 +513,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(c.attention_reasons for c in commits) else 0
 
     # Text output
-    if args.filter_attention:
+    if args.filter_attention and non_attention_filtered > 0:
         noun = "commit" if non_attention_filtered == 1 else "commits"
         print(f"... {non_attention_filtered} non-attention {noun}")
 
