@@ -44,6 +44,7 @@ def _first_block_index(subjects: list[str], patterns: list[str]) -> tuple[int | 
     return None, None
 
 
+# pylint: disable=too-many-locals
 def compute_ready(
     cwd: Path | str | None,
     *,

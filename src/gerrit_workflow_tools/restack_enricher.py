@@ -229,7 +229,7 @@ def _resolve_editor(cwd: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branches
+def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branches,too-many-locals
     """Rewrite rebase todo lines with Gerrit status annotations.
 
     Returns the original *text* unchanged if Gerrit is not configured for this

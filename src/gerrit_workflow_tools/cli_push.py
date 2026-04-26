@@ -182,6 +182,7 @@ def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str]) -> str:
     return ref
 
 
+# pylint: disable=too-many-locals
 def _commit_lines_for_preview(
     cwd: Path,
     r: ReadyResult,
@@ -412,7 +413,7 @@ def _maybe_check_rebased_onto_remote(
     return None
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals
     """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
     p = argparse.ArgumentParser(prog="ger push")
     p.add_argument(

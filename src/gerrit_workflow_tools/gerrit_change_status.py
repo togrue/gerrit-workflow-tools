@@ -218,7 +218,7 @@ def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> i
         return 0
 
 
-def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:
+def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:  # pylint: disable=too-many-locals
     """Map normalized Change-Id to ChangeInfo using chunked ``change:I1 OR change:I2`` queries."""
     out: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
@@ -311,7 +311,7 @@ def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
     return failed
 
 
-# pylint: disable=too-many-branches
+# pylint: disable=too-many-branches,too-many-locals
 def fetch_gerrit_data(
     client: GerritClient,
     web_base: str,

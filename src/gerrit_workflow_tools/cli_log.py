@@ -511,7 +511,7 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     return max(widths) + 2
 
 
-def _render_text_output(  # pylint: disable=too-many-arguments
+def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     *,
     cwd: Path,
     commits: list[LogCommit],
@@ -573,7 +573,7 @@ def _render_text_output(  # pylint: disable=too-many-arguments
             )
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-locals
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     parser = _build_parser()
     args = parser.parse_args(argv)

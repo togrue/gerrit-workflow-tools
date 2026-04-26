@@ -177,6 +177,7 @@ def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal[
     return "vanilla"
 
 
+# pylint: disable=too-many-locals
 def infer_nearest_remote_tracking_branch(
     cwd: Path | str | None,
     head: str = "HEAD",

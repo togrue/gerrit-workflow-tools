@@ -26,6 +26,7 @@ from gerrit_workflow_tools.stack import (
 logger = logging.getLogger(__name__)
 
 
+# pylint: disable=too-many-locals
 def _run_interactive_stack_rebase(
     argv: list[str] | None,
     *,
