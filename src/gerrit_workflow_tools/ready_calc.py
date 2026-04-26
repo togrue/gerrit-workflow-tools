@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,8 +30,6 @@ def _filter_patterns(patterns: list[str], *, ignore_exact: list[str]) -> list[st
 
 
 def _first_block_index(subjects: list[str], patterns: list[str]) -> tuple[int | None, str | None]:
-    import re
-
     for i, sub in enumerate(subjects):
         for pat in patterns:
             try:

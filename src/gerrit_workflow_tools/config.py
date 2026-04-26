@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.git_run import git, git_out
+from gerrit_workflow_tools.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
 
@@ -386,8 +386,6 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
     resolve to an existing ref—usually a local branch or ``refs/remotes/<remote>/<branch>``
     after ``git fetch``.
     """
-    from gerrit_workflow_tools.git_run import GitError
-
     b = branch or current_branch(cwd)
     target = branch_gerrit_target(cwd, b)
     if target:
@@ -453,8 +451,6 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     (``gerritTarget`` override, or upstream when its remote is ``gerrit.remote``). There is no
     fallback to ``<gerrit.remote>/main`` when neither is available.
     """
-    from gerrit_workflow_tools.git_run import GitError
-
     b = branch or current_branch(cwd)
     remote_name = gerrit_remote(cwd)
     eff = effective_gerrit_destination_branch(cwd, b)
