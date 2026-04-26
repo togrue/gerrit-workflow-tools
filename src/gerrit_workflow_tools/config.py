@@ -135,7 +135,10 @@ def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -
 
 
 def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Gerrit destination for push/restack: ``gerritTarget`` override, or upstream ref when its remote matches :func:`gerrit_remote`.
+    """Gerrit destination for push/restack.
+
+    Uses ``gerritTarget`` override, or upstream ref when its remote matches
+    :func:`gerrit_remote`.
 
     Returns a value suitable for :func:`refs_for_push_branch_name` (e.g. ``main``, ``origin/main``).
     Returns ``None`` when there is no override and no upstream on the Gerrit remote.
@@ -156,7 +159,11 @@ def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | No
 
 
 def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal["gerrit", "vanilla"] | None:
-    """``gerrit`` (``refs/for/…``), ``vanilla`` (plain ``git push``), or ``None`` if destination cannot be determined."""
+    """Return push mode for current branch destination.
+
+    ``gerrit`` uses ``refs/for/…``, ``vanilla`` uses plain ``git push``.
+    Returns ``None`` when destination cannot be determined.
+    """
     if branch_gerrit_target(cwd, branch):
         return "gerrit"
     parsed = resolve_upstream_parsed(cwd, branch)
@@ -216,7 +223,11 @@ def infer_nearest_remote_tracking_branch(
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
-    """Gerrit HTTPS base (scheme + host, optional port); no path. Required for commands that call Gerrit HTTP (e.g. ``ger log``, ``ger show``)."""
+    """Gerrit HTTPS base URL (scheme + host, optional port, no path).
+
+    Required for commands that call Gerrit HTTP (e.g. ``ger log``,
+    ``ger show``).
+    """
     return _config_get(cwd, "gerrit.webUrl")
 
 
@@ -236,7 +247,10 @@ def gerrit_token(cwd: Path | str | None) -> str | None:
 
 
 def gshow_comment_tail_lines(cwd: Path | str | None) -> int:
-    """Return ``gerrit.showCommentTailLines`` (positive integer), or default ``10`` if unset or invalid."""
+    """Return ``gerrit.showCommentTailLines``.
+
+    Must be a positive integer; defaults to ``10`` if unset or invalid.
+    """
     v = _config_get(cwd, "gerrit.showCommentTailLines")
     if not v:
         return 10
@@ -250,7 +264,10 @@ def gshow_comment_tail_lines(cwd: Path | str | None) -> int:
 
 
 def config_bool(cwd: Path | str | None, key: str, *, default: bool = False) -> bool:
-    """Return True if ``git config`` *key* is truthy (``1``, ``true``, ``yes``, ``on``); case-insensitive."""
+    """Return whether ``git config`` *key* is truthy.
+
+    Truthy values: ``1``, ``true``, ``yes``, ``on`` (case-insensitive).
+    """
     v = _config_get(cwd, key)
     if v is None or not str(v).strip():
         return default
@@ -266,7 +283,11 @@ def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
 
 
 def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger push`` from ``gerrit.push*`` / ``gerrit.lastPushedBranch`` (``--update-last-pushed`` overrides)."""
+    """Defaults for ``ger push`` from ``gerrit.push*`` keys.
+
+    Includes ``gerrit.lastPushedBranch`` (overridden by
+    ``--update-last-pushed``).
+    """
     return {
         "show_attributes": config_bool(cwd, "gerrit.pushShowAttributes"),
         "last_pushed_branch": config_bool(cwd, "gerrit.lastPushedBranch", default=True),
@@ -289,7 +310,7 @@ def gerrit_push_remote_policy(cwd: Path | str | None) -> str:
 
 
 def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> tuple[bool, str]:
-    """Return whether ``HEAD`` contains the remote-tracking tip of the configured Gerrit target (linear stack).
+    """Return whether ``HEAD`` contains the remote target tip (linear stack).
 
     After ``git fetch``, this is equivalent to ``merge-base(HEAD, R) == R`` for *R* the target tip, and to
     ``git merge-base --is-ancestor R HEAD`` (the fetched target tip must be an ancestor of ``HEAD``).
@@ -376,7 +397,8 @@ def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) ->
         if p.returncode == 0:
             return (p.stdout.strip(), target)
         raise GitError(
-            f"gerritTarget '{target}' is configured but does not resolve to a local ref (needed for stack / merge-base). "
+            f"gerritTarget '{target}' is configured but does not resolve to a local "
+            "ref (needed for stack / merge-base). "
             f"Fetch from your Gerrit remote (`gerrit.remote`, often `origin`), e.g. "
             f"`git fetch <remote>` or `git fetch <remote> <branch>`, so the branch exists as a "
             f"remote-tracking ref when required. "
@@ -440,7 +462,8 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         raise GitError(
             f"No Gerrit destination branch for `ger restack --onto-remote` on branch {b!r}. "
             f"Set upstream to a branch on `{remote_name}` (gerrit.remote), "
-            f"e.g. `ger branch infer-upstream` after `git fetch`, or `git branch --set-upstream-to={remote_name}/<branch>`. "
+            "e.g. `ger branch infer-upstream` after `git fetch`, or "
+            f"`git branch --set-upstream-to={remote_name}/<branch>`. "
             f"Fetch so `refs/remotes/{remote_name}/<branch>` exists. "
             "Optional `gerritTarget` overrides: see `ger branch --help`."
         )

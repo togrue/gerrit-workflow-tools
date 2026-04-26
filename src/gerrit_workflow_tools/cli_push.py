@@ -351,7 +351,10 @@ def _maybe_check_rebased_onto_remote(
     policy: str,
     no_rebase_check: bool,
 ) -> int | None:
-    """If the branch is not linear on the fetched remote target, warn or error per *policy*. Return exit code or None."""
+    """Check branch linearity on the fetched remote target.
+
+    Warns or errors based on *policy*. Returns an exit code or ``None``.
+    """
     if no_rebase_check or policy == "ignore-not-rebased":
         logger.debug(
             "gpush rebase check skipped: no_rebase_check=%s policy=%r",
@@ -420,7 +423,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--update-last-pushed",
         action="store_true",
-        help="After a successful push, move local branch lastPush/<current-branch> to the pushed tip. Default: gerrit.lastPushedBranch.",
+        help=(
+            "After a successful push, move local branch lastPush/<current-branch> "
+            "to the pushed tip. Default: gerrit.lastPushedBranch."
+        ),
     )
     p.add_argument(
         "--no-update-last-pushed",
