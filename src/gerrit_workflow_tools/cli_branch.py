@@ -195,7 +195,7 @@ def _cmd_infer_upstream(ns: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
+def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
     p = argparse.ArgumentParser(
         prog="ger branch",
@@ -253,20 +253,21 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     cwd = cwd_from_env()
     logger.debug("gbranch cmd=%s cwd=%s", args.cmd, cwd)
 
+    retcode = 1
     try:
         if args.cmd == "show":
-            return _cmd_show(cwd)
+            retcode = _cmd_show(cwd)
         if args.cmd == "init":
-            return _cmd_init(args, cwd)
+            retcode = _cmd_init(args, cwd)
         if args.cmd == "set-target":
-            return _cmd_set_target(args, cwd)
+            retcode = _cmd_set_target(args, cwd)
         if args.cmd == "set-reviewers":
-            return _cmd_set_reviewers(args, cwd)
+            retcode = _cmd_set_reviewers(args, cwd)
         if args.cmd == "infer-upstream":
-            return _cmd_infer_upstream(args, cwd)
+            retcode = _cmd_infer_upstream(args, cwd)
     except GitError as e:
-        return handle_git_error(e)
-    return 1
+        retcode = handle_git_error(e)
+    return retcode
 
 
 if __name__ == "__main__":
