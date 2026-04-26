@@ -27,7 +27,7 @@ _PARALLEL_IO = 8
 
 
 @dataclass
-class LogCommit:
+class LogCommit:  # pylint: disable=too-many-instance-attributes
     sha: str
     short_sha: str
     summary: str
