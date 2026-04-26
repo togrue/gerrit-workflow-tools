@@ -70,11 +70,59 @@ def _gcid_log_single_commit(rev_spec: str) -> bool:
     return ".." not in rev_spec
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
-    """CLI entry for ``ger change-id``.
+class ChangeIdError(Exception):
+    """Custom exception for Change-Id processing errors."""
 
-    Prints or validates Change-Ids for commits or ranges, with optional
-    duplicate checking.
+    def __init__(self, message: str, code: int = 1):
+        super().__init__(message)
+        self.code = code
+
+
+def check_duplicate_change_ids(cwd, input_arg) -> None:
+    if is_change_id_token(input_arg):
+        raise ChangeIdError("error: --check-duplicates needs a commit or range, not a Change-Id", code=2)
+
+    resolved = resolve_gcid_user_arg(cwd, input_arg)
+    rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
+    raw = git_log_sha_body(cwd, rev_spec, single=False)
+
+    pairs = parse_git_log_sha_body_rs(raw)
+    seen: dict[str, str] = {}
+    for sha, msg in pairs:
+        cid = extract_change_id_from_msg(msg)
+        if not cid:
+            raise ChangeIdError(f"error: no Change-Id found in commit {color_short_sha(sha)}", code=1)
+        if cid in seen:
+            short = sha[:8]
+            first = seen[cid][:8]
+            raise ChangeIdError(
+                f"error: duplicate Change-Id {cid} (commit {color_short_sha(short)}, also on {color_short_sha(first)})",
+                code=2,
+            )
+        seen[cid] = sha
+
+
+def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
+    resolved = resolve_gcid_user_arg(cwd, input_arg)
+    if use_remote:
+        rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
+        raw = git_log_sha_body(cwd, rev_spec, single=False)
+    else:
+        raw = git_log_sha_body(cwd, resolved, single=_gcid_log_single_commit(resolved))
+
+    pairs = parse_git_log_sha_body_rs(raw)
+    for sha, msg in pairs:
+        cid = extract_change_id_from_msg(msg)
+        if cid:
+            print(cid)
+        else:
+            raise ChangeIdError(f"error: no Change-Id found in commit {color_short_sha(sha)}", code=1)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI for `ger change-id`.
+
+    Prints or validates Change-Ids for commits or ranges, with optional duplicate checking.
     """
     p = argparse.ArgumentParser(prog="ger change-id")
     p.add_argument(
@@ -108,65 +156,23 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
 
     input_arg = args.rev_or_range or "HEAD"
 
-    if args.check_duplicates:
-        if is_change_id_token(input_arg):
-            print(
-                "error: --check-duplicates needs a commit or range, not a Change-Id",
-                file=sys.stderr,
-            )
-            return 2
-        try:
-            resolved = resolve_gcid_user_arg(cwd, input_arg)
-            rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
-            raw = git_log_sha_body(cwd, rev_spec, single=False)
-        except GitError as e:
-            return handle_git_error(e)
-        pairs = parse_git_log_sha_body_rs(raw)
-        seen: dict[str, str] = {}
-        for sha, msg in pairs:
-            cid = extract_change_id_from_msg(msg)
-            if not cid:
-                print(
-                    f"error: no Change-Id found in commit {color_short_sha(sha)}",
-                    file=sys.stderr,
-                )
-                return 1
-            if cid in seen:
-                short = sha[:8]
-                first = seen[cid][:8]
-                print(
-                    f"error: duplicate Change-Id {cid} (commit {color_short_sha(short)}, "
-                    f"also on {color_short_sha(first)})",
-                    file=sys.stderr,
-                )
-                return 2
-            seen[cid] = sha
-        return 0
-
-    # If arg looks like a Change-Id, just output it
-    if is_change_id_token(input_arg):
-        print(input_arg)
-        return 0
-
     try:
-        resolved = resolve_gcid_user_arg(cwd, input_arg)
-        if args.start_at_remote:
-            rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
-            raw = git_log_sha_body(cwd, rev_spec, single=False)
-        else:
-            raw = git_log_sha_body(cwd, resolved, single=_gcid_log_single_commit(resolved))
+        if args.check_duplicates:
+            check_duplicate_change_ids(cwd, input_arg)
+            return 0
+
+        if is_change_id_token(input_arg):
+            print(input_arg)
+            return 0
+
+        print_change_ids_for_range(cwd, input_arg, args.start_at_remote)
+        return 0
+
+    except ChangeIdError as err:
+        print(str(err), file=sys.stderr)
+        return getattr(err, "code", 1)
     except GitError as e:
         return handle_git_error(e)
-
-    pairs = parse_git_log_sha_body_rs(raw)
-    for sha, msg in pairs:
-        cid = extract_change_id_from_msg(msg)
-        if cid:
-            print(cid)
-        else:
-            print(f"error: no Change-Id found in commit {color_short_sha(sha)}", file=sys.stderr)
-            return 1
-    return 0
 
 
 if __name__ == "__main__":
