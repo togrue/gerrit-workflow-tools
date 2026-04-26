@@ -1,3 +1,5 @@
+"""Utilities for invoking git commands with consistent error handling."""
+
 from __future__ import annotations
 
 import logging

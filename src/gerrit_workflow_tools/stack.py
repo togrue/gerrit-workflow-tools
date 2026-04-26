@@ -1,3 +1,5 @@
+"""Stack inspection helpers for commit ranges and ancestry."""
+
 from __future__ import annotations
 
 import logging

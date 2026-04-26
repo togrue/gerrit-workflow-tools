@@ -1,3 +1,5 @@
+"""CLI for branch-level Gerrit configuration management."""
+
 from __future__ import annotations
 
 import argparse

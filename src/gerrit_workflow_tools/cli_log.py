@@ -1,3 +1,5 @@
+"""CLI for stack-aware Gerrit status over local commits."""
+
 from __future__ import annotations
 
 import argparse

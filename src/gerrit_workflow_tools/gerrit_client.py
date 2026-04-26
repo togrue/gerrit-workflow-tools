@@ -1,3 +1,5 @@
+"""HTTP client wrapper for Gerrit REST API calls."""
+
 from __future__ import annotations
 
 import base64

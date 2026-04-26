@@ -1,3 +1,5 @@
+"""Highlight stop/warning patterns in commit summaries."""
+
 from __future__ import annotations
 
 import re

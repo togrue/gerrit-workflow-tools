@@ -1,3 +1,5 @@
+"""Resolve and validate Gerrit web/API base URLs."""
+
 from __future__ import annotations
 
 import logging

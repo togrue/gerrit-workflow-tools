@@ -1,3 +1,5 @@
+"""Change-Id parsing and validation helpers for local commits."""
+
 from __future__ import annotations
 
 import re

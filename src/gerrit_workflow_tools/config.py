@@ -1,3 +1,5 @@
+"""Read and normalize git/Gerrit configuration values."""
+
 from __future__ import annotations
 
 import logging

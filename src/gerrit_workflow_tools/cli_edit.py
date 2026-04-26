@@ -1,3 +1,5 @@
+"""CLI for opening changed files from a selected commit."""
+
 from __future__ import annotations
 
 import argparse

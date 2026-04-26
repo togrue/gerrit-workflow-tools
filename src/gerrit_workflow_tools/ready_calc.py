@@ -1,3 +1,5 @@
+"""Compute stack push boundaries from stop-pattern rules."""
+
 from __future__ import annotations
 
 import logging

@@ -1,3 +1,5 @@
+"""CLI for inspecting and validating commit Change-Ids."""
+
 # gerrit change-id command (gcid)
 # Return a Change-Id for a commit or range of commits.
 # The Change-Id is taken from the last non-empty line when it matches "Change-Id: I…".

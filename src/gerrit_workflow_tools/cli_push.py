@@ -1,3 +1,5 @@
+"""CLI for pushing one commit or a stack to Gerrit."""
+
 from __future__ import annotations
 
 import argparse
