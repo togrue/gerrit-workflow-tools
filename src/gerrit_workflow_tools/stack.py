@@ -78,9 +78,14 @@ CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECA
 
 
 def parse_change_id(message: str) -> str | None:
-    """Extract ``Change-Id: …`` from a commit message body, or return None."""
-    m = CHANGE_ID_RE.search(message)
-    return m.group(1) if m else None
+    """Extract ``Change-Id: …`` from the last non-empty line of a commit message body, or return None."""
+    s = message.rstrip("\n")
+    i = s.rfind("\n")
+    line = (s[i + 1 :] if i >= 0 else s).strip()
+    if line:
+        m = CHANGE_ID_RE.match(line)
+        return m.group(1) if m else None
+    return None
 
 
 def merge_base_with_target(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
