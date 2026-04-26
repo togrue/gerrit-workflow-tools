@@ -386,20 +386,20 @@ def _format_summary_dashboard_line(
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
-    """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
-    p = argparse.ArgumentParser(
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger log``."""
+    parser = argparse.ArgumentParser(
         prog="ger log",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
-    p.add_argument(
+    parser.add_argument(
         "--filter-attention",
         action="store_true",
         help="Show only attention-required commits.",
     )
-    p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
-    add_color_args(p)
-    p.add_argument(
+    parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+    add_color_args(parser)
+    parser.add_argument(
         "--url",
         "--show-url",
         action="store_true",
@@ -409,13 +409,13 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             "Default: ``gerrit.logShowUrl``."
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "--show-change-id",
         action="store_true",
         help="Append Change-Id to each text line. Default: ``gerrit.logShowChangeId``.",
     )
     add_verbose_and_debug_log_args(
-        p,
+        parser,
         debug_log_help="Log git commands to stderr.",
         verbose_action="count",
         verbose_help=(
@@ -424,95 +424,105 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             "Does not enable diagnostic logging; use ``--debug-log`` for that."
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "rev_range",
         nargs="?",
         default=None,
         metavar="REV_RANGE",
         help="Commit range (e.g. origin/main..HEAD); default upstream..HEAD (tracking @{upstream}).",
     )
-    args = p.parse_args(argv)
-    configure_logging(args.debug_log)
+    return parser
 
-    cwd = cwd_from_env()
-    init_color_mode(color=args.color)
-    summary_highlighter = build_summary_highlighter(cwd)
 
-    gdef = log_defaults(cwd)
-    v_raw = getattr(args, "verbose", 0)
-    log_verbosity = int(v_raw) if isinstance(v_raw, int) else (1 if v_raw else 0)
-    show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
-    show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
+def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None, int | None]:
+    """Return revision range or (None, exit_code) on error."""
+    if arg_rev_range:
+        return arg_rev_range, None
+    try:
+        _fork, _target, target_tip = merge_base_with_target(cwd)
+    except GitError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return None, 2
+    return f"{target_tip}..HEAD", None
 
-    # Determine commit range
-    if args.rev_range:
-        rev_range = args.rev_range
-    else:
-        try:
-            _fork, _target, target_tip = merge_base_with_target(cwd)
-        except GitError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 2
-        rev_range = f"{target_tip}..HEAD"
 
+def _load_commits_in_range(cwd: Path, rev_range: str) -> tuple[list[tuple[str, str, str, str | None]] | None, int]:
+    """Load local commits for Gerrit enrichment; return (commit_data, exit_code)."""
     try:
         rows = commits_in_range(cwd, rev_range)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 2
+        return None, 2
     if not rows:
         print("(no commits in range)")
-        return 0
-
+        return None, 0
     commit_data: list[tuple[str, str, str, str | None]] = [(c.sha, c.short_sha, c.subject, c.change_id) for c in rows]
+    return commit_data, -1
 
-    # Connect to Gerrit
+
+def _fetch_enriched_commits(
+    cwd: Path,
+    commit_data: list[tuple[str, str, str, str | None]],
+) -> tuple[list[LogCommit] | None, int | None]:
+    """Fetch Gerrit-enriched commit status list, or (None, exit_code) on error."""
     try:
         web_base = resolve_gerrit_web_base(cwd)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 3
+        return None, 3
 
     client = GerritClient(web_base, cwd=str(cwd))
-
     try:
         commits = fetch_gerrit_data(client, web_base, commit_data, cwd=cwd)
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
-        return 3
+        return None, 3
+    return commits, None
 
-    _annotate_attention(commits)
 
-    visible = [c for c in commits if c.attention_reasons] if args.filter_attention else commits
+def _compute_url_start_visible(
+    visible: list[LogCommit],
+    *,
+    show_url: bool,
+    log_verbosity: int,
+    summary_highlighter: SummaryHighlighter | None,
+    show_change_id: bool,
+    attention_column: int,
+) -> int | None:
+    """Compute visible column where URLs should start for compact one-line output."""
+    if not show_url or log_verbosity >= 1:
+        return None
+    widths = [
+        _visible_len(
+            _oneline_body(
+                c,
+                summary_highlighter=summary_highlighter,
+                show_change_id=show_change_id,
+                attention_column=attention_column,
+            )
+        )
+        for c in visible
+        if c.gerrit_url
+    ]
+    if not widths:
+        return None
+    return max(widths) + 2
+
+
+def _render_text_output(
+    *,
+    cwd: Path,
+    commits: list[LogCommit],
+    visible: list[LogCommit],
+    log_verbosity: int,
+    show_url: bool,
+    show_change_id: bool,
+    filter_attention: bool,
+    summary_highlighter: SummaryHighlighter | None,
+) -> None:
+    """Render text view for ``ger log``."""
     non_attention_filtered = len(commits) - len(visible)
-
-    # JSON output
-    if args.json_:
-        payload = [
-            {
-                "sha": c.sha,
-                "summary": c.summary,
-                "pushed": c.pushed,
-                "patchset_status": c.patchset_status,
-                "verified": c.verified,
-                "code_review": c.code_review,
-                "comments_unresolved": c.comments_unresolved,
-                "ci_failures": c.ci_failures,
-                "gerrit_url": c.gerrit_url,
-                "submittable": c.submittable,
-                "change_id": c.change_id,
-                "abandoned": c.abandoned,
-                "attention_reasons": c.attention_reasons,
-                "change_status": c.change_status,
-                "merged_equivalent": c.merged_equivalent,
-            }
-            for c in visible
-        ]
-        print(json.dumps(payload, indent=2))
-        return 1 if any(c.attention_reasons for c in commits) else 0
-
-    # Text output
-    if args.filter_attention and non_attention_filtered > 0:
+    if filter_attention and non_attention_filtered > 0:
         noun = "commit" if non_attention_filtered == 1 else "commits"
         print(f"... {non_attention_filtered} non-attention {noun}")
 
@@ -521,22 +531,14 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         summary_highlighter=summary_highlighter,
         show_change_id=show_change_id,
     )
-    url_start_visible: int | None = None
-    if show_url and log_verbosity < 1:
-        widths = [
-            _visible_len(
-                _oneline_body(
-                    c,
-                    summary_highlighter=summary_highlighter,
-                    show_change_id=show_change_id,
-                    attention_column=attention_column,
-                )
-            )
-            for c in visible
-            if c.gerrit_url
-        ]
-        if widths:
-            url_start_visible = max(widths) + 2
+    url_start_visible = _compute_url_start_visible(
+        visible,
+        show_url=show_url,
+        log_verbosity=log_verbosity,
+        summary_highlighter=summary_highlighter,
+        show_change_id=show_change_id,
+        attention_column=attention_column,
+    )
 
     for commit in visible:
         if log_verbosity >= 1:
@@ -568,6 +570,78 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
                 )
             )
 
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    configure_logging(args.debug_log)
+
+    cwd = cwd_from_env()
+    init_color_mode(color=args.color)
+    summary_highlighter = build_summary_highlighter(cwd)
+
+    gdef = log_defaults(cwd)
+    v_raw = getattr(args, "verbose", 0)
+    log_verbosity = int(v_raw) if isinstance(v_raw, int) else (1 if v_raw else 0)
+    show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
+    show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
+
+    rev_range, rev_range_exit = _resolve_rev_range(cwd, args.rev_range)
+    if rev_range_exit is not None:
+        return rev_range_exit
+    assert rev_range is not None
+
+    commit_data, commit_data_exit = _load_commits_in_range(cwd, rev_range)
+    if commit_data is None:
+        return commit_data_exit
+
+    commits, gerrit_exit = _fetch_enriched_commits(cwd, commit_data)
+    if gerrit_exit is not None:
+        return gerrit_exit
+    assert commits is not None
+
+    _annotate_attention(commits)
+
+    visible = [c for c in commits if c.attention_reasons] if args.filter_attention else commits
+    has_attention = any(c.attention_reasons for c in commits)
+
+    # JSON output
+    if args.json_:
+        payload = [
+            {
+                "sha": c.sha,
+                "summary": c.summary,
+                "pushed": c.pushed,
+                "patchset_status": c.patchset_status,
+                "verified": c.verified,
+                "code_review": c.code_review,
+                "comments_unresolved": c.comments_unresolved,
+                "ci_failures": c.ci_failures,
+                "gerrit_url": c.gerrit_url,
+                "submittable": c.submittable,
+                "change_id": c.change_id,
+                "abandoned": c.abandoned,
+                "attention_reasons": c.attention_reasons,
+                "change_status": c.change_status,
+                "merged_equivalent": c.merged_equivalent,
+            }
+            for c in visible
+        ]
+        print(json.dumps(payload, indent=2))
+        return 1 if has_attention else 0
+
+    _render_text_output(
+        cwd=cwd,
+        commits=commits,
+        visible=visible,
+        log_verbosity=log_verbosity,
+        show_url=show_url,
+        show_change_id=show_change_id,
+        filter_attention=args.filter_attention,
+        summary_highlighter=summary_highlighter,
+    )
+
     summary, ready_n, total_n = _build_summary(commits)
     print()
     print(
@@ -578,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         )
     )
 
-    return 1 if any(c.attention_reasons for c in commits) else 0
+    return 1 if has_attention else 0
 
 
 if __name__ == "__main__":
