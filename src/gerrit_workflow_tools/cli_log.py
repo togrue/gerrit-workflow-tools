@@ -312,8 +312,7 @@ def _oneline_line(
     if include_url and commit.gerrit_url:
         if url_start_visible is not None:
             pad = url_start_visible - _visible_len(body)
-            if pad < 2:
-                pad = 2
+            pad = max(pad, 2)
             return f"{body}{' ' * pad}{_url_line(commit.gerrit_url)}"
         return f"{body}  {_url_line(commit.gerrit_url)}"
     return body
