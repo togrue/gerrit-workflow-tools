@@ -191,7 +191,8 @@ def infer_nearest_remote_tracking_branch(
     p = git("for-each-ref", "--format=%(refname)", "refs/remotes/", cwd=cwd, check=False)
     if p.returncode != 0 or not (p.stdout or "").strip():
         return None
-    best: tuple[tuple[int, int, str], tuple[str, int, int, int]] | None = None
+    best_key: tuple[int, int, str] | None = None
+    best_value: tuple[str, int, int, int] | None = None
     for line in (p.stdout or "").splitlines():
         ref = line.strip()
         if not ref or ref.endswith("/HEAD"):
@@ -215,11 +216,12 @@ def infer_nearest_remote_tracking_branch(
             continue
         abbrev = abbrev_p.stdout.strip()
         key = (sym, ahead, abbrev)
-        if best is None or key < best[0]:
-            best = (key, (abbrev, sym, ahead, behind))
-    if best is None:
+        if best_key is None or key < best_key:
+            best_key = key
+            best_value = (abbrev, sym, ahead, behind)
+    if best_value is None:
         return None
-    return best[1]
+    return best_value
 
 
 def gerrit_web_url(cwd: Path | str | None) -> str | None:
