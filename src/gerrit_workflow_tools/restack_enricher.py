@@ -356,13 +356,6 @@ def main(argv: list[str] | None = None) -> int:
             f"# ger restack: Gerrit enrichment failed — {e}\n"
             f"# ger restack: Showing original todo without status annotations.\n"
         )
-    except Exception as e:
-        logger.debug("restack_enricher: unexpected enrichment error: %s", e)
-        final_text = original_text
-        error_header = (
-            f"# ger restack: Unexpected error during enrichment — {e}\n"
-            f"# ger restack: Showing original todo without status annotations.\n"
-        )
 
     if error_header:
         # Prepend above the pick lines so the user sees it immediately on opening.
