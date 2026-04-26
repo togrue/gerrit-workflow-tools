@@ -588,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
 
         _fork, _, target_tip = merge_base_with_target(cwd)
         rows = change_id_rows_for_range(cwd, target_tip)
-        items = [(a, b, c) for a, b, c in rows]
+        items = list(rows)
         _, cid_exit = classify_issues(items, strict=True)
         logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
         if cid_exit >= 2:
