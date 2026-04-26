@@ -60,7 +60,7 @@ _REBASE_ONTO_REMOTE_HINT = (
 
 def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:
     """Run ``git push`` (separate hook so tests can monkeypatch without affecting other subprocess use)."""
-    return subprocess.run(cmd, cwd=cwd)
+    return subprocess.run(cmd, cwd=cwd, check=False)
 
 
 def _merge_reviewers(

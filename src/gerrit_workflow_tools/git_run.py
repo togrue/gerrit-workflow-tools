@@ -43,6 +43,7 @@ def git(
         env=merged,
         text=True,
         capture_output=True,
+        check=False,
     )
     if check and p.returncode != 0:
         # logger.debug(

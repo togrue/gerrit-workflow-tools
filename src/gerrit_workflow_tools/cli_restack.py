@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.debug("ger restack: base=%s onto_remote=%s", base[:8], use_onto_remote)
     cmd = ["git", "rebase", "-i", base]
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
-    r = subprocess.run(cmd, cwd=cwd, env=env)
+    r = subprocess.run(cmd, cwd=cwd, env=env, check=False)
     logger.debug("ger restack: git rebase finished rc=%s", r.returncode)
     return r.returncode
 

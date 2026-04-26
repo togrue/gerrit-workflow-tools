@@ -380,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         ed_cmd = [*shlex.split(editor), str(todo)]
         logger.debug("restack_enricher: run: %s", " ".join(ed_cmd))
-        result = subprocess.run(ed_cmd)
+        result = subprocess.run(ed_cmd, check=False)
         logger.debug("restack_enricher: editor finished rc=%s", result.returncode)
         return result.returncode
     except FileNotFoundError:

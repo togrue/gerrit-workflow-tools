@@ -89,6 +89,7 @@ def _patch_id_single_parent(cwd: Path | str | None, sha: str) -> str | None:
         input=diff_p.stdout,
         text=True,
         capture_output=True,
+        check=False,
     )
     if pid.returncode != 0 or not pid.stdout.strip():
         return None

@@ -91,7 +91,7 @@ def _run_interactive_stack_rebase(
     )
     cmd = ["git", "rebase", "-i", rebase_fork]
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
-    r = subprocess.run(cmd, cwd=cwd, env=env)
+    r = subprocess.run(cmd, cwd=cwd, env=env, check=False)
     logger.debug("gedit rebase finished with return code %s", r.returncode)
     return r.returncode
 
