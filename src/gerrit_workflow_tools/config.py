@@ -13,9 +13,9 @@ _GERRIT_STOP_PATTERN_CANONICAL = "gerrit.stoppattern"
 _GERRIT_WARNING_PATTERN_CANONICAL = "gerrit.warningpattern"
 
 # In-memory snapshot: one `git config --list` per process per resolved cwd (lazy first access).
-_snapshot: dict[str, str] | None = None
-_snapshot_multi: dict[str, list[str]] | None = None
-_snapshot_cwd: str | None = None
+_snapshot: dict[str, str] | None = None  # pylint: disable=invalid-name
+_snapshot_multi: dict[str, list[str]] | None = None  # pylint: disable=invalid-name
+_snapshot_cwd: str | None = None  # pylint: disable=invalid-name
 
 
 def clear_gerrit_git_config_cache() -> None:
