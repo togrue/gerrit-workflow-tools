@@ -195,7 +195,7 @@ def _cmd_infer_upstream(ns: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
     """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
     p = argparse.ArgumentParser(
         prog="ger branch",

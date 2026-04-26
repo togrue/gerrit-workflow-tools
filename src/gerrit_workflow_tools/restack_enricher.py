@@ -39,7 +39,7 @@ _RS = "\x1e"
 # ---------------------------------------------------------------------------
 
 
-def _fmt_patchset(commit: LogCommit) -> str:
+def _fmt_patchset(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
     if commit.abandoned:
         return "a"
     status = commit.patchset_status
@@ -89,7 +89,7 @@ def _fmt_comments(count: int) -> str:
     return "com" if count > 0 else "   "
 
 
-def _attention_text(commit: LogCommit) -> str:
+def _attention_text(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
     """Short plain-text annotation for the trailing ``# …`` column, or empty string."""
     if commit.abandoned:
         return "abandoned"

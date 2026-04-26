@@ -151,7 +151,7 @@ def resolve_row_for_gshow(
     return (sha, short, summary, cid), True
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
     p = argparse.ArgumentParser(
         prog="ger show",
         description="Show one commit and its Gerrit status (labels, comments, CI).",

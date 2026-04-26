@@ -65,7 +65,7 @@ def _has_marked_block(text: str) -> bool:
     return MARKER_START in text and MARKER_END in text
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
     parser = argparse.ArgumentParser(
         prog="ger bash-completion",
         description="Show the bash line to source tab-completion for ger, or install/uninstall it in a shell rc file.",

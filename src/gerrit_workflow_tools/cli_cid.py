@@ -70,7 +70,7 @@ def _gcid_log_single_commit(rev_spec: str) -> bool:
     return ".." not in rev_spec
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
     """CLI entry for ``ger change-id``.
 
     Prints or validates Change-Ids for commits or ranges, with optional

@@ -91,7 +91,7 @@ def _annotate_attention(commits: list[LogCommit]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fmt_patchset_column(commit: LogCommit) -> str:
+def _fmt_patchset_column(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
     """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
     if commit.abandoned:
         return _color("a", ANSI_DIM)
@@ -386,7 +386,7 @@ def _format_summary_dashboard_line(
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     p = argparse.ArgumentParser(
         prog="ger log",
