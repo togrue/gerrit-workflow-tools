@@ -13,9 +13,8 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_stop_pattern_args,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
     handle_git_error,
+    init_cli_runtime,
 )
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
@@ -27,7 +26,6 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_short_sha,
     color_text,
-    init_color_mode,
 )
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
@@ -49,7 +47,7 @@ from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git, git_out
 from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.stack import commits_in_range, merge_base_with_target
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
 
@@ -472,10 +470,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         help="Push only through this commit.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.debug_log)
-    cwd = cwd_from_env()
-    init_color_mode(color=args.color)
-    summary_highlighter = build_summary_highlighter(cwd)
+    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
     gdef = gpush_defaults(cwd)
     remote_policy = gerrit_push_remote_policy(cwd)
     show_attributes = gdef["show_attributes"]

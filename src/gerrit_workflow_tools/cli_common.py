@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.git_run import GitError
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
@@ -122,6 +123,16 @@ def configure_logging(verbosity: int | bool) -> None:
 def cwd_from_env() -> Path:
     """Return the current working directory (repository root for CLI commands)."""
     return Path.cwd()
+
+
+def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, SummaryHighlighter]:
+    """Configure logging/color and return ``(cwd, summary_highlighter)`` for CLI commands."""
+    from gerrit_workflow_tools.cli_style import init_color_mode
+
+    configure_logging(debug_log)
+    cwd = cwd_from_env()
+    init_color_mode(color=color)
+    return cwd, build_summary_highlighter(cwd)
 
 
 def print_json(obj: Any) -> None:

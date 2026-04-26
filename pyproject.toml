@@ -67,7 +67,6 @@ disable = [
   "too-many-locals",
   "too-many-arguments",
   "too-many-statements",
-  "duplicate-code",
 ]
 
 [tool.ruff.lint]

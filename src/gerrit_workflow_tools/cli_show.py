@@ -15,8 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     add_color_args,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
+    init_cli_runtime,
 )
 from gerrit_workflow_tools.cli_log import _extra_detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.cli_style import (
@@ -25,7 +24,6 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_DIM,
     ANSI_YELLOW,
     color_text,
-    init_color_mode,
 )
 from gerrit_workflow_tools.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.gerrit_change_status import (
@@ -38,7 +36,6 @@ from gerrit_workflow_tools.gerrit_comments import resolve_gerrit_change
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.git_run import GitError, git_out
 from gerrit_workflow_tools.stack import parse_change_id
-from gerrit_workflow_tools.summary_highlight import build_summary_highlighter
 
 logger = logging.getLogger(__name__)
 
@@ -187,10 +184,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         debug_log_help="Log Gerrit resolution to stderr.",
     )
     args = p.parse_args(argv)
-    configure_logging(args.debug_log)
-    cwd = cwd_from_env()
-    init_color_mode(color=args.color)
-    summary_highlighter = build_summary_highlighter(cwd)
+    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
         print(
