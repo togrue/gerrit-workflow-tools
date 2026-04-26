@@ -9,7 +9,7 @@ from gerrit_workflow_tools.cli_bash_completion import main as main_bash_completi
 from gerrit_workflow_tools.cli_branch import main as main_branch
 from gerrit_workflow_tools.cli_cid import main as main_cid
 from gerrit_workflow_tools.cli_edit import main as main_edit
-from gerrit_workflow_tools.cli_edit import main_reword as main_reword
+from gerrit_workflow_tools.cli_edit import main_reword
 from gerrit_workflow_tools.cli_fetch_api import main as main_fetch_api
 from gerrit_workflow_tools.cli_log import main as main_log
 from gerrit_workflow_tools.cli_push import main as main_push
