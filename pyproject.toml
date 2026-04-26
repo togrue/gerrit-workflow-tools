@@ -15,6 +15,7 @@ dependencies = []
 dev = [
     "mypy>=1.8",
     "pre-commit>=3.0",
+    "pylint>=4.0.5",
     "pytest>=7.0",
     "ruff>=0.9",
 ]
@@ -46,6 +47,29 @@ python_version = "3.10"
 explicit_package_bases = true
 mypy_path = "src"
 packages = ["gerrit_workflow_tools"]
+
+[tool.pylint."MAIN"]
+ignore-paths = [
+    "^tests/.*$",
+]
+source-roots = ["src"]
+py-version = "3.10"
+
+[tool.pylint."FORMAT"]
+max-line-length = 120
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+  "missing-module-docstring",
+  "missing-class-docstring",
+  "missing-function-docstring",
+  "too-many-branches",
+  "too-many-locals",
+  "too-many-arguments",
+  "too-many-statements",
+  "too-many-return-statements",
+  "duplicate-code",
+]
 
 [tool.ruff.lint]
 # Ruff defaults are only a subset of pycodestyle (E4, E7, E9) plus Pyflakes (F).
