@@ -296,7 +296,7 @@ def _oneline_body(
     return base
 
 
-def _oneline_line(
+def _oneline_line(  # pylint: disable=too-many-arguments
     commit: LogCommit,
     *,
     summary_highlighter: SummaryHighlighter | None = None,
@@ -482,7 +482,7 @@ def _fetch_enriched_commits(
     return commits, None
 
 
-def _compute_url_start_visible(
+def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     visible: list[LogCommit],
     *,
     show_url: bool,
@@ -511,7 +511,7 @@ def _compute_url_start_visible(
     return max(widths) + 2
 
 
-def _render_text_output(
+def _render_text_output(  # pylint: disable=too-many-arguments
     *,
     cwd: Path,
     commits: list[LogCommit],

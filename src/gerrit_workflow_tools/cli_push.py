@@ -275,7 +275,7 @@ def _format_boundary_commit_line(
     return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{summary_highlighter.highlight(subject)}"
 
 
-def _print_gpush_preview(
+def _print_gpush_preview(  # pylint: disable=too-many-arguments
     cwd: Path,
     cmd: list[str],
     r: ReadyResult,

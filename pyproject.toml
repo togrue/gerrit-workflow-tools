@@ -62,7 +62,6 @@ max-line-length = 120
 disable = [
   "too-many-branches",
   "too-many-locals",
-  "too-many-arguments",
   "too-many-statements",
 ]
 
