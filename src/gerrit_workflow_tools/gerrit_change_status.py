@@ -281,7 +281,7 @@ def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
     """Attempt to retrieve failed CI check names via the Gerrit Checks API."""
     enc = quote(change_id, safe="")
     try:
-        data = client._request_json(f"changes/{enc}/revisions/current/checks")
+        data = client.get_json(f"changes/{enc}/revisions/current/checks")
     except GerritApiError:
         return []
     if not isinstance(data, list):
