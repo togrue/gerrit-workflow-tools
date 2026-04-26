@@ -12,11 +12,9 @@ Help text style (``help=`` on parsers and arguments):
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
 
 from gerrit_workflow_tools.cli_style import init_color_mode
 from gerrit_workflow_tools.git_run import GitError
@@ -133,11 +131,6 @@ def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Summar
     cwd = cwd_from_env()
     init_color_mode(color=color)
     return cwd, build_summary_highlighter(cwd)
-
-
-def print_json(obj: Any) -> None:
-    """Print *obj* as indented JSON to stdout."""
-    print(json.dumps(obj, indent=2))
 
 
 def handle_git_error(e: Exception) -> int:

@@ -287,7 +287,7 @@ def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
     }
 
 
-def gpush_defaults(cwd: Path | str | None) -> dict[str, bool]:
+def ger_push_defaults(cwd: Path | str | None) -> dict[str, bool]:
     """Defaults for ``ger push`` from ``gerrit.push*`` keys.
 
     Includes ``gerrit.lastPushedBranch`` (overridden by
@@ -379,54 +379,6 @@ def set_branch_config(
     clear_gerrit_git_config_cache()
 
 
-def resolve_local_base_ref(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
-    """
-    Return ``(resolved_tip_commit, display_name)`` for the configured Gerrit push destination.
-
-    Order: ``branch.gerritTarget`` -> ``@{upstream}``. Use this when you need the same
-    **destination ref** as push (override or upstream), not for enumerating the local stack
-    (see :func:`~gerrit_workflow_tools.stack.upstream_tracking_tip_and_display`).
-
-    ``gerritTarget`` must be the Gerrit destination **branch name** (e.g. ``dev``). It must
-    resolve to an existing ref—usually a local branch or ``refs/remotes/<remote>/<branch>``
-    after ``git fetch``.
-    """
-    b = branch or current_branch(cwd)
-    target = branch_gerrit_target(cwd, b)
-    if target:
-        p = git("rev-parse", "--verify", target, cwd=cwd, check=False)
-        if p.returncode != 0:
-            p = git("rev-parse", "--verify", f"refs/heads/{target}", cwd=cwd, check=False)
-        if p.returncode == 0:
-            return (p.stdout.strip(), target)
-        raise GitError(
-            f"gerritTarget '{target}' is configured but does not resolve to a local "
-            "ref (needed for stack / merge-base). "
-            f"Fetch from your Gerrit remote (`gerrit.remote`, often `origin`), e.g. "
-            f"`git fetch <remote>` or `git fetch <remote> <branch>`, so the branch exists as a "
-            f"remote-tracking ref when required. "
-            f"Set branch.{b}.gerritTarget to the destination branch name on Gerrit (e.g. `dev`); "
-            f"do not create a *local* branch whose name is `origin/<branch>`—that form should only "
-            f"appear as `refs/remotes/<remote>/<branch>` after fetching."
-        )
-
-    upstream_name = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
-    if upstream_name.returncode == 0:
-        upstream = upstream_name.stdout.strip()
-        upstream_ref = git("rev-parse", "--verify", upstream, cwd=cwd, check=False)
-        if upstream_ref.returncode == 0:
-            return (upstream_ref.stdout.strip(), upstream)
-
-    raise GitError(
-        f"No base branch found for '{b}'.\n"
-        "Set an upstream, e.g.:\n"
-        f"  git branch --set-upstream-to=<remote>/<branch>\n"
-        "Or infer the nearest remote-tracking branch and set upstream:\n"
-        "  ger branch infer-upstream\n"
-        "Optional per-branch Gerrit destination overrides: see `ger branch --help`."
-    )
-
-
 def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -> list[str]:
     """Build refs to try for ``ger restack --onto-remote`` from ``branch.*.gerritTarget``.
 
@@ -448,9 +400,6 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     """
     Return a ref accepted by ``git rebase -i <ref>`` for rebasing onto the **latest fetched**
     remote-tracking tip of the configured Gerrit target branch (e.g. ``origin/main``).
-
-    Unlike :func:`resolve_local_base_ref`, this returns a **remote-tracking symbolic ref**, not a
-    detached SHA, so ``git rebase`` replays local commits onto the remote tip.
 
     Uses the same effective Gerrit destination as :func:`effective_gerrit_destination_branch`
     (``gerritTarget`` override, or upstream when its remote is ``gerrit.remote``). There is no

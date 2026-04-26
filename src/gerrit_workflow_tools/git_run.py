@@ -13,12 +13,6 @@ logger = logging.getLogger(__name__)
 _LOG_IO_CAP = 1000
 
 
-def _clip(s: str, cap: int = _LOG_IO_CAP) -> str:
-    if len(s) <= cap:
-        return s
-    return f"{s[:cap]}… ({len(s)} chars total)"
-
-
 class GitError(RuntimeError):
     """Git command failed."""
 
@@ -48,22 +42,11 @@ def git(
         check=False,
     )
     if check and p.returncode != 0:
-        # logger.debug(
-        #     "git failed: rc=%s stderr='%s' stdout='%s'",
-        #     p.returncode,
-        #     _clip(p.stderr or ""),
-        #     _clip(p.stdout or ""),
-        # )
         raise GitError(
             f"git {' '.join(args)} failed: {p.stderr.strip() or p.stdout.strip()}",
             stderr=p.stderr,
             returncode=p.returncode,
         )
-    # logger.debug(
-    #     "git ok: rc=0 stdout=%s stderr=%s",
-    #     _clip(p.stdout or ""),
-    #     _clip(p.stderr or ""),
-    # )
     return p
 
 

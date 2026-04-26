@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from gerrit_workflow_tools.config import (
     clear_gerrit_git_config_cache,
     effective_gerrit_destination_branch,
@@ -11,7 +9,6 @@ from gerrit_workflow_tools.config import (
     head_is_linear_on_remote_gerrit_target,
     infer_nearest_remote_tracking_branch,
     rebase_defaults,
-    resolve_local_base_ref,
     resolve_rebase_onto_remote_ref,
     warning_patterns,
 )
@@ -83,24 +80,6 @@ def test_resolve_rebase_onto_remote_ref_from_upstream_without_gerrit_target(tmp_
     clear_gerrit_git_config_cache()
     assert resolve_rebase_onto_remote_ref(repo) == "origin/main"
     assert effective_gerrit_destination_branch(repo) == "origin/main"
-
-
-def test_resolve_local_base_ref_no_fallback_without_upstream(tmp_path: Path) -> None:
-    from gerrit_workflow_tools.git_run import GitError
-
-    repo = tmp_path / "r"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    (repo / "f").write_text("x", encoding="utf-8")
-    git("add", "f", cwd=repo)
-    git("commit", "-m", "init", cwd=repo)
-    git("checkout", "-b", "orphan", cwd=repo)
-    (repo / "g").write_text("y", encoding="utf-8")
-    git("add", "g", cwd=repo)
-    git("commit", "-m", "second", cwd=repo)
-    clear_gerrit_git_config_cache()
-    with pytest.raises(GitError, match="No base branch"):
-        resolve_local_base_ref(repo)
 
 
 def test_resolve_rebase_onto_remote_ref_gerrit_target_origin_slash_branch(tmp_path: Path) -> None:

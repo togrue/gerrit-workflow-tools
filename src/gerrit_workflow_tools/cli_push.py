@@ -32,13 +32,13 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.config import (
     branch_gerrit_reviewers,
     effective_gerrit_destination_branch,
+    ger_push_defaults,
     ger_push_mode,
     gerrit_password,
     gerrit_push_remote_policy,
     gerrit_remote,
     gerrit_token,
     gerrit_user,
-    gpush_defaults,
     head_is_linear_on_remote_gerrit_target,
     refs_for_push_branch_name,
     set_branch_config,
@@ -71,28 +71,21 @@ def _merge_reviewers(
     interactive: str | None = None,
 ) -> list[str]:
     """Merge branch config, ``--reviewers``, then optional ``-i`` input; dedupe preserving order."""
-    seen: set[str] = set()
-    ordered: list[str] = []
+    segments = []
     cfg = branch_gerrit_reviewers(cwd, branch)
     if cfg:
-        for part in cfg.split(","):
-            s = part.strip()
-            if s and s not in seen:
-                seen.add(s)
-                ordered.append(s)
-    for seg in reviewer_flag_segments:
-        for part in seg.split(","):
-            s = part.strip()
-            if s and s not in seen:
-                seen.add(s)
-                ordered.append(s)
+        segments.append(cfg)
+    segments.extend(reviewer_flag_segments)
     if interactive:
-        for part in interactive.split(","):
-            s = part.strip()
+        segments.append(interactive)
+    reviewers = []
+    seen = set()
+    for seg in segments:
+        for s in map(str.strip, seg.split(",")):
             if s and s not in seen:
                 seen.add(s)
-                ordered.append(s)
-    return ordered
+                reviewers.append(s)
+    return reviewers
 
 
 def _gerrit_credentials_configured(cwd: Path) -> bool:
@@ -191,6 +184,19 @@ def _commit_lines_for_preview(
     show_attributes: bool,
     merged_reviewers: list[str],
 ) -> list[str]:
+    """
+    Generate a list of formatted commit lines for stack preview.
+
+    Args:
+        cwd: Working directory as a Path.
+        r: ReadyResult containing stack and push range information.
+        summary_highlighter: SummaryHighlighter for commit subject highlighting.
+        show_attributes: Whether to append reviewer/WIP/private attribute previews.
+        merged_reviewers: Reviewers list to show for preview, overriding branch/CLI defaults.
+
+    Returns:
+        List of strings, each corresponding to a stack commit with optional attribute preview.
+    """
     if not r.push_range:
         return []
     rows = commits_in_range(cwd, r.push_range)
@@ -474,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     )
     args = p.parse_args(argv)
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
-    gdef = gpush_defaults(cwd)
+    gdef = ger_push_defaults(cwd)
     remote_policy = gerrit_push_remote_policy(cwd)
     show_attributes = gdef["show_attributes"]
     update_last_pushed = (

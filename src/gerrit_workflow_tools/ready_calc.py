@@ -157,13 +157,3 @@ def change_id_rows_for_range(
     """Return ``(full_sha, short_sha, change_id)`` for each commit in ``start_exclusive..head``."""
     meta = commits_in_range(cwd, f"{start_exclusive}..{head}")
     return [(c.sha, c.short_sha, c.change_id) for c in meta]
-
-
-def change_id_rows_for_rev_range(
-    cwd: Path | str | None,
-    start_exclusive: str,
-    end_inclusive: str,
-) -> list[tuple[str, str, str | None]]:
-    """Return ``(full_sha, short_sha, change_id)`` for ``start_exclusive..end_inclusive``."""
-    meta = commits_in_range(cwd, f"{start_exclusive}..{end_inclusive}")
-    return [(c.sha, c.short_sha, c.change_id) for c in meta]

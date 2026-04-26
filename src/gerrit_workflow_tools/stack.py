@@ -19,8 +19,7 @@ def upstream_tracking_tip_and_display(cwd: Path | str | None, branch: str | None
     Return ``(upstream_tip_sha, display_name)`` for the branch's **upstream** only.
 
     The local stack is ``<sha>..HEAD`` (same *sha* as the first element here).
-    This does not consult ``branch.*.gerritTarget``; use :func:`resolve_local_base_ref`
-    in ``config`` when you need the configured Gerrit push destination tip instead.
+    This does not consult ``branch.*.gerritTarget``;
     """
     b = branch or current_branch(cwd)
     upstream_sym = f"{b}@{{upstream}}" if branch else "@{upstream}"
@@ -124,30 +123,6 @@ def rev_spec_target_tip_to_end(cwd: Path | str | None, input_arg: str) -> str:
     return rev_spec_stack_base_to_end(cwd, input_arg)
 
 
-def list_stack_commits(
-    cwd: Path | str | None,
-    start_exclusive: str,
-    *,
-    head: str = "HEAD",
-) -> list[str]:
-    """Oldest-first SHAs in ``start_exclusive..head``."""
-    return rev_list_reverse(cwd, start_exclusive, head)
-
-
-def rev_list_reverse(cwd: Path | str | None, start_exclusive: str, end_inclusive: str) -> list[str]:
-    """Commits reachable from end_inclusive but not start_exclusive, oldest first."""
-    p = git(
-        "rev-list",
-        "--reverse",
-        f"{start_exclusive}..{end_inclusive}",
-        cwd=cwd,
-        check=False,
-    )
-    if p.returncode != 0:
-        return []
-    return [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
-
-
 # Field separator in `git log --format` (ASCII RS). Avoids NUL in argv (Windows
 # subprocess rejects embedded nulls); %x1e is expanded by git, not by the shell.
 _RS = "\x1e"
@@ -236,20 +211,6 @@ def commits_in_range(
     return _parse_rs_metadata_records(p.stdout)
 
 
-def commit_subject_and_body(cwd: Path | str | None, sha: str) -> tuple[str, str]:
-    """Return ``(first_line_subject, full_message_body)`` for *sha*."""
-    raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
-    lines = raw.splitlines()
-    sub = lines[0] if lines else ""
-    return sub, raw
-
-
-def is_ancestor(cwd: Path | str | None, maybe_desc: str, maybe_anc: str) -> bool:
-    """Return True if *maybe_anc* is an ancestor of *maybe_desc*."""
-    p = git("merge-base", "--is-ancestor", maybe_anc, maybe_desc, cwd=cwd, check=False)
-    return p.returncode == 0
-
-
 def resolve_stack_commit(
     cwd: Path | str | None,
     ref: str,
@@ -293,8 +254,3 @@ def commit_in_stack(
     c = resolve_stack_commit(cwd, commit, branch=branch, _snap=snap)
     stack_shas = [x.sha for x in snap.commits]
     return c in stack_shas
-
-
-def current_stack_shas(cwd: Path | str | None, branch: str | None = None) -> list[str]:
-    """Full SHAs in the local stack (``@{upstream}..HEAD``), oldest first."""
-    return [c.sha for c in get_stack_snapshot(cwd, branch).commits]
