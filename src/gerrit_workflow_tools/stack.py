@@ -107,13 +107,13 @@ def merge_base_with_target(cwd: Path | str | None, branch: str | None = None) ->
 def rev_spec_stack_base_to_end(cwd: Path | str | None, input_arg: str, branch: str | None = None) -> str:
     """``upstream_tip..END`` where END is *input_arg* or the right side of ``left..right``."""
     _fork, _display, upstream_tip = merge_base_with_target(cwd, branch)
-    if ".." not in input_arg:
-        logger.debug("rev_spec_stack_base_to_end rev-parse %r (end ref)", input_arg)
-        end = git_out("rev-parse", input_arg, cwd=cwd)
-        return f"{upstream_tip}..{end}"
-    idx = input_arg.index("..")
-    right = input_arg[idx + 2 :].strip() or "HEAD"
-    logger.debug("rev_spec_stack_base_to_end rev-parse %r (range right)", right)
+    if ".." in input_arg:
+        idx = input_arg.index("..")
+        right = input_arg[idx + 2 :].strip() or "HEAD"
+        logger.debug("rev_spec_stack_base_to_end rev-parse %r (range right)", right)
+    else:
+        right = input_arg
+        logger.debug("rev_spec_stack_base_to_end rev-parse %r (end ref)", right)
     end = git_out("rev-parse", right, cwd=cwd)
     return f"{upstream_tip}..{end}"
 
@@ -135,13 +135,8 @@ def parse_git_log_sha_body_rs(raw: str) -> list[tuple[str, str]]:
     parts = raw.split(_RS)
     while parts and parts[-1] == "":
         parts.pop()
-    out: list[tuple[str, str]] = []
-    for i in range(0, len(parts), 2):
-        if i + 1 >= len(parts):
-            break
-        sha, msg = parts[i].strip(), parts[i + 1]
-        out.append((sha, msg))
-    return out
+    it = iter(parts)
+    return [(sha.strip(), msg) for sha, msg in zip(it, it, strict=False)]
 
 
 def git_log_sha_body(
@@ -165,26 +160,17 @@ def _parse_rs_metadata_records(stdout: str) -> list[Commit]:
     parts = stdout.split(_RS)
     while parts and parts[-1] == "":
         parts.pop()
-    out: list[Commit] = []
-    for i in range(0, len(parts), 4):
-        if i + 3 >= len(parts):
-            break
-        sha, short_s, subj, body = (
-            parts[i].strip(),
-            parts[i + 1].strip(),
-            parts[i + 2].strip(),
-            parts[i + 3].strip(),
+    it = iter(parts)
+    return [
+        Commit(
+            sha=sha.strip(),
+            short_sha=short_s.strip(),
+            subject=subj.strip(),
+            body=body.strip(),
+            change_id=parse_change_id(body.strip()),
         )
-        out.append(
-            Commit(
-                sha=sha,
-                short_sha=short_s,
-                subject=subj,
-                body=body,
-                change_id=parse_change_id(body),
-            )
-        )
-    return out
+        for sha, short_s, subj, body in zip(it, it, it, it, strict=False)
+    ]
 
 
 def commits_in_range(
@@ -223,11 +209,7 @@ def resolve_stack_commit(
     if CHANGE_ID_VALUE_RE.match(s):
         snap = _snap or get_stack_snapshot(cwd, branch)
         want = s.lower()
-        matches: list[tuple[str, str]] = []
-        for c in snap.commits:
-            cid = c.change_id
-            if cid and cid.lower() == want:
-                matches.append((c.sha, c.short_sha))
+        matches = [(c.sha, c.short_sha) for c in snap.commits if c.change_id and c.change_id.lower() == want]
         if not matches:
             raise GitError(f"no commit in current stack with Change-Id {s}")
         if len(matches) > 1:
@@ -252,5 +234,4 @@ def commit_in_stack(
     except GitError:
         return False
     c = resolve_stack_commit(cwd, commit, branch=branch, _snap=snap)
-    stack_shas = [x.sha for x in snap.commits]
-    return c in stack_shas
+    return c in {x.sha for x in snap.commits}
