@@ -17,6 +17,8 @@ class SummaryHighlighter:
     combined_re: re.Pattern[str] | None
 
     def highlight(self, summary: str) -> str:
+        """Colorize summary segments that match stop/warning regex groups."""
+
         if not summary or self.combined_re is None or not is_color_enabled():
             return summary
         out: list[str] = []

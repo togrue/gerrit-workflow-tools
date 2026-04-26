@@ -116,6 +116,8 @@ def _uninstall_completion_block(rc_path: Path, log) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Print, install, or uninstall shell completion bootstrap lines for ``ger``."""
+
     parser = argparse.ArgumentParser(
         prog="ger bash-completion",
         description="Show the bash line to source tab-completion for ger, or install/uninstall it in a shell rc file.",

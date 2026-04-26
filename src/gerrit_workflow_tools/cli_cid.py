@@ -81,6 +81,8 @@ class ChangeIdError(Exception):
 
 
 def check_duplicate_change_ids(cwd, input_arg) -> None:
+    """Raise :class:`ChangeIdError` when duplicate Change-Ids are found in a commit selection."""
+
     if is_change_id_token(input_arg):
         raise ChangeIdError("error: --check-duplicates needs a commit or range, not a Change-Id", code=2)
 
@@ -105,6 +107,8 @@ def check_duplicate_change_ids(cwd, input_arg) -> None:
 
 
 def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
+    """Print Change-Ids for one commit or a revision range resolved from user input."""
+
     resolved = resolve_gcid_user_arg(cwd, input_arg)
     if use_remote:
         rev_spec = rev_spec_target_tip_to_end(cwd, resolved)

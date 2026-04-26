@@ -163,6 +163,8 @@ def extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
 
 
 def count_unresolved_in_file_map(file_map: dict[str, list[dict[str, Any]]]) -> int:
+    """Count unresolved inline comments across Gerrit file->comments mappings."""
+
     count = 0
     for comments in file_map.values():
         for c in comments:
@@ -172,10 +174,14 @@ def count_unresolved_in_file_map(file_map: dict[str, list[dict[str, Any]]]) -> i
 
 
 def norm_change_id(change_id: str) -> str:
+    """Normalize Change-Id values for case-insensitive lookups."""
+
     return change_id.lower()
 
 
 def norm_sha(sha: str) -> str:
+    """Normalize commit SHA text for case-insensitive comparisons."""
+
     return sha.strip().lower()
 
 
@@ -202,6 +208,8 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> str:
 
 
 def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
+    """Fetch comments for one change and return unresolved count, logging and defaulting to 0 on errors."""
+
     try:
         file_map = client.get_comments(api_change_id)
         return count_unresolved_in_file_map(file_map)
@@ -246,6 +254,8 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
 
 
 def query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] | None:
+    """Query one Gerrit change by Change-Id and return first matching ``ChangeInfo`` row."""
+
     try:
         rows = client.query_changes(f"change:{change_id}", n=5, options=list(LOG_QUERY_OPTIONS))
     except GerritApiError as e:
@@ -257,6 +267,8 @@ def query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] 
 
 
 def gerrit_change_url(web_base: str, change: dict[str, Any]) -> str | None:
+    """Build the Gerrit change page URL from a ``ChangeInfo`` object."""
+
     proj = change.get("project")
     num = change.get("_number")
     if not proj or not isinstance(num, int):
