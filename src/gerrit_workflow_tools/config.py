@@ -41,7 +41,7 @@ def _resolve_cwd_key(cwd: Path | str | None) -> str:
 
 def _load_git_config_maps(cwd: Path | str | None) -> tuple[dict[str, str], dict[str, list[str]]]:
     """Parse `git config --list` once; last value wins for single-valued keys."""
-    p = git("config", "--list", cwd=cwd, check=False)
+    p = git("config", "--local", "--list", cwd=cwd, check=False)
     single: dict[str, str] = {}
     multi: dict[str, list[str]] = {}
     if p.returncode != 0 or not p.stdout:
