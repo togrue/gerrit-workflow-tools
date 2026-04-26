@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ReadyResult:
+    """Boundary calculation output describing what portion of a stack is pushable."""
+
     pushable_count: int
     boundary_sha: str | None
     boundary_reason: str

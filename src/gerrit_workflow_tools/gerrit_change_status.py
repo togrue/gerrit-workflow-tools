@@ -28,6 +28,8 @@ _PARALLEL_IO = 8
 
 @dataclass
 class LogCommit:  # pylint: disable=too-many-instance-attributes
+    """Aggregated local+Gerrit status for a commit shown by CLI status commands."""
+
     sha: str
     short_sha: str
     summary: str

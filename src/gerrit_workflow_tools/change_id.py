@@ -12,6 +12,8 @@ CHANGE_ID_LAST_LINE_FOOTER_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re
 
 @dataclass
 class ChangeIdIssue:
+    """Represents a single Change-Id validation issue for one commit."""
+
     kind: str  # "missing" | "duplicate" | "malformed"
     sha: str
     short_sha: str
