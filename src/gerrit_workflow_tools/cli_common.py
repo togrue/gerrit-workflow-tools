@@ -113,7 +113,7 @@ def configure_logging(verbosity: int | bool) -> None:
     1+         → DEBUG   (git subprocesses, outcomes, resolved refs/URLs, HTTP URLs/summaries)
     2+         → same level; use :func:`log_gerrit_response_bodies` for full API JSON bodies
     """
-    global _CONFIGURED, _DEBUG_LOG_COUNT
+    global _CONFIGURED, _DEBUG_LOG_COUNT  # pylint: disable=global-statement
     v = int(verbosity)
     _DEBUG_LOG_COUNT = v
     level = logging.DEBUG if v >= 1 else logging.WARNING

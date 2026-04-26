@@ -24,7 +24,7 @@ _COLOR_ENABLED = False
 
 def set_color_mode(enabled: bool) -> None:
     """Set global color mode for CLI output formatting."""
-    global _COLOR_ENABLED
+    global _COLOR_ENABLED  # pylint: disable=global-statement
     _COLOR_ENABLED = bool(enabled)
 
 
