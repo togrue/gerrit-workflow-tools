@@ -65,7 +65,57 @@ def _has_marked_block(text: str) -> bool:
     return MARKER_START in text and MARKER_END in text
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
+def _install_completion_block(rc_path: Path, log) -> int:
+    try:
+        script_path = completion_script_path()
+    except FileNotFoundError as e:
+        print(f"ger bash-completion: {e}", file=sys.stderr)
+        return 1
+    log(f"Using completion script: {script_path.resolve().as_posix()}")
+    log(f"Target rc file: {rc_path.resolve().as_posix()}")
+    block = "".join(line + "\n" for line in _block_lines())
+    existing = rc_path.read_text(encoding="utf-8") if rc_path.is_file() else ""
+    if _has_marked_block(existing):
+        log("Marked gerrit-workflow-tools completion block already present; leaving file unchanged.")
+        return 0
+    if not rc_path.exists():
+        log(f"Creating {rc_path} (did not exist).")
+    else:
+        log(f"Appending completion block to existing file ({rc_path.stat().st_size} bytes).")
+    with rc_path.open("a", encoding="utf-8") as f:
+        if existing and not existing.endswith("\n"):
+            f.write("\n")
+            log("Added missing newline before appended block.")
+        f.write(block)
+    log("Wrote marked block:")
+    for ln in _block_lines():
+        if ln:
+            log(f"  {ln}")
+    log("Done. Restart the shell or run: source " + _sh_quote_posix_path(rc_path.as_posix()))
+    return 0
+
+
+def _uninstall_completion_block(rc_path: Path, log) -> int:
+    log(f"Reading rc file: {rc_path.resolve().as_posix()}")
+    if not rc_path.is_file():
+        print(f"ger bash-completion: rc file does not exist: {rc_path}", file=sys.stderr)
+        return 1
+    before = rc_path.read_text(encoding="utf-8")
+    if not _has_marked_block(before):
+        print(
+            f"ger bash-completion: no gerrit-workflow-tools completion block found in {rc_path}",
+            file=sys.stderr,
+        )
+        return 1
+    after = _strip_marked_blocks(before)
+    log("Removing marked completion block from file.")
+    rc_path.write_text(after, encoding="utf-8")
+    log(f"Updated file ({len(before)} → {len(after)} bytes).")
+    log("Done. Restart the shell for the change to take effect.")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ger bash-completion",
         description="Show the bash line to source tab-completion for ger, or install/uninstall it in a shell rc file.",
@@ -106,49 +156,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         print(msg, file=sys.stderr)
 
     if ns.install:
-        try:
-            script_path = completion_script_path()
-        except FileNotFoundError as e:
-            print(f"ger bash-completion: {e}", file=sys.stderr)
-            return 1
-        log(f"Using completion script: {script_path.resolve().as_posix()}")
-        log(f"Target rc file: {rc_path.resolve().as_posix()}")
-        block = "".join(line + "\n" for line in _block_lines())
-        existing = rc_path.read_text(encoding="utf-8") if rc_path.is_file() else ""
-        if _has_marked_block(existing):
-            log("Marked gerrit-workflow-tools completion block already present; leaving file unchanged.")
-            return 0
-        if not rc_path.exists():
-            log(f"Creating {rc_path} (did not exist).")
-        else:
-            log(f"Appending completion block to existing file ({rc_path.stat().st_size} bytes).")
-        with rc_path.open("a", encoding="utf-8") as f:
-            if existing and not existing.endswith("\n"):
-                f.write("\n")
-                log("Added missing newline before appended block.")
-            f.write(block)
-        log("Wrote marked block:")
-        for ln in _block_lines():
-            if ln:
-                log(f"  {ln}")
-        log("Done. Restart the shell or run: source " + _sh_quote_posix_path(rc_path.as_posix()))
-        return 0
+        return _install_completion_block(rc_path, log)
 
-    # uninstall
-    log(f"Reading rc file: {rc_path.resolve().as_posix()}")
-    if not rc_path.is_file():
-        print(f"ger bash-completion: rc file does not exist: {rc_path}", file=sys.stderr)
-        return 1
-    before = rc_path.read_text(encoding="utf-8")
-    if not _has_marked_block(before):
-        print(
-            f"ger bash-completion: no gerrit-workflow-tools completion block found in {rc_path}",
-            file=sys.stderr,
-        )
-        return 1
-    after = _strip_marked_blocks(before)
-    log("Removing marked completion block from file.")
-    rc_path.write_text(after, encoding="utf-8")
-    log(f"Updated file ({len(before)} → {len(after)} bytes).")
-    log("Done. Restart the shell for the change to take effect.")
+    if ns.uninstall:
+        return _uninstall_completion_block(rc_path, log)
+
     return 0
