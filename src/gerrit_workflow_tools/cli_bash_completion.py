@@ -95,8 +95,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not ns.install and not ns.uninstall:
         try:
-            INSTALL_HINT = ' && echo "Note: You can also install the completion with `ger bash-completion --install`'
-            print(source_command_line() + INSTALL_HINT)
+            install_hint = ' && echo "Note: You can also install the completion with `ger bash-completion --install`'
+            print(source_command_line() + install_hint)
         except FileNotFoundError as e:
             print(f"ger bash-completion: {e}", file=sys.stderr)
             return 1
