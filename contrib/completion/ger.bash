@@ -50,7 +50,7 @@ _ger_log() {
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
             --help \
-            --full \
+            --filter-attention \
             --json \
             --color \
             --url --show-url \

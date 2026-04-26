@@ -28,7 +28,7 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert code == 0
     assert "ger log" in out or "log" in out
     assert "REV_RANGE" in out
-    assert "--full" in out
+    assert "--filter-attention" in out
     assert "--json" in out
     assert "--show-change-id" in out
     assert "--show-url" in out
@@ -39,10 +39,10 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     "argv_extra",
     [
         [],
-        ["--full"],
-        ["--full", "-v"],
-        ["--full", "--url"],
-        ["--full", "--color=never"],
+        ["--filter-attention"],
+        ["--filter-attention", "-v"],
+        ["--filter-attention", "--url"],
+        ["--filter-attention", "--color=never"],
     ],
 )
 def test_log_smoke_argv_exits_zero(
@@ -58,12 +58,12 @@ def test_log_smoke_argv_exits_zero(
     assert code in (0, 1), (code, err)
 
 
-def test_log_full_text_contains_commit_lines_and_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_default_text_contains_commit_lines_and_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
     assert "ready" in out and "/" in out
@@ -83,7 +83,7 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
     clear_gerrit_git_config_cache()
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", "--color", "always"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--color", "always"], monkeypatch)
     assert code == 0, err
     assert ANSI_YELLOW in out
     assert first_subject in out
@@ -99,7 +99,7 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     overrides[-1] = {"status": "ABANDONED", "submittable": False}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", "--verbose", "--color=never"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--verbose", "--color=never"], monkeypatch)
     assert code == 1, err
     assert "v? " in out
     assert "cr? " in out
@@ -112,12 +112,12 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     assert "✓" not in out
 
 
-def test_log_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--json", "--full"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
     assert code == 0, err
     data = json_stdout(out)
     assert isinstance(data, list)
@@ -129,21 +129,23 @@ def test_log_json_full_lists_all_commits(stack_repo: Path, monkeypatch: pytest.M
         assert "change_id" in item
 
 
-def test_log_default_hides_when_all_green(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With no attention, non-``--full`` mode prints no per-commit lines."""
+def test_log_filter_attention_hides_when_all_green(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no attention, ``--filter-attention`` prints no per-commit lines."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--filter-attention"], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
+    assert "... " in out
+    assert "non-attention commits" in out
     assert rows[0].short_sha not in out
     assert rows[0].subject not in out
 
 
-def test_log_shows_attention_without_full(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """One commit with CR+1 should appear without ``--full``."""
+def test_log_filter_attention_shows_only_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With ``--filter-attention``, only attention commits appear."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{}] * len(rows)
@@ -151,7 +153,7 @@ def test_log_shows_attention_without_full(stack_repo: Path, monkeypatch: pytest.
         overrides[-1] = {"cr": 1}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--filter-attention"], monkeypatch)
     assert code == 1, err
     last = rows[-1]
     assert last.short_sha in out
@@ -165,7 +167,7 @@ def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", revset], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, [revset], monkeypatch)
     assert code == 0, err
     assert "summary:" in out
 
@@ -179,8 +181,11 @@ def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.
 
 
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_gerrit_git_config_cache()
-    code, _out, err = run_cli(stack_repo, log_main, ["--full"], monkeypatch)
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.cli_log.resolve_gerrit_web_base",
+        lambda _cwd: (_ for _ in ()).throw(ValueError("missing gerrit.webUrl")),
+    )
+    code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch)
     assert code == 3
     assert "error" in err.lower()
 
@@ -190,7 +195,7 @@ def test_log_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest.
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", "--show-change-id", "--color=never"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--show-change-id", "--color=never"], monkeypatch)
     assert code == 0, err
     cid = rows[0].change_id
     assert cid
@@ -210,7 +215,7 @@ def test_log_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.Mon
         overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", "--color=never"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch)
     assert code == 1, err
     assert _unicode_strikethrough(rows[-1].subject) in out
 
@@ -222,7 +227,7 @@ def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.Monke
     overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--json", "--full"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
     assert code == 1, err
     data = json_stdout(out)
     assert data[-1]["abandoned"] is True
@@ -236,6 +241,6 @@ def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.Monke
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--full", "--color=never"], monkeypatch)
+        code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch)
     assert code == 0, err
     assert "g.example" in out or "/+/" in out

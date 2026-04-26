@@ -4,7 +4,7 @@
 
 Compact, actionable overview of the local commit chain vs Gerrit. Answers: *What do I need to do next?*
 
-Shows only commits that require attention by default (CI failures, negative votes, unresolved comments, missing or non-matching Gerrit patch set, blocked by an earlier commit). All commits visible with `--full`.
+Shows the full commit range by default. Use `--filter-attention` to show only commits that require attention (CI failures, negative votes, unresolved comments, missing or non-matching Gerrit patch set, blocked by an earlier commit).
 
 Requires `gerrit.webUrl` in git config.
 
@@ -24,7 +24,7 @@ ger log [options] [REVSET]
 
 | Option | Description |
 |--------|-------------|
-| `--full` | Show all commits, not just attention-required |
+| `--filter-attention` | Show only attention-required commits; prints how many non-attention commits were filtered out |
 | `--oneline` | One line per commit; detail lines inlined (default: `gerrit.logOneline`; use `--no-oneline` to force full rows) |
 | `--no-compact` | When `gerrit.logCompact` is on, show full status rows instead of minimal single-character columns |
 | `--url`, `--show-url` | Print each change’s Gerrit web URL (default: `gerrit.logShowUrl`) |

@@ -394,9 +394,9 @@ def main(argv: list[str] | None = None) -> int:
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
     p.add_argument(
-        "--full",
+        "--filter-attention",
         action="store_true",
-        help="Show all commits in the range, not only attention-required ones.",
+        help="Show only attention-required commits.",
     )
     p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     add_color_args(p)
@@ -484,7 +484,8 @@ def main(argv: list[str] | None = None) -> int:
 
     _annotate_attention(commits)
 
-    visible = commits if args.full else [c for c in commits if c.attention_reasons]
+    visible = [c for c in commits if c.attention_reasons] if args.filter_attention else commits
+    non_attention_filtered = len(commits) - len(visible)
 
     # JSON output
     if args.json_:
@@ -512,6 +513,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(c.attention_reasons for c in commits) else 0
 
     # Text output
+    if args.filter_attention:
+        noun = "commit" if non_attention_filtered == 1 else "commits"
+        print(f"... {non_attention_filtered} non-attention {noun}")
+
     attention_column = _attention_column(
         visible,
         summary_highlighter=summary_highlighter,
