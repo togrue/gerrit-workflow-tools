@@ -311,6 +311,7 @@ def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
     return failed
 
 
+# pylint: disable=too-many-branches
 def fetch_gerrit_data(
     client: GerritClient,
     web_base: str,
@@ -456,7 +457,7 @@ def fetch_gerrit_data(
     return result
 
 
-def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
+def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:  # pylint: disable=too-many-branches
     """Return reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []
     if commit.abandoned:

@@ -148,7 +148,7 @@ def resolve_row_for_gshow(
     return (sha, short, summary, cid), True
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches
     """Resolve one revision and print human-readable or JSON Gerrit status details."""
 
     p = argparse.ArgumentParser(

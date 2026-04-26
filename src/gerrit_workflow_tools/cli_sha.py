@@ -77,7 +77,7 @@ def _commits_all(cwd: Path):
     return _parse_rs_metadata_records(p.stdout)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-branches
     """CLI entry for ``ger sha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
     ap = argparse.ArgumentParser(
         prog="ger sha",
