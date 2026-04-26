@@ -20,7 +20,7 @@ _snapshot_cwd: str | None = None  # pylint: disable=invalid-name
 
 def clear_gerrit_git_config_cache() -> None:
     """Drop cached config so the next read loads from git again."""
-    global _snapshot, _snapshot_multi, _snapshot_cwd
+    global _snapshot, _snapshot_multi, _snapshot_cwd  # pylint: disable=global-statement
     _snapshot = None
     _snapshot_multi = None
     _snapshot_cwd = None
@@ -59,7 +59,7 @@ def _load_git_config_maps(cwd: Path | str | None) -> tuple[dict[str, str], dict[
 
 
 def _ensure_snapshot(cwd: Path | str | None) -> None:
-    global _snapshot, _snapshot_multi, _snapshot_cwd
+    global _snapshot, _snapshot_multi, _snapshot_cwd  # pylint: disable=global-statement
     key = _resolve_cwd_key(cwd)
     if _snapshot is not None and _snapshot_cwd == key:
         return
