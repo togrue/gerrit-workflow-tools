@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gerrit_workflow_tools.config import (
+from gerrit_workflow_tools.core.config import (
     clear_gerrit_git_config_cache,
     effective_gerrit_destination_branch,
     gerrit_push_remote_policy,
@@ -84,7 +84,7 @@ def test_resolve_rebase_onto_remote_ref_from_upstream_without_gerrit_target(tmp_
 
 def test_resolve_rebase_onto_remote_ref_gerrit_target_origin_slash_branch(tmp_path: Path) -> None:
     """gerritTarget origin/dev must not become origin/origin/dev."""
-    from gerrit_workflow_tools.config import set_branch_config
+    from gerrit_workflow_tools.core.config import set_branch_config
 
     repo = tmp_path / "r"
     repo.mkdir()

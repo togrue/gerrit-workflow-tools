@@ -79,7 +79,7 @@ def test_fmt_cr_all_variants():
 
 
 def test_attention_text_variants():
-    from gerrit_workflow_tools.gerrit_change_status import LogCommit
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.restack_enricher import _attention_text
 
     def _commit(**kw) -> LogCommit:
@@ -113,7 +113,7 @@ def test_attention_text_variants():
 
 
 def test_enriched_subject_format():
-    from gerrit_workflow_tools.gerrit_change_status import LogCommit
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.restack_enricher import _enriched_subject
 
     commit = LogCommit(
@@ -139,7 +139,7 @@ def test_enriched_subject_format():
 
 
 def test_enriched_subject_truncates_long_summary():
-    from gerrit_workflow_tools.gerrit_change_status import LogCommit
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.restack_enricher import _SUBJECT_WIDTH, _enriched_subject
 
     long_summary = "x" * (_SUBJECT_WIDTH + 20)
@@ -161,7 +161,7 @@ def test_enriched_subject_truncates_long_summary():
 
 
 def test_enriched_subject_not_pushed_shows_dash():
-    from gerrit_workflow_tools.gerrit_change_status import LogCommit
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.restack_enricher import _enriched_subject
 
     commit = LogCommit(
@@ -305,7 +305,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     text = _make_todo(rows)
 
     broken_client = MagicMock()
-    from gerrit_workflow_tools.gerrit_client import GerritApiError
+    from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 
     broken_client.query_changes.side_effect = GerritApiError("timeout")
 
@@ -361,7 +361,7 @@ def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path
 def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: Path, stack_repo: Path, monkeypatch):
     """When _enrich_todo raises, main() prepends an error comment and opens the editor
     with the original (unenriched) todo — the rebase can still proceed."""
-    from gerrit_workflow_tools.gerrit_client import GerritApiError
+    from gerrit_workflow_tools.core.gerrit_client import GerritApiError
     from gerrit_workflow_tools.restack_enricher import main as enricher_main
 
     rows = stack_rows_mb_to_head(stack_repo)
@@ -617,8 +617,8 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
 
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
+    from gerrit_workflow_tools.core.gerrit_change_status import compute_merged_equivalent
     from gerrit_workflow_tools.core.git_run import git_out
-    from gerrit_workflow_tools.gerrit_change_status import compute_merged_equivalent
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
@@ -628,7 +628,7 @@ def test_compute_merged_equivalent_sha_match(stack_repo: Path):
 
 
 def test_commit_blocks_chain_for_submittability_merged():
-    from gerrit_workflow_tools.gerrit_change_status import LogCommit, commit_blocks_chain_for_submittability
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, commit_blocks_chain_for_submittability
 
     def lc(**kw: object) -> LogCommit:
         base: dict = {

@@ -31,17 +31,17 @@ from gerrit_workflow_tools.cli_style import (
     is_color_enabled,
     visible_len,
 )
-from gerrit_workflow_tools.config import log_defaults
-from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
-from gerrit_workflow_tools.gerrit_change_status import (
+from gerrit_workflow_tools.core.config import log_defaults
+from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     commit_blocks_chain_for_submittability,
     determine_attention,
     fetch_gerrit_data,
 )
-from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.core.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)

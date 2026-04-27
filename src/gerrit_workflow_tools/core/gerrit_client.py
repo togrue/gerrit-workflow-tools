@@ -12,7 +12,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from gerrit_workflow_tools.cli_common import log_gerrit_response_bodies
-from gerrit_workflow_tools.config import gerrit_password, gerrit_token, gerrit_user
+from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user
 
 logger = logging.getLogger(__name__)
 

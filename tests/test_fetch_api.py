@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gerrit_workflow_tools.cli_fetch_api import main as fetch_api_main
-from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import json_stdout, run_cli
 
@@ -51,7 +51,7 @@ def test_fetch_api_gerrit_error(
     stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from gerrit_workflow_tools.gerrit_client import GerritApiError
+    from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 
     _configure_gerrit_http(stack_repo)
 

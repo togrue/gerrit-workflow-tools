@@ -7,8 +7,8 @@ import json
 import sys
 
 from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, configure_logging, cwd_from_env
-from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.core.gerrit_url import resolve_gerrit_web_base
 
 
 def main(argv: list[str] | None = None) -> int:

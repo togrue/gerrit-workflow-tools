@@ -23,7 +23,7 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
     init_color_mode,
 )
-from gerrit_workflow_tools.config import (
+from gerrit_workflow_tools.core.config import (
     branch_gerrit_reviewers,
     clear_gerrit_git_config_cache,
     current_branch,

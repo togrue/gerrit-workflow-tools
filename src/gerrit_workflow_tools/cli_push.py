@@ -28,7 +28,8 @@ from gerrit_workflow_tools.cli_style import (
     color_short_sha,
     color_text,
 )
-from gerrit_workflow_tools.config import (
+from gerrit_workflow_tools.core.change_id import classify_issues
+from gerrit_workflow_tools.core.config import (
     branch_gerrit_reviewers,
     effective_gerrit_destination_branch,
     ger_push_defaults,
@@ -42,13 +43,12 @@ from gerrit_workflow_tools.config import (
     refs_for_push_branch_name,
     set_branch_config,
 )
-from gerrit_workflow_tools.core.change_id import classify_issues
+from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details, norm_change_id
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.core.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
-from gerrit_workflow_tools.gerrit_change_status import batch_load_change_details, norm_change_id
-from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)

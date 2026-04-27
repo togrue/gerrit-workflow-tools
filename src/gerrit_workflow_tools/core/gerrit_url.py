@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from gerrit_workflow_tools.config import gerrit_web_url
+from gerrit_workflow_tools.core.config import gerrit_web_url
 
 logger = logging.getLogger(__name__)
 

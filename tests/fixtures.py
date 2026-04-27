@@ -99,7 +99,7 @@ def make_repo_malformed_cid(path: Path) -> Path:
 
 
 def configure_gerrit_target(path: Path, target: str = "main") -> None:
-    from gerrit_workflow_tools.config import set_branch_config
+    from gerrit_workflow_tools.core.config import set_branch_config
     from gerrit_workflow_tools.core.git_run import git_out
 
     branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=path)

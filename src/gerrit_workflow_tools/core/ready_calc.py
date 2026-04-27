@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.config import stop_patterns
+from gerrit_workflow_tools.core.config import stop_patterns
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 

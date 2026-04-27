@@ -10,17 +10,17 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
-from gerrit_workflow_tools.config import gerrit_web_url
-from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.stack import parse_change_id
-from gerrit_workflow_tools.gerrit_change_status import (
+from gerrit_workflow_tools.core.config import gerrit_web_url
+from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     commit_blocks_chain_for_submittability,
     determine_attention,
     fetch_gerrit_data,
 )
-from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.core.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.stack import parse_change_id
 
 logger = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.config import current_branch
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
+from gerrit_workflow_tools.core.config import current_branch
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)

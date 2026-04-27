@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.config import rebase_defaults, resolve_rebase_onto_remote_ref
+from gerrit_workflow_tools.core.config import rebase_defaults, resolve_rebase_onto_remote_ref
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import merge_base_with_target, resolve_stack_commit
 
