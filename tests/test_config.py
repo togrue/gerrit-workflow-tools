@@ -12,7 +12,7 @@ from gerrit_workflow_tools.config import (
     resolve_rebase_onto_remote_ref,
     warning_patterns,
 )
-from gerrit_workflow_tools.git_run import git, git_out
+from gerrit_workflow_tools.core.git_run import git, git_out
 
 
 def test_warning_patterns_defaults(stack_repo: Path) -> None:

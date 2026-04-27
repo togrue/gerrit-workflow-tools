@@ -9,7 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_fetch_api import main as fetch_api_main
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.git_run import git
+from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import json_stdout, run_cli
 
 

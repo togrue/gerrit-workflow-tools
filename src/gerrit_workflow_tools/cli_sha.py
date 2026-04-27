@@ -53,7 +53,6 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     add_color_args,
@@ -62,8 +61,9 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
-from gerrit_workflow_tools.git_run import GitError, git
-from gerrit_workflow_tools.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
+from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
 
 logger = logging.getLogger(__name__)
 

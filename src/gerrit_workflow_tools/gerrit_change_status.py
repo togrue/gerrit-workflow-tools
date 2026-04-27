@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.git_run import git
 
 logger = logging.getLogger(__name__)
 

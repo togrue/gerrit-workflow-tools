@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gerrit_workflow_tools.git_run import git
+from gerrit_workflow_tools.core.git_run import git
 
 
 def _cid(seed: str) -> str:
@@ -100,7 +100,7 @@ def make_repo_malformed_cid(path: Path) -> Path:
 
 def configure_gerrit_target(path: Path, target: str = "main") -> None:
     from gerrit_workflow_tools.config import set_branch_config
-    from gerrit_workflow_tools.git_run import git_out
+    from gerrit_workflow_tools.core.git_run import git_out
 
     branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=path)
     set_branch_config(path, branch, gerrit_target=target)

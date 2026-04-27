@@ -33,7 +33,7 @@ from gerrit_workflow_tools.config import (
     refs_for_push_branch_name,
     set_branch_config,
 )
-from gerrit_workflow_tools.git_run import GitError, git
+from gerrit_workflow_tools.core.git_run import GitError, git
 
 logger = logging.getLogger(__name__)
 

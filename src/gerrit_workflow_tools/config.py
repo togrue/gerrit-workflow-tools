@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
 

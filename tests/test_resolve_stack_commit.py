@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from gerrit_workflow_tools.git_run import GitError, git_out
-from gerrit_workflow_tools.stack import resolve_stack_commit
+from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.stack import resolve_stack_commit
 from tests.fixtures import _cid
 
 

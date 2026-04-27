@@ -34,8 +34,8 @@ def test_gbranch_set_target(stack_repo_unconfigured, monkeypatch):
 
 
 def test_gbranch_infer_upstream_yes(tmp_path, monkeypatch):
-    from gerrit_workflow_tools.git_run import git as git_run
-    from gerrit_workflow_tools.git_run import git_out
+    from gerrit_workflow_tools.core.git_run import git as git_run
+    from gerrit_workflow_tools.core.git_run import git_out
 
     bare = tmp_path / "upstream.git"
     git_run("init", "--bare", str(bare))
@@ -58,7 +58,7 @@ def test_gbranch_infer_upstream_yes(tmp_path, monkeypatch):
 
 
 def test_gbranch_infer_upstream_no_remotes(tmp_path, monkeypatch):
-    from gerrit_workflow_tools.git_run import git as git_run
+    from gerrit_workflow_tools.core.git_run import git as git_run
 
     repo = tmp_path / "noremote"
     repo.mkdir()

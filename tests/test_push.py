@@ -10,8 +10,8 @@ import pytest
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.config import clear_gerrit_git_config_cache, set_branch_config
-from gerrit_workflow_tools.git_run import git, git_out
-from gerrit_workflow_tools.ready_calc import compute_ready
+from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.ready_calc import compute_ready
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target

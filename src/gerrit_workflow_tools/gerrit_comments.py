@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.gerrit_change_status import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.gerrit_client import (
     GerritClient,
     pick_change_from_query_result,
     resolve_change_ref,
 )
-from gerrit_workflow_tools.git_run import GitError
 
 logger = logging.getLogger(__name__)
 

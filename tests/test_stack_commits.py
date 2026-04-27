@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gerrit_workflow_tools.stack import (
+from gerrit_workflow_tools.core.stack import (
     commits_in_range,
     merge_base_with_target,
     upstream_tracking_tip_and_display,

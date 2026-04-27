@@ -16,8 +16,8 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.git_run import GitError, git_out
-from gerrit_workflow_tools.stack import (
+from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.stack import (
     commit_in_stack,
     merge_base_with_target,
     resolve_stack_commit,

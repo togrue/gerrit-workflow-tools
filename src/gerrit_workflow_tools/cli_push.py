@@ -10,7 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.change_id import classify_issues
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_stop_pattern_args,
@@ -43,12 +42,13 @@ from gerrit_workflow_tools.config import (
     refs_for_push_branch_name,
     set_branch_config,
 )
+from gerrit_workflow_tools.core.change_id import classify_issues
+from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.gerrit_change_status import batch_load_change_details, norm_change_id
 from gerrit_workflow_tools.gerrit_client import GerritApiError, GerritClient
 from gerrit_workflow_tools.gerrit_url import resolve_gerrit_web_base
-from gerrit_workflow_tools.git_run import GitError, git, git_out
-from gerrit_workflow_tools.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
-from gerrit_workflow_tools.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)

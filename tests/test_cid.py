@@ -16,7 +16,7 @@ from gerrit_workflow_tools.cli_changeid import (
 from gerrit_workflow_tools.cli_changeid import (
     main as gcid_main,
 )
-from gerrit_workflow_tools.git_run import git
+from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import run_cli
 from tests.fixtures import _cid
 

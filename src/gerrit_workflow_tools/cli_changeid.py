@@ -20,11 +20,6 @@ import argparse
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.change_id import (
-    CHANGE_ID_LAST_LINE_FOOTER_RE,
-    extract_change_id_from_msg,
-    is_change_id_token,
-)
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_verbose_and_debug_log_args,
@@ -33,8 +28,13 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
-from gerrit_workflow_tools.git_run import GitError
-from gerrit_workflow_tools.stack import (
+from gerrit_workflow_tools.core.change_id import (
+    CHANGE_ID_LAST_LINE_FOOTER_RE,
+    extract_change_id_from_msg,
+    is_change_id_token,
+)
+from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.stack import (
     git_log_sha_body,
     parse_git_log_sha_body_rs,
     rev_spec_target_tip_to_end,

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gerrit_workflow_tools.stack import Commit
+from gerrit_workflow_tools.core.stack import Commit
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     make_query_changes_impl,
@@ -507,7 +507,7 @@ def test_cli_restack_sets_sequence_editor_env(stack_repo: Path, monkeypatch):
 
 def test_cli_restack_passes_merge_base_to_git(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_restack import main as restack_main
-    from gerrit_workflow_tools.stack import merge_base_with_target
+    from gerrit_workflow_tools.core.stack import merge_base_with_target
 
     monkeypatch.chdir(stack_repo)
     expected_base, _, _ = merge_base_with_target(stack_repo)
@@ -549,7 +549,7 @@ def test_cli_restack_debug_log_sets_env_flag(stack_repo: Path, monkeypatch):
 
 def test_cli_restack_onto_remote_passes_remote_ref(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_restack import main as restack_main
-    from gerrit_workflow_tools.git_run import git
+    from gerrit_workflow_tools.core.git_run import git
 
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
     captured: dict = {}
@@ -563,7 +563,7 @@ def test_cli_restack_onto_remote_passes_remote_ref(stack_repo: Path, monkeypatch
 
 def test_cli_restack_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_restack import main as restack_main
-    from gerrit_workflow_tools.git_run import git
+    from gerrit_workflow_tools.core.git_run import git
 
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
     captured: dict = {}
@@ -617,8 +617,8 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
 
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
+    from gerrit_workflow_tools.core.git_run import git_out
     from gerrit_workflow_tools.gerrit_change_status import compute_merged_equivalent
-    from gerrit_workflow_tools.git_run import git_out
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
