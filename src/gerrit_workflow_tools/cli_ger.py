@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from gerrit_workflow_tools.cli_bash_completion import main as main_bash_completion
 from gerrit_workflow_tools.cli_branch import main as main_branch
-from gerrit_workflow_tools.cli_cid import main as main_cid
+from gerrit_workflow_tools.cli_changeid import main as main_cid
 from gerrit_workflow_tools.cli_edit import main as main_edit
 from gerrit_workflow_tools.cli_edit import main_reword
 from gerrit_workflow_tools.cli_fetch_api import main as main_fetch_api

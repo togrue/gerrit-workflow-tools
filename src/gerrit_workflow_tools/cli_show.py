@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
-from gerrit_workflow_tools.cli_cid import resolve_gcid_user_arg
+from gerrit_workflow_tools.cli_changeid import resolve_gcid_user_arg
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     add_color_args,
