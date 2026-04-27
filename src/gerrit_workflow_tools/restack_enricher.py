@@ -17,8 +17,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     determine_attention,
     fetch_gerrit_data,
 )
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.core.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import parse_change_id
 

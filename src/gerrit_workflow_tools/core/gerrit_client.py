@@ -6,13 +6,15 @@ import base64
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from gerrit_workflow_tools.cli_common import log_gerrit_response_bodies
-from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user
+from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user, gerrit_web_url
+from gerrit_workflow_tools.core.git_run import GitError
 
 logger = logging.getLogger(__name__)
 
@@ -197,3 +199,55 @@ def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
         nums = [str(r.get("_number", "?")) for r in rows[:5]]
         raise GerritApiError(f"ambiguous change query ({len(rows)} matches): {', '.join(nums)}")
     return rows[0]
+
+
+def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
+    """
+    Gerrit HTTPS base for the REST API and web links.
+
+    Requires ``gerrit.webUrl`` in git config (no inference from remotes).
+    """
+    override = gerrit_web_url(cwd)
+    if override:
+        base = override.rstrip("/")
+        logger.debug("resolve_gerrit_web_base: gerrit.webUrl -> %s", base)
+        return base
+    raise ValueError(
+        "gerrit.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
+        "`git config gerrit.webUrl https://gerrit.example.com`"
+    )
+
+
+_RESOLVE_CHANGE_QUERY_OPTIONS = (
+    "DETAILED_LABELS",
+    "SUBMITTABLE",
+    "CURRENT_REVISION",
+    "ALL_REVISIONS",
+)
+
+
+def resolve_gerrit_change(
+    client: GerritClient,
+    *,
+    change_arg: str | None,
+    local_change_id: str | None,
+) -> dict[str, Any]:
+    """Resolve a Gerrit change query *change_arg* or *local_change_id* to a single change dict."""
+    opts = list(_RESOLVE_CHANGE_QUERY_OPTIONS)
+    if change_arg:
+        q = resolve_change_ref(change_arg)
+        rows = client.query_changes(q, n=10, options=opts)
+        ch = pick_change_from_query_result(rows)
+    elif local_change_id:
+        rows = client.query_changes(f"change:{local_change_id}", n=10, options=opts)
+        ch = pick_change_from_query_result(rows)
+    else:
+        raise GitError("internal: no change specified")
+    logger.info(
+        "resolved change -> #%s %r (id=%s)",
+        ch.get("_number"),
+        ch.get("subject"),
+        ch.get("id"),
+    )
+    logger.debug("resolved change detail: %s", ch)
+    return ch

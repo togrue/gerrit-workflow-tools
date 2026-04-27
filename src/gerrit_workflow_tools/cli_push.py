@@ -44,8 +44,7 @@ from gerrit_workflow_tools.core.config import (
     set_branch_config,
 )
 from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details, norm_change_id
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
-from gerrit_workflow_tools.core.gerrit_url import resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
