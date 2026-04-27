@@ -18,7 +18,6 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_log import _extra_detail_lines, _primary_line, _url_line
 from gerrit_workflow_tools.cli_style import (
-    ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
     ANSI_YELLOW,
@@ -301,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
 
     if unresolved_rows:
         print()
-        print(color_text("Unresolved comments", f"{ANSI_BOLD}{ANSI_CYAN}") + color_text(":", ANSI_DIM))
+        print(color_text("Unresolved comments:", ANSI_YELLOW))
         for path, line, c in unresolved_rows:
             raw_msg = c.get("message")
             msg = raw_msg if isinstance(raw_msg, str) else ""
