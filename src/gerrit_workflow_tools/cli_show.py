@@ -248,15 +248,13 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         for path, line, c in unresolved_rows:
             raw_msg = c.get("message")
             msg = raw_msg if isinstance(raw_msg, str) else ""
-            body, truncated = _apply_comment_tail(msg, tail_n, full=args.full)
             raw_cid = c.get("id")
             cmt_id = raw_cid if isinstance(raw_cid, str) else None
             comment_payload.append(
                 {
                     "path": path,
                     "line": line,
-                    "body": body,
-                    "truncated": truncated,
+                    "message": msg,
                     "url": gerrit_inline_comment_url(commit.gerrit_url, cmt_id),
                 }
             )
