@@ -9,6 +9,7 @@ import pytest
 
 from tests.fixtures import (
     configure_gerrit_target,
+    make_gcid_cli_repo,
     make_repo_duplicate_change_id,
     make_repo_malformed_cid,
     make_stack_repo,
@@ -40,6 +41,19 @@ def _malformed_cid_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Pa
     root = tmp_path_factory.mktemp("tpl_malformed")
     make_repo_malformed_cid(root / "repo")
     return root / "repo"
+
+
+@pytest.fixture(scope="session")
+def _gcid_cli_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("tpl_gcid_cli")
+    make_gcid_cli_repo(root / "repo")
+    return root / "repo"
+
+
+@pytest.fixture
+def gcid_cli_repo(tmp_path: Path, _gcid_cli_repo_template: Path) -> Path:
+    """Isolated copy of a small repo with three predictable Change-Ids (see ``GCID_CLI_CHANGE_IDS``)."""
+    return _copy_git_repo(_gcid_cli_repo_template, tmp_path / "gcid_cli")
 
 
 @pytest.fixture

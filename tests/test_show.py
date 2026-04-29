@@ -145,7 +145,8 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
     assert "awaiting-review" in data["attention_reasons"]
 
 
-def test_gshow_comment_tail_in_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--comment-tail-lines only affects text mode; JSON always has the full message."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -181,9 +182,10 @@ def test_gshow_comment_tail_in_json(stack_repo: Path, monkeypatch: pytest.Monkey
         )
     assert code == 0
     data = json_stdout(out)
-    assert data["comments"][0]["truncated"] is True
-    assert "lines omitted above" in data["comments"][0]["body"]
-    assert "line14" in data["comments"][0]["body"]
+    c0 = data["comments"][0]
+    assert c0["message"] == long_msg
+    assert "line0" in c0["message"] and "line14" in c0["message"]
+    assert "lines omitted above" not in c0["message"]
     assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
 
 
@@ -223,9 +225,9 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
         )
     assert code == 0
     data = json_stdout(out)
-    assert data["comments"][0]["truncated"] is False
-    assert "line0" in data["comments"][0]["body"]
-    assert "line14" in data["comments"][0]["body"]
+    c0 = data["comments"][0]
+    assert c0["message"] == long_msg
+    assert "line0" in c0["message"] and "line14" in c0["message"]
     assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
 
 

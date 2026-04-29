@@ -5,8 +5,6 @@ import logging
 import sys
 from pathlib import Path
 
-import pytest
-
 from gerrit_workflow_tools.cli_changeid import (
     CHANGE_ID_RE,
     _parse_sha_body_rs,
@@ -16,24 +14,13 @@ from gerrit_workflow_tools.cli_changeid import (
 from gerrit_workflow_tools.cli_changeid import (
     main as gcid_main,
 )
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
-from tests.fixtures import _cid
+from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid
 
-# Bundled repo with real history and Gerrit-style Change-Ids on the last line.
-_GIT_GRAPH_REPO = Path(__file__).resolve().parent.parent / "test-git-graph-repo"
-
-# Known SHAs and Change-Ids from test-git-graph-repo (branch change-105, tip at time of fixture).
-_HEAD_SHA = "f8078f8bf03263d27dfa6010611e2caab459c6a0"
-_HEAD_CID = "Ief8fa7cdbbc0dbb47127eb3e2f3c8cb82a9fa97b"
-_PARENT_CID = "If7a5c187870e6b26109b6ab380a97b26dcee949e"
-
-
-@pytest.fixture(scope="module")
-def git_graph_repo() -> Path:
-    if not (_GIT_GRAPH_REPO / ".git").is_dir():
-        pytest.skip(f"missing bundled repo: {_GIT_GRAPH_REPO}")
-    return _GIT_GRAPH_REPO
+# Tip / parent Change-Ids for :func:`tests.fixtures.make_gcid_cli_repo` (newest first in ``git log`` ranges).
+_HEAD_CID = GCID_CLI_CHANGE_IDS[2]
+_PARENT_CID = GCID_CLI_CHANGE_IDS[1]
 
 
 def _make_repo_no_change_id_footer(path: Path) -> Path:
@@ -137,34 +124,35 @@ def test_change_id_regex_full_line():
     assert m.group(1) == "I" + "d" * 40
 
 
-def test_gcid_help(git_graph_repo, monkeypatch):
-    code, out, _err = run_cli(git_graph_repo, gcid_main, ["--help"], monkeypatch, catch_sys_exit=True)
+def test_gcid_help(gcid_cli_repo, monkeypatch):
+    code, out, _err = run_cli(gcid_cli_repo, gcid_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "REV_OR_RANGE" in out
 
 
-# --- CLI: test-git-graph-repo ---
+# --- CLI: synthetic three-commit repo (``gcid_cli_repo``) ---
 
 
-def test_gcid_defaults_to_head(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(git_graph_repo, gcid_main, [], monkeypatch)
+def test_gcid_defaults_to_head(gcid_cli_repo, monkeypatch):
+    code, out, err = run_cli(gcid_cli_repo, gcid_main, [], monkeypatch)
     assert code == 0
     assert err == ""
     assert out.strip() == _HEAD_CID
 
 
-def test_gcid_explicit_sha(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(git_graph_repo, gcid_main, [_HEAD_SHA], monkeypatch)
+def test_gcid_explicit_sha(gcid_cli_repo, monkeypatch):
+    head_sha = git_out("rev-parse", "HEAD", cwd=gcid_cli_repo)
+    code, out, err = run_cli(gcid_cli_repo, gcid_main, [head_sha], monkeypatch)
     assert code == 0
     assert out.strip() == _HEAD_CID
     assert err == ""
 
 
-def test_gcid_range_two_commits_order(git_graph_repo, monkeypatch):
+def test_gcid_range_two_commits_order(gcid_cli_repo, monkeypatch):
     code, out, err = run_cli(
-        git_graph_repo,
+        gcid_cli_repo,
         gcid_main,
-        [f"{_HEAD_SHA}~2..{_HEAD_SHA}"],
+        ["HEAD~2..HEAD"],
         monkeypatch,
     )
     assert code == 0
@@ -173,28 +161,28 @@ def test_gcid_range_two_commits_order(git_graph_repo, monkeypatch):
     assert lines == [_HEAD_CID, _PARENT_CID]
 
 
-def test_gcid_single_commit_range_syntax(git_graph_repo, monkeypatch):
+def test_gcid_single_commit_range_syntax(gcid_cli_repo, monkeypatch):
     """HEAD~1..HEAD is one commit; still uses range mode (.. present)."""
     code, out, _err = run_cli(
-        git_graph_repo,
+        gcid_cli_repo,
         gcid_main,
-        [f"{_HEAD_SHA}~1..{_HEAD_SHA}"],
+        ["HEAD~1..HEAD"],
         monkeypatch,
     )
     assert code == 0
     assert out.strip() == _HEAD_CID
 
 
-def test_gcid_passthrough_change_id_no_git(git_graph_repo, monkeypatch):
-    code, out, err = run_cli(git_graph_repo, gcid_main, [_HEAD_CID], monkeypatch)
+def test_gcid_passthrough_change_id_no_git(gcid_cli_repo, monkeypatch):
+    code, out, err = run_cli(gcid_cli_repo, gcid_main, [_HEAD_CID], monkeypatch)
     assert code == 0
     assert out.strip() == _HEAD_CID
     assert err == ""
 
 
-def test_gcid_invalid_ref(git_graph_repo, monkeypatch):
+def test_gcid_invalid_ref(gcid_cli_repo, monkeypatch):
     code, out, err = run_cli(
-        git_graph_repo,
+        gcid_cli_repo,
         gcid_main,
         ["not-a-valid-ref-99999999"],
         monkeypatch,
@@ -204,13 +192,13 @@ def test_gcid_invalid_ref(git_graph_repo, monkeypatch):
     assert "git" in err.lower() or "unknown" in err.lower() or err.strip()
 
 
-def test_gcid_verbose(git_graph_repo, monkeypatch):
-    code, out, _err = run_cli(git_graph_repo, gcid_main, ["--debug-log", "HEAD"], monkeypatch)
+def test_gcid_verbose(gcid_cli_repo, monkeypatch):
+    code, out, _err = run_cli(gcid_cli_repo, gcid_main, ["--debug-log", "HEAD"], monkeypatch)
     assert code == 0
     assert _HEAD_CID in out
 
 
-def test_gcid_vv_logs_git_subprocess(git_graph_repo, monkeypatch):
+def test_gcid_vv_logs_git_subprocess(gcid_cli_repo, monkeypatch):
     """With --debug-log, git_run logs each subprocess at DEBUG on the package logger (propagate=False)."""
     buf = io.StringIO()
     extra = logging.StreamHandler(buf)
@@ -219,7 +207,7 @@ def test_gcid_vv_logs_git_subprocess(git_graph_repo, monkeypatch):
     pkg.addHandler(extra)
     pkg.setLevel(logging.DEBUG)
     try:
-        monkeypatch.chdir(git_graph_repo)
+        monkeypatch.chdir(gcid_cli_repo)
         out_buf = io.StringIO()
         monkeypatch.setattr(sys, "stdout", out_buf)
         monkeypatch.setattr(sys, "stderr", io.StringIO())
@@ -323,9 +311,9 @@ def test_gcid_malformed_change_id_last_line_exits_1(tmp_path, monkeypatch):
     assert "no Change-Id" in err
 
 
-def test_gcid_string_that_is_not_change_id_tries_git(git_graph_repo, monkeypatch):
+def test_gcid_string_that_is_not_change_id_tries_git(gcid_cli_repo, monkeypatch):
     """Too-short I… is not passthrough; git log fails for unknown object."""
     bad = "I" + "a" * 39
-    code, out, _err = run_cli(git_graph_repo, gcid_main, [bad], monkeypatch)
+    code, out, _err = run_cli(gcid_cli_repo, gcid_main, [bad], monkeypatch)
     assert code == 1
     assert out == ""

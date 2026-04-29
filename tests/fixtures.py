@@ -12,6 +12,31 @@ def _cid(seed: str) -> str:
     return "I" + (seed * 40)[:40]
 
 
+# Commits built by :func:`make_gcid_cli_repo` (root .. tip).
+GCID_CLI_CHANGE_IDS = (_cid("a"), _cid("b"), _cid("c"))
+
+
+def make_gcid_cli_repo(path: Path) -> Path:
+    """Three linear commits on ``main``, each with a distinct Change-Id (``gcid`` CLI tests)."""
+    path.mkdir(parents=True, exist_ok=True)
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    git("init", "-b", "main", cwd=path, env=env)
+    for msg, cid, fname in (
+        ("gcid base", GCID_CLI_CHANGE_IDS[0], "g1.txt"),
+        ("gcid middle", GCID_CLI_CHANGE_IDS[1], "g2.txt"),
+        ("gcid tip", GCID_CLI_CHANGE_IDS[2], "g3.txt"),
+    ):
+        (path / fname).write_text(f"{fname}\n", encoding="utf-8")
+        git("add", fname, cwd=path, env=env)
+        git("commit", "-m", f"{msg}\n\nChange-Id: {cid}", cwd=path, env=env)
+    return path
+
+
 def make_stack_repo(path: Path) -> Path:
     """
     main + feature branch with 4 commits; commit 3 matches ^test!.

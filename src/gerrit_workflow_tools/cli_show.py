@@ -244,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     unresolved_rows = _collect_unresolved_comments(file_map)
 
     if args.json_:
+        # Human output honors --comment-tail-lines / --full; JSON always emits full text.
         comment_payload: list[dict[str, Any]] = []
         for path, line, c in unresolved_rows:
             raw_msg = c.get("message")
