@@ -555,6 +555,101 @@ def test_gpush_update_last_pushed_flag_enables_when_config_false(
     assert git_out("rev-parse", "lastPush/feature", cwd=stack_repo) == expected_tip
 
 
+def _make_merge_branch_repo(tmp_path: Path) -> Path:
+    """
+    Build a repo where a side branch has been merged into a feature branch.
+
+    Topology (oldest → newest):
+
+        main:    base
+        side:    base → S1 → S2          (branched from main)
+        feature: base → local → merge-M  (merge-M merges S2 into local)
+
+    feature tracks main.  ``compute_ready`` should list only the two
+    first-parent commits on feature (local + merge-M), not S1/S2.
+    """
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    repo = tmp_path / "r"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo, env=env)
+    (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    git("add", "base.txt", cwd=repo, env=env)
+    git("commit", "-m", "base\n\nChange-Id: I" + "0" * 40, cwd=repo, env=env)
+
+    # feature branch with one local commit
+    git("checkout", "-b", "feature", cwd=repo, env=env)
+    git("branch", "--set-upstream-to", "main", "feature", cwd=repo, env=env, check=False)
+    (repo / "local.txt").write_text("local\n", encoding="utf-8")
+    git("add", "local.txt", cwd=repo, env=env)
+    git("commit", "-m", "local work\n\nChange-Id: I" + "1" * 40, cwd=repo, env=env)
+
+    # side branch with two commits (not on main or feature)
+    git("checkout", "main", cwd=repo, env=env)
+    git("checkout", "-b", "side", cwd=repo, env=env)
+    for i, fname in enumerate(["s1.txt", "s2.txt"], 1):
+        (repo / fname).write_text(f"side{i}\n", encoding="utf-8")
+        git("add", fname, cwd=repo, env=env)
+        git("commit", "-m", f"side commit {i}\n\nChange-Id: I{str(i + 1) * 40}", cwd=repo, env=env)
+
+    # merge side into feature
+    git("checkout", "feature", cwd=repo, env=env)
+    git(
+        "merge",
+        "--no-ff",
+        "-m",
+        "Merge side branch\n\nChange-Id: I" + "4" * 40,
+        "side",
+        cwd=repo,
+        env=env,
+    )
+    configure_gerrit_target(repo, "main")
+    return repo
+
+
+def test_compute_ready_with_merged_side_branch_counts_only_first_parent_commits(
+    tmp_path: Path,
+) -> None:
+    """
+    Regression: merging a side branch must not bloat the push commit list.
+
+    The push range should contain only the first-parent commits on the feature
+    branch (local work + merge commit = 2), not the side-branch commits (S1,
+    S2) that are reachable via the merge commit's second parent.
+    """
+    repo = _make_merge_branch_repo(tmp_path)
+    result = compute_ready(repo, all_commits=True)
+    # Currently FAILS: without --first-parent, git log also traverses the
+    # second parent of the merge commit, yielding 4 commits (local + S1 + S2 +
+    # merge) instead of the correct 2 (local + merge).
+    assert result.pushable_count == 2, (
+        f"expected 2 first-parent commits (local work + merge), got {result.pushable_count}"
+    )
+
+
+def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Regression: the push preview must not list side-branch commits.
+
+    Only the two first-parent commits (local work + merge commit) should
+    appear in the 'About to push commits:' output.
+    """
+    repo = _make_merge_branch_repo(tmp_path)
+    code, out, err = run_cli(repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
+    assert code == 0, (out, err)
+    assert "local work" in out
+    assert "Merge side branch" in out
+    assert "side commit 1" not in out
+    assert "side commit 2" not in out
+
+
 def _add_self_origin_and_fetch(repo: Path) -> None:
     git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
     git("fetch", "origin", cwd=repo)

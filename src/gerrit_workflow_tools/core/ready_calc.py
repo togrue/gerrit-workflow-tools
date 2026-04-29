@@ -57,7 +57,7 @@ def compute_ready(
     _fork, _display, target_tip = merge_base_with_target(cwd, branch)
     raw_patterns = stop_patterns(cwd)
     patterns = _filter_patterns(raw_patterns, ignore_exact=list(ignore_patterns or []))
-    rows = commits_in_range(cwd, f"{target_tip}..HEAD")
+    rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
     shas = [r.sha for r in rows]
     subjects = [r.subject for r in rows]
     logger.debug(

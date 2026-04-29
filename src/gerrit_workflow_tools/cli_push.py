@@ -198,7 +198,7 @@ def _commit_lines_for_preview(
     """
     if not r.push_range:
         return []
-    rows = commits_in_range(cwd, r.push_range)
+    rows = commits_in_range(cwd, r.push_range, first_parent=True)
     details_by_cid: dict[str, dict[str, object]] | None = None
     if show_attributes:
         ids: list[str] = []

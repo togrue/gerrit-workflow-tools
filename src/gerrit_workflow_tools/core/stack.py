@@ -181,17 +181,22 @@ def _parse_rs_metadata_records(stdout: str) -> list[Commit]:
 def commits_in_range(
     cwd: Path | str | None,
     rev_range: str,
+    *,
+    first_parent: bool = False,
 ) -> list[Commit]:
     """
     Oldest-first commits in *rev_range* (e.g. ``upstream_tip..HEAD``).
 
-    One ``git log`` call.
+    One ``git log`` call.  Pass *first_parent=True* to restrict traversal to
+    first-parent edges only (i.e. ignore commits reachable via merge parents).
     """
     # Git expands %x1e to ASCII RS; keeps argv free of NUL (required on Windows).
     fmt = "%H%x1e%h%x1e%s%x1e%B%x1e"
+    extra: list[str] = ["--first-parent"] if first_parent else []
     p = git(
         "log",
         "--reverse",
+        *extra,
         rev_range,
         f"--format={fmt}",
         cwd=cwd,
