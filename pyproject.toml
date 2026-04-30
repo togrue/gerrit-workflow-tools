@@ -59,6 +59,14 @@ explicit_package_bases = true
 mypy_path = "src"
 packages = ["gerrit_workflow_tools"]
 
+[[tool.mypy.overrides]]
+module = "prompt_toolkit.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "prompt_toolkit"
+ignore_missing_imports = true
+
 [tool.pylint."MAIN"]
 ignore-paths = [
     "^tests/.*$",

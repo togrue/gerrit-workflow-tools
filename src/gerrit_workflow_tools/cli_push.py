@@ -8,7 +8,12 @@ import logging
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+
+from prompt_toolkit import prompt as ptk_prompt
+from prompt_toolkit.history import FileHistory
 
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
@@ -53,6 +58,8 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
 
+ReviewerStrategy = Literal["push", "lazy", "overwrite"]
+
 _REBASE_ONTO_REMOTE_HINT = (
     "Hint: run `ger restack --onto-remote` to replay your commits on top of the latest target branch."
 )
@@ -70,7 +77,11 @@ def _merge_reviewers(
     *,
     interactive: str | None = None,
 ) -> list[str]:
-    """Merge branch config, ``--reviewers``, then optional ``-i`` input; dedupe preserving order."""
+    """Merge branch config, ``--reviewers``, then optional ``-i`` input; dedupe preserving order.
+
+    TODO(reviewer-merge-cleanup): replace merge semantics with overwrite-only resolution so this
+    matches the interactive ``r`` subflow and ``--reviewers`` expectations.
+    """
     segments = []
     cfg = branch_gerrit_reviewers(cwd, branch)
     if cfg:
@@ -168,11 +179,193 @@ def _prompt_save_reviewers() -> bool:
     return ans in ("y", "yes")
 
 
-def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str]) -> str:
+def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str], strategy: ReviewerStrategy) -> str:
     ref = f"{tip}:refs/for/{push_branch}"
-    for r in reviewers:
-        ref += f"%r={r}"
+    if strategy == "push":
+        for r in reviewers:
+            ref += f"%r={r}"
     return ref
+
+
+@dataclass
+class GerritPushReviewers:
+    """Effective reviewers and how to apply them for one ``ger push`` run."""
+
+    reviewers: list[str]
+    strategy: ReviewerStrategy
+
+
+def _parse_reviewers_comma_separated(raw: str) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in raw.split(","):
+        s = part.strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _reviewer_history_path() -> Path:
+    d = Path.home() / ".cache" / "ger"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "reviewer_line_history"
+
+
+def _prompt_reviewers_line_ptk() -> str:
+    return ptk_prompt(
+        "Reviewers (comma-separated): ",
+        history=FileHistory(str(_reviewer_history_path())),
+    )
+
+
+def _prompt_reviewer_strategy_interactive() -> ReviewerStrategy:
+    print("Reviewer assignment:")
+    print("  1. push      - attach as %r= on this git push")
+    print("  2. lazy       - after push: add reviewers only on changes that have none yet (REST)")
+    print("  3. overwrite  - after push: replace reviewers on every change in this stack (REST)")
+    while True:
+        raw = input("Choose 1-3 [1]: ").strip().lower()
+        if raw in ("", "1", "push"):
+            return "push"
+        if raw in ("2", "lazy"):
+            return "lazy"
+        if raw in ("3", "overwrite"):
+            return "overwrite"
+        print("  Enter 1, 2, or 3 (default: 1).", file=sys.stderr)
+
+
+def _strategy_status_label(strategy: ReviewerStrategy) -> str:
+    return {
+        "push": "push (git %r=)",
+        "lazy": "lazy (REST after push)",
+        "overwrite": "overwrite (REST after push)",
+    }[strategy]
+
+
+def _needs_rest_assignment(strategy: ReviewerStrategy, reviewers: list[str]) -> bool:
+    return strategy in ("lazy", "overwrite") and bool(reviewers)
+
+
+def _validate_rest_plan(cwd: Path, plan: GerritPushReviewers) -> str | None:
+    if not _needs_rest_assignment(plan.strategy, plan.reviewers):
+        return None
+    if not _gerrit_credentials_configured(cwd):
+        return (
+            "error: lazy/overwrite reviewer strategies need Gerrit REST; set gerrit.user and "
+            "gerrit.token (or gerrit.password)"
+        )
+    try:
+        resolve_gerrit_web_base(cwd)
+    except ValueError as e:
+        return f"error: {e}"
+    return None
+
+
+def _parse_gerrit_push_confirm(
+    raw: str,
+) -> Literal["push", "cancel", "reviewers", "invalid"]:
+    s = raw.strip().lower()
+    if s in ("n", "no"):
+        return "cancel"
+    if s in ("", "y", "yes"):
+        return "push"
+    if s in ("r", "reviewer", "reviewers"):
+        return "reviewers"
+    return "invalid"
+
+
+def _prompt_gerrit_push_confirm_action() -> Literal["push", "cancel", "reviewers"]:
+    while True:
+        raw = input("Do you want to push these commits? [Y/n/r]: ")
+        act = _parse_gerrit_push_confirm(raw)
+        if act == "invalid":
+            print(
+                "  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
+                file=sys.stderr,
+            )
+            continue
+        return act
+
+
+def _reviewer_account_ids_reviewer_and_cc(detail: dict[str, object]) -> list[int]:
+    out: list[int] = []
+    revs = detail.get("reviewers")
+    if not isinstance(revs, list):
+        return out
+    for entry in revs:
+        if not isinstance(entry, dict):
+            continue
+        st = entry.get("state")
+        if st not in ("REVIEWER", "CC"):
+            continue
+        acc = entry.get("account")
+        if isinstance(acc, dict):
+            aid = acc.get("_account_id")
+            if isinstance(aid, int):
+                out.append(aid)
+    return out
+
+
+def _stack_change_ids_ordered(cwd: Path, r: ReadyResult, first_parent: bool) -> list[str]:
+    if not r.push_range:
+        return []
+    rows = commits_in_range(cwd, r.push_range, first_parent=first_parent)
+    out: list[str] = []
+    seen: set[str] = set()
+    for c in rows:
+        if not c.change_id:
+            continue
+        nid = norm_change_id(c.change_id)
+        if nid not in seen:
+            seen.add(nid)
+            out.append(nid)
+    return out
+
+
+def _apply_reviewer_strategy_after_push(
+    cwd: Path,
+    client: GerritClient,
+    strategy: ReviewerStrategy,
+    reviewers: list[str],
+    r: ReadyResult,
+    first_parent: bool,
+) -> int:
+    """Return 0 on success, non-zero if a required REST step failed."""
+    if strategy == "push" or not reviewers:
+        return 0
+    for cid in _stack_change_ids_ordered(cwd, r, first_parent):
+        try:
+            detail = client.get_change(cid)
+        except GerritApiError as e:
+            print(f"error: could not load change {cid}: {e}", file=sys.stderr)
+            return 1
+        if strategy == "lazy":
+            if _reviewer_accounts_from_change_info(detail):
+                continue
+            for name in reviewers:
+                try:
+                    client.add_reviewer(cid, name)
+                except GerritApiError as e:
+                    print(f"error: could not add reviewer {name!r} on {cid}: {e}", file=sys.stderr)
+                    return 1
+        elif strategy == "overwrite":
+            for aid in _reviewer_account_ids_reviewer_and_cc(detail):
+                try:
+                    client.delete_reviewer(cid, aid)
+                except GerritApiError as e:
+                    if getattr(e, "status", None) != 404:
+                        print(
+                            f"warning: could not remove reviewer account {aid} on {cid}: {e}",
+                            file=sys.stderr,
+                        )
+            for name in reviewers:
+                try:
+                    client.add_reviewer(cid, name)
+                except GerritApiError as e:
+                    print(f"error: could not add reviewer {name!r} on {cid}: {e}", file=sys.stderr)
+                    return 1
+    return 0
 
 
 # pylint: disable=too-many-locals
@@ -328,6 +521,8 @@ def _print_gpush_confirm_status_line(
     local_branch: str,
     gerrit_target: str,
     reviewers: list[str],
+    *,
+    strategy: ReviewerStrategy | None = None,
 ) -> None:
     """One-line summary in ``ger branch show`` colors before the push confirmation prompt."""
     branch_v = color_text(local_branch, f"{ANSI_BOLD}{ANSI_CYAN}")
@@ -341,6 +536,9 @@ def _print_gpush_confirm_status_line(
         f"{sep}"
         f"{color_text('Reviewers', ANSI_DIM)} {rev_v}"
     )
+    if strategy is not None:
+        strat_v = color_text(_strategy_status_label(strategy), ANSI_DIM)
+        line += f"{sep}{color_text('Assignment', ANSI_DIM)} {strat_v}"
     print(line)
 
 
@@ -470,6 +668,15 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         metavar="ACCOUNTS",
         help="Comma-separated Gerrit reviewer accounts (repeat to merge). Appended as ref options %%r=…",
     )
+    p.add_argument(
+        "--reviewer-strategy",
+        choices=["push", "lazy", "overwrite"],
+        default=None,
+        help=(
+            "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
+            "overwrite (REST: replace on each change). Requires credentials for lazy/overwrite."
+        ),
+    )
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands and push steps to stderr.",
@@ -493,7 +700,8 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
 
     logger.debug(
         "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s show_attributes=%s "
-        "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s follow_merges=%s",
+        "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s follow_merges=%s "
+        "reviewer_strategy=%s",
         cwd,
         args.dry_run,
         args.yes,
@@ -505,6 +713,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         remote_policy,
         args.no_rebase_check,
         args.follow_merges,
+        args.reviewer_strategy,
     )
 
     if args.i and args.yes:
@@ -581,6 +790,11 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         else:
             reviewers = _merge_reviewers(cwd, b, list(args.reviewers))
 
+        plan = GerritPushReviewers(
+            reviewers=list(reviewers),
+            strategy=(args.reviewer_strategy or "push"),
+        )
+
         r = compute_ready(
             cwd,
             branch=None,
@@ -614,60 +828,89 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             print("error: nothing to push (empty ready prefix)", file=sys.stderr)
             return 1
 
-        refspec = _refs_for_spec(tip, push_branch, reviewers)
-        cmd = ["git", "push", remote, refspec]
-        logger.debug(
-            "gpush resolved: remote=%r gerrit_target=%r push_branch=%r reviewers=%s refspec=%r",
-            remote,
-            target,
-            push_branch,
-            reviewers,
-            refspec,
-        )
+        cmd: list[str] = []
+        while True:
+            refspec = _refs_for_spec(tip, push_branch, plan.reviewers, plan.strategy)
+            cmd = ["git", "push", remote, refspec]
+            logger.debug(
+                "gpush resolved: remote=%r gerrit_target=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
+                remote,
+                target,
+                push_branch,
+                plan.reviewers,
+                plan.strategy,
+                refspec,
+            )
 
-        try:
-            commit_lines = _commit_lines_for_preview(
+            try:
+                commit_lines = _commit_lines_for_preview(
+                    cwd,
+                    r,
+                    summary_highlighter=summary_highlighter,
+                    show_attributes=show_attributes,
+                    merged_reviewers=plan.reviewers,
+                    first_parent=fp,
+                )
+            except ValueError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+            except GerritApiError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+
+            _print_gpush_preview(
                 cwd,
+                cmd,
                 r,
+                commit_lines,
                 summary_highlighter=summary_highlighter,
-                show_attributes=show_attributes,
-                merged_reviewers=reviewers,
-                first_parent=fp,
+                show_push_command=True,
             )
-        except ValueError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        except GerritApiError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
 
-        _print_gpush_preview(
-            cwd,
-            cmd,
-            r,
-            commit_lines,
-            summary_highlighter=summary_highlighter,
-            show_push_command=True,
-        )
+            if args.dry_run:
+                if _needs_rest_assignment(plan.strategy, plan.reviewers):
+                    print(
+                        "[dry-run] after a successful push would apply reviewers via "
+                        f"{plan.strategy} ({_strategy_status_label(plan.strategy)})",
+                        file=sys.stderr,
+                    )
+                print("[dry-run] not executing push", file=sys.stderr)
+                return 0
 
-        if args.dry_run:
-            print("[dry-run] not executing push", file=sys.stderr)
-            return 0
+            if not sys.stdin.isatty() and not args.yes:
+                print(
+                    "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
+                    file=sys.stderr,
+                )
+                return 1
 
-        if not sys.stdin.isatty() and not args.yes:
-            print(
-                "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
-                file=sys.stderr,
-            )
-            return 1
+            if args.yes:
+                err = _validate_rest_plan(cwd, plan)
+                if err:
+                    print(err, file=sys.stderr)
+                    return 1
+                break
 
-        if not args.yes:
             print()
-            _print_gpush_confirm_status_line(b, push_branch, reviewers)
+            _print_gpush_confirm_status_line(b, push_branch, plan.reviewers, strategy=plan.strategy)
             print()
-            if not _confirm_push_interactive():
+            act = _prompt_gerrit_push_confirm_action()
+            if act == "cancel":
                 print("Push cancelled.", file=sys.stderr)
                 return 0
+            if act == "reviewers":
+                line = _prompt_reviewers_line_ptk().strip()
+                if not line:
+                    print("No reviewers entered; nothing changed.")
+                    continue
+                plan.reviewers = _parse_reviewers_comma_separated(line)
+                plan.strategy = _prompt_reviewer_strategy_interactive()
+                continue
+            err = _validate_rest_plan(cwd, plan)
+            if err:
+                print(err, file=sys.stderr)
+                continue
+            break
 
         logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
         proc = _run_git_push(cmd, cwd)
@@ -675,13 +918,32 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             "gpush push finished: rc=%s (push output is not captured; see terminal)",
             proc.returncode,
         )
-        if proc.returncode == 0 and update_last_pushed:
+        if proc.returncode != 0:
+            return proc.returncode
+        if _needs_rest_assignment(plan.strategy, plan.reviewers):
+            try:
+                web_base = resolve_gerrit_web_base(cwd)
+            except ValueError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+            client = GerritClient(web_base, cwd=str(cwd))
+            rc_rest = _apply_reviewer_strategy_after_push(
+                cwd,
+                client,
+                plan.strategy,
+                plan.reviewers,
+                r,
+                fp,
+            )
+            if rc_rest != 0:
+                return rc_rest
+        if update_last_pushed:
             marker = f"lastPush/{b}"
             try:
                 git("branch", "-f", marker, tip, cwd=cwd)
             except GitError as e:
                 print(f"warning: could not update {marker}: {e}", file=sys.stderr)
-        return proc.returncode
+        return 0
     except GitError as e:
         return handle_git_error(e)
 

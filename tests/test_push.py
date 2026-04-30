@@ -28,7 +28,9 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "gpush" in out.lower() or "ger push" in out
     assert "--dry-run" in out
     assert "--reviewers" in out
-    assert "--reviewer" not in out.replace("--reviewers", "")
+    assert "--reviewer-strategy" in out
+    scrubbed = out.replace("--reviewers", "").replace("--reviewer-strategy", "")
+    assert "--reviewer" not in scrubbed
     assert "--ignore-pattern" in out
     assert "--update-last-pushed" in out
     assert "--no-update-last-pushed" in out
@@ -170,6 +172,7 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "main" in out[i_status:]
     assert "Reviewers" in out[i_status:]
     assert "(none)" in out[i_status:]
+    assert "Assignment" in out[i_status:]
     assert "cancel" in err.lower()
     mock_run.assert_not_called()
 
@@ -192,7 +195,7 @@ def test_gpush_prompt_preview_order_matches_expected(stack_repo: Path, monkeypat
     i_stop = out.index("Stopped at commit")
     i_remain = out.index("not-ready commit(s) remain unpushed")
     assert i_cmd < i_push < i_stop < i_remain
-    assert prompts == ["Do you want to push these commits? [Y/n]: "]
+    assert prompts == ["Do you want to push these commits? [Y/n/r]: "]
     assert "it matches the stop pattern" in out
     assert "git push" in out
     assert "cancel" in err.lower()
@@ -209,6 +212,31 @@ def test_gpush_reviewers_append_to_refspec(stack_repo: Path, monkeypatch: pytest
     assert code == 0
     assert "%r=alice" in out
     assert "%r=bob" in out
+
+
+def test_gpush_lazy_strategy_omits_refspec_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice", "--reviewer-strategy", "lazy"],
+        monkeypatch,
+    )
+    assert code == 0
+    assert "refs/for/main" in out
+    assert "%r=" not in out
+    assert "lazy (REST after push)" in err
+
+
+def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--yes", "--reviewer-strategy", "lazy", "--reviewers", "alice"],
+        monkeypatch,
+    )
+    assert code == 1
+    assert "REST" in err or "gerrit" in err.lower()
 
 
 def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
