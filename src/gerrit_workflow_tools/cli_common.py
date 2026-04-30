@@ -29,6 +29,20 @@ HELP_DEBUG_LOG = (
 )
 
 
+def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
+    """Register ``--follow-merges`` (used by commands that display a local stack)."""
+    parser.add_argument(
+        "--follow-merges",
+        action="store_true",
+        default=False,
+        help=(
+            "Traverse all commit parents (including merge commits) instead of "
+            "only the first-parent chain. By default only the first-parent chain "
+            "is shown, matching Gerrit's relation-chain semantics."
+        ),
+    )
+
+
 def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
     """Register ``--ignore-pattern`` (used by ``ger push``)."""
     parser.add_argument(

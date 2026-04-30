@@ -14,7 +14,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
-from tests.fixtures import configure_gerrit_target
+from tests.fixtures import configure_gerrit_target, make_repo_with_merged_side_branch
 
 
 def _ref_exists(repo: Path, ref: str) -> bool:
@@ -34,6 +34,7 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--no-update-last-pushed" in out
     assert "--no-rebase-check" in out
     assert "-i" in out
+    assert "--follow-merges" in out
 
 
 def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch):
@@ -556,59 +557,8 @@ def test_gpush_update_last_pushed_flag_enables_when_config_false(
 
 
 def _make_merge_branch_repo(tmp_path: Path) -> Path:
-    """
-    Build a repo where a side branch has been merged into a feature branch.
-
-    Topology (oldest → newest):
-
-        main:    base
-        side:    base → S1 → S2          (branched from main)
-        feature: base → local → merge-M  (merge-M merges S2 into local)
-
-    feature tracks main.  ``compute_ready`` should list only the two
-    first-parent commits on feature (local + merge-M), not S1/S2.
-    """
-    env = {
-        "GIT_AUTHOR_NAME": "Test",
-        "GIT_AUTHOR_EMAIL": "test@example.com",
-        "GIT_COMMITTER_NAME": "Test",
-        "GIT_COMMITTER_EMAIL": "test@example.com",
-    }
-    repo = tmp_path / "r"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo, env=env)
-    (repo / "base.txt").write_text("base\n", encoding="utf-8")
-    git("add", "base.txt", cwd=repo, env=env)
-    git("commit", "-m", "base\n\nChange-Id: I" + "0" * 40, cwd=repo, env=env)
-
-    # feature branch with one local commit
-    git("checkout", "-b", "feature", cwd=repo, env=env)
-    git("branch", "--set-upstream-to", "main", "feature", cwd=repo, env=env, check=False)
-    (repo / "local.txt").write_text("local\n", encoding="utf-8")
-    git("add", "local.txt", cwd=repo, env=env)
-    git("commit", "-m", "local work\n\nChange-Id: I" + "1" * 40, cwd=repo, env=env)
-
-    # side branch with two commits (not on main or feature)
-    git("checkout", "main", cwd=repo, env=env)
-    git("checkout", "-b", "side", cwd=repo, env=env)
-    for i, fname in enumerate(["s1.txt", "s2.txt"], 1):
-        (repo / fname).write_text(f"side{i}\n", encoding="utf-8")
-        git("add", fname, cwd=repo, env=env)
-        git("commit", "-m", f"side commit {i}\n\nChange-Id: I{str(i + 1) * 40}", cwd=repo, env=env)
-
-    # merge side into feature
-    git("checkout", "feature", cwd=repo, env=env)
-    git(
-        "merge",
-        "--no-ff",
-        "-m",
-        "Merge side branch\n\nChange-Id: I" + "4" * 40,
-        "side",
-        cwd=repo,
-        env=env,
-    )
-    configure_gerrit_target(repo, "main")
-    return repo
+    """Thin wrapper around the shared fixture helper (see ``fixtures.make_repo_with_merged_side_branch``)."""
+    return make_repo_with_merged_side_branch(tmp_path / "r")
 
 
 def test_compute_ready_with_merged_side_branch_counts_only_first_parent_commits(
@@ -648,6 +598,30 @@ def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
     assert "Merge side branch" in out
     assert "side commit 1" not in out
     assert "side commit 2" not in out
+
+
+def test_compute_ready_follow_merges_restores_all_parents_count(tmp_path: Path) -> None:
+    """
+    ``--follow-merges`` (first_parent=False) must restore the full-DAG count.
+
+    With ``first_parent=False``, ``compute_ready`` traverses both parents of the
+    merge commit and returns 4 commits (local + S1 + S2 + merge-M).
+    """
+    repo = _make_merge_branch_repo(tmp_path)
+    result = compute_ready(repo, all_commits=True, first_parent=False)
+    assert result.pushable_count == 4, f"expected 4 commits with full-DAG traversal, got {result.pushable_count}"
+
+
+def test_gpush_follow_merges_flag_lists_side_branch_commits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--follow-merges`` must re-include side-branch commits in the push preview."""
+    repo = _make_merge_branch_repo(tmp_path)
+    code, out, err = run_cli(repo, gpush_main, ["--dry-run", "--all", "--follow-merges"], monkeypatch)
+    assert code == 0, (out, err)
+    assert "side commit 1" in out
+    assert "side commit 2" in out
 
 
 def _add_self_origin_and_fetch(repo: Path) -> None:

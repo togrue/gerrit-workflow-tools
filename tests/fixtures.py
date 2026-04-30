@@ -123,6 +123,59 @@ def make_repo_malformed_cid(path: Path) -> Path:
     return path
 
 
+def make_repo_with_merged_side_branch(path: Path) -> Path:
+    """
+    Build a repo where a side branch has been merged into a feature branch.
+
+    Topology (oldest → newest)::
+
+        main:    base
+        side:    base → S1 → S2          (branched from main)
+        feature: base → local → merge-M  (merge-M merges S2 into local)
+
+    ``feature`` tracks ``main``.  Callers can use this to verify that
+    first-parent traversal returns only ``{local, merge-M}`` (2 commits)
+    while full-DAG traversal returns ``{local, S1, S2, merge-M}`` (4 commits).
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    git("init", "-b", "main", cwd=path, env=env)
+    (path / "base.txt").write_text("base\n", encoding="utf-8")
+    git("add", "base.txt", cwd=path, env=env)
+    git("commit", "-m", "base\n\nChange-Id: I" + "0" * 40, cwd=path, env=env)
+
+    git("checkout", "-b", "feature", cwd=path, env=env)
+    git("branch", "--set-upstream-to", "main", "feature", cwd=path, env=env, check=False)
+    (path / "local.txt").write_text("local\n", encoding="utf-8")
+    git("add", "local.txt", cwd=path, env=env)
+    git("commit", "-m", "local work\n\nChange-Id: I" + "1" * 40, cwd=path, env=env)
+
+    git("checkout", "main", cwd=path, env=env)
+    git("checkout", "-b", "side", cwd=path, env=env)
+    for i, fname in enumerate(["s1.txt", "s2.txt"], 1):
+        (path / fname).write_text(f"side{i}\n", encoding="utf-8")
+        git("add", fname, cwd=path, env=env)
+        git("commit", "-m", f"side commit {i}\n\nChange-Id: I{str(i + 1) * 40}", cwd=path, env=env)
+
+    git("checkout", "feature", cwd=path, env=env)
+    git(
+        "merge",
+        "--no-ff",
+        "-m",
+        "Merge side branch\n\nChange-Id: I" + "4" * 40,
+        "side",
+        cwd=path,
+        env=env,
+    )
+    configure_gerrit_target(path, "main")
+    return path
+
+
 def configure_gerrit_target(path: Path, target: str = "main") -> None:
     from gerrit_workflow_tools.core.config import set_branch_config
     from gerrit_workflow_tools.core.git_run import git_out

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
+    add_follow_merges_args,
     add_stop_pattern_args,
     add_verbose_and_debug_log_args,
     handle_git_error,
@@ -182,6 +183,7 @@ def _commit_lines_for_preview(
     summary_highlighter: SummaryHighlighter,
     show_attributes: bool,
     merged_reviewers: list[str],
+    first_parent: bool = True,
 ) -> list[str]:
     """
     Generate a list of formatted commit lines for stack preview.
@@ -192,13 +194,14 @@ def _commit_lines_for_preview(
         summary_highlighter: SummaryHighlighter for commit subject highlighting.
         show_attributes: Whether to append reviewer/WIP/private attribute previews.
         merged_reviewers: Reviewers list to show for preview, overriding branch/CLI defaults.
+        first_parent: Restrict traversal to first-parent edges only.
 
     Returns:
         List of strings, each corresponding to a stack commit with optional attribute preview.
     """
     if not r.push_range:
         return []
-    rows = commits_in_range(cwd, r.push_range, first_parent=True)
+    rows = commits_in_range(cwd, r.push_range, first_parent=first_parent)
     details_by_cid: dict[str, dict[str, object]] | None = None
     if show_attributes:
         ids: list[str] = []
@@ -459,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     )
     add_color_args(p)
     add_stop_pattern_args(p)
+    add_follow_merges_args(p)
     p.add_argument(
         "--reviewers",
         action="append",
@@ -485,10 +489,11 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     update_last_pushed = (
         bool(args.update_last_pushed) or gdef["last_pushed_branch"]
     ) and not args.no_update_last_pushed
+    fp = not args.follow_merges
 
     logger.debug(
         "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s show_attributes=%s "
-        "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s",
+        "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s follow_merges=%s",
         cwd,
         args.dry_run,
         args.yes,
@@ -499,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         args.i,
         remote_policy,
         args.no_rebase_check,
+        args.follow_merges,
     )
 
     if args.i and args.yes:
@@ -581,6 +587,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             all_commits=args.all_,
             ignore_patterns=args.ignore_pattern or None,
             until=args.until,
+            first_parent=fp,
         )
         logger.debug(
             "gpush ready tip=%s range=%s boundary=%s",
@@ -590,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         )
 
         _fork, _, target_tip = merge_base_with_target(cwd)
-        rows = change_id_rows_for_range(cwd, target_tip)
+        rows = change_id_rows_for_range(cwd, target_tip, first_parent=fp)
         items = list(rows)
         _, cid_exit = classify_issues(items, strict=True)
         logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
@@ -625,6 +632,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
                 summary_highlighter=summary_highlighter,
                 show_attributes=show_attributes,
                 merged_reviewers=reviewers,
+                first_parent=fp,
             )
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)

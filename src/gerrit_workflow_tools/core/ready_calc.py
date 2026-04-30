@@ -52,12 +52,13 @@ def compute_ready(
     all_commits: bool = False,
     ignore_patterns: list[str] | None = None,
     until: str | None = None,
+    first_parent: bool = True,
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
     _fork, _display, target_tip = merge_base_with_target(cwd, branch)
     raw_patterns = stop_patterns(cwd)
     patterns = _filter_patterns(raw_patterns, ignore_exact=list(ignore_patterns or []))
-    rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
+    rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=first_parent)
     shas = [r.sha for r in rows]
     subjects = [r.subject for r in rows]
     logger.debug(
@@ -153,7 +154,8 @@ def change_id_rows_for_range(
     start_exclusive: str,
     *,
     head: str = "HEAD",
+    first_parent: bool = True,
 ) -> list[tuple[str, str, str | None]]:
     """Return ``(full_sha, short_sha, change_id)`` for each commit in ``start_exclusive..head``."""
-    meta = commits_in_range(cwd, f"{start_exclusive}..{head}")
+    meta = commits_in_range(cwd, f"{start_exclusive}..{head}", first_parent=first_parent)
     return [(c.sha, c.short_sha, c.change_id) for c in meta]

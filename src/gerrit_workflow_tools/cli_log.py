@@ -11,6 +11,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     add_color_args,
+    add_follow_merges_args,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
@@ -425,6 +426,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Does not enable diagnostic logging; use ``--debug-log`` for that."
         ),
     )
+    add_follow_merges_args(parser)
     parser.add_argument(
         "rev_range",
         nargs="?",
@@ -447,10 +449,12 @@ def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None
     return f"{target_tip}..HEAD", None
 
 
-def _load_commits_in_range(cwd: Path, rev_range: str) -> tuple[list[tuple[str, str, str, str | None]] | None, int]:
+def _load_commits_in_range(
+    cwd: Path, rev_range: str, *, first_parent: bool = True
+) -> tuple[list[tuple[str, str, str, str | None]] | None, int]:
     """Load local commits for Gerrit enrichment; return (commit_data, exit_code)."""
     try:
-        rows = commits_in_range(cwd, rev_range)
+        rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
         return None, 2
@@ -593,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
         return rev_range_exit
     assert rev_range is not None
 
-    commit_data, commit_data_exit = _load_commits_in_range(cwd, rev_range)
+    commit_data, commit_data_exit = _load_commits_in_range(cwd, rev_range, first_parent=not args.follow_merges)
     if commit_data is None:
         return commit_data_exit
 

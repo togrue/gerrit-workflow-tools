@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_log import _load_commits_in_range
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
@@ -16,6 +17,7 @@ from tests.cli_gerrit_mocks import (
     stack_rows_mb_to_head,
 )
 from tests.conftest import json_stdout, run_cli
+from tests.fixtures import make_repo_with_merged_side_branch
 
 
 def _configure_repo(repo: Path) -> None:
@@ -33,6 +35,7 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--show-change-id" in out
     assert "--show-url" in out
     assert "--verbose" in out or "-v" in out
+    assert "--follow-merges" in out
 
 
 @pytest.mark.parametrize(
@@ -244,3 +247,49 @@ def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.Monke
         code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch)
     assert code == 0, err
     assert "g.example" in out or "/+/" in out
+
+
+# ---------------------------------------------------------------------------
+# --follow-merges flag (first-parent / relation-chain semantics)
+# ---------------------------------------------------------------------------
+
+
+def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_path: Path) -> None:
+    """
+    By default ``_load_commits_in_range`` uses ``first_parent=True``, matching
+    Gerrit's relation-chain semantics.  Only the 2 first-parent commits are
+    returned; the 2 side-branch commits are excluded.
+    """
+    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    from gerrit_workflow_tools.core.stack import merge_base_with_target
+
+    _fork, _disp, target_tip = merge_base_with_target(repo)
+    rev_range = f"{target_tip}..HEAD"
+
+    commit_data, exit_code = _load_commits_in_range(repo, rev_range)
+    assert exit_code == -1  # success sentinel
+    assert commit_data is not None
+    subjects = [row[2] for row in commit_data]
+    assert len(subjects) == 2, f"expected 2 first-parent commits, got {len(subjects)}: {subjects}"
+    assert any("local work" in s for s in subjects)
+    assert any("Merge side branch" in s for s in subjects)
+    assert not any("side commit" in s for s in subjects)
+
+
+def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path) -> None:
+    """
+    With ``first_parent=False`` (i.e. ``--follow-merges``), all 4 commits are
+    returned including the 2 side-branch commits.
+    """
+    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    from gerrit_workflow_tools.core.stack import merge_base_with_target
+
+    _fork, _disp, target_tip = merge_base_with_target(repo)
+    rev_range = f"{target_tip}..HEAD"
+
+    commit_data, exit_code = _load_commits_in_range(repo, rev_range, first_parent=False)
+    assert exit_code == -1
+    assert commit_data is not None
+    subjects = [row[2] for row in commit_data]
+    assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"
+    assert sum(1 for s in subjects if "side commit" in s) == 2
