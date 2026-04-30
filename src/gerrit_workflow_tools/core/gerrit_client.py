@@ -53,21 +53,7 @@ class GerritClient:
         self.web_base = web_base.rstrip("/")
         self.cwd = cwd
 
-    def _request_json(
-        self,
-        path: str,
-        *,
-        params: dict[str, str] | list[tuple[str, str]] | None = None,
-    ) -> Any:
-        if params is None:
-            q = ""
-        elif isinstance(params, list):
-            q = f"?{urlencode(params, doseq=True)}"
-        else:
-            q = f"?{urlencode(params)}"
-        url = f"{self.web_base}/a/{path.lstrip('/')}{q}"
-        logger.info("GET %s", url)
-        # headers: dict[str, str] = {"Accept": "application/json"}
+    def _auth_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {"Accept": "*/*"}
         auth = _basic_auth_header(self.cwd)
         if auth:
@@ -76,10 +62,36 @@ class GerritClient:
             raise GerritApiError(
                 "missing Gerrit credentials in git config; set gerrit.user and gerrit.password (or gerrit.token)"
             )
-        req = Request(url, headers=headers, method="GET")
+        return headers
+
+    def _url(self, path: str, *, params: dict[str, str] | list[tuple[str, str]] | None) -> str:
+        if params is None:
+            q = ""
+        elif isinstance(params, list):
+            q = f"?{urlencode(params, doseq=True)}"
+        else:
+            q = f"?{urlencode(params)}"
+        return f"{self.web_base}/a/{path.lstrip('/')}{q}"
+
+    def _request_json(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        params: dict[str, str] | list[tuple[str, str]] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> Any:
+        url = self._url(path, params=params)
+        headers = self._auth_headers()
+        data: bytes | None = None
+        if json_body is not None:
+            data = json.dumps(json_body).encode("utf-8")
+            headers["Content-Type"] = "application/json; charset=UTF-8"
+        logger.info("%s %s", method, url)
+        req = Request(url, headers=headers, method=method, data=data)
         try:
             with urlopen(req, timeout=120) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
+                raw = resp.read().decode("utf-8", errors="replace")
         except HTTPError as e:
             raise GerritApiError(
                 f"Gerrit HTTP {e.code} for {url}: {e.reason}",
@@ -88,8 +100,10 @@ class GerritClient:
         except URLError as e:
             raise GerritApiError(f"Gerrit request failed: {e.reason!r}") from e
 
+        if not raw.strip():
+            return {}
         try:
-            parsed = json.loads(_strip_magic_json_prefix(body))
+            parsed = json.loads(_strip_magic_json_prefix(raw))
         except json.JSONDecodeError as e:
             raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
         if log_gerrit_response_bodies():
@@ -139,6 +153,25 @@ class GerritClient:
             data.get("subject"),
         )
         return data
+
+    def add_reviewer(self, change_id: str, reviewer: str) -> dict[str, Any]:
+        """POST a reviewer (username or email) onto *change_id*."""
+        enc = quote(change_id, safe="")
+        data = self._request_json(
+            f"changes/{enc}/reviewers",
+            method="POST",
+            json_body={"reviewer": reviewer},
+        )
+        if not isinstance(data, dict):
+            raise GerritApiError("unexpected add reviewer response")
+        logger.info("add_reviewer %r -> %s", change_id, data.get("_account_id"))
+        return data
+
+    def delete_reviewer(self, change_id: str, account_id: int) -> Any:
+        """Remove *account_id* from *change_id* (REVIEWER or CC)."""
+        enc = quote(change_id, safe="")
+        aid_enc = quote(str(account_id), safe="")
+        return self._request_json(f"changes/{enc}/reviewers/{aid_enc}", method="DELETE")
 
     def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """GET inline comments grouped by file path (or special keys) for *change_id*."""
