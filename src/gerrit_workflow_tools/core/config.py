@@ -29,11 +29,8 @@ def clear_gerrit_git_config_cache() -> None:
 
 
 def _canonical_cfg_key(key: str) -> str:
-    """Match key normalization used in `git config --list` (last segment lowercased)."""
-    if "." not in key:
-        return key.lower()
-    head, tail = key.rsplit(".", 1)
-    return f"{head}.{tail.lower()}"
+    """Canonicalize config keys case-insensitively for lookups and cache indexing."""
+    return key.lower()
 
 
 def _resolve_cwd_key(cwd: Path | str | None) -> str:

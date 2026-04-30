@@ -128,3 +128,20 @@ def test_infer_nearest_remote_tracking_branch_without_remotes(tmp_path: Path) ->
     git("add", "f", cwd=repo)
     git("commit", "-m", "init", cwd=repo)
     assert infer_nearest_remote_tracking_branch(repo) is None
+
+
+def test_gerrit_web_url_key_lookup_is_case_insensitive(stack_repo: Path) -> None:
+    from gerrit_workflow_tools.core.config import gerrit_web_url
+
+    git("config", "Gerrit.WebURL", "https://review.example.com", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    assert gerrit_web_url(stack_repo) == "https://review.example.com"
+
+
+def test_branch_gerrit_target_key_lookup_is_case_insensitive(stack_repo: Path) -> None:
+    from gerrit_workflow_tools.core.config import branch_gerrit_target
+
+    git("checkout", "-b", "CaseBranch", cwd=stack_repo)
+    git("config", "Branch.CaseBranch.GerritTarget", "origin/main", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    assert branch_gerrit_target(stack_repo, "CaseBranch") == "origin/main"
