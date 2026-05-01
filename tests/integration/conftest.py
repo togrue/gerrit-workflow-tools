@@ -31,7 +31,7 @@ from tests.integration.load_local_env import load_local_env_file
 logger = logging.getLogger(__name__)
 
 
-def pytest_configure(_config: pytest.Config) -> None:
+def pytest_configure(config: pytest.Config) -> None:
     """Apply gitignored ``local.env`` before collection (same keys as ``run_integration.py``)."""
     load_local_env_file(Path(__file__).resolve().parent / "local.env")
 

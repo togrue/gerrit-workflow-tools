@@ -41,10 +41,12 @@ def main() -> int:
     root = _repo_root()
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
+    from tests.integration.docker_gerrit import set_docker_host_from_env
     from tests.integration.load_local_env import load_local_env_file
 
     env_file = args.env_file if args.env_file is not None else root / "tests" / "integration" / "local.env"
     load_local_env_file(env_file)
+    set_docker_host_from_env()
 
     env = os.environ.copy()
     if args.keep:
