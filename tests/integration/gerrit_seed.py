@@ -131,7 +131,7 @@ def seed_repo_with_branches(
         port=port,
         project=project,
     )
-    _run_git(["clone", clone_url, str(repo_dir)])
+    _run_git(["clone", clone_url, str(repo_dir)], cwd=work_root)
 
     cur = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=repo_dir).strip()
     tip = git_out("rev-parse", "HEAD", cwd=repo_dir).strip()
@@ -177,8 +177,23 @@ def add_verified_label_to_project_meta(
         "GIT_COMMITTER_EMAIL": "integration@test.example",
     }
 
-    _run_git(["fetch", "origin", "refs/meta/config:refs/meta/config"], cwd=repo_dir, env=env)
-    _run_git(["checkout", "refs/meta/config"], cwd=repo_dir, env=env)
+    fetch_meta = git(
+        "fetch",
+        "origin",
+        "refs/meta/config:refs/meta/config",
+        cwd=repo_dir,
+        env=env,
+        check=False,
+    )
+    if fetch_meta.returncode == 0:
+        _run_git(["checkout", "refs/meta/config"], cwd=repo_dir, env=env)
+    elif "couldn't find remote ref refs/meta/config" in (fetch_meta.stderr or ""):
+        # Newer Gerrit setups may not create refs/meta/config until first push.
+        _run_git(["checkout", "--orphan", "refs/meta/config"], cwd=repo_dir, env=env)
+    else:
+        raise RuntimeError(
+            f"git fetch refs/meta/config failed (cwd={repo_dir}): {fetch_meta.stderr or fetch_meta.stdout}",
+        )
 
     cfg_path = repo_dir / "project.config"
     text = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""

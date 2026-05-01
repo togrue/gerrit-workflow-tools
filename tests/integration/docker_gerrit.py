@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_IMAGE = "gerritcodereview/gerrit:3.10"
+DEFAULT_IMAGE = "gerritcodereview/gerrit:3.14.0-rc5-ubuntu24"
 CONTAINER_NAME = "gerrit-workflow-tools-integration"
 
 
@@ -27,22 +27,50 @@ class PublishedPorts:
     ssh: int
 
 
-def wait_http_ready(http_url: str, *, timeout_s: float = 180.0, poll_s: float = 2.0) -> None:
-    """Poll ``GET {http_url}/config/server/version`` until HTTP 200."""
+def wait_http_ready(http_url: str, *, timeout_s: float = 240.0, poll_s: float = 2.0) -> None:
+    """Poll until Gerrit serves static config *and* the REST API on ``/a/``.
+
+    ``/config/server/version`` often returns 200 while Jetty/Gerrit is still wiring REST and
+    plugins; unauthenticated ``GET /a/accounts/self`` typically returns ``401`` once REST is
+    actually accepting traffic. Until then you may see ``502``/``503`` or connection errors from
+    the test host even though the version URL already works.
+    """
+    base = http_url.rstrip("/")
+    version_url = f"{base}/config/server/version"
+    rest_url = f"{base}/a/accounts/self"
     deadline = time.monotonic() + timeout_s
-    version_url = f"{http_url.rstrip('/')}/config/server/version"
     last_err: str | None = None
     while time.monotonic() < deadline:
         try:
-            r = requests.get(version_url, timeout=5)
-            if r.status_code == 200:
-                logger.info("Gerrit HTTP ready: %s", version_url)
+            rv = requests.get(version_url, timeout=5)
+            if rv.status_code != 200:
+                last_err = f"version HTTP {rv.status_code}"
+                time.sleep(poll_s)
+                continue
+            rr = requests.get(
+                rest_url,
+                headers={"Accept": "*/*"},
+                timeout=10,
+                allow_redirects=False,
+            )
+            code = rr.status_code
+            if code in (502, 503, 504):
+                last_err = f"REST still starting (HTTP {code})"
+                time.sleep(poll_s)
+                continue
+            if code in (401, 403, 200):
+                logger.info("Gerrit HTTP + REST ready: %s", base)
                 return
-            last_err = f"HTTP {r.status_code}"
+            if code in (301, 302, 303, 307, 308):
+                logger.info("Gerrit HTTP + REST ready (redirect %s): %s", code, base)
+                return
+            last_err = f"REST HTTP {code}"
         except OSError as e:
             last_err = str(e)
         time.sleep(poll_s)
-    raise RuntimeError(f"Gerrit did not become ready in {timeout_s}s (last: {last_err})")
+    raise RuntimeError(
+        f"Gerrit did not become HTTP+REST ready in {timeout_s}s (last: {last_err})",
+    )
 
 
 def _docker_client():
@@ -97,6 +125,7 @@ def start_gerrit_container(
             },
             environment={
                 "CANONICAL_WEB_URL": canonical,
+                "DEVELOPMENT_BECOME_ANY_ACCOUNT": "true",
             },
             remove=False,
         )

@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import quote
 
 import requests
-from requests.auth import HTTPDigestAuth
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 
 def strip_magic_json_prefix(raw: str) -> str:
@@ -29,8 +29,13 @@ class GerritHttpSession:
         self._session = requests.Session()
         self._session.headers.update({"Accept": "*/*"})
 
-    def _digest(self) -> HTTPDigestAuth:
-        return HTTPDigestAuth(self.user, self.password)
+    def _auth_candidates(self) -> list[object]:
+        # Gerrit HTTP passwords are commonly used via Basic auth, while some
+        # setups still use/accept Digest.
+        return [
+            HTTPBasicAuth(self.user, self.password),
+            HTTPDigestAuth(self.user, self.password),
+        ]
 
     def request_json(
         self,
@@ -42,13 +47,23 @@ class GerritHttpSession:
         ok_status: tuple[int, ...] = (200, 201, 204),
     ) -> Any:
         url = f"{self.web_base}/a/{path.lstrip('/')}"
-        kwargs: dict[str, Any] = {"auth": self._digest(), "timeout": 120}
+        kwargs: dict[str, Any] = {"timeout": 120}
         if params is not None:
             kwargs["params"] = params
         if body is not None:
             kwargs["json"] = body
             kwargs.setdefault("headers", {})["Content-Type"] = "application/json"
-        resp = self._session.request(method, url, **kwargs)
+        resp = None
+        for auth in self._auth_candidates():
+            attempt_kwargs = dict(kwargs)
+            attempt_kwargs["auth"] = auth
+            resp = self._session.request(method, url, **attempt_kwargs)
+            if resp.status_code in ok_status:
+                break
+            # Retry with the next auth mechanism only when this looks like auth rejection.
+            if resp.status_code not in (401, 403):
+                break
+        assert resp is not None
         if resp.status_code not in ok_status:
             raise RuntimeError(
                 f"Gerrit {method} {url} -> {resp.status_code}: {resp.text[:500]}",

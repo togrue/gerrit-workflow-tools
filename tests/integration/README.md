@@ -38,6 +38,7 @@ Resolve `lenovo-pc` (DNS or `hosts`). From the pytest machine: `docker -H ssh://
 | `GERRIT_IT_HOST_PORT_HTTP` | `8080` | Published HTTP port on the Docker **host**. |
 | `GERRIT_IT_HOST_PORT_SSH` | `29418` | Host port mapped to the container’s Gerrit SSH (**29418/tcp** inside the image). **Must be free** on the Docker host—if another Gerrit already uses **29418**, set e.g. **`29419`**. |
 | `GERRIT_IT_IMAGE` | `gerritcodereview/gerrit:3.10` | Override Gerrit image. |
+| *(container default)* | `DEVELOPMENT_BECOME_ANY_ACCOUNT=true` | Set automatically for the test container to make admin/account bootstrap reliable on newer Gerrit images. |
 | `GERRIT_IT_KEEP_CONTAINER` | `0` | If `1`, the named container is left running after the run (faster reruns). |
 | `GERRIT_IT_HTTP_ADMIN_PASS` | *(unset)* | If set, used as the admin HTTP password when REST bootstrap works. |
 | `GERRIT_IT_RUN_ID` | *(random)* | Suffix for project names (stable ID when debugging). |

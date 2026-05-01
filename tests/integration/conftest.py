@@ -155,7 +155,7 @@ def gerrit_integration_context(
     create_account(
         admin_session,
         dev_user,
-        email=f"{dev_user}@integration.test",
+        email=f"{dev_user}@example.com",
         http_password=dev_pw,
     )
 
