@@ -160,62 +160,23 @@ def add_verified_label_to_project_meta(
     admin_password: str,
     project: str,
 ) -> None:
-    """Fetch ``refs/meta/config``, add ``Verified`` label, push ``refs/meta/config``."""
-    set_origin_url(
-        repo_dir,
-        http_base=http_base,
-        user=admin_user,
-        password=admin_password,
-        project=project,
+    """Create/update project-local ``Verified`` label using Gerrit's project-label REST API."""
+    session = GerritHttpSession(http_base, user=admin_user, password=admin_password)
+    enc_project = quote(project, safe="")
+    session.put_json(
+        f"projects/{enc_project}/labels/Verified",
+        body={
+            "commit_message": "Add Verified label (integration)",
+            "function": "NoBlock",
+            "values": {
+                "-1": "Fails",
+                " 0": "No score",
+                "+1": "Verified",
+            },
+            "default_value": 0,
+            "can_override": True,
+        },
     )
-
-    env = {
-        **os.environ,
-        "GIT_AUTHOR_NAME": "Integration",
-        "GIT_AUTHOR_EMAIL": "integration@test.example",
-        "GIT_COMMITTER_NAME": "Integration",
-        "GIT_COMMITTER_EMAIL": "integration@test.example",
-    }
-
-    fetch_meta = git(
-        "fetch",
-        "origin",
-        "refs/meta/config:refs/meta/config",
-        cwd=repo_dir,
-        env=env,
-        check=False,
-    )
-    if fetch_meta.returncode == 0:
-        _run_git(["checkout", "refs/meta/config"], cwd=repo_dir, env=env)
-    elif "couldn't find remote ref refs/meta/config" in (fetch_meta.stderr or ""):
-        # Newer Gerrit setups may not create refs/meta/config until first push.
-        _run_git(["checkout", "--orphan", "refs/meta/config"], cwd=repo_dir, env=env)
-    else:
-        raise RuntimeError(
-            f"git fetch refs/meta/config failed (cwd={repo_dir}): {fetch_meta.stderr or fetch_meta.stdout}",
-        )
-
-    cfg_path = repo_dir / "project.config"
-    text = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
-    block = (
-        '\n[label "Verified"]\n'
-        "\tfunction = MaxWithBlock\n"
-        "\tvalue = -1 Fails\n"
-        "\tvalue =  0 No score\n"
-        "\tvalue = +1 Verified\n"
-    )
-    if '[label "Verified"]' not in text:
-        cfg_path.write_text(text.rstrip() + block + "\n", encoding="utf-8")
-
-    _run_git(["add", "project.config"], cwd=repo_dir, env=env)
-    _run_git(["commit", "-m", "Add Verified label (integration)"], cwd=repo_dir, env=env)
-    _run_git(["push", "origin", "HEAD:refs/meta/config"], cwd=repo_dir, env=env)
-
-    for cand in ("main", "master"):
-        p = git("rev-parse", "--verify", cand, cwd=repo_dir, check=False)
-        if p.returncode == 0:
-            _run_git(["checkout", cand], cwd=repo_dir, env=env)
-            break
 
 
 def post_review_labels(
