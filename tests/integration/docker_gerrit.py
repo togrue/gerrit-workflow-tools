@@ -85,20 +85,26 @@ def start_gerrit_container(
         host_http_port,
         host_ssh_port,
     )
-    container = client.containers.run(
-        image,
-        detach=True,
-        name=CONTAINER_NAME,
-        hostname="gerrit",
-        ports={
-            "8080/tcp": host_http_port,
-            "29418/tcp": host_ssh_port,
-        },
-        environment={
-            "CANONICAL_WEB_URL": canonical,
-        },
-        remove=False,
-    )
+    try:
+        container = client.containers.run(
+            image,
+            detach=True,
+            name=CONTAINER_NAME,
+            hostname="gerrit",
+            ports={
+                "8080/tcp": host_http_port,
+                "29418/tcp": host_ssh_port,
+            },
+            environment={
+                "CANONICAL_WEB_URL": canonical,
+            },
+            remove=False,
+        )
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        hint = _container_start_failure_hint(host_http_port, host_ssh_port, e)
+        raise RuntimeError(
+            f"Failed to start Gerrit test container ({CONTAINER_NAME}): {e}\n{hint}",
+        ) from e
     ports = PublishedPorts(http=host_http_port, ssh=host_ssh_port)
     return container, ports
 
@@ -131,3 +137,25 @@ def set_docker_host_from_env() -> None:
     v = os.environ.get("GERRIT_IT_DOCKER_HOST")
     if v:
         os.environ["DOCKER_HOST"] = v
+
+
+def _container_start_failure_hint(http_port: int, ssh_port: int, exc: BaseException) -> str:
+    msg = str(exc).lower()
+    lines = [
+        "Hints:",
+        f"  - Host ports {http_port} (HTTP) and {ssh_port} (SSH) must be FREE on the Docker host "
+        "for this test container.",
+        "    If another Gerrit or service already uses them, set GERRIT_IT_HOST_PORT_HTTP / "
+        "GERRIT_IT_HOST_PORT_SSH to unused ports and point GERRIT_IT_PUBLIC_HOST at the same host.",
+        "  - These tests start their own Gerrit image; GERRIT_IT_HOST_PORT_HTTP is not “whatever port my "
+        "existing Gerrit uses” unless that port is free for a new bind.",
+    ]
+    if "port is already allocated" in msg or "address already in use" in msg or "bind" in msg:
+        lines.insert(1, "  (Likely cause: port already in use on the remote host.)")
+    if os.name == "nt":
+        lines.append(
+            "  - On Windows, if `ssh lenovo docker ps` works but pytest fails Docker, try "
+            "GERRIT_IT_DOCKER_HOST=ssh://YOUR_USER@lenovo-pc (real hostname; docker-py may not honor "
+            "OpenSSH Host aliases the same as the `ssh` CLI).",
+        )
+    return "\n".join(lines)

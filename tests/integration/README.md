@@ -16,15 +16,18 @@ Copy [`local.env.example`](local.env.example) to **`tests/integration/local.env`
 
 `scripts/run_integration.py` and `pytest tests/integration` both load `tests/integration/local.env` automatically when the file exists. Override the path with **`--env-file PATH`** on the runner.
 
-Example layout for a Gerrit container on another PC, HTTP at `http://lenovo-pc:8081`, Docker over SSH using the `lenovo` host alias:
+**Important:** `GERRIT_IT_HOST_PORT_HTTP` / `GERRIT_IT_HOST_PORT_SSH` are the **host** ports for the **test** container. They must be **free** on the Docker machine. If you already run another Gerrit on 8081, use e.g. **8082** and **29419** in `local.env` and open those in the firewall from the PC that runs `git`/`ger`.
+
+Example (Lenovo runs Docker; your PC uses HTTP/git against `lenovo-pc`):
 
 ```bash
 GERRIT_IT_PUBLIC_HOST=lenovo-pc
-GERRIT_IT_HOST_PORT_HTTP=8081
+GERRIT_IT_HOST_PORT_HTTP=8082
+GERRIT_IT_HOST_PORT_SSH=29419
 GERRIT_IT_DOCKER_HOST=ssh://lenovo
 ```
 
-Ensure your machine resolves `lenovo-pc` (DNS or `hosts`) and that `docker` on your test runner can reach the remote engine (same as `docker -H ssh://lenovo ps`).
+Resolve `lenovo-pc` (DNS or `hosts`). From the pytest machine: `docker -H ssh://lenovo ps` (or your chosen URL) must work. If **`ssh lenovo docker ps`** works but **pytest** still cannot talk to Docker on Windows, set `GERRIT_IT_DOCKER_HOST=ssh://YOUR_USER@lenovo-pc` (explicit user and hostname; docker-py may not honor every OpenSSH `Host` alias).
 
 ## Environment variables
 
@@ -65,3 +68,11 @@ Tests use a fixed container name: **`gerrit-workflow-tools-integration`**. Remov
 ## Runtime
 
 First startup can take **2–4 minutes**. Use `GERRIT_IT_KEEP_CONTAINER=1` for repeated runs.
+
+## Troubleshooting
+
+| Symptom | Things to check |
+|--------|------------------|
+| Port / bind errors when starting the container | Another process (including a non-test Gerrit) is using `GERRIT_IT_HOST_PORT_HTTP` or `_SSH` on the Docker host. Pick unused ports and update `local.env`. |
+| `docker ps` over SSH works; pytest still fails Docker on Windows | Use `GERRIT_IT_DOCKER_HOST=ssh://user@real-hostname`. Confirm firewall allows your PC → those TCP ports on the Docker host. |
+| HTTP / git clone timeouts from your PC | `GERRIT_IT_PUBLIC_HOST` must be reachable from the machine running pytest (not only `localhost` on the remote). |
