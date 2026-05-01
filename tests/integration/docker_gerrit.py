@@ -145,10 +145,9 @@ def _container_start_failure_hint(http_port: int, ssh_port: int, exc: BaseExcept
         "Hints:",
         f"  - Host ports {http_port} (HTTP) and {ssh_port} (SSH) must be FREE on the Docker host "
         "for this test container.",
-        "    If another Gerrit or service already uses them, set GERRIT_IT_HOST_PORT_HTTP / "
-        "GERRIT_IT_HOST_PORT_SSH to unused ports and point GERRIT_IT_PUBLIC_HOST at the same host.",
-        "  - These tests start their own Gerrit image; GERRIT_IT_HOST_PORT_HTTP is not “whatever port my "
-        "existing Gerrit uses” unless that port is free for a new bind.",
+        "    If another Gerrit already uses 8080/8081 and 29418, set GERRIT_IT_HOST_PORT_HTTP and "
+        "GERRIT_IT_HOST_PORT_SSH to other free ports (e.g. 8082 and 29419).",
+        "  - These tests start their own Gerrit image; host ports are only for this test container.",
     ]
     if "port is already allocated" in msg or "address already in use" in msg or "bind" in msg:
         lines.insert(1, "  (Likely cause: port already in use on the remote host.)")

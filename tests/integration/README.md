@@ -16,7 +16,7 @@ Copy [`local.env.example`](local.env.example) to **`tests/integration/local.env`
 
 `scripts/run_integration.py` and `pytest tests/integration` both load `tests/integration/local.env` automatically when the file exists. Override the path with **`--env-file PATH`** on the runner.
 
-**Important:** `GERRIT_IT_HOST_PORT_HTTP` / `GERRIT_IT_HOST_PORT_SSH` are the **host** ports for the **test** container. They must be **free** on the Docker machine. If you already run another Gerrit on 8081, use e.g. **8082** and **29419** in `local.env` and open those in the firewall from the PC that runs `git`/`ger`.
+**Important:** `GERRIT_IT_HOST_PORT_HTTP` / `GERRIT_IT_HOST_PORT_SSH` are the **host** ports for the **test** container. They must be **free** on the Docker machine. If you already run another Gerrit on **8081** and **29418**, pick unused ports for the test instance (e.g. **8082** and **29419**) in `local.env` and open those in the firewall from the PC that runs `git`/`ger`. Integration tests use **HTTP** for Git; the SSH mapping is still required so the container can start without a host port conflict.
 
 Example (Lenovo runs Docker; your PC uses HTTP/git against `lenovo-pc`):
 
@@ -36,7 +36,7 @@ Resolve `lenovo-pc` (DNS or `hosts`). From the pytest machine: `docker -H ssh://
 | `GERRIT_IT_DOCKER_HOST` | *(unset)* | Copied to `DOCKER_HOST` (e.g. `ssh://user@host` for a remote engine). |
 | `GERRIT_IT_PUBLIC_HOST` | `localhost` | Hostname **your git client** uses to reach Gerrit HTTP (use with SSH `-L` when the daemon is remote). |
 | `GERRIT_IT_HOST_PORT_HTTP` | `8080` | Published HTTP port on the Docker **host**. |
-| `GERRIT_IT_HOST_PORT_SSH` | `29418` | Published SSH port on the Docker **host**. |
+| `GERRIT_IT_HOST_PORT_SSH` | `29418` | Host port mapped to the container’s Gerrit SSH (**29418/tcp** inside the image). **Must be free** on the Docker host—if another Gerrit already uses **29418**, set e.g. **`29419`**. |
 | `GERRIT_IT_IMAGE` | `gerritcodereview/gerrit:3.10` | Override Gerrit image. |
 | `GERRIT_IT_KEEP_CONTAINER` | `0` | If `1`, the named container is left running after the run (faster reruns). |
 | `GERRIT_IT_HTTP_ADMIN_PASS` | *(unset)* | If set, used as the admin HTTP password when REST bootstrap works. |
