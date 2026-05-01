@@ -49,6 +49,8 @@ uv sync --group integration
 uv run --group integration python scripts/run_integration.py
 # or:
 uv run --group integration pytest tests/integration -q
+# Minimal smoke only (Docker up + HTTP /config/server/version; no project seeding):
+uv run --group integration pytest tests/integration/test_00_smoke_http.py -q
 # with keep:
 uv run --group integration python scripts/run_integration.py --keep
 ```

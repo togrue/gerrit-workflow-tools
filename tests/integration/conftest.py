@@ -38,6 +38,17 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @dataclass(frozen=True)
+class GerritDockerSession:
+    """Gerrit container is up and HTTP answers (no projects or admin seeding)."""
+
+    http_base: str
+    public_host: str
+    host_http_port: int
+    host_ssh_port: int
+    container: object | None
+
+
+@dataclass(frozen=True)
 class GerritIntegrationContext:
     """Shared session state for integration tests."""
 
@@ -61,14 +72,7 @@ def _fail(msg: str) -> None:
     pytest.fail(msg)
 
 
-@pytest.fixture(scope="session")
-def gerrit_integration_context(tmp_path_factory: pytest.TempPathFactory) -> GerritIntegrationContext:
-    """Start Gerrit (Docker), bootstrap admin, seed two projects and template repos."""
-    pytest.importorskip("docker")
-    pytest.importorskip("requests")
-
-    set_docker_host_from_env()
-
+def _docker_ping_or_fail() -> None:
     try:
         import docker  # pylint: disable=import-outside-toplevel
 
@@ -79,13 +83,22 @@ def gerrit_integration_context(tmp_path_factory: pytest.TempPathFactory) -> Gerr
             "Use `uv sync --group integration` and ensure the Docker daemon is running.",
         )
 
+
+@pytest.fixture(scope="session")
+def gerrit_docker_session() -> GerritDockerSession:
+    """Start the Gerrit container and wait until HTTP serves ``/config/server/version``."""
+    pytest.importorskip("docker")
+    pytest.importorskip("requests")
+
+    set_docker_host_from_env()
+    _docker_ping_or_fail()
+
     public_host = os.environ.get("GERRIT_IT_PUBLIC_HOST", "localhost")
     host_http = int(os.environ.get("GERRIT_IT_HOST_PORT_HTTP", "8080"))
     host_ssh = int(os.environ.get("GERRIT_IT_HOST_PORT_SSH", "29418"))
     image = os.environ.get("GERRIT_IT_IMAGE", DEFAULT_IMAGE)
     keep = os.environ.get("GERRIT_IT_KEEP_CONTAINER", "").lower() in ("1", "true", "yes")
 
-    run_id = os.environ.get("GERRIT_IT_RUN_ID") or secrets.token_hex(4)
     http_base = f"http://{public_host}:{host_http}"
 
     container, _ports = start_gerrit_container(
@@ -95,12 +108,44 @@ def gerrit_integration_context(tmp_path_factory: pytest.TempPathFactory) -> Gerr
         host_ssh_port=host_ssh,
         keep=keep,
     )
+
+    wait_http_ready(http_base, timeout_s=240.0)
+
+    ctx = GerritDockerSession(
+        http_base=http_base,
+        public_host=public_host,
+        host_http_port=host_http,
+        host_ssh_port=host_ssh,
+        container=container,
+    )
+
+    yield ctx
+
+    if not keep and container is not None:
+        stop_container(container, remove=True)
+
+
+@pytest.fixture(scope="session")
+def gerrit_integration_context(
+    gerrit_docker_session: GerritDockerSession,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> GerritIntegrationContext:
+    """Bootstrap admin, seed two projects and template repos (reuses ``gerrit_docker_session``)."""
+    pytest.importorskip("docker")
+    pytest.importorskip("requests")
+
+    http_base = gerrit_docker_session.http_base
+    public_host = gerrit_docker_session.public_host
+    host_http = gerrit_docker_session.host_http_port
+    host_ssh = gerrit_docker_session.host_ssh_port
+    container = gerrit_docker_session.container
+
     container_id: str | None = None
     if container is not None:
         cid = getattr(container, "id", None)
         container_id = str(cid) if cid else None
 
-    wait_http_ready(http_base, timeout_s=240.0)
+    run_id = os.environ.get("GERRIT_IT_RUN_ID") or secrets.token_hex(4)
 
     admin_pw = ensure_admin_password(http_base, container_id=container_id)
     admin_session = GerritHttpSession(http_base, user="admin", password=admin_pw)
@@ -148,7 +193,7 @@ def gerrit_integration_context(tmp_path_factory: pytest.TempPathFactory) -> Gerr
         project=pv,
     )
 
-    ctx = GerritIntegrationContext(
+    return GerritIntegrationContext(
         run_id=run_id,
         http_base=http_base,
         public_host=public_host,
@@ -164,11 +209,6 @@ def gerrit_integration_context(tmp_path_factory: pytest.TempPathFactory) -> Gerr
         seed_repo_plain=seed_p,
         container=container,
     )
-
-    yield ctx
-
-    if not keep and container is not None:
-        stop_container(container, remove=True)
 
 
 @pytest.fixture
