@@ -188,6 +188,25 @@ class GerritPushReviewers:
     strategy: ReviewerStrategy
 
 
+@dataclass
+class GerritPushContext:
+    """Resolved state for a Gerrit push operation.
+
+    All fields except ``plan`` are set once during construction and treated as
+    immutable. ``plan`` is mutated in-place by the interactive reviewer loop.
+    """
+
+    branch: str
+    push_branch: str
+    target: str
+    remote: str
+    ready: ReadyResult
+    plan: GerritPushReviewers
+    first_parent: bool
+    show_attributes: bool
+    update_last_pushed: bool
+
+
 def _parse_reviewers_list(raw: str) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -608,8 +627,8 @@ def _maybe_check_rebased_onto_remote(
     return None
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
-    """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for ``ger push``."""
     p = argparse.ArgumentParser(prog="ger push")
     p.add_argument(
         "-i",
@@ -683,27 +702,272 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         metavar="REV",
         help="Push only through this commit.",
     )
-    args = p.parse_args(argv)
-    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
-    gdef = ger_push_defaults(cwd)
-    remote_policy = gerrit_push_remote_policy(cwd)
-    show_attributes = gdef["show_attributes"]
+    return p
+
+
+def _handle_vanilla_push(cwd: Path, args: argparse.Namespace) -> int:
+    """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
+    if args.until or args.all_ or args.reviewers or args.ignore_pattern:
+        print(
+            "warning: --until, --all, --reviewers, and --ignore-pattern apply only to Gerrit push; ignoring.",
+            file=sys.stderr,
+        )
+    cmd_vanilla = ["git", "push"]
+    logger.debug("gpush vanilla: %s", cmd_vanilla)
+    if args.dry_run:
+        print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
+        print("[dry-run] not executing push", file=sys.stderr)
+        return 0
+    if not sys.stdin.isatty() and not args.yes:
+        print(
+            "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
+            file=sys.stderr,
+        )
+        return 1
+    if not args.yes:
+        print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
+        print()
+        if not _confirm_push_interactive(vanilla=True):
+            print("Push cancelled.", file=sys.stderr)
+            return 0
+    logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd_vanilla), cwd)
+    proc = _run_git_push(cmd_vanilla, cwd)
+    return proc.returncode
+
+
+def _build_gerrit_context(  # pylint: disable=too-many-arguments
+    cwd: Path,
+    branch: str,
+    args: argparse.Namespace,
+    gdef: dict[str, bool],
+    remote_policy: str,
+    fp: bool,
+) -> GerritPushContext | int:
+    """Resolve all Gerrit push parameters and return a context, or an exit code on early failure."""
+    eff = effective_gerrit_destination_branch(cwd, branch)
+    if not eff:
+        raise GitError("Internal error: Gerrit push mode without effective destination.")
+    push_branch = refs_for_push_branch_name(cwd, eff)
+    target = eff
+
+    rc_early = _maybe_check_rebased_onto_remote(
+        cwd,
+        branch,
+        policy=remote_policy,
+        no_rebase_check=bool(args.no_rebase_check),
+    )
+    if rc_early is not None:
+        return rc_early
+
+    if args.i:
+        interactive = _prompt_interactive_reviewers().strip()
+        reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers), interactive=interactive or None)
+        if _prompt_save_reviewers():
+            set_branch_config(cwd, branch, gerrit_reviewers=",".join(reviewers))
+    else:
+        reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers))
+
+    plan = GerritPushReviewers(
+        reviewers=list(reviewers),
+        strategy=(args.reviewer_strategy or "push"),
+    )
+
+    r = compute_ready(
+        cwd,
+        branch=None,
+        all_commits=args.all_,
+        ignore_patterns=args.ignore_pattern or None,
+        until=args.until,
+        first_parent=fp,
+    )
+    logger.debug(
+        "gpush ready tip=%s range=%s boundary=%s",
+        r.push_tip_sha,
+        r.push_range,
+        r.boundary_reason,
+    )
+
+    _fork, _, target_tip = merge_base_with_target(cwd)
+    rows = change_id_rows_for_range(cwd, target_tip, first_parent=fp)
+    items = list(rows)
+    _, cid_exit = classify_issues(items, strict=True)
+    logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
+    if cid_exit >= 2:
+        print(
+            "error: Change-Id check failed; fix with ger change-id --check-duplicates",
+            file=sys.stderr,
+        )
+        return 2
+
+    remote = gerrit_remote(cwd)
+    if not r.push_tip_sha:
+        print("error: nothing to push (empty ready prefix)", file=sys.stderr)
+        return 1
+
     update_last_pushed = (
         bool(args.update_last_pushed) or gdef["last_pushed_branch"]
     ) and not args.no_update_last_pushed
+    logger.debug(
+        "gpush show_attributes=%s update_last_pushed=%s",
+        gdef["show_attributes"],
+        update_last_pushed,
+    )
+
+    return GerritPushContext(
+        branch=branch,
+        push_branch=push_branch,
+        target=target,
+        remote=remote,
+        ready=r,
+        plan=plan,
+        first_parent=fp,
+        show_attributes=gdef["show_attributes"],
+        update_last_pushed=update_last_pushed,
+    )
+
+
+def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statements
+    cwd: Path,
+    ctx: GerritPushContext,
+    args: argparse.Namespace,
+    summary_highlighter: SummaryHighlighter,
+) -> int:
+    """Run the interactive approval loop, execute the push, and handle post-push steps."""
+    tip = ctx.ready.push_tip_sha
+    assert tip is not None  # guaranteed by _build_gerrit_context
+    cmd: list[str] = []
+    while True:
+        refspec = _refs_for_spec(tip, ctx.push_branch, ctx.plan.reviewers, ctx.plan.strategy)
+        cmd = ["git", "push", ctx.remote, refspec]
+        logger.debug(
+            "gpush resolved: remote=%r gerrit_target=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
+            ctx.remote,
+            ctx.target,
+            ctx.push_branch,
+            ctx.plan.reviewers,
+            ctx.plan.strategy,
+            refspec,
+        )
+
+        try:
+            commit_lines = _commit_lines_for_preview(
+                cwd,
+                ctx.ready,
+                summary_highlighter=summary_highlighter,
+                show_attributes=ctx.show_attributes,
+                merged_reviewers=ctx.plan.reviewers,
+                first_parent=ctx.first_parent,
+            )
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        except GerritApiError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+
+        _print_gpush_preview(
+            cwd,
+            ctx.ready,
+            commit_lines,
+            summary_highlighter=summary_highlighter,
+        )
+
+        if args.dry_run:
+            if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
+                print(
+                    "[dry-run] after a successful push would apply reviewers via "
+                    f"{ctx.plan.strategy} ({_strategy_status_label(ctx.plan.strategy)})",
+                    file=sys.stderr,
+                )
+            print("[dry-run] not executing push", file=sys.stderr)
+            return 0
+
+        if not sys.stdin.isatty() and not args.yes:
+            print(
+                "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
+                file=sys.stderr,
+            )
+            return 1
+
+        if args.yes:
+            err = _validate_rest_plan(cwd, ctx.plan)
+            if err:
+                print(err, file=sys.stderr)
+                return 1
+            break
+
+        print()
+        _print_gpush_confirm_status_line(ctx.branch, ctx.push_branch, ctx.plan.reviewers, strategy=ctx.plan.strategy)
+        print()
+        act = _prompt_gerrit_push_confirm_action()
+        if act == "cancel":
+            print("Push cancelled.", file=sys.stderr)
+            return 0
+        if act == "reviewers":
+            line = _prompt_reviewers_line_ptk().strip()
+            if not line:
+                print("No reviewers entered; nothing changed.")
+                continue
+            ctx.plan.reviewers = _parse_reviewers_list(line)
+            ctx.plan.strategy = _prompt_reviewer_strategy_interactive()
+            continue
+
+        err = _validate_rest_plan(cwd, ctx.plan)
+        if err:
+            print(err, file=sys.stderr)
+            continue
+        break
+
+    logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
+    proc = _run_git_push(cmd, cwd)
+    logger.debug(
+        "gpush push finished: rc=%s (push output is not captured; see terminal)",
+        proc.returncode,
+    )
+    if proc.returncode != 0:
+        return proc.returncode
+    if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
+        try:
+            web_base = resolve_gerrit_web_base(cwd)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        client = GerritClient(web_base, cwd=str(cwd))
+        rc_rest = _apply_reviewer_strategy_after_push(
+            cwd,
+            client,
+            ctx.plan.strategy,
+            ctx.plan.reviewers,
+            ctx.ready,
+            ctx.first_parent,
+        )
+        if rc_rest != 0:
+            return rc_rest
+    if ctx.update_last_pushed:
+        marker = f"lastPush/{ctx.branch}"
+        try:
+            git("branch", "-f", marker, tip, cwd=cwd)
+        except GitError as e:
+            print(f"warning: could not update {marker}: {e}", file=sys.stderr)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
+    args = _build_arg_parser().parse_args(argv)
+    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    gdef = ger_push_defaults(cwd)
+    remote_policy = gerrit_push_remote_policy(cwd)
     fp = not args.follow_merges
 
     logger.debug(
-        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s show_attributes=%s "
-        "update_last_pushed=%s i=%s remote_policy=%s no_rebase_check=%s follow_merges=%s "
-        "reviewer_strategy=%s",
+        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
+        "no_rebase_check=%s follow_merges=%s reviewer_strategy=%s",
         cwd,
         args.dry_run,
         args.yes,
         args.all_,
         args.until,
-        show_attributes,
-        update_last_pushed,
         args.i,
         remote_policy,
         args.no_rebase_check,
@@ -734,210 +998,12 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             return 1
 
         if mode == "vanilla":
-            if args.until or args.all_ or args.reviewers or args.ignore_pattern:
-                print(
-                    "warning: --until, --all, --reviewers, and --ignore-pattern apply only to Gerrit push; ignoring.",
-                    file=sys.stderr,
-                )
-            cmd_vanilla = ["git", "push"]
-            logger.debug("gpush vanilla: %s", cmd_vanilla)
-            if args.dry_run:
-                print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
-                print("[dry-run] not executing push", file=sys.stderr)
-                return 0
-            if not sys.stdin.isatty() and not args.yes:
-                print(
-                    "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
-                    file=sys.stderr,
-                )
-                return 1
-            if not args.yes:
-                print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
-                print()
-                if not _confirm_push_interactive(vanilla=True):
-                    print("Push cancelled.", file=sys.stderr)
-                    return 0
-            logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd_vanilla), cwd)
-            proc = _run_git_push(cmd_vanilla, cwd)
-            return proc.returncode
+            return _handle_vanilla_push(cwd, args)
 
-        eff = effective_gerrit_destination_branch(cwd, b)
-        if not eff:
-            raise GitError("Internal error: Gerrit push mode without effective destination.")
-        push_branch = refs_for_push_branch_name(cwd, eff)
-        target = eff
-
-        rc_early = _maybe_check_rebased_onto_remote(
-            cwd,
-            b,
-            policy=remote_policy,
-            no_rebase_check=bool(args.no_rebase_check),
-        )
-        if rc_early is not None:
-            return rc_early
-
-        interactive: str | None = None
-        if args.i:
-            interactive = _prompt_interactive_reviewers().strip()
-            reviewers = _resolve_push_reviewers(cwd, b, list(args.reviewers), interactive=interactive or None)
-            if _prompt_save_reviewers():
-                set_branch_config(cwd, b, gerrit_reviewers=",".join(reviewers))
-        else:
-            reviewers = _resolve_push_reviewers(cwd, b, list(args.reviewers))
-
-        plan = GerritPushReviewers(
-            reviewers=list(reviewers),
-            strategy=(args.reviewer_strategy or "push"),
-        )
-
-        r = compute_ready(
-            cwd,
-            branch=None,
-            all_commits=args.all_,
-            ignore_patterns=args.ignore_pattern or None,
-            until=args.until,
-            first_parent=fp,
-        )
-        logger.debug(
-            "gpush ready tip=%s range=%s boundary=%s",
-            r.push_tip_sha,
-            r.push_range,
-            r.boundary_reason,
-        )
-
-        _fork, _, target_tip = merge_base_with_target(cwd)
-        rows = change_id_rows_for_range(cwd, target_tip, first_parent=fp)
-        items = list(rows)
-        _, cid_exit = classify_issues(items, strict=True)
-        logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
-        if cid_exit >= 2:
-            print(
-                "error: Change-Id check failed; fix with ger change-id --check-duplicates",
-                file=sys.stderr,
-            )
-            return 2
-
-        remote = gerrit_remote(cwd)
-        tip = r.push_tip_sha
-        if not tip:
-            print("error: nothing to push (empty ready prefix)", file=sys.stderr)
-            return 1
-
-        cmd: list[str] = []
-        while True:
-            refspec = _refs_for_spec(tip, push_branch, plan.reviewers, plan.strategy)
-            cmd = ["git", "push", remote, refspec]
-            logger.debug(
-                "gpush resolved: remote=%r gerrit_target=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
-                remote,
-                target,
-                push_branch,
-                plan.reviewers,
-                plan.strategy,
-                refspec,
-            )
-
-            try:
-                commit_lines = _commit_lines_for_preview(
-                    cwd,
-                    r,
-                    summary_highlighter=summary_highlighter,
-                    show_attributes=show_attributes,
-                    merged_reviewers=plan.reviewers,
-                    first_parent=fp,
-                )
-            except ValueError as e:
-                print(f"error: {e}", file=sys.stderr)
-                return 1
-            except GerritApiError as e:
-                print(f"error: {e}", file=sys.stderr)
-                return 1
-
-            _print_gpush_preview(
-                cwd,
-                r,
-                commit_lines,
-                summary_highlighter=summary_highlighter,
-            )
-
-            if args.dry_run:
-                if _needs_rest_assignment(plan.strategy, plan.reviewers):
-                    print(
-                        "[dry-run] after a successful push would apply reviewers via "
-                        f"{plan.strategy} ({_strategy_status_label(plan.strategy)})",
-                        file=sys.stderr,
-                    )
-                print("[dry-run] not executing push", file=sys.stderr)
-                return 0
-
-            if not sys.stdin.isatty() and not args.yes:
-                print(
-                    "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
-                    file=sys.stderr,
-                )
-                return 1
-
-            if args.yes:
-                err = _validate_rest_plan(cwd, plan)
-                if err:
-                    print(err, file=sys.stderr)
-                    return 1
-                break
-
-            print()
-            _print_gpush_confirm_status_line(b, push_branch, plan.reviewers, strategy=plan.strategy)
-            print()
-            act = _prompt_gerrit_push_confirm_action()
-            if act == "cancel":
-                print("Push cancelled.", file=sys.stderr)
-                return 0
-            if act == "reviewers":
-                line = _prompt_reviewers_line_ptk().strip()
-                if not line:
-                    print("No reviewers entered; nothing changed.")
-                    continue
-                plan.reviewers = _parse_reviewers_list(line)
-                plan.strategy = _prompt_reviewer_strategy_interactive()
-                continue
-
-            err = _validate_rest_plan(cwd, plan)
-            if err:
-                print(err, file=sys.stderr)
-                continue
-            break
-
-        logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
-        proc = _run_git_push(cmd, cwd)
-        logger.debug(
-            "gpush push finished: rc=%s (push output is not captured; see terminal)",
-            proc.returncode,
-        )
-        if proc.returncode != 0:
-            return proc.returncode
-        if _needs_rest_assignment(plan.strategy, plan.reviewers):
-            try:
-                web_base = resolve_gerrit_web_base(cwd)
-            except ValueError as e:
-                print(f"error: {e}", file=sys.stderr)
-                return 1
-            client = GerritClient(web_base, cwd=str(cwd))
-            rc_rest = _apply_reviewer_strategy_after_push(
-                cwd,
-                client,
-                plan.strategy,
-                plan.reviewers,
-                r,
-                fp,
-            )
-            if rc_rest != 0:
-                return rc_rest
-        if update_last_pushed:
-            marker = f"lastPush/{b}"
-            try:
-                git("branch", "-f", marker, tip, cwd=cwd)
-            except GitError as e:
-                print(f"warning: could not update {marker}: {e}", file=sys.stderr)
-        return 0
+        ctx_or_rc = _build_gerrit_context(cwd, b, args, gdef, remote_policy, fp)
+        if isinstance(ctx_or_rc, int):
+            return ctx_or_rc
+        return _execute_gerrit_push(cwd, ctx_or_rc, args, summary_highlighter)
     except GitError as e:
         return handle_git_error(e)
 
