@@ -473,16 +473,11 @@ def _format_boundary_commit_line(
 
 def _print_gpush_preview(  # pylint: disable=too-many-arguments
     cwd: Path,
-    cmd: list[str],
     r: ReadyResult,
     commit_lines: list[str],
     *,
     summary_highlighter: SummaryHighlighter,
-    show_push_command: bool,
 ) -> None:
-    if show_push_command:
-        print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
-        print()
     print(color_text("About to push commits:", f"{ANSI_BOLD}{ANSI_CYAN}"))
     for ln in commit_lines:
         print(ln)
@@ -860,11 +855,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
 
             _print_gpush_preview(
                 cwd,
-                cmd,
                 r,
                 commit_lines,
                 summary_highlighter=summary_highlighter,
-                show_push_command=True,
             )
 
             if args.dry_run:
