@@ -239,7 +239,7 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
     assert "REST" in err or "gerrit" in err.lower()
 
 
-def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_reviewers_cli_overwrites_branch_and_dedupes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
     set_branch_config(stack_repo, b, gerrit_reviewers="carol")
     code, out, _err = run_cli(
@@ -249,10 +249,10 @@ def test_gpush_reviewers_merge_config_and_dedupe(stack_repo: Path, monkeypatch: 
         monkeypatch,
     )
     assert code == 0
-    i = out.index("%r=carol")
-    j = out.index("%r=alice")
-    k = out.index("%r=bob")
-    assert i < j < k
+    assert "%r=carol" not in out
+    i = out.index("%r=alice")
+    j = out.index("%r=bob")
+    assert i < j
 
 
 @pytest.mark.parametrize(
@@ -471,7 +471,7 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
     assert "->" not in out
 
 
-def test_gpush_interactive_reviewers_merges_and_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_interactive_reviewers", lambda: "bob")
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
@@ -480,7 +480,7 @@ def test_gpush_interactive_reviewers_merges_and_refspec(stack_repo: Path, monkey
     assert "%r=bob" in out
 
 
-def test_gpush_interactive_reviewers_order_after_branch_and_cli(
+def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
@@ -495,10 +495,9 @@ def test_gpush_interactive_reviewers_order_after_branch_and_cli(
         monkeypatch,
     )
     assert code == 0
-    i = out.index("%r=carol")
-    j = out.index("%r=alice")
-    k = out.index("%r=bob")
-    assert i < j < k
+    assert "%r=carol" not in out
+    assert "%r=alice" not in out
+    assert "%r=bob" in out
 
 
 def test_gpush_interactive_requires_tty(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

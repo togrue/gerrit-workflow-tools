@@ -70,33 +70,25 @@ def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.Complete
     return subprocess.run(cmd, cwd=cwd, check=False)
 
 
-def _merge_reviewers(
+def _resolve_push_reviewers(
     cwd: Path,
     branch: str,
     reviewer_flag_segments: list[str],
     *,
     interactive: str | None = None,
 ) -> list[str]:
-    """Merge branch config, ``--reviewers``, then optional ``-i`` input; dedupe preserving order.
+    """Resolve reviewers without merging unrelated sources.
 
-    TODO(reviewer-merge-cleanup): replace merge semantics with overwrite-only resolution so this
-    matches the interactive ``r`` subflow and ``--reviewers`` expectations.
+    A non-empty ``-i`` line replaces branch config and ``--reviewers``.
+    ``--reviewers`` alone replaces branch config. Otherwise branch ``gerritReviewers`` applies.
+    Multiple ``--reviewers`` flags are concatenated and deduped in order.
     """
-    segments = []
-    cfg = branch_gerrit_reviewers(cwd, branch)
-    if cfg:
-        segments.append(cfg)
-    segments.extend(reviewer_flag_segments)
     if interactive:
-        segments.append(interactive)
-    reviewers = []
-    seen = set()
-    for seg in segments:
-        for s in map(str.strip, seg.split(",")):
-            if s and s not in seen:
-                seen.add(s)
-                reviewers.append(s)
-    return reviewers
+        return _parse_reviewers_comma_separated(interactive)
+    if reviewer_flag_segments:
+        return _parse_reviewers_comma_separated(",".join(reviewer_flag_segments))
+    cfg = branch_gerrit_reviewers(cwd, branch)
+    return _parse_reviewers_comma_separated(cfg) if cfg else []
 
 
 def _gerrit_credentials_configured(cwd: Path) -> bool:
@@ -171,7 +163,7 @@ def _gpush_attribute_suffix(
 
 
 def _prompt_interactive_reviewers() -> str:
-    return input("Reviewers (comma-separated; empty keeps branch/CLI defaults): ")
+    return input("Reviewers (comma-separated; empty: branch config and/or --reviewers; non-empty replaces both): ")
 
 
 def _prompt_save_reviewers() -> bool:
@@ -625,7 +617,10 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     p.add_argument(
         "-i",
         action="store_true",
-        help="Prompt for reviewers (TTY only; merged after branch config and --reviewers; cannot be used with --yes).",
+        help=(
+            "Prompt for reviewers (TTY only; non-empty line overwrites branch and --reviewers; "
+            "cannot be used with --yes)."
+        ),
     )
     p.add_argument(
         "--update-last-pushed",
@@ -666,7 +661,10 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         action="append",
         default=[],
         metavar="ACCOUNTS",
-        help="Comma-separated Gerrit reviewer accounts (repeat to merge). Appended as ref options %%r=…",
+        help=(
+            "Comma-separated Gerrit reviewer accounts (repeat for more; overwrites branch gerritReviewers). "
+            "Appended as ref options %%r=…"
+        ),
     )
     p.add_argument(
         "--reviewer-strategy",
@@ -784,11 +782,11 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         interactive: str | None = None
         if args.i:
             interactive = _prompt_interactive_reviewers().strip()
-            reviewers = _merge_reviewers(cwd, b, list(args.reviewers), interactive=interactive or None)
+            reviewers = _resolve_push_reviewers(cwd, b, list(args.reviewers), interactive=interactive or None)
             if _prompt_save_reviewers():
                 set_branch_config(cwd, b, gerrit_reviewers=",".join(reviewers))
         else:
-            reviewers = _merge_reviewers(cwd, b, list(args.reviewers))
+            reviewers = _resolve_push_reviewers(cwd, b, list(args.reviewers))
 
         plan = GerritPushReviewers(
             reviewers=list(reviewers),
