@@ -231,9 +231,9 @@ def _prompt_reviewer_strategy_interactive() -> ReviewerStrategy:
 
 def _strategy_status_label(strategy: ReviewerStrategy) -> str:
     return {
-        "push": "push (git %r=)",
-        "lazy": "lazy (REST after push)",
-        "overwrite": "overwrite (REST after push)",
+        "push": "push (new changes are modified)",
+        "lazy": "lazy (non-assigned are modified)",
+        "overwrite": "overwrite (all changes are modified)",
     }[strategy]
 
 
@@ -525,9 +525,9 @@ def _print_gpush_confirm_status_line(
         f"{sep}"
         f"{color_text('Reviewers', ANSI_DIM)} {rev_v}"
     )
-    if strategy is not None:
+    if strategy is not None and strategy != "push":
         strat_v = color_text(_strategy_status_label(strategy), ANSI_DIM)
-        line += f"{sep}{color_text('Assignment', ANSI_DIM)} {strat_v}"
+        line += f"{sep}{color_text('Strategy', ANSI_DIM)} {strat_v}"
     print(line)
 
 
@@ -898,11 +898,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
                     continue
                 plan.reviewers = _parse_reviewers_list(line)
                 plan.strategy = _prompt_reviewer_strategy_interactive()
-                continue
             err = _validate_rest_plan(cwd, plan)
             if err:
                 print(err, file=sys.stderr)
-                continue
             break
 
         logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
