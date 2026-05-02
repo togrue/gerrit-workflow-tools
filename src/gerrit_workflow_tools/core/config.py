@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _GERRIT_STOP_PATTERN_CANONICAL = "gerrit.stoppattern"
 _GERRIT_WARNING_PATTERN_CANONICAL = "gerrit.warningpattern"
 
-# In-memory snapshot: one `git config --list` per process per resolved cwd (lazy first access).
+# In-memory snapshot: one effective `git config --list` per process per cwd (lazy first access).
 _snapshot: dict[str, str] | None = None  # pylint: disable=invalid-name
 _snapshot_multi: dict[str, list[str]] | None = None  # pylint: disable=invalid-name
 _snapshot_cwd: str | None = None  # pylint: disable=invalid-name
@@ -42,8 +42,8 @@ def _resolve_cwd_key(cwd: Path | str | None) -> str:
 
 
 def _load_git_config_maps(cwd: Path | str | None) -> tuple[dict[str, str], dict[str, list[str]]]:
-    """Parse `git config --list` once; last value wins for single-valued keys."""
-    p = git("config", "--local", "--list", cwd=cwd, check=False)
+    """Parse effective `git config --list` (all scopes); last value wins for single-valued keys."""
+    p = git("config", "--list", cwd=cwd, check=False)
     single: dict[str, str] = {}
     multi: dict[str, list[str]] = {}
     if p.returncode != 0 or not p.stdout:

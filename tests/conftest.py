@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -14,6 +16,32 @@ from tests.fixtures import (
     make_repo_malformed_cid,
     make_stack_repo,
 )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Point Git at replacement global/system config so tests ignore the real ``~/.gitconfig``.
+
+    The stub global file supplies only ``user.*`` so ``git commit`` works without per-call
+    ``GIT_AUTHOR_*`` env. Production uses full ``git config --list`` (standard precedence);
+    without this, tests would pick up the developer's ``gerrit.*`` keys and become flaky.
+    """
+    if os.environ.get("GERRIT_WORKFLOW_TOOLS_NO_GIT_CONFIG_ISOLATION", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return
+    base = Path(tempfile.gettempdir()) / "gerrit-workflow-tools-test-gitconfig"
+    base.mkdir(parents=True, exist_ok=True)
+    stub_global = base / "stub-global"
+    stub_system = base / "stub-system"
+    stub_global.write_text(
+        "[user]\n\tname = Test\n\temail = test@example.com\n",
+        encoding="utf-8",
+    )
+    stub_system.write_text("", encoding="utf-8")
+    os.environ.setdefault("GIT_CONFIG_GLOBAL", str(stub_global))
+    os.environ.setdefault("GIT_CONFIG_SYSTEM", str(stub_system))
 
 
 def _copy_git_repo(template: Path, dest: Path) -> Path:
