@@ -60,8 +60,9 @@ class GerritHttpSession:
             resp = self._session.request(method, url, **attempt_kwargs)
             if resp.status_code in ok_status:
                 break
-            # Retry with the next auth mechanism only when this looks like auth rejection.
-            if resp.status_code not in (401, 403):
+            # Retry with the next auth mechanism only when this is an auth challenge.
+            # 403 is usually authorization (permissions), not authentication.
+            if resp.status_code != 401:
                 break
         assert resp is not None
         if resp.status_code not in ok_status:

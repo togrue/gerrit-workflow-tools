@@ -24,6 +24,7 @@ from tests.integration.gerrit_seed import (
     create_account,
     create_project,
     delete_project,
+    grant_registered_users_branch_create,
     seed_repo_with_branches,
 )
 from tests.integration.load_local_env import load_local_env_file
@@ -166,6 +167,8 @@ def gerrit_integration_context(
         delete_project(admin_session, name)
     create_project(admin_session, pv)
     create_project(admin_session, pn)
+    grant_registered_users_branch_create(admin_session, pv)
+    grant_registered_users_branch_create(admin_session, pn)
 
     work_root = tmp_path_factory.mktemp("gerrit_seed")
     seed_v = seed_repo_with_branches(

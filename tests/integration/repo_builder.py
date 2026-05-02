@@ -52,17 +52,20 @@ def prepare_worktree_clone(
         password=git_password,
         project=project,
     )
+    user_email = f"{git_user}@example.com"
     env = {
         **os.environ,
         "GIT_AUTHOR_NAME": "Dev User",
-        "GIT_AUTHOR_EMAIL": "devuser@test.example",
+        "GIT_AUTHOR_EMAIL": user_email,
         "GIT_COMMITTER_NAME": "Dev User",
-        "GIT_COMMITTER_EMAIL": "devuser@test.example",
+        "GIT_COMMITTER_EMAIL": user_email,
     }
     git("fetch", "origin", cwd=dest, env=env)
     p = git("checkout", branch, cwd=dest, env=env, check=False)
     if p.returncode != 0:
         git("checkout", "-b", branch, f"origin/{branch}", cwd=dest, env=env)
+    git("config", "user.name", "Dev User", cwd=dest)
+    git("config", "user.email", user_email, cwd=dest)
     return dest
 
 
@@ -73,13 +76,6 @@ def build_linear_chain(
     env: dict[str, str] | None = None,
 ) -> list[str]:
     """Create one commit per subject; subjects are full commit messages (hook adds Change-Id)."""
-    env = env or {
-        **os.environ,
-        "GIT_AUTHOR_NAME": "Dev User",
-        "GIT_AUTHOR_EMAIL": "devuser@test.example",
-        "GIT_COMMITTER_NAME": "Dev User",
-        "GIT_COMMITTER_EMAIL": "devuser@test.example",
-    }
     shas: list[str] = []
     for i, msg in enumerate(subjects):
         fname = f"chain_{i}.txt"

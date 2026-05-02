@@ -42,12 +42,18 @@ def test_ger_log_show_and_push_dry_run(
         cid = str(row.get("change_id") or row.get("id"))
         post_review_labels(gerrit_admin_session, cid, code_review=2, verified=1)
 
-    code_log, out_log, elog = run_cli(repo, ger_log_main, ["--no-color"], monkeypatch)
+    code_log, out_log, elog = run_cli(
+        repo,
+        ger_log_main,
+        ["--color", "never", "--show-change-id"],
+        monkeypatch,
+    )
     assert code_log == 0, elog
-    assert "Change-Id:" in out_log or re.search(r"\bI[0-9a-f]{40}\b", out_log)
+    # Text mode appends a shortened Change-Id token (not a "Change-Id:" footer line).
+    assert re.search(r"I[a-f0-9]{8}", out_log, re.IGNORECASE), out_log
 
     tip = git_out("rev-parse", "HEAD", cwd=repo).strip()
-    code_show, out_show, eshow = run_cli(repo, ger_show_main, ["--no-color", tip], monkeypatch)
+    code_show, out_show, eshow = run_cli(repo, ger_show_main, ["--color", "never", tip], monkeypatch)
     assert code_show == 0, eshow
     assert "Code-Review" in out_show or "change" in out_show.lower()
 

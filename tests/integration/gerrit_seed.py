@@ -40,6 +40,50 @@ def create_project(session: GerritHttpSession, name: str, *, parent: str = "All-
     )
 
 
+def grant_registered_users_branch_create(session: GerritHttpSession, project: str) -> None:
+    """Allow registered users to create/push branches and vote labels for tests."""
+    enc = quote(project, safe="")
+    session.post_json(
+        f"projects/{enc}/access",
+        body={
+            "add": {
+                "refs/heads/*": {
+                    "permissions": {
+                        "create": {
+                            "rules": {
+                                "global:Registered-Users": {"action": "ALLOW"},
+                            },
+                        },
+                        "push": {
+                            "rules": {
+                                "global:Registered-Users": {"action": "ALLOW"},
+                            },
+                        },
+                        "label-Code-Review": {
+                            "rules": {
+                                "global:Registered-Users": {
+                                    "action": "ALLOW",
+                                    "min": -2,
+                                    "max": 2,
+                                },
+                            },
+                        },
+                        "label-Verified": {
+                            "rules": {
+                                "global:Registered-Users": {
+                                    "action": "ALLOW",
+                                    "min": -1,
+                                    "max": 1,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+
 def list_branches(session: GerritHttpSession, project: str) -> list[dict[str, object]]:
     enc = quote(project, safe="")
     data = session.get_json(f"projects/{enc}/branches/")

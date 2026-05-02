@@ -50,7 +50,10 @@ def test_review_vote_matrix(
     post_review_labels(gerrit_admin_session, cid, code_review=cr, verified=v)
 
     enc = quote_change_id(cid)
-    detail = gerrit_admin_session.get_json(f"changes/{enc}/detail")
+    detail = gerrit_admin_session.get_json(
+        f"changes/{enc}/detail",
+        params=[("o", "SUBMITTABLE")],
+    )
     assert label_value(detail, "Code-Review") == cr
     assert label_value(detail, "Verified") == v
     if cr == 2 and v == 1:

@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import GitError, git
 from tests.integration.gerrit_http import GerritHttpSession
 from tests.integration.gerrit_seed import configure_ger_git_repo, set_origin_url
 from tests.integration.repo_builder import install_commit_msg_hook, prepare_worktree_clone
@@ -30,6 +30,23 @@ def label_value(detail: dict[str, Any], name: str) -> int | None:
         return None
     v = lab.get("value")
     if v is None:
+        # Gerrit 3.14+ puts applied votes under labels.<name>.all[*].value
+        all_votes = lab.get("all")
+        if isinstance(all_votes, list):
+            for item in reversed(all_votes):
+                if not isinstance(item, dict):
+                    continue
+                av = item.get("value")
+                if isinstance(av, int):
+                    return av
+                try:
+                    return int(av)
+                except (TypeError, ValueError):
+                    continue
+        # Gerrit may omit explicit vote entries for "no score"; treat as 0 when
+        # the label definition exists but no vote value is present.
+        if "values" in lab:
+            return 0
         return None
     if isinstance(v, int):
         return v
@@ -72,7 +89,30 @@ def prepare_topic_repo(
     p_main = git("rev-parse", "--verify", "origin/main", cwd=dest, check=False)
     base = "origin/main" if p_main.returncode == 0 else "origin/master"
     git("checkout", "-b", topic, base, cwd=dest)
-    git("push", "-u", "origin", topic, cwd=dest)
+    try:
+        git("push", "-u", "origin", topic, cwd=dest)
+    except GitError as e:
+        # Some Gerrit setups don't grant the test user branch-create rights.
+        # Create the topic branch with admin credentials, then restore dev credentials
+        # so the actual test pushes still run as the dev user.
+        err = (e.stderr or str(e)).lower()
+        if "not permitted: create" not in err:
+            raise
+        set_origin_url(
+            dest,
+            http_base=ctx.http_base,
+            user=ctx.admin_user,
+            password=ctx.admin_password,
+            project=proj,
+        )
+        git("push", "-u", "origin", topic, cwd=dest)
+        set_origin_url(
+            dest,
+            http_base=ctx.http_base,
+            user=ctx.dev_user,
+            password=ctx.dev_password,
+            project=proj,
+        )
     install_commit_msg_hook(dest, http_base=ctx.http_base)
     configure_ger_git_repo(
         dest,
@@ -111,6 +151,8 @@ def prepare_clone_at_branch(
     p = git("checkout", branch, cwd=dest, check=False)
     if p.returncode != 0:
         git("checkout", "-b", branch, f"origin/{branch}", cwd=dest)
+    git("config", "user.name", "Dev User", cwd=dest)
+    git("config", "user.email", f"{ctx.dev_user}@example.com", cwd=dest)
     install_commit_msg_hook(dest, http_base=ctx.http_base)
     configure_ger_git_repo(
         dest,
