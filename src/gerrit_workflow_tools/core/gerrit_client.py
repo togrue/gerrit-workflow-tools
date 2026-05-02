@@ -192,27 +192,6 @@ class GerritClient:
         )
         return out
 
-    def get_related(self, change_id: str, *, revision_id: str = "current") -> list[dict[str, Any]]:
-        """GET related changes for *change_id* at *revision_id* (empty if 404)."""
-        enc = quote(change_id, safe="")
-        rev_enc = quote(revision_id, safe="")
-        try:
-            data = self._request_json(
-                f"changes/{enc}/revisions/{rev_enc}/related",
-            )
-        except GerritApiError as e:
-            if e.status == 404:
-                return []
-            raise
-        if not isinstance(data, dict):
-            return []
-        ch = data.get("changes")
-        if not isinstance(ch, list):
-            return []
-        result = [x for x in ch if isinstance(x, dict)]
-        logger.info("get_related %r -> %d related change(s)", change_id, len(result))
-        return result
-
 
 def resolve_change_ref(arg: str) -> str:
     """Build a ``changes/`` query string (numeric id, Change-Id, or passthrough)."""

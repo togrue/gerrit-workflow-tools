@@ -59,17 +59,15 @@ class StackSnapshot:
     """Upstream tracking tip + ``upstream_tip..HEAD`` commits (one ``git log``)."""
 
     upstream_tip: str
-    upstream_display: str
     commits: tuple[Commit, ...]
 
 
 def get_stack_snapshot(cwd: Path | str | None, branch: str | None = None) -> StackSnapshot:
-    """Return the upstream tip SHA, display name, and oldest-first ``upstream_tip..HEAD`` commits."""
-    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch)
+    """Return the upstream tip SHA and oldest-first ``upstream_tip..HEAD`` commits."""
+    upstream_tip, _display = upstream_tracking_tip_and_display(cwd, branch)
     rows_list = commits_in_range(cwd, f"{upstream_tip}..HEAD")
     return StackSnapshot(
         upstream_tip=upstream_tip,
-        upstream_display=display,
         commits=tuple(rows_list),
     )
 

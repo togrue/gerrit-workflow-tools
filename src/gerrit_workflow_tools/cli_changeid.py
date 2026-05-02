@@ -44,7 +44,6 @@ from gerrit_workflow_tools.core.stack import (
 
 CHANGE_ID_RE = CHANGE_ID_LAST_LINE_FOOTER_RE
 
-is_change_id = is_change_id_token
 _parse_sha_body_rs = parse_git_log_sha_body_rs
 
 

@@ -108,4 +108,5 @@ def classify_issues(
             break
         if issue.severity == "warning" and exit_code < 2:
             exit_code = 1
+    assert all(i.kind for i in issues), "each issue must set kind"
     return issues, exit_code

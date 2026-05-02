@@ -9,11 +9,11 @@ from gerrit_workflow_tools.cli_changeid import (
     CHANGE_ID_RE,
     _parse_sha_body_rs,
     extract_change_id_from_msg,
-    is_change_id,
 )
 from gerrit_workflow_tools.cli_changeid import (
     main as gcid_main,
 )
+from gerrit_workflow_tools.core.change_id import is_change_id_token as is_change_id
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
 from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid

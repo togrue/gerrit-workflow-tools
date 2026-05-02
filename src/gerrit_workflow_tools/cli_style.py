@@ -16,7 +16,6 @@ ANSI_YELLOW = "\033[33m"
 ANSI_BOLD = "\033[1m"
 ANSI_CYAN = "\033[36m"
 ANSI_DIM_GRAY = "\033[2;37m"
-ANSI_DIM_YELLOW = "\033[2;33m"
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 _COLOR_ENABLED = False
