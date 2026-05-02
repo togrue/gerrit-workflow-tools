@@ -174,8 +174,9 @@ def _prompt_save_reviewers() -> bool:
 def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str], strategy: ReviewerStrategy) -> str:
     ref = f"{tip}:refs/for/{push_branch}"
     if strategy == "push":
-        for r in reviewers:
-            ref += f"%r={r}"
+        args = [f"r={r}" for r in reviewers]
+        if args:
+            ref += f"%{','.join(args)}"
     return ref
 
 
