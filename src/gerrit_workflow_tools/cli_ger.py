@@ -55,20 +55,26 @@ def _usage() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger``: dispatch ``ger <command>`` to the matching tool."""
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if not argv:
-        print(_usage())
-        return 2
-    if argv[0] in ("-h", "--help"):
-        print(_usage())
-        return 0
-    cmd = argv[0]
-    if cmd not in _COMMANDS:
-        print(f"ger: unknown command {cmd!r}", file=sys.stderr)
-        print("Run `ger --help` for a list of commands.", file=sys.stderr)
-        return 1
-    return _COMMANDS[cmd][1](argv[1:])
+    try:
+        argv = list(sys.argv[1:] if argv is None else argv)
+        if not argv:
+            print(_usage())
+            return 2
+        if argv[0] in ("-h", "--help"):
+            print(_usage())
+            return 0
+        cmd = argv[0]
+        if cmd not in _COMMANDS:
+            print(f"ger: unknown command {cmd!r}", file=sys.stderr)
+            print("Run `ger --help` for a list of commands.", file=sys.stderr)
+            return 1
+        return _COMMANDS[cmd][1](argv[1:])
+    except KeyboardInterrupt:
+        return 130
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        raise SystemExit(130) from None
