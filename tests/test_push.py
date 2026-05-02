@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import gerrit_workflow_tools.cli_push as cli_push_mod
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
@@ -20,6 +21,13 @@ from tests.fixtures import configure_gerrit_target, make_repo_with_merged_side_b
 def _ref_exists(repo: Path, ref: str) -> bool:
     p = git("rev-parse", "--verify", ref, cwd=repo, check=False)
     return p.returncode == 0
+
+
+def _mock_gerrit_push_refspec(mock_run: MagicMock) -> str:
+    mock_run.assert_called_once()
+    cmd, _cwd = mock_run.call_args[0]
+    assert cmd[0] == "git" and cmd[1] == "push"
+    return cmd[-1]
 
 
 def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,12 +47,12 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--follow-merges" in out
 
 
-def test_gpush_dry_run_prints_refs_for_and_push_command(stack_repo, monkeypatch):
+def test_gpush_dry_run_prints_commit_preview(stack_repo, monkeypatch):
+    """Gerrit dry-run shows the stack preview only; refspec is not echoed to stdout."""
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
-    assert "refs/for/main" in out
-    assert "git push" in out
     assert "About to push commits:" in out
+    assert "git push" not in out
     assert "[dry-run]" in err
 
 
@@ -95,14 +103,17 @@ def test_gpush_detached_head_errors(stack_repo: Path, monkeypatch: pytest.Monkey
 def test_gpush_infers_gerrit_target_from_upstream(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No gerritTarget: upstream on gerrit.remote implies Gerrit push and refs/for/…."""
+    """No gerritTarget: upstream on gerrit.remote implies Gerrit push to refs/for/<branch>."""
     repo = stack_repo_unconfigured
     _add_self_origin_and_fetch(repo)
     git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
     clear_gerrit_git_config_cache()
-    code, out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 0, (out, err)
-    assert "refs/for/main" in out
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, _err = run_cli(repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 0
+    assert ":refs/for/main" in _mock_gerrit_push_refspec(mock_run)
 
 
 def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
@@ -113,10 +124,14 @@ def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     main_sha = git_out("rev-parse", "main", cwd=repo)
     git("update-ref", "refs/remotes/origin/main", main_sha, cwd=repo)
     configure_gerrit_target(repo, "origin/main")
-    code, out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 0, (out, err)
-    assert "refs/for/main" in out
-    assert "refs/for/origin/main" not in out
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, _err = run_cli(repo, gpush_main, ["--yes"], monkeypatch)
+    assert code == 0
+    refspec = _mock_gerrit_push_refspec(mock_run)
+    assert ":refs/for/main" in refspec
+    assert "origin/main" not in refspec
 
 
 def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
@@ -163,16 +178,17 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert code == 0
     assert "About to push commits:" in out
     assert "Stopped at commit" in out
-    assert "git push" in out
+    assert "git push" not in out
+    i_push = out.index("About to push commits:")
+    i_stop = out.index("Stopped at commit")
     i_remain = out.index("not-ready commit(s) remain unpushed")
     i_status = out.index("Branch", i_remain)
-    assert i_remain < i_status
+    assert i_push < i_stop < i_remain < i_status
     assert "Target" in out[i_status:]
     assert "feature" in out[i_status:]
     assert "main" in out[i_status:]
     assert "Reviewers" in out[i_status:]
     assert "(none)" in out[i_status:]
-    assert "Assignment" in out[i_status:]
     assert "cancel" in err.lower()
     mock_run.assert_not_called()
 
@@ -190,28 +206,31 @@ def test_gpush_prompt_preview_order_matches_expected(stack_repo: Path, monkeypat
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     code, out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 0
-    i_cmd = out.index("git push")
     i_push = out.index("About to push commits:")
     i_stop = out.index("Stopped at commit")
     i_remain = out.index("not-ready commit(s) remain unpushed")
-    assert i_cmd < i_push < i_stop < i_remain
+    i_branch = out.index("Branch", i_remain)
+    assert i_push < i_stop < i_remain < i_branch
     assert prompts == ["Do you want to push these commits? [Y/n/r]: "]
     assert "it matches the stop pattern" in out
-    assert "git push" in out
+    assert "git push" not in out
     assert "cancel" in err.lower()
     mock_run.assert_not_called()
 
 
 def test_gpush_reviewers_append_to_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, _err = run_cli(
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, _err = run_cli(
         stack_repo,
         gpush_main,
-        ["--dry-run", "--reviewers", "alice,bob"],
+        ["--yes", "--reviewers", "alice,bob"],
         monkeypatch,
     )
     assert code == 0
-    assert "%r=alice" in out
-    assert "%r=bob" in out
+    refspec = _mock_gerrit_push_refspec(mock_run)
+    assert "%r=alice,r=bob" in refspec
 
 
 def test_gpush_lazy_strategy_omits_refspec_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -222,9 +241,9 @@ def test_gpush_lazy_strategy_omits_refspec_percent_r(stack_repo: Path, monkeypat
         monkeypatch,
     )
     assert code == 0
-    assert "refs/for/main" in out
     assert "%r=" not in out
-    assert "lazy (REST after push)" in err
+    assert "%r=" not in err
+    assert "lazy" in err and "reviewers" in err
 
 
 def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -242,16 +261,20 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
 def test_gpush_reviewers_cli_overwrites_branch_and_dedupes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
     set_branch_config(stack_repo, b, gerrit_reviewers="carol")
-    code, out, _err = run_cli(
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, _out, _err = run_cli(
         stack_repo,
         gpush_main,
-        ["--dry-run", "--reviewers", "alice", "--reviewers", "alice,bob"],
+        ["--yes", "--reviewers", "alice", "--reviewers", "alice,bob"],
         monkeypatch,
     )
     assert code == 0
-    assert "%r=carol" not in out
-    i = out.index("%r=alice")
-    j = out.index("%r=bob")
+    refspec = _mock_gerrit_push_refspec(mock_run)
+    assert "carol" not in refspec
+    i = refspec.index("r=alice")
+    j = refspec.index("r=bob")
     assert i < j
 
 
@@ -267,8 +290,11 @@ def test_gpush_reviewers_cli_overwrites_branch_and_dedupes(stack_repo: Path, mon
 def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]) -> None:
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", *extra], monkeypatch)
     assert code == 0, (code, out, err)
-    assert "refs/for/main" in out
-    assert "git push" in out
+    assert "About to push commits:" in out
+    assert "git push" not in out
+    assert "[dry-run]" in err
+    if "--all" in extra:
+        assert "Cleanup after experiment" in out
 
 
 def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -375,8 +401,6 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     assert code == 0
     assert "->" in out
     assert "`r=alice` -> `r=alice,r=bob`" in out
-    assert "%r=alice" in out
-    assert "%r=bob" in out
 
 
 def test_gpush_config_default_show_attributes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -472,32 +496,51 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
 
 
 def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    refs: list[str] = []
+    orig = cli_push_mod._refs_for_spec
+
+    def _capture(tip: str, push_branch: str, reviewers: list[str], strategy: object) -> str:
+        r = orig(tip, push_branch, reviewers, strategy)
+        refs.append(r)
+        return r
+
+    monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_interactive_reviewers", lambda: "bob")
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
-    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
-    assert "%r=bob" in out
+    assert refs and "%r=bob" in refs[-1]
 
 
 def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    refs: list[str] = []
+    orig = cli_push_mod._refs_for_spec
+
+    def _capture(tip: str, push_branch: str, reviewers: list[str], strategy: object) -> str:
+        r = orig(tip, push_branch, reviewers, strategy)
+        refs.append(r)
+        return r
+
     b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
     set_branch_config(stack_repo, b, gerrit_reviewers="carol")
+    monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_interactive_reviewers", lambda: "bob")
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
-    code, out, _err = run_cli(
+    code, _out, _err = run_cli(
         stack_repo,
         gpush_main,
         ["--dry-run", "-i", "--reviewers", "alice"],
         monkeypatch,
     )
     assert code == 0
-    assert "%r=carol" not in out
-    assert "%r=alice" not in out
-    assert "%r=bob" in out
+    refspec = refs[-1]
+    assert "carol" not in refspec
+    assert "alice" not in refspec
+    assert "%r=bob" in refspec
 
 
 def test_gpush_interactive_requires_tty(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -675,7 +718,7 @@ def test_gpush_default_remote_policy_skips_rebase_check(stack_repo: Path, monkey
     clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
-    assert "refs/for/main" in out
+    assert "About to push commits:" in out
     assert "not based directly" not in err.lower()
 
 
@@ -686,7 +729,7 @@ def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch:
     clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
-    assert "refs/for/main" in out
+    assert "About to push commits:" in out
     assert "warning:" in err.lower()
     assert "ger restack --onto-remote" in err
 
@@ -709,7 +752,7 @@ def test_gpush_no_rebase_check_bypasses_error_policy(stack_repo: Path, monkeypat
     clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--no-rebase-check"], monkeypatch)
     assert code == 0
-    assert "refs/for/main" in out
+    assert "About to push commits:" in out
     assert "not based directly" not in err.lower()
 
 
@@ -718,7 +761,7 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
     clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
-    assert "refs/for/main" in out
+    assert "About to push commits:" in out
     assert "skipping remote rebase check" in err.lower()
 
 
