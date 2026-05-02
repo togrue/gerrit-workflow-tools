@@ -513,6 +513,26 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
     assert refs and "%r=bob" in refs[-1]
 
 
+def test_gpush_confirm_reviewers_then_push_includes_percent_r(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After ``r`` at the push confirm prompt, refspec must include %%r= on the actual git push."""
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    _answers = iter(["r", "", ""])  # reviewers path, strategy 1 default, confirm push
+
+    def _input(prompt: str = "") -> str:
+        return next(_answers)
+
+    monkeypatch.setattr("builtins.input", _input)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_reviewers_line_ptk", lambda: "alice")
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    refspec = _mock_gerrit_push_refspec(mock_run)
+    assert "%r=alice" in refspec
+
+
 def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

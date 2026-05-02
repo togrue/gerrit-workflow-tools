@@ -898,9 +898,12 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
                     continue
                 plan.reviewers = _parse_reviewers_list(line)
                 plan.strategy = _prompt_reviewer_strategy_interactive()
+                continue
+
             err = _validate_rest_plan(cwd, plan)
             if err:
                 print(err, file=sys.stderr)
+                continue
             break
 
         logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
