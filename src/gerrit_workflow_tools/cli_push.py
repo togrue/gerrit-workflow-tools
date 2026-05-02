@@ -84,11 +84,11 @@ def _resolve_push_reviewers(
     Multiple ``--reviewers`` flags are concatenated and deduped in order.
     """
     if interactive:
-        return _parse_reviewers_comma_separated(interactive)
+        return _parse_reviewers_list(interactive)
     if reviewer_flag_segments:
-        return _parse_reviewers_comma_separated(",".join(reviewer_flag_segments))
+        return _parse_reviewers_list(",".join(reviewer_flag_segments))
     cfg = branch_gerrit_reviewers(cwd, branch)
-    return _parse_reviewers_comma_separated(cfg) if cfg else []
+    return _parse_reviewers_list(cfg) if cfg else []
 
 
 def _gerrit_credentials_configured(cwd: Path) -> bool:
@@ -188,10 +188,11 @@ class GerritPushReviewers:
     strategy: ReviewerStrategy
 
 
-def _parse_reviewers_comma_separated(raw: str) -> list[str]:
+def _parse_reviewers_list(raw: str) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
-    for part in raw.split(","):
+    # Split by comma or space
+    for part in raw.replace(",", " ").split():
         s = part.strip()
         if s and s not in seen:
             seen.add(s)
@@ -902,7 +903,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
                 if not line:
                     print("No reviewers entered; nothing changed.")
                     continue
-                plan.reviewers = _parse_reviewers_comma_separated(line)
+                plan.reviewers = _parse_reviewers_list(line)
                 plan.strategy = _prompt_reviewer_strategy_interactive()
                 continue
             err = _validate_rest_plan(cwd, plan)
