@@ -218,11 +218,12 @@ class GerritPushReviewers:
         )
 
     def replace_from_state(self, state: PushLineState) -> None:
-        """Overwrite reviewers/topic/wip/private with values from ``state``."""
+        """Overwrite reviewers/topic/wip/private/strategy with values from ``state``."""
         self.reviewers = list(state.reviewers)
         self.topic = state.topic
         self.wip = state.wip
         self.private = state.private
+        self.strategy = state.strategy
 
 
 @dataclass
@@ -794,7 +795,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     interactive_state: PushLineState | None = None
     if args.i:
         res = _prompt_interactive_reviewers(cwd, branch)
-        if res.state.reviewers or res.state.topic or res.state.wip or res.state.private:
+        if res.state.reviewers or res.state.topic or res.state.wip or res.state.private or res.state.strategy != "push":
             interactive_state = res.state
             reviewers = list(res.state.reviewers)
         else:
@@ -806,7 +807,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
 
     plan = GerritPushReviewers(
         reviewers=list(reviewers),
-        strategy=(args.reviewer_strategy or "push"),
+        strategy=(interactive_state.strategy if interactive_state is not None else (args.reviewer_strategy or "push")),
         topic=interactive_state.topic if interactive_state else None,
         wip=interactive_state.wip if interactive_state else False,
         private=interactive_state.private if interactive_state else False,
@@ -949,11 +950,16 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 print("Invalid push options; nothing changed.", file=sys.stderr)
                 continue
             new_state = res.state
-            if not (new_state.reviewers or new_state.topic or new_state.wip or new_state.private):
+            if not (
+                new_state.reviewers
+                or new_state.topic
+                or new_state.wip
+                or new_state.private
+                or new_state.strategy != "push"
+            ):
                 print("No push options entered; nothing changed.")
                 continue
             ctx.plan.replace_from_state(new_state)
-            ctx.plan.strategy = _prompt_reviewer_strategy_interactive()
             continue
 
         err = _validate_rest_plan(cwd, ctx.plan)

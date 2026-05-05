@@ -21,7 +21,10 @@ from prompt_toolkit.validation import ValidationError, Validator
 
 from gerrit_workflow_tools.cli_style import is_color_enabled
 from gerrit_workflow_tools.push_input_line import (
+    KW_LAZY,
+    KW_OVERWRITE,
     KW_PRIVATE,
+    KW_PUSH,
     KW_R,
     KW_TOPIC,
     KW_WIP,
@@ -37,6 +40,9 @@ _STYLE_BY_KIND: dict[SpanKind, str] = {
     "keyword_topic": "fg:ansicyan",
     "keyword_wip": "fg:#a05a2c bold",
     "keyword_private": "fg:#9b30ff bold",
+    "keyword_push": "fg:#4a7ebb bold",
+    "keyword_lazy": "fg:#4a7ebb bold",
+    "keyword_overwrite": "fg:#4a7ebb bold",
     "equals": "fg:ansiwhite",
     "comma": "fg:ansiwhite",
     "reviewer": "fg:ansibrightgreen",
@@ -112,6 +118,9 @@ class PushOptionsCompleter(Completer):
             (KW_TOPIC + "=", "change topic"),
             (KW_WIP, "mark as WIP"),
             (KW_PRIVATE, "mark as private"),
+            (KW_PUSH, "reviewers via %r= on push"),
+            (KW_LAZY, "reviewers via REST only when missing"),
+            (KW_OVERWRITE, "reviewers via REST on all changes"),
         ]
         candidates.extend((name, "reviewer") for name in self._reviewer_seeds)
         prefix = word.lstrip("-").lower()
@@ -154,7 +163,7 @@ def _bottom_toolbar(text: str) -> FormattedText | None:
         msg = warnings[0].message
         extra = f" (+{len(warnings) - 1} more)" if len(warnings) > 1 else ""
         return FormattedText([("fg:ansiyellow", f"warning: {msg}{extra}")])
-    return None
+    return FormattedText([("fg:#808080", "keywords: r= topic= wip private push lazy overwrite")])
 
 
 def prompt_push_options_line(

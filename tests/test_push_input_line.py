@@ -106,15 +106,27 @@ def test_keyword_wip_not_treated_as_reviewer_name() -> None:
 
 
 def test_case_insensitive_keywords() -> None:
-    s = _state("WIP Private TOPIC=x")
+    s = _state("WIP Private TOPIC=x LaZy")
     assert s.wip is True
     assert s.private is True
     assert s.topic == "x"
+    assert s.strategy == "lazy"
 
 
 def test_dedup_reviewers_preserves_order() -> None:
     s = _state("alice bob alice carol bob")
     assert s.reviewers == ["alice", "bob", "carol"]
+
+
+def test_strategy_keywords_set_strategy_last_one_wins() -> None:
+    s = _state("lazy overwrite push lazy")
+    assert s.strategy == "lazy"
+
+
+def test_strategy_keywords_are_reserved_not_reviewers() -> None:
+    s = _state("alice lazy overwrite")
+    assert s.reviewers == ["alice"]
+    assert s.strategy == "overwrite"
 
 
 # ---------- diagnostics ----------
@@ -165,6 +177,8 @@ def test_topic_redefined_warns() -> None:
         ("bob topic=abc alice", "r=bob,alice topic=abc"),
         ('bob topic "abc" alice', "r=bob,alice topic=abc"),
         ("alice private wip", "r=alice wip private"),
+        ("alice lazy", "r=alice lazy"),
+        ("alice overwrite", "r=alice overwrite"),
     ],
 )
 def test_canonical_examples(buf: str, expected: str) -> None:
@@ -181,7 +195,7 @@ def test_canonical_empty_state_is_empty_string() -> None:
 
 
 def test_canonical_round_trip_through_parser() -> None:
-    s1 = _state("alice bob topic=t1 wip private")
+    s1 = _state("alice bob topic=t1 wip private lazy")
     can = format_canonical(s1)
     s2 = _state(can)
     assert s2 == s1
@@ -233,13 +247,16 @@ def test_minus_span_records_minus_and_target_separately() -> None:
 
 
 def test_keyword_spans_are_classified() -> None:
-    res = parse("wip private topic=abc r=alice")
+    res = parse("wip private topic=abc r=alice lazy overwrite push")
     kinds = {s.kind for s in res.spans}
     expected = {
         "keyword_wip",
         "keyword_private",
         "keyword_topic",
         "keyword_r",
+        "keyword_lazy",
+        "keyword_overwrite",
+        "keyword_push",
         "topic_value",
         "reviewer",
         "equals",

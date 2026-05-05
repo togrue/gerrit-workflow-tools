@@ -1,18 +1,19 @@
 """Pure parsing/formatting for the interactive Gerrit push options line.
 
 The interactive ``ger push`` reviewer prompt accepts a single line that mixes
-reviewers, a topic, and the ``wip`` / ``private`` flags. This module turns the
+reviewers, a topic, flags, and reviewer-assignment strategy keywords. This module turns the
 raw buffer into a structured :class:`PushLineState` with diagnostics and
 classified spans for highlighting, and renders the canonical form back out.
 
 Grammar (best effort, case-insensitive keywords)::
 
     line     := element (WS+ element)*
-    element  := removal | rclause | topic | flag | reviewer
+    element  := removal | rclause | topic | flag | strategy | reviewer
     removal  := '-' (keyword | reviewer)
     rclause  := ('r' '=' list) | ('r' WS+ list)        # list = name (',' name)*
     topic    := ('topic' '=' value) | ('topic' WS+ value)
     flag     := 'wip' | 'private'
+    strategy := 'push' | 'lazy' | 'overwrite'
     reviewer := bare-word that is not a reserved keyword
 
 Quoted strings (``"..."`` / ``'...'``) are accepted as topic values.
@@ -29,8 +30,11 @@ KW_R = "r"
 KW_TOPIC = "topic"
 KW_WIP = "wip"
 KW_PRIVATE = "private"
+KW_PUSH = "push"
+KW_LAZY = "lazy"
+KW_OVERWRITE = "overwrite"
 
-RESERVED: frozenset[str] = frozenset({KW_R, KW_TOPIC, KW_WIP, KW_PRIVATE})
+RESERVED: frozenset[str] = frozenset({KW_R, KW_TOPIC, KW_WIP, KW_PRIVATE, KW_PUSH, KW_LAZY, KW_OVERWRITE})
 
 SpanKind = Literal[
     "whitespace",
@@ -39,6 +43,9 @@ SpanKind = Literal[
     "keyword_topic",
     "keyword_wip",
     "keyword_private",
+    "keyword_push",
+    "keyword_lazy",
+    "keyword_overwrite",
     "equals",
     "comma",
     "reviewer",
@@ -86,6 +93,7 @@ class PushLineState:
     topic: str | None = None
     wip: bool = False
     private: bool = False
+    strategy: ReviewerStrategy = "push"
 
     def add_reviewer(self, name: str) -> None:
         """Append ``name`` if non-empty and not already present."""
@@ -186,6 +194,12 @@ def _classify_keyword(word: str) -> SpanKind | None:
         return "keyword_wip"
     if low == KW_PRIVATE:
         return "keyword_private"
+    if low == KW_PUSH:
+        return "keyword_push"
+    if low == KW_LAZY:
+        return "keyword_lazy"
+    if low == KW_OVERWRITE:
+        return "keyword_overwrite"
     return None
 
 
@@ -232,6 +246,9 @@ def parse(buf: str) -> ParseResult:  # pylint: disable=too-many-branches,too-man
                 spans.append(Span("keyword_topic", inner_start, inner_end))
                 state.topic = None
                 topic_seen_at = None
+            elif kw in ("keyword_push", "keyword_lazy", "keyword_overwrite"):
+                spans.append(Span(kw, inner_start, inner_end))
+                state.strategy = "push"
             else:
                 spans.append(Span("reviewer", inner_start, inner_end))
                 state.remove_reviewer(inner)
@@ -316,6 +333,21 @@ def parse(buf: str) -> ParseResult:  # pylint: disable=too-many-branches,too-man
             state.private = True
             i += 1
             continue
+        if kw == "keyword_push":
+            spans.append(Span("keyword_push", tok.start, tok.end))
+            state.strategy = "push"
+            i += 1
+            continue
+        if kw == "keyword_lazy":
+            spans.append(Span("keyword_lazy", tok.start, tok.end))
+            state.strategy = "lazy"
+            i += 1
+            continue
+        if kw == "keyword_overwrite":
+            spans.append(Span("keyword_overwrite", tok.start, tok.end))
+            state.strategy = "overwrite"
+            i += 1
+            continue
 
         spans.append(Span("reviewer", tok.start, tok.end))
         state.add_reviewer(text)
@@ -352,8 +384,8 @@ def format_canonical(state: PushLineState) -> str:
     """Render ``state`` as a stable, ergonomic line.
 
     Reviewers come first as ``r=alice,bob``, then optional ``topic=…``, then
-    flags (``wip private``) so the user can ergonomically append ``-wip`` /
-    ``-private`` next time.
+    flags (``wip private``), and finally a non-default strategy keyword
+    (``lazy``/``overwrite``).
     """
     parts: list[str] = []
     if state.reviewers:
@@ -365,6 +397,8 @@ def format_canonical(state: PushLineState) -> str:
         parts.append("wip")
     if state.private:
         parts.append("private")
+    if state.strategy != "push":
+        parts.append(state.strategy)
     return " ".join(parts)
 
 

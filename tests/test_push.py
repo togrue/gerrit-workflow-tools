@@ -517,12 +517,34 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
     assert refs and "%r=bob" in refs[-1]
 
 
+def test_gpush_interactive_reviewers_lazy_omits_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    refs: list[str] = []
+    orig = cli_push_mod._refs_for_spec
+
+    def _capture(tip: str, push_branch: str, state: object, strategy: object) -> str:
+        r = orig(tip, push_branch, state, strategy)
+        refs.append(r)
+        return r
+
+    monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
+        lambda *_a, **_k: parse_push_options_line("bob lazy"),
+    )
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
+    assert code == 0
+    assert "lazy" in err
+    assert refs and "%r=bob" not in refs[-1]
+
+
 def test_gpush_confirm_reviewers_then_push_includes_percent_r(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """After ``r`` at the push confirm prompt, refspec must include %%r= on the actual git push."""
+    """After ``r`` at confirm, inline options drive push without a second strategy prompt."""
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    _answers = iter(["r", "", ""])  # reviewers path, strategy 1 default, confirm push
+    _answers = iter(["r", ""])  # reviewers path, then confirm push
 
     def _input(prompt: str = "") -> str:
         return next(_answers)
