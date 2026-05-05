@@ -140,6 +140,49 @@ class GerritClient:
         logger.info("query_changes %r -> %d result(s)", query, len(data))
         return data
 
+    def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
+        """GET ``accounts/?q=...`` and return account rows."""
+        data = self._request_json("accounts/", params=[("q", query), ("n", str(n))])
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected accounts query response")
+        out = [row for row in data if isinstance(row, dict)]
+        logger.info("query_accounts %r -> %d result(s)", query, len(out))
+        return out
+
+    def suggest_change_reviewers(
+        self,
+        change_id: str,
+        *,
+        query: str | None = None,
+        n: int = 20,
+    ) -> list[dict[str, Any]]:
+        """GET suggested reviewers for ``change_id`` via ``changes/<id>/suggest_reviewers``."""
+        enc = quote(change_id, safe="")
+        params: list[tuple[str, str]] = [("n", str(n))]
+        if query:
+            params.insert(0, ("q", query))
+        data = self._request_json(f"changes/{enc}/suggest_reviewers", params=params)
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected suggest reviewers response")
+        out = [row for row in data if isinstance(row, dict)]
+        logger.info("suggest_change_reviewers %r -> %d result(s)", change_id, len(out))
+        return out
+
+    def get_plugin_project_reviewers(self, project: str) -> list[dict[str, Any]] | None:
+        """GET project-level reviewer defaults from reviewers plugin (if installed)."""
+        enc = quote(project, safe="")
+        try:
+            data = self._request_json(f"projects/{enc}/reviewers")
+        except GerritApiError as e:
+            if e.status == 404:
+                return None
+            raise
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected project reviewers response")
+        out = [row for row in data if isinstance(row, dict)]
+        logger.info("get_plugin_project_reviewers %r -> %d result(s)", project, len(out))
+        return out
+
     def get_change(self, change_id: str) -> dict[str, Any]:
         """GET change detail (labels, submittable, etc.) for *change_id*."""
         enc = quote(change_id, safe="")

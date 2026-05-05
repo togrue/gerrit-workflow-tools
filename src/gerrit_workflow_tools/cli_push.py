@@ -50,7 +50,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_de
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target, parse_change_id
 from gerrit_workflow_tools.push_input_line import (
     ParseResult,
     PushLineState,
@@ -172,12 +172,30 @@ def _reviewer_seeds_for_prompt(cwd: Path, branch: str) -> list[str]:
     return seeds
 
 
-def _prompt_interactive_reviewers(cwd: Path | None = None, branch: str | None = None) -> ParseResult:
+def _change_id_for_rev(cwd: Path, rev: str) -> str | None:
+    try:
+        msg = git_out("show", "-s", "--format=%B", rev, cwd=cwd)
+    except GitError:
+        return None
+    return parse_change_id(msg)
+
+
+def _prompt_interactive_reviewers(
+    cwd: Path | None = None,
+    branch: str | None = None,
+    *,
+    change_id_hint: str | None = None,
+) -> ParseResult:
     """Pre-push interactive prompt (``-i``); reuses the new push-options input line."""
     from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
     seeds = _reviewer_seeds_for_prompt(cwd, branch) if (cwd is not None and branch is not None) else []
-    return prompt_push_options_line(reviewer_seeds=seeds, message="Push options: ")
+    return prompt_push_options_line(
+        reviewer_seeds=seeds,
+        message="Push options: ",
+        cwd=cwd,
+        change_id_hint=change_id_hint,
+    )
 
 
 def _prompt_save_reviewers() -> bool:
@@ -257,12 +275,22 @@ def _parse_reviewers_list(raw: str) -> list[str]:
     return out
 
 
-def _prompt_reviewers_line_ptk(cwd: Path | None = None, branch: str | None = None) -> ParseResult:
+def _prompt_reviewers_line_ptk(
+    cwd: Path | None = None,
+    branch: str | None = None,
+    *,
+    change_id_hint: str | None = None,
+) -> ParseResult:
     """Confirm-loop ``r`` action: open the highlighted push-options input line."""
     from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
     seeds = _reviewer_seeds_for_prompt(cwd, branch) if (cwd is not None and branch is not None) else []
-    return prompt_push_options_line(reviewer_seeds=seeds, message="Push options: ")
+    return prompt_push_options_line(
+        reviewer_seeds=seeds,
+        message="Push options: ",
+        cwd=cwd,
+        change_id_hint=change_id_hint,
+    )
 
 
 def _prompt_reviewer_strategy_interactive() -> ReviewerStrategy:
@@ -794,7 +822,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
 
     interactive_state: PushLineState | None = None
     if args.i:
-        res = _prompt_interactive_reviewers(cwd, branch)
+        res = _prompt_interactive_reviewers(cwd, branch, change_id_hint=_change_id_for_rev(cwd, "HEAD"))
         if res.state.reviewers or res.state.topic or res.state.wip or res.state.private or res.state.strategy != "push":
             interactive_state = res.state
             reviewers = list(res.state.reviewers)
@@ -945,7 +973,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             print("Push cancelled.", file=sys.stderr)
             return 0
         if act == "reviewers":
-            res = _prompt_reviewers_line_ptk(cwd, ctx.branch)
+            res = _prompt_reviewers_line_ptk(cwd, ctx.branch, change_id_hint=_change_id_for_rev(cwd, tip))
             if not res.valid_for_apply:
                 print("Invalid push options; nothing changed.", file=sys.stderr)
                 continue

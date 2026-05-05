@@ -236,6 +236,11 @@ def gerrit_web_url(cwd: Path | str | None) -> str | None:
     return _config_get(cwd, "gerrit.webUrl")
 
 
+def gerrit_project(cwd: Path | str | None) -> str | None:
+    """Return explicit ``gerrit.project`` override, if set."""
+    return _config_get(cwd, "gerrit.project")
+
+
 def gerrit_user(cwd: Path | str | None) -> str | None:
     """Return ``gerrit.user`` for HTTP Basic auth, if set."""
     return _config_get(cwd, "gerrit.user")

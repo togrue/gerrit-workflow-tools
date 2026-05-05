@@ -33,6 +33,7 @@ from gerrit_workflow_tools.push_input_line import (
     format_canonical,
     parse,
 )
+from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
 
 _STYLE_BY_KIND: dict[SpanKind, str] = {
     "minus": "fg:ansiyellow",
@@ -151,7 +152,7 @@ def save_last_canonical(line: str) -> None:
         p.write_text(line, encoding="utf-8")
 
 
-def _bottom_toolbar(text: str) -> FormattedText | None:
+def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> FormattedText | None:
     res = parse(text)
     errors = [d for d in res.diagnostics if d.severity == "error"]
     warnings = [d for d in res.diagnostics if d.severity == "warning"]
@@ -159,11 +160,23 @@ def _bottom_toolbar(text: str) -> FormattedText | None:
         msg = errors[0].message
         extra = f" (+{len(errors) - 1} more)" if len(errors) > 1 else ""
         return FormattedText([("fg:ansired", f"error: {msg}{extra}")])
+    if catalog is not None:
+        validation = catalog.validate_state(res.state)
+        if validation.issues:
+            msg = validation.issues[0].message
+            extra = f" (+{len(validation.issues) - 1} more)" if len(validation.issues) > 1 else ""
+            return FormattedText([("fg:ansired", f"reviewer: {msg}{extra}")])
+        if validation.pending_checks and res.state.reviewers:
+            return FormattedText([("fg:#808080", "reviewer validation: checking Gerrit...")])
     if warnings:
         msg = warnings[0].message
         extra = f" (+{len(warnings) - 1} more)" if len(warnings) > 1 else ""
         return FormattedText([("fg:ansiyellow", f"warning: {msg}{extra}")])
-    return FormattedText([("fg:#808080", "keywords: r= topic= wip private push lazy overwrite")])
+    if catalog is not None:
+        hint = catalog.default_toolbar_hint()
+    else:
+        hint = "keywords: r= topic= wip private push lazy overwrite"
+    return FormattedText([("fg:#808080", hint)])
 
 
 def prompt_push_options_line(
@@ -171,6 +184,8 @@ def prompt_push_options_line(
     default: str | None = None,
     reviewer_seeds: Iterable[str] = (),
     message: str = "Push options: ",
+    cwd: Path | None = None,
+    change_id_hint: str | None = None,
 ) -> ParseResult:
     """Show the prompt and return the parsed result for the accepted line.
 
@@ -179,14 +194,17 @@ def prompt_push_options_line(
     back to disk so the next prompt opens with the same state.
     """
     initial = default if default is not None else load_last_canonical()
+    seed_list = [s for s in reviewer_seeds if s]
+    catalog = ReviewerCatalog.from_runtime(cwd=cwd, reviewer_seeds=seed_list, change_id_hint=change_id_hint)
+    completion_candidates = catalog.completion_candidates()
     session: PromptSession[str] = PromptSession(
         message=message,
         lexer=PushOptionsLexer(),
         validator=PushOptionsValidator(),
         validate_while_typing=False,
-        completer=PushOptionsCompleter(reviewer_seeds),
+        completer=PushOptionsCompleter(completion_candidates),
         complete_while_typing=True,
-        bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text),
+        bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
     raw = session.prompt(default=initial)
     res = parse(raw)
