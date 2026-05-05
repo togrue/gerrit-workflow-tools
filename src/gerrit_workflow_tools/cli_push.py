@@ -12,9 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from prompt_toolkit import prompt as ptk_prompt
-from prompt_toolkit.history import FileHistory
-
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
@@ -54,6 +51,11 @@ from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClien
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.push_input_line import (
+    ParseResult,
+    PushLineState,
+    refspec_options,
+)
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
@@ -162,8 +164,20 @@ def _gpush_attribute_suffix(
     return f" - `{cur_s}` -> `{new_s}`"
 
 
-def _prompt_interactive_reviewers() -> str:
-    return input("Reviewers (comma-separated; empty: branch config and/or --reviewers; non-empty replaces both): ")
+def _reviewer_seeds_for_prompt(cwd: Path, branch: str) -> list[str]:
+    seeds: list[str] = []
+    cfg = branch_gerrit_reviewers(cwd, branch)
+    if cfg:
+        seeds.extend(_parse_reviewers_list(cfg))
+    return seeds
+
+
+def _prompt_interactive_reviewers(cwd: Path | None = None, branch: str | None = None) -> ParseResult:
+    """Pre-push interactive prompt (``-i``); reuses the new push-options input line."""
+    from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
+
+    seeds = _reviewer_seeds_for_prompt(cwd, branch) if (cwd is not None and branch is not None) else []
+    return prompt_push_options_line(reviewer_seeds=seeds, message="Push options: ")
 
 
 def _prompt_save_reviewers() -> bool:
@@ -171,21 +185,44 @@ def _prompt_save_reviewers() -> bool:
     return ans in ("y", "yes")
 
 
-def _refs_for_spec(tip: str, push_branch: str, reviewers: list[str], strategy: ReviewerStrategy) -> str:
+def _refs_for_spec(
+    tip: str,
+    push_branch: str,
+    state: PushLineState,
+    strategy: ReviewerStrategy,
+) -> str:
     ref = f"{tip}:refs/for/{push_branch}"
-    if strategy == "push":
-        args = [f"r={r}" for r in reviewers]
-        if args:
-            ref += f"%{','.join(args)}"
+    opts = refspec_options(state, strategy)
+    if opts:
+        ref += f"%{','.join(opts)}"
     return ref
 
 
 @dataclass
 class GerritPushReviewers:
-    """Effective reviewers and how to apply them for one ``ger push`` run."""
+    """Effective push-options state and how to apply reviewers for one ``ger push`` run."""
 
     reviewers: list[str]
     strategy: ReviewerStrategy
+    topic: str | None = None
+    wip: bool = False
+    private: bool = False
+
+    def to_state(self) -> PushLineState:
+        """Return a :class:`PushLineState` snapshot for refspec/canonical formatting."""
+        return PushLineState(
+            reviewers=list(self.reviewers),
+            topic=self.topic,
+            wip=self.wip,
+            private=self.private,
+        )
+
+    def replace_from_state(self, state: PushLineState) -> None:
+        """Overwrite reviewers/topic/wip/private with values from ``state``."""
+        self.reviewers = list(state.reviewers)
+        self.topic = state.topic
+        self.wip = state.wip
+        self.private = state.private
 
 
 @dataclass
@@ -219,17 +256,12 @@ def _parse_reviewers_list(raw: str) -> list[str]:
     return out
 
 
-def _reviewer_history_path() -> Path:
-    d = Path.home() / ".cache" / "ger"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "reviewer_line_history"
+def _prompt_reviewers_line_ptk(cwd: Path | None = None, branch: str | None = None) -> ParseResult:
+    """Confirm-loop ``r`` action: open the highlighted push-options input line."""
+    from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
-
-def _prompt_reviewers_line_ptk() -> str:
-    return ptk_prompt(
-        "Reviewers (comma-separated): ",
-        history=FileHistory(str(_reviewer_history_path())),
-    )
+    seeds = _reviewer_seeds_for_prompt(cwd, branch) if (cwd is not None and branch is not None) else []
+    return prompt_push_options_line(reviewer_seeds=seeds, message="Push options: ")
 
 
 def _prompt_reviewer_strategy_interactive() -> ReviewerStrategy:
@@ -759,9 +791,14 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     if rc_early is not None:
         return rc_early
 
+    interactive_state: PushLineState | None = None
     if args.i:
-        interactive = _prompt_interactive_reviewers().strip()
-        reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers), interactive=interactive or None)
+        res = _prompt_interactive_reviewers(cwd, branch)
+        if res.state.reviewers or res.state.topic or res.state.wip or res.state.private:
+            interactive_state = res.state
+            reviewers = list(res.state.reviewers)
+        else:
+            reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers))
         if _prompt_save_reviewers():
             set_branch_config(cwd, branch, gerrit_reviewers=",".join(reviewers))
     else:
@@ -770,6 +807,9 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     plan = GerritPushReviewers(
         reviewers=list(reviewers),
         strategy=(args.reviewer_strategy or "push"),
+        topic=interactive_state.topic if interactive_state else None,
+        wip=interactive_state.wip if interactive_state else False,
+        private=interactive_state.private if interactive_state else False,
     )
 
     r = compute_ready(
@@ -837,7 +877,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     assert tip is not None  # guaranteed by _build_gerrit_context
     cmd: list[str] = []
     while True:
-        refspec = _refs_for_spec(tip, ctx.push_branch, ctx.plan.reviewers, ctx.plan.strategy)
+        refspec = _refs_for_spec(tip, ctx.push_branch, ctx.plan.to_state(), ctx.plan.strategy)
         cmd = ["git", "push", ctx.remote, refspec]
         logger.debug(
             "gpush resolved: remote=%r gerrit_target=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
@@ -904,11 +944,15 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             print("Push cancelled.", file=sys.stderr)
             return 0
         if act == "reviewers":
-            line = _prompt_reviewers_line_ptk().strip()
-            if not line:
-                print("No reviewers entered; nothing changed.")
+            res = _prompt_reviewers_line_ptk(cwd, ctx.branch)
+            if not res.valid_for_apply:
+                print("Invalid push options; nothing changed.", file=sys.stderr)
                 continue
-            ctx.plan.reviewers = _parse_reviewers_list(line)
+            new_state = res.state
+            if not (new_state.reviewers or new_state.topic or new_state.wip or new_state.private):
+                print("No push options entered; nothing changed.")
+                continue
+            ctx.plan.replace_from_state(new_state)
             ctx.plan.strategy = _prompt_reviewer_strategy_interactive()
             continue
 

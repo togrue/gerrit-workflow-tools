@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
+from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target, make_repo_with_merged_side_branch
@@ -499,14 +500,17 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
     refs: list[str] = []
     orig = cli_push_mod._refs_for_spec
 
-    def _capture(tip: str, push_branch: str, reviewers: list[str], strategy: object) -> str:
-        r = orig(tip, push_branch, reviewers, strategy)
+    def _capture(tip: str, push_branch: str, state: object, strategy: object) -> str:
+        r = orig(tip, push_branch, state, strategy)
         refs.append(r)
         return r
 
     monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_interactive_reviewers", lambda: "bob")
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
+        lambda *_a, **_k: parse_push_options_line("bob"),
+    )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
@@ -524,7 +528,10 @@ def test_gpush_confirm_reviewers_then_push_includes_percent_r(
         return next(_answers)
 
     monkeypatch.setattr("builtins.input", _input)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_reviewers_line_ptk", lambda: "alice")
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.cli_push._prompt_reviewers_line_ptk",
+        lambda *_a, **_k: parse_push_options_line("alice"),
+    )
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
@@ -539,8 +546,8 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     refs: list[str] = []
     orig = cli_push_mod._refs_for_spec
 
-    def _capture(tip: str, push_branch: str, reviewers: list[str], strategy: object) -> str:
-        r = orig(tip, push_branch, reviewers, strategy)
+    def _capture(tip: str, push_branch: str, state: object, strategy: object) -> str:
+        r = orig(tip, push_branch, state, strategy)
         refs.append(r)
         return r
 
@@ -548,7 +555,10 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     set_branch_config(stack_repo, b, gerrit_reviewers="carol")
     monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_interactive_reviewers", lambda: "bob")
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
+        lambda *_a, **_k: parse_push_options_line("bob"),
+    )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
     code, _out, _err = run_cli(
         stack_repo,
