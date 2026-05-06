@@ -103,7 +103,7 @@ class PushOptionsValidator(Validator):
 class PushOptionsCompleter(Completer):
     """Complete reserved keywords and known reviewer names at the cursor word."""
 
-    def __init__(self, reviewer_seeds: Iterable[str] = ()):
+    def __init__(self, reviewer_seeds: Iterable[str] = (), *, catalog: ReviewerCatalog | None = None):
         seen: set[str] = set()
         ordered: list[str] = []
         for name in reviewer_seeds:
@@ -111,9 +111,11 @@ class PushOptionsCompleter(Completer):
                 seen.add(name)
                 ordered.append(name)
         self._reviewer_seeds = ordered
+        self._catalog = catalog
 
     def get_completions(self, document: Document, complete_event: CompleteEvent):  # type: ignore[override]
         word = document.get_word_before_cursor(WORD=True)
+        raw_word = word.lstrip("-")
         candidates: list[tuple[str, str]] = [
             (f"{KW_R}=", "reviewer list"),
             (KW_TOPIC + "=", "change topic"),
@@ -124,10 +126,17 @@ class PushOptionsCompleter(Completer):
             (KW_OVERWRITE, "reviewers via REST on all changes"),
         ]
         candidates.extend((name, "reviewer") for name in self._reviewer_seeds)
-        prefix = word.lstrip("-").lower()
+        if self._catalog is not None:
+            seen_lower = {n.lower() for n in self._reviewer_seeds}
+            for name in self._catalog.complete_prefix(raw_word):
+                low = name.lower()
+                if low not in seen_lower:
+                    seen_lower.add(low)
+                    candidates.append((name, "reviewer"))
+        prefix = raw_word.lower()
         for value, meta in candidates:
             if not prefix or value.lower().startswith(prefix):
-                yield Completion(value, start_position=-len(word.lstrip("-")), display_meta=meta)
+                yield Completion(value, start_position=-len(raw_word), display_meta=meta)
 
 
 def _last_line_path() -> Path:
@@ -202,7 +211,7 @@ def prompt_push_options_line(
         lexer=PushOptionsLexer(),
         validator=PushOptionsValidator(),
         validate_while_typing=False,
-        completer=PushOptionsCompleter(completion_candidates),
+        completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
         bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
