@@ -37,11 +37,8 @@ from gerrit_workflow_tools.core.config import (
     effective_gerrit_destination_branch,
     ger_push_defaults,
     ger_push_mode,
-    gerrit_password,
     gerrit_push_remote_policy,
     gerrit_remote,
-    gerrit_token,
-    gerrit_user,
     head_is_linear_on_remote_gerrit_target,
     refs_for_push_branch_name,
     set_branch_config,
@@ -49,7 +46,16 @@ from gerrit_workflow_tools.core.config import (
 from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details, norm_change_id
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.push_reviewers import (
+    apply_reviewer_strategy_after_push,
+    stack_change_ids_ordered,
+)
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
+from gerrit_workflow_tools.core.reviewer import (
+    ReviewerStrategy,
+    gerrit_credentials_configured,
+    reviewer_accounts_from_change_info,
+)
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target, parse_change_id
 from gerrit_workflow_tools.push_input_line import (
     ParseResult,
@@ -59,8 +65,6 @@ from gerrit_workflow_tools.push_input_line import (
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
-
-ReviewerStrategy = Literal["push", "lazy", "overwrite"]
 
 _REBASE_ONTO_REMOTE_HINT = (
     "Hint: run `ger restack --onto-remote` to replay your commits on top of the latest target branch."
@@ -94,42 +98,12 @@ def _resolve_push_reviewers(
 
 
 def _gerrit_credentials_configured(cwd: Path) -> bool:
-    u = gerrit_user(cwd)
-    secret = gerrit_token(cwd) or gerrit_password(cwd)
-    return bool(u and secret is not None)
-
-
-def _account_slug_from_gerrit(account: dict[str, object]) -> str | None:
-    u = account.get("username")
-    if isinstance(u, str) and u.strip():
-        return u.strip()
-    email = account.get("email")
-    if isinstance(email, str) and "@" in email:
-        return email.split("@", 1)[0].strip()
-    name = account.get("name")
-    if isinstance(name, str) and name.strip():
-        return name.strip()
-    return None
+    return gerrit_credentials_configured(cwd)
 
 
 def _reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[str]:
     """Return reviewer account slugs in Gerrit API order (REVIEWER and CC entries)."""
-    out: list[str] = []
-    revs = detail.get("reviewers")
-    if not isinstance(revs, list):
-        return out
-    for entry in revs:
-        if not isinstance(entry, dict):
-            continue
-        st = entry.get("state")
-        if st not in ("REVIEWER", "CC"):
-            continue
-        acc = entry.get("account")
-        if isinstance(acc, dict):
-            slug = _account_slug_from_gerrit(acc)
-            if slug:
-                out.append(slug)
-    return out
+    return [acc.slug for acc in reviewer_accounts_from_change_info(detail)]
 
 
 def _format_gpush_attribute_string(reviewers: list[str], wip: bool, private: bool) -> str:
@@ -210,7 +184,7 @@ def _refs_for_spec(
     strategy: ReviewerStrategy,
 ) -> str:
     ref = f"{tip}:refs/for/{push_branch}"
-    opts = refspec_options(state, strategy)
+    opts = refspec_options(state, strategy.value)
     if opts:
         ref += f"%{','.join(opts)}"
     return ref
@@ -233,6 +207,7 @@ class GerritPushReviewers:
             topic=self.topic,
             wip=self.wip,
             private=self.private,
+            strategy=self.strategy.value,
         )
 
     def replace_from_state(self, state: PushLineState) -> None:
@@ -241,7 +216,7 @@ class GerritPushReviewers:
         self.topic = state.topic
         self.wip = state.wip
         self.private = state.private
-        self.strategy = state.strategy
+        self.strategy = ReviewerStrategy(state.strategy)
 
 
 @dataclass
@@ -301,24 +276,24 @@ def _prompt_reviewer_strategy_interactive() -> ReviewerStrategy:
     while True:
         raw = input("Choose 1-3 [1]: ").strip().lower()
         if raw in ("", "1", "push"):
-            return "push"
+            return ReviewerStrategy.PUSH
         if raw in ("2", "lazy"):
-            return "lazy"
+            return ReviewerStrategy.LAZY
         if raw in ("3", "overwrite"):
-            return "overwrite"
+            return ReviewerStrategy.OVERWRITE
         print("  Enter 1, 2, or 3 (default: 1).", file=sys.stderr)
 
 
 def _strategy_status_label(strategy: ReviewerStrategy) -> str:
     return {
-        "push": "push (new changes are modified)",
-        "lazy": "lazy (non-assigned are modified)",
-        "overwrite": "overwrite (all changes are modified)",
+        ReviewerStrategy.PUSH: "push (new changes are modified)",
+        ReviewerStrategy.LAZY: "lazy (non-assigned are modified)",
+        ReviewerStrategy.OVERWRITE: "overwrite (all changes are modified)",
     }[strategy]
 
 
 def _needs_rest_assignment(strategy: ReviewerStrategy, reviewers: list[str]) -> bool:
-    return strategy in ("lazy", "overwrite") and bool(reviewers)
+    return strategy in (ReviewerStrategy.LAZY, ReviewerStrategy.OVERWRITE) and bool(reviewers)
 
 
 def _validate_rest_plan(cwd: Path, plan: GerritPushReviewers) -> str | None:
@@ -362,42 +337,7 @@ def _prompt_gerrit_push_confirm_action() -> Literal["push", "cancel", "reviewers
         return act
 
 
-def _reviewer_account_ids_reviewer_and_cc(detail: dict[str, object]) -> list[int]:
-    out: list[int] = []
-    revs = detail.get("reviewers")
-    if not isinstance(revs, list):
-        return out
-    for entry in revs:
-        if not isinstance(entry, dict):
-            continue
-        st = entry.get("state")
-        if st not in ("REVIEWER", "CC"):
-            continue
-        acc = entry.get("account")
-        if isinstance(acc, dict):
-            aid = acc.get("_account_id")
-            if isinstance(aid, int):
-                out.append(aid)
-    return out
-
-
-def _stack_change_ids_ordered(cwd: Path, r: ReadyResult, first_parent: bool) -> list[str]:
-    if not r.push_range:
-        return []
-    rows = commits_in_range(cwd, r.push_range, first_parent=first_parent)
-    out: list[str] = []
-    seen: set[str] = set()
-    for c in rows:
-        if not c.change_id:
-            continue
-        nid = norm_change_id(c.change_id)
-        if nid not in seen:
-            seen.add(nid)
-            out.append(nid)
-    return out
-
-
-def _apply_reviewer_strategy_after_push(
+def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
     cwd: Path,
     client: GerritClient,
     strategy: ReviewerStrategy,
@@ -406,40 +346,11 @@ def _apply_reviewer_strategy_after_push(
     first_parent: bool,
 ) -> int:
     """Return 0 on success, non-zero if a required REST step failed."""
-    if strategy == "push" or not reviewers:
-        return 0
-    for cid in _stack_change_ids_ordered(cwd, r, first_parent):
-        try:
-            detail = client.get_change(cid)
-        except GerritApiError as e:
-            print(f"error: could not load change {cid}: {e}", file=sys.stderr)
-            return 1
-        if strategy == "lazy":
-            if _reviewer_accounts_from_change_info(detail):
-                continue
-            for name in reviewers:
-                try:
-                    client.add_reviewer(cid, name)
-                except GerritApiError as e:
-                    print(f"error: could not add reviewer {name!r} on {cid}: {e}", file=sys.stderr)
-                    return 1
-        elif strategy == "overwrite":
-            for aid in _reviewer_account_ids_reviewer_and_cc(detail):
-                try:
-                    client.delete_reviewer(cid, aid)
-                except GerritApiError as e:
-                    if getattr(e, "status", None) != 404:
-                        print(
-                            f"warning: could not remove reviewer account {aid} on {cid}: {e}",
-                            file=sys.stderr,
-                        )
-            for name in reviewers:
-                try:
-                    client.add_reviewer(cid, name)
-                except GerritApiError as e:
-                    print(f"error: could not add reviewer {name!r} on {cid}: {e}", file=sys.stderr)
-                    return 1
-    return 0
+    change_ids = stack_change_ids_ordered(cwd, r, first_parent)
+    result = apply_reviewer_strategy_after_push(client, strategy, reviewers, change_ids)
+    for issue in result.issues:
+        print(f"{issue.level}: {issue.message}", file=sys.stderr)
+    return 0 if result.ok else 1
 
 
 # pylint: disable=too-many-locals
@@ -605,7 +516,7 @@ def _print_gpush_confirm_status_line(
         f"{sep}"
         f"{color_text('Reviewers', ANSI_DIM)} {rev_v}"
     )
-    if strategy is not None and strategy != "push":
+    if strategy is not None and strategy != ReviewerStrategy.PUSH:
         strat_v = color_text(_strategy_status_label(strategy), ANSI_DIM)
         line += f"{sep}{color_text('Strategy', ANSI_DIM)} {strat_v}"
     print(line)
@@ -745,7 +656,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--reviewer-strategy",
-        choices=["push", "lazy", "overwrite"],
+        choices=[ReviewerStrategy.PUSH.value, ReviewerStrategy.LAZY.value, ReviewerStrategy.OVERWRITE.value],
         default=None,
         help=(
             "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
@@ -823,7 +734,13 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     interactive_state: PushLineState | None = None
     if args.i:
         res = _prompt_interactive_reviewers(cwd, branch, change_id_hint=_change_id_for_rev(cwd, "HEAD"))
-        if res.state.reviewers or res.state.topic or res.state.wip or res.state.private or res.state.strategy != "push":
+        if (
+            res.state.reviewers
+            or res.state.topic
+            or res.state.wip
+            or res.state.private
+            or res.state.strategy != ReviewerStrategy.PUSH.value
+        ):
             interactive_state = res.state
             reviewers = list(res.state.reviewers)
         else:
@@ -833,9 +750,14 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     else:
         reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers))
 
+    selected_strategy = (
+        interactive_state.strategy
+        if interactive_state is not None
+        else (args.reviewer_strategy or ReviewerStrategy.PUSH.value)
+    )
     plan = GerritPushReviewers(
         reviewers=list(reviewers),
-        strategy=(interactive_state.strategy if interactive_state is not None else (args.reviewer_strategy or "push")),
+        strategy=ReviewerStrategy(selected_strategy),
         topic=interactive_state.topic if interactive_state else None,
         wip=interactive_state.wip if interactive_state else False,
         private=interactive_state.private if interactive_state else False,
@@ -945,7 +867,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
                 print(
                     "[dry-run] after a successful push would apply reviewers via "
-                    f"{ctx.plan.strategy} ({_strategy_status_label(ctx.plan.strategy)})",
+                    f"{ctx.plan.strategy.value} ({_strategy_status_label(ctx.plan.strategy)})",
                     file=sys.stderr,
                 )
             print("[dry-run] not executing push", file=sys.stderr)
@@ -983,7 +905,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 or new_state.topic
                 or new_state.wip
                 or new_state.private
-                or new_state.strategy != "push"
+                or new_state.strategy != ReviewerStrategy.PUSH.value
             ):
                 print("No push options entered; nothing changed.")
                 continue
