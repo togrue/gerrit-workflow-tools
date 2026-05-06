@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from gerrit_workflow_tools.core.change_id import ChangeIdRow
 from gerrit_workflow_tools.core.config import stop_patterns
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
@@ -155,7 +156,7 @@ def change_id_rows_for_range(
     *,
     head: str = "HEAD",
     first_parent: bool = True,
-) -> list[tuple[str, str, str | None]]:
-    """Return ``(full_sha, short_sha, change_id)`` for each commit in ``start_exclusive..head``."""
+) -> list[ChangeIdRow]:
+    """Return named rows for each commit in ``start_exclusive..head``."""
     meta = commits_in_range(cwd, f"{start_exclusive}..{head}", first_parent=first_parent)
-    return [(c.sha, c.short_sha, c.change_id) for c in meta]
+    return [ChangeIdRow(sha=c.sha, short_sha=c.short_sha, change_id=c.change_id) for c in meta]

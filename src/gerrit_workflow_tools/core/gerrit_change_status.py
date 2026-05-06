@@ -6,6 +6,7 @@ import logging
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -26,6 +27,55 @@ _BATCH_OR_CHUNK = 25
 _PARALLEL_IO = 8
 
 
+class PatchsetStatus(str, Enum):
+    """Bounded Gerrit-vs-local patchset states for one commit."""
+
+    ACTIVE = "active"
+    NEWER = "newer"
+    OUTDATED = "outdated"
+    ABSENT = "absent"
+    MERGED_SAME = "merged-same"
+    MERGED_DRIFT = "merged-drift"
+    MERGED_UNKNOWN = "merged-unknown"
+
+
+@dataclass(frozen=True)
+class CommitStatusInput:
+    """Input row for Gerrit status enrichment."""
+
+    sha: str
+    short_sha: str
+    summary: str
+    change_id: str | None
+
+
+def commit_status_input_rows(rows: list[tuple[str, str, str, str | None]]) -> list[CommitStatusInput]:
+    """Backwards-compatible conversion from positional rows to structured inputs."""
+
+    return [
+        CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
+        for sha, short, summary, change_id in rows
+    ]
+
+
+@dataclass(frozen=True)
+class ReviewerAccount:
+    """Normalized Gerrit reviewer account identity used by CLI and core."""
+
+    slug: str
+    account_id: int | None = None
+
+
+@dataclass(frozen=True)
+class InlineComment:
+    """Normalized unresolved inline comment payload."""
+
+    path: str
+    line: int | None
+    message: str
+    comment_id: str | None = None
+
+
 @dataclass
 class LogCommit:  # pylint: disable=too-many-instance-attributes
     """Aggregated local+Gerrit status for a commit shown by CLI status commands."""
@@ -36,7 +86,7 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     change_id: str | None
     pushed: bool  # True if a Gerrit change exists for this Change-Id (any patchset state)
     abandoned: bool  # True when Gerrit change status is ABANDONED
-    patchset_status: str  # "active" | "newer" | "outdated" | "absent" | merged-*
+    patchset_status: PatchsetStatus
     verified: int | None  # -1, 0, +1; None = no vote
     code_review: int | None  # -2, -1, 0, +1, +2; None = no vote
     comments_unresolved: int
@@ -61,9 +111,9 @@ def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
 
     Open (non-MERGED) changes keep the usual ``not submittable`` rule.
     """
-    if commit.patchset_status == "merged-same":
+    if commit.patchset_status == PatchsetStatus.MERGED_SAME:
         return False
-    if commit.patchset_status in ("merged-drift", "merged-unknown"):
+    if commit.patchset_status in (PatchsetStatus.MERGED_DRIFT, PatchsetStatus.MERGED_UNKNOWN):
         return True
     if not commit.pushed:
         return False
@@ -173,6 +223,40 @@ def count_unresolved_in_file_map(file_map: dict[str, list[dict[str, Any]]]) -> i
     return count
 
 
+def _comment_line(c: dict[str, Any]) -> int | None:
+    ln = c.get("line")
+    if isinstance(ln, int):
+        return ln
+    rng = c.get("range")
+    if isinstance(rng, dict):
+        start_line = rng.get("start_line")
+        if isinstance(start_line, int):
+            return start_line
+    return None
+
+
+def collect_unresolved_comments(file_map: dict[str, list[dict[str, Any]]]) -> list[InlineComment]:
+    """Normalize unresolved comments from Gerrit file map, sorted by path/line."""
+
+    rows: list[InlineComment] = []
+    for path, comments in file_map.items():
+        for comment in comments:
+            if not isinstance(comment, dict) or comment.get("unresolved") is not True:
+                continue
+            raw_msg = comment.get("message")
+            raw_id = comment.get("id")
+            rows.append(
+                InlineComment(
+                    path=path,
+                    line=_comment_line(comment),
+                    message=raw_msg if isinstance(raw_msg, str) else "",
+                    comment_id=raw_id if isinstance(raw_id, str) else None,
+                )
+            )
+    rows.sort(key=lambda r: (r.path, r.line if r.line is not None else -1))
+    return rows
+
+
 def norm_change_id(change_id: str) -> str:
     """Normalize Change-Id values for case-insensitive lookups."""
 
@@ -185,7 +269,7 @@ def norm_sha(sha: str) -> str:
     return sha.strip().lower()
 
 
-def patchset_status(local_sha: str, detail: dict[str, Any]) -> str:
+def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
     """Compare local commit SHA to Gerrit ``current_revision`` / ``revisions``."""
     ls = norm_sha(local_sha)
     cur = detail.get("current_revision")
@@ -199,12 +283,12 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> str:
     if cur_n is None and len(rev_keys) == 1:
         cur_n = next(iter(rev_keys))
     if cur_n and ls == cur_n:
-        return "active"
+        return PatchsetStatus.ACTIVE
     if rev_keys and ls in rev_keys and cur_n and ls != cur_n:
-        return "outdated"
+        return PatchsetStatus.OUTDATED
     if cur_n or rev_keys:
-        return "newer"
-    return "newer"
+        return PatchsetStatus.NEWER
+    return PatchsetStatus.NEWER
 
 
 def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
@@ -315,20 +399,21 @@ def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
 def fetch_gerrit_data(
     client: GerritClient,
     web_base: str,
-    commits: list[tuple[str, str, str, str | None]],
+    commits: list[CommitStatusInput],
     *,
     cwd: Path | str | None = None,
 ) -> list[LogCommit]:
     """Query Gerrit for each commit and return populated LogCommit objects."""
     resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
     result: list[LogCommit] = []
-    ids_in_range = [cid for _, _, _, cid in commits if cid]
+    ids_in_range = [c.change_id for c in commits if c.change_id]
     cache = batch_load_change_details(client, ids_in_range)
 
     needs_comment_count: list[tuple[int, str]] = []
     needs_checks: list[tuple[int, str]] = []
 
-    for sha, short, summary, change_id in commits:
+    for row in commits:
+        sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
         if not change_id:
             result.append(
                 LogCommit(
@@ -338,7 +423,7 @@ def fetch_gerrit_data(
                     change_id=None,
                     pushed=False,
                     abandoned=False,
-                    patchset_status="absent",
+                    patchset_status=PatchsetStatus.ABSENT,
                     verified=None,
                     code_review=None,
                     comments_unresolved=0,
@@ -365,7 +450,7 @@ def fetch_gerrit_data(
                     change_id=change_id,
                     pushed=False,
                     abandoned=False,
-                    patchset_status="absent",
+                    patchset_status=PatchsetStatus.ABSENT,
                     verified=None,
                     code_review=None,
                     comments_unresolved=0,
@@ -400,11 +485,11 @@ def fetch_gerrit_data(
         if st == "MERGED":
             merged_eq = compute_merged_equivalent(sha, detail, resolved_cwd)
             if merged_eq is True:
-                ps = "merged-same"
+                ps = PatchsetStatus.MERGED_SAME
             elif merged_eq is False:
-                ps = "merged-drift"
+                ps = PatchsetStatus.MERGED_DRIFT
             else:
-                ps = "merged-unknown"
+                ps = PatchsetStatus.MERGED_UNKNOWN
         else:
             ps = patchset_status(sha, detail)
 
@@ -463,26 +548,26 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
     if commit.abandoned:
         reasons.append("abandoned")
         return reasons
-    if commit.patchset_status == "absent":
+    if commit.patchset_status == PatchsetStatus.ABSENT:
         reasons.append("not-pushed")
         return reasons
-    if commit.patchset_status == "merged-same":
+    if commit.patchset_status == PatchsetStatus.MERGED_SAME:
         if chain_blocked:
             reasons.append("chain-blocked")
         return reasons
-    if commit.patchset_status == "merged-drift":
+    if commit.patchset_status == PatchsetStatus.MERGED_DRIFT:
         reasons.append("merged-drift")
         if chain_blocked:
             reasons.append("chain-blocked")
         return reasons
-    if commit.patchset_status == "merged-unknown":
+    if commit.patchset_status == PatchsetStatus.MERGED_UNKNOWN:
         reasons.append("merged-unknown")
         if chain_blocked:
             reasons.append("chain-blocked")
         return reasons
-    if commit.patchset_status == "newer":
+    if commit.patchset_status == PatchsetStatus.NEWER:
         reasons.append("ahead-of-gerrit")
-    if commit.patchset_status == "outdated":
+    if commit.patchset_status == PatchsetStatus.OUTDATED:
         reasons.append("outdated-patchset")
     if commit.verified == -1:
         reasons.append("ci-failed")
