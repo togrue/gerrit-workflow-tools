@@ -13,8 +13,7 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
+    init_cli_runtime,
 )
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
@@ -28,12 +27,12 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_short_sha,
     color_text,
-    init_color_mode,
     is_color_enabled,
     visible_len,
 )
 from gerrit_workflow_tools.core.config import log_defaults
 from gerrit_workflow_tools.core.gerrit_change_status import (
+    CommitStatusInput,
     LogCommit,
     commit_blocks_chain_for_submittability,
     determine_attention,
@@ -42,7 +41,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
 
@@ -451,7 +450,7 @@ def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None
 
 def _load_commits_in_range(
     cwd: Path, rev_range: str, *, first_parent: bool = True
-) -> tuple[list[tuple[str, str, str, str | None]] | None, int]:
+) -> tuple[list[CommitStatusInput] | None, int]:
     """Load local commits for Gerrit enrichment; return (commit_data, exit_code)."""
     try:
         rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
@@ -461,13 +460,15 @@ def _load_commits_in_range(
     if not rows:
         print("(no commits in range)")
         return None, 0
-    commit_data: list[tuple[str, str, str, str | None]] = [(c.sha, c.short_sha, c.subject, c.change_id) for c in rows]
+    commit_data = [
+        CommitStatusInput(sha=c.sha, short_sha=c.short_sha, summary=c.subject, change_id=c.change_id) for c in rows
+    ]
     return commit_data, -1
 
 
 def _fetch_enriched_commits(
     cwd: Path,
-    commit_data: list[tuple[str, str, str, str | None]],
+    commit_data: list[CommitStatusInput],
 ) -> tuple[list[LogCommit] | None, int | None]:
     """Fetch Gerrit-enriched commit status list, or (None, exit_code) on error."""
     try:
@@ -580,11 +581,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     parser = _build_parser()
     args = parser.parse_args(argv)
-    configure_logging(args.debug_log)
-
-    cwd = cwd_from_env()
-    init_color_mode(color=args.color)
-    summary_highlighter = build_summary_highlighter(cwd)
+    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
     gdef = log_defaults(cwd)
     v_raw = getattr(args, "verbose", 0)

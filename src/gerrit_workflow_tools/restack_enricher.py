@@ -12,6 +12,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.config import gerrit_web_url
 from gerrit_workflow_tools.core.gerrit_change_status import (
+    CommitStatusInput,
     LogCommit,
     commit_blocks_chain_for_submittability,
     determine_attention,
@@ -258,14 +259,16 @@ def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branc
 
     # Build ordered input for fetch_gerrit_data.
     # We preserve the todo order (oldest-first) so chain-blocked detection is correct.
-    commit_inputs: list[tuple[str, str, str, str | None]] = []
+    commit_inputs: list[CommitStatusInput] = []
     for short_sha in short_shas:
         meta = meta_map.get(short_sha)
         if meta:
             full_sha, subject, change_id = meta
             # Pass the todo's short SHA as the short field so LogCommit.short_sha
             # matches the keys we use for lookup below.
-            commit_inputs.append((full_sha, short_sha, subject, change_id))
+            commit_inputs.append(
+                CommitStatusInput(sha=full_sha, short_sha=short_sha, summary=subject, change_id=change_id)
+            )
 
     if not commit_inputs:
         return text
