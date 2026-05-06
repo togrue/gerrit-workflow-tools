@@ -6,10 +6,7 @@ import argparse
 import json
 import logging
 import sys
-from pathlib import Path
-from typing import Any
 
-from gerrit_workflow_tools.cli_changeid import resolve_gcid_user_arg
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     add_color_args,
@@ -23,9 +20,9 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_text,
 )
-from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.core.gerrit_change_status import (
+    collect_unresolved_comments,
     determine_attention,
     fetch_gerrit_data,
     gerrit_inline_comment_url,
@@ -33,45 +30,15 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import (
     GerritApiError,
     GerritClient,
-    resolve_gerrit_change,
     resolve_gerrit_web_base,
 )
+from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.stack import parse_change_id
 
 logger = logging.getLogger(__name__)
 
 _EXIT_ATTENTION = 1
 _EXIT_ERROR = 2
-
-
-def _arg_has_range(s: str) -> bool:
-    t = s.strip()
-    return ".." in t or "..." in t
-
-
-def _looks_like_change_id(s: str) -> bool:
-    t = s.strip()
-    if is_change_id_token(t):
-        return True
-    return bool(CHANGE_ID_VALUE_RE.match(t))
-
-
-def _is_numeric_change(s: str) -> bool:
-    t = s.strip()
-    return bool(t) and t.isdigit()
-
-
-def _comment_line(c: dict[str, Any]) -> int | None:
-    ln = c.get("line")
-    if isinstance(ln, int):
-        return ln
-    r = c.get("range")
-    if isinstance(r, dict):
-        sl = r.get("start_line")
-        if isinstance(sl, int):
-            return sl
-    return None
 
 
 def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
@@ -83,71 +50,6 @@ def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str,
     omitted = len(lines) - tail_lines
     body = "\n".join(lines[-tail_lines:])
     return f"[... {omitted} lines omitted above]\n{body}", True
-
-
-def _collect_unresolved_comments(
-    file_map: dict[str, list[dict[str, Any]]],
-) -> list[tuple[str, int | None, dict[str, Any]]]:
-    out: list[tuple[str, int | None, dict[str, Any]]] = []
-    for path, clist in file_map.items():
-        for c in clist:
-            if isinstance(c, dict) and c.get("unresolved") is True:
-                out.append((path, _comment_line(c), c))
-    out.sort(key=lambda x: (x[0], x[1] if x[1] is not None else -1))
-    return out
-
-
-def resolve_row_for_gshow(
-    cwd: Path | str,
-    arg: str | None,
-    client: GerritClient,
-) -> tuple[tuple[str, str, str, str | None], bool]:
-    """Return ``(sha, short, summary, change_id), is_local_git`` for :func:`fetch_gerrit_data`."""
-    a = (arg or "HEAD").strip()
-    if _arg_has_range(a):
-        raise GitError(f"ger show does not support revision ranges: {arg!r}")
-
-    if _looks_like_change_id(a) or _is_numeric_change(a):
-        ch = resolve_gerrit_change(client, change_arg=a, local_change_id=None)
-        rev = ch.get("current_revision")
-        sha = rev if isinstance(rev, str) else ""
-        chg_id = ch.get("change_id")
-        if not isinstance(chg_id, str):
-            raise GitError("Gerrit change has no change_id")
-        subj = ch.get("subject")
-        summary = subj if isinstance(subj, str) else ""
-        short = sha[:8] if len(sha) >= 8 else "?" * min(8, max(1, len(sha) or 1))
-        if not sha:
-            short = "????????"
-        return (sha, short, summary, chg_id), False
-
-    try:
-        resolved = resolve_gcid_user_arg(cwd, a)
-    except GitError:
-        ch = resolve_gerrit_change(client, change_arg=a, local_change_id=None)
-        rev = ch.get("current_revision")
-        sha = rev if isinstance(rev, str) else ""
-        chg_id = ch.get("change_id")
-        if not isinstance(chg_id, str):
-            raise GitError("Gerrit change has no change_id") from None
-        subj = ch.get("subject")
-        summary = subj if isinstance(subj, str) else ""
-        short = sha[:8] if len(sha) >= 8 else "????????"
-        if not sha:
-            short = "????????"
-        return (sha, short, summary, chg_id), False
-
-    if ".." in resolved or "..." in resolved:
-        raise GitError(f"ger show does not support revision ranges: {arg!r}")
-
-    sha = git_out("rev-parse", "--verify", resolved, cwd=cwd)
-    raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
-    summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
-    short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
-    cid = parse_change_id(raw)
-    if not cid:
-        raise GitError(f"no Change-Id in commit {short}")
-    return (sha, short, summary, cid), True
 
 
 def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
@@ -210,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     client = GerritClient(web_base, cwd=str(cwd))
 
     try:
-        row, is_local = resolve_row_for_gshow(cwd, args.rev, client)
+        resolved = resolve_show_commit_row(cwd, args.rev, client)
     except GerritApiError as e:
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR
@@ -218,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR
 
+    row = resolved.row
+    is_local = resolved.is_local_commit
     try:
         commits = fetch_gerrit_data(client, web_base, [row], cwd=cwd)
     except GerritApiError as e:
@@ -241,22 +145,18 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         print(f"gerrit error: {e}", file=sys.stderr)
         return _EXIT_ERROR
 
-    unresolved_rows = _collect_unresolved_comments(file_map)
+    unresolved_rows = collect_unresolved_comments(file_map)
 
     if args.json_:
         # Human output honors --comment-tail-lines / --full; JSON always emits full text.
-        comment_payload: list[dict[str, Any]] = []
-        for path, line, c in unresolved_rows:
-            raw_msg = c.get("message")
-            msg = raw_msg if isinstance(raw_msg, str) else ""
-            raw_cid = c.get("id")
-            cmt_id = raw_cid if isinstance(raw_cid, str) else None
+        comment_payload: list[dict[str, object]] = []
+        for row_item in unresolved_rows:
             comment_payload.append(
                 {
-                    "path": path,
-                    "line": line,
-                    "message": msg,
-                    "url": gerrit_inline_comment_url(commit.gerrit_url, cmt_id),
+                    "path": row_item.path,
+                    "line": row_item.line,
+                    "message": row_item.message,
+                    "url": gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id),
                 }
             )
         payload = {
@@ -300,14 +200,10 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     if unresolved_rows:
         print()
         print(color_text("Unresolved comments:", ANSI_YELLOW))
-        for path, line, c in unresolved_rows:
-            raw_msg = c.get("message")
-            msg = raw_msg if isinstance(raw_msg, str) else ""
-            body, _trunc = _apply_comment_tail(msg, tail_n, full=args.full)
-            raw_cid = c.get("id")
-            cmt_id = raw_cid if isinstance(raw_cid, str) else None
-            comment_url = gerrit_inline_comment_url(commit.gerrit_url, cmt_id) or commit.gerrit_url
-            loc = f"{path}:{line}" if line is not None else path
+        for row_item in unresolved_rows:
+            body, _trunc = _apply_comment_tail(row_item.message, tail_n, full=args.full)
+            comment_url = gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id) or commit.gerrit_url
+            loc = f"{row_item.path}:{row_item.line}" if row_item.line is not None else row_item.path
             print(f"  {color_text(loc, ANSI_CYAN)}")
             if comment_url:
                 print(f"  {color_text('url:', ANSI_DIM)} {color_text(comment_url, ANSI_YELLOW)}")
