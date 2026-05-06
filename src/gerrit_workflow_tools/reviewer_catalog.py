@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
+from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit, gerrit_credentials_configured
 from gerrit_workflow_tools.push_input_line import PushLineState
 
 _DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite"
@@ -20,16 +20,7 @@ _USERNAME_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 
 
 def _account_slug(account: dict[str, object]) -> str | None:
-    u = account.get("username")
-    if isinstance(u, str) and u.strip():
-        return u.strip()
-    email = account.get("email")
-    if isinstance(email, str) and "@" in email:
-        return email.split("@", 1)[0].strip()
-    name = account.get("name")
-    if isinstance(name, str) and name.strip():
-        return name.strip()
-    return None
+    return account_slug_from_gerrit(account)
 
 
 def _entry_to_slug(entry: object) -> str | None:
@@ -236,7 +227,7 @@ class ReviewerCatalog:
 
 
 def _gerrit_creds_configured(cwd: Path) -> bool:
-    return bool(gerrit_user(cwd) and (gerrit_token(cwd) or gerrit_password(cwd)) is not None)
+    return gerrit_credentials_configured(cwd)
 
 
 def _account_query_for_reviewer(reviewer: str) -> str:
