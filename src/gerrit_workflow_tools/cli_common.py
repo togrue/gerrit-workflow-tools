@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import init_color_mode
+from gerrit_workflow_tools.core.gerrit_client import set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -123,6 +124,7 @@ def configure_logging(verbosity: int | bool) -> None:
     global _CONFIGURED, _DEBUG_LOG_ENABLED  # pylint: disable=global-statement
     v = int(verbosity)
     _DEBUG_LOG_ENABLED = bool(v)
+    set_log_gerrit_response_bodies(_DEBUG_LOG_ENABLED)
     level = logging.DEBUG if v >= 1 else logging.WARNING
     _LOG.setLevel(level)
     if not _CONFIGURED:

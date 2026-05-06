@@ -12,11 +12,18 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from gerrit_workflow_tools.cli_common import log_gerrit_response_bodies
 from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user, gerrit_web_url
 from gerrit_workflow_tools.core.git_run import GitError
 
 logger = logging.getLogger(__name__)
+_LOG_RESPONSE_BODIES = False
+
+
+def set_log_gerrit_response_bodies(enabled: bool) -> None:
+    """Configure whether full Gerrit JSON payloads should be debug-logged."""
+
+    global _LOG_RESPONSE_BODIES  # pylint: disable=global-statement
+    _LOG_RESPONSE_BODIES = enabled
 
 
 class GerritApiError(RuntimeError):
@@ -106,7 +113,7 @@ class GerritClient:
             parsed = json.loads(_strip_magic_json_prefix(raw))
         except json.JSONDecodeError as e:
             raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
-        if log_gerrit_response_bodies():
+        if _LOG_RESPONSE_BODIES:
             logger.debug("response body: %s", json.dumps(parsed, indent=2))
         return parsed
 
