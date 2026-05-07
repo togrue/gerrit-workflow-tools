@@ -398,7 +398,7 @@ def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_pat
     rev_range = f"{target_tip}..HEAD"
 
     commit_data, exit_code = _load_commits_in_range(repo, rev_range)
-    assert exit_code == -1  # success sentinel
+    assert exit_code == 0
     assert commit_data is not None
     subjects = [row.summary for row in commit_data]
     assert len(subjects) == 2, f"expected 2 first-parent commits, got {len(subjects)}: {subjects}"
@@ -419,7 +419,7 @@ def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path
     rev_range = f"{target_tip}..HEAD"
 
     commit_data, exit_code = _load_commits_in_range(repo, rev_range, first_parent=False)
-    assert exit_code == -1
+    assert exit_code == 0
     assert commit_data is not None
     subjects = [row.summary for row in commit_data]
     assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"

@@ -54,20 +54,11 @@ def _status_sha_column(short_sha: str) -> str:
     return short_sha.ljust(_STATUS_SHA_COL_WIDTH)
 
 
-def _visible_len(s: str) -> int:
-    """Length of ``s`` as displayed in a terminal (ANSI color codes omitted)."""
-    return visible_len(s)
-
-
 def _fmt_summary_strike(summary: str) -> str:
     """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
     if is_color_enabled():
         return f"{ANSI_STRIKE}{summary}{ANSI_RESET}"
     return "".join(f"{c}\u0336" for c in summary)
-
-
-def _color(text: str, code: str) -> str:
-    return color_text(text, code)
 
 
 def _annotate_attention(commits: list[LogCommit]) -> None:
@@ -77,14 +68,12 @@ def _annotate_attention(commits: list[LogCommit]) -> None:
     :func:`~gerrit_workflow_tools.gerrit_change_status.commit_blocks_chain_for_submittability`
     says so (Gerrit submittable, plus MERGED equivalence rules).
     """
-    for i, commit in enumerate(commits):
-        chain_blocked = False
-        if commit.pushed:
-            for earlier in commits[:i]:
-                if earlier.pushed and commit_blocks_chain_for_submittability(earlier):
-                    chain_blocked = True
-                    break
+    prefix_chain_blocks = False
+    for commit in commits:
+        chain_blocked = commit.pushed and prefix_chain_blocks
         commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
+        if commit.pushed and commit_blocks_chain_for_submittability(commit):
+            prefix_chain_blocks = True
 
 
 # ---------------------------------------------------------------------------
@@ -95,51 +84,51 @@ def _annotate_attention(commits: list[LogCommit]) -> None:
 def _fmt_patchset_column(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
     """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
     if commit.abandoned:
-        return _color("a", ANSI_DIM)
+        return color_text("a", ANSI_DIM)
     status = commit.patchset_status
     if status == "merged-same":
-        return _color("m", ANSI_GREEN)
+        return color_text("m", ANSI_GREEN)
     if status == "merged-drift":
-        return _color("!", ANSI_RED)
+        return color_text("!", ANSI_RED)
     if status == "merged-unknown":
-        return _color("?", ANSI_YELLOW)
+        return color_text("?", ANSI_YELLOW)
     if status == "active":
-        return _color("p", ANSI_GREEN)
+        return color_text("p", ANSI_GREEN)
     if status == "newer":
-        return _color("n", ANSI_YELLOW)
+        return color_text("n", ANSI_YELLOW)
     if status == "outdated":
-        return _color("o", ANSI_RED)
-    return _color("-", ANSI_DIM)
+        return color_text("o", ANSI_RED)
+    return color_text("-", ANSI_DIM)
 
 
 def _fmt_verified(v: int | None) -> str:
     if v is None:
-        return _color("v? ", ANSI_DIM)
+        return color_text("v? ", ANSI_DIM)
     if v >= 1:
-        return _color("v+1", ANSI_GREEN)
+        return color_text("v+1", ANSI_GREEN)
     if v <= -1:
-        return _color("v-1", ANSI_RED)
-    return _color("v0 ", ANSI_DIM)
+        return color_text("v-1", ANSI_RED)
+    return color_text("v0 ", ANSI_DIM)
 
 
 def _fmt_code_review(cr: int | None) -> str:
     if cr is None:
-        return _color("cr? ", ANSI_DIM)
+        return color_text("cr? ", ANSI_DIM)
     if cr >= 2:
-        return _color("cr+2", ANSI_GREEN)
+        return color_text("cr+2", ANSI_GREEN)
     if cr == 1:
-        return _color("cr+1", ANSI_LIGHT_GREEN)
+        return color_text("cr+1", ANSI_LIGHT_GREEN)
     if cr == -1:
-        return _color("cr-1", ANSI_YELLOW)
+        return color_text("cr-1", ANSI_YELLOW)
     if cr <= -2:
-        return _color("cr-2", ANSI_RED)
-    return _color("cr0 ", ANSI_DIM)
+        return color_text("cr-2", ANSI_RED)
+    return color_text("cr0 ", ANSI_DIM)
 
 
 def _fmt_comments(count: int) -> str:
     if count > 0:
-        return _color("com", ANSI_YELLOW)
-    return _color("   ", ANSI_DIM)
+        return color_text("com", ANSI_YELLOW)
+    return color_text("   ", ANSI_DIM)
 
 
 def _primary_line_prefix(commit: LogCommit) -> str:
@@ -153,12 +142,8 @@ def _primary_line_prefix(commit: LogCommit) -> str:
 
 
 def _continuation_indent(commit: LogCommit) -> int:
-    """Column where the subject starts; continuation lines align using :func:`_visible_len` on the prefix."""
-    return _visible_len(_primary_line_prefix(commit))
-
-
-def _url_line(url: str) -> str:
-    return _color(url, ANSI_DIM)
+    """Column where the subject starts; continuation lines align using :func:`visible_len` on the prefix."""
+    return visible_len(_primary_line_prefix(commit))
 
 
 def _extra_detail_lines(commit: LogCommit) -> list[str]:
@@ -172,10 +157,10 @@ def _extra_detail_lines(commit: LogCommit) -> list[str]:
     if not failures:
         return []
     if len(failures) == 1:
-        return [_color(f"# failed: {failures[0]}", ANSI_RED)]
-    lines: list[str] = [_color("# failed checks:", ANSI_RED)]
+        return [color_text(f"# failed: {failures[0]}", ANSI_RED)]
+    lines: list[str] = [color_text("# failed checks:", ANSI_RED)]
     for name in failures:
-        lines.append(_color(f"  · {name}", ANSI_RED))
+        lines.append(color_text(f"  · {name}", ANSI_RED))
     return lines
 
 
@@ -190,18 +175,14 @@ def _commit_body_detail_lines(cwd: Path | str, commit: LogCommit) -> list[str]:
         lines = lines[1:]
     while lines and not lines[0].strip():
         lines.pop(0)
-    return [ln if not ln.strip() else _color(ln, ANSI_DIM) for ln in lines]
-
-
-# Primary line format: {sha} {patchset p/n/o/-} {verified} {code_review} {comments}  # {summary}
-# Continuation indent = visible width of that prefix (colors ignored), so it stays aligned with ``_fmt_*``.
+    return [ln if not ln.strip() else color_text(ln, ANSI_DIM) for ln in lines]
 
 
 def _fmt_change_id_suffix(change_id: str | None) -> str:
     if not change_id:
         return ""
     disp = change_id if len(change_id) <= 14 else change_id[:12] + "…"
-    return _color(f"  {disp}", ANSI_DIM)
+    return color_text(f"  {disp}", ANSI_DIM)
 
 
 def _primary_line(
@@ -245,11 +226,11 @@ def _attention_suffix(commit: LogCommit) -> str:
     if not tokens:
         return ""
 
-    rendered: list[str] = [_color("# ", ANSI_DIM)]
+    rendered: list[str] = [color_text("# ", ANSI_DIM)]
     for idx, (text, code) in enumerate(tokens):
         if idx:
-            rendered.append(_color(", ", ANSI_DIM))
-        rendered.append(_color(text, code))
+            rendered.append(color_text(", ", ANSI_DIM))
+        rendered.append(color_text(text, code))
     return "".join(rendered)
 
 
@@ -260,7 +241,7 @@ def _attention_column(
     show_change_id: bool = False,
 ) -> int:
     widths = [
-        _visible_len(
+        visible_len(
             _primary_line(
                 commit,
                 summary_highlighter=summary_highlighter,
@@ -290,7 +271,7 @@ def _oneline_body(
     )
     attention = _attention_suffix(commit)
     if attention:
-        gap = max(2, attention_column - _visible_len(base)) if attention_column else 2
+        gap = max(2, attention_column - visible_len(base)) if attention_column else 2
         base = f"{base}{' ' * gap}{attention}"
     return base
 
@@ -312,10 +293,10 @@ def _oneline_line(  # pylint: disable=too-many-arguments
     )
     if include_url and commit.gerrit_url:
         if url_start_visible is not None:
-            pad = url_start_visible - _visible_len(body)
+            pad = url_start_visible - visible_len(body)
             pad = max(pad, 2)
-            return f"{body}{' ' * pad}{_url_line(commit.gerrit_url)}"
-        return f"{body}  {_url_line(commit.gerrit_url)}"
+            return f"{body}{' ' * pad}{color_text(commit.gerrit_url, ANSI_DIM)}"
+        return f"{body}  {color_text(commit.gerrit_url, ANSI_DIM)}"
     return body
 
 
@@ -340,7 +321,6 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
             counts["ci-failures"] += 1
         if c.comments_unresolved > 0:
             counts["unresolved-comments"] += 1
-        # awaiting-review = pushed commits that still need attention
         if c.pushed:
             counts["on-gerrit"] += 1
     return counts, ready, total
@@ -467,7 +447,7 @@ def _load_commits_in_range(
     commit_data = [
         CommitStatusInput(sha=c.sha, short_sha=c.short_sha, summary=c.subject, change_id=c.change_id) for c in rows
     ]
-    return commit_data, -1
+    return commit_data, 0
 
 
 def _fetch_enriched_commits(
@@ -503,7 +483,7 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     if not show_url or log_verbosity >= 1:
         return None
     widths = [
-        _visible_len(
+        visible_len(
             _oneline_body(
                 c,
                 summary_highlighter=summary_highlighter,
@@ -562,7 +542,7 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
             )
             print(intro)
             if show_url and commit.gerrit_url:
-                print(f"{ind}{_url_line(commit.gerrit_url)}")
+                print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
             for d in _extra_detail_lines(commit):
                 print(f"{ind}{d}")
             if log_verbosity >= 2:
@@ -588,8 +568,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
     gdef = log_defaults(cwd)
-    v_raw = getattr(args, "verbose", 0)
-    log_verbosity = int(v_raw) if isinstance(v_raw, int) else (1 if v_raw else 0)
+    log_verbosity = int(args.verbose)
     show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
