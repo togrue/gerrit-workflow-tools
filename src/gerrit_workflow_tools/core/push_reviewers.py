@@ -20,12 +20,21 @@ class ReviewerApplyIssue:
     message: str
 
 
+@dataclass(frozen=True)
+class ReviewerApplyChangeOutcome:
+    """Per-change result of a lazy/overwrite reviewer pass (``change_id`` is normalized)."""
+
+    change_id: str
+    reviewers_assigned: tuple[str, ...]
+
+
 @dataclass
 class ReviewerApplyResult:
     """Result of applying reviewer strategy via Gerrit REST."""
 
     ok: bool
     issues: list[ReviewerApplyIssue] = field(default_factory=list)
+    outcomes: list[ReviewerApplyChangeOutcome] = field(default_factory=list)
 
 
 def stack_change_ids_ordered(cwd: Path, ready: ReadyResult, first_parent: bool) -> list[str]:
@@ -58,6 +67,7 @@ def apply_reviewer_strategy_after_push(
         return ReviewerApplyResult(ok=True)
 
     issues: list[ReviewerApplyIssue] = []
+    outcomes: list[ReviewerApplyChangeOutcome] = []
     for change_id in change_ids:
         try:
             detail = client.get_change(change_id)
@@ -67,6 +77,7 @@ def apply_reviewer_strategy_after_push(
 
         if strategy == ReviewerStrategy.LAZY:
             if reviewer_accounts_from_change_info(detail):
+                outcomes.append(ReviewerApplyChangeOutcome(change_id=change_id, reviewers_assigned=()))
                 continue
             for reviewer in reviewers:
                 try:
@@ -79,6 +90,7 @@ def apply_reviewer_strategy_after_push(
                         )
                     )
                     return ReviewerApplyResult(ok=False, issues=issues)
+            outcomes.append(ReviewerApplyChangeOutcome(change_id=change_id, reviewers_assigned=tuple(reviewers)))
             continue
 
         # overwrite strategy: remove existing REVIEWER/CC accounts, then add requested.
@@ -106,5 +118,6 @@ def apply_reviewer_strategy_after_push(
                     )
                 )
                 return ReviewerApplyResult(ok=False, issues=issues)
+        outcomes.append(ReviewerApplyChangeOutcome(change_id=change_id, reviewers_assigned=tuple(reviewers)))
 
-    return ReviewerApplyResult(ok=True, issues=issues)
+    return ReviewerApplyResult(ok=True, issues=issues, outcomes=outcomes)

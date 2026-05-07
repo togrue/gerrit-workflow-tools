@@ -47,6 +47,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_de
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.push_reviewers import (
+    ReviewerApplyChangeOutcome,
     apply_reviewer_strategy_after_push,
     stack_change_ids_ordered,
 )
@@ -337,6 +338,47 @@ def _prompt_gerrit_push_confirm_action() -> Literal["push", "cancel", "reviewers
         return act
 
 
+def _escape_topic_for_assignment_report(topic: str) -> str:
+    return topic.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _assignment_attributes_fragment(plan: GerritPushReviewers, reviewers_assigned: tuple[str, ...]) -> str:
+    parts: list[str] = []
+    if plan.topic:
+        parts.append(f'topic="{_escape_topic_for_assignment_report(plan.topic)}"')
+    parts.extend(f"r={name}" for name in reviewers_assigned)
+    if plan.wip:
+        parts.append("wip")
+    if plan.private:
+        parts.append("private")
+    return ",".join(parts)
+
+
+def _print_post_push_assignment_report(
+    cwd: Path,
+    r: ReadyResult,
+    first_parent: bool,
+    plan: GerritPushReviewers,
+    outcomes: list[ReviewerApplyChangeOutcome],
+) -> None:
+    if not r.push_range:
+        return
+    rows = commits_in_range(cwd, r.push_range, first_parent=first_parent)
+    by_cid: dict[str, tuple[str, str]] = {}
+    for c in rows:
+        if c.change_id:
+            by_cid[norm_change_id(c.change_id)] = (c.sha, c.subject)
+    for outcome in outcomes:
+        row = by_cid.get(outcome.change_id)
+        if row is None:
+            continue
+        sha, subject = row
+        frag = _assignment_attributes_fragment(plan, outcome.reviewers_assigned)
+        if not frag:
+            continue
+        print(f"{sha} {subject} assigned {frag}")
+
+
 def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
     cwd: Path,
     client: GerritClient,
@@ -344,12 +386,15 @@ def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
     reviewers: list[str],
     r: ReadyResult,
     first_parent: bool,
+    plan: GerritPushReviewers,
 ) -> int:
     """Return 0 on success, non-zero if a required REST step failed."""
     change_ids = stack_change_ids_ordered(cwd, r, first_parent)
     result = apply_reviewer_strategy_after_push(client, strategy, reviewers, change_ids)
     for issue in result.issues:
         print(f"{issue.level}: {issue.message}", file=sys.stderr)
+    if result.ok and result.outcomes:
+        _print_post_push_assignment_report(cwd, r, first_parent, plan, result.outcomes)
     return 0 if result.ok else 1
 
 
@@ -941,6 +986,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             ctx.plan.reviewers,
             ctx.ready,
             ctx.first_parent,
+            ctx.plan,
         )
         if rc_rest != 0:
             return rc_rest
