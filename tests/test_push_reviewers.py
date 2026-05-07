@@ -4,13 +4,26 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from gerrit_workflow_tools.core.gerrit_client import GerritClient
+from gerrit_workflow_tools.core.gerrit_client import GerritClient, change_id_for_gerrit_rest_path
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 
 
 def _reviewer_entry(username: str) -> dict[str, object]:
     return {"account": {"username": username}, "state": "REVIEWER"}
+
+
+def test_change_id_for_gerrit_rest_path_uppercases_leading_i() -> None:
+    low = "i" + "a" * 40
+    assert change_id_for_gerrit_rest_path(low) == "I" + "a" * 40
+    assert change_id_for_gerrit_rest_path("I" + "b" * 40) == "I" + "b" * 40
+
+
+def test_change_id_for_gerrit_rest_path_leaves_numeric_and_triplet_unchanged() -> None:
+    assert change_id_for_gerrit_rest_path("12345") == "12345"
+    assert change_id_for_gerrit_rest_path("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == (
+        "proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    )
 
 
 def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:

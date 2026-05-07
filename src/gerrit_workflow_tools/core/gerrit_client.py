@@ -34,6 +34,25 @@ class GerritApiError(RuntimeError):
         self.status = status
 
 
+_CHANGE_ID_REST_PATH_RE = re.compile(r"^[iI]([0-9a-fA-F]{40})$")
+
+
+def change_id_for_gerrit_rest_path(change_id: str) -> str:
+    """
+    Return *change_id* for Gerrit ``changes/<id>/…`` URL segments.
+
+    Gerrit expects the canonical Change-Id with an uppercase ``I`` prefix; values
+    taken from :func:`~gerrit_workflow_tools.core.gerrit_change_status.norm_change_id`
+    use a lowercase ``i`` and yield HTTP 404 unless corrected.
+    """
+
+    s = change_id.strip()
+    m = _CHANGE_ID_REST_PATH_RE.fullmatch(s)
+    if m:
+        return "I" + m.group(1).lower()
+    return s
+
+
 def _strip_magic_json_prefix(raw: str) -> str:
     s = raw.lstrip()
     if s.startswith(")]}'"):
@@ -192,13 +211,14 @@ class GerritClient:
 
     def get_change(self, change_id: str) -> dict[str, Any]:
         """GET change detail (labels, submittable, etc.) for *change_id*."""
-        enc = quote(change_id, safe="")
+        cid = change_id_for_gerrit_rest_path(change_id)
+        enc = quote(cid, safe="")
         data = self._request_json(f"changes/{enc}/detail")
         if not isinstance(data, dict):
             raise GerritApiError("unexpected change detail response")
         logger.info(
             "get_change %r -> #%s %r",
-            change_id,
+            cid,
             data.get("_number"),
             data.get("subject"),
         )
@@ -206,7 +226,8 @@ class GerritClient:
 
     def add_reviewer(self, change_id: str, reviewer: str) -> dict[str, Any]:
         """POST a reviewer (username or email) onto *change_id*."""
-        enc = quote(change_id, safe="")
+        cid = change_id_for_gerrit_rest_path(change_id)
+        enc = quote(cid, safe="")
         data = self._request_json(
             f"changes/{enc}/reviewers",
             method="POST",
@@ -214,18 +235,20 @@ class GerritClient:
         )
         if not isinstance(data, dict):
             raise GerritApiError("unexpected add reviewer response")
-        logger.info("add_reviewer %r -> %s", change_id, data.get("_account_id"))
+        logger.info("add_reviewer %r -> %s", cid, data.get("_account_id"))
         return data
 
     def delete_reviewer(self, change_id: str, account_id: int) -> Any:
         """Remove *account_id* from *change_id* (REVIEWER or CC)."""
-        enc = quote(change_id, safe="")
+        cid = change_id_for_gerrit_rest_path(change_id)
+        enc = quote(cid, safe="")
         aid_enc = quote(str(account_id), safe="")
         return self._request_json(f"changes/{enc}/reviewers/{aid_enc}", method="DELETE")
 
     def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """GET inline comments grouped by file path (or special keys) for *change_id*."""
-        enc = quote(change_id, safe="")
+        cid = change_id_for_gerrit_rest_path(change_id)
+        enc = quote(cid, safe="")
         data = self._request_json(f"changes/{enc}/comments")
         if not isinstance(data, dict):
             raise GerritApiError("unexpected comments response")
@@ -236,7 +259,7 @@ class GerritClient:
         total = sum(len(v) for v in out.values())
         logger.info(
             "get_comments %r -> %d file(s), %d comment(s)",
-            change_id,
+            cid,
             len(out),
             total,
         )
