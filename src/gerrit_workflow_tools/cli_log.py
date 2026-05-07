@@ -30,7 +30,7 @@ from gerrit_workflow_tools.cli_style import (
     is_color_enabled,
     visible_len,
 )
-from gerrit_workflow_tools.core.config import log_defaults
+from gerrit_workflow_tools.core.config import current_branch, log_defaults
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
     LogCommit,
@@ -40,7 +40,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 )
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
@@ -431,7 +431,7 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         metavar="REV_RANGE",
-        help="Commit range (e.g. origin/main..HEAD); default upstream..HEAD (tracking @{upstream}).",
+        help="Commit range (e.g. origin/main..HEAD); default <branch>@{upstream}..<branch>.",
     )
     return parser
 
@@ -439,13 +439,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None, int | None]:
     """Return revision range or (None, exit_code) on error."""
     if arg_rev_range:
-        return arg_rev_range, None
+        if ".." in arg_rev_range:
+            return arg_rev_range, None
+        return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}", None
     try:
-        _fork, _target, target_tip = merge_base_with_target(cwd)
+        branch = current_branch(cwd)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
         return None, 2
-    return f"{target_tip}..HEAD", None
+    if branch == "HEAD":
+        return "@{upstream}..HEAD", None
+    return f"{branch}@{{upstream}}..{branch}", None
 
 
 def _load_commits_in_range(

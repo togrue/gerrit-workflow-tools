@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_log import _load_commits_in_range
+from gerrit_workflow_tools.cli_log import _load_commits_in_range, _resolve_rev_range
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
@@ -247,6 +248,136 @@ def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.Monke
         code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch)
     assert code == 0, err
     assert "g.example" in out or "/+/" in out
+
+
+# ---------------------------------------------------------------------------
+# Revision range resolution argv behavior
+# ---------------------------------------------------------------------------
+
+
+def _install_log_git_mocks(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    head_branch: str,
+) -> tuple[list[tuple[tuple[str, ...], Path]], list[tuple[tuple[str, ...], Path, bool]]]:
+    git_out_calls: list[tuple[tuple[str, ...], Path]] = []
+    git_calls: list[tuple[tuple[str, ...], Path, bool]] = []
+
+    def fake_git_out(*args: str, cwd: Path | str | None = None) -> str:
+        assert isinstance(cwd, Path)
+        git_out_calls.append((args, cwd))
+        if args == ("rev-parse", "--abbrev-ref", "HEAD"):
+            return head_branch
+        raise AssertionError(f"unexpected git_out call: {args}")
+
+    def fake_git(
+        *args: str,
+        cwd: Path | str | None = None,
+        env: dict[str, str] | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        assert isinstance(cwd, Path)
+        _ = env
+        git_calls.append((args, cwd, check))
+        return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.config.git_out", fake_git_out)
+    monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
+    return git_out_calls, git_calls
+
+
+def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    cwd = Path("mock-repo")
+    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="feat/x")
+
+    rev_range, exit_code = _resolve_rev_range(cwd, None)
+    assert exit_code is None
+    assert rev_range == "feat/x@{upstream}..feat/x"
+
+    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
+    assert load_exit == 0
+    assert commit_data is None
+
+    assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
+    assert [args for args, _cwd, _check in git_calls] == [
+        ("log", "--reverse", "--first-parent", "feat/x@{upstream}..feat/x", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
+    ]
+
+
+def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    cwd = Path("mock-repo")
+    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
+
+    rev_range, exit_code = _resolve_rev_range(cwd, None)
+    assert exit_code is None
+    assert rev_range == "@{upstream}..HEAD"
+
+    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
+    assert load_exit == 0
+    assert commit_data is None
+
+    assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
+    assert [args for args, _cwd, _check in git_calls] == [
+        ("log", "--reverse", "--first-parent", "@{upstream}..HEAD", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
+    ]
+
+
+def test_log_rev_range_single_branch_expands_to_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    cwd = Path("mock-repo")
+    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
+
+    rev_range, exit_code = _resolve_rev_range(cwd, "bak")
+    assert exit_code is None
+    assert rev_range == "bak@{upstream}..bak"
+
+    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
+    assert load_exit == 0
+    assert commit_data is None
+
+    assert git_out_calls == []
+    assert [args for args, _cwd, _check in git_calls] == [
+        ("log", "--reverse", "--first-parent", "bak@{upstream}..bak", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
+    ]
+
+
+@pytest.mark.parametrize("arg_rev_range", ["a..b", "a...b"])
+def test_log_rev_range_explicit_ranges_are_forwarded_verbatim(
+    monkeypatch: pytest.MonkeyPatch,
+    arg_rev_range: str,
+) -> None:
+    cwd = Path("mock-repo")
+    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
+
+    rev_range, exit_code = _resolve_rev_range(cwd, arg_rev_range)
+    assert exit_code is None
+    assert rev_range == arg_rev_range
+
+    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
+    assert load_exit == 0
+    assert commit_data is None
+
+    assert git_out_calls == []
+    assert [args for args, _cwd, _check in git_calls] == [
+        ("log", "--reverse", "--first-parent", arg_rev_range, "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
+    ]
+
+
+def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.MonkeyPatch) -> None:
+    cwd = Path("mock-repo")
+    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
+    _ = git_out_calls
+
+    rev_range, exit_code = _resolve_rev_range(cwd, "a..b")
+    assert exit_code is None
+    assert rev_range == "a..b"
+
+    commit_data, load_exit = _load_commits_in_range(cwd, rev_range, first_parent=False)
+    assert load_exit == 0
+    assert commit_data is None
+
+    assert [args for args, _cwd, _check in git_calls] == [
+        ("log", "--reverse", "a..b", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
+    ]
 
 
 # ---------------------------------------------------------------------------
