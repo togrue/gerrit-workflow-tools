@@ -17,7 +17,10 @@
 # ``--check-duplicates`` exits 0 if all footers are valid and unique, 1 if a footer is missing, 2 on duplicates.
 
 import argparse
+import os
+import shlex
 import sys
+import tempfile
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -33,8 +36,9 @@ from gerrit_workflow_tools.core.change_id import (
     extract_change_id_from_msg,
     is_change_id_token,
 )
-from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import (
+    commits_in_range,
     git_log_sha_body,
     parse_git_log_sha_body_rs,
     rev_spec_target_tip_to_end,
@@ -124,6 +128,107 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
             raise ChangeIdError(f"error: no Change-Id found in commit {color_short_sha(sha)}", code=1)
 
 
+def _ensure_clean_tree_for_fix(cwd: Path) -> None:
+    status = git("status", "--porcelain", cwd=cwd, check=False)
+    if status.returncode != 0:
+        raise GitError("git status failed", stderr=status.stderr, returncode=status.returncode)
+    if status.stdout.strip():
+        raise ChangeIdError("error: --fix requires a clean working tree", code=2)
+
+    merge_head = git("rev-parse", "--verify", "MERGE_HEAD", cwd=cwd, check=False)
+    if merge_head.returncode == 0:
+        raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=2)
+
+    git_dir = git("rev-parse", "--git-dir", cwd=cwd, check=False)
+    if git_dir.returncode != 0:
+        raise GitError("git rev-parse --git-dir failed", stderr=git_dir.stderr, returncode=git_dir.returncode)
+    git_dir_path = Path(git_dir.stdout.strip())
+    if not git_dir_path.is_absolute():
+        git_dir_path = cwd / git_dir_path
+    if (git_dir_path / "rebase-merge").exists() or (git_dir_path / "rebase-apply").exists():
+        raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=2)
+
+
+def _msg_filter_script() -> str:
+    return (
+        "from pathlib import Path\n"
+        "import os\n"
+        "import sys\n"
+        "from gerrit_workflow_tools.core.change_id import (\n"
+        "    append_change_id_footer,\n"
+        "    extract_change_id_from_msg,\n"
+        "    generate_change_id_for_commit,\n"
+        "    strip_change_id_lines,\n"
+        ")\n"
+        "msg = sys.stdin.read()\n"
+        "targets = {s for s in os.environ.get('GER_CID_TARGETS', '').split(',') if s}\n"
+        "commit = os.environ['GIT_COMMIT']\n"
+        "if commit not in targets:\n"
+        "    sys.stdout.write(msg)\n"
+        "    raise SystemExit(0)\n"
+        "if extract_change_id_from_msg(msg):\n"
+        "    sys.stdout.write(msg)\n"
+        "    raise SystemExit(0)\n"
+        "base = strip_change_id_lines(msg)\n"
+        "cwd = Path(os.environ['GER_CID_REPO'])\n"
+        "cid = generate_change_id_for_commit(cwd, commit, base)\n"
+        "sys.stdout.write(append_change_id_footer(base, cid))\n"
+    )
+
+
+def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
+    """Rewrite stack commit messages, assigning Change-Ids where missing on the last line."""
+    if is_change_id_token(input_arg):
+        raise ChangeIdError("error: --fix needs a commit or range, not a Change-Id", code=2)
+
+    _ensure_clean_tree_for_fix(cwd)
+    resolved = resolve_gcid_user_arg(cwd, input_arg)
+    rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
+    rows = commits_in_range(cwd, rev_spec)
+    if not rows:
+        return
+    base, _end = rev_spec.split("..", 1)
+    head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
+    if head_ref_proc.returncode != 0:
+        raise GitError(
+            "git rev-parse --abbrev-ref HEAD failed",
+            stderr=head_ref_proc.stderr,
+            returncode=head_ref_proc.returncode,
+        )
+    head_ref = head_ref_proc.stdout.strip()
+
+    src_path = cwd / "src"
+    py_path = os.environ.get("PYTHONPATH")
+    env = {
+        "FILTER_BRANCH_SQUELCH_WARNING": "1",
+        "GER_CID_REPO": str(cwd),
+        "GER_CID_TARGETS": ",".join(c.sha for c in rows),
+        "PYTHONPATH": f"{src_path}{os.pathsep}{py_path}" if py_path else str(src_path),
+    }
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".py", encoding="utf-8") as f:
+        f.write(_msg_filter_script())
+        script_path = Path(f.name)
+    try:
+        cmd = f"{shlex.quote(sys.executable)} {shlex.quote(str(script_path))}"
+        p = git(
+            "filter-branch",
+            "-f",
+            "--msg-filter",
+            cmd,
+            "--",
+            head_ref,
+            "--not",
+            base,
+            cwd=cwd,
+            env=env,
+            check=False,
+        )
+        if p.returncode != 0:
+            raise ChangeIdError(f"error: --fix failed: {p.stderr.strip() or p.stdout.strip()}", code=2)
+    finally:
+        script_path.unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI for `ger change-id`.
 
@@ -153,6 +258,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Check for duplicate Change-Ids across upstream_tip..END (same range as --start-at-remote).",
     )
+    p.add_argument(
+        "--fix",
+        action="store_true",
+        help=(
+            "Assign Change-Ids for commits in upstream_tip..END when the last non-empty message line has no Change-Id."
+        ),
+    )
     add_color_args(p)
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
@@ -162,6 +274,13 @@ def main(argv: list[str] | None = None) -> int:
     input_arg = args.rev_or_range or "HEAD"
 
     try:
+        if args.fix and args.check_duplicates:
+            raise ChangeIdError("error: --fix cannot be combined with --check-duplicates", code=2)
+
+        if args.fix:
+            fix_change_ids_for_stack(cwd, input_arg)
+            return 0
+
         if args.check_duplicates:
             check_duplicate_change_ids(cwd, input_arg)
             return 0

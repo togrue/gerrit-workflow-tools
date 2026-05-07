@@ -81,6 +81,48 @@ def _make_repo_change_id_not_last_line(path: Path) -> Path:
     return path
 
 
+def _make_stack_repo_for_fix(path: Path) -> Path:
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    path.mkdir(parents=True, exist_ok=True)
+    git("init", "-b", "main", cwd=path, env=env)
+    (path / "README.md").write_text("base\n", encoding="utf-8")
+    git("add", "README.md", cwd=path, env=env)
+    git("commit", "-m", "base", cwd=path, env=env)
+
+    git("checkout", "-b", "feature", cwd=path, env=env)
+
+    (path / "a.txt").write_text("a\n", encoding="utf-8")
+    git("add", "a.txt", cwd=path, env=env)
+    git("commit", "-m", "first commit without footer", cwd=path, env=env)
+
+    (path / "b.txt").write_text("b\n", encoding="utf-8")
+    git("add", "b.txt", cwd=path, env=env)
+    git(
+        "commit",
+        "-m",
+        "second commit footer not last\n\nChange-Id: I" + "e" * 40 + "\n\nSigned-off-by: test@example.com",
+        cwd=path,
+        env=env,
+    )
+
+    keep = "I" + "f" * 40
+    (path / "c.txt").write_text("c\n", encoding="utf-8")
+    git("add", "c.txt", cwd=path, env=env)
+    git("commit", "-m", f"third commit keep\n\nChange-Id: {keep}", cwd=path, env=env)
+    git("branch", "--set-upstream-to", "main", "feature", cwd=path, env=env, check=False)
+    return path
+
+
+def _stack_bodies(repo: Path) -> list[str]:
+    raw = git_out("log", "--reverse", "main..HEAD", "--format=%B%x1f", cwd=repo)
+    return [chunk for chunk in raw.split("\x1f") if chunk.strip()]
+
+
 # --- Pure helpers ---
 
 
@@ -317,3 +359,55 @@ def test_gcid_string_that_is_not_change_id_tries_git(gcid_cli_repo, monkeypatch)
     code, out, _err = run_cli(gcid_cli_repo, gcid_main, [bad], monkeypatch)
     assert code == 1
     assert out == ""
+
+
+def test_gcid_fix_assigns_missing_and_not_last_line(tmp_path, monkeypatch):
+    repo = _make_stack_repo_for_fix(tmp_path / "fix")
+    code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
+    assert code == 0
+    assert out == ""
+    assert err == ""
+
+    bodies = _stack_bodies(repo)
+    assert len(bodies) == 3
+    for body in bodies:
+        assert extract_change_id_from_msg(body) is not None
+
+    second = bodies[1]
+    assert "Signed-off-by: test@example.com" in second
+    assert second.count("Change-Id:") == 1
+
+    check_code, check_out, check_err = run_cli(repo, gcid_main, ["--check-duplicates"], monkeypatch)
+    assert check_code == 0
+    assert check_out == ""
+    assert check_err == ""
+
+
+def test_gcid_fix_skips_commit_with_valid_last_line_change_id(tmp_path, monkeypatch):
+    repo = _make_stack_repo_for_fix(tmp_path / "fix_skip")
+    before = _stack_bodies(repo)
+    assert "Change-Id: I" + "f" * 40 in before[2]
+
+    code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
+    assert code == 0
+    assert out == ""
+    assert err == ""
+
+    after = _stack_bodies(repo)
+    assert "Change-Id: I" + "f" * 40 in after[2]
+    assert after[2].count("Change-Id:") == 1
+
+
+def test_gcid_fix_rejects_check_duplicates_combo(stack_repo, monkeypatch):
+    code, out, err = run_cli(stack_repo, gcid_main, ["--fix", "--check-duplicates"], monkeypatch)
+    assert code == 2
+    assert out == ""
+    assert "cannot be combined" in err
+
+
+def test_gcid_fix_requires_clean_tree(stack_repo, monkeypatch):
+    (stack_repo / "dirty.txt").write_text("dirty\n", encoding="utf-8")
+    code, out, err = run_cli(stack_repo, gcid_main, ["--fix"], monkeypatch)
+    assert code == 2
+    assert out == ""
+    assert "clean working tree" in err
