@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
+from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -257,6 +258,39 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
     )
     assert code == 1
     assert "REST" in err or "gerrit" in err.lower()
+
+
+def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    ready = compute_ready(stack_repo)
+    assert ready.push_range
+    rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
+    reviewer_existing = {
+        "reviewers": [{"account": {"username": "bob", "_account_id": 3}, "state": "REVIEWER"}],
+    }
+    details = build_details_by_change_id(rows, per_index_overrides=[reviewer_existing] * len(rows))
+    mock_run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--yes", "--reviewer-strategy", "overwrite", "--reviewers", "alice,ben"],
+            monkeypatch,
+        )
+    assert code == 0
+    assignment_lines = [ln for ln in out.splitlines() if " assigned " in ln]
+    assert len(assignment_lines) == len(rows)
+    for row in rows:
+        assert row.subject in out
+        assert row.sha in out
+    assert "r=alice" in out and "r=ben" in out
 
 
 def test_gpush_reviewers_cli_overwrites_branch_and_dedupes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

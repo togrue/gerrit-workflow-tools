@@ -127,6 +127,17 @@ def patch_gerrit_client_for_queries(
     """Patch ``resolve_gerrit_web_base`` and ``GerritClient`` on *module* (e.g. ``cli_log``)."""
     inst = MagicMock()
     inst.query_changes.side_effect = make_query_changes_impl(details_by_change_id)
+
+    def _get_change(change_id: str) -> dict[str, Any]:
+        key = norm_change_id(change_id)
+        row = details_by_change_id.get(key)
+        if row is None:
+            raise AssertionError(f"test mock: no ChangeInfo for {change_id!r} (normalized {key!r})")
+        return row
+
+    inst.get_change.side_effect = _get_change
+    inst.add_reviewer.return_value = {}
+    inst.delete_reviewer.return_value = None
     inst.get_comments.return_value = {}
     with (
         patch(f"{module}.resolve_gerrit_web_base", return_value=web_base),
