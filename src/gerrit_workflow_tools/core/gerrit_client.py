@@ -229,9 +229,9 @@ class GerritClient:
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = quote(cid, safe="")
         data = self._request_json(
-            f"changes/{enc}/reviewers",
+            f"changes/{enc}/revisions/current/review",
             method="POST",
-            json_body={"reviewer": reviewer},
+            json_body={"reviewers": [{"reviewer": reviewer}]},
         )
         if not isinstance(data, dict):
             raise GerritApiError("unexpected add reviewer response")
