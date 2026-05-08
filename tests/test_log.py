@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_log import _load_commits_in_range, _resolve_rev_range
+from gerrit_workflow_tools.cli_log import (
+    _load_commits_in_range,
+    _resolve_rev_range,
+    rev_range_needs_upstream_resolution,
+)
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
@@ -378,6 +382,26 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     assert [args for args, _cwd, _check in git_calls] == [
         ("log", "--reverse", "a..b", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
     ]
+
+
+@pytest.mark.parametrize(
+    ("rev_range", "head_branch", "want"),
+    [
+        ("@{upstream}..HEAD", "feat/x", ["feat/x"]),
+        ("feat/topic@{upstream}..feat/topic", "unused", ["feat/topic"]),
+        ("origin/main..HEAD", "feat/x", []),
+        ("one@{upstream}...two@{upstream}", "unused", ["one", "two"]),
+    ],
+)
+def test_rev_range_needs_upstream_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    rev_range: str,
+    head_branch: str,
+    want: list[str],
+) -> None:
+    monkeypatch.setattr("gerrit_workflow_tools.cli_log.current_branch", lambda _cwd: head_branch)
+    got = rev_range_needs_upstream_resolution(Path("mock-repo"), rev_range)
+    assert got == want
 
 
 # ---------------------------------------------------------------------------

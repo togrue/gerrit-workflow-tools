@@ -16,8 +16,9 @@ from gerrit_workflow_tools.cli_common import (
     handle_git_error,
 )
 from gerrit_workflow_tools.core.config import rebase_defaults, resolve_rebase_onto_remote_ref
-from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import merge_base_with_target, resolve_stack_commit
+from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
             # resolve_stack_commit handles both Change-Id (I…) and plain git refs.
             base = resolve_stack_commit(cwd, args.rev.strip())
         else:
+            head_ref = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
+            if (
+                head_ref != "HEAD"
+                and not branch_has_upstream(cwd, head_ref)
+                and not ensure_branch_upstream_interactive(cwd, head_ref)
+                and sys.stdin.isatty()
+            ):
+                return 1
             base, _, _ = merge_base_with_target(cwd)
     except GitError as e:
         return handle_git_error(e)

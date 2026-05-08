@@ -58,6 +58,7 @@ from gerrit_workflow_tools.core.reviewer import (
     reviewer_accounts_from_change_info,
 )
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target, parse_change_id
+from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
 from gerrit_workflow_tools.push_input_line import (
     ParseResult,
     PushLineState,
@@ -1018,6 +1019,10 @@ def main(argv: list[str] | None = None) -> int:
         if b == "HEAD":
             raise GitError("ger push requires a branch (detached HEAD). Check out a branch first.")
         mode = ger_push_mode(cwd, b)
+        if not args.yes and mode in ("gerrit", None) and not branch_has_upstream(cwd, b):
+            if not ensure_branch_upstream_interactive(cwd, b) and sys.stdin.isatty():
+                return 1
+            mode = ger_push_mode(cwd, b)
         if mode is None:
             raise GitError(
                 "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "

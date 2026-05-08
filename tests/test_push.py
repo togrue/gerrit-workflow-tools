@@ -76,6 +76,40 @@ def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
     assert "push destination" in err.lower() or "gerritTarget" in err.lower()
 
 
+def test_gpush_prompts_for_missing_upstream_and_aborts(
+    stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = stack_repo_unconfigured
+    git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
+    set_branch_config(repo, "feature", gerrit_target="main")
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda _cwd, _branch: None,
+    )
+    code, _out, _err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 1
+    p = git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo, check=False)
+    assert p.returncode != 0
+
+
+def test_gpush_sets_missing_upstream_then_continues(
+    stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = stack_repo_unconfigured
+    git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
+    set_branch_config(repo, "feature", gerrit_target="main")
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda _cwd, _branch: "main",
+    )
+    code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
+    assert "Upstream for 'feature' set to main." in err
+    assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo) == "main"
+
+
 def test_gpush_vanilla_upstream_runs_plain_git_push(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

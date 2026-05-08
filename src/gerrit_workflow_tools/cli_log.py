@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -41,9 +42,11 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import commits_in_range
+from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
+_UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
 
 # Fixed width for the abbreviated SHA so status columns line up across commits.
 _STATUS_SHA_COL_WIDTH = 8
@@ -432,6 +435,22 @@ def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None
     return f"{branch}@{{upstream}}..{branch}", None
 
 
+def rev_range_needs_upstream_resolution(cwd: Path, rev_range: str) -> list[str]:
+    """Return branch names that need upstream resolution for *rev_range*."""
+    current = current_branch(cwd)
+    required: list[str] = []
+    seen: set[str] = set()
+    for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):
+        branch = (match.group("branch") or current).lstrip(".")
+        if branch in ("HEAD", ""):
+            branch = current
+        if branch in seen:
+            continue
+        seen.add(branch)
+        required.append(branch)
+    return required
+
+
 def _load_commits_in_range(
     cwd: Path, rev_range: str, *, first_parent: bool = True
 ) -> tuple[list[CommitStatusInput] | None, int]:
@@ -576,6 +595,11 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
     if rev_range_exit is not None:
         return rev_range_exit
     assert rev_range is not None
+    for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
+        if branch_has_upstream(cwd, branch):
+            continue
+        if not ensure_branch_upstream_interactive(cwd, branch) and sys.stdin.isatty():
+            return 1
 
     commit_data, commit_data_exit = _load_commits_in_range(cwd, rev_range, first_parent=not args.follow_merges)
     if commit_data is None:

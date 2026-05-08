@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.stack import (
     merge_base_with_target,
     resolve_stack_commit,
 )
+from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,14 @@ def _run_interactive_stack_rebase(
     logger.debug("gedit cwd=%s rev_arg=%r action=%s", cwd, args.rev, action)
 
     try:
+        branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
+        if (
+            branch != "HEAD"
+            and not branch_has_upstream(cwd, branch)
+            and not ensure_branch_upstream_interactive(cwd, branch)
+            and sys.stdin.isatty()
+        ):
+            return 1
         full = resolve_stack_commit(cwd, args.rev.strip())
         if not commit_in_stack(cwd, full):
             raise GitError(f"commit {args.rev} is not in the current local stack")
