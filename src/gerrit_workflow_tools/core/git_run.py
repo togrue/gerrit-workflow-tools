@@ -21,6 +21,9 @@ class GitError(RuntimeError):
         self.stderr = stderr
         self.returncode = returncode
 
+    def __str__(self) -> str:
+        return f"{self.args[0]}\n{self.stderr.strip()}"
+
 
 def git(
     *args: str,
