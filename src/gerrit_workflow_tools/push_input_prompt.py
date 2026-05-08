@@ -113,7 +113,7 @@ class PushOptionsCompleter(Completer):
         self._reviewer_seeds = ordered
         self._catalog = catalog
 
-    def get_completions(self, document: Document, complete_event: CompleteEvent):  # type: ignore[override]
+    def get_completions(self, document: Document, _complete_event: CompleteEvent):  # type: ignore[override]
         word = document.get_word_before_cursor(WORD=True)
         raw_word = word.lstrip("-")
         candidates: list[tuple[str, str]] = [

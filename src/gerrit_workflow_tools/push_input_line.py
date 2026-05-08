@@ -34,8 +34,6 @@ KW_PUSH = "push"
 KW_LAZY = "lazy"
 KW_OVERWRITE = "overwrite"
 
-RESERVED: frozenset[str] = frozenset({KW_R, KW_TOPIC, KW_WIP, KW_PRIVATE, KW_PUSH, KW_LAZY, KW_OVERWRITE})
-
 SpanKind = Literal[
     "whitespace",
     "minus",

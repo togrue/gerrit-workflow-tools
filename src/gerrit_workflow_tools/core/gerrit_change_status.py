@@ -49,15 +49,6 @@ class CommitStatusInput:
     change_id: str | None
 
 
-def commit_status_input_rows(rows: list[tuple[str, str, str, str | None]]) -> list[CommitStatusInput]:
-    """Backwards-compatible conversion from positional rows to structured inputs."""
-
-    return [
-        CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
-        for sha, short, summary, change_id in rows
-    ]
-
-
 @dataclass(frozen=True)
 class ReviewerAccount:
     """Normalized Gerrit reviewer account identity used by CLI and core."""

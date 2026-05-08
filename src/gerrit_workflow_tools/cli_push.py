@@ -269,22 +269,6 @@ def _prompt_reviewers_line_ptk(
     )
 
 
-def _prompt_reviewer_strategy_interactive() -> ReviewerStrategy:
-    print("Reviewer assignment:")
-    print("  1. push      - attach as %r= on this git push")
-    print("  2. lazy       - after push: add reviewers only on changes that have none yet (REST)")
-    print("  3. overwrite  - after push: replace reviewers on every change in this stack (REST)")
-    while True:
-        raw = input("Choose 1-3 [1]: ").strip().lower()
-        if raw in ("", "1", "push"):
-            return ReviewerStrategy.PUSH
-        if raw in ("2", "lazy"):
-            return ReviewerStrategy.LAZY
-        if raw in ("3", "overwrite"):
-            return ReviewerStrategy.OVERWRITE
-        print("  Enter 1, 2, or 3 (default: 1).", file=sys.stderr)
-
-
 def _strategy_status_label(strategy: ReviewerStrategy) -> str:
     return {
         ReviewerStrategy.PUSH: "push (new changes are modified)",

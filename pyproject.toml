@@ -81,6 +81,19 @@ max-line-length = 120
 disable = [
 ]
 
+[tool.vulture]
+paths = ["src"]
+ignore_names = [
+    # cli_changeid --fix: imported from dynamically built subprocess script only.
+    "strip_change_id_lines",
+    "append_change_id_footer",
+    "generate_change_id_for_commit",
+    # Prompt-toolkit Lexer / Validator / Completer callbacks.
+    "lex_document",
+    "validate",
+    "get_completions",
+]
+
 [tool.ruff.lint]
 # Ruff defaults are only a subset of pycodestyle (E4, E7, E9) plus Pyflakes (F).
 # These families add import order, bug-prone patterns, modern syntax, and cleanup.

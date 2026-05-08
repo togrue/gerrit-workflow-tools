@@ -109,11 +109,6 @@ _CONFIGURED = False
 _DEBUG_LOG_ENABLED = False
 
 
-def log_gerrit_response_bodies() -> bool:
-    """Whether to log full Gerrit JSON bodies when debug logging is enabled."""
-    return _DEBUG_LOG_ENABLED
-
-
 def configure_logging(verbosity: int | bool) -> None:
     """Set package log level based on debug logging enablement.
 
