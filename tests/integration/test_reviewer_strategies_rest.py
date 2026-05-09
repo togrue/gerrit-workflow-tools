@@ -12,26 +12,33 @@ from tests.conftest import run_cli
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.gerrit_seed import create_account
 from tests.integration.integration_helpers import (
-    open_changes_on_branch,
+    first_change_id_from_tip,
     prepare_topic_repo,
+    reviewer_slugs_from_reviewers_rest,
     reviewer_slugs_on_change,
 )
 from tests.integration.repo_builder import build_linear_chain
 
 
-def _detail_for_topic_tip(
+def _reviewer_slugs_re_fetched_from_gerrit(
     session: GerritHttpSession,
     project: str,
     topic: str,
-) -> dict[str, object]:
-    rows = open_changes_on_branch(session, project, topic)
-    assert rows, "expected at least one open change on topic branch"
-    cid = rows[0].get("change_id") or rows[0].get("id")
-    assert cid
-    enc = quote_change_id(str(cid))
+) -> set[str]:
+    """
+    Re-query Gerrit after the push: compare change ``detail`` reviewers with
+    ``GET changes/<id>/reviewers/`` so we assert on live server state, not CLI output.
+    """
+
+    cid = first_change_id_from_tip(session, project, topic)
+    assert cid, "expected an open change on topic branch"
+    enc = quote_change_id(cid)
     detail = session.get_json(f"changes/{enc}/detail")
     assert isinstance(detail, dict)
-    return detail
+    from_detail = set(reviewer_slugs_on_change(detail))
+    from_rest = set(reviewer_slugs_from_reviewers_rest(session, cid))
+    assert from_detail == from_rest, f"detail.reviewers and GET /reviewers/ disagree: {from_detail!r} vs {from_rest!r}"
+    return from_rest
 
 
 def test_lazy_reviewer_strategy_adds_via_rest(
@@ -58,8 +65,8 @@ def test_lazy_reviewer_strategy_adds_via_rest(
         monkeypatch,
     )
     assert code == 0, err
-    detail = _detail_for_topic_tip(gerrit_admin_session, ctx.project_verified, topic)
-    assert ctx.admin_user in reviewer_slugs_on_change(detail)
+    slugs = _reviewer_slugs_re_fetched_from_gerrit(gerrit_admin_session, ctx.project_verified, topic)
+    assert ctx.admin_user in slugs
 
 
 def test_lazy_reviewer_strategy_skips_when_reviewers_exist(
@@ -93,8 +100,8 @@ def test_lazy_reviewer_strategy_skips_when_reviewers_exist(
         monkeypatch,
     )
     assert code1 == 0, e1
-    detail1 = _detail_for_topic_tip(gerrit_admin_session, ctx.project_verified, topic)
-    assert ctx.admin_user in reviewer_slugs_on_change(detail1)
+    slugs1 = _reviewer_slugs_re_fetched_from_gerrit(gerrit_admin_session, ctx.project_verified, topic)
+    assert ctx.admin_user in slugs1
 
     git("commit", "--amend", "--no-edit", cwd=repo)
     code2, _o2, e2 = run_cli(
@@ -111,10 +118,9 @@ def test_lazy_reviewer_strategy_skips_when_reviewers_exist(
         monkeypatch,
     )
     assert code2 == 0, e2
-    detail2 = _detail_for_topic_tip(gerrit_admin_session, ctx.project_verified, topic)
-    slugs = reviewer_slugs_on_change(detail2)
-    assert ctx.admin_user in slugs
-    assert rev_alt not in slugs
+    slugs2 = _reviewer_slugs_re_fetched_from_gerrit(gerrit_admin_session, ctx.project_verified, topic)
+    assert ctx.admin_user in slugs2
+    assert rev_alt not in slugs2
 
 
 def test_overwrite_reviewer_strategy_replaces_reviewers(
@@ -148,8 +154,8 @@ def test_overwrite_reviewer_strategy_replaces_reviewers(
         monkeypatch,
     )
     assert code1 == 0, e1
-    detail1 = _detail_for_topic_tip(gerrit_admin_session, ctx.project_verified, topic)
-    assert ctx.admin_user in reviewer_slugs_on_change(detail1)
+    slugs1b = _reviewer_slugs_re_fetched_from_gerrit(gerrit_admin_session, ctx.project_verified, topic)
+    assert ctx.admin_user in slugs1b
 
     git("commit", "--amend", "--no-edit", cwd=repo)
     code2, _o2, e2 = run_cli(
@@ -166,7 +172,6 @@ def test_overwrite_reviewer_strategy_replaces_reviewers(
         monkeypatch,
     )
     assert code2 == 0, e2
-    detail2 = _detail_for_topic_tip(gerrit_admin_session, ctx.project_verified, topic)
-    slugs = reviewer_slugs_on_change(detail2)
-    assert rev_alt in slugs
-    assert ctx.admin_user not in slugs
+    slugs2b = _reviewer_slugs_re_fetched_from_gerrit(gerrit_admin_session, ctx.project_verified, topic)
+    assert rev_alt in slugs2b
+    assert ctx.admin_user not in slugs2b

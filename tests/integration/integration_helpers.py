@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
-from tests.integration.gerrit_http import GerritHttpSession
+from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit, reviewer_accounts_from_change_info
+from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.gerrit_seed import configure_ger_git_repo, set_origin_url
 from tests.integration.repo_builder import install_commit_msg_hook, prepare_worktree_clone
 
@@ -26,6 +26,23 @@ def reviewer_slugs_on_change(detail: dict[str, Any]) -> list[str]:
     """REVIEWER/CC account usernames from a Gerrit ``.../detail`` payload (same rules as core)."""
 
     return [a.slug for a in reviewer_accounts_from_change_info(detail)]
+
+
+def reviewer_slugs_from_reviewers_rest(session: GerritHttpSession, change_id: str) -> list[str]:
+    """Account slugs from a live ``GET changes/<id>/reviewers/`` (Gerrit reviewer list endpoint)."""
+
+    enc = quote_change_id(change_id)
+    data = session.get_json(f"changes/{enc}/reviewers/")
+    if not isinstance(data, list):
+        return []
+    out: list[str] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        slug = account_slug_from_gerrit(row)
+        if slug:
+            out.append(slug)
+    return out
 
 
 def label_value(detail: dict[str, Any], name: str) -> int | None:
