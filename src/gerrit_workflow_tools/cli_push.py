@@ -694,8 +694,25 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
-            "overwrite (REST: replace on each change). Requires credentials for lazy/overwrite."
+            "overwrite (REST: replace on each change). Requires credentials for lazy/overwrite. "
+            "Topic/WIP/private always use magic ref options (see --topic / --wip / --private)."
         ),
+    )
+    p.add_argument(
+        "--topic",
+        metavar="NAME",
+        default=None,
+        help="Gerrit change topic (magic ref %%topic=…; sent on push for every reviewer strategy).",
+    )
+    p.add_argument(
+        "--wip",
+        action="store_true",
+        help="Mark change(s) work-in-progress (magic ref %%wip; sent on push for every reviewer strategy).",
+    )
+    p.add_argument(
+        "--private",
+        action="store_true",
+        help="Mark change(s) private (magic ref %%private; sent on push for every reviewer strategy).",
     )
     add_verbose_and_debug_log_args(
         p,
@@ -713,9 +730,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def _handle_vanilla_push(cwd: Path, args: argparse.Namespace) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
-    if args.until or args.all_ or args.reviewers or args.ignore_pattern:
+    if (
+        args.until
+        or args.all_
+        or args.reviewers
+        or args.ignore_pattern
+        or args.topic is not None
+        or args.wip
+        or args.private
+    ):
         print(
-            "warning: --until, --all, --reviewers, and --ignore-pattern apply only to Gerrit push; ignoring.",
+            "warning: --until, --all, --reviewers, --ignore-pattern, --topic, --wip, and --private "
+            "apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
     cmd_vanilla = ["git", "push"]
@@ -789,12 +815,20 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         if interactive_state is not None
         else (args.reviewer_strategy or ReviewerStrategy.PUSH.value)
     )
+    if interactive_state is not None:
+        eff_topic = interactive_state.topic
+        eff_wip = interactive_state.wip
+        eff_private = interactive_state.private
+    else:
+        eff_topic = args.topic
+        eff_wip = bool(args.wip)
+        eff_private = bool(args.private)
     plan = GerritPushReviewers(
         reviewers=list(reviewers),
         strategy=ReviewerStrategy(selected_strategy),
-        topic=interactive_state.topic if interactive_state else None,
-        wip=interactive_state.wip if interactive_state else False,
-        private=interactive_state.private if interactive_state else False,
+        topic=eff_topic,
+        wip=eff_wip,
+        private=eff_private,
     )
 
     r = compute_ready(
@@ -906,6 +940,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 ctx.plan.reviewers,
                 strategy=ctx.plan.strategy,
             )
+            print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
             if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
                 print(
                     "[dry-run] after a successful push would apply reviewers via "

@@ -39,6 +39,9 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--dry-run" in out
     assert "--reviewers" in out
     assert "--reviewer-strategy" in out
+    assert "--topic" in out
+    assert "--wip" in out
+    assert "--private" in out
     scrubbed = out.replace("--reviewers", "").replace("--reviewer-strategy", "")
     assert "--reviewer" not in scrubbed
     assert "--ignore-pattern" in out
@@ -50,11 +53,12 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_gpush_dry_run_prints_commit_preview(stack_repo, monkeypatch):
-    """Gerrit dry-run shows the stack preview only; refspec is not echoed to stdout."""
+    """Gerrit dry-run shows the stack preview and the would-be ``git push`` refspec."""
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
-    assert "git push" not in out
+    assert "git push" in out
+    assert ":refs/for/" in out
     assert "[dry-run]" in err
 
 
@@ -282,6 +286,31 @@ def test_gpush_lazy_strategy_omits_refspec_percent_r(stack_repo: Path, monkeypat
     assert "lazy" in err and "reviewers" in err
 
 
+def test_gpush_lazy_dry_run_includes_topic_and_wip_on_refspec(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        [
+            "--dry-run",
+            "--reviewers",
+            "alice",
+            "--reviewer-strategy",
+            "lazy",
+            "--topic",
+            "my-series",
+            "--wip",
+        ],
+        monkeypatch,
+    )
+    assert code == 0
+    assert "%r=" not in out
+    line = next(ln for ln in out.splitlines() if ln.strip().startswith("git push"))
+    assert "wip" in line
+    assert "topic=my-series" in line
+
+
 def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, _out, err = run_cli(
@@ -360,7 +389,8 @@ def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", *extra], monkeypatch)
     assert code == 0, (code, out, err)
     assert "About to push commits:" in out
-    assert "git push" not in out
+    assert "git push" in out
+    assert ":refs/for/" in out
     assert "[dry-run]" in err
     if "--all" in extra:
         assert "Cleanup after experiment" in out
