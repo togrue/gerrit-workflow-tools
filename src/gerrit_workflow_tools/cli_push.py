@@ -534,9 +534,13 @@ def _print_gpush_confirm_status_line(
     *,
     strategy: ReviewerStrategy | None = None,
 ) -> None:
-    """One-line summary in ``ger branch show`` colors before the push confirmation prompt."""
+    """One-line summary in ``ger branch show`` colors before the push confirmation prompt.
+
+    *gerrit_target* is the branch segment inside ``refs/for/<branch>`` (from
+    :func:`~gerrit_workflow_tools.core.config.refs_for_push_branch_name`).
+    """
     branch_v = color_text(local_branch, f"{ANSI_BOLD}{ANSI_CYAN}")
-    target_v = color_text(gerrit_target, ANSI_GREEN)
+    target_v = color_text(f"refs/for/{gerrit_target}", ANSI_GREEN)
     rev_v = color_text(", ".join(reviewers), ANSI_LIGHT_GREEN) if reviewers else color_text("(none)", ANSI_DIM)
     sep = color_text("  ·  ", ANSI_DIM)
     line = (
@@ -895,6 +899,13 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             stack_printed = True
 
         if args.dry_run:
+            print()
+            _print_gpush_confirm_status_line(
+                ctx.branch,
+                ctx.push_branch,
+                ctx.plan.reviewers,
+                strategy=ctx.plan.strategy,
+            )
             if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
                 print(
                     "[dry-run] after a successful push would apply reviewers via "
