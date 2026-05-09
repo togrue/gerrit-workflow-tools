@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 from tests.integration.gerrit_http import GerritHttpSession
 from tests.integration.gerrit_seed import configure_ger_git_repo, set_origin_url
 from tests.integration.repo_builder import install_commit_msg_hook, prepare_worktree_clone
@@ -19,6 +20,12 @@ def open_changes_on_branch(session: GerritHttpSession, project: str, branch: str
     if not isinstance(data, list):
         return []
     return [x for x in data if isinstance(x, dict)]
+
+
+def reviewer_slugs_on_change(detail: dict[str, Any]) -> list[str]:
+    """REVIEWER/CC account usernames from a Gerrit ``.../detail`` payload (same rules as core)."""
+
+    return [a.slug for a in reviewer_accounts_from_change_info(detail)]
 
 
 def label_value(detail: dict[str, Any], name: str) -> int | None:
