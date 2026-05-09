@@ -858,6 +858,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     tip = ctx.ready.push_tip_sha
     assert tip is not None  # guaranteed by _build_gerrit_context
     cmd: list[str] = []
+    stack_printed = False
     while True:
         refspec = _refs_for_spec(tip, ctx.push_branch, ctx.plan.to_state(), ctx.plan.strategy)
         cmd = ["git", "push", ctx.remote, refspec]
@@ -880,19 +881,18 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 merged_reviewers=ctx.plan.reviewers,
                 first_parent=ctx.first_parent,
             )
-        except ValueError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        except GerritApiError as e:
+        except (ValueError, GerritApiError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
 
-        _print_gpush_preview(
-            cwd,
-            ctx.ready,
-            commit_lines,
-            summary_highlighter=summary_highlighter,
-        )
+        if not stack_printed:
+            _print_gpush_preview(
+                cwd,
+                ctx.ready,
+                commit_lines,
+                summary_highlighter=summary_highlighter,
+            )
+            stack_printed = True
 
         if args.dry_run:
             if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
