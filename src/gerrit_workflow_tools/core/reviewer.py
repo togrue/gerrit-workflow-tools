@@ -43,6 +43,20 @@ def reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[Review
 
     out: list[ReviewerAccount] = []
     reviewers = detail.get("reviewers")
+    if isinstance(reviewers, dict):
+        for role in ("REVIEWER", "CC"):
+            bucket = reviewers.get(role)
+            if not isinstance(bucket, list):
+                continue
+            for account in bucket:
+                if not isinstance(account, dict):
+                    continue
+                slug = account_slug_from_gerrit(account)
+                if not slug:
+                    continue
+                account_id = account.get("_account_id")
+                out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
+        return out
     if not isinstance(reviewers, list):
         return out
     for entry in reviewers:

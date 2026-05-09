@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 from gerrit_workflow_tools.core.gerrit_client import GerritClient, change_id_for_gerrit_rest_path
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push
-from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 
 
 def _reviewer_entry(username: str) -> dict[str, object]:
@@ -24,6 +24,20 @@ def test_change_id_for_gerrit_rest_path_leaves_numeric_and_triplet_unchanged() -
     assert change_id_for_gerrit_rest_path("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == (
         "proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     )
+
+
+def test_reviewer_accounts_from_change_info_dict_shaped_reviewers() -> None:
+    """Gerrit change detail often uses a ``reviewers.REVIEWER`` / ``reviewers.CC`` map."""
+
+    detail: dict[str, object] = {
+        "reviewers": {
+            "REVIEWER": [{"_account_id": 1, "username": "alice"}],
+            "CC": [{"_account_id": 2, "email": "bob@example.com"}],
+        }
+    }
+    accs = reviewer_accounts_from_change_info(detail)
+    assert [a.slug for a in accs] == ["alice", "bob"]
+    assert [a.account_id for a in accs] == [1, 2]
 
 
 def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:
