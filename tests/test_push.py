@@ -229,6 +229,10 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "main" in out[i_status:]
     assert "Reviewers" in out[i_status:]
     assert "(none)" in out[i_status:]
+    assert "Topic" in out[i_status:]
+    assert "WIP" in out[i_status:]
+    assert "Private" in out[i_status:]
+    assert "no" in out[i_status:]
     assert "cancel" in err.lower()
     mock_run.assert_not_called()
 
@@ -309,6 +313,27 @@ def test_gpush_lazy_dry_run_includes_topic_and_wip_on_refspec(
     line = next(ln for ln in out.splitlines() if ln.strip().startswith("git push"))
     assert "wip" in line
     assert "topic=my-series" in line
+
+
+def test_gpush_dry_run_status_line_spells_out_topic_wip_and_private(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice", "--topic", "my-series", "--wip", "--private"],
+        monkeypatch,
+    )
+    assert code == 0
+    i_status = out.index("Branch")
+    status = out[i_status:]
+    assert "Target" in status
+    assert "Reviewers" in status
+    assert "Topic" in status
+    assert "my-series" in status
+    assert "WIP" in status
+    assert "Private" in status
+    assert "yes" in status
 
 
 def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

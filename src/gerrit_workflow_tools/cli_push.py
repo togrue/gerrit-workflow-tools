@@ -532,6 +532,9 @@ def _print_gpush_confirm_status_line(
     gerrit_target: str,
     reviewers: list[str],
     *,
+    topic: str | None = None,
+    wip: bool = False,
+    private: bool = False,
     strategy: ReviewerStrategy | None = None,
 ) -> None:
     """One-line summary in ``ger branch show`` colors before the push confirmation prompt.
@@ -542,6 +545,9 @@ def _print_gpush_confirm_status_line(
     branch_v = color_text(local_branch, f"{ANSI_BOLD}{ANSI_CYAN}")
     target_v = color_text(f"refs/for/{gerrit_target}", ANSI_GREEN)
     rev_v = color_text(", ".join(reviewers), ANSI_LIGHT_GREEN) if reviewers else color_text("(none)", ANSI_DIM)
+    topic_v = color_text(topic, ANSI_CYAN) if topic else color_text("(none)", ANSI_DIM)
+    wip_v = color_text("yes", ANSI_GREEN) if wip else color_text("no", ANSI_DIM)
+    private_v = color_text("yes", ANSI_GREEN) if private else color_text("no", ANSI_DIM)
     sep = color_text("  ·  ", ANSI_DIM)
     line = (
         f"{color_text('Branch', ANSI_DIM)} {branch_v}"
@@ -549,6 +555,12 @@ def _print_gpush_confirm_status_line(
         f"{color_text('Target', ANSI_DIM)} {target_v}"
         f"{sep}"
         f"{color_text('Reviewers', ANSI_DIM)} {rev_v}"
+        f"{sep}"
+        f"{color_text('Topic', ANSI_DIM)} {topic_v}"
+        f"{sep}"
+        f"{color_text('WIP', ANSI_DIM)} {wip_v}"
+        f"{sep}"
+        f"{color_text('Private', ANSI_DIM)} {private_v}"
     )
     if strategy is not None and strategy != ReviewerStrategy.PUSH:
         strat_v = color_text(_strategy_status_label(strategy), ANSI_DIM)
@@ -938,6 +950,9 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 ctx.branch,
                 ctx.push_branch,
                 ctx.plan.reviewers,
+                topic=ctx.plan.topic,
+                wip=ctx.plan.wip,
+                private=ctx.plan.private,
                 strategy=ctx.plan.strategy,
             )
             print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
@@ -965,7 +980,15 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             break
 
         print()
-        _print_gpush_confirm_status_line(ctx.branch, ctx.push_branch, ctx.plan.reviewers, strategy=ctx.plan.strategy)
+        _print_gpush_confirm_status_line(
+            ctx.branch,
+            ctx.push_branch,
+            ctx.plan.reviewers,
+            topic=ctx.plan.topic,
+            wip=ctx.plan.wip,
+            private=ctx.plan.private,
+            strategy=ctx.plan.strategy,
+        )
         print()
         act = _prompt_gerrit_push_confirm_action()
         if act == "cancel":
