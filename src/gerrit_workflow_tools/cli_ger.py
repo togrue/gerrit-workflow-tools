@@ -11,6 +11,7 @@ from gerrit_workflow_tools.cli_changeid import main as main_cid
 from gerrit_workflow_tools.cli_edit import main as main_edit
 from gerrit_workflow_tools.cli_edit import main_reword
 from gerrit_workflow_tools.cli_fetch_api import main as main_fetch_api
+from gerrit_workflow_tools.cli_fix import main as main_fix
 from gerrit_workflow_tools.cli_log import main as main_log
 from gerrit_workflow_tools.cli_push import main as main_push
 from gerrit_workflow_tools.cli_restack import main as main_restack
@@ -26,6 +27,7 @@ _COMMANDS: dict[str, tuple[str, _Handler]] = {
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", main_edit),
     "reword": ("Interactive rebase: reword, edit, or drop a stack commit.", main_reword),
     "fetch-api": ("GET a Gerrit REST path with configured user and token.", main_fetch_api),
+    "fix": ("Create a git fixup commit for a ref or Gerrit change.", main_fix),
     "log": ("Overview of the local commit chain vs Gerrit (CI, votes, comments).", main_log),
     "push": ("Push the ready prefix or full stack to Gerrit.", main_push),
     "restack": ("Interactive rebase with Gerrit status annotations.", main_restack),

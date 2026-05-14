@@ -157,6 +157,21 @@ _ger_show() {
     fi
 }
 
+_ger_fix() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" \
+            --help \
+            -a --all \
+            --no-verify \
+            -v --verbose --debug-log
+        return
+    fi
+    if declare -F __git_complete_refs >/dev/null 2>&1; then
+        __git_complete_refs
+    fi
+}
+
 _ger_fetch_api() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
@@ -171,7 +186,7 @@ _ger_fetch_api() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" branch change-id edit fetch-api log push restack reword sha show
+        __gwt_flags "$cur" branch change-id edit fetch-api fix log push restack reword sha show
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -186,6 +201,7 @@ _ger() {
         sha) _ger_sha ;;
         show) _ger_show ;;
         fetch-api) _ger_fetch_api ;;
+        fix) _ger_fix ;;
     esac
 }
 
