@@ -13,6 +13,7 @@ from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.gerrit_seed import create_account
 from tests.integration.integration_helpers import (
     first_change_id_from_tip,
+    open_changes_on_branch,
     prepare_topic_repo,
     reviewer_slugs_from_reviewers_rest,
     reviewer_slugs_on_change,
@@ -39,6 +40,63 @@ def _reviewer_slugs_re_fetched_from_gerrit(
     from_rest = set(reviewer_slugs_from_reviewers_rest(session, cid))
     assert from_detail == from_rest, f"detail.reviewers and GET /reviewers/ disagree: {from_detail!r} vs {from_rest!r}"
     return from_rest
+
+
+def _revision_count_from_detail(detail: dict[str, object]) -> int:
+    revisions = detail.get("revisions")
+    if not isinstance(revisions, dict):
+        return 0
+    return len(revisions)
+
+
+def _snapshot_revision_counts(
+    session: GerritHttpSession,
+    project: str,
+    topic: str,
+) -> dict[str, int]:
+    rows = open_changes_on_branch(session, project, topic)
+    out: dict[str, int] = {}
+    for row in rows:
+        cid = row.get("change_id") or row.get("id")
+        assert cid, f"missing change id in row: {row!r}"
+        cid_str = str(cid)
+        enc = quote_change_id(cid_str)
+        detail = session.get_json(f"changes/{enc}/detail")
+        assert isinstance(detail, dict)
+        out[cid_str] = _revision_count_from_detail(detail)
+    return out
+
+
+def _assert_all_open_changes_reviewers(
+    session: GerritHttpSession,
+    project: str,
+    topic: str,
+    *,
+    must_include: set[str],
+    must_exclude: set[str] | None = None,
+    expected_change_count: int | None = None,
+) -> None:
+    rows = open_changes_on_branch(session, project, topic)
+    if expected_change_count is not None:
+        assert len(rows) == expected_change_count, rows
+    assert rows, "expected open changes on topic branch"
+
+    for row in rows:
+        cid = row.get("change_id") or row.get("id")
+        assert cid, f"missing change id in row: {row!r}"
+        cid_str = str(cid)
+        enc = quote_change_id(cid_str)
+        detail = session.get_json(f"changes/{enc}/detail")
+        assert isinstance(detail, dict)
+        from_detail = set(reviewer_slugs_on_change(detail))
+        from_rest = set(reviewer_slugs_from_reviewers_rest(session, cid_str))
+        assert from_detail == from_rest, (
+            f"detail.reviewers and GET /reviewers/ disagree for {cid_str}: {from_detail!r} vs {from_rest!r}"
+        )
+        for reviewer in must_include:
+            assert reviewer in from_rest, f"{reviewer!r} missing on change {cid_str}; got {sorted(from_rest)!r}"
+        for reviewer in must_exclude or set():
+            assert reviewer not in from_rest, f"{reviewer!r} unexpectedly present on change {cid_str}"
 
 
 def test_lazy_reviewer_strategy_adds_via_rest(
@@ -175,3 +233,115 @@ def test_overwrite_reviewer_strategy_replaces_reviewers(
     slugs2b = _reviewer_slugs_re_fetched_from_gerrit(gerrit_admin_session, ctx.project_verified, topic)
     assert rev_alt in slugs2b
     assert ctx.admin_user not in slugs2b
+
+
+def test_lazy_reviewer_strategy_assigns_after_initial_push_without_reviewers(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = gerrit_integration_context
+    topic = f"lz3_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(
+        repo,
+        [
+            "feat: lazy two-phase first",
+            "feat: lazy two-phase second",
+        ],
+    )
+
+    code1, _o1, e1 = run_cli(
+        repo,
+        ger_push_main,
+        ["--yes", "--no-rebase-check"],
+        monkeypatch,
+    )
+    assert code1 == 0, e1
+    before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+    assert len(before_revisions) == 2
+
+    code2, _o2, e2 = run_cli(
+        repo,
+        ger_push_main,
+        [
+            "--yes",
+            "--no-rebase-check",
+            "--reviewer-strategy",
+            "lazy",
+            "--reviewers",
+            ctx.admin_user,
+        ],
+        monkeypatch,
+    )
+    assert code2 == 0, e2
+    _assert_all_open_changes_reviewers(
+        gerrit_admin_session,
+        ctx.project_verified,
+        topic,
+        must_include={ctx.admin_user},
+        expected_change_count=2,
+    )
+    after_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+    assert after_revisions == before_revisions
+
+
+def test_overwrite_reviewer_strategy_assigns_after_initial_push_without_reviewers(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = gerrit_integration_context
+    rev_alt = f"rvo2_{secrets.token_hex(4)}"
+    create_account(
+        gerrit_admin_session,
+        rev_alt,
+        email=f"{rev_alt}@example.com",
+        http_password=f"pw-{secrets.token_hex(8)}",
+    )
+    topic = f"ow2_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(
+        repo,
+        [
+            "feat: overwrite two-phase first",
+            "feat: overwrite two-phase second",
+        ],
+    )
+
+    code1, _o1, e1 = run_cli(
+        repo,
+        ger_push_main,
+        ["--yes", "--no-rebase-check"],
+        monkeypatch,
+    )
+    assert code1 == 0, e1
+    before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+    assert len(before_revisions) == 2
+
+    code2, _o2, e2 = run_cli(
+        repo,
+        ger_push_main,
+        [
+            "--yes",
+            "--no-rebase-check",
+            "--reviewer-strategy",
+            "overwrite",
+            "--reviewers",
+            rev_alt,
+        ],
+        monkeypatch,
+    )
+    assert code2 == 0, e2
+    _assert_all_open_changes_reviewers(
+        gerrit_admin_session,
+        ctx.project_verified,
+        topic,
+        must_include={rev_alt},
+        must_exclude={ctx.admin_user},
+        expected_change_count=2,
+    )
+    after_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+    assert after_revisions == before_revisions
