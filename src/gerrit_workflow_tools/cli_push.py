@@ -73,9 +73,49 @@ _REBASE_ONTO_REMOTE_HINT = (
 )
 
 
+def _git_push_output_text(proc: subprocess.CompletedProcess[bytes]) -> str:
+    parts: list[bytes] = []
+    for chunk in (proc.stdout, proc.stderr):
+        if isinstance(chunk, bytes) and chunk:
+            parts.append(chunk)
+    if not parts:
+        return ""
+    return b"".join(parts).decode(errors="replace")
+
+
+def _git_push_rejected_no_new_changes(proc: subprocess.CompletedProcess[bytes]) -> bool:
+    """True when Gerrit rejected the refspec because the commit is already on the server."""
+
+    return "no new changes" in _git_push_output_text(proc).lower()
+
+
+def _emit_git_push_output(proc: subprocess.CompletedProcess[bytes]) -> None:
+    for stream, buf in ((sys.stdout, proc.stdout), (sys.stderr, proc.stderr)):
+        if not isinstance(buf, bytes) or not buf:
+            continue
+        text = buf.decode(errors="replace")
+        stream.write(text)
+        if not text.endswith("\n"):
+            stream.write("\n")
+        stream.flush()
+
+
 def _run_git_push(cmd: list[str], cwd: Path | str | None) -> subprocess.CompletedProcess[bytes]:
     """Run ``git push`` (separate hook so tests can monkeypatch without affecting other subprocess use)."""
-    return subprocess.run(cmd, cwd=cwd, check=False)
+    proc = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True)
+    _emit_git_push_output(proc)
+    return proc
+
+
+def _push_succeeded_for_reviewer_rest(
+    proc: subprocess.CompletedProcess[bytes],
+    *,
+    strategy: ReviewerStrategy,
+    reviewers: list[str],
+) -> bool:
+    if proc.returncode == 0:
+        return True
+    return _needs_rest_assignment(strategy, reviewers) and _git_push_rejected_no_new_changes(proc)
 
 
 def _resolve_push_reviewers(
@@ -1020,11 +1060,18 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
 
     logger.debug("gpush executing: %s (cwd=%s)", " ".join(cmd), cwd)
     proc = _run_git_push(cmd, cwd)
-    logger.debug(
-        "gpush push finished: rc=%s (push output is not captured; see terminal)",
-        proc.returncode,
+    push_ok = _push_succeeded_for_reviewer_rest(
+        proc,
+        strategy=ctx.plan.strategy,
+        reviewers=ctx.plan.reviewers,
     )
-    if proc.returncode != 0:
+    logger.debug(
+        "gpush push finished: rc=%s push_ok=%s no_new_changes=%s",
+        proc.returncode,
+        push_ok,
+        _git_push_rejected_no_new_changes(proc),
+    )
+    if not push_ok:
         return proc.returncode
     if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
         try:

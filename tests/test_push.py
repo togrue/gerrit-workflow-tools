@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -346,6 +347,48 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
     )
     assert code == 1
     assert "REST" in err or "gerrit" in err.lower()
+
+
+def test_git_push_rejected_no_new_changes_detects_gerrit_message() -> None:
+    proc = subprocess.CompletedProcess(
+        ["git", "push"],
+        1,
+        stdout=b"",
+        stderr=b"! [remote rejected] deadbeef -> refs/for/main (no new changes)\n",
+    )
+    assert cli_push_mod._git_push_rejected_no_new_changes(proc)
+    ok = subprocess.CompletedProcess(["git", "push"], 0, stdout=b"SUCCESS\n", stderr=b"")
+    assert not cli_push_mod._git_push_rejected_no_new_changes(ok)
+
+
+def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    ready = compute_ready(stack_repo)
+    assert ready.push_range
+    rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
+    details = build_details_by_change_id(rows)
+    mock_run = MagicMock(
+        return_value=subprocess.CompletedProcess(
+            ["git", "push"],
+            1,
+            stdout=b"",
+            stderr=b"! [remote rejected] tip -> refs/for/main (no new changes)\n",
+        )
+    )
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
+        code, out, _err = run_cli(
+            stack_repo,
+            gpush_main,
+            ["--yes", "--reviewer-strategy", "lazy", "--reviewers", "alice"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert any(" assigned " in ln and "r=alice" in ln for ln in out.splitlines())
 
 
 def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
