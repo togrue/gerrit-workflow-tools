@@ -65,6 +65,7 @@ class InlineComment:
     line: int | None
     message: str
     comment_id: str | None = None
+    author: str | None = None
 
 
 @dataclass
@@ -230,6 +231,8 @@ def _comment_line(c: dict[str, Any]) -> int | None:
 def collect_unresolved_comments(file_map: dict[str, list[dict[str, Any]]]) -> list[InlineComment]:
     """Normalize unresolved comments from Gerrit file map, sorted by path/line."""
 
+    from gerrit_workflow_tools.core.reviewer import format_gerrit_account_label
+
     rows: list[InlineComment] = []
     for path, comments in file_map.items():
         for comment in comments:
@@ -237,12 +240,17 @@ def collect_unresolved_comments(file_map: dict[str, list[dict[str, Any]]]) -> li
                 continue
             raw_msg = comment.get("message")
             raw_id = comment.get("id")
+            author_label: str | None = None
+            raw_author = comment.get("author")
+            if isinstance(raw_author, dict):
+                author_label = format_gerrit_account_label(raw_author)
             rows.append(
                 InlineComment(
                     path=path,
                     line=_comment_line(comment),
                     message=raw_msg if isinstance(raw_msg, str) else "",
                     comment_id=raw_id if isinstance(raw_id, str) else None,
+                    author=author_label,
                 )
             )
     rows.sort(key=lambda r: (r.path, r.line if r.line is not None else -1))

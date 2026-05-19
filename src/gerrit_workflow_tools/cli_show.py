@@ -151,14 +151,15 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         # Human output honors --comment-tail-lines / --full; JSON always emits full text.
         comment_payload: list[dict[str, object]] = []
         for row_item in unresolved_rows:
-            comment_payload.append(
-                {
-                    "path": row_item.path,
-                    "line": row_item.line,
-                    "message": row_item.message,
-                    "url": gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id),
-                }
-            )
+            entry: dict[str, object] = {
+                "path": row_item.path,
+                "line": row_item.line,
+                "message": row_item.message,
+                "url": gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id),
+            }
+            if row_item.author:
+                entry["author"] = row_item.author
+            comment_payload.append(entry)
         payload = {
             "sha": commit.sha if commit.sha else None,
             "change_id": cid,
@@ -204,11 +205,14 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             body, _trunc = _apply_comment_tail(row_item.message, tail_n, full=args.full)
             comment_url = gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id) or commit.gerrit_url
             loc = f"{row_item.path}:{row_item.line}" if row_item.line is not None else row_item.path
-            print(f"  {color_text(loc, ANSI_CYAN)}")
+            loc_line = f"  {color_text(loc, ANSI_CYAN)}"
+            if row_item.author:
+                loc_line += f"  {color_text(row_item.author, ANSI_DIM)}"
+            print(loc_line)
             if comment_url:
                 print(f"  {color_text('url:', ANSI_DIM)} {color_text(comment_url, ANSI_YELLOW)}")
             for ln in body.splitlines():
-                print(f"  {ln}")
+                print(f"    {ln}")
             print()
 
     return _EXIT_ATTENTION if attention else 0

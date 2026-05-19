@@ -190,6 +190,86 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
 
 
+def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch["unresolved_comment_count"] = 1
+    comments = {
+        "epsilon.txt": [
+            {
+                "id": "ff909dbc",
+                "line": 908,
+                "message": "some comment",
+                "unresolved": True,
+                "author": {"username": "grt", "name": "Tobias Grün"},
+            }
+        ]
+    }
+    with (
+        patch(
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
+            return_value="https://g.example",
+        ),
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
+    ):
+        inst = MagicMock()
+        client_cls.return_value = inst
+        inst.query_changes.return_value = [ch]
+        inst.get_comments.return_value = comments
+        code, out, _err = run_cli(
+            stack_repo,
+            gshow_main,
+            ["--color=never", "42"],
+            monkeypatch,
+        )
+    assert code == 1
+    assert "epsilon.txt:908" in out
+    assert "grt (Tobias Grün)" in out
+    assert "    some comment" in out
+
+
+def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    comments = {
+        "f.py": [
+            {
+                "id": "TvcXrmjM",
+                "line": 1,
+                "message": "note",
+                "unresolved": True,
+                "author": {"username": "grt", "name": "Tobias Grün"},
+            }
+        ]
+    }
+    with (
+        patch(
+            "gerrit_workflow_tools.cli_show.resolve_gerrit_web_base",
+            return_value="https://g.example",
+        ),
+        patch("gerrit_workflow_tools.cli_show.GerritClient") as client_cls,
+    ):
+        inst = MagicMock()
+        client_cls.return_value = inst
+        inst.query_changes.return_value = [ch]
+        inst.get_comments.return_value = comments
+        code, out, _err = run_cli(
+            stack_repo,
+            gshow_main,
+            ["--json", "42"],
+            monkeypatch,
+        )
+    assert code == 0
+    data = json_stdout(out)
+    assert data["comments"][0]["author"] == "grt (Tobias Grün)"
+
+
 def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()

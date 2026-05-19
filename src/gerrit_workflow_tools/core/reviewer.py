@@ -38,6 +38,21 @@ def account_slug_from_gerrit(account: dict[str, object]) -> str | None:
     return None
 
 
+def format_gerrit_account_label(account: dict[str, object]) -> str | None:
+    """Human label for Gerrit AccountInfo, e.g. ``grt (Tobias Grün)``."""
+
+    slug = account_slug_from_gerrit(account)
+    raw_name = account.get("name")
+    name = raw_name.strip() if isinstance(raw_name, str) else ""
+    if slug and name and slug.lower() != name.lower():
+        return f"{slug} ({name})"
+    if slug:
+        return slug
+    if name:
+        return name
+    return None
+
+
 def reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[ReviewerAccount]:
     """Reviewer/CC account list in Gerrit API order."""
 
