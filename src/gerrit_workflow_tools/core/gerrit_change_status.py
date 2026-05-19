@@ -306,6 +306,53 @@ def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> i
         return 0
 
 
+def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw_id = row.get("change_id")
+        if isinstance(raw_id, str):
+            out[norm_change_id(raw_id)] = row
+
+
+def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
+    """Query each Change-Id in *chunk* when a batched OR query fails."""
+    rows: list[dict[str, Any]] = []
+    workers = min(_PARALLEL_IO, len(chunk))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for one in ex.map(lambda c: query_single_change(client, c), chunk):
+            if one:
+                rows.append(one)
+    return rows
+
+
+def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
+    q = " OR ".join(f"change:{c}" for c in chunk)
+    try:
+        return client.query_changes(q, n=len(chunk) + 10, options=opts)
+    except GerritApiError as e:
+        logger.warning("batched Gerrit query failed (%s), falling back per change", e)
+        return _fallback_query_chunk(client, chunk)
+
+
+def _parallel_fill_cache_misses(
+    client: GerritClient,
+    cache: dict[str, dict[str, Any]],
+    change_ids: list[str],
+) -> None:
+    missing = [cid for cid in change_ids if norm_change_id(cid) not in cache]
+    if not missing:
+        return
+    workers = min(_PARALLEL_IO, len(missing))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for detail in ex.map(lambda c: query_single_change(client, c), missing):
+            if not detail:
+                continue
+            raw_id = detail.get("change_id")
+            if isinstance(raw_id, str):
+                cache[norm_change_id(raw_id)] = detail
+
+
 def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:  # pylint: disable=too-many-locals
     """Map normalized Change-Id to ChangeInfo using chunked ``change:I1 OR change:I2`` queries."""
     out: dict[str, dict[str, Any]] = {}
@@ -318,26 +365,16 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
             unique.append(cid)
 
     opts = list(LOG_QUERY_OPTIONS)
-    for i in range(0, len(unique), _BATCH_OR_CHUNK):
-        chunk = unique[i : i + _BATCH_OR_CHUNK]
-        q = " OR ".join(f"change:{c}" for c in chunk)
-        try:
-            rows = client.query_changes(q, n=len(chunk) + 10, options=opts)
-        except GerritApiError as e:
-            logger.warning("batched Gerrit query failed (%s), falling back per change", e)
-            for c in chunk:
-                one = query_single_change(client, c)
-                if one:
-                    raw_id = one.get("change_id")
-                    if isinstance(raw_id, str):
-                        out[norm_change_id(raw_id)] = one
-            continue
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            raw_id = row.get("change_id")
-            if isinstance(raw_id, str):
-                out[norm_change_id(raw_id)] = row
+    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
+    if len(chunks) <= 1:
+        for chunk in chunks:
+            _ingest_change_rows(out, _query_change_chunk(client, chunk, opts))
+        return out
+
+    workers = min(_PARALLEL_IO, len(chunks))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for rows in ex.map(lambda ch: _query_change_chunk(client, ch, opts), chunks):
+            _ingest_change_rows(out, rows)
     return out
 
 
@@ -409,14 +446,15 @@ def fetch_gerrit_data(
 ) -> list[LogCommit]:
     """Query Gerrit for each commit and return populated LogCommit objects."""
 
+    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
+
     resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
     result: list[LogCommit] = []
     ids_in_range = [c.change_id for c in commits if c.change_id]
     cache = batch_load_change_details(client, ids_in_range)
+    _parallel_fill_cache_misses(client, cache, ids_in_range)
 
-    needs_comment_count: list[tuple[int, str]] = []
-    needs_checks: list[tuple[int, str]] = []
-    needs_reviewers: list[tuple[int, str]] = []
+    follow_ups: list[tuple[str, int, str]] = []
 
     for row in commits:
         sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
@@ -440,12 +478,6 @@ def fetch_gerrit_data(
             continue
 
         detail = cache.get(norm_change_id(change_id))
-        if detail is None:
-            detail = query_single_change(client, change_id)
-            if detail:
-                cid = detail.get("change_id")
-                if isinstance(cid, str):
-                    cache[norm_change_id(cid)] = detail
 
         if not detail:
             result.append(
@@ -482,12 +514,16 @@ def fetch_gerrit_data(
             unresolved = raw_u
         else:
             unresolved = 0
-            needs_comment_count.append((len(result), api_id))
+            follow_ups.append(("comments", len(result), api_id))
 
         if verified is not None and verified < 0:
-            needs_checks.append((len(result), api_id))
+            follow_ups.append(("checks", len(result), api_id))
 
-        needs_reviewers.append((len(result), api_id))
+        # List/batch ChangeInfo may include an empty ``reviewers`` stub; only skip the
+        # detail fetch when the batch row already has parsed reviewer accounts.
+        reviewer_list = reviewer_accounts_from_change_info(detail)
+        if not reviewer_list:
+            follow_ups.append(("reviewers", len(result), api_id))
 
         merged_eq: bool | None = None
         if st == "MERGED":
@@ -518,51 +554,33 @@ def fetch_gerrit_data(
                 submittable=submittable,
                 change_status=change_status_val,
                 merged_equivalent=merged_eq,
-                reviewers=[],
+                reviewers=reviewer_list,
             )
         )
 
-    workers = min(
-        _PARALLEL_IO,
-        max(len(needs_comment_count), len(needs_checks), len(needs_reviewers), 1),
-    )
-
-    if needs_comment_count:
+    if follow_ups:
+        workers = min(_PARALLEL_IO, len(follow_ups))
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            comment_future_to_idx = {
-                ex.submit(count_unresolved_via_comments, client, aid): idx for idx, aid in needs_comment_count
-            }
-            for comment_fut in as_completed(comment_future_to_idx):
-                idx = comment_future_to_idx[comment_fut]
-                exc = comment_fut.exception()
-                if exc is None:
-                    result[idx].comments_unresolved = comment_fut.result()
+            future_meta: dict[Any, tuple[str, int]] = {}
+            for kind, idx, api_id in follow_ups:
+                if kind == "comments":
+                    future_meta[ex.submit(count_unresolved_via_comments, client, api_id)] = (kind, idx)
+                elif kind == "checks":
+                    future_meta[ex.submit(fetch_check_failures, client, api_id)] = (kind, idx)
                 else:
-                    logger.debug("unresolved comment count failed: %s", exc)
-
-    if needs_checks:
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            check_future_to_idx = {ex.submit(fetch_check_failures, client, aid): idx for idx, aid in needs_checks}
-            for check_fut in as_completed(check_future_to_idx):
-                idx = check_future_to_idx[check_fut]
-                exc = check_fut.exception()
-                if exc is None:
-                    result[idx].ci_failures = check_fut.result()
+                    future_meta[ex.submit(_load_reviewers_for_change, client, api_id)] = (kind, idx)
+            for fut in as_completed(future_meta):
+                kind, idx = future_meta[fut]
+                exc = fut.exception()
+                if exc is not None:
+                    logger.debug("%s follow-up failed: %s", kind, exc)
+                    continue
+                if kind == "comments":
+                    result[idx].comments_unresolved = fut.result()
+                elif kind == "checks":
+                    result[idx].ci_failures = fut.result()
                 else:
-                    logger.debug("checks API failed: %s", exc)
-
-    if needs_reviewers:
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            reviewer_future_to_idx = {
-                ex.submit(_load_reviewers_for_change, client, aid): idx for idx, aid in needs_reviewers
-            }
-            for reviewer_fut in as_completed(reviewer_future_to_idx):
-                idx = reviewer_future_to_idx[reviewer_fut]
-                exc = reviewer_fut.exception()
-                if exc is None:
-                    result[idx].reviewers = reviewer_fut.result()
-                else:
-                    logger.debug("reviewer fetch failed: %s", exc)
+                    result[idx].reviewers = fut.result()
 
     return result
 
