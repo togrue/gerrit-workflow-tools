@@ -219,6 +219,8 @@ def _attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
     if commit.comments_unresolved > 0:
         noun = "comment" if commit.comments_unresolved == 1 else "comments"
         tokens.append((f"{commit.comments_unresolved} unresolved {noun}", ANSI_YELLOW))
+    if "no-reviewers" in commit.attention_reasons:
+        tokens.append(("no reviewers", ANSI_YELLOW))
     if commit.submittable and not tokens:
         tokens.append(("submittable", ANSI_GREEN))
     return tokens

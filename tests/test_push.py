@@ -369,7 +369,7 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     ready = compute_ready(stack_repo)
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
-    details = build_details_by_change_id(rows)
+    details = build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []} for _ in rows])
     mock_run = MagicMock(
         return_value=subprocess.CompletedProcess(
             ["git", "push"],

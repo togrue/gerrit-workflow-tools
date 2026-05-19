@@ -87,6 +87,7 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     attention_reasons: list[str] = field(default_factory=list)
     change_status: str | None = None  # raw Gerrit ``status`` (e.g. NEW, MERGED)
     merged_equivalent: bool | None = None  # MERGED only: proved same / different / unknown
+    reviewers: list[ReviewerAccount] = field(default_factory=list)
 
 
 def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
@@ -395,6 +396,8 @@ def fetch_gerrit_data(
     cwd: Path | str | None = None,
 ) -> list[LogCommit]:
     """Query Gerrit for each commit and return populated LogCommit objects."""
+    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
+
     resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
     result: list[LogCommit] = []
     ids_in_range = [c.change_id for c in commits if c.change_id]
@@ -501,6 +504,7 @@ def fetch_gerrit_data(
                 submittable=submittable,
                 change_status=change_status_val,
                 merged_equivalent=merged_eq,
+                reviewers=reviewer_accounts_from_change_info(detail),
             )
         )
 
@@ -562,6 +566,8 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
         reasons.append("outdated-patchset")
     if commit.verified == -1:
         reasons.append("ci-failed")
+    if len(commit.reviewers) == 0:
+        reasons.append("no-reviewers")
     if commit.code_review is not None and commit.code_review < 0:
         reasons.append("review-issues")
     if commit.code_review != 2:

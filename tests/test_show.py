@@ -40,6 +40,7 @@ def _detail_ok(
             "Verified": {"value": v_value, "all": [{"value": v_value}]},
             "Code-Review": {"value": cr_value, "all": [{"value": cr_value}]},
         },
+        "reviewers": [{"account": {"username": "default-reviewer"}, "state": "REVIEWER"}],
     }
 
 

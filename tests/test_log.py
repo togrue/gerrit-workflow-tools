@@ -15,6 +15,12 @@ from gerrit_workflow_tools.cli_log import (
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.gerrit_change_status import (
+    LogCommit,
+    PatchsetStatus,
+    ReviewerAccount,
+    determine_attention,
+)
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
@@ -150,6 +156,61 @@ def test_log_filter_attention_hides_when_all_green(stack_repo: Path, monkeypatch
     assert "non-attention commits" in out
     assert rows[0].short_sha not in out
     assert rows[0].subject not in out
+
+
+def test_determine_attention_no_reviewers_when_empty() -> None:
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="abc1234",
+        summary="subj",
+        change_id="I" + "a" * 40,
+        pushed=True,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ACTIVE,
+        verified=1,
+        code_review=2,
+        comments_unresolved=0,
+        submittable=True,
+        reviewers=[],
+    )
+    reasons = determine_attention(commit, chain_blocked=False)
+    assert "no-reviewers" in reasons
+
+
+def test_determine_attention_no_reviewers_absent_when_assigned() -> None:
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="abc1234",
+        summary="subj",
+        change_id="I" + "a" * 40,
+        pushed=True,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ACTIVE,
+        verified=1,
+        code_review=2,
+        comments_unresolved=0,
+        submittable=True,
+        reviewers=[ReviewerAccount(slug="alice")],
+    )
+    reasons = determine_attention(commit, chain_blocked=False)
+    assert "no-reviewers" not in reasons
+
+
+def test_log_no_reviewers_shown_in_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {"reviewers": []}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
+    assert code == 1, err
+    assert "no reviewers" in out
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    assert code == 1, err
+    data = json_stdout(out)
+    assert any("no-reviewers" in item.get("attention_reasons", []) for item in data)
 
 
 def test_log_filter_attention_shows_only_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

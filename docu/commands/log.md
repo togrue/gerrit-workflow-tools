@@ -113,6 +113,7 @@ A commit requires attention if **any** of the following:
 - Local commit is ahead of the server's current revision (`n` / ahead-of-gerrit)
 - Local commit is a non-current patch set (`o` / outdated-patchset)
 - `v-1` (CI failed)
+- No assigned reviewers or CCs on Gerrit (`no-reviewers`)
 - `cr-1` or `cr-2`
 - Lacks `cr+2` (awaiting review)
 - Has unresolved comments

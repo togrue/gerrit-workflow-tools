@@ -48,7 +48,9 @@ def change_info_for_sha(
             "Code-Review": {"value": cr, "all": [{"value": cr}]},
         },
     }
-    if reviewers is not None:
+    if reviewers is None:
+        out["reviewers"] = [{"account": {"username": "default-reviewer"}, "state": "REVIEWER"}]
+    else:
         out["reviewers"] = reviewers
     return out
 
