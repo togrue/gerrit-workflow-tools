@@ -2,15 +2,120 @@
 
 from __future__ import annotations
 
+import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit, reviewer_accounts_from_change_info
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.gerrit_seed import configure_ger_git_repo, set_origin_url
 from tests.integration.repo_builder import install_commit_msg_hook, prepare_worktree_clone
+
+
+@dataclass(frozen=True)
+class ChainCommit:
+    """One local commit from an integration topic chain (oldest first)."""
+
+    sha: str
+    subject: str
+    change_id: str
+    chain_index: int
+
+
+def chain_commits_oldest_first(repo: Path) -> list[ChainCommit]:
+    """Return pushed-ready commits on the current stack, oldest first."""
+    _fork, _, target_tip = merge_base_with_target(repo)
+    rows = commits_in_range(repo, f"{target_tip}..HEAD")
+    out: list[ChainCommit] = []
+    for i, row in enumerate(rows):
+        if not row.change_id:
+            continue
+        out.append(
+            ChainCommit(
+                sha=row.sha,
+                subject=row.subject.strip(),
+                change_id=row.change_id,
+                chain_index=i,
+            )
+        )
+    return out
+
+
+def add_change_reviewer(session: GerritHttpSession, change_id: str, reviewer: str) -> None:
+    """Add *reviewer* to a change via REST (same endpoint as lazy push strategy)."""
+    enc = quote_change_id(change_id)
+    session.post_json(f"changes/{enc}/reviewers", body={"reviewer": reviewer})
+
+
+def clear_change_reviewers(session: GerritHttpSession, change_id: str) -> None:
+    """Remove all REVIEWER/CC accounts from a change."""
+    enc = quote_change_id(change_id)
+    rows = session.get_json(f"changes/{enc}/reviewers/")
+    if not isinstance(rows, list):
+        return
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        account_id = row.get("_account_id")
+        if isinstance(account_id, int):
+            session.delete(f"changes/{enc}/reviewers/{account_id}")
+
+
+def abandon_change(session: GerritHttpSession, change_id: str) -> None:
+    """Abandon an open change."""
+    enc = quote_change_id(change_id)
+    session.post_json(f"changes/{enc}/abandon", body={})
+
+
+def post_unresolved_inline_comment(
+    session: GerritHttpSession,
+    change_id: str,
+    file_path: str,
+    line: int,
+    message: str,
+) -> None:
+    """Post one unresolved inline review comment on the current revision."""
+    enc = quote_change_id(change_id)
+    session.post_json(
+        f"changes/{enc}/revisions/current/review",
+        body={
+            "comments": {
+                file_path: [
+                    {
+                        "line": line,
+                        "message": message,
+                        "unresolved": True,
+                    }
+                ]
+            }
+        },
+    )
+
+
+def parse_trailing_attention_labels(log_text: str, subject_tag: str) -> list[str] | None:
+    """
+    Parse trailing ``# …`` attention tokens from a ``ger log`` text line containing *subject_tag*.
+
+    Returns ``None`` when no matching line exists, or an empty list when the line has no trailing label.
+    """
+    marker = f"# {subject_tag}"
+    for line in log_text.splitlines():
+        plain = line.replace("\u0336", "")
+        idx = plain.find(marker)
+        if idx == -1:
+            continue
+        after_marker = plain[idx + len(marker) :]
+        if after_marker and not after_marker[0].isspace():
+            continue
+        match = re.search(r"\s+#\s+(.+)$", after_marker)
+        if not match:
+            return []
+        return [part.strip() for part in match.group(1).split(",")]
+    return None
 
 
 def open_changes_on_branch(session: GerritHttpSession, project: str, branch: str) -> list[dict[str, Any]]:

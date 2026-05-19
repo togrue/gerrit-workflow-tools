@@ -131,7 +131,8 @@ def patch_gerrit_client_for_queries(
     inst.query_changes.side_effect = make_query_changes_impl(details_by_change_id)
 
     def _get_change(change_id: str) -> dict[str, Any]:
-        key = norm_change_id(change_id)
+        m = re.search(r"~(I[a-f0-9]{40})$", change_id, re.IGNORECASE)
+        key = norm_change_id(m.group(1) if m else change_id)
         row = details_by_change_id.get(key)
         if row is None:
             raise AssertionError(f"test mock: no ChangeInfo for {change_id!r} (normalized {key!r})")

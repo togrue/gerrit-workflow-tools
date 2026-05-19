@@ -284,7 +284,7 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
 
 
 def _load_reviewers_for_change(client: GerritClient, api_change_id: str) -> list[ReviewerAccount]:
-    """Load reviewers when batched change queries omit them (e.g. Gerrit 3.10 rejects ``o=REVIEWERS``)."""
+    """Load reviewers from change detail (batched queries omit the ``reviewers`` field)."""
     from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
     try:
@@ -408,7 +408,6 @@ def fetch_gerrit_data(
     cwd: Path | str | None = None,
 ) -> list[LogCommit]:
     """Query Gerrit for each commit and return populated LogCommit objects."""
-    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
     resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
     result: list[LogCommit] = []
@@ -417,6 +416,7 @@ def fetch_gerrit_data(
 
     needs_comment_count: list[tuple[int, str]] = []
     needs_checks: list[tuple[int, str]] = []
+    needs_reviewers: list[tuple[int, str]] = []
 
     for row in commits:
         sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
@@ -487,6 +487,8 @@ def fetch_gerrit_data(
         if verified is not None and verified < 0:
             needs_checks.append((len(result), api_id))
 
+        needs_reviewers.append((len(result), api_id))
+
         merged_eq: bool | None = None
         if st == "MERGED":
             merged_eq = compute_merged_equivalent(sha, detail, resolved_cwd)
@@ -516,11 +518,14 @@ def fetch_gerrit_data(
                 submittable=submittable,
                 change_status=change_status_val,
                 merged_equivalent=merged_eq,
-                reviewers=reviewer_accounts_from_change_info(detail),
+                reviewers=[],
             )
         )
 
-    workers = min(_PARALLEL_IO, max(len(needs_comment_count), len(needs_checks), 1))
+    workers = min(
+        _PARALLEL_IO,
+        max(len(needs_comment_count), len(needs_checks), len(needs_reviewers), 1),
+    )
 
     if needs_comment_count:
         with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -545,6 +550,19 @@ def fetch_gerrit_data(
                     result[idx].ci_failures = check_fut.result()
                 else:
                     logger.debug("checks API failed: %s", exc)
+
+    if needs_reviewers:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            reviewer_future_to_idx = {
+                ex.submit(_load_reviewers_for_change, client, aid): idx for idx, aid in needs_reviewers
+            }
+            for reviewer_fut in as_completed(reviewer_future_to_idx):
+                idx = reviewer_future_to_idx[reviewer_fut]
+                exc = reviewer_fut.exception()
+                if exc is None:
+                    result[idx].reviewers = reviewer_fut.result()
+                else:
+                    logger.debug("reviewer fetch failed: %s", exc)
 
     return result
 
