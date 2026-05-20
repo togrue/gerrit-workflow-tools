@@ -86,6 +86,62 @@ def current_branch(cwd: Path | str | None) -> str:
     return git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
 
 
+def is_detached_head(cwd: Path | str | None) -> bool:
+    """True when HEAD is checked out directly (not via a branch)."""
+    return git("symbolic-ref", "-q", "HEAD", cwd=cwd, check=False).returncode != 0
+
+
+def checked_out_branch_name(cwd: Path | str | None) -> str | None:
+    """Named branch checked out, or ``None`` when HEAD is detached."""
+    p = git("branch", "--show-current", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return None
+    name = (p.stdout or "").strip()
+    return name or None
+
+
+def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
+    p = git("branch", "--points-at", "HEAD", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return []
+    names: list[str] = []
+    for line in (p.stdout or "").splitlines():
+        name = line.strip().lstrip("* ").strip()
+        if not name or name.startswith("("):
+            continue
+        names.append(name)
+    return names
+
+
+def _push_context_branch_rank(cwd: Path | str | None, branch: str) -> tuple[int, int, int, str]:
+    """Lower is better when choosing a branch for detached-HEAD push config."""
+    from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream
+
+    mode = ger_push_mode(cwd, branch)
+    mode_rank = 0 if mode == "gerrit" else (1 if mode == "vanilla" else 2)
+    return (
+        0 if branch_gerrit_target(cwd, branch) else 1,
+        mode_rank,
+        0 if branch_has_upstream(cwd, branch) else 1,
+        branch,
+    )
+
+
+def resolve_push_context_branch(cwd: Path | str | None) -> str | None:
+    """Branch name for ``ger push`` mode and ``branch.<name>.*`` config.
+
+    Uses the checked-out branch when present. On detached HEAD, picks a local branch
+    that points at ``HEAD`` (preferring ``gerritTarget``, then Gerrit upstream, then any upstream).
+    """
+    checked = checked_out_branch_name(cwd)
+    if checked:
+        return checked
+    candidates = _branches_pointing_at_head(cwd)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b))
+
+
 def branch_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> str | None:
     """Return ``branch.<name>.gerritTarget`` (optional override for Gerrit destination), if set."""
     b = branch or current_branch(cwd)
@@ -119,18 +175,35 @@ def refs_for_push_branch_name(cwd: Path | str | None, target: str) -> str:
     return target
 
 
-def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str] | None:
-    """Parse ``@{upstream}`` into ``(remote_name, branch_after_first_slash)``.
+def upstream_abbrev_sym(cwd: Path | str | None, branch: str | None = None) -> str | None:
+    """Revision expression for a branch's upstream, or ``HEAD``'s when on a named branch."""
+    if branch:
+        return f"{branch}@{{upstream}}"
+    if is_detached_head(cwd):
+        return None
+    return "@{upstream}"
 
-    Uses the current branch's upstream (same as ``git rev-parse --abbrev-ref @{upstream}``).
-    Returns ``None`` if there is no upstream or the abbrev-ref has no ``/``.
-    """
-    del branch  # reserved for future branch-specific upstream resolution
-    p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
+
+def resolve_upstream_abbrev_ref(cwd: Path | str | None, branch: str | None = None) -> str | None:
+    """Return ``git rev-parse --abbrev-ref`` of the upstream, or ``None``."""
+    sym = upstream_abbrev_sym(cwd, branch)
+    if sym is None:
+        return None
+    p = git("rev-parse", "--abbrev-ref", sym, cwd=cwd, check=False)
     if p.returncode != 0:
         return None
     upstream = p.stdout.strip()
-    if "/" not in upstream:
+    return upstream or None
+
+
+def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str] | None:
+    """Parse upstream into ``(remote_name, branch_after_first_slash)``.
+
+    Uses *branch*'s upstream when given; otherwise ``@{upstream}`` for a checked-out branch.
+    Returns ``None`` if there is no upstream or the abbrev-ref has no ``/``.
+    """
+    upstream = resolve_upstream_abbrev_ref(cwd, branch)
+    if not upstream or "/" not in upstream:
         return None
     remote_name, rest = upstream.split("/", 1)
     return (remote_name, rest)
@@ -154,10 +227,7 @@ def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | No
     remote_name, _rest = parsed
     if remote_name != gerrit_remote(cwd):
         return None
-    p = git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    return p.stdout.strip()
+    return resolve_upstream_abbrev_ref(cwd, branch)
 
 
 def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal["gerrit", "vanilla"] | None:

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.core.config import is_detached_head
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.upstream_interactive import (
     branch_has_upstream,
@@ -60,6 +61,20 @@ def test_ensure_branch_upstream_interactive_sets_upstream(tmp_path: Path, monkey
     assert ensure_branch_upstream_interactive(repo, "feature")
     assert git_out("rev-parse", "--abbrev-ref", "@{upstream}", cwd=repo) == "origin/main"
     assert "origin/main" in read_recent_upstream_abbrevs(repo)
+
+
+def test_ensure_branch_upstream_interactive_detached_skips_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _make_repo_with_origin(tmp_path)
+    git("checkout", "--detach", "HEAD", cwd=repo)
+    assert is_detached_head(repo)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompt must not run on detached HEAD")),
+    )
+    assert not ensure_branch_upstream_interactive(repo, "feature")
 
 
 def test_ensure_branch_upstream_interactive_non_tty_skips_prompt(

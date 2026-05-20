@@ -40,7 +40,9 @@ from gerrit_workflow_tools.core.config import (
     gerrit_push_remote_policy,
     gerrit_remote,
     head_is_linear_on_remote_gerrit_target,
+    is_detached_head,
     refs_for_push_branch_name,
+    resolve_push_context_branch,
     set_branch_config,
 )
 from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details, norm_change_id
@@ -885,7 +887,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
 
     r = compute_ready(
         cwd,
-        branch=None,
+        branch=branch,
         all_commits=args.all_,
         ignore_patterns=args.ignore_pattern or None,
         until=args.until,
@@ -898,7 +900,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         r.boundary_reason,
     )
 
-    _fork, _, target_tip = merge_base_with_target(cwd)
+    _fork, _, target_tip = merge_base_with_target(cwd, branch)
     rows = change_id_rows_for_range(cwd, target_tip, first_parent=fp)
     items = list(rows)
     _, cid_exit = classify_issues(items, strict=True)
@@ -1131,11 +1133,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
-        if b == "HEAD":
-            raise GitError("ger push requires a branch (detached HEAD). Check out a branch first.")
+        detached = is_detached_head(cwd)
+        b = resolve_push_context_branch(cwd)
+        if b is None:
+            raise GitError(
+                "ger push requires a branch (detached HEAD with no local branch at this commit). "
+                "Check out a branch first."
+            )
         mode = ger_push_mode(cwd, b)
-        if not args.yes and mode in ("gerrit", None) and not branch_has_upstream(cwd, b):
+        if not detached and not args.yes and mode in ("gerrit", None) and not branch_has_upstream(cwd, b):
             if not ensure_branch_upstream_interactive(cwd, b) and sys.stdin.isatty():
                 return 1
             mode = ger_push_mode(cwd, b)

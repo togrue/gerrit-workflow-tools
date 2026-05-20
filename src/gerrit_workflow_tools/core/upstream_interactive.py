@@ -12,6 +12,7 @@ from prompt_toolkit.completion import WordCompleter
 from gerrit_workflow_tools.core.config import (
     clear_gerrit_git_config_cache,
     infer_nearest_remote_tracking_branch,
+    is_detached_head,
 )
 from gerrit_workflow_tools.core.git_run import git
 
@@ -118,6 +119,8 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str) -> s
 
 
 def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str) -> bool:
+    if is_detached_head(cwd):
+        return False
     if branch_has_upstream(cwd, branch):
         return True
     if not sys.stdin.isatty():

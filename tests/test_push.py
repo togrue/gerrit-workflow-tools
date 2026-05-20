@@ -133,12 +133,27 @@ def test_gpush_vanilla_upstream_runs_plain_git_push(
     mock_run.assert_called_once_with(["git", "push"], repo)
 
 
-def test_gpush_detached_head_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_detached_head_no_local_branch_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    (stack_repo / "detached-only.txt").write_text("x\n", encoding="utf-8")
+    git("add", "detached-only.txt", cwd=stack_repo)
+    git("commit", "-m", "detached-only", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "detached" in err.lower()
+
+
+def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("upstream prompt on detached HEAD")),
+    )
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
 
 
 def test_gpush_infers_gerrit_target_from_upstream(
