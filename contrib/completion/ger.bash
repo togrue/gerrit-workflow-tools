@@ -28,18 +28,47 @@ _ger_restack() {
 
 _ger_push() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
             --help \
-            --dry-run \
-            -y --yes \
             -i \
+            --branch \
+            --update-last-pushed \
+            --no-update-last-pushed \
+            --dry-run \
+            --no-rebase-check \
+            -y --yes \
             --all \
+            --color \
             --ignore-pattern \
+            --follow-merges \
             --reviewers \
+            --reviewer-strategy \
+            --topic \
+            --wip \
+            --private \
             -v --verbose --debug-log
         return
     fi
+    case "$prev" in
+        --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --reviewer-strategy)
+            __gwt_flags "$cur" push lazy overwrite
+            return
+            ;;
+        --branch)
+            if declare -F __git_heads >/dev/null 2>&1; then
+                __git_heads
+            elif declare -F __git_complete_refs >/dev/null 2>&1; then
+                __git_complete_refs
+            fi
+            return
+            ;;
+    esac
     if declare -F __git_complete_refs >/dev/null 2>&1; then
         __git_complete_refs
     fi
