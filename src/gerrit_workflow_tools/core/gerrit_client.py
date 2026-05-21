@@ -106,7 +106,10 @@ def parallel_map(
     *,
     min_tasks_per_worker: int = 1,
 ) -> list[R]:
-    """Run *fn* over *items* with one persistent session per worker thread."""
+    """Run *fn* over *items* with one persistent session per worker thread.
+
+    Return values are in the same order as *items* (unlike naive bucket merge).
+    """
 
     if not items:
         return []
@@ -114,17 +117,22 @@ def parallel_map(
         return [fn(client, items[0])]
 
     workers = parallel_io_workers(len(items), min_tasks_per_worker=min_tasks_per_worker)
-    buckets = partition_tasks(items, workers)
+    indexed: list[tuple[int, T]] = list(enumerate(items))
+    buckets = partition_tasks(indexed, workers)
 
-    def run_bucket(batch: list[T]) -> list[R]:
-        return [fn(client, item) for item in batch]
+    def run_bucket(batch: list[tuple[int, T]]) -> list[tuple[int, R]]:
+        return [(i, fn(client, item)) for i, item in batch]
 
     with ThreadPoolExecutor(max_workers=len(buckets)) as ex:
         parts = list(ex.map(run_bucket, buckets))
-    out: list[R] = []
+    unset = object()
+    out: list[Any] = [unset] * len(items)
     for part in parts:
-        out.extend(part)
-    return out
+        for i, value in part:
+            out[i] = value
+    if any(v is unset for v in out):
+        raise RuntimeError("parallel_map: worker did not return a result for every item")
+    return out  # type: ignore[return-value]
 
 
 class GerritClient:

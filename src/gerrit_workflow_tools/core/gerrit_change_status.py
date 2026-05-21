@@ -438,11 +438,20 @@ def _execute_follow_ups(client: GerritClient, work: _FollowUpWork) -> tuple[int,
     """Run all follow-up REST calls for one change sequentially on the worker session."""
     updates: dict[str, Any] = {}
     if "comments" in work.kinds:
-        updates["comments"] = count_unresolved_via_comments(client, work.api_id)
+        try:
+            updates["comments"] = count_unresolved_via_comments(client, work.api_id)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("comments follow-up failed for %s: %s", work.api_id, e)
     if "checks" in work.kinds:
-        updates["checks"] = fetch_check_failures(client, work.api_id)
+        try:
+            updates["checks"] = fetch_check_failures(client, work.api_id)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("checks follow-up failed for %s: %s", work.api_id, e)
     if "reviewers" in work.kinds:
-        updates["reviewers"] = _load_reviewers_for_change(client, work.api_id)
+        try:
+            updates["reviewers"] = _load_reviewers_for_change(client, work.api_id)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("reviewers follow-up failed for %s: %s", work.api_id, e)
     return work.result_idx, updates
 
 
