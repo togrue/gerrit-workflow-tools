@@ -11,7 +11,7 @@ __gwt_flags() {
     COMPREPLY=( $(compgen -W "$*" -- "$cur") )
 }
 
-_ger_restack() {
+_ger_rebase() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ "$cur" == -* ]]; then
         __gwt_flags "$cur" \
@@ -221,7 +221,7 @@ _ger() {
     local sub="${COMP_WORDS[1]}"
     case "$sub" in
         push) _ger_push ;;
-        rebase|restack|stack) _ger_restack ;;
+        rebase|restack|stack) _ger_rebase ;;
         log) _ger_log ;;
         branch) _ger_branch ;;
         edit) _ger_edit ;;

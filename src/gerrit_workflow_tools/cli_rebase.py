@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger rebase``: interactive rebase with Gerrit status annotations.
 
     Sets ``GIT_SEQUENCE_EDITOR`` to the enricher wrapper
-    (:mod:`gerrit_workflow_tools.restack_enricher`) which annotates each pick line with
+    (:mod:`gerrit_workflow_tools.rebase_enricher`) which annotates each pick line with
     the commit's Gerrit verified/CR/comments status before opening the real editor.
 
     The real editor is resolved by the enricher from ``GIT_EDITOR``, ``core.editor``,
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     env = os.environ.copy()
     # Point GIT_SEQUENCE_EDITOR at the enricher.  The enricher reads GIT_EDITOR /
     # core.editor / EDITOR from the environment to find the actual editor to open.
-    env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.restack_enricher"
+    env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_enricher"
     if args.debug_log:
         env["GREBASE_DEBUG_LOG"] = "1"
     if drop_merged:

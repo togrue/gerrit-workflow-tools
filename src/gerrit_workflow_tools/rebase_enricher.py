@@ -350,9 +350,9 @@ def main(argv: list[str] | None = None) -> int:
     error_header: str | None = None
     try:
         final_text = _enrich_todo(original_text, cwd)
-        logger.debug("restack_enricher: todo enriched successfully")
+        logger.debug("rebase_enricher: todo enriched successfully")
     except (GerritApiError, GitError, ValueError, OSError) as e:
-        logger.debug("restack_enricher: enrichment failed: %s", e)
+        logger.debug("rebase_enricher: enrichment failed: %s", e)
         final_text = original_text
         error_header = (
             f"# ger rebase: Gerrit enrichment failed — {e}\n"
@@ -371,12 +371,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # Launch the real editor.
     editor = _resolve_editor(cwd)
-    logger.debug("restack_enricher: launching editor %r on %s", editor, todo)
+    logger.debug("rebase_enricher: launching editor %r on %s", editor, todo)
     try:
         ed_cmd = [*shlex.split(editor), str(todo)]
-        logger.debug("restack_enricher: run: %s", " ".join(ed_cmd))
+        logger.debug("rebase_enricher: run: %s", " ".join(ed_cmd))
         result = subprocess.run(ed_cmd, check=False)
-        logger.debug("restack_enricher: editor finished rc=%s", result.returncode)
+        logger.debug("rebase_enricher: editor finished rc=%s", result.returncode)
         return result.returncode
     except FileNotFoundError:
         print(f"error: editor not found: {editor!r}", file=sys.stderr)

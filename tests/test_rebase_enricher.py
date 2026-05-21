@@ -1,4 +1,4 @@
-"""Tests for restack_enricher (GIT_SEQUENCE_EDITOR wrapper) and cli_restack."""
+"""Tests for rebase_enricher (GIT_SEQUENCE_EDITOR wrapper) and cli_rebase."""
 
 from __future__ import annotations
 
@@ -35,15 +35,15 @@ def _make_todo(rows: list[Commit] | list[tuple[str, str, str, str]]) -> str:
 
 def _patch_gerrit(details: dict, *, web_base: str = "https://g.example"):
     """Context manager that patches gerrit_web_url, resolve_gerrit_web_base, and GerritClient
-    on the restack_enricher module with mock data."""
+    on the rebase_enricher module with mock data."""
     mock_client = MagicMock()
     mock_client.query_changes.side_effect = make_query_changes_impl(details)
     mock_client.get_comments.return_value = {}
 
     return (
-        patch("gerrit_workflow_tools.restack_enricher.gerrit_web_url", return_value=web_base),
-        patch("gerrit_workflow_tools.restack_enricher.resolve_gerrit_web_base", return_value=web_base),
-        patch("gerrit_workflow_tools.restack_enricher.GerritClient", return_value=mock_client),
+        patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=web_base),
+        patch("gerrit_workflow_tools.rebase_enricher.resolve_gerrit_web_base", return_value=web_base),
+        patch("gerrit_workflow_tools.rebase_enricher.GerritClient", return_value=mock_client),
     )
 
 
@@ -53,7 +53,7 @@ def _patch_gerrit(details: dict, *, web_base: str = "https://g.example"):
 
 
 def test_fmt_verified_all_variants():
-    from gerrit_workflow_tools.restack_enricher import _fmt_verified
+    from gerrit_workflow_tools.rebase_enricher import _fmt_verified
 
     assert _fmt_verified(1) == "v+1"
     assert _fmt_verified(2) == "v+1"
@@ -66,7 +66,7 @@ def test_fmt_verified_all_variants():
 
 
 def test_fmt_cr_all_variants():
-    from gerrit_workflow_tools.restack_enricher import _fmt_cr
+    from gerrit_workflow_tools.rebase_enricher import _fmt_cr
 
     assert _fmt_cr(2) == "cr+2"
     assert _fmt_cr(1) == "cr+1"
@@ -80,7 +80,7 @@ def test_fmt_cr_all_variants():
 
 def test_attention_text_variants():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.restack_enricher import _attention_text
+    from gerrit_workflow_tools.rebase_enricher import _attention_text
 
     def _commit(**kw) -> LogCommit:
         defaults: dict = {
@@ -114,7 +114,7 @@ def test_attention_text_variants():
 
 def test_enriched_subject_format():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.restack_enricher import _enriched_subject
+    from gerrit_workflow_tools.rebase_enricher import _enriched_subject
 
     commit = LogCommit(
         sha="abc" * 13 + "ab",
@@ -140,7 +140,7 @@ def test_enriched_subject_format():
 
 def test_enriched_subject_truncates_long_summary():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.restack_enricher import _SUBJECT_WIDTH, _enriched_subject
+    from gerrit_workflow_tools.rebase_enricher import _SUBJECT_WIDTH, _enriched_subject
 
     long_summary = "x" * (_SUBJECT_WIDTH + 20)
     commit = LogCommit(
@@ -162,7 +162,7 @@ def test_enriched_subject_truncates_long_summary():
 
 def test_enriched_subject_not_pushed_shows_dash():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.restack_enricher import _enriched_subject
+    from gerrit_workflow_tools.rebase_enricher import _enriched_subject
 
     commit = LogCommit(
         sha="abc" * 13 + "ab",
@@ -188,10 +188,10 @@ def test_enriched_subject_not_pushed_shows_dash():
 
 def test_enrich_todo_passthrough_without_gerrit_url(tmp_path: Path):
     """When gerrit.webUrl is not configured the todo is returned unchanged."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "pick abc1234 some commit\n# comment\n"
-    with patch("gerrit_workflow_tools.restack_enricher.gerrit_web_url", return_value=None):
+    with patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=None):
         result = _enrich_todo(text, tmp_path)
 
     assert result == text
@@ -199,10 +199,10 @@ def test_enrich_todo_passthrough_without_gerrit_url(tmp_path: Path):
 
 def test_enrich_todo_preserves_comment_and_blank_lines(tmp_path: Path):
     """Comment lines and blank lines are preserved as-is."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "\n# some comment\n\n"
-    with patch("gerrit_workflow_tools.restack_enricher.gerrit_web_url", return_value=None):
+    with patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=None):
         result = _enrich_todo(text, tmp_path)
 
     assert result == text
@@ -210,10 +210,10 @@ def test_enrich_todo_preserves_comment_and_blank_lines(tmp_path: Path):
 
 def test_enrich_todo_passthrough_when_no_commit_lines(tmp_path: Path):
     """If todo has only comment lines (e.g. empty rebase), return unchanged."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "# pick abc no pick lines here\n"
-    with patch("gerrit_workflow_tools.restack_enricher.gerrit_web_url", return_value="https://g.example"):
+    with patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value="https://g.example"):
         result = _enrich_todo(text, tmp_path)
 
     assert result == text
@@ -226,7 +226,7 @@ def test_enrich_todo_passthrough_when_no_commit_lines(tmp_path: Path):
 
 def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
     """Happy path: each pick line gets v+1 cr+2 etc. from the mocked Gerrit API."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
@@ -251,7 +251,7 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
 
 def test_enrich_todo_preserves_action_and_sha(stack_repo: Path):
     """The action token and SHA must not be modified."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
@@ -266,7 +266,7 @@ def test_enrich_todo_preserves_action_and_sha(stack_repo: Path):
 
 
 def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows, per_index_overrides=[{"unresolved_comment_count": 3}])
@@ -281,7 +281,7 @@ def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
 
 
 def test_enrich_todo_build_failed_shown(stack_repo: Path):
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows, per_index_overrides=[{"verified": -1}])
@@ -299,7 +299,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     """When the Gerrit API is unreachable, fetch_gerrit_data catches the error internally
     and returns commits as absent/not-pushed rather than raising.  The enricher should
     still succeed and annotate each line with the degraded status."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     text = _make_todo(rows)
@@ -310,9 +310,9 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     broken_client.query_changes.side_effect = GerritApiError("timeout")
 
     with (
-        patch("gerrit_workflow_tools.restack_enricher.gerrit_web_url", return_value="https://g.example"),
-        patch("gerrit_workflow_tools.restack_enricher.resolve_gerrit_web_base", return_value="https://g.example"),
-        patch("gerrit_workflow_tools.restack_enricher.GerritClient", return_value=broken_client),
+        patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value="https://g.example"),
+        patch("gerrit_workflow_tools.rebase_enricher.resolve_gerrit_web_base", return_value="https://g.example"),
+        patch("gerrit_workflow_tools.rebase_enricher.GerritClient", return_value=broken_client),
     ):
         result = _enrich_todo(text, stack_repo)
 
@@ -329,7 +329,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
 
 def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path, monkeypatch):
     """main() writes the enriched text returned by _enrich_todo and opens the editor."""
-    from gerrit_workflow_tools.restack_enricher import main as enricher_main
+    from gerrit_workflow_tools.rebase_enricher import main as enricher_main
 
     rows = stack_rows_mb_to_head(stack_repo)
     todo = tmp_path / "git-rebase-todo"
@@ -344,8 +344,8 @@ def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path
     # Mock _enrich_todo to avoid real Gerrit/git calls; only subprocess.run
     # (the editor launch) remains, which is the thing we want to test here.
     with (
-        patch("gerrit_workflow_tools.restack_enricher._enrich_todo", return_value=enriched_text),
-        patch("gerrit_workflow_tools.restack_enricher.subprocess.run", mock_run),
+        patch("gerrit_workflow_tools.rebase_enricher._enrich_todo", return_value=enriched_text),
+        patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run),
     ):
         code = enricher_main(["_", str(todo)])
 
@@ -362,7 +362,7 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
     """When _enrich_todo raises, main() prepends an error comment and opens the editor
     with the original (unenriched) todo — the rebase can still proceed."""
     from gerrit_workflow_tools.core.gerrit_client import GerritApiError
-    from gerrit_workflow_tools.restack_enricher import main as enricher_main
+    from gerrit_workflow_tools.rebase_enricher import main as enricher_main
 
     rows = stack_rows_mb_to_head(stack_repo)
     todo = tmp_path / "git-rebase-todo"
@@ -375,10 +375,10 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
 
     with (
         patch(
-            "gerrit_workflow_tools.restack_enricher._enrich_todo",
+            "gerrit_workflow_tools.rebase_enricher._enrich_todo",
             side_effect=GerritApiError("connection refused"),
         ),
-        patch("gerrit_workflow_tools.restack_enricher.subprocess.run", mock_run),
+        patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run),
     ):
         code = enricher_main(["_", str(todo)])
 
@@ -398,7 +398,7 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
 
 
 def test_main_returns_editor_exit_code(tmp_path: Path, stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.restack_enricher import main as enricher_main
+    from gerrit_workflow_tools.rebase_enricher import main as enricher_main
 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
@@ -410,14 +410,14 @@ def test_main_returns_editor_exit_code(tmp_path: Path, stack_repo: Path, monkeyp
     mock_run = MagicMock(return_value=MagicMock(returncode=42))
 
     wg, wrgb, wgc = _patch_gerrit(details)
-    with wg, wrgb, wgc, patch("gerrit_workflow_tools.restack_enricher.subprocess.run", mock_run):
+    with wg, wrgb, wgc, patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run):
         code = enricher_main(["_", str(todo)])
 
     assert code == 42
 
 
 def test_main_missing_args_returns_1():
-    from gerrit_workflow_tools.restack_enricher import main as enricher_main
+    from gerrit_workflow_tools.rebase_enricher import main as enricher_main
 
     assert enricher_main(["_"]) == 1
 
@@ -428,7 +428,7 @@ def test_main_missing_args_returns_1():
 
 
 def test_resolve_editor_prefers_grebase_editor(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.restack_enricher import _resolve_editor
+    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
 
     monkeypatch.setenv("GREBASE_EDITOR", "myeditor")
     monkeypatch.setenv("GIT_EDITOR", "other")
@@ -436,41 +436,41 @@ def test_resolve_editor_prefers_grebase_editor(tmp_path: Path, monkeypatch):
 
 
 def test_resolve_editor_falls_back_to_git_editor(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.restack_enricher import _resolve_editor
+    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
 
     monkeypatch.delenv("GREBASE_EDITOR", raising=False)
     monkeypatch.setenv("GIT_EDITOR", "nano")
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.delenv("EDITOR", raising=False)
-    with patch("gerrit_workflow_tools.restack_enricher.git") as mock_git:
+    with patch("gerrit_workflow_tools.rebase_enricher.git") as mock_git:
         mock_git.return_value = MagicMock(returncode=1, stdout="")
         assert _resolve_editor(tmp_path) == "nano"
 
 
 def test_resolve_editor_falls_back_to_editor_env(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.restack_enricher import _resolve_editor
+    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
 
     monkeypatch.delenv("GREBASE_EDITOR", raising=False)
     monkeypatch.delenv("GIT_EDITOR", raising=False)
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "emacs")
-    with patch("gerrit_workflow_tools.restack_enricher.git") as mock_git:
+    with patch("gerrit_workflow_tools.rebase_enricher.git") as mock_git:
         mock_git.return_value = MagicMock(returncode=1, stdout="")
         assert _resolve_editor(tmp_path) == "emacs"
 
 
 def test_resolve_editor_vi_fallback(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.restack_enricher import _resolve_editor
+    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
 
     for var in ("GREBASE_EDITOR", "GIT_EDITOR", "VISUAL", "EDITOR"):
         monkeypatch.delenv(var, raising=False)
-    with patch("gerrit_workflow_tools.restack_enricher.git") as mock_git:
+    with patch("gerrit_workflow_tools.rebase_enricher.git") as mock_git:
         mock_git.return_value = MagicMock(returncode=1, stdout="")
         assert _resolve_editor(tmp_path) == "vi"
 
 
 # ---------------------------------------------------------------------------
-# cli_restack
+# cli_rebase
 # ---------------------------------------------------------------------------
 
 # subprocess.run is a global — patching it via the module affects git_run.py
@@ -492,21 +492,21 @@ def _make_rebase_interceptor(captured: dict):
     return fake_run
 
 
-def test_cli_restack_sets_sequence_editor_env(stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+def test_cli_rebase_sets_sequence_editor_env(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        code = restack_main([])
+        code = rebase_main([])
 
     assert code == 0
     assert "GIT_SEQUENCE_EDITOR" in captured["env"]
-    assert "restack_enricher" in captured["env"]["GIT_SEQUENCE_EDITOR"]
+    assert "rebase_enricher" in captured["env"]["GIT_SEQUENCE_EDITOR"]
 
 
-def test_cli_restack_passes_merge_base_to_git(stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+def test_cli_rebase_passes_merge_base_to_git(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
     from gerrit_workflow_tools.core.stack import merge_base_with_target
 
     monkeypatch.chdir(stack_repo)
@@ -514,15 +514,15 @@ def test_cli_restack_passes_merge_base_to_git(stack_repo: Path, monkeypatch):
 
     captured: dict = {}
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        code = restack_main([])
+        code = rebase_main([])
 
     assert code == 0
     assert captured["cmd"] == ["git", "rebase", "-i", expected_base]
 
 
-def test_cli_restack_uses_given_rev(stack_repo: Path, monkeypatch):
+def test_cli_rebase_uses_given_rev(stack_repo: Path, monkeypatch):
     """When REV is given, it is resolved and passed as the rebase base."""
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
     rows = stack_rows_mb_to_head(stack_repo)
     target_sha = rows[0].sha  # Full SHA of the first (oldest) stack commit.
@@ -530,63 +530,63 @@ def test_cli_restack_uses_given_rev(stack_repo: Path, monkeypatch):
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        code = restack_main([rows[0].short_sha])  # pass short SHA; resolve_stack_commit expands it
+        code = rebase_main([rows[0].short_sha])  # pass short SHA; resolve_stack_commit expands it
 
     assert code == 0
     assert captured["cmd"][-1] == target_sha
 
 
-def test_cli_restack_debug_log_sets_env_flag(stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+def test_cli_rebase_debug_log_sets_env_flag(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        restack_main(["--debug-log"])
+        rebase_main(["--debug-log"])
 
     assert captured.get("env", {}).get("GREBASE_DEBUG_LOG") == "1"
 
 
-def test_cli_restack_onto_remote_passes_remote_ref(stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+def test_cli_rebase_onto_remote_passes_remote_ref(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
     from gerrit_workflow_tools.core.git_run import git
 
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        code = restack_main(["--onto-remote"])
+        code = rebase_main(["--onto-remote"])
 
     assert code == 0
     assert captured["cmd"] == ["git", "rebase", "-i", "origin/main"]
 
 
-def test_cli_restack_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+def test_cli_rebase_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
     from gerrit_workflow_tools.core.git_run import git
 
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        restack_main(["--onto-remote", "--drop-merged-equivalent"])
+        rebase_main(["--onto-remote", "--drop-merged-equivalent"])
 
     assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") == "1"
 
 
-def test_cli_restack_cannot_combine_onto_remote_with_rev(stack_repo: Path, monkeypatch):
+def test_cli_rebase_cannot_combine_onto_remote_with_rev(stack_repo: Path, monkeypatch):
 
-    from gerrit_workflow_tools.cli_restack import main as restack_main
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
     monkeypatch.chdir(stack_repo)
     with pytest.raises(SystemExit) as exc:
-        restack_main(["--onto-remote", "HEAD"])
+        rebase_main(["--onto-remote", "HEAD"])
     assert exc.value.code == 2
 
 
 def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monkeypatch):
     """GREBASE_DROP_MERGED_EQUIVALENT turns pick into drop when merged-same."""
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     n = len(rows)
@@ -602,7 +602,7 @@ def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monke
 
 
 def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monkeypatch):
-    from gerrit_workflow_tools.restack_enricher import _enrich_todo
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED"}])
