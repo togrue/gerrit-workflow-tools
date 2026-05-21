@@ -86,18 +86,23 @@ def parse_change_id(message: str) -> str | None:
     return None
 
 
-def merge_base_with_target(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str, str]:
+def merge_base_with_target(
+    cwd: Path | str | None,
+    branch: str | None = None,
+    *,
+    head: str = "HEAD",
+) -> tuple[str, str, str]:
     """
     Return ``(rebase_fork, upstream_display, upstream_tip_sha)``.
 
     *upstream_tip_sha* is ``git rev-parse`` of the branch's ``@{upstream}``; the default
-    local stack is ``upstream_tip_sha..HEAD``.
+    local stack is ``upstream_tip_sha..head`` (``HEAD`` when *head* is omitted).
 
-    *rebase_fork* is ``merge-base(HEAD, upstream_tip_sha)`` — the onto point for
+    *rebase_fork* is ``merge-base(head, upstream_tip_sha)`` — the onto point for
     ``git rebase -i <fork>`` (not the same commit as *upstream_tip_sha* when histories diverge).
     """
     upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch)
-    rebase_fork = git_out("merge-base", "HEAD", upstream_tip, cwd=cwd)
+    rebase_fork = git_out("merge-base", head, upstream_tip, cwd=cwd)
     logger.debug(
         "merge_base_with_target: rebase_fork=%s upstream_display=%r upstream_tip=%r",
         rebase_fork[:8],

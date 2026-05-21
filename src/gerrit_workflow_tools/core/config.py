@@ -389,16 +389,21 @@ def gerrit_push_remote_policy(cwd: Path | str | None) -> str:
     return "ignore-not-rebased"
 
 
-def head_is_linear_on_remote_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> tuple[bool, str]:
-    """Return whether ``HEAD`` contains the remote target tip (linear stack).
+def head_is_linear_on_remote_gerrit_target(
+    cwd: Path | str | None,
+    branch: str | None = None,
+    *,
+    head: str = "HEAD",
+) -> tuple[bool, str]:
+    """Return whether *head* contains the remote target tip (linear stack).
 
-    After ``git fetch``, this is equivalent to ``merge-base(HEAD, R) == R`` for *R* the target tip, and to
-    ``git merge-base --is-ancestor R HEAD`` (the fetched target tip must be an ancestor of ``HEAD``).
+    After ``git fetch``, this is equivalent to ``merge-base(head, R) == R`` for *R* the target tip, and to
+    ``git merge-base --is-ancestor R head`` (the fetched target tip must be an ancestor of *head*).
 
     Returns ``(ok, onto_ref)`` where *onto_ref* is the symbolic remote ref (e.g. ``origin/main``).
     """
     onto = resolve_rebase_onto_remote_ref(cwd, branch)
-    p = git("merge-base", "--is-ancestor", onto, "HEAD", cwd=cwd, check=False)
+    p = git("merge-base", "--is-ancestor", onto, head, cwd=cwd, check=False)
     ok = p.returncode == 0
     logger.debug(
         "head_is_linear_on_remote_gerrit_target: onto=%r linear=%s (merge-base --is-ancestor rc=%s)",

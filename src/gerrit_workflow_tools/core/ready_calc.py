@@ -50,16 +50,17 @@ def compute_ready(
     cwd: Path | str | None,
     *,
     branch: str | None = None,
+    head: str = "HEAD",
     all_commits: bool = False,
     ignore_patterns: list[str] | None = None,
     until: str | None = None,
     first_parent: bool = True,
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
-    _fork, _display, target_tip = merge_base_with_target(cwd, branch)
+    _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=head)
     raw_patterns = stop_patterns(cwd)
     patterns = _filter_patterns(raw_patterns, ignore_exact=list(ignore_patterns or []))
-    rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=first_parent)
+    rows = commits_in_range(cwd, f"{target_tip}..{head}", first_parent=first_parent)
     shas = [r.sha for r in rows]
     subjects = [r.subject for r in rows]
     logger.debug(

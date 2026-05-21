@@ -38,6 +38,7 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert code == 0
     assert "gpush" in out.lower() or "ger push" in out
     assert "--dry-run" in out
+    assert "--branch" in out
     assert "--reviewers" in out
     assert "--reviewer-strategy" in out
     assert "--topic" in out
@@ -154,6 +155,27 @@ def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypa
     )
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
+
+
+def test_gpush_branch_flag_pushes_specified_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("checkout", "main", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    code, out, err = run_cli(stack_repo, gpush_main, ["--branch", "feature", "--dry-run"], monkeypatch)
+    assert code == 0
+    assert "About to push commits:" in out
+    push_lines = [ln for ln in out.splitlines() if ln.startswith("    ")]
+    assert len(push_lines) == 2
+    assert any("Refactor parser init" in ln for ln in push_lines)
+    assert any("Extract command routing" in ln for ln in push_lines)
+    assert "Stopped at commit" in out
+    assert ":refs/for/main" in out
+    assert "[dry-run]" in err
+
+
+def test_gpush_branch_flag_unknown_branch_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--branch", "no-such-branch", "--dry-run"], monkeypatch)
+    assert code == 1
+    assert "no-such-branch" in err
 
 
 def test_gpush_infers_gerrit_target_from_upstream(

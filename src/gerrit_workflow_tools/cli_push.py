@@ -34,6 +34,7 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.change_id import classify_issues
 from gerrit_workflow_tools.core.config import (
     branch_gerrit_reviewers,
+    checked_out_branch_name,
     effective_gerrit_destination_branch,
     ger_push_defaults,
     ger_push_mode,
@@ -43,6 +44,7 @@ from gerrit_workflow_tools.core.config import (
     is_detached_head,
     refs_for_push_branch_name,
     resolve_push_context_branch,
+    resolve_upstream_parsed,
     set_branch_config,
 )
 from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details, norm_change_id
@@ -495,11 +497,11 @@ def _stop_pattern_from_reason(boundary_reason: str) -> str | None:
     return m.group(1).strip()
 
 
-def _remaining_not_ready_count(cwd: Path, boundary_sha: str | None) -> int:
+def _remaining_not_ready_count(cwd: Path, boundary_sha: str | None, *, head: str = "HEAD") -> int:
     if not boundary_sha:
         return 0
     try:
-        return int(git_out("rev-list", "--count", f"{boundary_sha}..HEAD", cwd=cwd))
+        return int(git_out("rev-list", "--count", f"{boundary_sha}..{head}", cwd=cwd))
     except (GitError, ValueError):
         return 0
 
@@ -539,6 +541,7 @@ def _print_gpush_preview(  # pylint: disable=too-many-arguments
     r: ReadyResult,
     commit_lines: list[str],
     *,
+    head: str = "HEAD",
     summary_highlighter: SummaryHighlighter,
 ) -> None:
     print(color_text("About to push commits:", f"{ANSI_BOLD}{ANSI_CYAN}"))
@@ -554,7 +557,7 @@ def _print_gpush_preview(  # pylint: disable=too-many-arguments
         if boundary_line and pat:
             print()
             print(_format_stop_pattern_notice(boundary_line, pat))
-            remain = _remaining_not_ready_count(cwd, r.boundary_sha)
+            remain = _remaining_not_ready_count(cwd, r.boundary_sha, head=head)
             if remain > 0:
                 print(color_text(f"... {remain} not-ready commit(s) remain unpushed", ANSI_YELLOW))
 
@@ -623,6 +626,7 @@ def _maybe_check_rebased_onto_remote(
     cwd: Path,
     branch: str,
     *,
+    head: str,
     policy: str,
     no_rebase_check: bool,
 ) -> int | None:
@@ -649,7 +653,7 @@ def _maybe_check_rebased_onto_remote(
         )
         return None
     try:
-        ok, onto = head_is_linear_on_remote_gerrit_target(cwd, branch)
+        ok, onto = head_is_linear_on_remote_gerrit_target(cwd, branch, head=head)
     except GitError as e:
         print(
             f"warning: could not compare HEAD to remote target; skipping remote rebase check: {e}",
@@ -668,7 +672,7 @@ def _maybe_check_rebased_onto_remote(
             short_onto = git_out("rev-parse", "--short", onto, cwd=cwd)
     try:
         tip = git_out("rev-parse", "--short", onto, cwd=cwd)
-        fork = git_out("merge-base", "HEAD", onto, cwd=cwd)
+        fork = git_out("merge-base", head, onto, cwd=cwd)
         fork_s = git_out("rev-parse", "--short", fork, cwd=cwd)
         detail = (
             f"tip of `{short_onto}` ({tip}) is not an ancestor of HEAD "
@@ -697,6 +701,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "Prompt for reviewers (TTY only; non-empty line overwrites branch and --reviewers; "
             "cannot be used with --yes)."
         ),
+    )
+    p.add_argument(
+        "--branch",
+        metavar="NAME",
+        default=None,
+        help="Push the specified local branch instead of the current branch.",
     )
     p.add_argument(
         "--update-last-pushed",
@@ -782,7 +792,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _handle_vanilla_push(cwd: Path, args: argparse.Namespace) -> int:
+def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
     if (
         args.until
@@ -798,7 +808,16 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace) -> int:
             "apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
-    cmd_vanilla = ["git", "push"]
+    parsed = resolve_upstream_parsed(cwd, branch)
+    checked_out = checked_out_branch_name(cwd)
+    if args.branch is not None and checked_out != branch:
+        if parsed:
+            remote_name, _rest = parsed
+            cmd_vanilla = ["git", "push", remote_name, branch]
+        else:
+            cmd_vanilla = ["git", "push", branch]
+    else:
+        cmd_vanilla = ["git", "push"]
     logger.debug("gpush vanilla: %s", cmd_vanilla)
     if args.dry_run:
         print(color_text(" ".join(cmd_vanilla), ANSI_DIM_GRAY))
@@ -839,6 +858,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     rc_early = _maybe_check_rebased_onto_remote(
         cwd,
         branch,
+        head=branch,
         policy=remote_policy,
         no_rebase_check=bool(args.no_rebase_check),
     )
@@ -847,7 +867,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
 
     interactive_state: PushLineState | None = None
     if args.i:
-        res = _prompt_interactive_reviewers(cwd, branch, change_id_hint=_change_id_for_rev(cwd, "HEAD"))
+        res = _prompt_interactive_reviewers(cwd, branch, change_id_hint=_change_id_for_rev(cwd, branch))
         if (
             res.state.reviewers
             or res.state.topic
@@ -888,6 +908,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     r = compute_ready(
         cwd,
         branch=branch,
+        head=branch,
         all_commits=args.all_,
         ignore_patterns=args.ignore_pattern or None,
         until=args.until,
@@ -900,8 +921,8 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         r.boundary_reason,
     )
 
-    _fork, _, target_tip = merge_base_with_target(cwd, branch)
-    rows = change_id_rows_for_range(cwd, target_tip, first_parent=fp)
+    _fork, _, target_tip = merge_base_with_target(cwd, branch, head=branch)
+    rows = change_id_rows_for_range(cwd, target_tip, head=branch, first_parent=fp)
     items = list(rows)
     _, cid_exit = classify_issues(items, strict=True)
     logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
@@ -982,6 +1003,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 cwd,
                 ctx.ready,
                 commit_lines,
+                head=ctx.branch,
                 summary_highlighter=summary_highlighter,
             )
             stack_printed = True
@@ -1102,6 +1124,23 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     return 0
 
 
+def _resolve_push_branch(cwd: Path, branch_arg: str | None) -> str:
+    """Return the local branch ``ger push`` operates on."""
+    if branch_arg:
+        try:
+            git_out("rev-parse", "--verify", branch_arg, cwd=cwd)
+        except GitError as e:
+            raise GitError(f"branch {branch_arg!r} not found") from e
+        return branch_arg
+    b = resolve_push_context_branch(cwd)
+    if b is None:
+        raise GitError(
+            "ger push requires a branch (detached HEAD with no local branch at this commit). "
+            "Check out a branch first, or pass --branch."
+        )
+    return b
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
     args = _build_arg_parser().parse_args(argv)
@@ -1111,9 +1150,10 @@ def main(argv: list[str] | None = None) -> int:
     fp = not args.follow_merges
 
     logger.debug(
-        "gpush cwd=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
+        "gpush cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
         "no_rebase_check=%s follow_merges=%s reviewer_strategy=%s",
         cwd,
+        args.branch,
         args.dry_run,
         args.yes,
         args.all_,
@@ -1134,15 +1174,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         detached = is_detached_head(cwd)
-        b = resolve_push_context_branch(cwd)
-        if b is None:
-            raise GitError(
-                "ger push requires a branch (detached HEAD with no local branch at this commit). "
-                "Check out a branch first."
-            )
+        b = _resolve_push_branch(cwd, args.branch)
         mode = ger_push_mode(cwd, b)
-        if not detached and not args.yes and mode in ("gerrit", None) and not branch_has_upstream(cwd, b):
-            if not ensure_branch_upstream_interactive(cwd, b) and sys.stdin.isatty():
+        if not args.yes and mode in ("gerrit", None) and not branch_has_upstream(cwd, b):
+            if (args.branch or not detached) and not ensure_branch_upstream_interactive(cwd, b) and sys.stdin.isatty():
                 return 1
             mode = ger_push_mode(cwd, b)
         if mode is None:
@@ -1156,7 +1191,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         if mode == "vanilla":
-            return _handle_vanilla_push(cwd, args)
+            return _handle_vanilla_push(cwd, args, branch=b)
 
         ctx_or_rc = _build_gerrit_context(cwd, b, args, gdef, remote_policy, fp)
         if isinstance(ctx_or_rc, int):
