@@ -427,6 +427,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "prompt-toolkit" },
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -444,7 +445,10 @@ integration = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prompt-toolkit", specifier = ">=3.0" }]
+requires-dist = [
+    { name = "prompt-toolkit", specifier = ">=3.0" },
+    { name = "requests", specifier = ">=2.28" },
+]
 
 [package.metadata.requires-dev]
 dev = [

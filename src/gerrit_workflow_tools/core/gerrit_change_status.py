@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, parallel_map
 from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,6 @@ LOG_QUERY_OPTIONS = (
     "ALL_REVISIONS",
 )
 _BATCH_OR_CHUNK = 25
-_PARALLEL_IO = 8
 
 
 class PatchsetStatus(str, Enum):
@@ -324,13 +323,12 @@ def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None
 
 
 def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
-    """Query each Change-Id in *chunk* when a batched OR query fails."""
+    """Query each Change-Id in *chunk* when a batched OR query fails (same session, sequential)."""
     rows: list[dict[str, Any]] = []
-    workers = min(_PARALLEL_IO, len(chunk))
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        for one in ex.map(lambda c: query_single_change(client, c), chunk):
-            if one:
-                rows.append(one)
+    for change_id in chunk:
+        one = query_single_change(client, change_id)
+        if one:
+            rows.append(one)
     return rows
 
 
@@ -343,6 +341,19 @@ def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str])
         return _fallback_query_chunk(client, chunk)
 
 
+def _ingest_single_change_miss(
+    client: GerritClient,
+    change_id: str,
+) -> tuple[str, dict[str, Any]] | None:
+    detail = query_single_change(client, change_id)
+    if not detail:
+        return None
+    raw_id = detail.get("change_id")
+    if isinstance(raw_id, str):
+        return norm_change_id(raw_id), detail
+    return None
+
+
 def _parallel_fill_cache_misses(
     client: GerritClient,
     cache: dict[str, dict[str, Any]],
@@ -351,14 +362,9 @@ def _parallel_fill_cache_misses(
     missing = [cid for cid in change_ids if norm_change_id(cid) not in cache]
     if not missing:
         return
-    workers = min(_PARALLEL_IO, len(missing))
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        for detail in ex.map(lambda c: query_single_change(client, c), missing):
-            if not detail:
-                continue
-            raw_id = detail.get("change_id")
-            if isinstance(raw_id, str):
-                cache[norm_change_id(raw_id)] = detail
+    for row in parallel_map(client, missing, _ingest_single_change_miss, min_tasks_per_worker=2):
+        if row is not None:
+            cache[row[0]] = row[1]
 
 
 def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:  # pylint: disable=too-many-locals
@@ -374,15 +380,12 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
 
     opts = list(LOG_QUERY_OPTIONS)
     chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
-    if len(chunks) <= 1:
-        for chunk in chunks:
-            _ingest_change_rows(out, _query_change_chunk(client, chunk, opts))
-        return out
 
-    workers = min(_PARALLEL_IO, len(chunks))
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        for rows in ex.map(lambda ch: _query_change_chunk(client, ch, opts), chunks):
-            _ingest_change_rows(out, rows)
+    def query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
+        return _query_change_chunk(client, chunk, opts)
+
+    for rows in parallel_map(client, chunks, query_chunk, min_tasks_per_worker=1):
+        _ingest_change_rows(out, rows)
     return out
 
 
@@ -422,6 +425,42 @@ def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | Non
     base = change_page_url.rstrip("/")
     cid_enc = quote(str(comment_id), safe="")
     return f"{base}/comment/{cid_enc}/"
+
+
+@dataclass(frozen=True)
+class _FollowUpWork:
+    result_idx: int
+    api_id: str
+    kinds: frozenset[str]
+
+
+def _execute_follow_ups(client: GerritClient, work: _FollowUpWork) -> tuple[int, dict[str, Any]]:
+    """Run all follow-up REST calls for one change sequentially on the worker session."""
+    updates: dict[str, Any] = {}
+    if "comments" in work.kinds:
+        updates["comments"] = count_unresolved_via_comments(client, work.api_id)
+    if "checks" in work.kinds:
+        updates["checks"] = fetch_check_failures(client, work.api_id)
+    if "reviewers" in work.kinds:
+        updates["reviewers"] = _load_reviewers_for_change(client, work.api_id)
+    return work.result_idx, updates
+
+
+def _group_follow_ups(follow_ups: list[tuple[str, int, str]]) -> list[_FollowUpWork]:
+    grouped: dict[tuple[int, str], set[str]] = defaultdict(set)
+    for kind, idx, api_id in follow_ups:
+        grouped[(idx, api_id)].add(kind)
+    return [_FollowUpWork(idx, api_id, frozenset(kinds)) for (idx, api_id), kinds in grouped.items()]
+
+
+def _apply_follow_up_results(result: list[LogCommit], rows: list[tuple[int, dict[str, Any]]]) -> None:
+    for idx, updates in rows:
+        if "comments" in updates:
+            result[idx].comments_unresolved = updates["comments"]
+        if "checks" in updates:
+            result[idx].ci_failures = updates["checks"]
+        if "reviewers" in updates:
+            result[idx].reviewers = updates["reviewers"]
 
 
 def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
@@ -567,28 +606,9 @@ def fetch_gerrit_data(
         )
 
     if follow_ups:
-        workers = min(_PARALLEL_IO, len(follow_ups))
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            future_meta: dict[Any, tuple[str, int]] = {}
-            for kind, idx, api_id in follow_ups:
-                if kind == "comments":
-                    future_meta[ex.submit(count_unresolved_via_comments, client, api_id)] = (kind, idx)
-                elif kind == "checks":
-                    future_meta[ex.submit(fetch_check_failures, client, api_id)] = (kind, idx)
-                else:
-                    future_meta[ex.submit(_load_reviewers_for_change, client, api_id)] = (kind, idx)
-            for fut in as_completed(future_meta):
-                kind, idx = future_meta[fut]
-                exc = fut.exception()
-                if exc is not None:
-                    logger.debug("%s follow-up failed: %s", kind, exc)
-                    continue
-                if kind == "comments":
-                    result[idx].comments_unresolved = fut.result()
-                elif kind == "checks":
-                    result[idx].ci_failures = fut.result()
-                else:
-                    result[idx].reviewers = fut.result()
+        work_items = _group_follow_ups(follow_ups)
+        rows = parallel_map(client, work_items, _execute_follow_ups, min_tasks_per_worker=1)
+        _apply_follow_up_results(result, rows)
 
     return result
 

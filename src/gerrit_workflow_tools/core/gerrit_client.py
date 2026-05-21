@@ -2,21 +2,28 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import re
+import threading
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
+from typing import Any, TypeVar
+
+import requests
+from requests.adapters import HTTPAdapter
+from requests.auth import HTTPBasicAuth
 
 from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user, gerrit_web_url
 from gerrit_workflow_tools.core.git_run import GitError
 
 logger = logging.getLogger(__name__)
 _LOG_RESPONSE_BODIES = False
+
+_MAX_PARALLEL_IO = 8
+T = TypeVar("T")
+R = TypeVar("R")
 
 
 def set_log_gerrit_response_bodies(enabled: bool) -> None:
@@ -62,13 +69,64 @@ def _strip_magic_json_prefix(raw: str) -> str:
     return raw
 
 
-def _basic_auth_header(cwd: str | None) -> str | None:
+def _basic_auth(cwd: str | None) -> HTTPBasicAuth:
     user = gerrit_user(cwd)
     secret = gerrit_token(cwd) or gerrit_password(cwd)
     if not user or secret is None:
-        return None
-    token = base64.b64encode(f"{user}:{secret}".encode()).decode()
-    return f"Basic {token}"
+        raise GerritApiError(
+            "missing Gerrit credentials in git config; set gerrit.user and gerrit.password (or gerrit.token)"
+        )
+    return HTTPBasicAuth(user, secret)
+
+
+def parallel_io_workers(task_count: int, *, min_tasks_per_worker: int = 1) -> int:
+    """Balance parallelism against per-worker HTTP session overhead."""
+
+    if task_count <= 1:
+        return 1
+    per_worker = max(1, min_tasks_per_worker)
+    capped = min(_MAX_PARALLEL_IO, (task_count + per_worker - 1) // per_worker)
+    return max(1, min(task_count, capped))
+
+
+def partition_tasks(items: list[T], workers: int) -> list[list[T]]:
+    """Split *items* into *workers* buckets as evenly as possible."""
+
+    if not items:
+        return []
+    bucket_count = min(workers, len(items))
+    buckets: list[list[T]] = [[] for _ in range(bucket_count)]
+    for index, item in enumerate(items):
+        buckets[index % bucket_count].append(item)
+    return buckets
+
+
+def parallel_map(
+    client: GerritClient,
+    items: list[T],
+    fn: Callable[[GerritClient, T], R],
+    *,
+    min_tasks_per_worker: int = 1,
+) -> list[R]:
+    """Run *fn* over *items* with one persistent session per worker thread."""
+
+    if not items:
+        return []
+    if len(items) == 1:
+        return [fn(client, items[0])]
+
+    workers = parallel_io_workers(len(items), min_tasks_per_worker=min_tasks_per_worker)
+    buckets = partition_tasks(items, workers)
+
+    def run_bucket(batch: list[T]) -> list[R]:
+        return [fn(client, item) for item in batch]
+
+    with ThreadPoolExecutor(max_workers=len(buckets)) as ex:
+        parts = list(ex.map(run_bucket, buckets))
+    out: list[R] = []
+    for part in parts:
+        out.extend(part)
+    return out
 
 
 class GerritClient:
@@ -78,19 +136,43 @@ class GerritClient:
         """Use *web_base* (HTTPS origin) and optional *cwd* for resolving ``gerrit.user`` / token config."""
         self.web_base = web_base.rstrip("/")
         self.cwd = cwd
+        self._auth: HTTPBasicAuth | None = None
+        self._tls = threading.local()
 
-    def _auth_headers(self) -> dict[str, str]:
-        headers: dict[str, str] = {"Accept": "*/*"}
-        auth = _basic_auth_header(self.cwd)
-        if auth:
-            headers["Authorization"] = auth
-        else:
-            raise GerritApiError(
-                "missing Gerrit credentials in git config; set gerrit.user and gerrit.password (or gerrit.token)"
-            )
-        return headers
+    def _resolve_auth(self) -> HTTPBasicAuth:
+        if self._auth is None:
+            self._auth = _basic_auth(self.cwd)
+        return self._auth
+
+    def _session(self) -> requests.Session:
+        session = getattr(self._tls, "session", None)
+        if session is None:
+            session = requests.Session()
+            session.auth = self._resolve_auth()
+            session.headers.update({"Accept": "*/*", "Connection": "keep-alive"})
+            adapter = HTTPAdapter(pool_connections=1, pool_maxsize=4, max_retries=0)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            self._tls.session = session
+        return session
+
+    def close(self) -> None:
+        """Close the current thread's HTTP session, if any."""
+
+        session = getattr(self._tls, "session", None)
+        if session is not None:
+            session.close()
+            self._tls.session = None
+
+    def __enter__(self) -> GerritClient:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
 
     def _url(self, path: str, *, params: dict[str, str] | list[tuple[str, str]] | None) -> str:
+        from urllib.parse import urlencode
+
         if params is None:
             q = ""
         elif isinstance(params, list):
@@ -108,24 +190,28 @@ class GerritClient:
         json_body: dict[str, Any] | None = None,
     ) -> Any:
         url = self._url(path, params=params)
-        headers = self._auth_headers()
-        data: bytes | None = None
+        headers: dict[str, str] = {}
         if json_body is not None:
-            data = json.dumps(json_body).encode("utf-8")
             headers["Content-Type"] = "application/json; charset=UTF-8"
         logger.info("%s %s", method, url)
-        req = Request(url, headers=headers, method=method, data=data)
         try:
-            with urlopen(req, timeout=120) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
-        except HTTPError as e:
-            raise GerritApiError(
-                f"Gerrit HTTP {e.code} for {url}: {e.reason}",
-                status=e.code,
-            ) from e
-        except URLError as e:
-            raise GerritApiError(f"Gerrit request failed: {e.reason!r}") from e
+            resp = self._session().request(
+                method,
+                url,
+                headers=headers or None,
+                json=json_body,
+                timeout=120,
+            )
+        except requests.RequestException as e:
+            raise GerritApiError(f"Gerrit request failed: {e!r}") from e
 
+        if resp.status_code >= 400:
+            raise GerritApiError(
+                f"Gerrit HTTP {resp.status_code} for {url}: {resp.reason}",
+                status=resp.status_code,
+            )
+
+        raw = resp.text
         if not raw.strip():
             return {}
         try:
@@ -183,6 +269,8 @@ class GerritClient:
         n: int = 20,
     ) -> list[dict[str, Any]]:
         """GET suggested reviewers for ``change_id`` via ``changes/<id>/suggest_reviewers``."""
+        from urllib.parse import quote
+
         enc = quote(change_id, safe="")
         params: list[tuple[str, str]] = [("n", str(n))]
         if query:
@@ -196,6 +284,8 @@ class GerritClient:
 
     def get_plugin_project_reviewers(self, project: str) -> list[dict[str, Any]] | None:
         """GET project-level reviewer defaults from reviewers plugin (if installed)."""
+        from urllib.parse import quote
+
         enc = quote(project, safe="")
         try:
             data = self._request_json(f"projects/{enc}/reviewers")
@@ -211,6 +301,8 @@ class GerritClient:
 
     def get_change(self, change_id: str) -> dict[str, Any]:
         """GET change detail (labels, submittable, etc.) for *change_id*."""
+        from urllib.parse import quote
+
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = quote(cid, safe="")
         data = self._request_json(f"changes/{enc}/detail")
@@ -226,6 +318,8 @@ class GerritClient:
 
     def add_reviewer(self, change_id: str, reviewer: str) -> dict[str, Any]:
         """POST a reviewer (username or email) onto *change_id*."""
+        from urllib.parse import quote
+
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = quote(cid, safe="")
         data = self._request_json(
@@ -240,6 +334,8 @@ class GerritClient:
 
     def delete_reviewer(self, change_id: str, account_id: int) -> Any:
         """Remove *account_id* from *change_id* (REVIEWER or CC)."""
+        from urllib.parse import quote
+
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = quote(cid, safe="")
         aid_enc = quote(str(account_id), safe="")
@@ -247,6 +343,8 @@ class GerritClient:
 
     def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """GET inline comments grouped by file path (or special keys) for *change_id*."""
+        from urllib.parse import quote
+
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = quote(cid, safe="")
         data = self._request_json(f"changes/{enc}/comments")
