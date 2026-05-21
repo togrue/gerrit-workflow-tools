@@ -6,9 +6,6 @@ import logging
 import sys
 from pathlib import Path
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
-
 from gerrit_workflow_tools.core.config import (
     clear_gerrit_git_config_cache,
     infer_nearest_remote_tracking_branch,
@@ -88,6 +85,9 @@ def _upstream_choice_candidates(cwd: Path | str | None) -> tuple[list[str], str]
 
 
 def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str) -> str | None:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import WordCompleter
+
     candidates, inferred_ref = _upstream_choice_candidates(cwd)
     default = inferred_ref or (candidates[0] if candidates else "")
     completer = WordCompleter(candidates, ignore_case=False, sentence=True)
