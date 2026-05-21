@@ -53,6 +53,29 @@ def format_gerrit_account_label(account: dict[str, object]) -> str | None:
     return None
 
 
+def reviewer_accounts_from_reviewer_list(rows: list[dict[str, object]]) -> list[ReviewerAccount]:
+    """Parse ``GET changes/<id>/reviewers/`` rows (flat accounts or ReviewerInfo)."""
+
+    out: list[ReviewerAccount] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        state = row.get("state")
+        if isinstance(state, str) and state not in ("REVIEWER", "CC"):
+            continue
+        account = row.get("account")
+        if isinstance(account, dict):
+            payload: dict[str, object] = account
+        else:
+            payload = row
+        slug = account_slug_from_gerrit(payload)
+        if not slug:
+            continue
+        account_id = payload.get("_account_id")
+        out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
+    return out
+
+
 def reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[ReviewerAccount]:
     """Reviewer/CC account list in Gerrit API order."""
 

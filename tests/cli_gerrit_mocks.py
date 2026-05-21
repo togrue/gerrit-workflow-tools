@@ -139,6 +139,24 @@ def patch_gerrit_client_for_queries(
         return row
 
     inst.get_change.side_effect = _get_change
+
+    def _list_change_reviewers(change_id: str) -> list[dict[str, Any]]:
+        row = _get_change(change_id)
+        reviewers = row.get("reviewers")
+        if isinstance(reviewers, list):
+            return reviewers
+        if isinstance(reviewers, dict):
+            out: list[dict[str, Any]] = []
+            for role in ("REVIEWER", "CC"):
+                bucket = reviewers.get(role)
+                if isinstance(bucket, list):
+                    for account in bucket:
+                        if isinstance(account, dict):
+                            out.append({"account": account, "state": role})
+            return out
+        return []
+
+    inst.list_change_reviewers.side_effect = _list_change_reviewers
     inst.add_reviewer.return_value = {}
     inst.delete_reviewer.return_value = None
     inst.get_comments.return_value = {}

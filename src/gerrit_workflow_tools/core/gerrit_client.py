@@ -11,10 +11,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, TypeVar
 
-import requests
-from requests.adapters import HTTPAdapter
-from requests.auth import HTTPBasicAuth
-
 from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user, gerrit_web_url
 from gerrit_workflow_tools.core.git_run import GitError
 
@@ -69,7 +65,9 @@ def _strip_magic_json_prefix(raw: str) -> str:
     return raw
 
 
-def _basic_auth(cwd: str | None) -> HTTPBasicAuth:
+def _basic_auth(cwd: str | None) -> Any:
+    from requests.auth import HTTPBasicAuth
+
     user = gerrit_user(cwd)
     secret = gerrit_token(cwd) or gerrit_password(cwd)
     if not user or secret is None:
@@ -136,15 +134,18 @@ class GerritClient:
         """Use *web_base* (HTTPS origin) and optional *cwd* for resolving ``gerrit.user`` / token config."""
         self.web_base = web_base.rstrip("/")
         self.cwd = cwd
-        self._auth: HTTPBasicAuth | None = None
+        self._auth: Any | None = None
         self._tls = threading.local()
 
-    def _resolve_auth(self) -> HTTPBasicAuth:
+    def _resolve_auth(self) -> Any:
         if self._auth is None:
             self._auth = _basic_auth(self.cwd)
         return self._auth
 
-    def _session(self) -> requests.Session:
+    def _session(self) -> Any:
+        import requests
+        from requests.adapters import HTTPAdapter
+
         session = getattr(self._tls, "session", None)
         if session is None:
             session = requests.Session()
@@ -202,8 +203,12 @@ class GerritClient:
                 json=json_body,
                 timeout=120,
             )
-        except requests.RequestException as e:
-            raise GerritApiError(f"Gerrit request failed: {e!r}") from e
+        except Exception as e:
+            import requests
+
+            if isinstance(e, requests.RequestException):
+                raise GerritApiError(f"Gerrit request failed: {e!r}") from e
+            raise
 
         if resp.status_code >= 400:
             raise GerritApiError(
@@ -315,6 +320,19 @@ class GerritClient:
             data.get("subject"),
         )
         return data
+
+    def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
+        """GET ``changes/<id>/reviewers/`` (lighter than full ``/detail``)."""
+        from urllib.parse import quote
+
+        cid = change_id_for_gerrit_rest_path(change_id)
+        enc = quote(cid, safe="")
+        data = self._request_json(f"changes/{enc}/reviewers/")
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected list reviewers response")
+        out = [row for row in data if isinstance(row, dict)]
+        logger.info("list_change_reviewers %r -> %d reviewer(s)", cid, len(out))
+        return out
 
     def add_reviewer(self, change_id: str, reviewer: str) -> dict[str, Any]:
         """POST a reviewer (username or email) onto *change_id*."""

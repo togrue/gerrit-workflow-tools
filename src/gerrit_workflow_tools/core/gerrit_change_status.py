@@ -291,15 +291,15 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
 
 
 def _load_reviewers_for_change(client: GerritClient, api_change_id: str) -> list[ReviewerAccount]:
-    """Load reviewers from change detail (batched queries omit the ``reviewers`` field)."""
-    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
+    """Load reviewers via ``GET changes/<id>/reviewers/`` (batched queries omit reviewer accounts)."""
+    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
     try:
-        detail = client.get_change(api_change_id)
+        rows = client.list_change_reviewers(api_change_id)
     except GerritApiError as e:
-        logger.debug("reviewer detail fetch failed for %s: %s", api_change_id, e)
+        logger.debug("reviewer list fetch failed for %s: %s", api_change_id, e)
         return []
-    return reviewer_accounts_from_change_info(detail)
+    return reviewer_accounts_from_reviewer_list(rows)
 
 
 def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
