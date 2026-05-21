@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -302,11 +303,35 @@ def _load_reviewers_for_change(client: GerritClient, api_change_id: str) -> list
     return reviewer_accounts_from_reviewer_list(rows)
 
 
+def _load_reviewers_from_fetcher(
+    fetch_change: Callable[[str], dict[str, Any]],
+    api_change_id: str,
+) -> list[ReviewerAccount]:
+    """Load reviewers from a fetcher returning ChangeInfo."""
+    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
+
+    try:
+        detail = fetch_change(api_change_id)
+    except GerritApiError as e:
+        logger.debug("reviewer detail fetch failed for %s: %s", api_change_id, e)
+        return []
+    return reviewer_accounts_from_change_info(detail)
+
+
 def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
     """Fetch comments for one change and return unresolved count, logging and defaulting to 0 on errors."""
 
+    return count_unresolved_from_fetcher(client.get_comments, api_change_id)
+
+
+def count_unresolved_from_fetcher(
+    fetch_comments: Callable[[str], dict[str, list[dict[str, Any]]]],
+    api_change_id: str,
+) -> int:
+    """Fetch comments through *fetch_comments* and return unresolved count."""
+
     try:
-        file_map = client.get_comments(api_change_id)
+        file_map = fetch_comments(api_change_id)
         return count_unresolved_in_file_map(file_map)
     except GerritApiError as e:
         logger.warning("Gerrit comments failed for %s: %s", api_change_id, e)
@@ -362,7 +387,14 @@ def _parallel_fill_cache_misses(
     missing = [cid for cid in change_ids if norm_change_id(cid) not in cache]
     if not missing:
         return
-    for row in parallel_map(client, missing, _ingest_single_change_miss, min_tasks_per_worker=2):
+
+    def _miss_job(change_id: str) -> Callable[[], tuple[str, dict[str, Any]] | None]:
+        def _job() -> tuple[str, dict[str, Any]] | None:
+            return _ingest_single_change_miss(client, change_id)
+
+        return _job
+
+    for row in parallel_map(_miss_job(cid) for cid in missing):
         if row is not None:
             cache[row[0]] = row[1]
 
@@ -381,10 +413,13 @@ def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> di
     opts = list(LOG_QUERY_OPTIONS)
     chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
 
-    def query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
-        return _query_change_chunk(client, chunk, opts)
+    def _chunk_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
+        def _job() -> list[dict[str, Any]]:
+            return _query_change_chunk(client, chunk, opts)
 
-    for rows in parallel_map(client, chunks, query_chunk, min_tasks_per_worker=1):
+        return _job
+
+    for rows in parallel_map(_chunk_job(chunk) for chunk in chunks):
         _ingest_change_rows(out, rows)
     return out
 
@@ -434,12 +469,19 @@ class _FollowUpWork:
     kinds: frozenset[str]
 
 
-def _execute_follow_ups(client: GerritClient, work: _FollowUpWork) -> tuple[int, dict[str, Any]]:
+def _execute_follow_ups(
+    client: GerritClient,
+    work: _FollowUpWork,
+    *,
+    comments_fetcher: Callable[[str], dict[str, list[dict[str, Any]]]] | None = None,
+    change_fetcher: Callable[[str], dict[str, Any]] | None = None,
+) -> tuple[int, dict[str, Any]]:
     """Run all follow-up REST calls for one change sequentially on the worker session."""
     updates: dict[str, Any] = {}
     if "comments" in work.kinds:
         try:
-            updates["comments"] = count_unresolved_via_comments(client, work.api_id)
+            fetch_comments = comments_fetcher or client.get_comments
+            updates["comments"] = count_unresolved_from_fetcher(fetch_comments, work.api_id)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("comments follow-up failed for %s: %s", work.api_id, e)
     if "checks" in work.kinds:
@@ -449,7 +491,10 @@ def _execute_follow_ups(client: GerritClient, work: _FollowUpWork) -> tuple[int,
             logger.debug("checks follow-up failed for %s: %s", work.api_id, e)
     if "reviewers" in work.kinds:
         try:
-            updates["reviewers"] = _load_reviewers_for_change(client, work.api_id)
+            if change_fetcher is not None:
+                updates["reviewers"] = _load_reviewers_from_fetcher(change_fetcher, work.api_id)
+            else:
+                updates["reviewers"] = _load_reviewers_for_change(client, work.api_id)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("reviewers follow-up failed for %s: %s", work.api_id, e)
     return work.result_idx, updates
@@ -499,6 +544,9 @@ def fetch_gerrit_data(
     commits: list[CommitStatusInput],
     *,
     cwd: Path | str | None = None,
+    detail_cache: dict[str, dict[str, Any]] | None = None,
+    comments_fetcher: Callable[[str], dict[str, list[dict[str, Any]]]] | None = None,
+    change_fetcher: Callable[[str], dict[str, Any]] | None = None,
 ) -> list[LogCommit]:
     """Query Gerrit for each commit and return populated LogCommit objects."""
 
@@ -507,8 +555,11 @@ def fetch_gerrit_data(
     resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
     result: list[LogCommit] = []
     ids_in_range = [c.change_id for c in commits if c.change_id]
-    cache = batch_load_change_details(client, ids_in_range)
-    _parallel_fill_cache_misses(client, cache, ids_in_range)
+    if detail_cache is None:
+        cache = batch_load_change_details(client, ids_in_range)
+        _parallel_fill_cache_misses(client, cache, ids_in_range)
+    else:
+        cache = detail_cache
 
     follow_ups: list[tuple[str, int, str]] = []
 
@@ -616,7 +667,19 @@ def fetch_gerrit_data(
 
     if follow_ups:
         work_items = _group_follow_ups(follow_ups)
-        rows = parallel_map(client, work_items, _execute_follow_ups, min_tasks_per_worker=1)
+
+        def _follow_up_job(work: _FollowUpWork) -> Callable[[], tuple[int, dict[str, Any]]]:
+            def _job() -> tuple[int, dict[str, Any]]:
+                return _execute_follow_ups(
+                    client,
+                    work,
+                    comments_fetcher=comments_fetcher,
+                    change_fetcher=change_fetcher,
+                )
+
+            return _job
+
+        rows = parallel_map(_follow_up_job(work) for work in work_items)
         _apply_follow_up_results(result, rows)
 
     return result

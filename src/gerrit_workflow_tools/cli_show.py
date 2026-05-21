@@ -21,10 +21,11 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
 )
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
+from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     collect_unresolved_comments,
     determine_attention,
-    fetch_gerrit_data,
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.gerrit_client import (
@@ -39,6 +40,13 @@ logger = logging.getLogger(__name__)
 
 _EXIT_ATTENTION = 1
 _EXIT_ERROR = 2
+
+
+def _service_from_cwd(cwd) -> GerritService:
+    web_base = resolve_gerrit_web_base(cwd)
+    client = GerritClient(web_base, cwd=str(cwd))
+    client.web_base = web_base
+    return GerritService(client, GerritCache.for_web_base(web_base))
 
 
 def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
@@ -109,15 +117,13 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         tail_n = gshow_comment_tail_lines(cwd)
 
     try:
-        web_base = resolve_gerrit_web_base(cwd)
+        service = _service_from_cwd(cwd)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR
 
-    client = GerritClient(web_base, cwd=str(cwd))
-
     try:
-        resolved = resolve_show_commit_row(cwd, args.rev, client)
+        resolved = resolve_show_commit_row(cwd, args.rev, service.rest)
     except GerritApiError as e:
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR
@@ -128,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     row = resolved.row
     is_local = resolved.is_local_commit
     try:
-        commits = fetch_gerrit_data(client, web_base, [row], cwd=cwd)
+        commits = service.fetch_gerrit_data([row], cwd=cwd)
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
         return _EXIT_ERROR
@@ -145,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         return _EXIT_ERROR
 
     try:
-        file_map = client.get_comments(cid)
+        file_map = service.comments.get_file_map(cid)
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
         return _EXIT_ERROR

@@ -98,6 +98,13 @@ def stack_repo(tmp_path: Path, _stack_repo_template: Path) -> Path:
     return repo
 
 
+@pytest.fixture(autouse=True)
+def _isolate_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep Gerrit API cache rows from leaking between tests that share mock hosts."""
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+
+
 @pytest.fixture
 def dup_repo(tmp_path: Path, _dup_repo_template: Path) -> Path:
     repo = _copy_git_repo(_dup_repo_template, tmp_path / "dup")

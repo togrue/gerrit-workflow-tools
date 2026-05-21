@@ -17,7 +17,7 @@ def test_execute_follow_ups_continues_after_one_kind_fails() -> None:
 
     with (
         patch(
-            "gerrit_workflow_tools.core.gerrit_change_status.count_unresolved_via_comments",
+            "gerrit_workflow_tools.core.gerrit_change_status.count_unresolved_from_fetcher",
             side_effect=RuntimeError("comments boom"),
         ),
         patch(

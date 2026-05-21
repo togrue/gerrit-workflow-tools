@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from collections.abc import Callable
 
@@ -15,6 +16,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_bash_completion:main",
     ),
     "branch": ("Branch-local Gerrit target and reviewers.", "gerrit_workflow_tools.cli_branch:main"),
+    "cache": ("Inspect or clear the local Gerrit API cache.", "gerrit_workflow_tools.cli_cache:main"),
     "change-id": ("Print or validate Change-Ids for commits or ranges.", "gerrit_workflow_tools.cli_changeid:main"),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", "gerrit_workflow_tools.cli_edit:main"),
     "reword": (
@@ -77,6 +79,10 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger``: dispatch ``ger <command>`` to the matching tool."""
     try:
         argv = list(sys.argv[1:] if argv is None else argv)
+        refresh = False
+        while "--refresh" in argv:
+            argv.remove("--refresh")
+            refresh = True
         if not argv:
             print(_usage())
             return 2
@@ -88,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ger: unknown command {cmd!r}", file=sys.stderr)
             print("Run `ger --help` for a list of commands.", file=sys.stderr)
             return 1
+        if refresh:
+            os.environ["GER_CACHE_REFRESH"] = "1"
         _, import_path = _COMMANDS[cmd]
         handler = _HANDLER_CACHE.get(cmd)
         if handler is None:

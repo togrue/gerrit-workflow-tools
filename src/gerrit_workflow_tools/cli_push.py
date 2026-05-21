@@ -47,12 +47,14 @@ from gerrit_workflow_tools.core.config import (
     resolve_upstream_parsed,
     set_branch_config,
 )
-from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details, norm_change_id
+from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_change_status import norm_change_id
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.push_reviewers import (
     ReviewerApplyChangeOutcome,
-    apply_reviewer_strategy_after_push,
+    apply_reviewer_strategy_after_push_service,
     stack_change_ids_ordered,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
@@ -71,6 +73,14 @@ from gerrit_workflow_tools.push_input_line import (
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
+
+
+def _service_from_cwd(cwd: Path) -> GerritService:
+    web_base = resolve_gerrit_web_base(cwd)
+    client = GerritClient(web_base, cwd=str(cwd))
+    client.web_base = web_base
+    return GerritService(client, GerritCache.for_web_base(web_base))
+
 
 _REBASE_ONTO_REMOTE_HINT = (
     "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."
@@ -410,7 +420,7 @@ def _print_post_push_assignment_report(
 
 def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
     cwd: Path,
-    client: GerritClient,
+    service: GerritService,
     strategy: ReviewerStrategy,
     reviewers: list[str],
     r: ReadyResult,
@@ -419,7 +429,7 @@ def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
 ) -> int:
     """Return 0 on success, non-zero if a required REST step failed."""
     change_ids = stack_change_ids_ordered(cwd, r, first_parent)
-    result = apply_reviewer_strategy_after_push(client, strategy, reviewers, change_ids)
+    result = apply_reviewer_strategy_after_push_service(service, strategy, reviewers, change_ids)
     for issue in result.issues:
         print(f"{issue.level}: {issue.message}", file=sys.stderr)
     if result.ok and result.outcomes:
@@ -462,7 +472,7 @@ def _commit_lines_for_preview(
                 ids.append(c.change_id)
         if ids:
             try:
-                web_base = resolve_gerrit_web_base(cwd)
+                resolve_gerrit_web_base(cwd)
             except ValueError as e:
                 raise ValueError(str(e)) from e
             if not _gerrit_credentials_configured(cwd):
@@ -470,8 +480,9 @@ def _commit_lines_for_preview(
                     "Gerrit credentials are not configured; set gerrit.user and "
                     "gerrit.token (or gerrit.password) for REST access."
                 )
-            client = GerritClient(web_base, cwd=str(cwd))
-            details_by_cid = batch_load_change_details(client, ids)
+            service = _service_from_cwd(cwd)
+            raw_details = service.changes.get_payloads(ids)
+            details_by_cid = {norm_change_id(k): v for k, v in raw_details.items()}
         else:
             details_by_cid = {}
 
@@ -1099,14 +1110,14 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
         return proc.returncode
     if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
         try:
-            web_base = resolve_gerrit_web_base(cwd)
+            resolve_gerrit_web_base(cwd)
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        client = GerritClient(web_base, cwd=str(cwd))
+        service = _service_from_cwd(cwd)
         rc_rest = _apply_reviewer_strategy_after_push(
             cwd,
-            client,
+            service,
             ctx.plan.strategy,
             ctx.plan.reviewers,
             ctx.ready,
