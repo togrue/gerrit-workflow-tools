@@ -215,13 +215,13 @@ _ger_fetch_api() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" branch change-id changeid edit fetch-api fix log push restack reword sha show
+        __gwt_flags "$cur" branch change-id changeid edit fetch-api fix log push rebase restack reword sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
     case "$sub" in
         push) _ger_push ;;
-        restack) _ger_restack ;;
+        rebase|restack|stack) _ger_restack ;;
         log) _ger_log ;;
         branch) _ger_branch ;;
         edit) _ger_edit ;;

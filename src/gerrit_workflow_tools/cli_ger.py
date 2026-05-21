@@ -30,7 +30,7 @@ _COMMANDS: dict[str, tuple[str, _Handler]] = {
     "fix": ("Create a git fixup commit for a ref or Gerrit change.", main_fix),
     "log": ("Overview of the local commit chain vs Gerrit (CI, votes, comments).", main_log),
     "push": ("Push the ready prefix or full stack to Gerrit.", main_push),
-    "restack": ("Interactive rebase with Gerrit status annotations.", main_restack),
+    "rebase": ("Interactive rebase with Gerrit status annotations.", main_restack),
     "sha": ("Resolve a Change-Id to a commit SHA.", main_sha),
     "show": ("One commit vs Gerrit (status and unresolved comments).", main_show),
 }
@@ -38,6 +38,8 @@ _COMMANDS: dict[str, tuple[str, _Handler]] = {
 # Alternate spellings; not listed in ``ger --help``.
 _ALIASES: dict[str, str] = {
     "changeid": "change-id",
+    "restack": "rebase",
+    "stack": "rebase",
 }
 
 

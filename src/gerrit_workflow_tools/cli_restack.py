@@ -1,4 +1,4 @@
-"""CLI entry: ``ger restack`` — interactive rebase with Gerrit status annotations."""
+"""CLI entry: ``ger rebase`` — interactive rebase with Gerrit status annotations."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger restack``: interactive rebase with Gerrit status annotations.
+    """CLI entry for ``ger rebase``: interactive rebase with Gerrit status annotations.
 
     Sets ``GIT_SEQUENCE_EDITOR`` to the enricher wrapper
     (:mod:`gerrit_workflow_tools.restack_enricher`) which annotates each pick line with
@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
     """
     p = argparse.ArgumentParser(
-        prog="ger restack",
+        prog="ger rebase",
         description=(
             "Start an interactive rebase with Gerrit status annotations in the sequence editor.\n\n"
             "Each pick line is enriched with the commit's patchset status, Verified and Code-Review\n"
@@ -123,11 +123,11 @@ def main(argv: list[str] | None = None) -> int:
     if drop_merged:
         env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
 
-    logger.debug("ger restack: base=%s onto_remote=%s", base[:8], use_onto_remote)
+    logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
     cmd = ["git", "rebase", "-i", base]
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
     r = subprocess.run(cmd, cwd=cwd, env=env, check=False)
-    logger.debug("ger restack: git rebase finished rc=%s", r.returncode)
+    logger.debug("ger rebase: git rebase finished rc=%s", r.returncode)
     return r.returncode
 
 

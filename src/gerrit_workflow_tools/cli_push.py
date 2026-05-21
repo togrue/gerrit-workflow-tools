@@ -73,7 +73,7 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 logger = logging.getLogger(__name__)
 
 _REBASE_ONTO_REMOTE_HINT = (
-    "Hint: run `ger restack --onto-remote` to replay your commits on top of the latest target branch."
+    "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."
 )
 
 

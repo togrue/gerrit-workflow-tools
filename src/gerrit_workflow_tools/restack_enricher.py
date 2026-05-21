@@ -197,7 +197,7 @@ def _resolve_editor(cwd: Path) -> str:
     """Find the real editor, following git's lookup order (skipping ``sequence.editor``).
 
     Priority:
-    1. ``GREBASE_EDITOR`` env var (explicit override; set by ``ger restack`` if needed)
+    1. ``GREBASE_EDITOR`` env var (explicit override; set by ``ger rebase`` if needed)
     2. ``GIT_EDITOR`` env var
     3. ``core.editor`` git config
     4. ``VISUAL`` env var
@@ -334,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = argv if argv is not None else sys.argv
     if len(args) < 2:
-        print("usage: GIT_SEQUENCE_EDITOR for ger restack", file=sys.stderr)
+        print("usage: GIT_SEQUENCE_EDITOR for ger rebase", file=sys.stderr)
         return 1
 
     todo = Path(args[1])
@@ -355,8 +355,8 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("restack_enricher: enrichment failed: %s", e)
         final_text = original_text
         error_header = (
-            f"# ger restack: Gerrit enrichment failed — {e}\n"
-            f"# ger restack: Showing original todo without status annotations.\n"
+            f"# ger rebase: Gerrit enrichment failed — {e}\n"
+            f"# ger rebase: Showing original todo without status annotations.\n"
         )
 
     if error_header:

@@ -210,7 +210,7 @@ def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -
 
 
 def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Gerrit destination for push/restack.
+    """Gerrit destination for push/rebase.
 
     Uses ``gerritTarget`` override, or upstream ref when its remote matches
     :func:`gerrit_remote`.
@@ -415,7 +415,7 @@ def head_is_linear_on_remote_gerrit_target(
 
 
 def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger restack`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
+    """Defaults for ``ger rebase`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
     return {
         "onto_remote": config_bool(cwd, "gerrit.rebaseOntoRemote"),
         "drop_merged_equivalent": config_bool(cwd, "gerrit.rebaseDropMergedEquivalent"),
@@ -460,7 +460,7 @@ def set_branch_config(
 
 
 def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -> list[str]:
-    """Build refs to try for ``ger restack --onto-remote`` from ``branch.*.gerritTarget``.
+    """Build refs to try for ``ger rebase --onto-remote`` from ``branch.*.gerritTarget``.
 
     Accepts a bare branch name (``dev`` → ``<remote>/dev``) or an existing remote-tracking
     form (``origin/dev``) without doubling the remote (``origin/origin/dev``).
@@ -490,7 +490,7 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     eff = effective_gerrit_destination_branch(cwd, b)
     if not eff:
         raise GitError(
-            f"No Gerrit destination branch for `ger restack --onto-remote` on branch {b!r}. "
+            f"No Gerrit destination branch for `ger rebase --onto-remote` on branch {b!r}. "
             f"Set upstream to a branch on `{remote_name}` (gerrit.remote), "
             "e.g. `ger branch infer-upstream` after `git fetch`, or "
             f"`git branch --set-upstream-to={remote_name}/<branch>`. "
@@ -521,4 +521,4 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         f"Fetch from your Gerrit remote (`gerrit.remote`, often `{remote_name}`), e.g. "
         f"`git fetch {remote_name}` so `refs/remotes/{remote_name}/<branch>` exists."
     )
-    raise GitError(f"No remote-tracking ref found for `ger restack --onto-remote` (tried {tried}). {hint}")
+    raise GitError(f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}). {hint}")

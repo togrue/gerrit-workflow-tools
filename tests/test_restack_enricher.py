@@ -386,7 +386,7 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
     text = todo.read_text(encoding="utf-8")
 
     # Error comment must appear at the top.
-    assert text.startswith("# ger restack:")
+    assert text.startswith("# ger rebase:")
     assert "enrichment failed" in text
 
     # Original pick lines must be intact (unenriched fallback).

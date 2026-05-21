@@ -35,6 +35,24 @@ def test_ger_log_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "ger log" in out
 
 
+def test_ger_rebase_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = _run_ger(stack_repo, ["rebase", "--help"], monkeypatch, catch_sys_exit=True)
+    assert code == 0
+    assert "ger rebase" in out
+
+
+def test_ger_restack_alias_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = _run_ger(stack_repo, ["restack", "--help"], monkeypatch, catch_sys_exit=True)
+    assert code == 0
+    assert "ger rebase" in out
+
+
+def test_ger_stack_alias_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = _run_ger(stack_repo, ["stack", "--help"], monkeypatch, catch_sys_exit=True)
+    assert code == 0
+    assert "ger rebase" in out
+
+
 def test_ger_changeid_alias_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = _run_ger(stack_repo, ["changeid", "--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
