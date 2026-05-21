@@ -35,6 +35,11 @@ _COMMANDS: dict[str, tuple[str, _Handler]] = {
     "show": ("One commit vs Gerrit (status and unresolved comments).", main_show),
 }
 
+# Alternate spellings; not listed in ``ger --help``.
+_ALIASES: dict[str, str] = {
+    "changeid": "change-id",
+}
+
 
 def _usage() -> str:
     lines = [
@@ -65,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         if argv[0] in ("-h", "--help"):
             print(_usage())
             return 0
-        cmd = argv[0]
+        cmd = _ALIASES.get(argv[0], argv[0])
         if cmd not in _COMMANDS:
             print(f"ger: unknown command {cmd!r}", file=sys.stderr)
             print("Run `ger --help` for a list of commands.", file=sys.stderr)
