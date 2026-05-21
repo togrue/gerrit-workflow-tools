@@ -2,37 +2,35 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 from collections.abc import Callable
 
-from gerrit_workflow_tools.cli_bash_completion import main as main_bash_completion
-from gerrit_workflow_tools.cli_branch import main as main_branch
-from gerrit_workflow_tools.cli_changeid import main as main_cid
-from gerrit_workflow_tools.cli_edit import main as main_edit
-from gerrit_workflow_tools.cli_edit import main_reword
-from gerrit_workflow_tools.cli_fetch_api import main as main_fetch_api
-from gerrit_workflow_tools.cli_fix import main as main_fix
-from gerrit_workflow_tools.cli_log import main as main_log
-from gerrit_workflow_tools.cli_push import main as main_push
-from gerrit_workflow_tools.cli_restack import main as main_restack
-from gerrit_workflow_tools.cli_sha import main as main_sha
-from gerrit_workflow_tools.cli_show import main as main_show
-
 _Handler = Callable[[list[str] | None], int]
 
-_COMMANDS: dict[str, tuple[str, _Handler]] = {
-    "bash-completion": ("Print or install bash tab-completion for ger.", main_bash_completion),
-    "branch": ("Branch-local Gerrit target and reviewers.", main_branch),
-    "change-id": ("Print or validate Change-Ids for commits or ranges.", main_cid),
-    "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", main_edit),
-    "reword": ("Interactive rebase: reword, edit, or drop a stack commit.", main_reword),
-    "fetch-api": ("GET a Gerrit REST path with configured user and token.", main_fetch_api),
-    "fix": ("Create a git fixup commit for a ref or Gerrit change.", main_fix),
-    "log": ("Overview of the local commit chain vs Gerrit (CI, votes, comments).", main_log),
-    "push": ("Push the ready prefix or full stack to Gerrit.", main_push),
-    "rebase": ("Interactive rebase with Gerrit status annotations.", main_restack),
-    "sha": ("Resolve a Change-Id to a commit SHA.", main_sha),
-    "show": ("One commit vs Gerrit (status and unresolved comments).", main_show),
+# Lazy import paths: only the invoked command module is loaded.
+_COMMANDS: dict[str, tuple[str, str]] = {
+    "bash-completion": (
+        "Print or install bash tab-completion for ger.",
+        "gerrit_workflow_tools.cli_bash_completion:main",
+    ),
+    "branch": ("Branch-local Gerrit target and reviewers.", "gerrit_workflow_tools.cli_branch:main"),
+    "change-id": ("Print or validate Change-Ids for commits or ranges.", "gerrit_workflow_tools.cli_changeid:main"),
+    "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", "gerrit_workflow_tools.cli_edit:main"),
+    "reword": (
+        "Interactive rebase: reword, edit, or drop a stack commit.",
+        "gerrit_workflow_tools.cli_edit:main_reword",
+    ),
+    "fetch-api": ("GET a Gerrit REST path with configured user and token.", "gerrit_workflow_tools.cli_fetch_api:main"),
+    "fix": ("Create a git fixup commit for a ref or Gerrit change.", "gerrit_workflow_tools.cli_fix:main"),
+    "log": (
+        "Overview of the local commit chain vs Gerrit (CI, votes, comments).",
+        "gerrit_workflow_tools.cli_log:main",
+    ),
+    "push": ("Push the ready prefix or full stack to Gerrit.", "gerrit_workflow_tools.cli_push:main"),
+    "rebase": ("Interactive rebase with Gerrit status annotations.", "gerrit_workflow_tools.cli_restack:main"),
+    "sha": ("Resolve a Change-Id to a commit SHA.", "gerrit_workflow_tools.cli_sha:main"),
+    "show": ("One commit vs Gerrit (status and unresolved comments).", "gerrit_workflow_tools.cli_show:main"),
 }
 
 # Alternate spellings; not listed in ``ger --help``.
@@ -41,6 +39,19 @@ _ALIASES: dict[str, str] = {
     "restack": "rebase",
     "stack": "rebase",
 }
+
+_HANDLER_CACHE: dict[str, _Handler] = {}
+
+
+def _load_handler(import_path: str) -> _Handler:
+    module_name, _, attr = import_path.partition(":")
+    if not module_name or not attr:
+        raise ValueError(f"invalid handler import path: {import_path!r}")
+    module = importlib.import_module(module_name)
+    handler = getattr(module, attr)
+    if not callable(handler):
+        raise TypeError(f"{import_path} is not callable")
+    return handler  # type: ignore[return-value]
 
 
 def _usage() -> str:
@@ -77,7 +88,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ger: unknown command {cmd!r}", file=sys.stderr)
             print("Run `ger --help` for a list of commands.", file=sys.stderr)
             return 1
-        return _COMMANDS[cmd][1](argv[1:])
+        _, import_path = _COMMANDS[cmd]
+        handler = _HANDLER_CACHE.get(cmd)
+        if handler is None:
+            handler = _load_handler(import_path)
+            _HANDLER_CACHE[cmd] = handler
+        return handler(argv[1:])
     except KeyboardInterrupt:
         return 130
 
