@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
+    ANSI_DIM_GRAY,
     ANSI_GREEN,
     ANSI_LIGHT_GREEN,
     ANSI_RED,
@@ -220,7 +221,7 @@ def _attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
         noun = "comment" if commit.comments_unresolved == 1 else "comments"
         tokens.append((f"{commit.comments_unresolved} unresolved {noun}", ANSI_YELLOW))
     if "no-reviewers" in commit.attention_reasons:
-        tokens.append(("no reviewers", ANSI_YELLOW))
+        tokens.append(("no reviewers", ANSI_DIM_GRAY))
     if commit.submittable and not tokens:
         tokens.append(("submittable", ANSI_GREEN))
     return tokens
