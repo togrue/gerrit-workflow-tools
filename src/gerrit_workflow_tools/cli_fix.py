@@ -134,8 +134,8 @@ def _index_has_staged_changes(cwd: Path) -> bool:
     return d.returncode != 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Create a fixup commit with ``git commit --fixup=<target>``."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger fix``."""
     p = argparse.ArgumentParser(
         prog="ger fix",
         description=(
@@ -166,6 +166,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Bypass pre-commit and commit-msg hooks (passed through to ``git commit``).",
     )
     add_verbose_and_debug_log_args(p, debug_log_help="Log resolution steps to stderr.")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Create a fixup commit with ``git commit --fixup=<target>``."""
+    p = _build_parser()
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()

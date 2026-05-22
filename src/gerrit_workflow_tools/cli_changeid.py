@@ -235,38 +235,7 @@ def main(argv: list[str] | None = None) -> int:
 
     Prints or validates Change-Ids for commits or ranges, with optional duplicate checking.
     """
-    p = argparse.ArgumentParser(prog="ger change-id")
-    p.add_argument(
-        "rev_or_range",
-        nargs="?",
-        default=None,
-        metavar="REV_OR_RANGE",
-        help=(
-            "Revision (anything git rev-parse --verify accepts), Change-Id (I…, passthrough), "
-            "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD."
-        ),
-    )
-    add_verbose_and_debug_log_args(p)
-    p.add_argument(
-        "--start-at-remote",
-        action="store_true",
-        help=(
-            "Use upstream_tip..END (same stack window as default `ger log`) instead of the default revision resolution."
-        ),
-    )
-    p.add_argument(
-        "--check-duplicates",
-        action="store_true",
-        help="Check for duplicate Change-Ids across upstream_tip..END (same range as --start-at-remote).",
-    )
-    p.add_argument(
-        "--fix",
-        action="store_true",
-        help=(
-            "Assign Change-Ids for commits in upstream_tip..END when the last non-empty message line has no Change-Id."
-        ),
-    )
-    add_color_args(p)
+    p = _build_parser()
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     init_color_mode(color=args.color)
@@ -311,6 +280,43 @@ def main(argv: list[str] | None = None) -> int:
         return getattr(err, "code", 1)
     except GitError as e:
         return handle_git_error(e)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger change-id``."""
+    p = argparse.ArgumentParser(prog="ger change-id")
+    p.add_argument(
+        "rev_or_range",
+        nargs="?",
+        default=None,
+        metavar="REV_OR_RANGE",
+        help=(
+            "Revision (anything git rev-parse --verify accepts), Change-Id (I…, passthrough), "
+            "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD."
+        ),
+    )
+    add_verbose_and_debug_log_args(p)
+    p.add_argument(
+        "--start-at-remote",
+        action="store_true",
+        help=(
+            "Use upstream_tip..END (same stack window as default `ger log`) instead of the default revision resolution."
+        ),
+    )
+    p.add_argument(
+        "--check-duplicates",
+        action="store_true",
+        help="Check for duplicate Change-Ids across upstream_tip..END (same range as --start-at-remote).",
+    )
+    p.add_argument(
+        "--fix",
+        action="store_true",
+        help=(
+            "Assign Change-Ids for commits in upstream_tip..END when the last non-empty message line has no Change-Id."
+        ),
+    )
+    add_color_args(p)
+    return p
 
 
 if __name__ == "__main__":

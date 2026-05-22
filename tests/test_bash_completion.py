@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools import cli_bash_completion as bc
+from gerrit_workflow_tools.bash_completion_generator import render_bash_completion_script
 from gerrit_workflow_tools.cli_ger import main as ger_main
 from tests.conftest import run_cli
 
@@ -81,3 +82,8 @@ def test_ger_dispatches_bash_completion(tmp_path: Path, monkeypatch: pytest.Monk
     assert code == 0
     assert out.strip().startswith("source ")
     assert err == ""
+
+
+def test_regenerated_bash_completion_matches_checked_in_file() -> None:
+    completion_path = Path(__file__).resolve().parents[1] / "contrib" / "completion" / "ger.bash"
+    assert completion_path.read_text(encoding="utf-8") == render_bash_completion_script()

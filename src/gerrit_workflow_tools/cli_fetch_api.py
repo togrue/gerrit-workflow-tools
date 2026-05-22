@@ -10,8 +10,8 @@ from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, con
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger fetch-api``: GET a path under ``/a/`` and print JSON."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger fetch-api``."""
     p = argparse.ArgumentParser(
         prog="ger fetch-api",
         description=(
@@ -30,6 +30,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Write a single line of JSON to stdout.",
     )
     add_verbose_and_debug_log_args(p, debug_log_help="Log resolved URL and Gerrit API diagnostics to stderr.")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger fetch-api``: GET a path under ``/a/`` and print JSON."""
+    p = _build_parser()
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()

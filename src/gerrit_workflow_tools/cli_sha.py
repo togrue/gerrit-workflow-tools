@@ -78,8 +78,8 @@ def _commits_all(cwd: Path):
     return _parse_rs_metadata_records(p.stdout)
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-branches,too-many-locals
-    """CLI entry for ``ger sha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger sha``."""
     ap = argparse.ArgumentParser(
         prog="ger sha",
         description="Resolve a Gerrit Change-Id to a Git commit SHA.",
@@ -115,6 +115,12 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
 
     add_color_args(ap)
     add_verbose_and_debug_log_args(ap)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-branches,too-many-locals
+    """CLI entry for ``ger sha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
+    ap = _build_parser()
 
     args = ap.parse_args(argv)
     configure_logging(args.debug_log)

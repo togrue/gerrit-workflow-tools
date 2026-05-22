@@ -197,8 +197,8 @@ def _cmd_infer_upstream(ns: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger branch``."""
     p = argparse.ArgumentParser(
         prog="ger branch",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -248,6 +248,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Set upstream without confirmation (required when stdin is not a terminal).",
     )
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger branch``: show or set branch-local Gerrit target and reviewers."""
+    p = _build_parser()
 
     args = p.parse_args(argv)
     configure_logging(args.debug_log)

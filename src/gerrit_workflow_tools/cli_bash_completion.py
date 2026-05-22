@@ -115,9 +115,8 @@ def _uninstall_completion_block(rc_path: Path, log) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Print, install, or uninstall shell completion bootstrap lines for ``ger``."""
-
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger bash-completion``."""
     parser = argparse.ArgumentParser(
         prog="ger bash-completion",
         description="Show the bash line to source tab-completion for ger, or install/uninstall it in a shell rc file.",
@@ -138,6 +137,13 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="Rc file to modify for --install / --uninstall (default: ~/.bashrc).",
     )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Print, install, or uninstall shell completion bootstrap lines for ``ger``."""
+
+    parser = _build_parser()
     ns = parser.parse_args(argv)
 
     if ns.install and ns.uninstall:

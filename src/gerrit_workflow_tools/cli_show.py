@@ -52,9 +52,8 @@ def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str,
     return f"[... {omitted} lines omitted above]\n{body}", True
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
-    """Resolve one revision and print human-readable or JSON Gerrit status details."""
-
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger show``."""
     p = argparse.ArgumentParser(
         prog="ger show",
         description="Show one commit and its Gerrit status (labels, comments, CI).",
@@ -89,6 +88,12 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         p,
         debug_log_help="Log Gerrit resolution to stderr.",
     )
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
+    """Resolve one revision and print human-readable or JSON Gerrit status details."""
+    p = _build_parser()
     args = p.parse_args(argv)
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 

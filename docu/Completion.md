@@ -44,3 +44,15 @@ source "$_pysite/completion/ger.bash"
 
 - Revision arguments (where applicable) use `__git_complete_refs` when Git’s bash completion is loaded.
 - The `ger` executable (`ger.exe` on Windows) uses the same completion function.
+
+## Keeping completion in sync
+
+`contrib/completion/ger.bash` is generated from the live argparse definitions in the Python CLI modules.
+
+Regenerate it with:
+
+```bash
+python -c "from pathlib import Path; from gerrit_workflow_tools.bash_completion_generator import render_bash_completion_script; Path('contrib/completion/ger.bash').write_text(render_bash_completion_script(), encoding='utf-8')"
+```
+
+`tests/test_bash_completion.py` includes a drift test that regenerates and compares the result byte-for-byte with the checked-in file.

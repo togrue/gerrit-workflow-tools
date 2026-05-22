@@ -57,15 +57,8 @@ def resolve_first_edit_attention_sha(cwd: Path) -> str:
     return target.sha
 
 
-# pylint: disable=too-many-locals
-def _run_interactive_stack_rebase(
-    argv: list[str] | None,
-    *,
-    prog: str,
-    description: str,
-    default_action: Literal["edit", "reword"],
-) -> int:
-    """Shared implementation for ``ger edit`` and ``ger reword``."""
+def _build_parser(*, prog: str, description: str, default_action: Literal["edit", "reword"]) -> argparse.ArgumentParser:
+    """Build and return the parser for ``ger edit`` / ``ger reword``."""
     p = argparse.ArgumentParser(prog=prog, description=description)
     p.add_argument(
         "rev",
@@ -101,6 +94,37 @@ def _run_interactive_stack_rebase(
         p,
         debug_log_help="Log git commands and rebase sequence editor steps to stderr.",
     )
+    return p
+
+
+def _build_parser_edit() -> argparse.ArgumentParser:
+    """Build parser for ``ger edit``."""
+    return _build_parser(
+        prog="ger edit",
+        description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
+        default_action="edit",
+    )
+
+
+def _build_parser_reword() -> argparse.ArgumentParser:
+    """Build parser for ``ger reword``."""
+    return _build_parser(
+        prog="ger reword",
+        description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
+        default_action="reword",
+    )
+
+
+# pylint: disable=too-many-locals
+def _run_interactive_stack_rebase(
+    argv: list[str] | None,
+    *,
+    prog: str,
+    description: str,
+    default_action: Literal["edit", "reword"],
+) -> int:
+    """Shared implementation for ``ger edit`` and ``ger reword``."""
+    p = _build_parser(prog=prog, description=description, default_action=default_action)
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()

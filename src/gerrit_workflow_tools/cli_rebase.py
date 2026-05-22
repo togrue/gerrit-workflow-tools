@@ -23,16 +23,8 @@ from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream,
 logger = logging.getLogger(__name__)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger rebase``: interactive rebase with Gerrit status annotations.
-
-    Sets ``GIT_SEQUENCE_EDITOR`` to the enricher wrapper
-    (:mod:`gerrit_workflow_tools.rebase_enricher`) which annotates each pick line with
-    the commit's Gerrit verified/CR/comments status before opening the real editor.
-
-    The real editor is resolved by the enricher from ``GIT_EDITOR``, ``core.editor``,
-    ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
-    """
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger rebase``."""
     p = argparse.ArgumentParser(
         prog="ger rebase",
         description=(
@@ -76,6 +68,20 @@ def main(argv: list[str] | None = None) -> int:
         p,
         debug_log_help="Log git commands and enricher steps to stderr.",
     )
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger rebase``: interactive rebase with Gerrit status annotations.
+
+    Sets ``GIT_SEQUENCE_EDITOR`` to the enricher wrapper
+    (:mod:`gerrit_workflow_tools.rebase_enricher`) which annotates each pick line with
+    the commit's Gerrit verified/CR/comments status before opening the real editor.
+
+    The real editor is resolved by the enricher from ``GIT_EDITOR``, ``core.editor``,
+    ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
+    """
+    p = _build_parser()
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
