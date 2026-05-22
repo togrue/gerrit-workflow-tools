@@ -36,8 +36,7 @@ from gerrit_workflow_tools.core.config import current_branch, log_defaults, reso
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
     LogCommit,
-    commit_blocks_chain_for_submittability,
-    determine_attention,
+    annotate_attention,
     fetch_gerrit_data,
 )
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
@@ -65,19 +64,22 @@ def _fmt_summary_strike(summary: str) -> str:
     return "".join(f"{c}\u0336" for c in summary)
 
 
-def _annotate_attention(commits: list[LogCommit]) -> None:
-    """Populate attention_reasons on each commit, including chain-blocking.
-
-    Chain-blocking: an earlier pushed commit blocks later ones when
-    :func:`~gerrit_workflow_tools.gerrit_change_status.commit_blocks_chain_for_submittability`
-    says so (Gerrit submittable, plus MERGED equivalence rules).
-    """
-    prefix_chain_blocks = False
-    for commit in commits:
-        chain_blocked = commit.pushed and prefix_chain_blocks
-        commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
-        if commit.pushed and commit_blocks_chain_for_submittability(commit):
-            prefix_chain_blocks = True
+def load_annotated_commits(
+    cwd: Path,
+    rev_range: str,
+    *,
+    first_parent: bool = False,
+) -> tuple[list[LogCommit] | None, int]:
+    """Load local commits in *rev_range*, enrich from Gerrit, and annotate attention."""
+    commit_data, exit_code = _load_commits_in_range(cwd, rev_range, first_parent=first_parent)
+    if commit_data is None:
+        return None, exit_code
+    commits, gerrit_exit = _fetch_enriched_commits(cwd, commit_data)
+    if gerrit_exit is not None:
+        return None, gerrit_exit
+    assert commits is not None
+    annotate_attention(commits)
+    return commits, 0
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +424,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None, int | None]:
+def resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None, int | None]:
     """Return revision range or (None, exit_code) on error."""
     if arg_rev_range:
         if ".." in arg_rev_range:
@@ -594,7 +596,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
     show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
-    rev_range, rev_range_exit = _resolve_rev_range(cwd, args.rev_range)
+    rev_range, rev_range_exit = resolve_rev_range(cwd, args.rev_range)
     if rev_range_exit is not None:
         return rev_range_exit
     assert rev_range is not None
@@ -604,16 +606,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
         if not ensure_branch_upstream_interactive(cwd, branch) and sys.stdin.isatty():
             return 1
 
-    commit_data, commit_data_exit = _load_commits_in_range(cwd, rev_range, first_parent=not args.follow_merges)
-    if commit_data is None:
-        return commit_data_exit
-
-    commits, gerrit_exit = _fetch_enriched_commits(cwd, commit_data)
-    if gerrit_exit is not None:
-        return gerrit_exit
-    assert commits is not None
-
-    _annotate_attention(commits)
+    commits, load_exit = load_annotated_commits(cwd, rev_range, first_parent=not args.follow_merges)
+    if commits is None:
+        return load_exit
 
     visible = [c for c in commits if c.attention_reasons] if args.filter_attention else commits
     has_attention = any(c.attention_reasons for c in commits)

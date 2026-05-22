@@ -622,6 +622,38 @@ def fetch_gerrit_data(
     return result
 
 
+# Attention that warrants amending the commit (``ger edit --first-attention-commit``).
+EDIT_ATTENTION_REASONS = frozenset({"unresolved-comments", "ci-failed"})
+
+
+def annotate_attention(commits: list[LogCommit]) -> None:
+    """Populate ``attention_reasons`` on each commit, including chain-blocking.
+
+    Chain-blocking: an earlier pushed commit blocks later ones when
+    :func:`commit_blocks_chain_for_submittability` says so (Gerrit submittable,
+    plus MERGED equivalence rules). Same rules as ``ger log``.
+    """
+    prefix_chain_blocks = False
+    for commit in commits:
+        chain_blocked = commit.pushed and prefix_chain_blocks
+        commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
+        if commit.pushed and commit_blocks_chain_for_submittability(commit):
+            prefix_chain_blocks = True
+
+
+def commit_needs_edit_attention(commit: LogCommit) -> bool:
+    """True when the commit has unresolved comments or a failed build (``ger log`` attention)."""
+    return bool(EDIT_ATTENTION_REASONS.intersection(commit.attention_reasons))
+
+
+def first_commit_needing_edit_attention(commits: list[LogCommit]) -> LogCommit | None:
+    """Oldest commit in *commits* that needs edit attention, or ``None``."""
+    for commit in commits:
+        if commit_needs_edit_attention(commit):
+            return commit
+    return None
+
+
 def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:  # pylint: disable=too-many-branches
     """Return reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []

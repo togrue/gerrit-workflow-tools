@@ -9,7 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_log import (
     _load_commits_in_range,
-    _resolve_rev_range,
+    resolve_rev_range,
     rev_range_needs_upstream_resolution,
 )
 from gerrit_workflow_tools.cli_log import main as log_main
@@ -356,7 +356,7 @@ def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: py
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="feat/x")
 
-    rev_range, exit_code = _resolve_rev_range(cwd, None)
+    rev_range, exit_code = resolve_rev_range(cwd, None)
     assert exit_code is None
     assert rev_range == "feat/x@{upstream}..feat/x"
 
@@ -374,7 +374,7 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
 
-    rev_range, exit_code = _resolve_rev_range(cwd, None)
+    rev_range, exit_code = resolve_rev_range(cwd, None)
     assert exit_code is None
     assert rev_range == "@{upstream}..HEAD"
 
@@ -393,7 +393,7 @@ def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypa
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
     monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: "feat/x")
 
-    rev_range, exit_code = _resolve_rev_range(cwd, None)
+    rev_range, exit_code = resolve_rev_range(cwd, None)
     assert exit_code is None
     assert rev_range == "feat/x@{upstream}..feat/x"
 
@@ -411,7 +411,7 @@ def test_log_rev_range_single_branch_expands_to_branch_upstream_range(monkeypatc
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range, exit_code = _resolve_rev_range(cwd, "bak")
+    rev_range, exit_code = resolve_rev_range(cwd, "bak")
     assert exit_code is None
     assert rev_range == "bak@{upstream}..bak"
 
@@ -433,7 +433,7 @@ def test_log_rev_range_explicit_ranges_are_forwarded_verbatim(
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range, exit_code = _resolve_rev_range(cwd, arg_rev_range)
+    rev_range, exit_code = resolve_rev_range(cwd, arg_rev_range)
     assert exit_code is None
     assert rev_range == arg_rev_range
 
@@ -452,7 +452,7 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
     _ = git_out_calls
 
-    rev_range, exit_code = _resolve_rev_range(cwd, "a..b")
+    rev_range, exit_code = resolve_rev_range(cwd, "a..b")
     assert exit_code is None
     assert rev_range == "a..b"
 

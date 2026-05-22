@@ -10,6 +10,7 @@ Edit, reword, or drop a commit in the middle of the current local stack without 
 
 ```
 ger edit <commit> [--reword | --drop] [-v]
+ger edit --first-attention-commit
 ```
 
 ---
@@ -18,7 +19,7 @@ ger edit <commit> [--reword | --drop] [-v]
 
 | Argument | Description |
 |----------|-------------|
-| `commit` | Short or full SHA, or Gerrit Change-Id (`I…`); must be in the current stack |
+| `commit` | Short or full SHA, or Gerrit Change-Id (`I…`); must be in the current stack (optional with `--first-attention-commit`) |
 
 ---
 
@@ -26,6 +27,7 @@ ger edit <commit> [--reword | --drop] [-v]
 
 | Option | Description |
 |--------|-------------|
+| `--first-attention-commit` | Edit the oldest stack commit that needs attention: unresolved Gerrit comments or failed build (same rules as [`ger log`](log.md)) |
 | `--reword` | Reword the commit message only (opens `$EDITOR`) |
 | `--drop` | Drop the commit entirely from the stack |
 | (none) | Default: `edit` — stop at the commit for amending |
@@ -50,6 +52,9 @@ For `edit`, amend the commit normally, then `git rebase --continue`.
 ## Examples
 
 ```bash
+# Edit the oldest commit with unresolved comments or a failed build
+ger edit --first-attention-commit
+
 # Edit a commit by short SHA
 ger edit a1b2c3d
 
