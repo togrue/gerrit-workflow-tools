@@ -100,6 +100,39 @@ def checked_out_branch_name(cwd: Path | str | None) -> str | None:
     return name or None
 
 
+def _git_dir(cwd: Path | str | None) -> Path | None:
+    p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return None
+    raw = (p.stdout or "").strip()
+    if not raw:
+        return None
+    git_dir = Path(raw)
+    if git_dir.is_absolute():
+        return git_dir
+    base = Path.cwd() if cwd is None else Path(cwd)
+    return base / git_dir
+
+
+def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
+    """Branch currently being rebased, if Git has an in-progress rebase state."""
+    git_dir = _git_dir(cwd)
+    if git_dir is None:
+        return None
+    for state_dir in ("rebase-merge", "rebase-apply"):
+        head_name = git_dir / state_dir / "head-name"
+        if not head_name.exists():
+            continue
+        try:
+            branch = head_name.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if branch.startswith("refs/heads/"):
+            branch = branch[len("refs/heads/") :]
+        return branch or None
+    return None
+
+
 def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
     p = git("branch", "--points-at", "HEAD", cwd=cwd, check=False)
     if p.returncode != 0:
@@ -127,19 +160,28 @@ def _push_context_branch_rank(cwd: Path | str | None, branch: str) -> tuple[int,
     )
 
 
-def resolve_push_context_branch(cwd: Path | str | None) -> str | None:
-    """Branch name for ``ger push`` mode and ``branch.<name>.*`` config.
-
-    Uses the checked-out branch when present. On detached HEAD, picks a local branch
-    that points at ``HEAD`` (preferring ``gerritTarget``, then Gerrit upstream, then any upstream).
-    """
+def resolve_working_branch(cwd: Path | str | None) -> str | None:
+    """Best branch for commands that need branch config while HEAD may be detached."""
     checked = checked_out_branch_name(cwd)
     if checked:
         return checked
+    rebasing = rebase_in_progress_branch(cwd)
+    if rebasing:
+        return rebasing
     candidates = _branches_pointing_at_head(cwd)
     if not candidates:
         return None
     return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b))
+
+
+def resolve_push_context_branch(cwd: Path | str | None) -> str | None:
+    """Branch name for ``ger push`` mode and ``branch.<name>.*`` config.
+
+    Uses the checked-out branch when present. During rebase, uses Git's recorded
+    rebased branch. Otherwise on detached HEAD, picks a local branch that points at
+    ``HEAD`` (preferring ``gerritTarget``, then Gerrit upstream, then any upstream).
+    """
+    return resolve_working_branch(cwd)
 
 
 def branch_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> str | None:

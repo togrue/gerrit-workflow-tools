@@ -32,7 +32,7 @@ from gerrit_workflow_tools.cli_style import (
     is_color_enabled,
     visible_len,
 )
-from gerrit_workflow_tools.core.config import current_branch, log_defaults
+from gerrit_workflow_tools.core.config import current_branch, log_defaults, resolve_working_branch
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
     LogCommit,
@@ -429,7 +429,7 @@ def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None
             return arg_rev_range, None
         return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}", None
     try:
-        branch = current_branch(cwd)
+        branch = resolve_working_branch(cwd) or current_branch(cwd)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
         return None, 2
@@ -440,7 +440,7 @@ def _resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None
 
 def rev_range_needs_upstream_resolution(cwd: Path, rev_range: str) -> list[str]:
     """Return branch names that need upstream resolution for *rev_range*."""
-    current = current_branch(cwd)
+    current = resolve_working_branch(cwd) or current_branch(cwd)
     required: list[str] = []
     seen: set[str] = set()
     for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):

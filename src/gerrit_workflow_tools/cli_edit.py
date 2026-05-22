@@ -16,6 +16,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
+from gerrit_workflow_tools.core.config import resolve_working_branch
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import (
     commit_in_stack,
@@ -70,18 +71,18 @@ def _run_interactive_stack_rebase(
     logger.debug("gedit cwd=%s rev_arg=%r action=%s", cwd, args.rev, action)
 
     try:
-        branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
+        branch = resolve_working_branch(cwd)
         if (
-            branch != "HEAD"
+            branch is not None
             and not branch_has_upstream(cwd, branch)
             and not ensure_branch_upstream_interactive(cwd, branch)
             and sys.stdin.isatty()
         ):
             return 1
-        full = resolve_stack_commit(cwd, args.rev.strip())
-        if not commit_in_stack(cwd, full):
+        full = resolve_stack_commit(cwd, args.rev.strip(), branch=branch)
+        if not commit_in_stack(cwd, full, branch=branch):
             raise GitError(f"commit {args.rev} is not in the current local stack")
-        rebase_fork, _, _ = merge_base_with_target(cwd)
+        rebase_fork, _, _ = merge_base_with_target(cwd, branch)
         short = git_out("rev-parse", "--short", full, cwd=cwd)
     except GitError as e:
         return handle_git_error(e)
