@@ -26,6 +26,15 @@ def _ref_exists(repo: Path, ref: str) -> bool:
     return p.returncode == 0
 
 
+def _write_rebase_head(repo: Path, branch: str) -> None:
+    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
+    if not git_dir.is_absolute():
+        git_dir = repo / git_dir
+    state_dir = git_dir / "rebase-merge"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "head-name").write_text(f"refs/heads/{branch}\n", encoding="utf-8")
+
+
 def _mock_gerrit_push_refspec(mock_run: MagicMock) -> str:
     mock_run.assert_called_once()
     cmd, _cwd = mock_run.call_args[0]
@@ -143,6 +152,27 @@ def test_gpush_detached_head_no_local_branch_errors(stack_repo: Path, monkeypatc
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "detached" in err.lower()
+
+
+def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    (stack_repo / "rebased.txt").write_text("x\n", encoding="utf-8")
+    git("add", "rebased.txt", cwd=stack_repo)
+    git(
+        "commit",
+        "-m",
+        "rebased detached commit",
+        "-m",
+        "Change-Id: I00000000000000000000000000000000000000aa",
+        cwd=stack_repo,
+    )
+    _write_rebase_head(stack_repo, "feature")
+    clear_gerrit_git_config_cache()
+
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
+
+    assert code == 0, err
+    assert ":refs/for/main" in out
 
 
 def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

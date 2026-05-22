@@ -348,6 +348,7 @@ def _install_log_git_mocks(
 
     monkeypatch.setattr("gerrit_workflow_tools.core.config.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: None)
     return git_out_calls, git_calls
 
 
@@ -384,6 +385,25 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
     assert [args for args, _cwd, _check in git_calls] == [
         ("log", "--reverse", "--first-parent", "@{upstream}..HEAD", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
+    ]
+
+
+def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    cwd = Path("mock-repo")
+    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
+    monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: "feat/x")
+
+    rev_range, exit_code = _resolve_rev_range(cwd, None)
+    assert exit_code is None
+    assert rev_range == "feat/x@{upstream}..feat/x"
+
+    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
+    assert load_exit == 0
+    assert commit_data is None
+
+    assert git_out_calls == []
+    assert [args for args, _cwd, _check in git_calls] == [
+        ("log", "--reverse", "--first-parent", "feat/x@{upstream}..feat/x", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
     ]
 
 
@@ -461,6 +481,7 @@ def test_rev_range_needs_upstream_resolution(
     want: list[str],
 ) -> None:
     monkeypatch.setattr("gerrit_workflow_tools.cli_log.current_branch", lambda _cwd: head_branch)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: None)
     got = rev_range_needs_upstream_resolution(Path("mock-repo"), rev_range)
     assert got == want
 

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import Commit
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
@@ -492,6 +493,15 @@ def _make_rebase_interceptor(captured: dict):
     return fake_run
 
 
+def _write_rebase_head(repo: Path, branch: str) -> None:
+    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
+    if not git_dir.is_absolute():
+        git_dir = repo / git_dir
+    state_dir = git_dir / "rebase-merge"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "head-name").write_text(f"refs/heads/{branch}\n", encoding="utf-8")
+
+
 def test_cli_rebase_sets_sequence_editor_env(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
@@ -513,6 +523,26 @@ def test_cli_rebase_passes_merge_base_to_git(stack_repo: Path, monkeypatch):
     expected_base, _, _ = merge_base_with_target(stack_repo)
 
     captured: dict = {}
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        code = rebase_main([])
+
+    assert code == 0
+    assert captured["cmd"] == ["git", "rebase", "-i", expected_base]
+
+
+def test_cli_rebase_uses_rebase_branch_while_detached(stack_repo: Path, monkeypatch):
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.core.stack import merge_base_with_target
+
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    (stack_repo / "rebased.txt").write_text("x\n", encoding="utf-8")
+    git("add", "rebased.txt", cwd=stack_repo)
+    git("commit", "-m", "rebased detached commit", cwd=stack_repo)
+    _write_rebase_head(stack_repo, "feature")
+    expected_base, _, _ = merge_base_with_target(stack_repo, "feature")
+
+    captured: dict = {}
+    monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
         code = rebase_main([])
 

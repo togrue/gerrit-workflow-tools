@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import (
@@ -9,10 +10,21 @@ from gerrit_workflow_tools.core.config import (
     head_is_linear_on_remote_gerrit_target,
     infer_nearest_remote_tracking_branch,
     rebase_defaults,
+    rebase_in_progress_branch,
     resolve_rebase_onto_remote_ref,
+    resolve_working_branch,
     warning_patterns,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
+
+
+def _write_rebase_head(repo: Path, state_dir: str, branch: str) -> None:
+    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
+    if not git_dir.is_absolute():
+        git_dir = repo / git_dir
+    path = git_dir / state_dir
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "head-name").write_text(f"refs/heads/{branch}\n", encoding="utf-8")
 
 
 def test_warning_patterns_defaults(stack_repo: Path) -> None:
@@ -35,6 +47,30 @@ def test_rebase_defaults(stack_repo: Path) -> None:
     git("config", "gerrit.rebaseDropMergedEquivalent", "1", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     assert rebase_defaults(stack_repo) == {"onto_remote": True, "drop_merged_equivalent": True}
+
+
+def test_rebase_in_progress_branch_reads_git_rebase_state(stack_repo: Path) -> None:
+    _write_rebase_head(stack_repo, "rebase-merge", "feature")
+    assert rebase_in_progress_branch(stack_repo) == "feature"
+
+    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=stack_repo))
+    if not git_dir.is_absolute():
+        git_dir = stack_repo / git_dir
+    shutil.rmtree(git_dir / "rebase-merge")
+    _write_rebase_head(stack_repo, "rebase-apply", "apply-branch")
+    assert rebase_in_progress_branch(stack_repo) == "apply-branch"
+
+
+def test_resolve_working_branch_prefers_checked_out_branch(stack_repo: Path) -> None:
+    assert resolve_working_branch(stack_repo) == "feature"
+
+
+def test_resolve_working_branch_prefers_rebase_branch_over_points_at_head(stack_repo: Path) -> None:
+    git("branch", "rebasing", "HEAD~1", cwd=stack_repo)
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    _write_rebase_head(stack_repo, "rebase-merge", "rebasing")
+
+    assert resolve_working_branch(stack_repo) == "rebasing"
 
 
 def test_resolve_rebase_onto_remote_ref(stack_repo: Path) -> None:
