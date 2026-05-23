@@ -296,14 +296,16 @@ def infer_nearest_remote_tracking_branch(
 ) -> tuple[str, int, int, int] | None:
     """Pick the remote-tracking ref with minimum symmetric divergence from *head*.
 
-    For each ``refs/remotes/`` ref (excluding ``*/HEAD``), compute ``merge-base(head, ref)``
-    then ``ahead = |mb..head|`` and ``behind = |mb..ref|``; minimize ``ahead + behind``,
+    For each ref under the Gerrit remote's ``refs/remotes/<remote>/`` namespace
+    (excluding ``*/HEAD``), compute ``merge-base(head, ref)`` then
+    ``ahead = |mb..head|`` and ``behind = |mb..ref|``; minimize ``ahead + behind``,
     then *ahead*, then abbreviated ref name for stable tie-breaks.
 
     Returns ``(abbrev_ref, symmetric_total, ahead, behind)`` where *abbrev_ref* is suitable for
     ``git branch --set-upstream-to`` (e.g. ``origin/main``), or ``None`` if no candidate applies.
     """
-    p = git("for-each-ref", "--format=%(refname)", "refs/remotes/", cwd=cwd, check=False)
+    remote_ref_prefix = f"refs/remotes/{gerrit_remote(cwd)}/"
+    p = git("for-each-ref", "--format=%(refname)", remote_ref_prefix, cwd=cwd, check=False)
     if p.returncode != 0 or not (p.stdout or "").strip():
         return None
     best_key: tuple[int, int, str] | None = None

@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.config import (
     current_branch,
     effective_gerrit_destination_branch,
     ger_push_mode,
+    gerrit_remote,
     infer_nearest_remote_tracking_branch,
     refs_for_push_branch_name,
     set_branch_config,
@@ -166,8 +167,9 @@ def _cmd_infer_upstream(ns: argparse.Namespace, cwd: Path) -> int:
         return 1
     inferred = infer_nearest_remote_tracking_branch(cwd, "HEAD")
     if not inferred:
+        remote = gerrit_remote(cwd)
         print(
-            "error: no remote-tracking branches under refs/remotes/ (fetch remotes first).",
+            f"error: no remote-tracking branches under refs/remotes/{remote}/ (fetch `{remote}` first).",
             file=sys.stderr,
         )
         return 1
