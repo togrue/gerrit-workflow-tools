@@ -155,6 +155,31 @@ def test_infer_nearest_remote_tracking_branch(tmp_path: Path) -> None:
     assert sym == 1 and ahead == 1 and behind == 0
 
 
+def test_infer_nearest_remote_tracking_branch_only_searches_gerrit_remote(tmp_path: Path) -> None:
+    clear_gerrit_git_config_cache()
+    repo = tmp_path / "gerrit-only"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("1\n", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "init", cwd=repo)
+    main_sha = git_out("rev-parse", "HEAD", cwd=repo)
+    git("checkout", "-b", "feature", cwd=repo)
+    (repo / "f").write_text("2\n", encoding="utf-8")
+    git("commit", "-am", "feat", cwd=repo)
+    feature_sha = git_out("rev-parse", "HEAD", cwd=repo)
+    git("config", "gerrit.remote", "gerrit", cwd=repo)
+    git("update-ref", "refs/remotes/gerrit/main", main_sha, cwd=repo)
+    git("update-ref", "refs/remotes/origin/feature", feature_sha, cwd=repo)
+
+    got = infer_nearest_remote_tracking_branch(repo)
+
+    assert got is not None
+    abbrev, sym, ahead, behind = got
+    assert abbrev == "gerrit/main"
+    assert sym == 1 and ahead == 1 and behind == 0
+
+
 def test_infer_nearest_remote_tracking_branch_without_remotes(tmp_path: Path) -> None:
     clear_gerrit_git_config_cache()
     repo = tmp_path / "r2"
