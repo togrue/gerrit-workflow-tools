@@ -719,19 +719,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Push the specified local branch instead of the current branch.",
     )
-    p.add_argument(
-        "--update-last-pushed",
-        action="store_true",
-        help=(
-            "After a successful push, move local branch lastPush/<current-branch> "
-            "to the pushed tip. Default: gerrit.lastPushedBranch."
-        ),
-    )
-    p.add_argument(
-        "--no-update-last-pushed",
-        action="store_true",
-        help="Do not update lastPush/<current-branch> after push (overrides gerrit.lastPushedBranch).",
-    )
     p.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
     p.add_argument(
         "--no-rebase-check",
@@ -950,9 +937,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         print("error: nothing to push (empty ready prefix)", file=sys.stderr)
         return 1
 
-    update_last_pushed = (
-        bool(args.update_last_pushed) or gdef["last_pushed_branch"]
-    ) and not args.no_update_last_pushed
+    update_last_pushed = gdef["last_pushed_branch"]
     logger.debug(
         "gpush show_attributes=%s update_last_pushed=%s",
         gdef["show_attributes"],

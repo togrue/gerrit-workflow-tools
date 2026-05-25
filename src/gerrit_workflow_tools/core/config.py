@@ -409,8 +409,7 @@ def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
 def ger_push_defaults(cwd: Path | str | None) -> dict[str, bool]:
     """Defaults for ``ger push`` from ``gerrit.push*`` keys.
 
-    Includes ``gerrit.lastPushedBranch`` (overridden by
-    ``--update-last-pushed``).
+    Includes ``gerrit.lastPushedBranch``.
     """
     return {
         "show_attributes": config_bool(cwd, "gerrit.pushShowAttributes"),

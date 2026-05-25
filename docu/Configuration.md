@@ -2,7 +2,7 @@
 
 Git config drives defaults for Gerrit workflow tools. Values are read from repo `.git/config`, global `~/.gitconfig`, etc. (standard Git precedence).
 
-**Convention:** keys live under the `gerrit` section unless noted. Boolean values accept `true`, `1`, `yes`, or `on` (case-insensitive). Command-line flags override these defaults when present; several commands support `--no-…` to force a behavior off when a config default would turn it on.
+**Convention:** keys live under the `gerrit` section unless noted. Boolean values accept `true`, `1`, `yes`, or `on` (case-insensitive). Command-line flags override these defaults when present.
 
 ---
 
@@ -26,8 +26,6 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 |-----|--------|
 | `gerrit.logShowUrl` | Default on: include Gerrit URLs in text output (same as `--url` / `--show-url`). |
 | `gerrit.logShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
-| `gerrit.logOneline` | Default on: one-line format (`--oneline`). Use `--no-oneline` to show full rows. |
-| `gerrit.logCompact` | Default on: compact columns. Use `--no-compact` for full rows. |
 
 ---
 
@@ -36,7 +34,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | Key | Effect |
 |-----|--------|
 | `gerrit.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `gerrit.webUrl` and credentials). Default off when unset. |
-| `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. Override per run with `--update-last-pushed` / `--no-update-last-pushed`. |
+| `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. |
 
 ---
 
@@ -73,8 +71,8 @@ Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_con
 # Append another stop pattern (repeatable key)
 git config --add gerrit.stopPattern '^hold:'
 
-# Turn off default log one-line without changing other config
-ger log --no-oneline
+# Show Gerrit URLs by default in ger log
+git config gerrit.logShowUrl true
 ```
 
 ---

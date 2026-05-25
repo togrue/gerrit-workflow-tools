@@ -102,12 +102,10 @@ fi
 
 run_case "ger log help" ger log --help
 run_case "ger log default" ger log
-run_case "ger log filter-attention" ger log --filter-attention
 run_case "ger log json" ger log --json
 run_case "ger log show-change-id" ger log --show-change-id
 run_case "ger log url" ger log --url
 run_case "ger log verbose" ger log -v
-run_case "ger log very-verbose" ger log -vv
 
 run_case "ger show help" ger show --help
 run_case "ger show default" ger show

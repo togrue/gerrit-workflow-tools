@@ -56,8 +56,6 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     scrubbed = out.replace("--reviewers", "").replace("--reviewer-strategy", "")
     assert "--reviewer" not in scrubbed
     assert "--ignore-pattern" in out
-    assert "--update-last-pushed" in out
-    assert "--no-update-last-pushed" in out
     assert "--no-rebase-check" in out
     assert "-i" in out
     assert "--follow-merges" in out
@@ -883,32 +881,6 @@ def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypat
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 1
     assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
-
-
-def test_gpush_no_update_last_pushed_overrides_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-    mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
-    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes", "--no-update-last-pushed"], monkeypatch)
-    assert code == 0
-    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
-
-
-def test_gpush_update_last_pushed_flag_enables_when_config_false(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    expected_tip = compute_ready(stack_repo).push_tip_sha
-    assert expected_tip
-    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-    mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
-    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes", "--update-last-pushed"], monkeypatch)
-    assert code == 0
-    assert git_out("rev-parse", "lastPush/feature", cwd=stack_repo) == expected_tip
 
 
 def _make_merge_branch_repo(tmp_path: Path) -> Path:

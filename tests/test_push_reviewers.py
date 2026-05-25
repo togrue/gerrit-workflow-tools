@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
-from gerrit_workflow_tools.core.gerrit_client import GerritClient, change_id_for_gerrit_rest_path
-from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push
+from gerrit_workflow_tools.core.gerrit_client import change_id_for_gerrit_rest_path
+from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 
 
@@ -41,16 +41,16 @@ def test_reviewer_accounts_from_change_info_dict_shaped_reviewers() -> None:
 
 
 def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:
-    client = MagicMock(spec=GerritClient)
-    res = apply_reviewer_strategy_after_push(
-        client,
+    service = MagicMock()
+    res = apply_reviewer_strategy_after_push_service(
+        service,
         ReviewerStrategy.PUSH,
         ["alice"],
         ["Ia" * 20 + "a"],
     )
     assert res.ok
     assert res.outcomes == []
-    client.get_change.assert_not_called()
+    service.changes.get_payloads.assert_not_called()
 
 
 def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
@@ -59,18 +59,19 @@ def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
     detail_empty: dict[str, object] = {"reviewers": []}
     detail_has: dict[str, object] = {"reviewers": [_reviewer_entry("bob")]}
 
-    client = MagicMock(spec=GerritClient)
-    client.get_change.side_effect = [detail_empty, detail_has]
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {
+        change_id_for_gerrit_rest_path(cid_a): detail_empty,
+        change_id_for_gerrit_rest_path(cid_b): detail_has,
+    }
 
-    res = apply_reviewer_strategy_after_push(client, ReviewerStrategy.LAZY, ["alice", "ben"], [cid_a, cid_b])
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.LAZY, ["alice", "ben"], [cid_a, cid_b])
 
     assert res.ok
     assert [o.change_id for o in res.outcomes] == [cid_a, cid_b]
     assert res.outcomes[0].reviewers_assigned == ("alice", "ben")
     assert res.outcomes[1].reviewers_assigned == ()
-    assert client.add_reviewer.call_count == 2
-    client.add_reviewer.assert_any_call(cid_a, "alice")
-    client.add_reviewer.assert_any_call(cid_a, "ben")
+    service.changes.set_reviewers.assert_called_once_with(cid_a, add=["alice", "ben"], remove=[])
 
 
 def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
@@ -81,13 +82,12 @@ def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
             {"account": {"username": "gone", "_account_id": 7}, "state": "REVIEWER"},
         ]
     }
-    client = MagicMock(spec=GerritClient)
-    client.get_change.return_value = detail
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {change_id_for_gerrit_rest_path(cid): detail}
 
-    res = apply_reviewer_strategy_after_push(client, ReviewerStrategy.OVERWRITE, ["alice"], [cid])
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["alice"], [cid])
 
     assert res.ok
     assert len(res.outcomes) == 1
     assert res.outcomes[0].reviewers_assigned == ("alice",)
-    assert {c.args for c in client.delete_reviewer.call_args_list} == {(cid, 5), (cid, 7)}
-    client.add_reviewer.assert_called_once_with(cid, "alice")
+    service.changes.set_reviewers.assert_has_calls([call(cid, add=["alice"], remove=[5, 7])])

@@ -41,7 +41,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     annotate_attention,
 )
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
@@ -176,20 +176,6 @@ def _extra_detail_lines(commit: LogCommit) -> list[str]:
     for name in failures:
         lines.append(color_text(f"  · {name}", ANSI_RED))
     return lines
-
-
-def _commit_body_detail_lines(cwd: Path | str, commit: LogCommit) -> list[str]:
-    """Non-first lines of the commit message (subject already on the oneline row)."""
-    try:
-        raw = git_out("log", "-1", "--format=%B", commit.sha, cwd=cwd)
-    except GitError:
-        return []
-    lines = raw.splitlines()
-    if lines and lines[0].strip() == commit.summary.strip():
-        lines = lines[1:]
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    return [ln if not ln.strip() else color_text(ln, ANSI_DIM) for ln in lines]
 
 
 def _fmt_change_id_suffix(change_id: str | None) -> str:
@@ -389,11 +375,6 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger log",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
-    parser.add_argument(
-        "--filter-attention",
-        action="store_true",
-        help="Show only attention-required commits.",
-    )
     parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     add_color_args(parser)
     parser.add_argument(
@@ -414,10 +395,8 @@ def _build_parser() -> argparse.ArgumentParser:
     add_verbose_and_debug_log_args(
         parser,
         debug_log_help="Log git commands to stderr.",
-        verbose_action="count",
         verbose_help=(
             "Expanded layout: oneline summary, indented details, Gerrit URL on the next line when URLs are on. "
-            "``-vv`` adds the commit message body. "
             "Does not enable diagnostic logging; use ``--debug-log`` for that."
         ),
     )
@@ -505,13 +484,13 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     visible: list[LogCommit],
     *,
     show_url: bool,
-    log_verbosity: int,
+    verbose: bool,
     summary_highlighter: SummaryHighlighter | None,
     show_change_id: bool,
     attention_column: int,
 ) -> int | None:
     """Compute visible column where URLs should start for compact one-line output."""
-    if not show_url or log_verbosity >= 1:
+    if not show_url or verbose:
         return None
     widths = [
         visible_len(
@@ -532,21 +511,13 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
 
 def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     *,
-    cwd: Path,
-    commits: list[LogCommit],
     visible: list[LogCommit],
-    log_verbosity: int,
+    verbose: bool,
     show_url: bool,
     show_change_id: bool,
-    filter_attention: bool,
     summary_highlighter: SummaryHighlighter | None,
 ) -> None:
     """Render text view for ``ger log``."""
-    non_attention_filtered = len(commits) - len(visible)
-    if filter_attention and non_attention_filtered > 0:
-        noun = "commit" if non_attention_filtered == 1 else "commits"
-        print(f"... {non_attention_filtered} non-attention {noun}")
-
     attention_column = _attention_column(
         visible,
         summary_highlighter=summary_highlighter,
@@ -555,14 +526,14 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     url_start_visible = _compute_url_start_visible(
         visible,
         show_url=show_url,
-        log_verbosity=log_verbosity,
+        verbose=verbose,
         summary_highlighter=summary_highlighter,
         show_change_id=show_change_id,
         attention_column=attention_column,
     )
 
     for commit in visible:
-        if log_verbosity >= 1:
+        if verbose:
             ind = " " * _continuation_indent(commit)
             intro = _oneline_line(
                 commit,
@@ -576,9 +547,6 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
                 print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
             for d in _extra_detail_lines(commit):
                 print(f"{ind}{d}")
-            if log_verbosity >= 2:
-                for b in _commit_body_detail_lines(cwd, commit):
-                    print(f"{ind}{b}")
         else:
             print(
                 _oneline_line(
@@ -599,8 +567,8 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
     gdef = log_defaults(cwd)
-    log_verbosity = int(args.verbose)
-    show_url = bool(args.url) or gdef["show_url"] or (log_verbosity >= 1)
+    verbose = bool(args.verbose)
+    show_url = bool(args.url) or gdef["show_url"] or verbose
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
     rev_range, rev_range_exit = resolve_rev_range(cwd, args.rev_range)
@@ -617,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
     if commits is None:
         return load_exit
 
-    visible = [c for c in commits if c.attention_reasons] if args.filter_attention else commits
+    visible = commits
     has_attention = any(c.attention_reasons for c in commits)
 
     # JSON output
@@ -646,13 +614,10 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
         return 1 if has_attention else 0
 
     _render_text_output(
-        cwd=cwd,
-        commits=commits,
         visible=visible,
-        log_verbosity=log_verbosity,
+        verbose=verbose,
         show_url=show_url,
         show_change_id=show_change_id,
-        filter_attention=args.filter_attention,
         summary_highlighter=summary_highlighter,
     )
 

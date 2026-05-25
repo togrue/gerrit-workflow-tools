@@ -41,7 +41,6 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert code == 0
     assert "ger log" in out or "log" in out
     assert "REV_RANGE" in out
-    assert "--filter-attention" in out
     assert "--json" in out
     assert "--show-change-id" in out
     assert "--show-url" in out
@@ -53,10 +52,9 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     "argv_extra",
     [
         [],
-        ["--filter-attention"],
-        ["--filter-attention", "-v"],
-        ["--filter-attention", "--url"],
-        ["--filter-attention", "--color=never"],
+        ["-v"],
+        ["--url"],
+        ["--color=never"],
     ],
 )
 def test_log_smoke_argv_exits_zero(
@@ -143,21 +141,6 @@ def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytes
         assert "change_id" in item
 
 
-def test_log_filter_attention_hides_when_all_green(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With no attention, ``--filter-attention`` prints no per-commit lines."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--filter-attention"], monkeypatch)
-    assert code == 0, err
-    assert "summary:" in out
-    assert "... " in out
-    assert "non-attention commits" in out
-    assert rows[0].short_sha not in out
-    assert rows[0].subject not in out
-
-
 def test_determine_attention_no_reviewers_when_empty() -> None:
     commit = LogCommit(
         sha="a" * 40,
@@ -211,22 +194,6 @@ def test_log_no_reviewers_shown_in_attention(stack_repo: Path, monkeypatch: pyte
     assert code == 1, err
     data = json_stdout(out)
     assert any("no-reviewers" in item.get("attention_reasons", []) for item in data)
-
-
-def test_log_filter_attention_shows_only_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With ``--filter-attention``, only attention commits appear."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    overrides: list[dict] = [{}] * len(rows)
-    if overrides:
-        overrides[-1] = {"cr": 1}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--filter-attention"], monkeypatch)
-    assert code == 1, err
-    last = rows[-1]
-    assert last.short_sha in out
-    assert "cr+1" in out
 
 
 def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

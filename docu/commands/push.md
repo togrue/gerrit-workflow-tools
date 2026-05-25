@@ -25,8 +25,6 @@ ger push [options] [REV]
 | `--dry-run` | Print what would be pushed without executing |
 | `-y`, `--yes` | Push without confirmation (required when stdin is not a terminal) |
 | `-i` | Prompt for reviewers on a TTY; merged after branch config and `--reviewers` (cannot be combined with `--yes`) |
-| `--update-last-pushed` | After a successful push, update local branch `lastPush/<current-branch>` to the pushed tip. Default: `gerrit.lastPushedBranch` |
-| `--no-update-last-pushed` | Skip updating `lastPush/<current-branch>` (overrides `gerrit.lastPushedBranch`) |
 | `--all` | Push the entire stack, ignoring stop patterns |
 | `--ignore-pattern REGEX` | Disable a specific stop pattern (repeatable) |
 | `--reviewers ACCOUNTS` | Comma-separated Gerrit reviewer accounts (repeatable; merged with `branch.<name>.gerritReviewers`, deduplicated) |
@@ -35,7 +33,7 @@ ger push [options] [REV]
 
 **`-i` (interactive reviewers)** — Only when stdin is a TTY. You are prompted for comma-separated reviewers (empty keeps branch and CLI defaults). Order after merge: branch `gerritReviewers`, then each `--reviewers` argument, then the interactive line (duplicates removed, first occurrence wins). A second prompt asks whether to save the merged reviewer list to `branch.<name>.gerritReviewers`. `-i` cannot be used with `-y`/`--yes` (use one or the other).
 
-**Last-pushed marker branch** — When enabled (`gerrit.lastPushedBranch`, default `true`), after `git push` exits successfully the tool runs `git branch -f lastPush/<name> <tip>` where `<name>` is the current branch (`git rev-parse --abbrev-ref HEAD`) and `<tip>` is the commit pushed (same SHA as in the printed refspec). This is a local convenience ref only; it is not sent to Gerrit. If updating that ref fails, a warning is printed and the command still exits with the push’s status code. Disable globally with `git config gerrit.lastPushedBranch false`, or pass `--no-update-last-pushed` for a single run. Use `--update-last-pushed` to force the update when the config is off.
+**Last-pushed marker branch** — When enabled (`gerrit.lastPushedBranch`, default `true`), after `git push` exits successfully the tool runs `git branch -f lastPush/<name> <tip>` where `<name>` is the current branch (`git rev-parse --abbrev-ref HEAD`) and `<tip>` is the commit pushed (same SHA as in the printed refspec). This is a local convenience ref only; it is not sent to Gerrit. If updating that ref fails, a warning is printed and the command still exits with the push’s status code. Disable it with `git config gerrit.lastPushedBranch false`.
 
 **Attribute preview** (`gerrit.pushShowAttributes`) — When enabled, for each commit in the push range that has a Change-Id, the tool batches Gerrit `change:` queries (same path as `ger log`) and appends a column to the “Updated commits” lines: `` `current` `` or `` `current` -> `new` `` when the proposed push would change reviewers on the refspec. Tokens are comma-separated: one `r=<account>` per reviewer (order matches Gerrit’s `reviewers` list for **current**; merged push order for **new**), then `wip` and `private` when set on the change. The push does not send `%wip`/`%private` in the refspec, so **proposed** wip/private always match the server for existing changes (only reviewer differences produce an arrow). New changes (no match in Gerrit) show `` `(none)` -> `r=…` `` when you add reviewers.
 

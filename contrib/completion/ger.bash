@@ -150,7 +150,7 @@ _ger_log() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --filter-attention --json --color --url --show-url --show-change-id -v --verbose --debug-log --follow-merges
+        __gwt_flags "$cur" -h --help --json --color --url --show-url --show-change-id -v --verbose --debug-log --follow-merges
         return
     fi
     case "$prev" in
@@ -168,7 +168,7 @@ _ger_push() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -i --branch --update-last-pushed --no-update-last-pushed --dry-run --no-rebase-check -y --yes --all --color --ignore-pattern --follow-merges --reviewers --reviewer-strategy --topic --wip --private -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help -i --branch --dry-run --no-rebase-check -y --yes --all --color --ignore-pattern --follow-merges --reviewers --reviewer-strategy --topic --wip --private -v --verbose --debug-log
         return
     fi
     case "$prev" in

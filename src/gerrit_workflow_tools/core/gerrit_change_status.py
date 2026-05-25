@@ -318,12 +318,6 @@ def _load_reviewers_from_fetcher(
     return reviewer_accounts_from_change_info(detail)
 
 
-def count_unresolved_via_comments(client: GerritClient, api_change_id: str) -> int:
-    """Fetch comments for one change and return unresolved count, logging and defaulting to 0 on errors."""
-
-    return count_unresolved_from_fetcher(client.get_comments, api_change_id)
-
-
 def count_unresolved_from_fetcher(
     fetch_comments: Callable[[str], dict[str, list[dict[str, Any]]]],
     api_change_id: str,

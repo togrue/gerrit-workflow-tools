@@ -4,7 +4,7 @@
 
 Compact, actionable overview of the local commit chain vs Gerrit. Answers: *What do I need to do next?*
 
-Shows the full commit range by default. Use `--filter-attention` to show only commits that require attention (CI failures, negative votes, unresolved comments, missing or non-matching Gerrit patch set, blocked by an earlier commit).
+Shows the full commit range by default, including commits that are ready, blocked, or already clean.
 
 Requires `gerrit.webUrl` in git config.
 
@@ -24,17 +24,14 @@ ger log [options] [REVSET]
 
 | Option | Description |
 |--------|-------------|
-| `--filter-attention` | Show only attention-required commits; prints how many non-attention commits were filtered out |
-| `--oneline` | One line per commit; detail lines inlined (default: `gerrit.logOneline`; use `--no-oneline` to force full rows) |
-| `--no-compact` | When `gerrit.logCompact` is on, show full status rows instead of minimal single-character columns |
 | `--url`, `--show-url` | Print each change’s Gerrit web URL (default: `gerrit.logShowUrl`) |
 | `--show-change-id` | Append Change-Id on each text line (default: `gerrit.logShowChangeId`) |
 | `--json` | Machine-readable JSON output |
 | `--color WHEN` | Colorize output: `always`, `auto`, or `never` |
-| `--debug-log` | Log git commands to stderr. Repeat for more detail (git subprocesses and API bodies). |
-| `-v`, `--verbose` | Reserved for richer command output in a future release (currently no effect). |
+| `--debug-log` | Log git commands to stderr. |
+| `-v`, `--verbose` | Use expanded output with indented detail lines and Gerrit URLs. |
 
-**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.logShowUrl`, `gerrit.logShowChangeId`, `gerrit.logOneline`, `gerrit.logCompact`. CLI flags override when present; `--no-oneline` and `--no-compact` defeat the oneline and compact defaults. See [Configuration.md](../Configuration.md#ger-log--gerritlog).
+**git config defaults** (boolean: `true` / `1` / `yes` / `on`): `gerrit.logShowUrl`, `gerrit.logShowChangeId`. CLI flags override when present. See [Configuration.md](../Configuration.md#ger-log--gerritlog).
 
 ---
 
@@ -90,21 +87,6 @@ When the first column is not `p`, **Verified** / **Code-Review** still reflect G
 | dim | Not on Gerrit (`-`) |
 
 Commit subjects are also highlighted in color mode when they match configured summary patterns: stop matches (`gerrit.stopPattern`) and warning matches (`gerrit.warningPattern`). If both patterns match the same text, stop highlighting wins.
-
-### Compact format (`gerrit.logCompact`)
-
-Extra column before comment flag: `+` submittable, `.` not, `-` not on Gerrit.
-
-```
-a1b2c3d p +1 +2 + .
-b2c3d4e p -1 +2 + .
-c3d4e5f p +1 +1 + c
-d4e5f6a n +1 +2 + .
-e5f6a7b o +1 +2 + .
-f6a7b8c - .  .  - .
-```
-
----
 
 ## Attention detection
 
