@@ -2,8 +2,8 @@
 
 The pure parsing/formatting logic lives in :mod:`push_input_line`. This module
 wires it into a prompt_toolkit ``PromptSession`` with a syntax-highlighting
-lexer, live validation, keyword/reviewer completion, and a persisted default
-buffer reflecting the last accepted line.
+lexer, live validation, keyword/reviewer completion, persisted push-options
+history, and Up/Down recall when completion is inactive.
 """
 
 from __future__ import annotations
@@ -13,9 +13,14 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import get_app
+from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.lexers import Lexer
 from prompt_toolkit.validation import ValidationError, Validator
 
@@ -139,26 +144,60 @@ class PushOptionsCompleter(Completer):
                 yield Completion(value, start_position=-len(raw_word), display_meta=meta)
 
 
-def _last_line_path() -> Path:
-    d = Path.home() / ".cache" / "ger"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "push_options_line_last"
+_HISTORY_LIMIT = 20
 
 
-def load_last_canonical() -> str:
-    """Return the last canonical line stored on disk, or empty string."""
-    p = _last_line_path()
+def _history_file() -> Path:
+    return Path.home() / ".cache" / "ger" / "push_options_history.txt"
+
+
+def load_push_options_history() -> list[str]:
+    """Return stored canonical lines, newest first."""
     try:
-        return p.read_text(encoding="utf-8").strip()
+        raw = _history_file().read_text(encoding="utf-8")
     except OSError:
-        return ""
+        return []
+    return [line for line in raw.splitlines() if line.strip()]
 
 
-def save_last_canonical(line: str) -> None:
-    """Persist ``line`` (already canonical) for the next prompt's default buffer."""
-    p = _last_line_path()
+def prepend_push_options_history(line: str) -> None:
+    """Prepend ``line`` to persisted history (dedupe, cap at :data:`_HISTORY_LIMIT`)."""
+    canonical = line.strip()
+    recent = [entry for entry in load_push_options_history() if entry != canonical]
+    updated = ([canonical, *recent] if canonical else recent)[:_HISTORY_LIMIT]
+    path = _history_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(OSError):
-        p.write_text(line, encoding="utf-8")
+        path.write_text("\n".join(updated) + ("\n" if updated else ""), encoding="utf-8")
+
+
+def should_navigate_push_options_history(buffer: Buffer) -> bool:
+    """True when Up/Down should walk push-options history instead of completion."""
+    if not buffer.document.is_cursor_at_the_end:
+        return False
+    complete_state = buffer.complete_state
+    return complete_state is None or not complete_state.completions
+
+
+@Condition
+def _push_options_history_navigation() -> bool:
+    try:
+        return should_navigate_push_options_history(get_app().current_buffer)
+    except (RuntimeError, AttributeError):
+        return False
+
+
+_PUSH_OPTIONS_HISTORY_BINDINGS = KeyBindings()
+
+
+@_PUSH_OPTIONS_HISTORY_BINDINGS.add("up", filter=_push_options_history_navigation)
+def _history_up(event):  # type: ignore[no-untyped-def]
+    event.current_buffer.history_backward()
+
+
+@_PUSH_OPTIONS_HISTORY_BINDINGS.add("down", filter=_push_options_history_navigation)
+def _history_down(event):  # type: ignore[no-untyped-def]
+    event.current_buffer.history_forward()
 
 
 def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> FormattedText | None:
@@ -202,7 +241,8 @@ def prompt_push_options_line(
     line is used. On accept, the canonical form of the parsed state is saved
     back to disk so the next prompt opens with the same state.
     """
-    initial = default if default is not None else load_last_canonical()
+    history = load_push_options_history()
+    initial = default if default is not None else (history[0] if history else "")
     seed_list = [s for s in reviewer_seeds if s]
     catalog = ReviewerCatalog.from_runtime(cwd=cwd, reviewer_seeds=seed_list, change_id_hint=change_id_hint)
     completion_candidates = catalog.completion_candidates()
@@ -213,10 +253,12 @@ def prompt_push_options_line(
         validate_while_typing=False,
         completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
+        history=InMemoryHistory(list(reversed(history))),
+        key_bindings=_PUSH_OPTIONS_HISTORY_BINDINGS,
         bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
     raw = session.prompt(default=initial)
     res = parse(raw)
     if res.valid_for_apply:
-        save_last_canonical(format_canonical(res.state))
+        prepend_push_options_history(format_canonical(res.state))
     return res
