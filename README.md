@@ -10,11 +10,11 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 
 ## You might want this if
 
-- You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`, `ger comments`).
+- You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`).
 - You want **branch-local Gerrit settings** (target branch, reviewers) and **push** commands that understand your stack (`ger branch`, `ger push`).
 - You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger sha` / `ger change-id`).
 
-**Documentation** (command reference, configuration, Gerrit HTTP setup): [docu/README.md](docu/README.md).
+**Documentation** (specification, commands, configuration): [docu/SPEC.md](docu/SPEC.md) · [docu/README.md](docu/README.md).
 
 ## Install
 

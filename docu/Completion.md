@@ -1,5 +1,7 @@
 # Bash completion
 
+> Spec: [spec/commands/bash-completion.md](spec/commands/bash-completion.md) · Index: [SPEC.md](SPEC.md)
+
 Bash tab-completes `ger` and its subcommands via a bundled `ger.bash` script; run `ger bash-completion` to print the `source` line, or `ger bash-completion --install` to append that line to `~/.bashrc` (and `--uninstall` to remove it).
 
 ## Quick setup

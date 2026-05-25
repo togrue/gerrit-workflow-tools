@@ -99,6 +99,7 @@ Version 1 must include a clear setup path for a new teammate.
 - **Bash completion:** `ger bash-completion install` — documented as a recommended step in the setup README
 - **Commit-msg hook:** Manual setup documented in the README until `ger hooks` is available (version 1.1)
 - **Configuration reference:** `docu/Configuration.md` must be accurate and linked from the setup README
+- **Development specification:** `docu/SPEC.md` (per-command specs under `docu/spec/commands/`) is the single source of truth for implemented behavior; keep aligned with code when shipping v1 items
 
 ---
 

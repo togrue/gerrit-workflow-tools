@@ -35,6 +35,16 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 |-----|--------|
 | `gerrit.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `gerrit.webUrl` and credentials). Default off when unset. |
 | `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. |
+| `gerrit.push.remotePolicy` | Before push: fetch/check that `HEAD` is linear on the remote Gerrit target tip. Disable per-invocation with `ger push --no-rebase-check`. |
+
+---
+
+## `ger rebase` — `gerrit.rebase*`
+
+| Key | Effect |
+|-----|--------|
+| `gerrit.rebaseOntoRemote` | Default for `ger rebase --onto-remote` (rebase onto `refs/remotes/<gerrit.remote>/<target>`). |
+| `gerrit.rebaseDropMergedEquivalent` | Default for `ger rebase --drop-merged-equivalent`. |
 
 ---
 
@@ -79,5 +89,5 @@ git config gerrit.logShowUrl true
 
 ## See also
 
-- [Documentation index](README.md) — command list and first-time setup
-- [`ger push`](commands/push.md), [`ger log`](commands/log.md) — command-specific options
+- [SPEC.md](SPEC.md) — specification index
+- [`ger push`](spec/commands/push.md), [`ger log`](spec/commands/log.md) — command specs
