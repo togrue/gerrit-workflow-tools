@@ -41,6 +41,13 @@ def test_prepend_push_options_history_caps(history_home: Path) -> None:
     assert loaded[0] == "r=user24"
 
 
+def test_in_memory_history_entries_skips_initial() -> None:
+    history = ["r=new", "r=mid", "r=old"]
+    assert pip._in_memory_history_entries(history, "r=new") == ["r=old", "r=mid"]
+    assert pip._in_memory_history_entries(history, "") == ["r=old", "r=mid", "r=new"]
+    assert pip._in_memory_history_entries(history, "r=other") == ["r=old", "r=mid", "r=new"]
+
+
 def test_should_navigate_requires_cursor_at_end() -> None:
     buffer = MagicMock()
     buffer.complete_state = None

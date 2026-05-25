@@ -171,6 +171,11 @@ def prepend_push_options_history(line: str) -> None:
         path.write_text("\n".join(updated) + ("\n" if updated else ""), encoding="utf-8")
 
 
+def _in_memory_history_entries(history: list[str], initial: str) -> list[str]:
+    """Oldest-first entries for ``InMemoryHistory``, omitting the pre-filled buffer line."""
+    return list(reversed([entry for entry in history if entry != initial]))
+
+
 def should_navigate_push_options_history(buffer: Buffer) -> bool:
     """True when Up/Down should walk push-options history instead of completion."""
     if not buffer.document.is_cursor_at_the_end:
@@ -253,7 +258,7 @@ def prompt_push_options_line(
         validate_while_typing=False,
         completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
-        history=InMemoryHistory(list(reversed(history))),
+        history=InMemoryHistory(_in_memory_history_entries(history, initial)),
         key_bindings=_PUSH_OPTIONS_HISTORY_BINDINGS,
         bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
