@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from gerrit_workflow_tools import (
     cli_bash_completion,
     cli_branch,
+    cli_cache,
     cli_changeid,
     cli_edit,
     cli_fetch_api,
@@ -93,6 +94,7 @@ def _parser_builders() -> dict[str, Callable[[], argparse.ArgumentParser]]:
     return {
         "bash-completion": cli_bash_completion._build_parser,
         "branch": cli_branch._build_parser,
+        "cache": cli_cache._build_parser,
         "change-id": cli_changeid._build_parser,
         "edit": cli_edit._build_parser_edit,
         "fetch-api": cli_fetch_api._build_parser,

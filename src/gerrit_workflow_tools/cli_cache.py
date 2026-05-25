@@ -10,16 +10,21 @@ from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run ``ger cache`` administration commands."""
-
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger cache``."""
     p = argparse.ArgumentParser(prog="ger cache", description="Inspect or clear the local Gerrit API cache.")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("info", help="Show cache path and row counts.")
     sub.add_parser("clear", help="Delete cached Gerrit API payloads for this Gerrit host.")
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log cache administration diagnostics to stderr.")
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run ``ger cache`` administration commands."""
+
+    args = _build_parser().parse_args(argv)
     cwd, _summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
     try:
