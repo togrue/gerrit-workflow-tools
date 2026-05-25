@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
-from tests.fixtures import configure_gerrit_target, make_repo_with_merged_side_branch
+from tests.fixtures import make_repo_with_merged_side_branch
 
 
 def _ref_exists(repo: Path, ref: str) -> bool:
@@ -86,7 +86,7 @@ def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
     # no configure_gerrit_target, no upstream → no push destination
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
-    assert "push destination" in err.lower() or "gerritTarget" in err.lower()
+    assert "push destination" in err.lower() or "upstream" in err.lower()
 
 
 def test_gpush_prompts_for_missing_upstream_and_aborts(
@@ -94,7 +94,6 @@ def test_gpush_prompts_for_missing_upstream_and_aborts(
 ) -> None:
     repo = stack_repo_unconfigured
     git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
-    set_branch_config(repo, "feature", gerrit_target="main")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
@@ -110,17 +109,17 @@ def test_gpush_sets_missing_upstream_then_continues(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = stack_repo_unconfigured
+    _add_self_origin_and_fetch(repo)
     git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
-    set_branch_config(repo, "feature", gerrit_target="main")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
-        lambda _cwd, _branch: "main",
+        lambda _cwd, _branch: "origin/main",
     )
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
-    assert "Upstream for 'feature' set to main." in err
-    assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo) == "main"
+    assert "Upstream for 'feature' set to origin/main." in err
+    assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo) == "origin/main"
 
 
 def test_gpush_vanilla_upstream_runs_plain_git_push(
@@ -209,7 +208,7 @@ def test_gpush_branch_flag_unknown_branch_errors(stack_repo: Path, monkeypatch: 
 def test_gpush_infers_gerrit_target_from_upstream(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No gerritTarget: upstream on gerrit.remote implies Gerrit push to refs/for/<branch>."""
+    """Upstream on gerrit.remote implies Gerrit push to refs/for/<branch>."""
     repo = stack_repo_unconfigured
     _add_self_origin_and_fetch(repo)
     git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
@@ -225,11 +224,11 @@ def test_gpush_infers_gerrit_target_from_upstream(
 def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """gerritTarget ``origin/main`` must push to ``refs/for/main``, not ``refs/for/origin/main``."""
+    """Upstream ``origin/main`` must push to ``refs/for/main``, not ``refs/for/origin/main``."""
     repo = stack_repo_unconfigured
-    main_sha = git_out("rev-parse", "main", cwd=repo)
-    git("update-ref", "refs/remotes/origin/main", main_sha, cwd=repo)
-    configure_gerrit_target(repo, "origin/main")
+    _add_self_origin_and_fetch(repo)
+    git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
+    clear_gerrit_git_config_cache()
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
@@ -952,7 +951,8 @@ def test_gpush_follow_merges_flag_lists_side_branch_commits(
 
 
 def _add_self_origin_and_fetch(repo: Path) -> None:
-    git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
+    if git("remote", "get-url", "origin", cwd=repo, check=False).returncode != 0:
+        git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
     git("fetch", "origin", cwd=repo)
 
 
@@ -1014,10 +1014,18 @@ def test_gpush_no_rebase_check_bypasses_error_policy(stack_repo: Path, monkeypat
 
 
 def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.core.git_run import GitError
+
+    def git_fetch_fail(*args, **kwargs):
+        if args and args[0] == "fetch":
+            raise GitError("git fetch origin failed: simulated fetch failure")
+        return git(*args, **kwargs)
+
+    monkeypatch.setattr(cli_push_mod, "git", git_fetch_fail)
     git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 0
+    assert code == 0, err
     assert "About to push commits:" in out
     assert "skipping remote rebase check" in err.lower()
 

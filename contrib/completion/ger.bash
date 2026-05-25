@@ -20,48 +20,6 @@ _ger_bash_completion() {
     fi
 }
 
-_ger_branch() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    local prev="${COMP_WORDS[COMP_CWORD-1]}"
-    if [ "${COMP_CWORD:-0}" -eq 2 ]; then
-        if [[ "$cur" == -* ]]; then
-            __gwt_flags "$cur" -h --help --color -v --verbose --debug-log
-        else
-            __gwt_flags "$cur" infer-upstream init set-reviewers set-target show
-        fi
-        return
-    fi
-    local sub="${COMP_WORDS[2]}"
-    case "$prev" in
-        --color)
-            __gwt_flags "$cur" always auto never
-            return
-            ;;
-    esac
-    if [[ "$cur" == -* ]]; then
-        case "$sub" in
-            infer-upstream)
-                __gwt_flags "$cur" -h --help -y --yes
-                ;;
-            init)
-                __gwt_flags "$cur" -h --help --target --reviewers
-                ;;
-            set-reviewers)
-                __gwt_flags "$cur" -h --help
-                ;;
-            set-target)
-                __gwt_flags "$cur" -h --help
-                ;;
-            show)
-                __gwt_flags "$cur" -h --help
-                ;;
-        esac
-        return
-    fi
-    case "$sub" in
-    esac
-}
-
 _ger_cache() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -249,13 +207,12 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion branch cache change-id changeid edit fetch-api fix log push rebase restack reword sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix log push rebase restack reword sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
     case "$sub" in
         bash-completion) _ger_bash_completion ;;
-        branch) _ger_branch ;;
         cache) _ger_cache ;;
         change-id|changeid) _ger_change_id ;;
         edit) _ger_edit ;;

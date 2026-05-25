@@ -19,7 +19,6 @@ def upstream_tracking_tip_and_display(cwd: Path | str | None, branch: str | None
     Return ``(upstream_tip_sha, display_name)`` for the branch's **upstream** only.
 
     The local stack is ``<sha>..HEAD`` (same *sha* as the first element here).
-    This does not consult ``branch.*.gerritTarget``;
     """
     b = branch or current_branch(cwd)
     upstream_sym = f"{b}@{{upstream}}" if branch else "@{upstream}"
@@ -29,9 +28,7 @@ def upstream_tracking_tip_and_display(cwd: Path | str | None, branch: str | None
             f"No upstream configured for branch {b!r}.\n"
             "Set an upstream, e.g.:\n"
             "  git branch --set-upstream-to=<remote>/<branch>\n"
-            "Or infer the nearest remote-tracking branch and set upstream:\n"
-            "  ger branch infer-upstream\n"
-            "Optional per-branch Gerrit destination overrides: see `ger branch --help`."
+            "Fetch from your Gerrit remote first if the tracking branch is missing."
         )
     display = upstream_name.stdout.strip()
     upstream_ref = git("rev-parse", "--verify", display, cwd=cwd, check=False)

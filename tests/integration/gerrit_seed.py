@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
+from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 
@@ -251,13 +251,11 @@ def configure_ger_git_repo(
     gerrit_secret: str,
     gerrit_remote: str = "origin",
     branch: str,
-    gerrit_target: str,
 ) -> None:
-    """Apply ``gerrit.*`` and branch gerritTarget; clear config cache."""
+    """Apply ``gerrit.*`` and branch upstream; clear config cache."""
     git("config", "gerrit.webUrl", web_base, cwd=repo)
     git("config", "gerrit.user", gerrit_user, cwd=repo)
     git("config", "gerrit.token", gerrit_secret, cwd=repo)
     git("config", "gerrit.remote", gerrit_remote, cwd=repo)
-    set_branch_config(repo, branch, gerrit_target=gerrit_target)
     git("branch", "--set-upstream-to", f"{gerrit_remote}/{branch}", branch, cwd=repo)
     clear_gerrit_git_config_cache()

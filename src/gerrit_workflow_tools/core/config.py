@@ -146,14 +146,13 @@ def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
     return names
 
 
-def _push_context_branch_rank(cwd: Path | str | None, branch: str) -> tuple[int, int, int, str]:
+def _push_context_branch_rank(cwd: Path | str | None, branch: str) -> tuple[int, int, str]:
     """Lower is better when choosing a branch for detached-HEAD push config."""
     from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream
 
     mode = ger_push_mode(cwd, branch)
     mode_rank = 0 if mode == "gerrit" else (1 if mode == "vanilla" else 2)
     return (
-        0 if branch_gerrit_target(cwd, branch) else 1,
         mode_rank,
         0 if branch_has_upstream(cwd, branch) else 1,
         branch,
@@ -179,16 +178,9 @@ def resolve_push_context_branch(cwd: Path | str | None) -> str | None:
 
     Uses the checked-out branch when present. During rebase, uses Git's recorded
     rebased branch. Otherwise on detached HEAD, picks a local branch that points at
-    ``HEAD`` (preferring ``gerritTarget``, then Gerrit upstream, then any upstream).
+    ``HEAD`` (preferring Gerrit upstream, then any upstream).
     """
     return resolve_working_branch(cwd)
-
-
-def branch_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Return ``branch.<name>.gerritTarget`` (optional override for Gerrit destination), if set."""
-    b = branch or current_branch(cwd)
-    key = f"branch.{b}.gerritTarget"
-    return _config_get(cwd, key)
 
 
 def branch_gerrit_reviewers(cwd: Path | str | None, branch: str | None = None) -> str | None:
@@ -252,17 +244,12 @@ def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -
 
 
 def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Gerrit destination for push/rebase.
+    """Gerrit destination for push/rebase from the branch's upstream.
 
-    Uses ``gerritTarget`` override, or upstream ref when its remote matches
-    :func:`gerrit_remote`.
-
-    Returns a value suitable for :func:`refs_for_push_branch_name` (e.g. ``main``, ``origin/main``).
-    Returns ``None`` when there is no override and no upstream on the Gerrit remote.
+    Returns upstream ref when its remote matches :func:`gerrit_remote`
+    (e.g. ``origin/main``), suitable for :func:`refs_for_push_branch_name`.
+    Returns ``None`` when there is no upstream on the Gerrit remote.
     """
-    override = branch_gerrit_target(cwd, branch)
-    if override:
-        return override
     parsed = resolve_upstream_parsed(cwd, branch)
     if not parsed:
         return None
@@ -278,8 +265,6 @@ def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal[
     ``gerrit`` uses ``refs/for/…``, ``vanilla`` uses plain ``git push``.
     Returns ``None`` when destination cannot be determined.
     """
-    if branch_gerrit_target(cwd, branch):
-        return "gerrit"
     parsed = resolve_upstream_parsed(cwd, branch)
     if not parsed:
         return None
@@ -491,19 +476,16 @@ def set_branch_config(
     cwd: Path | str | None,
     branch: str,
     *,
-    gerrit_target: str | None = None,
     gerrit_reviewers: str | None = None,
 ) -> None:
     """Write branch-scoped Gerrit settings via ``git config`` and clear the config cache."""
-    if gerrit_target is not None:
-        git("config", f"branch.{branch}.gerritTarget", gerrit_target, cwd=cwd)
     if gerrit_reviewers is not None:
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
     clear_gerrit_git_config_cache()
 
 
 def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -> list[str]:
-    """Build refs to try for ``ger rebase --onto-remote`` from ``branch.*.gerritTarget``.
+    """Build refs to try for ``ger rebase --onto-remote`` from the upstream target.
 
     Accepts a bare branch name (``dev`` → ``<remote>/dev``) or an existing remote-tracking
     form (``origin/dev``) without doubling the remote (``origin/origin/dev``).
@@ -525,8 +507,8 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     remote-tracking tip of the configured Gerrit target branch (e.g. ``origin/main``).
 
     Uses the same effective Gerrit destination as :func:`effective_gerrit_destination_branch`
-    (``gerritTarget`` override, or upstream when its remote is ``gerrit.remote``). There is no
-    fallback to ``<gerrit.remote>/main`` when neither is available.
+    (upstream when its remote is ``gerrit.remote``). There is no fallback to
+    ``<gerrit.remote>/main`` when upstream is unavailable.
     """
     b = branch or current_branch(cwd)
     remote_name = gerrit_remote(cwd)
@@ -535,10 +517,8 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         raise GitError(
             f"No Gerrit destination branch for `ger rebase --onto-remote` on branch {b!r}. "
             f"Set upstream to a branch on `{remote_name}` (gerrit.remote), "
-            "e.g. `ger branch infer-upstream` after `git fetch`, or "
-            f"`git branch --set-upstream-to={remote_name}/<branch>`. "
-            f"Fetch so `refs/remotes/{remote_name}/<branch>` exists. "
-            "Optional `gerritTarget` overrides: see `ger branch --help`."
+            f"e.g. `git branch --set-upstream-to={remote_name}/<branch>` after `git fetch`. "
+            f"Fetch so `refs/remotes/{remote_name}/<branch>` exists."
         )
 
     candidates = _remote_tracking_ref_candidates_from_target(remote_name, eff)

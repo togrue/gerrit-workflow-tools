@@ -92,7 +92,7 @@ def stack_repo_unconfigured(tmp_path: Path, _stack_repo_template: Path) -> Path:
 
 @pytest.fixture
 def stack_repo(tmp_path: Path, _stack_repo_template: Path) -> Path:
-    """Linear feature branch over main; third commit matches ^test!; gerritTarget=main."""
+    """Linear feature branch over main; third commit matches ^test!; upstream origin/main."""
     repo = _copy_git_repo(_stack_repo_template, tmp_path / "stack")
     configure_gerrit_target(repo, "main")
     return repo

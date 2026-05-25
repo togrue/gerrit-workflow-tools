@@ -47,8 +47,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--onto-remote",
         action="store_true",
         help=(
-            "Rebase the current branch onto the fetched remote-tracking tip of the configured "
-            "target (see branch.gerritTarget and gerrit.remote). Default: gerrit.rebaseOntoRemote."
+            "Rebase the current branch onto the fetched remote-tracking tip of the upstream "
+            "target on gerrit.remote. Default: gerrit.rebaseOntoRemote."
         ),
     )
     p.add_argument(

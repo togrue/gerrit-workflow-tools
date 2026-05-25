@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 
 from gerrit_workflow_tools import (
     cli_bash_completion,
-    cli_branch,
     cli_cache,
     cli_changeid,
     cli_edit,
@@ -22,7 +21,7 @@ from gerrit_workflow_tools import (
 )
 from gerrit_workflow_tools.cli_ger import _ALIASES, _COMMANDS
 
-_NO_REF_FALLBACK_COMMANDS = {"branch", "bash-completion", "fetch-api"}
+_NO_REF_FALLBACK_COMMANDS = {"bash-completion", "fetch-api"}
 
 
 @dataclass
@@ -93,7 +92,6 @@ def _spec_from_parser(parser: argparse.ArgumentParser, *, command_name: str) -> 
 def _parser_builders() -> dict[str, Callable[[], argparse.ArgumentParser]]:
     return {
         "bash-completion": cli_bash_completion._build_parser,
-        "branch": cli_branch._build_parser,
         "cache": cli_cache._build_parser,
         "change-id": cli_changeid._build_parser,
         "edit": cli_edit._build_parser_edit,

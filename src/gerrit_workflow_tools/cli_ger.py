@@ -15,7 +15,6 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "Print or install bash tab-completion for ger.",
         "gerrit_workflow_tools.cli_bash_completion:main",
     ),
-    "branch": ("Branch-local Gerrit target and reviewers.", "gerrit_workflow_tools.cli_branch:main"),
     "cache": ("Inspect or clear the local Gerrit API cache.", "gerrit_workflow_tools.cli_cache:main"),
     "change-id": ("Print or validate Change-Ids for commits or ranges.", "gerrit_workflow_tools.cli_changeid:main"),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", "gerrit_workflow_tools.cli_edit:main"),

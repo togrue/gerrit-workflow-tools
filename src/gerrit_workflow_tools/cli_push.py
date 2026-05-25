@@ -593,7 +593,7 @@ def _print_gpush_confirm_status_line(
     private: bool = False,
     strategy: ReviewerStrategy | None = None,
 ) -> None:
-    """One-line summary in ``ger branch show`` colors before the push confirmation prompt.
+    """One-line summary before the push confirmation prompt.
 
     *gerrit_target* is the branch segment inside ``refs/for/<branch>`` (from
     :func:`~gerrit_workflow_tools.core.config.refs_for_push_branch_name`).
@@ -1179,8 +1179,7 @@ def main(argv: list[str] | None = None) -> int:
         if mode is None:
             raise GitError(
                 "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
-                "try `ger branch infer-upstream` after `git fetch`). "
-                "Optional Gerrit destination overrides: see `ger branch --help`."
+                "run `git fetch` first if the tracking branch is missing)."
             )
         if args.i and mode == "vanilla":
             print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)

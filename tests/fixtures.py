@@ -177,12 +177,18 @@ def make_repo_with_merged_side_branch(path: Path) -> Path:
 
 
 def configure_gerrit_target(path: Path, target: str = "main") -> None:
-    from gerrit_workflow_tools.core.config import set_branch_config
+    """Set branch upstream on ``gerrit.remote`` for Gerrit push/rebase tests."""
     from gerrit_workflow_tools.core.git_run import git_out
 
     branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=path)
-    set_branch_config(path, branch, gerrit_target=target)
-    # Local stack is @{upstream}..HEAD; align tests that set gerritTarget with a real upstream.
-    p = git("rev-parse", "--verify", target, cwd=path, check=False)
-    if p.returncode == 0:
-        git("branch", "--set-upstream-to", target, branch, cwd=path, check=False)
+    remote = "origin"
+    if git("remote", "get-url", remote, cwd=path, check=False).returncode != 0:
+        git("remote", "add", remote, str(path.resolve()), cwd=path, check=False)
+    git("fetch", remote, cwd=path, check=False)
+    upstream = target if "/" in target else f"{remote}/{target}"
+    main_sha = git("rev-parse", "--verify", target, cwd=path, check=False)
+    if main_sha.returncode != 0 and "/" not in target:
+        main_sha = git("rev-parse", "--verify", "main", cwd=path, check=False)
+    if main_sha.returncode == 0:
+        git("update-ref", f"refs/remotes/{upstream}", main_sha.stdout.strip(), cwd=path, check=False)
+    git("branch", "--set-upstream-to", upstream, branch, cwd=path, check=False)

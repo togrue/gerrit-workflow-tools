@@ -100,7 +100,7 @@ def test_head_is_linear_on_remote_gerrit_target(stack_repo: Path) -> None:
 
 
 def test_resolve_rebase_onto_remote_ref_from_upstream_without_gerrit_target(tmp_path: Path) -> None:
-    """Upstream on origin/main resolves without branch.*.gerritTarget."""
+    """Upstream on origin/main resolves from branch upstream."""
     repo = tmp_path / "r"
     repo.mkdir()
     git("init", "-b", "main", cwd=repo)
@@ -118,18 +118,18 @@ def test_resolve_rebase_onto_remote_ref_from_upstream_without_gerrit_target(tmp_
     assert effective_gerrit_destination_branch(repo) == "origin/main"
 
 
-def test_resolve_rebase_onto_remote_ref_gerrit_target_origin_slash_branch(tmp_path: Path) -> None:
-    """gerritTarget origin/dev must not become origin/origin/dev."""
-    from gerrit_workflow_tools.core.config import set_branch_config
-
+def test_resolve_rebase_onto_remote_ref_from_upstream_origin_slash_branch(tmp_path: Path) -> None:
+    """Upstream origin/dev must not become origin/origin/dev."""
     repo = tmp_path / "r"
     repo.mkdir()
     git("init", "-b", "dev2", cwd=repo)
     (repo / "f").write_text("x", encoding="utf-8")
     git("add", "f", cwd=repo)
     git("commit", "-m", "init", cwd=repo)
+    git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
     git("update-ref", "refs/remotes/origin/dev", "HEAD", cwd=repo)
-    set_branch_config(repo, "dev2", gerrit_target="origin/dev")
+    git("config", "branch.dev2.remote", "origin", cwd=repo)
+    git("config", "branch.dev2.merge", "refs/heads/dev", cwd=repo)
     clear_gerrit_git_config_cache()
     assert resolve_rebase_onto_remote_ref(repo) == "origin/dev"
 

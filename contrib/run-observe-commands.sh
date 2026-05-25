@@ -66,8 +66,7 @@ run_case "ger help" ger --help
 run_case "ger bash-completion help" ger bash-completion --help
 run_case "ger bash-completion" ger bash-completion
 
-run_case "ger branch help" ger branch --help
-run_case "ger branch show" ger branch show
+run_case "ger cache help" ger cache --help
 
 run_case "ger change-id help" ger change-id --help
 run_case "ger change-id default" ger change-id

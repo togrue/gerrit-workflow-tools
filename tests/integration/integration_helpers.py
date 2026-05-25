@@ -249,7 +249,6 @@ def prepare_topic_repo(
         gerrit_user=ctx.dev_user,
         gerrit_secret=ctx.dev_password,
         branch=topic,
-        gerrit_target=topic,
     )
     return dest
 
@@ -289,6 +288,5 @@ def prepare_clone_at_branch(
         gerrit_user=ctx.dev_user,
         gerrit_secret=ctx.dev_password,
         branch=branch,
-        gerrit_target=branch,
     )
     return dest
