@@ -88,6 +88,18 @@ From [Version 1 Scope](../../Version%201%20Scope.md) — **not yet implemented:*
 | `-v` URLs for non-clean only | Partially: verbose expands layout; scope asks URLs only when status is non-clean |
 | `-<n>` limiter | Explicitly deferred |
 
+### Target line format (design)
+
+Planned trailing attention labels (instead of only `#` detail lines) for high-signal state only: `submittable`, `build failed`, `<n> unresolved comments`, `abandoned`. Missing votes as `v?` / `cr?`. Example:
+
+```
+99647be2 p v+1 cr-1     # test: cover case           # submittable
+83b790c4 p v-1 cr+1     # perf: tweak hot path       # build failed
+219bee67 p v?  cr-1 com # style: format block        # 2 unresolved comments
+```
+
+With `--url`, append the Gerrit web URL on the same line.
+
 ---
 
 ## See also

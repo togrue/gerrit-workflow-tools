@@ -91,9 +91,3 @@ Defined once in [architecture.md](architecture.md): **local stack**, **ready bou
 
 - **Config reference:** [Configuration.md](Configuration.md)
 - **First-time setup:** [architecture.md#onboarding](architecture.md#onboarding) and root [README.md](../README.md)
-
----
-
-## Legacy documentation
-
-Older files under [commands/](commands/) are **deprecated**; they redirect here. Do not edit them for new behavior — update `spec/commands/` instead.

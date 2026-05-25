@@ -68,7 +68,7 @@ ger show [options] [REV]
 
 ## V1 scope delta
 
-From [Version 1 Scope](../../Version%201%20Scope.md) and [ger-show-goal](../../commands/ger-show-goal.md):
+From [Version 1 Scope](../../Version%201%20Scope.md):
 
 | Item | Target behavior |
 |------|-----------------|
@@ -78,6 +78,34 @@ From [Version 1 Scope](../../Version%201%20Scope.md) and [ger-show-goal](../../c
 | Shared API | `comment chains` helper in core for reuse |
 | `--stat` / `-p` | **Deferred** |
 | `--next-attention-commit` | **Deferred** (align with `ger edit`) |
+
+### Comment chain example (target UX)
+
+Gerrit can mark a thread resolved while earlier replies stay visible. A chain is **resolved** when its **last** comment is resolved.
+
+Target output when clean:
+
+```
+Unresolved comments:
+  (no unresolved comments)
+```
+
+Target format for an open chain:
+
+```
+  /PATCHSET_LEVEL  https://gerrit.example/c/proj/+/15/comment/6d9478f2…/
+    alice (Alice)
+      Could you change the style?
+
+    alice (Alice) - (2 days ago)
+      Another comment
+
+  epsilon.txt:873  https://gerrit.example/c/proj/+/15/comment/c2d6bdcf…/
+    alice (Alice) - (10 minutes ago)
+      Comment with file location
+```
+
+**Current bug:** per-comment `unresolved: true` from the API is treated independently, so resolved chains still list earlier unresolved-looking replies.
 
 ---
 

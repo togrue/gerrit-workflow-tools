@@ -41,9 +41,3 @@ ger push
 ```
 
 Commit-msg hook: manual until `ger hooks` (v1.1) — see [Version 1 Scope.md](Version%201%20Scope.md).
-
----
-
-## Legacy `commands/` folder
-
-Files under [commands/](commands/) are **deprecated redirects**. Edit [spec/commands/](spec/commands/) instead.

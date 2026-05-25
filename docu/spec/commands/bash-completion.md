@@ -23,18 +23,11 @@ ger bash-completion [--install | --uninstall] [--rc-file PATH]
 | `--uninstall` | Remove marked block |
 | `--rc-file PATH` | Target rc file for install/uninstall |
 
-Script: `contrib/completion/ger.bash` (also installed with package).
-
----
-
-## V1 scope delta
-
-Documented in [Version 1 Scope](../../Version%201%20Scope.md) onboarding: recommended in setup README.
-
-Operational guide: [Completion.md](../../Completion.md).
+Install paths, manual setup, and regenerating `contrib/completion/ger.bash`: [Completion.md](../../Completion.md).
 
 ---
 
 ## See also
 
 - [SPEC.md](../../SPEC.md)
+- [Completion.md](../../Completion.md)
