@@ -15,6 +15,7 @@ from tests.cli_gerrit_mocks import (
     make_query_changes_impl,
     stack_rows_mb_to_head,
 )
+from tests.helpers import write_rebase_head
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -494,15 +495,6 @@ def _make_rebase_interceptor(captured: dict):
     return fake_run
 
 
-def _write_rebase_head(repo: Path, branch: str) -> None:
-    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
-    if not git_dir.is_absolute():
-        git_dir = repo / git_dir
-    state_dir = git_dir / "rebase-merge"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    (state_dir / "head-name").write_text(f"refs/heads/{branch}\n", encoding="utf-8")
-
-
 def test_cli_rebase_sets_sequence_editor_env(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
@@ -539,7 +531,7 @@ def test_cli_rebase_uses_rebase_branch_while_detached(stack_repo: Path, monkeypa
     (stack_repo / "rebased.txt").write_text("x\n", encoding="utf-8")
     git("add", "rebased.txt", cwd=stack_repo)
     git("commit", "-m", "rebased detached commit", cwd=stack_repo)
-    _write_rebase_head(stack_repo, "feature")
+    write_rebase_head(stack_repo, "feature")
     expected_base, _, _ = merge_base_with_target(stack_repo, "feature")
 
     captured: dict = {}
@@ -649,7 +641,6 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
     from gerrit_workflow_tools.core.gerrit_change_status import compute_merged_equivalent
-    from gerrit_workflow_tools.core.git_run import git_out
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)

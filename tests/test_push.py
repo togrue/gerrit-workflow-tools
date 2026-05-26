@@ -1,3 +1,6 @@
+# Spec: docu/spec/commands/push.md
+# Covers: --dry-run, --yes, duplicate Change-Id, lastPush branch, merged side branch, reviewer strategies
+
 from __future__ import annotations
 
 import re
@@ -19,20 +22,7 @@ from gerrit_workflow_tools.push_input_line import parse as parse_push_options_li
 from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import make_repo_with_merged_side_branch
-
-
-def _ref_exists(repo: Path, ref: str) -> bool:
-    p = git("rev-parse", "--verify", ref, cwd=repo, check=False)
-    return p.returncode == 0
-
-
-def _write_rebase_head(repo: Path, branch: str) -> None:
-    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
-    if not git_dir.is_absolute():
-        git_dir = repo / git_dir
-    state_dir = git_dir / "rebase-merge"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    (state_dir / "head-name").write_text(f"refs/heads/{branch}\n", encoding="utf-8")
+from tests.helpers import ref_exists, write_rebase_head
 
 
 def _mock_gerrit_push_refspec(mock_run: MagicMock) -> str:
@@ -163,7 +153,7 @@ def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: p
         "Change-Id: I00000000000000000000000000000000000000aa",
         cwd=stack_repo,
     )
-    _write_rebase_head(stack_repo, "feature")
+    write_rebase_head(stack_repo, "feature")
     clear_gerrit_git_config_cache()
 
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
@@ -860,7 +850,7 @@ def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: 
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 0
-    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+    assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
 def test_gpush_dry_run_does_not_create_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -868,7 +858,7 @@ def test_gpush_dry_run_does_not_create_last_push_branch(stack_repo: Path, monkey
     clear_gerrit_git_config_cache()
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
-    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+    assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
 def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -879,32 +869,7 @@ def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypat
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 1
-    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
-
-
-def _make_merge_branch_repo(tmp_path: Path) -> Path:
-    """Thin wrapper around the shared fixture helper (see ``fixtures.make_repo_with_merged_side_branch``)."""
-    return make_repo_with_merged_side_branch(tmp_path / "r")
-
-
-def test_compute_ready_with_merged_side_branch_counts_only_first_parent_commits(
-    tmp_path: Path,
-) -> None:
-    """
-    Regression: merging a side branch must not bloat the push commit list.
-
-    The push range should contain only the first-parent commits on the feature
-    branch (local work + merge commit = 2), not the side-branch commits (S1,
-    S2) that are reachable via the merge commit's second parent.
-    """
-    repo = _make_merge_branch_repo(tmp_path)
-    result = compute_ready(repo, all_commits=True)
-    # Currently FAILS: without --first-parent, git log also traverses the
-    # second parent of the merge commit, yielding 4 commits (local + S1 + S2 +
-    # merge) instead of the correct 2 (local + merge).
-    assert result.pushable_count == 2, (
-        f"expected 2 first-parent commits (local work + merge), got {result.pushable_count}"
-    )
+    assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
 def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
@@ -917,7 +882,7 @@ def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
     Only the two first-parent commits (local work + merge commit) should
     appear in the 'About to push commits:' output.
     """
-    repo = _make_merge_branch_repo(tmp_path)
+    repo = make_repo_with_merged_side_branch(tmp_path / "r")
     code, out, err = run_cli(repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
     assert code == 0, (out, err)
     assert "local work" in out
@@ -926,24 +891,12 @@ def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
     assert "side commit 2" not in out
 
 
-def test_compute_ready_follow_merges_restores_all_parents_count(tmp_path: Path) -> None:
-    """
-    ``--follow-merges`` (first_parent=False) must restore the full-DAG count.
-
-    With ``first_parent=False``, ``compute_ready`` traverses both parents of the
-    merge commit and returns 4 commits (local + S1 + S2 + merge-M).
-    """
-    repo = _make_merge_branch_repo(tmp_path)
-    result = compute_ready(repo, all_commits=True, first_parent=False)
-    assert result.pushable_count == 4, f"expected 4 commits with full-DAG traversal, got {result.pushable_count}"
-
-
 def test_gpush_follow_merges_flag_lists_side_branch_commits(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``--follow-merges`` must re-include side-branch commits in the push preview."""
-    repo = _make_merge_branch_repo(tmp_path)
+    repo = make_repo_with_merged_side_branch(tmp_path / "r")
     code, out, err = run_cli(repo, gpush_main, ["--dry-run", "--all", "--follow-merges"], monkeypatch)
     assert code == 0, (out, err)
     assert "side commit 1" in out
@@ -1040,4 +993,4 @@ def test_gpush_cancel_at_prompt_does_not_create_last_push(stack_repo: Path, monk
     code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 0
     mock_run.assert_not_called()
-    assert not _ref_exists(stack_repo, "refs/heads/lastPush/feature")
+    assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")

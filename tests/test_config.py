@@ -16,15 +16,7 @@ from gerrit_workflow_tools.core.config import (
     warning_patterns,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
-
-
-def _write_rebase_head(repo: Path, state_dir: str, branch: str) -> None:
-    git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
-    if not git_dir.is_absolute():
-        git_dir = repo / git_dir
-    path = git_dir / state_dir
-    path.mkdir(parents=True, exist_ok=True)
-    (path / "head-name").write_text(f"refs/heads/{branch}\n", encoding="utf-8")
+from tests.helpers import write_rebase_head
 
 
 def test_warning_patterns_defaults(stack_repo: Path) -> None:
@@ -50,14 +42,14 @@ def test_rebase_defaults(stack_repo: Path) -> None:
 
 
 def test_rebase_in_progress_branch_reads_git_rebase_state(stack_repo: Path) -> None:
-    _write_rebase_head(stack_repo, "rebase-merge", "feature")
+    write_rebase_head(stack_repo, "feature", state_dir="rebase-merge")
     assert rebase_in_progress_branch(stack_repo) == "feature"
 
     git_dir = Path(git_out("rev-parse", "--git-dir", cwd=stack_repo))
     if not git_dir.is_absolute():
         git_dir = stack_repo / git_dir
     shutil.rmtree(git_dir / "rebase-merge")
-    _write_rebase_head(stack_repo, "rebase-apply", "apply-branch")
+    write_rebase_head(stack_repo, "apply-branch", state_dir="rebase-apply")
     assert rebase_in_progress_branch(stack_repo) == "apply-branch"
 
 
@@ -68,7 +60,7 @@ def test_resolve_working_branch_prefers_checked_out_branch(stack_repo: Path) -> 
 def test_resolve_working_branch_prefers_rebase_branch_over_points_at_head(stack_repo: Path) -> None:
     git("branch", "rebasing", "HEAD~1", cwd=stack_repo)
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
-    _write_rebase_head(stack_repo, "rebase-merge", "rebasing")
+    write_rebase_head(stack_repo, "rebasing", state_dir="rebase-merge")
 
     assert resolve_working_branch(stack_repo) == "rebasing"
 
