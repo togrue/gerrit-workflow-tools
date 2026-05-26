@@ -13,7 +13,6 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     init_cli_runtime,
 )
-from gerrit_workflow_tools.cli_log import _extra_detail_lines, _primary_line
 from gerrit_workflow_tools.cli_style import (
     ANSI_CYAN,
     ANSI_DIM,
@@ -30,6 +29,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.render.commit_row import extra_detail_lines, primary_line
 
 logger = logging.getLogger(__name__)
 
@@ -193,9 +193,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     print()
     if commit.gerrit_url:
         print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
-    for d in _extra_detail_lines(commit):
+    for d in extra_detail_lines(commit):
         print(f"{ind}{d}")
-    print(f"{ind}{_primary_line(commit, summary_highlighter=summary_highlighter)}")
+    print(f"{ind}{primary_line(commit, summary_highlighter=summary_highlighter)}")
 
     if unresolved_rows:
         print()

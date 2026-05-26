@@ -20,16 +20,10 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
-    ANSI_DIM_GRAY,
     ANSI_GREEN,
-    ANSI_LIGHT_GREEN,
     ANSI_RED,
-    ANSI_RESET,
-    ANSI_STRIKE,
     ANSI_YELLOW,
-    color_short_sha,
     color_text,
-    is_color_enabled,
     visible_len,
 )
 from gerrit_workflow_tools.core.config import current_branch, log_defaults, resolve_working_branch
@@ -43,25 +37,17 @@ from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.render.commit_row import (
+    attention_column,
+    continuation_indent,
+    extra_detail_lines,
+    oneline_body,
+    oneline_line,
+)
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
 _UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
-
-# Fixed width for the abbreviated SHA so status columns line up across commits.
-_STATUS_SHA_COL_WIDTH = 8
-
-
-def _status_sha_column(short_sha: str) -> str:
-    """Left-justify short SHA for a stable column (typical git abbrev is 7 characters)."""
-    return short_sha.ljust(_STATUS_SHA_COL_WIDTH)
-
-
-def _fmt_summary_strike(summary: str) -> str:
-    """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
-    if is_color_enabled():
-        return f"{ANSI_STRIKE}{summary}{ANSI_RESET}"
-    return "".join(f"{c}\u0336" for c in summary)
 
 
 def load_annotated_commits(
@@ -80,218 +66,6 @@ def load_annotated_commits(
     assert commits is not None
     annotate_attention(commits)
     return commits, 0
-
-
-# ---------------------------------------------------------------------------
-# Rendering helpers
-# ---------------------------------------------------------------------------
-
-
-def _fmt_patchset_column(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
-    """Single-letter column: current patch set / local ahead / outdated / not on Gerrit."""
-    if commit.abandoned:
-        return color_text("a", ANSI_DIM)
-    status = commit.patchset_status
-    if status == "merged-same":
-        return color_text("m", ANSI_GREEN)
-    if status == "merged-drift":
-        return color_text("!", ANSI_RED)
-    if status == "merged-unknown":
-        return color_text("?", ANSI_YELLOW)
-    if status == "active":
-        return color_text("p", ANSI_GREEN)
-    if status == "newer":
-        return color_text("n", ANSI_YELLOW)
-    if status == "outdated":
-        return color_text("o", ANSI_RED)
-    return color_text("-", ANSI_DIM)
-
-
-def _fmt_verified(v: int | None) -> str:
-    if v is None:
-        return color_text("v? ", ANSI_DIM)
-    if v >= 1:
-        return color_text("v+1", ANSI_GREEN)
-    if v <= -1:
-        return color_text("v-1", ANSI_RED)
-    return color_text("v0 ", ANSI_DIM)
-
-
-def _fmt_code_review(cr: int | None) -> str:
-    if cr is None:
-        return color_text("cr? ", ANSI_DIM)
-    if cr >= 2:
-        return color_text("cr+2", ANSI_GREEN)
-    if cr == 1:
-        return color_text("cr+1", ANSI_LIGHT_GREEN)
-    if cr == -1:
-        return color_text("cr-1", ANSI_YELLOW)
-    if cr <= -2:
-        return color_text("cr-2", ANSI_RED)
-    return color_text("cr0 ", ANSI_DIM)
-
-
-def _fmt_comments(count: int) -> str:
-    if count > 0:
-        return color_text("com", ANSI_YELLOW)
-    return color_text("   ", ANSI_DIM)
-
-
-def _primary_line_prefix(commit: LogCommit) -> str:
-    """Text before the subject on the primary line (through ``  # ``), same as in :func:`_primary_line`."""
-    sha = color_short_sha(_status_sha_column(commit.short_sha))
-    push = _fmt_patchset_column(commit)
-    verified = _fmt_verified(commit.verified)
-    cr = _fmt_code_review(commit.code_review)
-    comments = _fmt_comments(commit.comments_unresolved)
-    return f"{sha} {push} {verified} {cr} {comments} # "
-
-
-def _continuation_indent(commit: LogCommit) -> int:
-    """Column where the subject starts; continuation lines align using :func:`visible_len` on the prefix."""
-    return visible_len(_primary_line_prefix(commit))
-
-
-def _extra_detail_lines(commit: LogCommit) -> list[str]:
-    """Indented detail lines only where they add information not already on the oneline row.
-
-    Attention tokens (``# build failed``, unresolved comment counts, etc.) stay on the
-    oneline introduction via :func:`_oneline_line`. Here we add structured CI failure
-    names (room for per-check URLs later) and avoid repeating comment counts.
-    """
-    failures = commit.ci_failures
-    if not failures:
-        return []
-    if len(failures) == 1:
-        return [color_text(f"# failed: {failures[0]}", ANSI_RED)]
-    lines: list[str] = [color_text("# failed checks:", ANSI_RED)]
-    for name in failures:
-        lines.append(color_text(f"  · {name}", ANSI_RED))
-    return lines
-
-
-def _fmt_change_id_suffix(change_id: str | None) -> str:
-    if not change_id:
-        return ""
-    disp = change_id if len(change_id) <= 14 else change_id[:12] + "…"
-    return color_text(f"  {disp}", ANSI_DIM)
-
-
-def _primary_line(
-    commit: LogCommit,
-    *,
-    summary_highlighter: SummaryHighlighter | None = None,
-    show_change_id: bool = False,
-) -> str:
-    summ = _fmt_summary_strike(commit.summary) if commit.abandoned else commit.summary
-    if summary_highlighter is not None and not commit.abandoned:
-        summ = summary_highlighter.highlight(summ)
-    line = f"{_primary_line_prefix(commit)}{summ}"
-    if show_change_id:
-        line += _fmt_change_id_suffix(commit.change_id)
-    return line
-
-
-def _attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
-    if commit.abandoned:
-        return [("abandoned", ANSI_RED)]
-    if commit.patchset_status == "merged-drift":
-        return [("merged drift", ANSI_RED)]
-    if commit.patchset_status == "merged-unknown":
-        return [("merged (equiv. unknown)", ANSI_YELLOW)]
-    if commit.patchset_status == "merged-same":
-        return []
-
-    tokens: list[tuple[str, str]] = []
-    if commit.ci_failures or (commit.verified is not None and commit.verified <= -1):
-        tokens.append(("build failed", ANSI_RED))
-    if commit.comments_unresolved > 0:
-        noun = "comment" if commit.comments_unresolved == 1 else "comments"
-        tokens.append((f"{commit.comments_unresolved} unresolved {noun}", ANSI_YELLOW))
-    if "no-reviewers" in commit.attention_reasons:
-        tokens.append(("no reviewers", ANSI_DIM_GRAY))
-    if commit.submittable and not tokens:
-        tokens.append(("submittable", ANSI_GREEN))
-    return tokens
-
-
-def _attention_suffix(commit: LogCommit) -> str:
-    tokens = _attention_tokens(commit)
-    if not tokens:
-        return ""
-
-    rendered: list[str] = [color_text("# ", ANSI_DIM)]
-    for idx, (text, code) in enumerate(tokens):
-        if idx:
-            rendered.append(color_text(", ", ANSI_DIM))
-        rendered.append(color_text(text, code))
-    return "".join(rendered)
-
-
-def _attention_column(
-    commits: list[LogCommit],
-    *,
-    summary_highlighter: SummaryHighlighter | None = None,
-    show_change_id: bool = False,
-) -> int:
-    widths = [
-        visible_len(
-            _primary_line(
-                commit,
-                summary_highlighter=summary_highlighter,
-                show_change_id=show_change_id,
-            )
-        )
-        for commit in commits
-        if _attention_tokens(commit)
-    ]
-    if not widths:
-        return 0
-    return max(widths) + 2
-
-
-def _oneline_body(
-    commit: LogCommit,
-    *,
-    summary_highlighter: SummaryHighlighter | None = None,
-    show_change_id: bool = False,
-    attention_column: int = 0,
-) -> str:
-    """Oneline text through attention suffix; excludes Gerrit URL."""
-    base = _primary_line(
-        commit,
-        summary_highlighter=summary_highlighter,
-        show_change_id=show_change_id,
-    )
-    attention = _attention_suffix(commit)
-    if attention:
-        gap = max(2, attention_column - visible_len(base)) if attention_column else 2
-        base = f"{base}{' ' * gap}{attention}"
-    return base
-
-
-def _oneline_line(  # pylint: disable=too-many-arguments
-    commit: LogCommit,
-    *,
-    summary_highlighter: SummaryHighlighter | None = None,
-    include_url: bool,
-    show_change_id: bool = False,
-    attention_column: int = 0,
-    url_start_visible: int | None = None,
-) -> str:
-    body = _oneline_body(
-        commit,
-        summary_highlighter=summary_highlighter,
-        show_change_id=show_change_id,
-        attention_column=attention_column,
-    )
-    if include_url and commit.gerrit_url:
-        if url_start_visible is not None:
-            pad = url_start_visible - visible_len(body)
-            pad = max(pad, 2)
-            return f"{body}{' ' * pad}{color_text(commit.gerrit_url, ANSI_DIM)}"
-        return f"{body}  {color_text(commit.gerrit_url, ANSI_DIM)}"
-    return body
 
 
 # ---------------------------------------------------------------------------
@@ -479,18 +253,18 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     verbose: bool,
     summary_highlighter: SummaryHighlighter | None,
     show_change_id: bool,
-    attention_column: int,
+    attn_col: int,
 ) -> int | None:
     """Compute visible column where URLs should start for compact one-line output."""
     if not show_url or verbose:
         return None
     widths = [
         visible_len(
-            _oneline_body(
+            oneline_body(
                 c,
                 summary_highlighter=summary_highlighter,
                 show_change_id=show_change_id,
-                attention_column=attention_column,
+                attention_col=attn_col,
             )
         )
         for c in visible
@@ -510,7 +284,7 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     summary_highlighter: SummaryHighlighter | None,
 ) -> None:
     """Render text view for ``ger log``."""
-    attention_column = _attention_column(
+    attn_col = attention_column(
         visible,
         summary_highlighter=summary_highlighter,
         show_change_id=show_change_id,
@@ -521,32 +295,32 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
         verbose=verbose,
         summary_highlighter=summary_highlighter,
         show_change_id=show_change_id,
-        attention_column=attention_column,
+        attn_col=attn_col,
     )
 
     for commit in visible:
         if verbose:
-            ind = " " * _continuation_indent(commit)
-            intro = _oneline_line(
+            ind = " " * continuation_indent(commit)
+            intro = oneline_line(
                 commit,
                 summary_highlighter=summary_highlighter,
                 include_url=False,
                 show_change_id=show_change_id,
-                attention_column=attention_column,
+                attention_col=attn_col,
             )
             print(intro)
             if show_url and commit.gerrit_url:
                 print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
-            for d in _extra_detail_lines(commit):
+            for d in extra_detail_lines(commit):
                 print(f"{ind}{d}")
         else:
             print(
-                _oneline_line(
+                oneline_line(
                     commit,
                     summary_highlighter=summary_highlighter,
                     include_url=show_url,
                     show_change_id=show_change_id,
-                    attention_column=attention_column,
+                    attention_col=attn_col,
                     url_start_visible=url_start_visible,
                 )
             )

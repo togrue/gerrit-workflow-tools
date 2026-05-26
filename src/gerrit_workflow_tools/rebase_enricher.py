@@ -21,6 +21,21 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import parse_change_id
+from gerrit_workflow_tools.render.status_fmt import (
+    attention_text as _attention_text,
+)
+from gerrit_workflow_tools.render.status_fmt import (
+    code_review_token as _fmt_cr,
+)
+from gerrit_workflow_tools.render.status_fmt import (
+    comments_token as _fmt_comments,
+)
+from gerrit_workflow_tools.render.status_fmt import (
+    patchset_token as _fmt_patchset,
+)
+from gerrit_workflow_tools.render.status_fmt import (
+    verified_token as _fmt_verified,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,87 +48,6 @@ _SUBJECT_WIDTH = 50
 
 # Record separator used in git --format strings (ASCII RS, same as stack.py).
 _RS = "\x1e"
-
-
-# ---------------------------------------------------------------------------
-# Plain-text formatting helpers (no ANSI — this is an editable file)
-# ---------------------------------------------------------------------------
-
-
-def _fmt_patchset(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
-    if commit.abandoned:
-        return "a"
-    status = commit.patchset_status
-    if status == "merged-same":
-        return "m"
-    if status == "merged-drift":
-        return "!"
-    if status == "merged-unknown":
-        return "?"
-    if status == "active":
-        return "p"
-    if status == "newer":
-        return "n"
-    if status == "outdated":
-        return "o"
-    return "-"
-
-
-def _fmt_verified(v: int | None) -> str:
-    """Three-char verified label: ``v+1``, ``v-1``, ``v0 ``, ``v? ``."""
-    if v is None:
-        return "v? "
-    if v >= 1:
-        return "v+1"
-    if v <= -1:
-        return "v-1"
-    return "v0 "
-
-
-def _fmt_cr(cr: int | None) -> str:
-    """Four-char code-review label: ``cr+2``, ``cr+1``, ``cr0 ``, ``cr-1``, ``cr-2``, ``cr? ``."""
-    if cr is None:
-        return "cr? "
-    if cr >= 2:
-        return "cr+2"
-    if cr == 1:
-        return "cr+1"
-    if cr == -1:
-        return "cr-1"
-    if cr <= -2:
-        return "cr-2"
-    return "cr0 "
-
-
-def _fmt_comments(count: int) -> str:
-    """Three-char comments indicator: ``com`` or blank."""
-    return "com" if count > 0 else "   "
-
-
-def _attention_text(commit: LogCommit) -> str:  # pylint: disable=too-many-return-statements
-    """Short plain-text annotation for the trailing ``# …`` column, or empty string."""
-    if commit.abandoned:
-        return "abandoned"
-    if not commit.pushed:
-        return "not-pushed"
-    if commit.patchset_status == "merged-same":
-        return ""
-    if commit.patchset_status == "merged-drift":
-        return "merged drift"
-    if commit.patchset_status == "merged-unknown":
-        return "merged (equiv. unknown)"
-    parts: list[str] = []
-    if commit.ci_failures:
-        parts.append(f"CI failed: {commit.ci_failures[0]}")
-    elif commit.verified is not None and commit.verified <= -1:
-        parts.append("build failed")
-    if commit.comments_unresolved > 0:
-        n = commit.comments_unresolved
-        noun = "comment" if n == 1 else "comments"
-        parts.append(f"{n} unresolved {noun}")
-    if not parts and commit.submittable:
-        return "submittable"
-    return ", ".join(parts)
 
 
 def _enriched_subject(commit: LogCommit) -> str:

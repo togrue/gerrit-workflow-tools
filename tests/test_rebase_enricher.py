@@ -55,34 +55,34 @@ def _patch_gerrit(details: dict, *, web_base: str = "https://g.example"):
 
 
 def test_fmt_verified_all_variants():
-    from gerrit_workflow_tools.rebase_enricher import _fmt_verified
+    from gerrit_workflow_tools.render.status_fmt import verified_token
 
-    assert _fmt_verified(1) == "v+1"
-    assert _fmt_verified(2) == "v+1"
-    assert _fmt_verified(-1) == "v-1"
-    assert _fmt_verified(-2) == "v-1"
-    assert _fmt_verified(0) == "v0 "
-    assert _fmt_verified(None) == "v? "
-    assert len(_fmt_verified(1)) == 3
-    assert len(_fmt_verified(None)) == 3
+    assert verified_token(1) == "v+1"
+    assert verified_token(2) == "v+1"
+    assert verified_token(-1) == "v-1"
+    assert verified_token(-2) == "v-1"
+    assert verified_token(0) == "v0 "
+    assert verified_token(None) == "v? "
+    assert len(verified_token(1)) == 3
+    assert len(verified_token(None)) == 3
 
 
 def test_fmt_cr_all_variants():
-    from gerrit_workflow_tools.rebase_enricher import _fmt_cr
+    from gerrit_workflow_tools.render.status_fmt import code_review_token
 
-    assert _fmt_cr(2) == "cr+2"
-    assert _fmt_cr(1) == "cr+1"
-    assert _fmt_cr(0) == "cr0 "
-    assert _fmt_cr(-1) == "cr-1"
-    assert _fmt_cr(-2) == "cr-2"
-    assert _fmt_cr(None) == "cr? "
+    assert code_review_token(2) == "cr+2"
+    assert code_review_token(1) == "cr+1"
+    assert code_review_token(0) == "cr0 "
+    assert code_review_token(-1) == "cr-1"
+    assert code_review_token(-2) == "cr-2"
+    assert code_review_token(None) == "cr? "
     for v in (2, 1, 0, -1, -2, None):
-        assert len(_fmt_cr(v)) == 4
+        assert len(code_review_token(v)) == 4
 
 
 def test_attention_text_variants():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.rebase_enricher import _attention_text
+    from gerrit_workflow_tools.render.status_fmt import attention_text
 
     def _commit(**kw) -> LogCommit:
         defaults: dict = {
@@ -101,15 +101,15 @@ def test_attention_text_variants():
         defaults.update(kw)
         return LogCommit(**defaults)
 
-    assert _attention_text(_commit(abandoned=True)) == "abandoned"
-    assert _attention_text(_commit(pushed=False, patchset_status="absent")) == "not-pushed"
-    assert _attention_text(_commit(submittable=True)) == "submittable"
-    assert _attention_text(_commit(verified=-1)) == "build failed"
-    assert _attention_text(_commit(ci_failures=["Lint"])) == "CI failed: Lint"
-    assert "2 unresolved comments" in _attention_text(_commit(comments_unresolved=2))
-    assert "1 unresolved comment" in _attention_text(_commit(comments_unresolved=1))
+    assert attention_text(_commit(abandoned=True)) == "abandoned"
+    assert attention_text(_commit(pushed=False, patchset_status="absent")) == "not-pushed"
+    assert attention_text(_commit(submittable=True)) == "submittable"
+    assert attention_text(_commit(verified=-1)) == "build failed"
+    assert attention_text(_commit(ci_failures=["Lint"])) == "CI failed: Lint"
+    assert "2 unresolved comments" in attention_text(_commit(comments_unresolved=2))
+    assert "1 unresolved comment" in attention_text(_commit(comments_unresolved=1))
     # When there are issues, submittable is suppressed
-    result = _attention_text(_commit(verified=-1, comments_unresolved=1))
+    result = attention_text(_commit(verified=-1, comments_unresolved=1))
     assert "build failed" in result
     assert "unresolved" in result
 
