@@ -36,15 +36,16 @@ def _make_todo(rows: list[Commit] | list[tuple[str, str, str, str]]) -> str:
 
 def _patch_gerrit(details: dict, *, web_base: str = "https://g.example"):
     """Context manager that patches gerrit_web_url, resolve_gerrit_web_base, and GerritClient
-    on the rebase_enricher module with mock data."""
+    so that GerritService.from_cwd() returns a service backed by mock data."""
     mock_client = MagicMock()
     mock_client.query_changes.side_effect = make_query_changes_impl(details)
     mock_client.get_comments.return_value = {}
+    mock_client.web_base = web_base
 
     return (
         patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=web_base),
-        patch("gerrit_workflow_tools.rebase_enricher.resolve_gerrit_web_base", return_value=web_base),
-        patch("gerrit_workflow_tools.rebase_enricher.GerritClient", return_value=mock_client),
+        patch("gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base", return_value=web_base),
+        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", return_value=mock_client),
     )
 
 
@@ -312,8 +313,8 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
 
     with (
         patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value="https://g.example"),
-        patch("gerrit_workflow_tools.rebase_enricher.resolve_gerrit_web_base", return_value="https://g.example"),
-        patch("gerrit_workflow_tools.rebase_enricher.GerritClient", return_value=broken_client),
+        patch("gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base", return_value="https://g.example"),
+        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", return_value=broken_client),
     ):
         result = _enrich_todo(text, stack_repo)
 

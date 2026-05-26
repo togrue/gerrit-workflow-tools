@@ -33,14 +33,13 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 from gerrit_workflow_tools.core.config import current_branch, log_defaults, resolve_working_branch
-from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
     LogCommit,
     annotate_attention,
 )
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
@@ -51,13 +50,6 @@ _UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
 
 # Fixed width for the abbreviated SHA so status columns line up across commits.
 _STATUS_SHA_COL_WIDTH = 8
-
-
-def _service_from_cwd(cwd: Path) -> GerritService:
-    web_base = resolve_gerrit_web_base(cwd)
-    client = GerritClient(web_base, cwd=str(cwd))
-    client.web_base = web_base
-    return GerritService(client, GerritCache.for_web_base(web_base))
 
 
 def _status_sha_column(short_sha: str) -> str:
@@ -467,7 +459,7 @@ def _fetch_enriched_commits(
 ) -> tuple[list[LogCommit] | None, int | None]:
     """Fetch Gerrit-enriched commit status list, or (None, exit_code) on error."""
     try:
-        service = _service_from_cwd(cwd)
+        service = GerritService.from_cwd(cwd)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return None, 3

@@ -160,9 +160,19 @@ def patch_gerrit_client_for_queries(
     inst.add_reviewer.return_value = {}
     inst.delete_reviewer.return_value = None
     inst.get_comments.return_value = {}
+    inst.web_base = web_base
+
     with (
-        patch(f"{module}.resolve_gerrit_web_base", return_value=web_base),
-        patch(f"{module}.GerritClient", return_value=inst),
+        patch(f"{module}.resolve_gerrit_web_base", return_value=web_base, create=True),
+        patch(f"{module}.GerritClient", return_value=inst, create=True),
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
+            return_value=web_base,
+        ),
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.GerritClient",
+            return_value=inst,
+        ),
     ):
         yield inst
 

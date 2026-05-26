@@ -11,7 +11,6 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.config import gerrit_web_url
-from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
@@ -19,18 +18,11 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     commit_blocks_chain_for_submittability,
     determine_attention,
 )
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import parse_change_id
 
 logger = logging.getLogger(__name__)
-
-
-def _service_from_cwd(cwd: Path) -> GerritService:
-    web_base = resolve_gerrit_web_base(cwd)
-    client = GerritClient(web_base, cwd=str(cwd))
-    client.web_base = web_base
-    return GerritService(client, GerritCache.for_web_base(web_base))
 
 
 # Actions that take a commit SHA as their second token.
@@ -282,7 +274,7 @@ def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branc
     if not commit_inputs:
         return text
 
-    service = _service_from_cwd(cwd)
+    service = GerritService.from_cwd(cwd)
     commits = service.fetch_gerrit_data(commit_inputs, cwd=cwd)
 
     # Annotate attention (chain-blocked aware, oldest-first).

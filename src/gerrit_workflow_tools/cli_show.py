@@ -21,18 +21,13 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
 )
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
-from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     collect_unresolved_comments,
     determine_attention,
     gerrit_inline_comment_url,
 )
-from gerrit_workflow_tools.core.gerrit_client import (
-    GerritApiError,
-    GerritClient,
-    resolve_gerrit_web_base,
-)
+from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 
@@ -40,13 +35,6 @@ logger = logging.getLogger(__name__)
 
 _EXIT_ATTENTION = 1
 _EXIT_ERROR = 2
-
-
-def _service_from_cwd(cwd) -> GerritService:
-    web_base = resolve_gerrit_web_base(cwd)
-    client = GerritClient(web_base, cwd=str(cwd))
-    client.web_base = web_base
-    return GerritService(client, GerritCache.for_web_base(web_base))
 
 
 def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
@@ -117,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         tail_n = gshow_comment_tail_lines(cwd)
 
     try:
-        service = _service_from_cwd(cwd)
+        service = GerritService.from_cwd(cwd)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR
