@@ -1,3 +1,6 @@
+# Spec: docu/spec/commands/sha-change-id.md
+# Covers: change-id lookup, duplicate detection, --fix, malformed footer
+
 from __future__ import annotations
 
 import io

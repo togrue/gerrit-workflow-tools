@@ -1,3 +1,6 @@
+# Spec: docu/spec/commands/log.md
+# Covers: --json, --verbose, --color, warning/stop highlighting, merged side branch range
+
 """Tests for ``ger log`` (mocked Gerrit)."""
 
 from __future__ import annotations
@@ -139,6 +142,39 @@ def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytes
         assert "patchset_status" in item
         assert "attention_reasons" in item
         assert "change_id" in item
+
+
+def test_log_json_contract_required_keys_and_types(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Machine output contract: required keys and types per commit (see docu/spec/commands/log.md)."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, log_main, ["--json", "--color=never"], monkeypatch)
+    assert code in (0, 1), err
+    data = json_stdout(out)
+    assert isinstance(data, list) and data
+    required_str = ("sha", "summary", "patchset_status", "change_id", "change_status")
+    required_bool = ("pushed", "submittable", "abandoned")
+    optional_bool = ("merged_equivalent",)
+    required_list = ("attention_reasons", "ci_failures")
+    for item in data:
+        for key in required_str:
+            assert key in item
+            assert isinstance(item[key], str), key
+        for key in required_bool:
+            assert key in item
+            assert isinstance(item[key], bool), key
+        for key in optional_bool:
+            assert key in item
+            assert item[key] is None or isinstance(item[key], bool), key
+        for key in required_list:
+            assert key in item
+            assert isinstance(item[key], list), key
+        assert "verified" in item
+        assert "code_review" in item
+        assert "comments_unresolved" in item
+        assert isinstance(item["comments_unresolved"], int)
 
 
 def test_determine_attention_no_reviewers_when_empty() -> None:

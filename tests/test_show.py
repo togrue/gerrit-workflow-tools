@@ -1,3 +1,6 @@
+# Spec: docu/spec/commands/show.md
+# Covers: HEAD query, --json, --verbose, warning highlighting, invalid change number
+
 from __future__ import annotations
 
 from pathlib import Path
