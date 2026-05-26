@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -291,47 +290,6 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
     return PatchsetStatus.NEWER
 
 
-def _load_reviewers_for_change(client: GerritClient, api_change_id: str) -> list[ReviewerAccount]:
-    """Load reviewers via ``GET changes/<id>/reviewers/`` (batched queries omit reviewer accounts)."""
-    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
-
-    try:
-        rows = client.list_change_reviewers(api_change_id)
-    except GerritApiError as e:
-        logger.debug("reviewer list fetch failed for %s: %s", api_change_id, e)
-        return []
-    return reviewer_accounts_from_reviewer_list(rows)
-
-
-def _load_reviewers_from_fetcher(
-    fetch_change: Callable[[str], dict[str, Any]],
-    api_change_id: str,
-) -> list[ReviewerAccount]:
-    """Load reviewers from a fetcher returning ChangeInfo."""
-    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
-
-    try:
-        detail = fetch_change(api_change_id)
-    except GerritApiError as e:
-        logger.debug("reviewer detail fetch failed for %s: %s", api_change_id, e)
-        return []
-    return reviewer_accounts_from_change_info(detail)
-
-
-def count_unresolved_from_fetcher(
-    fetch_comments: Callable[[str], dict[str, list[dict[str, Any]]]],
-    api_change_id: str,
-) -> int:
-    """Fetch comments through *fetch_comments* and return unresolved count."""
-
-    try:
-        file_map = fetch_comments(api_change_id)
-        return count_unresolved_in_file_map(file_map)
-    except GerritApiError as e:
-        logger.warning("Gerrit comments failed for %s: %s", api_change_id, e)
-        return 0
-
-
 def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None:
     for row in rows:
         if not isinstance(row, dict):
@@ -358,39 +316,6 @@ def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str])
     except GerritApiError as e:
         logger.warning("batched Gerrit query failed (%s), falling back per change", e)
         return _fallback_query_chunk(client, chunk)
-
-
-def _ingest_single_change_miss(
-    client: GerritClient,
-    change_id: str,
-) -> tuple[str, dict[str, Any]] | None:
-    detail = query_single_change(client, change_id)
-    if not detail:
-        return None
-    raw_id = detail.get("change_id")
-    if isinstance(raw_id, str):
-        return norm_change_id(raw_id), detail
-    return None
-
-
-def _parallel_fill_cache_misses(
-    client: GerritClient,
-    cache: dict[str, dict[str, Any]],
-    change_ids: list[str],
-) -> None:
-    missing = [cid for cid in change_ids if norm_change_id(cid) not in cache]
-    if not missing:
-        return
-
-    def _miss_job(change_id: str) -> Callable[[], tuple[str, dict[str, Any]] | None]:
-        def _job() -> tuple[str, dict[str, Any]] | None:
-            return _ingest_single_change_miss(client, change_id)
-
-        return _job
-
-    for row in parallel_map(_miss_job(cid) for cid in missing):
-        if row is not None:
-            cache[row[0]] = row[1]
 
 
 def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:  # pylint: disable=too-many-locals
@@ -456,227 +381,102 @@ def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | Non
     return f"{base}/comment/{cid_enc}/"
 
 
-@dataclass(frozen=True)
-class _FollowUpWork:
-    result_idx: int
-    api_id: str
-    kinds: frozenset[str]
-
-
-def _execute_follow_ups(
-    client: GerritClient,
-    work: _FollowUpWork,
-    *,
-    comments_fetcher: Callable[[str], dict[str, list[dict[str, Any]]]] | None = None,
-    change_fetcher: Callable[[str], dict[str, Any]] | None = None,
-) -> tuple[int, dict[str, Any]]:
-    """Run all follow-up REST calls for one change sequentially on the worker session."""
-    updates: dict[str, Any] = {}
-    if "comments" in work.kinds:
-        try:
-            fetch_comments = comments_fetcher or client.get_comments
-            updates["comments"] = count_unresolved_from_fetcher(fetch_comments, work.api_id)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.debug("comments follow-up failed for %s: %s", work.api_id, e)
-    if "checks" in work.kinds:
-        try:
-            updates["checks"] = fetch_check_failures(client, work.api_id)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.debug("checks follow-up failed for %s: %s", work.api_id, e)
-    if "reviewers" in work.kinds:
-        try:
-            if change_fetcher is not None:
-                updates["reviewers"] = _load_reviewers_from_fetcher(change_fetcher, work.api_id)
-            else:
-                updates["reviewers"] = _load_reviewers_for_change(client, work.api_id)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.debug("reviewers follow-up failed for %s: %s", work.api_id, e)
-    return work.result_idx, updates
-
-
-def _group_follow_ups(follow_ups: list[tuple[str, int, str]]) -> list[_FollowUpWork]:
-    grouped: dict[tuple[int, str], set[str]] = defaultdict(set)
-    for kind, idx, api_id in follow_ups:
-        grouped[(idx, api_id)].add(kind)
-    return [_FollowUpWork(idx, api_id, frozenset(kinds)) for (idx, api_id), kinds in grouped.items()]
-
-
-def _apply_follow_up_results(result: list[LogCommit], rows: list[tuple[int, dict[str, Any]]]) -> None:
-    for idx, updates in rows:
-        if "comments" in updates:
-            result[idx].comments_unresolved = updates["comments"]
-        if "checks" in updates:
-            result[idx].ci_failures = updates["checks"]
-        if "reviewers" in updates:
-            result[idx].reviewers = updates["reviewers"]
-
-
-def fetch_check_failures(client: GerritClient, change_id: str) -> list[str]:
-    """Attempt to retrieve failed CI check names via the Gerrit Checks API."""
-    enc = quote(change_id, safe="")
-    try:
-        data = client.get_json(f"changes/{enc}/revisions/current/checks")
-    except GerritApiError:
-        return []
-    if not isinstance(data, list):
-        return []
-    failed: list[str] = []
-    for check in data:
-        if not isinstance(check, dict):
-            continue
-        if check.get("state") == "FAILED":
-            name = check.get("checker_name") or check.get("name") or ""
-            if name:
-                failed.append(str(name))
-    return failed
-
-
-# pylint: disable=too-many-branches,too-many-locals,too-many-statements
-def fetch_gerrit_data(
-    client: GerritClient,
+def build_log_commit(
+    row: CommitStatusInput,
+    detail: dict[str, Any] | None,
     web_base: str,
-    commits: list[CommitStatusInput],
-    *,
-    cwd: Path | str | None = None,
-    detail_cache: dict[str, dict[str, Any]] | None = None,
-    comments_fetcher: Callable[[str], dict[str, list[dict[str, Any]]]] | None = None,
-    change_fetcher: Callable[[str], dict[str, Any]] | None = None,
-) -> list[LogCommit]:
-    """Query Gerrit for each commit and return populated LogCommit objects."""
+    cwd: Path | str | None,
+) -> tuple[LogCommit, frozenset[str]]:
+    """Build one ``LogCommit`` from a Gerrit ChangeInfo detail dict.
 
+    Returns ``(commit, follow_up_kinds)`` where *follow_up_kinds* names REST
+    calls the caller should make to fill absent data: ``'comments'``,
+    ``'checks'``, ``'reviewers'``.  An empty set means the commit is fully
+    populated from *detail* alone.
+    """
     from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
-    resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
-    result: list[LogCommit] = []
-    ids_in_range = [c.change_id for c in commits if c.change_id]
-    if detail_cache is None:
-        cache = batch_load_change_details(client, ids_in_range)
-        _parallel_fill_cache_misses(client, cache, ids_in_range)
-    else:
-        cache = detail_cache
+    sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
 
-    follow_ups: list[tuple[str, int, str]] = []
-
-    for row in commits:
-        sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
-        if not change_id:
-            result.append(
-                LogCommit(
-                    sha=sha,
-                    short_sha=short,
-                    summary=summary,
-                    change_id=None,
-                    pushed=False,
-                    abandoned=False,
-                    patchset_status=PatchsetStatus.ABSENT,
-                    verified=None,
-                    code_review=None,
-                    comments_unresolved=0,
-                    change_status=None,
-                    merged_equivalent=None,
-                )
-            )
-            continue
-
-        detail = cache.get(norm_change_id(change_id))
-
-        if not detail:
-            result.append(
-                LogCommit(
-                    sha=sha,
-                    short_sha=short,
-                    summary=summary,
-                    change_id=change_id,
-                    pushed=False,
-                    abandoned=False,
-                    patchset_status=PatchsetStatus.ABSENT,
-                    verified=None,
-                    code_review=None,
-                    comments_unresolved=0,
-                    change_status=None,
-                    merged_equivalent=None,
-                )
-            )
-            continue
-
-        labels = detail.get("labels") or {}
-        verified = extract_label_value(labels, "Verified")
-        code_review = extract_label_value(labels, "Code-Review")
-        submittable = bool(detail.get("submittable"))
-        raw_status = detail.get("status")
-        st = raw_status.upper() if isinstance(raw_status, str) else ""
-        change_status_val = raw_status if isinstance(raw_status, str) else None
-        abandoned = st == "ABANDONED"
-        url = gerrit_change_url(web_base, detail)
-        api_id = str(detail.get("id") or change_id)
-
-        raw_u = detail.get("unresolved_comment_count")
-        if isinstance(raw_u, int):
-            unresolved = raw_u
-        else:
-            unresolved = 0
-            follow_ups.append(("comments", len(result), api_id))
-
-        if verified is not None and verified < 0:
-            follow_ups.append(("checks", len(result), api_id))
-
-        # List/batch ChangeInfo may include an empty ``reviewers`` stub; only skip the
-        # detail fetch when the batch row already has parsed reviewer accounts.
-        reviewer_list = reviewer_accounts_from_change_info(detail)
-        if not reviewer_list:
-            follow_ups.append(("reviewers", len(result), api_id))
-
-        merged_eq: bool | None = None
-        if st == "MERGED":
-            merged_eq = compute_merged_equivalent(sha, detail, resolved_cwd)
-            if merged_eq is True:
-                ps = PatchsetStatus.MERGED_SAME
-            elif merged_eq is False:
-                ps = PatchsetStatus.MERGED_DRIFT
-            else:
-                ps = PatchsetStatus.MERGED_UNKNOWN
-        else:
-            ps = patchset_status(sha, detail)
-
-        result.append(
+    if not change_id or not detail:
+        return (
             LogCommit(
                 sha=sha,
                 short_sha=short,
                 summary=summary,
                 change_id=change_id,
-                pushed=True,
-                abandoned=abandoned,
-                patchset_status=ps,
-                verified=verified,
-                code_review=code_review,
-                comments_unresolved=unresolved,
-                ci_failures=[],
-                gerrit_url=url,
-                submittable=submittable,
-                change_status=change_status_val,
-                merged_equivalent=merged_eq,
-                reviewers=reviewer_list,
-            )
+                pushed=False,
+                abandoned=False,
+                patchset_status=PatchsetStatus.ABSENT,
+                verified=None,
+                code_review=None,
+                comments_unresolved=0,
+                change_status=None,
+                merged_equivalent=None,
+            ),
+            frozenset(),
         )
 
-    if follow_ups:
-        work_items = _group_follow_ups(follow_ups)
+    labels = detail.get("labels") or {}
+    verified = extract_label_value(labels, "Verified")
+    code_review = extract_label_value(labels, "Code-Review")
+    submittable = bool(detail.get("submittable"))
+    raw_status = detail.get("status")
+    st = raw_status.upper() if isinstance(raw_status, str) else ""
+    change_status_val = raw_status if isinstance(raw_status, str) else None
+    abandoned = st == "ABANDONED"
+    url = gerrit_change_url(web_base, detail)
 
-        def _follow_up_job(work: _FollowUpWork) -> Callable[[], tuple[int, dict[str, Any]]]:
-            def _job() -> tuple[int, dict[str, Any]]:
-                return _execute_follow_ups(
-                    client,
-                    work,
-                    comments_fetcher=comments_fetcher,
-                    change_fetcher=change_fetcher,
-                )
+    needed: set[str] = set()
 
-            return _job
+    raw_u = detail.get("unresolved_comment_count")
+    if isinstance(raw_u, int):
+        unresolved = raw_u
+    else:
+        unresolved = 0
+        needed.add("comments")
 
-        rows = parallel_map(_follow_up_job(work) for work in work_items)
-        _apply_follow_up_results(result, rows)
+    if verified is not None and verified < 0:
+        needed.add("checks")
 
-    return result
+    reviewer_list = reviewer_accounts_from_change_info(detail)
+    if not reviewer_list:
+        needed.add("reviewers")
+
+    resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
+    merged_eq: bool | None = None
+    if st == "MERGED":
+        merged_eq = compute_merged_equivalent(sha, detail, resolved_cwd)
+        if merged_eq is True:
+            ps = PatchsetStatus.MERGED_SAME
+        elif merged_eq is False:
+            ps = PatchsetStatus.MERGED_DRIFT
+        else:
+            ps = PatchsetStatus.MERGED_UNKNOWN
+    else:
+        ps = patchset_status(sha, detail)
+
+    return (
+        LogCommit(
+            sha=sha,
+            short_sha=short,
+            summary=summary,
+            change_id=change_id,
+            pushed=True,
+            abandoned=abandoned,
+            patchset_status=ps,
+            verified=verified,
+            code_review=code_review,
+            comments_unresolved=unresolved,
+            ci_failures=[],
+            gerrit_url=url,
+            submittable=submittable,
+            change_status=change_status_val,
+            merged_equivalent=merged_eq,
+            reviewers=reviewer_list,
+        ),
+        frozenset(needed),
+    )
 
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``).

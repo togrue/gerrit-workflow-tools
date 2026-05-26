@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from gerrit_workflow_tools.core.gerrit.cache import (
     DEFAULT_ACCOUNT_TTL_SECONDS,
@@ -24,6 +26,9 @@ from gerrit_workflow_tools.core.gerrit.rest import (
 
 def _change_key(change_id: str) -> str:
     return change_id_for_gerrit_rest_path(change_id)
+
+
+logger = logging.getLogger(__name__)
 
 
 def _canonical_change_map(rows: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -101,24 +106,89 @@ class GerritService:
         return dict(parallel_map(jobs))
 
     def fetch_gerrit_data(self, commits: list[Any], *, cwd: Path | str | None = None) -> list[Any]:
-        """Return ``LogCommit`` rows using cached ChangeInfo and cached comments."""
+        """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
 
-        from gerrit_workflow_tools.core.gerrit_change_status import fetch_gerrit_data, norm_change_id
+        from gerrit_workflow_tools.core.gerrit_change_status import (
+            build_log_commit,
+            count_unresolved_in_file_map,
+            norm_change_id,
+        )
+        from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
         ids = [row.change_id for row in commits if row.change_id]
-        details = self.changes.get_payloads(ids)
-        normalized_details: dict[str, dict[str, Any]] = {}
-        for key, payload in details.items():
-            normalized_details[norm_change_id(key)] = payload
-        return fetch_gerrit_data(
-            self.rest,
-            self.web_base,
-            commits,
-            cwd=cwd,
-            detail_cache=normalized_details,
-            comments_fetcher=self.comments.get_file_map,
-            change_fetcher=lambda change_id: self.changes.get(change_id).payload,
-        )
+        detail_map = self.changes.get_payloads(ids)
+        normalized: dict[str, dict[str, Any]] = {norm_change_id(key): payload for key, payload in detail_map.items()}
+
+        result: list[Any] = []
+        pending: list[tuple[int, frozenset[str]]] = []
+
+        for row in commits:
+            nkey = norm_change_id(row.change_id) if row.change_id else None
+            detail = normalized.get(nkey) if nkey else None
+            lc, needed = build_log_commit(row, detail, self.web_base, cwd)
+            result.append(lc)
+            if needed:
+                pending.append((len(result) - 1, needed))
+
+        if not pending:
+            return result
+
+        def _follow_up(item: tuple[int, frozenset[str]]) -> tuple[int, dict[str, Any]]:
+            idx, kinds = item
+            commit = result[idx]
+            updates: dict[str, Any] = {}
+            cid = commit.change_id
+            if not cid:
+                return idx, updates
+            if "comments" in kinds:
+                try:
+                    file_map = self.comments.get_file_map(cid)
+                    updates["comments"] = count_unresolved_in_file_map(file_map)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    logger.debug("comments follow-up failed for %s: %s", cid, exc)
+            if "checks" in kinds:
+                try:
+                    updates["checks"] = self._fetch_ci_failures(cid)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    logger.debug("checks follow-up failed for %s: %s", cid, exc)
+            if "reviewers" in kinds:
+                try:
+                    change = self.changes.get(cid)
+                    updates["reviewers"] = reviewer_accounts_from_change_info(change.payload)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    logger.debug("reviewers follow-up failed for %s: %s", cid, exc)
+            return idx, updates
+
+        jobs = [lambda item=item: _follow_up(item) for item in pending]
+        for idx, updates in parallel_map(jobs):
+            if "comments" in updates:
+                result[idx].comments_unresolved = updates["comments"]
+            if "checks" in updates:
+                result[idx].ci_failures = updates["checks"]
+            if "reviewers" in updates:
+                result[idx].reviewers = updates["reviewers"]
+
+        return result
+
+    def _fetch_ci_failures(self, change_id: str) -> list[str]:
+        """Fetch failed CI check names via the Gerrit Checks API."""
+
+        enc = quote(change_id, safe="")
+        try:
+            data = self.rest.get_json(f"changes/{enc}/revisions/current/checks")
+        except GerritApiError:
+            return []
+        if not isinstance(data, list):
+            return []
+        failed: list[str] = []
+        for check in data:
+            if not isinstance(check, dict):
+                continue
+            if check.get("state") == "FAILED":
+                name = check.get("checker_name") or check.get("name") or ""
+                if name:
+                    failed.append(str(name))
+        return failed
 
     def _refresh_after_mutation(self, change_id: str) -> Change:
         key = _change_key(change_id)

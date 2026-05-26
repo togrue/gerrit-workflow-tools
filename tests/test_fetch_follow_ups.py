@@ -1,32 +1,66 @@
-"""Tests for isolated Gerrit follow-up fetches in :func:`fetch_gerrit_data`."""
+"""Tests for follow-up fetch resilience in :meth:`GerritService.fetch_gerrit_data`."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
 from unittest.mock import MagicMock, patch
 
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    ReviewerAccount,
-    _execute_follow_ups,
-    _FollowUpWork,
-)
+from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_change_status import ReviewerAccount
 
 
-def test_execute_follow_ups_continues_after_one_kind_fails() -> None:
-    client = MagicMock()
-    work = _FollowUpWork(2, "proj~main~Iabc", frozenset({"comments", "reviewers"}))
+@dataclass
+class _FakeRow:
+    sha: str = "aabbcc"
+    short_sha: str = "aabbcc"
+    summary: str = "feat: thing"
+    change_id: str | None = "Iabc123"
+
+
+# Detail missing ``unresolved_comment_count`` and ``reviewers`` — triggers
+# both follow-up kinds.  Verified=0 so no checks follow-up.
+_DETAIL: dict[str, Any] = {
+    "change_id": "Iabc123",
+    "status": "NEW",
+    "subject": "feat: thing",
+    "labels": {"Verified": {"value": 0}, "Code-Review": {"value": 0}},
+    "_number": 1,
+    "project": "proj",
+    "branch": "main",
+}
+
+
+def _make_service(detail: dict[str, Any] | None = None) -> GerritService:
+    rest = MagicMock()
+    rest.web_base = "https://gerrit.example.com"
+    cache = MagicMock()
+    cache.load_changes.return_value = {"Iabc123": detail} if detail is not None else {}
+    return GerritService(rest, cache)
+
+
+def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
+    """A comments fetch failure must not prevent reviewers from being populated."""
+
+    service = _make_service(_DETAIL)
+    alice = ReviewerAccount(slug="alice", account_id=42)
+
+    # Return a Change whose payload carries reviewer data for the follow-up.
+    refreshed = MagicMock()
+    refreshed.payload = {
+        **_DETAIL,
+        "reviewers": {"REVIEWER": [{"_account_id": 42, "username": "alice"}]},
+    }
 
     with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit_change_status.count_unresolved_from_fetcher",
-            side_effect=RuntimeError("comments boom"),
-        ),
-        patch(
-            "gerrit_workflow_tools.core.gerrit_change_status._load_reviewers_for_change",
-            return_value=[ReviewerAccount(slug="alice")],
-        ),
+        patch.object(service.comments, "get_file_map", side_effect=RuntimeError("boom")),
+        patch.object(service.changes, "get", return_value=refreshed),
     ):
-        idx, updates = _execute_follow_ups(client, work)
+        commits = service.fetch_gerrit_data([_FakeRow()])
 
-    assert idx == 2
-    assert "comments" not in updates
-    assert updates["reviewers"] == [ReviewerAccount(slug="alice")]
+    assert len(commits) == 1
+    lc = commits[0]
+    # Comments failed — field stays at the default value (0), no exception raised.
+    assert lc.comments_unresolved == 0
+    # Reviewers succeeded despite the comments failure.
+    assert lc.reviewers == [alice]
