@@ -4,26 +4,19 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, parallel_map
+from gerrit_workflow_tools.core.gerrit.rest import (  # noqa: F401  (backward-compat re-exports)
+    LOG_QUERY_OPTIONS,
+    norm_change_id,
+)
 from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
-
-# Batched change query: labels + submittable + revisions in one round trip (no separate /detail).
-LOG_QUERY_OPTIONS = (
-    "DETAILED_LABELS",
-    "SUBMITTABLE",
-    "CURRENT_REVISION",
-    "ALL_REVISIONS",
-)
-_BATCH_OR_CHUNK = 25
 
 
 class PatchsetStatus(str, Enum):
@@ -256,12 +249,6 @@ def collect_unresolved_comments(file_map: dict[str, list[dict[str, Any]]]) -> li
     return rows
 
 
-def norm_change_id(change_id: str) -> str:
-    """Normalize Change-Id values for case-insensitive lookups."""
-
-    return change_id.lower()
-
-
 def norm_sha(sha: str) -> str:
     """Normalize commit SHA text for case-insensitive comparisons."""
 
@@ -288,72 +275,6 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
     if cur_n or rev_keys:
         return PatchsetStatus.NEWER
     return PatchsetStatus.NEWER
-
-
-def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None:
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        raw_id = row.get("change_id")
-        if isinstance(raw_id, str):
-            out[norm_change_id(raw_id)] = row
-
-
-def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
-    """Query each Change-Id in *chunk* when a batched OR query fails (same session, sequential)."""
-    rows: list[dict[str, Any]] = []
-    for change_id in chunk:
-        one = query_single_change(client, change_id)
-        if one:
-            rows.append(one)
-    return rows
-
-
-def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
-    q = " OR ".join(f"change:{c}" for c in chunk)
-    try:
-        return client.query_changes(q, n=len(chunk) + 10, options=opts)
-    except GerritApiError as e:
-        logger.warning("batched Gerrit query failed (%s), falling back per change", e)
-        return _fallback_query_chunk(client, chunk)
-
-
-def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:  # pylint: disable=too-many-locals
-    """Map normalized Change-Id to ChangeInfo using chunked ``change:I1 OR change:I2`` queries."""
-    out: dict[str, dict[str, Any]] = {}
-    seen: set[str] = set()
-    unique: list[str] = []
-    for cid in change_ids:
-        k = norm_change_id(cid)
-        if k not in seen:
-            seen.add(k)
-            unique.append(cid)
-
-    opts = list(LOG_QUERY_OPTIONS)
-    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
-
-    def _chunk_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
-        def _job() -> list[dict[str, Any]]:
-            return _query_change_chunk(client, chunk, opts)
-
-        return _job
-
-    for rows in parallel_map(_chunk_job(chunk) for chunk in chunks):
-        _ingest_change_rows(out, rows)
-    return out
-
-
-def query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] | None:
-    """Query one Gerrit change by Change-Id and return first matching ``ChangeInfo`` row."""
-
-    try:
-        rows = client.query_changes(f"change:{change_id}", n=5, options=list(LOG_QUERY_OPTIONS))
-    except GerritApiError as e:
-        logger.warning("Gerrit query failed for %s: %s", change_id, e)
-        return None
-    if not rows:
-        return None
-    return rows[0]
 
 
 def gerrit_change_url(web_base: str, change: dict[str, Any]) -> str | None:

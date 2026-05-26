@@ -18,7 +18,9 @@ from gerrit_workflow_tools.core.gerrit.models import Account, Change, Comment
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritClient,
+    batch_load_change_details,
     change_id_for_gerrit_rest_path,
+    norm_change_id,
     parallel_map,
     resolve_gerrit_web_base,
 )
@@ -85,8 +87,6 @@ class GerritService:
         return self.rest.web_base
 
     def _fetch_change_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
-        from gerrit_workflow_tools.core.gerrit_change_status import batch_load_change_details
-
         return _canonical_change_map(batch_load_change_details(self.rest, change_ids))
 
     def _fetch_account_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
@@ -111,7 +111,6 @@ class GerritService:
         from gerrit_workflow_tools.core.gerrit_change_status import (
             build_log_commit,
             count_unresolved_in_file_map,
-            norm_change_id,
         )
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
