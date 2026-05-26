@@ -230,3 +230,6 @@ def gerrit_dev_session(gerrit_integration_context: GerritIntegrationContext) -> 
         user=gerrit_integration_context.dev_user,
         password=gerrit_integration_context.dev_password,
     )
+
+
+pytestmark = pytest.mark.integration

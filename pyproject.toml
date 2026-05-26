@@ -48,6 +48,10 @@ testpaths = ["tests"]
 pythonpath = ["src", "."]
 # Integration tests (Docker + Gerrit) live under tests/integration; run explicitly (see tests/integration/README.md).
 addopts = "--ignore=tests/integration"
+markers = [
+    "integration: needs Docker + Gerrit (tests/integration)",
+    "slow: intentionally slow unit fixtures",
+]
 
 [tool.ruff]
 target-version = "py310"
