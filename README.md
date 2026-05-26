@@ -64,6 +64,12 @@ See [docu/Completion.md](docu/Completion.md): `ger bash-completion` prints the `
 
 Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user. See [docu/Howto_Test.md](docu/Howto_Test.md).
 
+### Testing
+
+See [docu/Howto_Test.md](docu/Howto_Test.md). Quick start: `uv run pytest -q` (unit only).
+
+Improvement plans: [docu/test-suite-easy-wins.md](docu/test-suite-easy-wins.md) · [docu/test-suite-future-improvements.md](docu/test-suite-future-improvements.md).
+
 ### Integration tests (optional)
 
 End-to-end tests against a real Gerrit in Docker are under [tests/integration/README.md](tests/integration/README.md). Default `pytest` **skips** them (`--ignore=tests/integration` in `pyproject.toml`). Install deps with `uv sync --group integration` and run `python scripts/run_integration.py` or `pytest tests/integration`.
