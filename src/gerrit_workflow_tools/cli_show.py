@@ -197,9 +197,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         print(f"{ind}{d}")
     print(f"{ind}{primary_line(commit, summary_highlighter=summary_highlighter)}")
 
+    print()
+    print(color_text("Unresolved comments:", ANSI_YELLOW))
     if unresolved_rows:
-        print()
-        print(color_text("Unresolved comments:", ANSI_YELLOW))
         for row_item in unresolved_rows:
             body, _trunc = _apply_comment_tail(row_item.message, tail_n, full=args.full)
             comment_url = gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id) or commit.gerrit_url
@@ -213,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             for ln in body.splitlines():
                 print(f"    {ln}")
             print()
+    else:
+        print("  (no unresolved comments)")
 
     return _EXIT_ATTENTION if attention else 0
 

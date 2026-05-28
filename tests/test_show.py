@@ -346,6 +346,21 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     assert "g.example/c/" in out or "/+/" in out
 
 
+def test_gshow_human_prints_no_unresolved_comments_when_clean(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_gshow_repo(stack_repo)
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    cid = head_change_id(stack_repo)
+    detail = change_info_for_sha(sha, cid, number=92)
+    details = {norm_change_id(cid): detail}
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch)
+    assert code == 0, err
+    assert "Unresolved comments:" in out
+    assert "  (no unresolved comments)" in out
+
+
 def test_gshow_highlights_warning_pattern_on_summary_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_gshow_repo(stack_repo)
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
