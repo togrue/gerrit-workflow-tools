@@ -27,6 +27,8 @@ Details: [architecture.md](architecture.md).
 
 ## First-time setup
 
+Configuration reference: [Configuration.md](Configuration.md) (`gerrit.webUrl`, credentials, defaults, and stop patterns).
+
 ```bash
 git config --global gerrit.webUrl https://gerrit.example.com
 # credentials: gerrit.user + gerrit.token (or password)

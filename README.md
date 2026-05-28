@@ -56,6 +56,14 @@ ger push --help
 # or:  ger --help
 ```
 
+### Configure Gerrit defaults
+
+Before daily use, review the supported Git config keys in [docu/Configuration.md](docu/Configuration.md), especially:
+
+- `gerrit.webUrl`
+- default reviewers (`branch.<name>.gerritReviewers`)
+- ready-boundary stop patterns (`gerrit.stopPattern`)
+
 ### Bash completion (optional)
 
 See [docu/Completion.md](docu/Completion.md): `ger bash-completion` prints the `source` line; `ger bash-completion --install` adds it to `~/.bashrc`.

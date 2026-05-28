@@ -66,7 +66,7 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 ---
 
-## 3. Link Configuration.md from root README setup (S) — 📝
+## 3. Link Configuration.md from root README setup (S) — ✅
 
 **Why:** Scope asks config reference linked from setup docs; root README only links SPEC/docu index.
 
