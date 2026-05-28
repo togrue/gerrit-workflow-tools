@@ -116,7 +116,7 @@ From [Version 1 Scope](../../Version%201%20Scope.md):
 |------|--------|
 | Interactive confirmation default | **Done** (`-y` bypass) |
 | `--review` shortcut to reviewer step | **Not implemented** (use `-i` or flags) |
-| Richer confirmation (branch, reviewers, topic, WIP prominent) | **Partial** — preview exists; UX polish open |
+| Richer confirmation (branch, reviewers, topic, WIP prominent) | **Done** (`_print_gpush_confirm_status_line` in `cli_push.py`) |
 | Submodule safety | **Deferred** (hooks) |
 
 ---
