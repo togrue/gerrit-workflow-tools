@@ -60,6 +60,29 @@ ger push --help
 
 See [docu/Completion.md](docu/Completion.md): `ger bash-completion` prints the `source` line; `ger bash-completion --install` adds it to `~/.bashrc`.
 
+### First-time setup: Change-Id hook
+
+Gerrit Change-Ids are added automatically by the `commit-msg` hook. Install this once per clone:
+
+```bash
+# Uses gerrit.webUrl from your git config
+# Example: git config --global gerrit.webUrl https://gerrit.example.com
+HOOK_URL="$(git config --get gerrit.webUrl)/tools/hooks/commit-msg"
+
+curl -sfL -o .git/hooks/commit-msg "$HOOK_URL" \
+  || wget -q -O .git/hooks/commit-msg "$HOOK_URL"
+
+chmod +x .git/hooks/commit-msg
+```
+
+If `gerrit.webUrl` is not set yet, configure it first (see [docu/Configuration.md](docu/Configuration.md)).
+
+After installing the hook, run:
+
+```bash
+ger change-id --check-duplicates
+```
+
 ## Development
 
 Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user. See [docu/Howto_Test.md](docu/Howto_Test.md).

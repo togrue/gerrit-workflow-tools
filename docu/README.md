@@ -40,4 +40,4 @@ ger push --dry-run
 ger push
 ```
 
-Commit-msg hook: manual until `ger hooks` (v1.1) — see [Version 1 Scope.md](Version%201%20Scope.md).
+Commit-msg hook: manual until `ger hooks` (v1.1) — install steps: [README.md → First-time setup: Change-Id hook](../README.md#first-time-setup-change-id-hook), background: [Version 1 Scope.md](Version%201%20Scope.md).
