@@ -34,64 +34,6 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 | `ger assign` | Full command: flags, targets, `--dry-run`, branch move API | [spec/commands/assign.md](spec/commands/assign.md) |
 | Stale docs | `push.md` still says confirmation UX is “partial” — shipped | [spec/commands/push.md](spec/commands/push.md) |
 
----
-
-## 1. Align `push.md` with shipped confirmation UX (S) — ✅
-
-**Why:** Avoid implementers re-doing finished work; keeps SPEC trustworthy.
-
-**Steps:**
-
-1. In [spec/commands/push.md](spec/commands/push.md) v1 delta table, mark “Richer confirmation” as **Done** (match `_print_gpush_confirm_status_line` in `cli_push.py`).
-2. Skim [SPEC.md](SPEC.md) registry — no change expected.
-
-**Done when:** Push spec v1 delta matches [Version 1 Scope](Version%201%20Scope.md) (only `--review` remains open).
-
----
-
-## 2. Document commit-msg hook setup (S) — ✅
-
-**Why:** [Version 1 Scope](Version%201%20Scope.md) onboarding; [docu/README.md](README.md) only says “manual until `ger hooks`”.
-
-**Steps:**
-
-1. Add a **First-time setup → Change-Id hook** subsection to root [README.md](../README.md) (after Install):
-   - Download from `{gerrit.webUrl}/tools/hooks/commit-msg` into `.git/hooks/commit-msg`, `chmod +x`
-   - One-time per clone; link [Configuration.md](Configuration.md) for `gerrit.webUrl`
-   - Mirror steps from [tests/integration/repo_builder.py](../tests/integration/repo_builder.py) `install_commit_msg_hook` (curl/wget)
-2. Expand the one-liner in [docu/README.md](README.md) to link to that section.
-3. Mention `ger change-id --check-duplicates` after hook install.
-
-**Done when:** New teammate can set up Change-Ids without reading integration test code.
-
----
-
-## 3. Link Configuration.md from root README setup (S) — ✅
-
-**Why:** Scope asks config reference linked from setup docs; root README only links SPEC/docu index.
-
-**Steps:**
-
-1. In root [README.md](../README.md) Install or a short **Configure** bullet, link [docu/Configuration.md](Configuration.md) (`gerrit.webUrl`, reviewers, stop patterns).
-2. Cross-link from [docu/README.md](README.md) first-time setup block.
-
-**Done when:** `Configuration.md` is reachable in ≤2 clicks from root README.
-
----
-
-## 4. Spec: `ger log -v` URLs for non-clean commits only (S) — 📝
-
-**Why:** Scope item; current `-v` expands layout for every row ([cli_log.py](../src/gerrit_workflow_tools/cli_log.py)).
-
-**Steps:**
-
-1. In [spec/commands/log.md](spec/commands/log.md), add **§ Verbose URL policy**:
-   - **Non-clean** = any `attention_reasons` non-empty (same as exit code 1), **or** document explicit list if narrower
-   - When `-v` and URLs enabled: print URL + extra detail **only** for non-clean rows; clean rows stay compact
-   - Interaction: `--url` alone unchanged; `-v` adds selective URLs even if `gerrit.logShowUrl` is false (decide and document)
-2. Add 2–3 example lines (clean vs CI failed vs unresolved comments).
-
-**Done when:** A reviewer can implement without guessing; matches team expectation from scope.
 
 ---
 
@@ -336,10 +278,10 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 ## Suggested first sprint (simplest, high leverage)
 
-1. **§1** push.md hygiene  
-2. **§2–3** onboarding docs  
-3. **§5** show empty unresolved line  
-4. **§4 + §8** log `-v` spec then implement  
-5. **§6–7** fix merged spec + implement  
+1. **§1** push.md hygiene
+2. **§2–3** onboarding docs
+3. **§5** show empty unresolved line
+4. **§4 + §8** log `-v` spec then implement
+5. **§6–7** fix merged spec + implement
 
 Defer **§20–21** (`ger assign`) until comment-chain core (**§9–11**) is stable — log inline comments and show share the same model.
