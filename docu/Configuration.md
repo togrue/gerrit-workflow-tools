@@ -55,7 +55,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `branch.<name>.gerritTarget` | **Optional override** for the Gerrit **destination branch** (e.g. `main`, `dev`). When unset, `ger push` and `ger rebase` infer the destination from `@{upstream}` if its remote name matches `gerrit.remote` (default `origin`). When set, it wins for push, merge-base, and `ger rebase --onto-remote`. The value must resolve to an existing ref—typically a local branch of that name or `refs/remotes/<remote>/<branch>` after `git fetch` on `gerrit.remote`. If the tool reports that the target is missing locally, fetch from the remote first; do not create a local branch literally named `origin/<branch>`—that is the remote-tracking name space, not a branch you should create by hand. |
 | `branch.<name>.gerritReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
 
-Set via `ger branch init` / `ger branch set-*` or `git config` / `set_branch_config` in code.
+Set via `git config` (or `set_branch_config` in code).
 
 ---
 

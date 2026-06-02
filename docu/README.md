@@ -5,7 +5,6 @@
 | Topic | Document |
 |-------|----------|
 | Architecture | [architecture.md](architecture.md) |
-| Version 1 product scope | [Version 1 Scope.md](Version%201%20Scope.md) |
 | Git configuration | [Configuration.md](Configuration.md) |
 | Per-command specs | [spec/commands/](spec/commands/) |
 | Bash completion setup | [Completion.md](Completion.md) |
@@ -33,7 +32,9 @@ Configuration reference: [Configuration.md](Configuration.md) (`gerrit.webUrl`, 
 git config --global gerrit.webUrl https://gerrit.example.com
 # credentials: gerrit.user + gerrit.token (or password)
 
-ger branch init --target main --reviewers alice,bob
+git branch --set-upstream-to origin/main    # or your Gerrit remote/branch
+git config branch.$(git branch --show-current).gerritTarget main
+git config branch.$(git branch --show-current).gerritReviewers alice,bob
 ger bash-completion --install   # optional, recommended
 
 ger change-id --check-duplicates
@@ -42,4 +43,4 @@ ger push --dry-run
 ger push
 ```
 
-Commit-msg hook: manual until `ger hooks` (v1.1) — install steps: [README.md → First-time setup: Change-Id hook](../README.md#first-time-setup-change-id-hook), background: [Version 1 Scope.md](Version%201%20Scope.md).
+Commit-msg hook: [README.md → First-time setup: Change-Id hook](../README.md#first-time-setup-change-id-hook).

@@ -44,12 +44,6 @@ Editor: enricher delegates to `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`
 
 ---
 
-## V1 scope delta
-
-No changes required for v1.
-
----
-
 ## See also
 
 - [`ger log`](log.md)

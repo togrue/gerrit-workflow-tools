@@ -38,12 +38,6 @@ ger fetch-api [options] PATH
 
 ---
 
-## V1 scope delta
-
-No v1 changes ([Version 1 Scope](../../Version%201%20Scope.md): debug utility).
-
----
-
 ## See also
 
 - [`ger cache`](cache.md)

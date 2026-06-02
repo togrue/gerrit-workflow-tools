@@ -76,14 +76,6 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged.
 
 ---
 
-## V1 scope delta
-
-| Item | Status |
-|------|--------|
-| `ger sha` patchset resolution | **Deferred** (v1.1) |
-
----
-
 ## See also
 
 - [`ger push`](push.md) (runs duplicate check in Gerrit mode)

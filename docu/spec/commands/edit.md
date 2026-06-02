@@ -40,12 +40,6 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit]
 
 ---
 
-## V1 scope delta
-
-No changes required for v1.
-
----
-
 ## See also
 
 - [`ger log`](log.md)

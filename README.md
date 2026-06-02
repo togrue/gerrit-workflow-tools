@@ -11,7 +11,7 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 ## You might want this if
 
 - You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`).
-- You want **branch-local Gerrit settings** (target branch, reviewers) and **push** commands that understand your stack (`ger branch`, `ger push`).
+- You want **branch-local Gerrit settings** (target branch, reviewers via `branch.*` git config) and **push** commands that understand your stack (`ger push`).
 - You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger sha` / `ger change-id`).
 
 **Documentation** (specification, commands, configuration): [docu/SPEC.md](docu/SPEC.md) · [docu/README.md](docu/README.md).
@@ -98,8 +98,6 @@ Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). 
 ### Testing
 
 See [docu/Howto_Test.md](docu/Howto_Test.md). Quick start: `uv run pytest -q` (unit only).
-
-Improvement plans: [docu/test-suite-easy-wins.md](docu/test-suite-easy-wins.md) · [docu/test-suite-future-improvements.md](docu/test-suite-future-improvements.md).
 
 ### Integration tests (optional)
 

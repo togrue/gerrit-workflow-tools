@@ -25,12 +25,6 @@ ger cache <subcommand>
 
 ---
 
-## V1 scope delta
-
-No v1 changes.
-
----
-
 ## See also
 
 - [architecture.md](../../architecture.md#gerrit-api-access)

@@ -1,6 +1,6 @@
 # Architecture overview
 
-How **`ger`** is structured, which modules own which concerns, and how commands share behavior. Command-level detail lives under [spec/commands/](spec/commands/); product scope in [Version 1 Scope.md](Version%201%20Scope.md).
+How **`ger`** is structured, which modules own which concerns, and how commands share behavior. Command-level detail lives under [spec/commands/](spec/commands/).
 
 ---
 
@@ -75,7 +75,7 @@ The server branch name used for `refs/for/<target>` and merge-base (e.g. `main`)
 1. `branch.<name>.gerritTarget` (optional override)
 2. Inferred from `@{upstream}` when its remote equals `gerrit.remote` (default `origin`)
 
-Configured via `ger branch`; see [spec/commands/branch.md](spec/commands/branch.md).
+Configured via `branch.<name>.gerritTarget` in git config; see [Configuration.md](Configuration.md#branch-local-branchname).
 
 ### Ready boundary
 
@@ -134,7 +134,7 @@ Commands that call Gerrit require `gerrit.webUrl` and credentials (`gerrit.user`
 
 ### Local-only
 
-`ger sha`, `ger change-id` (except `--fix`), `ger branch` (config writes only) — no Gerrit HTTP.
+`ger sha`, `ger change-id` (except `--fix`) — no Gerrit HTTP.
 
 ### Push pipeline (Gerrit mode)
 
@@ -170,7 +170,6 @@ Reviewer strategies (`push`, `lazy`, `overwrite`) and magic ref options (`%topic
 | `cli_edit.py` | Interactive rebase targeting one commit |
 | `cli_fix.py` | `git commit --fixup` wrapper |
 | `cli_rebase.py` | `GIT_SEQUENCE_EDITOR` enricher hook |
-| `cli_branch.py` | Branch-local git config |
 | `cli_sha.py` / `cli_changeid.py` | Identifier plumbing |
 | `cli_fetch_api.py` / `cli_cache.py` | Debug utilities |
 | `cli_bash_completion.py` | Completion install |
@@ -182,12 +181,12 @@ Reviewer strategies (`push`, `lazy`, `overwrite`) and magic ref options (`%topic
 
 ## Onboarding
 
-Minimum path for a new teammate (v1):
+Minimum path for a new teammate:
 
 1. Install `ger` ([README.md](../README.md)).
 2. `git config --global gerrit.webUrl <url>` and credentials.
-3. `ger branch init --target <branch> --reviewers …` (or `infer-upstream`).
-4. Commit-msg hook for Change-Ids (manual until `ger hooks` — v1.1).
+3. Set upstream (`git branch --set-upstream-to=<remote>/<branch>`) and optional `branch.*.gerritTarget` / `gerritReviewers` (see [Configuration.md](Configuration.md)).
+4. Install the commit-msg hook for Change-Ids ([README.md](../README.md#first-time-setup-change-id-hook)).
 5. `ger bash-completion --install` (recommended).
 6. Daily: `ger log` → `ger show <ref>` → `ger push`.
 
@@ -200,7 +199,4 @@ Config details: [Configuration.md](Configuration.md).
 When changing behavior:
 
 1. Update the relevant `spec/commands/<cmd>.md`.
-2. If the change is a **v1 scope** item, update [Version 1 Scope.md](Version%201%20Scope.md) (check off or adjust).
-3. Run tests; integration tests live under `tests/integration/` (optional).
-
-Candidate refactors (not spec): [ABSTRACTIONS.md](../ABSTRACTIONS.md).
+2. Run tests; integration tests live under `tests/integration/` (optional).

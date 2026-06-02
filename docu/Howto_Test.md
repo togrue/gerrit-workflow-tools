@@ -1,7 +1,5 @@
 # How to run tests
 
-> **Test improvement plans:** [test-suite-easy-wins.md](test-suite-easy-wins.md) (start here) · [test-suite-future-improvements.md](test-suite-future-improvements.md)
-
 ## Prerequisites
 
 ```bash
@@ -95,7 +93,7 @@ When fixing a bug, make intent obvious:
 - Name: `test_<behavior>_regression_<short_slug>`, **or**
 - Docstring: `Regression: <one sentence>.`
 
-Link to an issue or [current_issues.md](current_issues.md) when applicable.
+Link to a GitHub issue when applicable.
 
 ### CLI output assertions
 
@@ -119,4 +117,4 @@ Major command test modules should start with a comment block:
 uv run python scripts/audit_test_coverage.py
 ```
 
-Lists source modules with weak or missing test-file heuristics. File gaps in [test-suite-future-improvements.md](test-suite-future-improvements.md).
+Lists source modules with weak or missing test-file heuristics (stdout only).

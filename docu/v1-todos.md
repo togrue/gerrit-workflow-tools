@@ -25,44 +25,16 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 | Area | Gap | Where to write |
 |------|-----|----------------|
 | Onboarding | No copy-paste commit-msg hook steps for end users | Root [README.md](../README.md) + [docu/README.md](README.md) |
-| `ger log -v` | What counts as “non-clean”; URL line rules vs `--url` | [spec/commands/log.md](spec/commands/log.md) |
 | `ger log --unresolved-comments` | Flag behavior, output shape, `--json`, cost (N API calls?) | [spec/commands/log.md](spec/commands/log.md) |
 | Comment chains | Shared model + API helper contract (used by show + log) | [architecture.md](architecture.md) + [spec/commands/show.md](spec/commands/show.md) |
 | `ger show` Change-Id-only | Message source: Gerrit `commit` field vs “not available” | [spec/commands/show.md](spec/commands/show.md) |
-| `ger fix` safety | Exit codes, exact error text, `--force` for conflict probe | [spec/commands/fix.md](spec/commands/fix.md) |
 | `ger push --review` | Interactive step order vs `-i` / `--reviewers` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger assign` | Full command: flags, targets, `--dry-run`, branch move API | [spec/commands/assign.md](spec/commands/assign.md) |
-| Stale docs | `push.md` still says confirmation UX is “partial” — shipped | [spec/commands/push.md](spec/commands/push.md) |
+| `ger branch` | Command spec + `cli_ger` registration (today: git config only) | [Configuration.md](Configuration.md) + new `spec/commands/branch.md` |
 
 
 ---
 
-## 5. `ger show`: print `(no unresolved comments)` when clean (S) — ✅
-
-**Why:** Small UX win; example already in [spec/commands/show.md](spec/commands/show.md).
-
-**Steps:**
-
-1. In `cli_show.py`, after fetching comments, if zero unresolved chains: print section header `Unresolved comments:` and indented `  (no unresolved comments)` (match spec example).
-2. Unit test in `tests/test_show.py` (mock file map / empty unresolved).
-
-**Done when:** `ger show` on a clean change shows the explicit empty state.
-
----
-
-## 6. Spec: `ger fix` merged + conflict checks (S) — 📝
-
-**Why:** [spec/commands/fix.md](spec/commands/fix.md) lists checks as “Open” with no behavior detail.
-
-**Steps:**
-
-1. **Merged:** If target resolves to a Gerrit change with `status == MERGED`, exit `1` (or `2` — pick one, document), message: suggest `ger show` / new change. Local SHA-only targets: skip Gerrit check.
-2. **Conflict:** Define probe (e.g. `git merge-tree` / dry-run fixup rebase) and whether `--force` warns vs hard-fails.
-3. Document exit codes and stderr wording in [fix.md](spec/commands/fix.md).
-
-**Done when:** fix.md has testable acceptance criteria; no “verify before release” ambiguity.
-
----
 
 ## 7. `ger fix`: reject merged Gerrit target (S–M) — depends on §6
 
@@ -74,19 +46,6 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 2. Tests: unit test with mocked change dict; optional integration seed merged change.
 
 **Done when:** `ger fix I…` on merged change fails with documented message and exit code.
-
----
-
-## 8. Implement `ger log -v` selective URLs (S–M) — depends on §4
-
-**Why:** Closes scope log item after spec is clear.
-
-**Steps:**
-
-1. Implement policy from log.md § Verbose URL policy in `cli_log.py` (reuse `attention_reasons` / `determine_attention`).
-2. Extend `tests/test_log.py` for verbose + clean vs attention row.
-
-**Done when:** `-v` does not print URLs for clean commits; integration or unit tests lock behavior.
 
 ---
 
@@ -271,8 +230,8 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 ## Maintenance (ongoing, not ordered)
 
-- [ ] When closing any todo above, update [Version 1 Scope.md](Version%201%20Scope.md) and the command spec **V1 scope delta** section.
-- [ ] Keep [SPEC.md](SPEC.md) command registry status in sync (`Planned` → `Implemented`).
+- [ ] When closing any todo above, update [Version 1 Scope.md](Version%201%20Scope.md). Do not add roadmap or “planned/deferred” sections to user-facing docs (`docu/SPEC.md`, `docu/spec/commands/*` for shipped commands, `docu/README.md`, root `README.md`).
+- [ ] Keep [SPEC.md](SPEC.md) command registry limited to commands registered in `cli_ger.py`.
 
 ---
 
@@ -281,7 +240,6 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 1. **§1** push.md hygiene
 2. **§2–3** onboarding docs
 3. **§5** show empty unresolved line
-4. **§4 + §8** log `-v` spec then implement
-5. **§6–7** fix merged spec + implement
+4. **§6–7** fix merged spec + implement
 
 Defer **§20–21** (`ger assign`) until comment-chain core (**§9–11**) is stable — log inline comments and show share the same model.

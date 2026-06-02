@@ -32,14 +32,22 @@ Default: only **staged** changes are committed.
 
 ---
 
-## V1 scope delta
+## Behavior
 
-From [Version 1 Scope](../../Version%201%20Scope.md) — **verify / implement before release:**
+1. Resolve `REF_OR_CHANGE` to a commit SHA (local ref, `refs/changes/…` fetch, or Gerrit API + fetch when the argument is a Change-Id or numeric change id).
+2. If the index has no staged changes and `-a` was not passed, exit `1` with a hint to stage edits or use `-a`.
+3. Run `git commit --fixup=<sha>` (honours `--no-verify` and `-a`).
 
-| Check | Status |
-|-------|--------|
-| Fail if target change already **merged** on Gerrit | Open |
-| Fail or `--force` if fixup would **conflict** | Open |
+---
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Fixup commit created successfully |
+| `1` | Fixup rejected (no staged changes, resolution/git error) |
+| `2` | Usage error (bad arguments) |
+| `3` | Gerrit API error (unreachable, auth failure, change not found) |
 
 ---
 

@@ -49,7 +49,7 @@ ger push [options] [REV]
 | **Gerrit** | `branch.*.gerritTarget` set, **or** upstream remote == `gerrit.remote` | Ready range → Change-Id check → `git push <tip>:refs/for/<target>[%options]` |
 | **Vanilla** | Upstream on another remote | Plain `git push`; Gerrit-specific flags ignored (warning printed) |
 
-No upstream and no `gerritTarget` → error; use `ger branch infer-upstream` or set upstream.
+No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --set-upstream-to=<remote>/<branch>`) or `branch.<name>.gerritTarget`. On a TTY, several commands prompt interactively via `ensure_branch_upstream_interactive`.
 
 ---
 
@@ -108,21 +108,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 
 ---
 
-## V1 scope delta
-
-From [Version 1 Scope](../../Version%201%20Scope.md):
-
-| Item | Status |
-|------|--------|
-| Interactive confirmation default | **Done** (`-y` bypass) |
-| `--review` shortcut to reviewer step | **Not implemented** (use `-i` or flags) |
-| Richer confirmation (branch, reviewers, topic, WIP prominent) | **Done** (`_print_gpush_confirm_status_line` in `cli_push.py`) |
-| Submodule safety | **Deferred** (hooks) |
-
----
-
 ## See also
 
-- [`ger branch`](branch.md)
+- [Configuration.md](../../Configuration.md) — `branch.*.gerritTarget`, `gerritReviewers`
 - [`ger change-id`](sha-change-id.md#ger-change-id)
-- [Configuration.md](../../Configuration.md)
