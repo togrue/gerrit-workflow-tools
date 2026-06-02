@@ -138,11 +138,14 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         print("error: missing Change-Id", file=sys.stderr)
         return _EXIT_ERROR
 
-    try:
-        file_map = service.comments.get_file_map(cid)
-    except GerritApiError as e:
-        print(f"gerrit error: {e}", file=sys.stderr)
-        return _EXIT_ERROR
+    if commit.pushed:
+        try:
+            file_map = service.comments.get_file_map(cid)
+        except GerritApiError as e:
+            print(f"gerrit error: {e}", file=sys.stderr)
+            return _EXIT_ERROR
+    else:
+        file_map = {}
 
     unresolved_rows = collect_unresolved_comments(file_map)
 

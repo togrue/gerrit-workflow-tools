@@ -112,7 +112,7 @@ class GerritService:
             build_log_commit,
             count_unresolved_in_file_map,
         )
-        from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
+        from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(ids)
@@ -152,8 +152,8 @@ class GerritService:
                     logger.debug("checks follow-up failed for %s: %s", cid, exc)
             if "reviewers" in kinds:
                 try:
-                    change = self.changes.get(cid)
-                    updates["reviewers"] = reviewer_accounts_from_change_info(change.payload)
+                    rows = self.rest.list_change_reviewers(cid)
+                    updates["reviewers"] = reviewer_accounts_from_reviewer_list(rows)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("reviewers follow-up failed for %s: %s", cid, exc)
             return idx, updates

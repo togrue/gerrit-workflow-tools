@@ -45,16 +45,13 @@ def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
     service = _make_service(_DETAIL)
     alice = ReviewerAccount(slug="alice", account_id=42)
 
-    # Return a Change whose payload carries reviewer data for the follow-up.
-    refreshed = MagicMock()
-    refreshed.payload = {
-        **_DETAIL,
-        "reviewers": {"REVIEWER": [{"_account_id": 42, "username": "alice"}]},
-    }
-
     with (
         patch.object(service.comments, "get_file_map", side_effect=RuntimeError("boom")),
-        patch.object(service.changes, "get", return_value=refreshed),
+        patch.object(
+            service.rest,
+            "list_change_reviewers",
+            return_value=[{"account": {"_account_id": 42, "username": "alice"}, "state": "REVIEWER"}],
+        ),
     ):
         commits = service.fetch_gerrit_data([_FakeRow()])
 
