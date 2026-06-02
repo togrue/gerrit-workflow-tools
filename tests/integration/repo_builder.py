@@ -5,30 +5,41 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.integration.gerrit_seed import set_origin_url
 
+_commit_msg_hook_cache: dict[str, Path] = {}
+
 
 def install_commit_msg_hook(repo: Path, *, http_base: str) -> None:
-    """Download Gerrit ``commit-msg`` hook from the server."""
+    """Install Gerrit ``commit-msg`` hook (download once per ``http_base`` per pytest process)."""
     hook = repo / ".git" / "hooks" / "commit-msg"
     hook.parent.mkdir(parents=True, exist_ok=True)
-    url = f"{http_base.rstrip('/')}/tools/hooks/commit-msg"
-    for cmd in (
-        ["curl", "-sfL", "-o", str(hook), url],
-        ["wget", "-q", "-O", str(hook), url],
-    ):
-        try:
-            subprocess.run(cmd, check=True, timeout=60)
-            break
-        except (OSError, subprocess.CalledProcessError):
-            continue
-    else:
-        raise RuntimeError("Could not download commit-msg hook (need curl or wget on PATH)")
-    mode = hook.stat().st_mode
-    hook.chmod(mode | 0o111)
+    base = http_base.rstrip("/")
+    cached = _commit_msg_hook_cache.get(base)
+    if cached is None:
+        url = f"{base}/tools/hooks/commit-msg"
+        cache_dir = Path(tempfile.gettempdir()) / "gerrit-workflow-tools-hooks"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached = cache_dir / "commit-msg"
+        for cmd in (
+            ["curl", "-sfL", "-o", str(cached), url],
+            ["wget", "-q", "-O", str(cached), url],
+        ):
+            try:
+                subprocess.run(cmd, check=True, timeout=60)
+                break
+            except (OSError, subprocess.CalledProcessError):
+                continue
+        else:
+            raise RuntimeError("Could not download commit-msg hook (need curl or wget on PATH)")
+        cached.chmod(cached.stat().st_mode | 0o111)
+        _commit_msg_hook_cache[base] = cached
+    shutil.copy2(cached, hook)
+    hook.chmod(hook.stat().st_mode | 0o111)
 
 
 def prepare_worktree_clone(
@@ -60,10 +71,12 @@ def prepare_worktree_clone(
         "GIT_COMMITTER_NAME": "Dev User",
         "GIT_COMMITTER_EMAIL": user_email,
     }
-    git("fetch", "origin", cwd=dest, env=env)
+    # Seed copy already has local branches; skip network fetch after retargeting origin.
     p = git("checkout", branch, cwd=dest, env=env, check=False)
     if p.returncode != 0:
-        git("checkout", "-b", branch, f"origin/{branch}", cwd=dest, env=env)
+        p2 = git("checkout", "-b", branch, f"origin/{branch}", cwd=dest, env=env, check=False)
+        if p2.returncode != 0:
+            git("checkout", "-b", branch, branch, cwd=dest, env=env)
     git("config", "user.name", "Dev User", cwd=dest)
     git("config", "user.email", user_email, cwd=dest)
     return dest

@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit, review
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.gerrit_seed import configure_ger_git_repo, set_origin_url
+from tests.integration.profile import phase
 from tests.integration.repo_builder import install_commit_msg_hook, prepare_worktree_clone
 
 
@@ -206,6 +207,26 @@ def prepare_topic_repo(
     proj = ctx.project_verified if use_verified_project else ctx.project_plain
     seed = ctx.seed_repo_verified if use_verified_project else ctx.seed_repo_plain
     dest = tmp_path / f"wk_{topic}"
+    with phase(f"prepare_topic_repo({topic})"):
+        return _prepare_topic_repo_impl(
+            ctx=ctx,
+            tmp_path=tmp_path,
+            topic=topic,
+            proj=proj,
+            seed=seed,
+            dest=dest,
+        )
+
+
+def _prepare_topic_repo_impl(
+    *,
+    ctx: Any,
+    tmp_path: Path,
+    topic: str,
+    proj: str,
+    seed: Path,
+    dest: Path,
+) -> Path:
     prepare_worktree_clone(
         source_seed_repo=seed,
         dest=dest,
@@ -275,10 +296,11 @@ def prepare_clone_at_branch(
         password=ctx.dev_password,
         project=proj,
     )
-    git("fetch", "origin", cwd=dest)
     p = git("checkout", branch, cwd=dest, check=False)
     if p.returncode != 0:
-        git("checkout", "-b", branch, f"origin/{branch}", cwd=dest)
+        p2 = git("checkout", "-b", branch, f"origin/{branch}", cwd=dest, check=False)
+        if p2.returncode != 0:
+            git("checkout", "-b", branch, branch, cwd=dest)
     git("config", "user.name", "Dev User", cwd=dest)
     git("config", "user.email", f"{ctx.dev_user}@example.com", cwd=dest)
     install_commit_msg_hook(dest, http_base=ctx.http_base)

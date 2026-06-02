@@ -72,6 +72,16 @@ Tests use a fixed container name: **`gerrit-workflow-tools-integration`**. Remov
 
 First startup can take **2–4 minutes**. Use `GERRIT_IT_KEEP_CONTAINER=1` for repeated runs.
 
+With a warm container, a full run is typically **~3–4 minutes** (was ~6+ before batching the review matrix, caching the commit-msg hook, and skipping redundant `git fetch` after copying seed repos).
+
+### Profiling a run
+
+```bash
+GERRIT_IT_PROFILE=1 uv run --group integration pytest tests/integration -q --durations=15
+```
+
+Prints per-phase timings (Docker, session seed, each `prepare_topic_repo`, each test body) plus pytest’s slowest tests. With a **warm** container, session setup is often ~30–40s; most wall time is **per-test** `ger push` / REST against `lenovo-pc` (or your host).
+
 ## Troubleshooting
 
 | Symptom | Things to check |

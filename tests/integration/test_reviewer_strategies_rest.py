@@ -10,7 +10,6 @@ from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import run_cli
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
-from tests.integration.gerrit_seed import create_account
 from tests.integration.integration_helpers import (
     first_change_id_from_tip,
     open_changes_on_branch,
@@ -134,13 +133,7 @@ def test_lazy_reviewer_strategy_skips_when_reviewers_exist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ctx = gerrit_integration_context
-    rev_alt = f"rev_{secrets.token_hex(4)}"
-    create_account(
-        gerrit_admin_session,
-        rev_alt,
-        email=f"{rev_alt}@example.com",
-        http_password=f"pw-{secrets.token_hex(8)}",
-    )
+    rev_alt = ctx.rev_alt_user
     topic = f"lz2_{secrets.token_hex(4)}"
     repo = prepare_topic_repo(ctx, tmp_path, topic)
     build_linear_chain(repo, ["feat: lazy skip"])
@@ -188,13 +181,7 @@ def test_overwrite_reviewer_strategy_replaces_reviewers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ctx = gerrit_integration_context
-    rev_alt = f"rvo_{secrets.token_hex(4)}"
-    create_account(
-        gerrit_admin_session,
-        rev_alt,
-        email=f"{rev_alt}@example.com",
-        http_password=f"pw-{secrets.token_hex(8)}",
-    )
+    rev_alt = ctx.rev_alt_user
     topic = f"ow_{secrets.token_hex(4)}"
     repo = prepare_topic_repo(ctx, tmp_path, topic)
     build_linear_chain(repo, ["feat: overwrite reviewers"])
@@ -235,113 +222,60 @@ def test_overwrite_reviewer_strategy_replaces_reviewers(
     assert ctx.admin_user not in slugs2b
 
 
-def test_lazy_reviewer_strategy_assigns_after_initial_push_without_reviewers(
+def test_reviewer_strategy_assigns_after_initial_push_without_reviewers(
     tmp_path,
     gerrit_integration_context,
     gerrit_admin_session: GerritHttpSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Lazy and overwrite both assign reviewers on a second push without new patch sets."""
     ctx = gerrit_integration_context
-    topic = f"lz3_{secrets.token_hex(4)}"
-    repo = prepare_topic_repo(ctx, tmp_path, topic)
-    build_linear_chain(
-        repo,
-        [
-            "feat: lazy two-phase first",
-            "feat: lazy two-phase second",
-        ],
+    cases: tuple[tuple[str, str, set[str] | None], ...] = (
+        ("lazy", ctx.admin_user, None),
+        ("overwrite", ctx.rev_alt_user, {ctx.admin_user}),
     )
+    for strategy, rev, exclude in cases:
+        topic = f"2ph_{strategy}_{secrets.token_hex(4)}"
+        repo = prepare_topic_repo(ctx, tmp_path, topic)
+        build_linear_chain(
+            repo,
+            [
+                f"feat: {strategy} two-phase first",
+                f"feat: {strategy} two-phase second",
+            ],
+        )
 
-    code1, _o1, e1 = run_cli(
-        repo,
-        ger_push_main,
-        ["--yes", "--no-rebase-check"],
-        monkeypatch,
-    )
-    assert code1 == 0, e1
-    before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
-    assert len(before_revisions) == 2
+        code1, _o1, e1 = run_cli(
+            repo,
+            ger_push_main,
+            ["--yes", "--no-rebase-check"],
+            monkeypatch,
+        )
+        assert code1 == 0, e1
+        before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+        assert len(before_revisions) == 2
 
-    code2, _o2, e2 = run_cli(
-        repo,
-        ger_push_main,
-        [
-            "--yes",
-            "--no-rebase-check",
-            "--reviewer-strategy",
-            "lazy",
-            "--reviewers",
-            ctx.admin_user,
-        ],
-        monkeypatch,
-    )
-    assert code2 == 0, e2
-    _assert_all_open_changes_reviewers(
-        gerrit_admin_session,
-        ctx.project_verified,
-        topic,
-        must_include={ctx.admin_user},
-        expected_change_count=2,
-    )
-    after_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
-    assert after_revisions == before_revisions
-
-
-def test_overwrite_reviewer_strategy_assigns_after_initial_push_without_reviewers(
-    tmp_path,
-    gerrit_integration_context,
-    gerrit_admin_session: GerritHttpSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    ctx = gerrit_integration_context
-    rev_alt = f"rvo2_{secrets.token_hex(4)}"
-    create_account(
-        gerrit_admin_session,
-        rev_alt,
-        email=f"{rev_alt}@example.com",
-        http_password=f"pw-{secrets.token_hex(8)}",
-    )
-    topic = f"ow2_{secrets.token_hex(4)}"
-    repo = prepare_topic_repo(ctx, tmp_path, topic)
-    build_linear_chain(
-        repo,
-        [
-            "feat: overwrite two-phase first",
-            "feat: overwrite two-phase second",
-        ],
-    )
-
-    code1, _o1, e1 = run_cli(
-        repo,
-        ger_push_main,
-        ["--yes", "--no-rebase-check"],
-        monkeypatch,
-    )
-    assert code1 == 0, e1
-    before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
-    assert len(before_revisions) == 2
-
-    code2, _o2, e2 = run_cli(
-        repo,
-        ger_push_main,
-        [
-            "--yes",
-            "--no-rebase-check",
-            "--reviewer-strategy",
-            "overwrite",
-            "--reviewers",
-            rev_alt,
-        ],
-        monkeypatch,
-    )
-    assert code2 == 0, e2
-    _assert_all_open_changes_reviewers(
-        gerrit_admin_session,
-        ctx.project_verified,
-        topic,
-        must_include={rev_alt},
-        must_exclude={ctx.admin_user},
-        expected_change_count=2,
-    )
-    after_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
-    assert after_revisions == before_revisions
+        code2, _o2, e2 = run_cli(
+            repo,
+            ger_push_main,
+            [
+                "--yes",
+                "--no-rebase-check",
+                "--reviewer-strategy",
+                strategy,
+                "--reviewers",
+                rev,
+            ],
+            monkeypatch,
+        )
+        assert code2 == 0, e2
+        _assert_all_open_changes_reviewers(
+            gerrit_admin_session,
+            ctx.project_verified,
+            topic,
+            must_include={rev},
+            must_exclude=exclude,
+            expected_change_count=2,
+        )
+        after_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+        assert after_revisions == before_revisions
