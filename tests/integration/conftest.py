@@ -100,9 +100,7 @@ def gerrit_docker_session() -> GerritDockerSession:
     image = os.environ.get("GERRIT_IT_IMAGE", DEFAULT_IMAGE)
     keep = os.environ.get("GERRIT_IT_KEEP_CONTAINER", "").lower() in ("1", "true", "yes")
 
-    http_base = f"http://{public_host}:{host_http}"
-
-    container, _ports = start_gerrit_container(
+    container, published = start_gerrit_container(
         image=image,
         public_host=public_host,
         host_http_port=host_http,
@@ -110,13 +108,14 @@ def gerrit_docker_session() -> GerritDockerSession:
         keep=keep,
     )
 
+    http_base = f"http://{public_host}:{published.http}"
     wait_http_ready(http_base, timeout_s=240.0)
 
     ctx = GerritDockerSession(
         http_base=http_base,
         public_host=public_host,
-        host_http_port=host_http,
-        host_ssh_port=host_ssh,
+        host_http_port=published.http,
+        host_ssh_port=published.ssh,
         container=container,
     )
 

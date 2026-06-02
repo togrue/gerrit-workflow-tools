@@ -27,6 +27,45 @@ class PublishedPorts:
     ssh: int
 
 
+def _host_port_from_binding(binding: list[dict[str, str]] | None) -> int | None:
+    if not binding:
+        return None
+    raw = binding[0].get("HostPort")
+    return int(raw) if raw else None
+
+
+def _container_published_ports(container: object) -> PublishedPorts | None:
+    """Read host ports for 8080/tcp and 29418/tcp from inspect data.
+
+    Over SSH, ``NetworkSettings.Ports`` is often empty while ``HostConfig.PortBindings`` is
+    still populated — reading only the former made stale containers look port-less.
+    """
+    try:
+        c: Container = container  # type: ignore[assignment]
+        c.reload()
+        ns_ports = (c.attrs.get("NetworkSettings") or {}).get("Ports") or {}
+        http_port = _host_port_from_binding(ns_ports.get("8080/tcp"))
+        ssh_port = _host_port_from_binding(ns_ports.get("29418/tcp"))
+        if http_port is None or ssh_port is None:
+            pb = (c.attrs.get("HostConfig") or {}).get("PortBindings") or {}
+            http_port = http_port or _host_port_from_binding(pb.get("8080/tcp"))
+            ssh_port = ssh_port or _host_port_from_binding(pb.get("29418/tcp"))
+        if http_port is None or ssh_port is None:
+            return None
+        return PublishedPorts(http=http_port, ssh=ssh_port)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.debug("Could not read published ports: %s", e)
+        return None
+
+
+def _port_bindings(host_http_port: int, host_ssh_port: int) -> dict[str, tuple[str, int]]:
+    """Publish container ports on all interfaces on the Docker host."""
+    return {
+        "8080/tcp": ("0.0.0.0", host_http_port),
+        "29418/tcp": ("0.0.0.0", host_ssh_port),
+    }
+
+
 def wait_http_ready(http_url: str, *, timeout_s: float = 240.0, poll_s: float = 2.0) -> None:
     """Poll until Gerrit serves static config *and* the REST API on ``/a/``.
 
@@ -101,9 +140,36 @@ def start_gerrit_container(
     if existing is not None:
         if existing.status != "running":
             existing.start()
-        ports = PublishedPorts(http=host_http_port, ssh=host_ssh_port)
-        logger.info("Reusing existing container %s (%s)", CONTAINER_NAME, existing.short_id)
-        return existing, ports
+        actual = _container_published_ports(existing)
+        if actual is not None and (actual.http != host_http_port or actual.ssh != host_ssh_port):
+            logger.warning(
+                "Container %s publishes HTTP %s and SSH %s but local.env requests %s and %s; recreating",
+                CONTAINER_NAME,
+                actual.http,
+                actual.ssh,
+                host_http_port,
+                host_ssh_port,
+            )
+            stop_container(existing, remove=True)
+            existing = None
+        elif actual is not None:
+            ports = actual
+            logger.info(
+                "Reusing existing container %s (%s) HTTP port %s",
+                CONTAINER_NAME,
+                existing.short_id,
+                ports.http,
+            )
+            return existing, ports
+        elif existing is not None:
+            logger.warning(
+                "Container %s has no readable port bindings; recreating with HTTP %s SSH %s",
+                CONTAINER_NAME,
+                host_http_port,
+                host_ssh_port,
+            )
+            stop_container(existing, remove=True)
+            existing = None
 
     canonical = f"http://{public_host}:{host_http_port}"
     logger.info(
@@ -119,10 +185,7 @@ def start_gerrit_container(
             detach=True,
             name=CONTAINER_NAME,
             hostname="gerrit",
-            ports={
-                "8080/tcp": host_http_port,
-                "29418/tcp": host_ssh_port,
-            },
+            ports=_port_bindings(host_http_port, host_ssh_port),
             environment={
                 "CANONICAL_WEB_URL": canonical,
                 "DEVELOPMENT_BECOME_ANY_ACCOUNT": "true",
