@@ -86,7 +86,5 @@ def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritClie
     summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
     short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
     change_id = parse_change_id(raw)
-    if not change_id:
-        raise GitError(f"no Change-Id in commit {short}")
     row = CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
     return ShowCommitResolution(row=row, is_local_commit=True)

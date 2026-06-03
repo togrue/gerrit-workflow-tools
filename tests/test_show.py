@@ -346,6 +346,52 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     assert "g.example/c/" in out or "/+/" in out
 
 
+def test_gshow_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unpushed local commit: git message, not-pushed status line, no Gerrit comments."""
+    _configure_gshow_repo(stack_repo)
+    cid = "Icccccccccccccccccccccccccccccccccccccccc"
+    git(
+        "commit",
+        "--allow-empty",
+        "-m",
+        f"local only wip\n\nChange-Id: {cid}",
+        cwd=stack_repo,
+    )
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id={}):
+        code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch)
+    assert code == 1, err
+    assert "commit " in out and sha in out
+    assert "local only wip" in out
+    assert "v? " not in out
+    assert "cr? " not in out
+    assert "not-pushed" in out
+    assert "(not on Gerrit — no comments)" in out
+    assert "(no unresolved comments)" not in out
+
+
+def test_gshow_json_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_gshow_repo(stack_repo)
+    cid = "Idddddddddddddddddddddddddddddddddddddddd"
+    git(
+        "commit",
+        "--allow-empty",
+        "-m",
+        f"not pushed yet\n\nChange-Id: {cid}",
+        cwd=stack_repo,
+    )
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id={}):
+        code, out, err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch)
+    assert code == 1, err
+    data = json_stdout(out)
+    assert data["pushed"] is False
+    assert data["patchset_status"] == "absent"
+    assert data["change_id"] == cid
+    assert data["local_commit"] is True
+    assert data["attention_reasons"] == ["not-pushed"]
+    assert data["comments"] == []
+
+
 def test_gshow_human_prints_no_unresolved_comments_when_clean(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

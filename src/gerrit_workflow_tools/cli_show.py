@@ -29,7 +29,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.render.commit_row import extra_detail_lines, primary_line
+from gerrit_workflow_tools.render.commit_row import attention_column, extra_detail_lines, oneline_body
 
 logger = logging.getLogger(__name__)
 
@@ -132,11 +132,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         return _EXIT_ERROR
     commit = commits[0]
     attention = determine_attention(commit, chain_blocked=False)
-
     cid = commit.change_id
-    if not cid:
-        print("error: missing Change-Id", file=sys.stderr)
-        return _EXIT_ERROR
 
     if commit.pushed:
         try:
@@ -198,11 +194,14 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
     for d in extra_detail_lines(commit):
         print(f"{ind}{d}")
-    print(f"{ind}{primary_line(commit, summary_highlighter=summary_highlighter)}")
+    attn_col = attention_column([commit], summary_highlighter=summary_highlighter)
+    print(f"{ind}{oneline_body(commit, summary_highlighter=summary_highlighter, attention_col=attn_col)}")
 
     print()
     print(color_text("Unresolved comments:", ANSI_YELLOW))
-    if unresolved_rows:
+    if not commit.pushed:
+        print("  (not on Gerrit — no comments)")
+    elif unresolved_rows:
         for row_item in unresolved_rows:
             body, _trunc = _apply_comment_tail(row_item.message, tail_n, full=args.full)
             comment_url = gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id) or commit.gerrit_url

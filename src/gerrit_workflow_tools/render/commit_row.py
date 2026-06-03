@@ -95,9 +95,14 @@ def primary_line_prefix(commit: LogCommit) -> str:
     """Text before the subject on the primary line (through ``  # ``)."""
     sha = color_short_sha(_status_sha_column(commit.short_sha))
     push = fmt_patchset_column(commit)
-    verified = fmt_verified(commit.verified)
-    cr = fmt_code_review(commit.code_review)
-    comments = fmt_comments(commit.comments_unresolved)
+    if commit.pushed:
+        verified = fmt_verified(commit.verified)
+        cr = fmt_code_review(commit.code_review)
+        comments = fmt_comments(commit.comments_unresolved)
+    else:
+        verified = "   "
+        cr = "    "
+        comments = "   "
     return f"{sha} {push} {verified} {cr} {comments} # "
 
 
@@ -145,6 +150,8 @@ def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
     """Attention (text, ANSI-color) pairs for the trailing annotation column."""
     if commit.abandoned:
         return [("abandoned", ANSI_RED)]
+    if not commit.pushed:
+        return [("not-pushed", ANSI_YELLOW)]
     if commit.patchset_status == "merged-drift":
         return [("merged drift", ANSI_RED)]
     if commit.patchset_status == "merged-unknown":
