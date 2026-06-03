@@ -22,7 +22,8 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
-    collect_unresolved_comments,
+    CommentChain,
+    collect_unresolved_comment_chains,
     determine_attention,
     gerrit_inline_comment_url,
 )
@@ -35,6 +36,27 @@ logger = logging.getLogger(__name__)
 
 _EXIT_ATTENTION = 1
 _EXIT_ERROR = 2
+
+
+def _print_comment_chain(
+    chain: CommentChain,
+    gerrit_url: str | None,
+    *,
+    tail_n: int,
+    full: bool,
+) -> None:
+    loc = f"{chain.path}:{chain.line}" if chain.line is not None else chain.path
+    print(f"  {color_text(loc, ANSI_CYAN)}")
+    chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
+    if chain_url:
+        print(f"  {color_text('url:', ANSI_DIM)} {color_text(chain_url, ANSI_YELLOW)}")
+    for row_item in chain.comments:
+        if row_item.author:
+            print(f"  {color_text(row_item.author, ANSI_DIM)}")
+        body, _trunc = _apply_comment_tail(row_item.message, tail_n, full=full)
+        for ln in body.splitlines():
+            print(f"    {ln}")
+    print()
 
 
 def _apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
@@ -143,21 +165,35 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     else:
         file_map = {}
 
-    unresolved_rows = collect_unresolved_comments(file_map)
+    unresolved_chains = collect_unresolved_comment_chains(file_map)
 
     if args.json_:
         # Human output honors --comment-tail-lines / --full; JSON always emits full text.
         comment_payload: list[dict[str, object]] = []
-        for row_item in unresolved_rows:
-            entry: dict[str, object] = {
-                "path": row_item.path,
-                "line": row_item.line,
-                "message": row_item.message,
-                "url": gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id),
-            }
-            if row_item.author:
-                entry["author"] = row_item.author
-            comment_payload.append(entry)
+        chain_payload: list[dict[str, object]] = []
+        for chain in unresolved_chains:
+            chain_comments: list[dict[str, object]] = []
+            for row_item in chain.comments:
+                entry: dict[str, object] = {
+                    "path": row_item.path,
+                    "line": row_item.line,
+                    "message": row_item.message,
+                    "url": gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id),
+                }
+                if row_item.author:
+                    entry["author"] = row_item.author
+                if row_item.comment_id:
+                    entry["comment_id"] = row_item.comment_id
+                chain_comments.append(entry)
+                comment_payload.append(entry)
+            chain_payload.append(
+                {
+                    "path": chain.path,
+                    "line": chain.line,
+                    "url": gerrit_inline_comment_url(commit.gerrit_url, chain.root_id),
+                    "comments": chain_comments,
+                }
+            )
         payload = {
             "sha": commit.sha if commit.sha else None,
             "change_id": cid,
@@ -172,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             "submittable": commit.submittable,
             "attention_reasons": attention,
             "comments": comment_payload,
+            "comment_chains": chain_payload,
             "local_commit": is_local,
             "change_status": commit.change_status,
             "merged_equivalent": commit.merged_equivalent,
@@ -201,20 +238,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     print(color_text("Unresolved comments:", ANSI_YELLOW))
     if not commit.pushed:
         print("  (not on Gerrit — no comments)")
-    elif unresolved_rows:
-        for row_item in unresolved_rows:
-            body, _trunc = _apply_comment_tail(row_item.message, tail_n, full=args.full)
-            comment_url = gerrit_inline_comment_url(commit.gerrit_url, row_item.comment_id) or commit.gerrit_url
-            loc = f"{row_item.path}:{row_item.line}" if row_item.line is not None else row_item.path
-            loc_line = f"  {color_text(loc, ANSI_CYAN)}"
-            if row_item.author:
-                loc_line += f"  {color_text(row_item.author, ANSI_DIM)}"
-            print(loc_line)
-            if comment_url:
-                print(f"  {color_text('url:', ANSI_DIM)} {color_text(comment_url, ANSI_YELLOW)}")
-            for ln in body.splitlines():
-                print(f"    {ln}")
-            print()
+    elif unresolved_chains:
+        for chain in unresolved_chains:
+            _print_comment_chain(chain, commit.gerrit_url, tail_n=tail_n, full=args.full)
     else:
         print("  (no unresolved comments)")
 

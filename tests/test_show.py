@@ -194,6 +194,55 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
 
 
+def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolved thread: last reply unresolved=false hides entire chain."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    comments = {
+        "f.py": [
+            {
+                "id": "root-id",
+                "line": 1,
+                "message": "please fix",
+                "unresolved": True,
+                "updated": "2024-01-01 10:00:00",
+            },
+            {
+                "id": "reply-id",
+                "line": 1,
+                "message": "done",
+                "unresolved": False,
+                "in_reply_to": "root-id",
+                "updated": "2024-01-01 11:00:00",
+            },
+        ]
+    }
+    with (
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
+            return_value="https://g.example",
+        ),
+        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient") as client_cls,
+    ):
+        inst = MagicMock()
+        client_cls.return_value = inst
+        inst.query_changes.return_value = [ch]
+        inst.get_comments.return_value = comments
+        code, out, _err = run_cli(
+            stack_repo,
+            gshow_main,
+            ["--color=never", "42"],
+            monkeypatch,
+        )
+    assert code == 0
+    assert "please fix" not in out
+    assert "done" not in out
+    assert "  (no unresolved comments)" in out
+
+
 def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()

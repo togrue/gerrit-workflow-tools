@@ -37,13 +37,11 @@ ger show [options] [REV]
 2. Fetch labels, patchset status, attention via `GerritService` / `gerrit_change_status`.
 3. If **local** commit: print `git show` medium message body first.
 4. Print Gerrit URL (dim), detail lines, primary status line (same vocabulary as `ger log`).
-5. If any **unresolved** inline comments (per-comment `unresolved: true` in API map): print `Unresolved comments:` and per-comment blocks (path, author, url, body).
+5. If any **unresolved** comment chains: print `Unresolved comments:` and per-chain blocks (location + URL once, then each comment in the chain with author + body).
 
-**Comment resolution (current):** `collect_unresolved_comments()` treats each API comment with `unresolved: true` independently — **not** chain-level “last comment resolved” semantics.
+**Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`; only unresolved chains are listed. See `build_comment_chains()` / `collect_unresolved_comment_chains()` in `gerrit_change_status.py`.
 
 **Change-Id-only:** When there is no local commit, the git message block is skipped.
-
-**Comment threads:** Gerrit can mark a thread resolved while earlier replies stay visible. The tool treats each API comment with `unresolved: true` independently, so resolved chains may still list earlier replies that look unresolved.
 
 ---
 
