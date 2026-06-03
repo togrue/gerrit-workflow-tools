@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.upstream_interactive import (
     branch_has_upstream,
     ensure_branch_upstream_interactive,
     read_recent_upstream_abbrevs,
+    require_branch_upstream,
 )
 
 
@@ -89,3 +90,17 @@ def test_ensure_branch_upstream_interactive_non_tty_skips_prompt(
 
     monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _boom)
     assert not ensure_branch_upstream_interactive(repo, "feature")
+
+
+def test_require_branch_upstream_non_tty_prints_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _make_repo_with_origin(tmp_path)
+    assert not branch_has_upstream(repo, "feature")
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+
+    assert not require_branch_upstream(repo, "feature")
+
+    err = capsys.readouterr().err
+    assert "No upstream configured for branch 'feature'" in err
+    assert "git branch --set-upstream-to=" in err

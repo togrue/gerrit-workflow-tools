@@ -43,7 +43,7 @@ from gerrit_workflow_tools.core.stack import (
     parse_git_log_sha_body_rs,
     rev_spec_target_tip_to_end,
 )
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 # Re-export for tests and backwards compatibility.
 
@@ -249,12 +249,7 @@ def main(argv: list[str] | None = None) -> int:
             head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
             if head_ref_proc.returncode == 0:
                 branch = head_ref_proc.stdout.strip()
-                if (
-                    branch != "HEAD"
-                    and not branch_has_upstream(cwd, branch)
-                    and not ensure_branch_upstream_interactive(cwd, branch)
-                    and sys.stdin.isatty()
-                ):
+                if branch != "HEAD" and not require_branch_upstream(cwd, branch):
                     return 1
 
         if args.fix and args.check_duplicates:

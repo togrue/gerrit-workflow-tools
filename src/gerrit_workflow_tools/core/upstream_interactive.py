@@ -36,6 +36,10 @@ def branch_has_upstream(cwd: Path | str | None, branch: str) -> bool:
     return p.returncode == 0
 
 
+def local_branch_exists(cwd: Path | str | None, branch: str) -> bool:
+    return git("show-ref", "--verify", "--quiet", f"refs/heads/{branch}", cwd=cwd, check=False).returncode == 0
+
+
 def read_recent_upstream_abbrevs(cwd: Path | str | None) -> list[str]:
     p = git("config", "--global", "--get-all", _RECENT_UPSTREAM_KEY, cwd=cwd, check=False)
     if p.returncode != 0:
@@ -118,6 +122,15 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str) -> s
     return chosen
 
 
+def missing_upstream_error_message(branch: str) -> str:
+    return (
+        f"No upstream configured for branch {branch!r}.\n"
+        "Set an upstream, e.g.:\n"
+        "  git branch --set-upstream-to=<remote>/<branch>\n"
+        "Fetch from your Gerrit remote first if the tracking branch is missing."
+    )
+
+
 def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str) -> bool:
     if is_detached_head(cwd):
         return False
@@ -133,3 +146,21 @@ def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str) -> b
     append_recent_upstream_abbrev(cwd, choice)
     print(f"Upstream for {branch!r} set to {choice}.", file=sys.stderr)
     return True
+
+
+def require_branch_upstream(cwd: Path | str | None, branch: str) -> bool:
+    """Return True when *branch* has upstream (possibly set via TTY prompt).
+
+    When upstream is still missing and stdin is not a TTY, print setup guidance
+    to stderr before returning False. Non-existent local branches are ignored so
+    downstream git commands can report invalid refs.
+    """
+    if not local_branch_exists(cwd, branch):
+        return True
+    if branch_has_upstream(cwd, branch):
+        return True
+    if ensure_branch_upstream_interactive(cwd, branch):
+        return True
+    if not sys.stdin.isatty():
+        print(f"error: {missing_upstream_error_message(branch)}", file=sys.stderr)
+    return False

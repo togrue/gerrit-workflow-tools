@@ -64,7 +64,7 @@ from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +144,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
             head_ref = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
             if head_ref.returncode == 0:
                 branch = head_ref.stdout.strip()
-                if (
-                    branch != "HEAD"
-                    and not branch_has_upstream(cwd, branch)
-                    and not ensure_branch_upstream_interactive(cwd, branch)
-                    and sys.stdin.isatty()
-                ):
+                if branch != "HEAD" and not require_branch_upstream(cwd, branch):
                     return 1
             _fork, display, target_tip = merge_base_with_target(cwd)
             rev_range = f"{target_tip}..HEAD"

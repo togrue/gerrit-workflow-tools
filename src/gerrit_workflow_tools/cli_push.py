@@ -64,7 +64,7 @@ from gerrit_workflow_tools.core.reviewer import (
     reviewer_accounts_from_change_info,
 )
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target, parse_change_id
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.push_input_line import (
     ParseResult,
     PushLineState,
@@ -1172,8 +1172,8 @@ def main(argv: list[str] | None = None) -> int:
         detached = is_detached_head(cwd)
         b = _resolve_push_branch(cwd, args.branch)
         mode = ger_push_mode(cwd, b)
-        if not args.yes and mode in ("gerrit", None) and not branch_has_upstream(cwd, b):
-            if (args.branch or not detached) and not ensure_branch_upstream_interactive(cwd, b) and sys.stdin.isatty():
+        if not args.yes and mode in ("gerrit", None) and (args.branch or not detached):
+            if not require_branch_upstream(cwd, b):
                 return 1
             mode = ger_push_mode(cwd, b)
         if mode is None:

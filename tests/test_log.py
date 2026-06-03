@@ -252,6 +252,17 @@ def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.
     assert "error:" in err.lower()
 
 
+def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    git("branch", "--unset-upstream", cwd=stack_repo, check=False)
+    code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
+    assert code == 1
+    assert out == ""
+    assert "No upstream configured for branch" in err
+    assert "git branch --set-upstream-to=" in err
+    assert "git log failed" not in err
+
+
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",

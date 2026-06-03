@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.stack import (
     merge_base_with_target,
     resolve_stack_commit,
 )
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,7 @@ def resolve_first_edit_attention_sha(cwd: Path) -> str:
         raise GitError("could not resolve commit range for stack")
     assert rev_range is not None
     for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
-        if branch_has_upstream(cwd, branch):
-            continue
-        if not ensure_branch_upstream_interactive(cwd, branch) and sys.stdin.isatty():
+        if not require_branch_upstream(cwd, branch):
             raise GitError("upstream not configured")
     commits, load_exit = load_annotated_commits(cwd, rev_range)
     if commits is None:
@@ -142,12 +140,7 @@ def _run_interactive_stack_rebase(
 
     try:
         branch = resolve_working_branch(cwd)
-        if (
-            branch is not None
-            and not branch_has_upstream(cwd, branch)
-            and not ensure_branch_upstream_interactive(cwd, branch)
-            and sys.stdin.isatty()
-        ):
+        if branch is not None and not require_branch_upstream(cwd, branch):
             return 1
         if args.first_attention_commit:
             full = resolve_first_edit_attention_sha(cwd)

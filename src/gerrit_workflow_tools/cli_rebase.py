@@ -18,7 +18,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.config import rebase_defaults, resolve_rebase_onto_remote_ref, resolve_working_branch
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import merge_base_with_target, resolve_stack_commit
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +109,7 @@ def main(argv: list[str] | None = None) -> int:
             # resolve_stack_commit handles both Change-Id (I…) and plain git refs.
             base = resolve_stack_commit(cwd, args.rev.strip(), branch=branch)
         else:
-            if (
-                branch is not None
-                and not branch_has_upstream(cwd, branch)
-                and not ensure_branch_upstream_interactive(cwd, branch)
-                and sys.stdin.isatty()
-            ):
+            if branch is not None and not require_branch_upstream(cwd, branch):
                 return 1
             base, _, _ = merge_base_with_target(cwd, branch)
     except GitError as e:

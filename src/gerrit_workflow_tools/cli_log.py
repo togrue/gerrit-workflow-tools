@@ -36,7 +36,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import commits_in_range
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, ensure_branch_upstream_interactive
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
@@ -342,9 +342,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
         return rev_range_exit
     assert rev_range is not None
     for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
-        if branch_has_upstream(cwd, branch):
-            continue
-        if not ensure_branch_upstream_interactive(cwd, branch) and sys.stdin.isatty():
+        if not require_branch_upstream(cwd, branch):
             return 1
 
     commits, load_exit = load_annotated_commits(cwd, rev_range, first_parent=not args.follow_merges)
