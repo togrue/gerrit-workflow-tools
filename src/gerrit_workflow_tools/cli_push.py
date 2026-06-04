@@ -49,9 +49,8 @@ from gerrit_workflow_tools.core.config import (
     stop_patterns,
 )
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, norm_change_id, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import norm_change_id
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.push_reviewers import (
     ReviewerApplyChangeOutcome,

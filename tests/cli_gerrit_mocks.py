@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from gerrit_workflow_tools.core.gerrit_change_status import norm_change_id
+from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, parse_change_id
 

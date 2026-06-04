@@ -108,10 +108,8 @@ class GerritService:
     def fetch_gerrit_data(self, commits: list[Any], *, cwd: Path | str | None = None) -> list[Any]:
         """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
 
-        from gerrit_workflow_tools.core.gerrit_change_status import (
-            build_log_commit,
-            count_unresolved_in_file_map,
-        )
+        from gerrit_workflow_tools.core.comment_chains import count_unresolved_in_file_map
+        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         ids = [row.change_id for row in commits if row.change_id]

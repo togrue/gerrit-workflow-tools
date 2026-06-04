@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, change_id_for_gerrit_rest_path
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, change_id_for_gerrit_rest_path, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import norm_change_id
 from gerrit_workflow_tools.core.ready_calc import ReadyResult
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 from gerrit_workflow_tools.core.stack import commits_in_range

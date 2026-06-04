@@ -19,12 +19,12 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_text,
 )
+from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
-    collect_unresolved_comment_chains,
     determine_attention,
     gerrit_inline_comment_url,
 )

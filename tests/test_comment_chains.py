@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.core.gerrit_change_status import (
+from gerrit_workflow_tools.core.comment_chains import (
     build_comment_chains,
     collect_unresolved_comment_chains,
     count_unresolved_in_file_map,

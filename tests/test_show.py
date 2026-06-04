@@ -11,7 +11,7 @@ import pytest
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.core.gerrit_change_status import LOG_QUERY_OPTIONS, norm_change_id
+from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, norm_change_id
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
