@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import ChangeIdRow
-from gerrit_workflow_tools.core.config import stop_patterns
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 
@@ -55,11 +54,11 @@ def compute_ready(
     ignore_patterns: list[str] | None = None,
     until: str | None = None,
     first_parent: bool = True,
+    stop_patterns: list[str],
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
     _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=head)
-    raw_patterns = stop_patterns(cwd)
-    patterns = _filter_patterns(raw_patterns, ignore_exact=list(ignore_patterns or []))
+    patterns = _filter_patterns(stop_patterns, ignore_exact=list(ignore_patterns or []))
     rows = commits_in_range(cwd, f"{target_tip}..{head}", first_parent=first_parent)
     shas = [r.sha for r in rows]
     subjects = [r.subject for r in rows]

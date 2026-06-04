@@ -420,7 +420,7 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    ready = compute_ready(stack_repo)
+    ready = compute_ready(stack_repo, stop_patterns=[r"^test!"])
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
     details = build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []} for _ in rows])
@@ -452,7 +452,7 @@ def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    ready = compute_ready(stack_repo)
+    ready = compute_ready(stack_repo, stop_patterns=[r"^test!"])
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
     reviewer_existing = {
@@ -832,7 +832,7 @@ def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pyt
 def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    expected_tip = compute_ready(stack_repo).push_tip_sha
+    expected_tip = compute_ready(stack_repo, stop_patterns=[r"^test!"]).push_tip_sha
     assert expected_tip
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))

@@ -46,6 +46,7 @@ from gerrit_workflow_tools.core.config import (
     resolve_push_context_branch,
     resolve_upstream_parsed,
     set_branch_config,
+    stop_patterns,
 )
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -911,6 +912,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         ignore_patterns=args.ignore_pattern or None,
         until=args.until,
         first_parent=fp,
+        stop_patterns=stop_patterns(cwd),
     )
     logger.debug(
         "gpush ready tip=%s range=%s boundary=%s",
