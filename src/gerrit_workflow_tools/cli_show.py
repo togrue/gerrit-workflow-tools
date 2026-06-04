@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
 )
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
@@ -27,7 +28,6 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     determine_attention,
     gerrit_inline_comment_url,
 )
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.render.commit_row import attention_column, extra_detail_lines, oneline_body

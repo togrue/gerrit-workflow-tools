@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, call
 
-from gerrit_workflow_tools.core.gerrit_client import change_id_for_gerrit_rest_path
+from gerrit_workflow_tools.core.gerrit.rest import change_id_for_gerrit_rest_path
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 

@@ -7,7 +7,7 @@ import json
 import sys
 
 from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, configure_logging, cwd_from_env
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
 
 
 def _build_parser() -> argparse.ArgumentParser:

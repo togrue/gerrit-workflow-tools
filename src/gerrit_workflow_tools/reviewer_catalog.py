@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.reviewer_completion import (

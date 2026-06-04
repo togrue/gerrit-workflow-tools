@@ -27,13 +27,13 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 from gerrit_workflow_tools.core.config import current_branch, log_defaults, resolve_working_branch
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
     LogCommit,
     annotate_attention,
 )
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream

@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
+from gerrit_workflow_tools.core.gerrit.rest import GerritClient, resolve_gerrit_change
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
-from gerrit_workflow_tools.core.gerrit_client import GerritClient, resolve_gerrit_change
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import parse_change_id
 

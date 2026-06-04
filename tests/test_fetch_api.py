@@ -51,7 +51,7 @@ def test_fetch_api_gerrit_error(
     stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from gerrit_workflow_tools.core.gerrit_client import GerritApiError
+    from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
     _configure_gerrit_http(stack_repo)
 

@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import init_color_mode
-from gerrit_workflow_tools.core.gerrit_client import set_log_gerrit_response_bodies
+from gerrit_workflow_tools.core.gerrit.rest import set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 

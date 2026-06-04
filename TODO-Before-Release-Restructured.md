@@ -54,7 +54,7 @@ Ship a safe, low-friction Gerrit CLI flow where:
 ### Verbose output
 
 For the @src/gerrit_workflow_tools/cli_log.py  command there should be the
-`-v` option: prints urls and more detailed status information about commits that need attention.
+`-v` option: prints urls per commit and optionally more detailed information why the commit needs attention (Which CI tests failed + an url to the test results)
 
 ## `ger push`
 

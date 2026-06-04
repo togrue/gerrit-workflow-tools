@@ -308,7 +308,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     text = _make_todo(rows)
 
     broken_client = MagicMock()
-    from gerrit_workflow_tools.core.gerrit_client import GerritApiError
+    from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
     broken_client.query_changes.side_effect = GerritApiError("timeout")
 
@@ -364,7 +364,7 @@ def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path
 def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: Path, stack_repo: Path, monkeypatch):
     """When _enrich_todo raises, main() prepends an error comment and opens the editor
     with the original (unenriched) todo — the rebase can still proceed."""
-    from gerrit_workflow_tools.core.gerrit_client import GerritApiError
+    from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
     from gerrit_workflow_tools.rebase_enricher import main as enricher_main
 
     rows = stack_rows_mb_to_head(stack_repo)

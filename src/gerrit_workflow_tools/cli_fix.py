@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
 from gerrit_workflow_tools.core.config import gerrit_remote
-from gerrit_workflow_tools.core.gerrit_client import (
+from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritClient,
     resolve_gerrit_change,

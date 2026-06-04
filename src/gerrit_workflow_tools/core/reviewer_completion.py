@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from gerrit_workflow_tools.core.gerrit_client import GerritClient
+from gerrit_workflow_tools.core.gerrit.rest import GerritClient
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit
 
 # Tokens accepted as bare reviewer login prefixes (aligned with push-input grammar).

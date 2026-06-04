@@ -11,6 +11,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.config import gerrit_web_url
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
@@ -18,7 +19,6 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     commit_blocks_chain_for_submittability,
     determine_attention,
 )
-from gerrit_workflow_tools.core.gerrit_client import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import parse_change_id
 from gerrit_workflow_tools.render.status_fmt import (
