@@ -170,7 +170,7 @@ class GerritService:
     def _fetch_ci_failures(self, change_id: str) -> list[str]:
         """Fetch failed CI check names via the Gerrit Checks API."""
 
-        enc = quote(change_id, safe="")
+        enc = quote(change_id_for_gerrit_rest_path(change_id), safe="")
         try:
             data = self.rest.get_json(f"changes/{enc}/revisions/current/checks")
         except GerritApiError:
