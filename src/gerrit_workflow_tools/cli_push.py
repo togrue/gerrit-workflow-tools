@@ -836,7 +836,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) ->
         print()
         if not _confirm_push_interactive(vanilla=True):
             print("Push cancelled.", file=sys.stderr)
-            return 0
+            return 1
     logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd_vanilla), cwd)
     proc = _run_git_push(cmd_vanilla, cwd)
     return proc.returncode
@@ -1058,7 +1058,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
         act = _prompt_gerrit_push_confirm_action()
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
-            return 0
+            return 1
         if act == "reviewers":
             res = _prompt_reviewers_line_ptk(cwd, ctx.branch, change_id_hint=_change_id_for_rev(cwd, tip))
             if not res.valid_for_apply:
