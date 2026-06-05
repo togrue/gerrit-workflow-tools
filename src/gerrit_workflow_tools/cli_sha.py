@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
         else:
             print(sha)
 
-    return 0
+    return 3 if len(matches) > 1 else 0
 
 
 if __name__ == "__main__":
