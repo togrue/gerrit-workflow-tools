@@ -196,8 +196,13 @@ def extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
         if isinstance(vote, dict) and vote.get("value") is not None
     ]
     if all_vals:
-        max_val = max(all_vals, default=0)
-        if max_val == 0 and not any(x != 0 for x in all_vals):
+        min_val = min(all_vals)
+        if min_val < 0:
+            # Any negative vote (e.g. Code-Review -2) takes precedence over
+            # positive votes because blocking votes override approvals.
+            return min_val
+        max_val = max(all_vals)
+        if max_val == 0:
             return None
         return max_val
 
