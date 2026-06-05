@@ -13,31 +13,23 @@
 
 ### `ger log`
 
-Stack overview against Gerrit (CI votes, code-review, unresolved comments). Attention labels and `-v` verbose layout are shipped; see [spec/commands/log.md](spec/commands/log.md).
-
-**Still in scope:**
+See [spec/commands/log.md](spec/commands/log.md).
 
 - `--unresolved-comments` — inline full text of unresolved comment chains
 - `-v` refinement — print Gerrit URLs (and extra detail) only for commits with non-clean status (CI failures, negative votes, open comments), not for every row when verbose is on
 
 ### `ger push`
 
-Push the ready prefix of the stack to Gerrit. Interactive confirmation, `-y`, and the confirmation summary line (target, reviewers, topic, WIP/private) are shipped.
-
-**Still in scope:**
+See [spec/commands/push.md](spec/commands/push.md).
 
 - `--review` — shortcut to the reviewer-assignment step, skipping earlier confirmation steps
 
 ### `ger show`
 
-Single commit detail: commit message, Gerrit status, unresolved comments.
-
-**Still in scope:**
+See [spec/commands/show.md](spec/commands/show.md).
 
 - Always show the git commit message when called with a Change-Id (no local commit)
-- Chain resolution: unresolved only when the **last** comment in the chain is unresolved (not any comment in the chain)
-- Show `(no unresolved comments)` when the change is clean
-- Reformat comment chains: URL once at the top; author + relative timestamp per comment; `PATCHSET_LEVEL` or `file:line` prefix
+- Comment chain formatting polish: relative timestamp per comment; `PATCHSET_LEVEL` or `file:line` prefix on each comment line
 
 ---
 
@@ -54,18 +46,8 @@ Targets: SHA range, Change-Id, or current stack. Spec: [spec/commands/assign.md]
 
 ### `ger fix`
 
-**Verify before release:**
-
 - Fail with a clear error if the target change is already merged on Gerrit
 - Fail (or warn with `--force`) if the fixup would produce a merge conflict
-
----
-
-## Onboarding (remaining)
-
-- **Commit-msg hook:** Manual setup documented in [README.md](../README.md#first-time-setup-change-id-hook) until `ger hooks` ships (v1.1)
-- **Configuration reference:** Keep [Configuration.md](Configuration.md) accurate and linked from setup docs
-- **Specs vs code:** Update [SPEC.md](SPEC.md) and per-command specs when closing items above
 
 ---
 

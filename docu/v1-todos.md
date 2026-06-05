@@ -24,17 +24,29 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 | Area | Gap | Where to write |
 |------|-----|----------------|
-| Onboarding | No copy-paste commit-msg hook steps for end users | Root [README.md](../README.md) + [docu/README.md](README.md) |
+| `ger log -v` | What counts as “non-clean”; URL line rules vs `--url` | [spec/commands/log.md](spec/commands/log.md) |
 | `ger log --unresolved-comments` | Flag behavior, output shape, `--json`, cost (N API calls?) | [spec/commands/log.md](spec/commands/log.md) |
-| Comment chains | Shared model + API helper contract (used by show + log) | [architecture.md](architecture.md) + [spec/commands/show.md](spec/commands/show.md) |
+| Comment chains (docs) | `architecture.md` section missing; show.md still points at wrong module | [architecture.md](architecture.md) + [spec/commands/show.md](spec/commands/show.md) |
 | `ger show` Change-Id-only | Message source: Gerrit `commit` field vs “not available” | [spec/commands/show.md](spec/commands/show.md) |
+| `ger fix` safety | Exit codes, exact error text, `--force` for conflict probe | [spec/commands/fix.md](spec/commands/fix.md) |
 | `ger push --review` | Interactive step order vs `-i` / `--reviewers` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger assign` | Full command: flags, targets, `--dry-run`, branch move API | [spec/commands/assign.md](spec/commands/assign.md) |
-| `ger branch` | Command spec + `cli_ger` registration (today: git config only) | [Configuration.md](Configuration.md) + new `spec/commands/branch.md` |
-
 
 ---
 
+## 6. Spec: `ger fix` merged + conflict checks (S) — 📝
+
+**Why:** [spec/commands/fix.md](spec/commands/fix.md) has no behavior detail for merged-target or conflict probes.
+
+**Steps:**
+
+1. **Merged:** If target resolves to a Gerrit change with `status == MERGED`, exit `1` (or `2` — pick one, document), message: suggest `ger show` / new change. Local SHA-only targets: skip Gerrit check.
+2. **Conflict:** Define probe (e.g. `git merge-tree` / dry-run fixup rebase) and whether `--force` warns vs hard-fails.
+3. Document exit codes and stderr wording in [fix.md](spec/commands/fix.md).
+
+**Done when:** fix.md has testable acceptance criteria; no “verify before release” ambiguity.
+
+---
 
 ## 7. `ger fix`: reject merged Gerrit target (S–M) — depends on §6
 
@@ -49,48 +61,45 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 ---
 
-## 9. Spec: comment chain model + shared helper (M) — 📝
+## 8. Implement `ger log -v` selective URLs (S–M) — depends on log.md spec
 
-**Why:** Blocks show chain fix, show formatting, log `--unresolved-comments`, and consistent attention counts.
+**Why:** Closes scope log item: verbose mode still prints URLs for every row.
 
 **Steps:**
 
-1. In [architecture.md](architecture.md), add **Comment chains**:
-   - Chain id / grouping rule (Gerrit `in_reply_to` / thread root)
-   - **Resolved** iff last comment in chain has `unresolved: false`
-   - `collect_unresolved_comment_chains(file_map) -> list[Chain]` (name TBD)
-2. In [show.md](spec/commands/show.md), reference helper; move “current bug” to **Behavior (target)** once agreed.
-3. Note impact on `comments_unresolved` count in log attention (integer = chain count, not raw comment count? — **decide in spec**).
+1. Document policy in [log.md](spec/commands/log.md) (reuse `attention_reasons` / `determine_attention`).
+2. Implement in `cli_log.py`: skip URL + extra detail lines for clean commits when `-v` is set.
+3. Extend `tests/test_log.py` for verbose + clean vs attention row.
 
-**Done when:** One helper contract documented; show + log specs point to it.
+**Done when:** `-v` does not print URLs for clean commits; unit tests lock behavior.
 
 ---
 
-## 10. `ger show`: chain-level unresolved detection (M) — depends on §9
+## 9. Spec: comment chain model in architecture (S) — 📝
 
-**Why:** Scope + spec bug: per-comment `unresolved: true` is wrong for threads.
+**Why:** Implementation lives in `core/comment_chains.py`; docs still lag.
 
 **Steps:**
 
-1. Implement helper from §9; switch `cli_show` off `collect_unresolved_comments` (or make thin wrapper).
-2. Port/update tests touching `collect_unresolved_comments` in `tests/test_show.py` / `gerrit_change_status` tests.
-3. Align `determine_attention` / `comments_unresolved` if spec says chain count (may affect log summary — document in commit).
+1. In [architecture.md](architecture.md), add **Comment chains** (grouping, resolution rule, helper names).
+2. Fix module reference in [show.md](spec/commands/show.md) (`comment_chains.py`, not `gerrit_change_status.py`).
+3. Confirm `comments_unresolved` = chain count (already used by `count_unresolved_in_file_map`).
 
-**Done when:** Resolved thread with unresolved-looking middle replies does not list as open.
+**Done when:** architecture.md + show.md match shipped code.
 
 ---
 
-## 11. `ger show`: reformatted comment chain output (M) — depends on §10 — 🔶
+## 11. `ger show`: comment chain formatting polish (S) — 🔶 — depends on §9
 
-**Why:** Scope formatting; example in [show.md](spec/commands/show.md).
+**Why:** Per-comment timestamp and location prefix still missing from show output.
 
 **Steps:**
 
-1. Render: chain URL once at top; per comment: author, relative time, `PATCHSET_LEVEL` or `path:line` prefix.
-2. Reuse or add small formatter in `render/` if needed.
-3. Update golden tests / `test_show.py`.
+1. Per comment: relative timestamp (e.g. “3 days ago”) alongside author.
+2. Per comment: `PATCHSET_LEVEL` or `path:line` prefix (not only at chain header).
+3. Reuse or add formatter in `render/`; update `tests/test_show.py`.
 
-**Done when:** Output matches spec example structure (manual spot-check on integration optional).
+**Done when:** Output matches spec example structure.
 
 ---
 
@@ -125,7 +134,7 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 **Steps:**
 
 1. Add option to [log.md](spec/commands/log.md):
-   - Text mode: after each **non-clean** line or only lines with comment attention? (**recommend:** only rows with unresolved chains)
+   - Text mode: only rows with unresolved chains (recommended)
    - Inline body: reuse show chain formatter (§11)
    - `--json`: new field e.g. `unresolved_chains` vs inline only in text
    - Performance: one comments API per change vs batch — document
@@ -149,7 +158,7 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 ## 16. Spec: `ger push --review` interactive shortcut (S) — 📝
 
-**Why:** Scope item; [push.md](spec/commands/push.md) only says “not implemented”.
+**Why:** Scope item; [push.md](spec/commands/push.md) has no `--review` behavior yet.
 
 **Steps:**
 
@@ -235,11 +244,11 @@ Work **top to bottom** (simplest first). Each item lists **effort**, **spec stat
 
 ---
 
-## Suggested first sprint (simplest, high leverage)
+## Suggested next sprint
 
-1. **§1** push.md hygiene
-2. **§2–3** onboarding docs
-3. **§5** show empty unresolved line
-4. **§6–7** fix merged spec + implement
+1. **§9** — architecture.md comment chains (doc-only, unblocks log flag spec)
+2. **§6–7** — fix merged spec + implement
+3. **§8** — log `-v` selective URLs
+4. **§11** — show comment timestamp / location prefix polish
 
-Defer **§20–21** (`ger assign`) until comment-chain core (**§9–11**) is stable — log inline comments and show share the same model.
+Defer **§20–21** (`ger assign`) until comment-chain formatting is stable — log inline comments and show share the same formatter.
