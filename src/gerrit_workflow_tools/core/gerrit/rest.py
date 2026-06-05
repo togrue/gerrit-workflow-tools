@@ -307,14 +307,17 @@ class GerritClient:
         aid_enc = quote(str(account_id), safe="")
         return self._request_json(f"changes/{enc}/reviewers/{aid_enc}", method="DELETE")
 
-    def set_topic(self, change_id: str, topic: str | None) -> dict[str, Any]:
-        """Set or clear the topic on *change_id*."""
+    def set_topic(self, change_id: str, topic: str | None) -> None:
+        """Set or clear the topic on *change_id*.
+
+        Gerrit ``PUT /changes/{id}/topic`` returns the new topic as a bare JSON
+        string (e.g. ``"my-topic"``), not a JSON object.  Clearing the topic
+        yields ``204 No Content`` (mapped to ``{}`` by ``_request_json``).
+        Both are valid; neither needs further validation.
+        """
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = quote(cid, safe="")
-        data = self._request_json(f"changes/{enc}/topic", method="PUT", json_body={"topic": topic or ""})
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected set topic response")
-        return data
+        self._request_json(f"changes/{enc}/topic", method="PUT", json_body={"topic": topic or ""})
 
     def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
         """Mark *change_id* work-in-progress when *on*, otherwise ready for review."""
