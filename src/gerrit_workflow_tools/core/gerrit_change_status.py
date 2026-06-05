@@ -234,7 +234,7 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
         return PatchsetStatus.OUTDATED
     if cur_n or rev_keys:
         return PatchsetStatus.NEWER
-    return PatchsetStatus.NEWER
+    return PatchsetStatus.ABSENT
 
 
 def gerrit_change_url(web_base: str, change: dict[str, Any]) -> str | None:
