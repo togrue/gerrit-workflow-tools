@@ -813,7 +813,11 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) ->
             remote_name, _rest = parsed
             cmd_vanilla = ["git", "push", remote_name, branch]
         else:
-            cmd_vanilla = ["git", "push", branch]
+            print(
+                f"error: branch '{branch}' has no tracking upstream configured; cannot determine remote to push to",
+                file=sys.stderr,
+            )
+            return 1
     else:
         cmd_vanilla = ["git", "push"]
     logger.debug("gpush vanilla: %s", cmd_vanilla)
