@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Literal
+from urllib.parse import quote
 
 ReviewerStrategy = Literal["push", "lazy", "overwrite"]
 
@@ -416,5 +417,5 @@ def refspec_options(state: PushLineState, strategy: ReviewerStrategy) -> list[st
     if state.private:
         parts.append("private")
     if state.topic:
-        parts.append(f"topic={state.topic}")
+        parts.append(f"topic={quote(state.topic, safe='')}")
     return parts
