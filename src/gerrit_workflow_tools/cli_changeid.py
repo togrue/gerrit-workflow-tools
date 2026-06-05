@@ -198,7 +198,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
         )
     head_ref = head_ref_proc.stdout.strip()
 
-    src_path = cwd / "src"
+    src_path = Path(__file__).parent.parent
     py_path = os.environ.get("PYTHONPATH")
     env = {
         "FILTER_BRANCH_SQUELCH_WARNING": "1",
