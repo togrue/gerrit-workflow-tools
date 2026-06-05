@@ -800,10 +800,11 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) ->
         or args.topic is not None
         or args.wip
         or args.private
+        or args.reviewer_strategy is not None
     ):
         print(
-            "warning: --until, --all, --reviewers, --ignore-pattern, --topic, --wip, and --private "
-            "apply only to Gerrit push; ignoring.",
+            "warning: --until, --all, --reviewers, --ignore-pattern, --topic, --wip, --private, "
+            "and --reviewer-strategy apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
     parsed = resolve_upstream_parsed(cwd, branch)
