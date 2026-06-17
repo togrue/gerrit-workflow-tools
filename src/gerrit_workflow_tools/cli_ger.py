@@ -30,6 +30,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     ),
     "push": ("Push the ready prefix or full stack to Gerrit.", "gerrit_workflow_tools.cli_push:main"),
     "rebase": ("Interactive rebase with Gerrit status annotations.", "gerrit_workflow_tools.cli_rebase:main"),
+    "setup": (
+        "Interactively configure gerrit.webUrl, user, and token in git config.",
+        "gerrit_workflow_tools.cli_setup:main",
+    ),
     "sha": ("Resolve a Change-Id to a commit SHA.", "gerrit_workflow_tools.cli_sha:main"),
     "show": ("One commit vs Gerrit (status and unresolved comments).", "gerrit_workflow_tools.cli_show:main"),
 }

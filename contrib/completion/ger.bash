@@ -20,6 +20,14 @@ _ger_bash_completion() {
     fi
 }
 
+_ger_setup() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" -h --help --local
+        return
+    fi
+}
+
 _ger_cache() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -207,7 +215,7 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix log push rebase restack reword sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix log push rebase restack reword setup sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -222,6 +230,7 @@ _ger() {
         push) _ger_push ;;
         rebase|restack|stack) _ger_rebase ;;
         reword) _ger_reword ;;
+        setup) _ger_setup ;;
         sha) _ger_sha ;;
         show) _ger_show ;;
     esac
