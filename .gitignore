@@ -8,3 +8,6 @@ build/
 
 # Personal integration-test machine settings (see tests/integration/local.env.example)
 tests/integration/local.env
+
+# Local planning docs, prompts, and scratch notes (not for the repo)
+.temp/
