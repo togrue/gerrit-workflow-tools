@@ -9,7 +9,7 @@
 | [spec/commands/](spec/commands/) | One spec per shipped `ger` command |
 | [Configuration.md](Configuration.md) | Git config keys (referenced by command specs) |
 
-**Operational docs** (not behavioral specs): [Howto_Test.md](Howto_Test.md), [Completion.md](Completion.md).
+**Operational docs** (not behavioral specs): [Completion.md](Completion.md).
 
 ---
 

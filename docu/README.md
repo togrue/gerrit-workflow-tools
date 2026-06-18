@@ -8,7 +8,7 @@
 | Git configuration | [Configuration.md](Configuration.md) |
 | Per-command specs | [spec/commands/](spec/commands/) |
 | Bash completion setup | [Completion.md](Completion.md) |
-| Testing | [Howto_Test.md](Howto_Test.md) |
+| Testing | [../README.md#development](../README.md#development) (unit); [../tests/integration/README.md](../tests/integration/README.md) (integration) |
 
 ---
 

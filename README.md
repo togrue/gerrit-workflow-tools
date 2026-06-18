@@ -93,11 +93,11 @@ ger change-id --check-duplicates
 
 ## Development
 
-Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user. See [docu/Howto_Test.md](docu/Howto_Test.md).
+Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user.
 
 ### Testing
 
-See [docu/Howto_Test.md](docu/Howto_Test.md). Quick start: `uv run pytest -q` (unit only).
+Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in).
 
 ### Integration tests (optional)
 

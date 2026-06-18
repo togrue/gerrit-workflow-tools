@@ -47,5 +47,4 @@ ger assign [options] <targets>
 
 ## See also
 
-- [Version 1 Scope](../../Version%201%20Scope.md#ger-assign-new-command)
 - [`ger push`](push.md) (current metadata on push)
