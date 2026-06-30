@@ -8,6 +8,8 @@
 
 If you use Gerrit with single-commit changes only, or you already have a workflow you like, you may not need this.
 
+![Example `ger log` output: stack commits with patchset, verification, code-review, comments, and attention hints](.screenshots\ger_log_output.png)
+
 ## You might want this if
 
 - You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`).
@@ -22,78 +24,21 @@ Each commit carries a footer **Change-Id** (`I…`), but Gerrit's unique key for
 
 ## Install
 
-Python installs a single CLI: **`ger`**. After install, run **`ger`** subcommands from any repository without activating a virtual environment.
-
-### First-time setup
-
-See **[docu/Getting-Started.md](docu/Getting-Started.md)** for the full checklist (install → `ger setup` → upstream → hook → verify).
-
-Key config keys: [docu/Configuration.md](docu/Configuration.md) — `gerrit.webUrl`, credentials, `branch.*.gerritReviewers`, `gerrit.stopPattern`.
-
-
-### User environment (recommended)
-
-Install once; the generated launcher embeds the interpreter used at install time. **Runtime does not use `uv`**—only the install step may.
-
-**From a clone of this repo** (editable or regular install):
+From a clone of this repo:
 
 ```bash
-# pip (user site-packages + user Scripts/bin)
 pip install --user .
-
-# or uv as an installer only (same outcome: scripts on PATH)
-uv pip install --user .
+# or:  pipx install .
 ```
 
-**Or isolated tool env** ([pipx](https://pypa.github.io/pipx/)):
+Ensure the install directory is on `PATH`, then configure Gerrit:
 
 ```bash
-pipx install .
-# or from directory:  pipx install /path/to/workflow-optimization
+ger setup
+ger --help
 ```
 
-Then ensure your **user binary directory** is on `PATH`:
-
-| Platform | Typical path |
-|----------|--------------|
-| Linux / macOS | `~/.local/bin` |
-| Windows (pip `--user`) | `%APPDATA%\Python\Python3x\Scripts` or `Python3x\Scripts` under your user profile (see `python -m site --user-site` and parent `Scripts`) |
-| Windows (Git Bash) | same as above; add the `Scripts` folder that contains `ger.exe` |
-
-Verify:
-
-```bash
-ger push --help
-# or:  ger --help
-```
-
-
-### Bash completion (optional)
-
-See [docu/Completion.md](docu/Completion.md): `ger bash-completion` prints the `source` line; `ger bash-completion --install` adds it to `~/.bashrc`.
-
-### First-time setup: Change-Id hook
-
-Gerrit Change-Ids are added automatically by the `commit-msg` hook. Install this once per clone:
-
-```bash
-# Uses gerrit.webUrl from your git config
-# Example: git config --global gerrit.webUrl https://gerrit.example.com
-HOOK_URL="$(git config --get gerrit.webUrl)/tools/hooks/commit-msg"
-
-curl -sfL -o .git/hooks/commit-msg "$HOOK_URL" \
-  || wget -q -O .git/hooks/commit-msg "$HOOK_URL"
-
-chmod +x .git/hooks/commit-msg
-```
-
-If `gerrit.webUrl` is not set yet, configure it first (see [docu/Configuration.md](docu/Configuration.md)).
-
-After installing the hook, run:
-
-```bash
-ger change-id --check
-```
+For PATH details, bash completion, the Change-Id hook, branch settings, and verification: **[Getting started](docu/Getting-Started.md)**.
 
 ## Development
 
