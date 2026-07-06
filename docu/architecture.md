@@ -181,16 +181,16 @@ Reviewer strategies (`push`, `lazy`, `overwrite`) and magic ref options (`%topic
 
 ## Onboarding
 
-Minimum path for a new teammate:
+Full checklist: **[Getting-Started.md](Getting-Started.md)**.
+
+Minimum path:
 
 1. Install `ger` ([README.md](../README.md)).
-2. `git config --global gerrit.webUrl <url>` and credentials.
-3. Set upstream (`git branch --set-upstream-to=<remote>/<branch>`) and optional `branch.*.gerritTarget` / `gerritReviewers` (see [Configuration.md](Configuration.md)).
-4. Install the commit-msg hook for Change-Ids ([README.md](../README.md#first-time-setup-change-id-hook)).
+2. `ger setup` or manual `gerrit.webUrl` + credentials.
+3. Set upstream and optional `branch.*.gerritTarget` / `gerritReviewers`.
+4. Install the commit-msg hook ([Getting-Started.md](Getting-Started.md#4-install-the-change-id-hook)).
 5. `ger bash-completion --install` (recommended).
-6. Daily: `ger log` → `ger show <ref>` → `ger push`.
-
-Config details: [Configuration.md](Configuration.md).
+6. Daily: `ger log` ([Reading-ger-log.md](Reading-ger-log.md)) → `ger show <ref>` → `ger push`.
 
 ---
 

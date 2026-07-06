@@ -5,11 +5,13 @@
 | Document | Role |
 |----------|------|
 | This file | Index, conventions, command registry |
+| [Getting-Started.md](Getting-Started.md) | First-run setup (install, config, hook) |
+| [Reading-ger-log.md](Reading-ger-log.md) | User guide for `ger log` text output |
 | [architecture.md](architecture.md) | System design, shared concepts, module map |
 | [spec/commands/](spec/commands/) | One spec per shipped `ger` command |
 | [Configuration.md](Configuration.md) | Git config keys (referenced by command specs) |
 
-**Operational docs** (not behavioral specs): [Completion.md](Completion.md).
+**Operational docs** (not behavioral specs): [Completion.md](Completion.md). **Doc index:** [README.md](README.md).
 
 ---
 
@@ -72,7 +74,8 @@ Commands listed here are registered in `cli_ger.py` today.
 
 ## Configuration & setup
 
+- **First-time setup:** [Getting-Started.md](Getting-Started.md)
 - **Config reference:** [Configuration.md](Configuration.md)
-- **First-time setup:** [architecture.md#onboarding](architecture.md#onboarding) and root [README.md](../README.md)
+- **Reading `ger log`:** [Reading-ger-log.md](Reading-ger-log.md)
 
 Branch-local keys (`branch.*.gerritTarget`, `gerritReviewers`) are documented in [Configuration.md](Configuration.md#branch-local-branchname); set them with `git config`.

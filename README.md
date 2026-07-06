@@ -14,11 +14,18 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 - You want **branch-local Gerrit settings** (target branch, reviewers via `branch.*` git config) and **push** commands that understand your stack (`ger push`).
 - You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger sha` / `ger change-id`).
 
-**Documentation** (specification, commands, configuration): [docu/SPEC.md](docu/SPEC.md) · [docu/README.md](docu/README.md).
+**Documentation:** [Getting started](docu/Getting-Started.md) · [Reading `ger log`](docu/Reading-ger-log.md) · [Full index](docu/README.md)
 
 ## Install
 
 Python installs a single CLI: **`ger`**. After install, run **`ger`** subcommands from any repository without activating a virtual environment.
+
+### First-time setup
+
+See **[docu/Getting-Started.md](docu/Getting-Started.md)** for the full checklist (install → `ger setup` → upstream → hook → verify).
+
+Key config keys: [docu/Configuration.md](docu/Configuration.md) — `gerrit.webUrl`, credentials, `branch.*.gerritReviewers`, `gerrit.stopPattern`.
+
 
 ### User environment (recommended)
 
@@ -56,13 +63,6 @@ ger push --help
 # or:  ger --help
 ```
 
-### Configure Gerrit defaults
-
-Before daily use, review the supported Git config keys in [docu/Configuration.md](docu/Configuration.md), especially:
-
-- `gerrit.webUrl`
-- default reviewers (`branch.<name>.gerritReviewers`)
-- ready-boundary stop patterns (`gerrit.stopPattern`)
 
 ### Bash completion (optional)
 
