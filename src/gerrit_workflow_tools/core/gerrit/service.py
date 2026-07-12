@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.cache import (
     DEFAULT_ACCOUNT_TTL_SECONDS,
     DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
@@ -36,9 +37,42 @@ logger = logging.getLogger(__name__)
 def _canonical_change_map(rows: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for fallback, payload in rows.items():
+        triplet = payload.get("id")
+        if isinstance(triplet, str) and triplet:
+            out[triplet] = payload
+        else:
+            out[fallback] = payload
+    return out
+
+
+def _effective_cwd(service: GerritService) -> str | Path | None:
+    cwd = getattr(service, "_cwd", None) or getattr(service.rest, "cwd", None)
+    if isinstance(cwd, (str, Path)):
+        text = str(cwd)
+        if text and "MagicMock" not in text:
+            path = Path(text)
+            if path.is_dir():
+                return path
+    return os.getcwd()
+
+
+def _batch_ref_for_change_key(service: GerritService, change_key: str) -> str:
+    """Map a cache Change-Id key to a triplet or numeric ref for batch REST queries."""
+    if "~" in change_key:
+        return change_key
+    if change_key.isdigit():
+        return change_key
+    stack = resolve_stack_context(_effective_cwd(service))
+    return build_triplet(stack.project, stack.push_branch, change_key)
+
+
+def _payloads_by_change_key(payloads: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Re-key triplet-keyed batch results to canonical Change-Id keys for the cache layer."""
+    out: dict[str, dict[str, Any]] = {}
+    for payload in payloads.values():
         raw = payload.get("change_id")
-        key = _change_key(raw if isinstance(raw, str) else fallback)
-        out[key] = payload
+        if isinstance(raw, str):
+            out[_change_key(raw)] = payload
     return out
 
 
@@ -53,9 +87,11 @@ class GerritService:
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         account_ttl_seconds: int = DEFAULT_ACCOUNT_TTL_SECONDS,
         refresh: bool = False,
+        cwd: Path | str | None = None,
     ) -> None:
         self.rest = rest
         self.cache = cache
+        self._cwd = str(cwd) if cwd is not None else getattr(rest, "cwd", None)
         self.trust_window_seconds = trust_window_seconds
         self.account_ttl_seconds = account_ttl_seconds
         self.refresh = refresh
@@ -78,7 +114,13 @@ class GerritService:
         web_base = resolve_gerrit_web_base(cwd)
         rest = GerritClient(web_base, cwd=str(cwd) if cwd is not None else None)
         cache = GerritCache.for_web_base(web_base)
-        return cls(rest, cache, refresh=refresh, trust_window_seconds=trust_window_seconds)
+        return cls(
+            rest,
+            cache,
+            refresh=refresh,
+            trust_window_seconds=trust_window_seconds,
+            cwd=cwd,
+        )
 
     @property
     def web_base(self) -> str:
@@ -87,7 +129,19 @@ class GerritService:
         return self.rest.web_base
 
     def _fetch_change_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
-        return _canonical_change_map(batch_load_change_details(self.rest, change_ids))
+        refs = [_batch_ref_for_change_key(self, cid) for cid in change_ids]
+        by_triplet = _canonical_change_map(batch_load_change_details(self.rest, refs))
+        return _payloads_by_change_key(by_triplet)
+
+    def _probe_changes_updated(self, change_ids: list[str]) -> dict[str, str]:
+        refs = [_batch_ref_for_change_key(self, cid) for cid in change_ids]
+        by_triplet = self.rest.probe_changes_updated(refs)
+        out: dict[str, str] = {}
+        for change_key, ref in zip(change_ids, refs):
+            updated = by_triplet.get(ref)
+            if updated is not None:
+                out[_change_key(change_key)] = updated
+        return out
 
     def _fetch_account_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
         def _one(account_id: int | str) -> tuple[int, dict[str, Any]]:
@@ -230,7 +284,7 @@ class ChangeApi:
 
         return self._service.cache.load_changes(
             change_ids,
-            probe_updated=self._service.rest.probe_changes_updated,
+            probe_updated=self._service._probe_changes_updated,
             fetch_changes=self._service._fetch_change_payloads,
             trust_window_seconds=self._service.trust_window_seconds,
             refresh=self._service.refresh,

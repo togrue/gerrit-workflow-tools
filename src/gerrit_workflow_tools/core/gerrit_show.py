@@ -32,9 +32,20 @@ def _looks_like_change_id(arg: str) -> bool:
     return bool(CHANGE_ID_VALUE_RE.match(token))
 
 
-def _is_numeric_change(arg: str) -> bool:
+def _is_gerrit_change_ref(arg: str) -> bool:
     token = arg.strip()
-    return bool(token) and token.isdigit()
+    if not token:
+        return False
+    lower = token.lower()
+    if lower.startswith(("change:", "cl:")):
+        return True
+    if _looks_like_change_id(token):
+        return True
+    if "~" in token:
+        parts = token.split("~")
+        if len(parts) == 3 and _looks_like_change_id(parts[2]):
+            return True
+    return False
 
 
 def _normalize_user_arg(arg: str) -> str:
@@ -70,7 +81,7 @@ def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritClie
     if _arg_has_range(raw_arg):
         raise GitError(f"ger show does not support revision ranges: {arg!r}")
 
-    if _looks_like_change_id(raw_arg) or _is_numeric_change(raw_arg):
+    if _is_gerrit_change_ref(raw_arg):
         return ShowCommitResolution(row=_resolved_row_from_gerrit(client, raw_arg), is_local_commit=False)
 
     try:

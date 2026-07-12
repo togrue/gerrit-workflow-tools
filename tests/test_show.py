@@ -11,7 +11,7 @@ import pytest
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, norm_change_id
+from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
@@ -27,13 +27,14 @@ def _detail_ok(
     sha: str,
     cr_value: int = 2,
     v_value: int = 1,
+    number: int = 99,
 ) -> dict:
     """Minimal ChangeInfo for :func:`fetch_gerrit_data`."""
     return {
         "id": f"proj~master~{change_id}",
         "change_id": change_id,
         "project": "proj",
-        "_number": 99,
+        "_number": number,
         "subject": "subj",
         "current_revision": sha,
         "submittable": True,
@@ -63,7 +64,7 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     with (
         patch(
             "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
@@ -95,7 +96,8 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    ch["_number"] = 42
     with (
         patch(
             "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
@@ -110,7 +112,7 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--json", "42"],
+            ["--json", "change:42"],
             monkeypatch,
         )
     assert code == 0
@@ -126,7 +128,7 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=1)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=1, number=42)
     with (
         patch(
             "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
@@ -141,7 +143,7 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--json", "42"],
+            ["--json", "change:42"],
             monkeypatch,
         )
     assert code == 1
@@ -155,7 +157,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     long_msg = "\n".join(f"line{i}" for i in range(15))
     comments = {
         "f.py": [
@@ -182,7 +184,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--json", "42", "--comment-tail-lines", "3"],
+            ["--json", "change:42", "--comment-tail-lines", "3"],
             monkeypatch,
         )
     assert code == 0
@@ -191,7 +193,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     assert c0["message"] == long_msg
     assert "line0" in c0["message"] and "line14" in c0["message"]
     assert "lines omitted above" not in c0["message"]
-    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
+    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/42/comment/TvcXrmjM/"
 
 
 def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -200,7 +202,7 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     comments = {
         "f.py": [
             {
@@ -234,7 +236,7 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--color=never", "42"],
+            ["--color=never", "change:42"],
             monkeypatch,
         )
     assert code == 0
@@ -248,7 +250,7 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     ch["unresolved_comment_count"] = 1
     comments = {
         "epsilon.txt": [
@@ -275,7 +277,7 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--color=never", "42"],
+            ["--color=never", "change:42"],
             monkeypatch,
         )
     assert code == 1
@@ -289,7 +291,7 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     comments = {
         "f.py": [
             {
@@ -315,7 +317,7 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--json", "42"],
+            ["--json", "change:42"],
             monkeypatch,
         )
     assert code == 0
@@ -328,7 +330,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     long_msg = "\n".join(f"line{i}" for i in range(15))
     comments = {
         "f.py": [
@@ -355,7 +357,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
         code, out, _err = run_cli(
             stack_repo,
             gshow_main,
-            ["--json", "42", "--full"],
+            ["--json", "change:42", "--full"],
             monkeypatch,
         )
     assert code == 0
@@ -363,7 +365,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     c0 = data["comments"][0]
     assert c0["message"] == long_msg
     assert "line0" in c0["message"] and "line14" in c0["message"]
-    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/99/comment/TvcXrmjM/"
+    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/42/comment/TvcXrmjM/"
 
 
 def _configure_gshow_repo(stack_repo: Path) -> None:
@@ -385,7 +387,7 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=77)
-    details = {norm_change_id(cid): detail}
+    details = {str(detail["id"]): detail}
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch)
     assert code == 0, err
@@ -448,7 +450,7 @@ def test_gshow_human_prints_no_unresolved_comments_when_clean(
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=92)
-    details = {norm_change_id(cid): detail}
+    details = {str(detail["id"]): detail}
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch)
     assert code == 0, err
@@ -467,7 +469,7 @@ def test_gshow_highlights_warning_pattern_on_summary_line(stack_repo: Path, monk
     git("config", "--add", "gerrit.warningPattern", subj, cwd=stack_repo)
     clear_gerrit_git_config_cache()
     detail = change_info_for_sha(sha, cid, number=91)
-    details = {norm_change_id(cid): detail}
+    details = {str(detail["id"]): detail}
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, out, err = run_cli(stack_repo, gshow_main, ["--color", "always"], monkeypatch)
     assert code == 0, err
@@ -488,7 +490,7 @@ def test_gshow_smoke_argv_head_mocked(stack_repo: Path, monkeypatch: pytest.Monk
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=88)
-    details = {norm_change_id(cid): detail}
+    details = {str(detail["id"]): detail}
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch)
     assert code in (0, 1), err

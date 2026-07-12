@@ -34,11 +34,18 @@ def _wants_gerrit_resolution(arg: str) -> bool:
     token = arg.strip()
     if not token:
         return False
+    lower = token.lower()
+    if lower.startswith(("change:", "cl:")):
+        return True
     if is_change_id_token(token):
         return True
     if CHANGE_ID_VALUE_RE.match(token):
         return True
-    return token.isdigit()
+    if "~" in token:
+        parts = token.split("~")
+        if len(parts) == 3 and CHANGE_ID_VALUE_RE.match(parts[2]):
+            return True
+    return False
 
 
 def _refs_changes_ref(arg: str) -> str | None:
