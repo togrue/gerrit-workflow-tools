@@ -91,6 +91,22 @@ Footer `Change-Id: I<40 hex>` in commit messages. Required for Gerrit-mode push 
 - Parse/validate: `core/change_id.py`, `cli_changeid.py`
 - Duplicate check: `ger change-id --check-duplicates`
 
+### Change identity
+
+Gerrit's canonical identity for a change is the **triplet** `project~branch~Change-Id` — the same string returned as `ChangeInfo.id` in the REST API. A bare footer **Change-Id** is **not** unique across branches: the same `Change-Id` can legitimately appear on multiple Gerrit changes (e.g. cherry-picks to a release branch). Commands must never assume one Change-Id maps to exactly one server row.
+
+Every command that accepts a **changeish** (git ref, Change-Id, triplet, `change:<n>`, URL, etc.) resolves it through a single shared core — **`core/gerrit/change_resolution.py`** (planned; Phase 1) — so classification, stack context, triplet building, and ambiguity narrowing live in one place instead of per-command copies. The behavior contract is [spec/change-and-commit-identifiers.md](spec/change-and-commit-identifiers.md).
+
+**Stack context** feeds that resolver:
+
+| Field | Source (precedence order) |
+|-------|---------------------------|
+| `project` | `gerrit.project` → parsed from `gerrit.remote` URL |
+| **target branch** | `branch.<name>.gerritTarget` → upstream on `gerrit.remote` |
+| **push branch** | branch Gerrit receives via `refs/for/<target>` |
+
+See [Configuration.md](Configuration.md#branch-local-branchname).
+
 ### Patchset status (log / show / rebase annotations)
 
 | Token | Meaning |
