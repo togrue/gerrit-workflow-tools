@@ -8,7 +8,7 @@ satisfy lives in
 read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 `resolution` output, and exit codes.
 
-**Status:** Phases 0–2 complete (common resolution core, gerritTarget config, triplet-aware REST layer); Phase 3a complete (read-only overlay: log/show/rebase via resolution core); Phase 3b–6 not yet implemented
+**Status:** Phases 0–6 complete — shared resolution core, triplet-aware REST/cache, all commands wired, `ger resolve`, integration tests, and operator docs shipped
 
 ---
 
@@ -213,7 +213,7 @@ Phase 0 wired the surrounding docs to it (see **Status** below).
 
 **Phase 3a status:** Complete — `fetch_gerrit_data` resolves stack context and triplet-keys detail lookup; `ger show` uses `resolve_changeish` with resolution JSON/notes and exit codes 3/4; `ger log` emits stack context in `--json` and resolution notes on stderr; tests updated for triplet-keyed mocks.
 
-**Phase 3b (not yet):** Wire `cli_push`, `cli_fix`, mutations, `push_reviewers`, `reviewer_catalog`.
+**Phase 3b status:** Complete — `cli_push`, `cli_fix`, `push_reviewers`, and `reviewer_catalog` wired through the shared core; bare integer → git revision; resolution JSON and exit code 4 on ambiguity.
 
 ---
 
@@ -235,6 +235,8 @@ Phase 0 wired the surrounding docs to it (see **Status** below).
 
 **Done when:** No cache collision across branches, and no normalization step exists anywhere in the cache read/write path.
 
+**Status:** Complete — schema v2, triplet PK, tests in `tests/test_gerrit_cache.py`.
+
 ---
 
 ### Phase 5 — `ger resolve` command
@@ -253,6 +255,8 @@ ger resolve <changeish> [--json]
 
 **Done when:** `ger resolve` exists, documented in `spec/commands/resolve.md`, and its output is produced by the exact same core function every other command uses — no bespoke logic in the CLI layer beyond argument parsing and printing.
 
+**Status:** Complete — `cli_resolve.py`, `tests/test_resolve.py`, `docu/spec/commands/resolve.md`.
+
 ---
 
 ### Phase 6 — Integration tests & operator docs
@@ -266,6 +270,16 @@ ger resolve <changeish> [--json]
 - Root [README.md](../../README.md): one paragraph on Change-Id vs triplet, linking to the behavior spec.
 
 **Done when:** CI covers the cross-branch Change-Id scenario, the bare-integer reversal, and cross-command resolution consistency — the three things most likely to regress silently if a future change bypasses the shared core.
+
+**Status:** Complete
+
+| Deliverable | Where |
+|-------------|--------|
+| Cross-branch Change-Id; resolve/show JSON agreement; per-branch log | `tests/integration/test_09_change_resolution.py` (Docker Gerrit: resolve/show + log narrowing notes); unit fallback `tests/test_change_resolution_consistency.py` (full log overlay via mocks) |
+| Bare integer `ger fix N` → git revision, not change number | `tests/test_fix.py::test_ger_fix_bare_integer_is_git_revision_not_change_number` |
+| Push → log/resolve triplet consistency | integration `test_push_then_resolve_triplet_consistency`; unit `test_push_stack_resolve_and_show_agree_on_triplet` |
+| `gerrit.project`, `branch.*.gerritTarget` for triplet resolution | [Configuration.md](../Configuration.md#change-identity-triplet-resolution) |
+| Change-Id vs triplet (README) | [README.md](../../README.md) |
 
 ---
 

@@ -17,6 +17,22 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` to drop specific patterns without editing config. |
 | `gerrit.warningPattern` | **Repeatable.** Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, and `ger show` when color output is enabled. Defaults when unset: single-word subject (`^[^\\s]+$`), `wip`, `todo` (case-insensitive). Stop-pattern highlighting takes precedence when both match the same text span. |
 | `gerrit.showCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
+| `gerrit.project` | **Gerrit project name** for change resolution and REST calls (e.g. `mygroup/myrepo`). When unset, parsed from the `gerrit.remote` URL. Set this when the remote URL does not encode the project path Gerrit expects, or when you use a mirror/fork whose URL differs from the server project name. Required input for building **triplets** (`project~branch~Change-Id`) used by `ger log`, `ger show`, `ger push`, `ger fix`, and `ger resolve`. |
+
+---
+
+## Change identity (triplet resolution)
+
+Commands that talk to Gerrit resolve each footer **Change-Id** to Gerrit's canonical **triplet** (`project~branch~Change-Id`, the `ChangeInfo.id` string). Two git config keys supply the `project` and `branch` parts:
+
+| Key | Role in triplet |
+|-----|-----------------|
+| `gerrit.project` | **Project** segment — explicit override; otherwise parsed from `gerrit.remote` |
+| `branch.<name>.gerritTarget` | **Branch** segment — Gerrit **destination branch** for the current working branch (same branch used in `refs/for/<branch>` on push) |
+
+Resolution order for the branch segment matches push: `branch.<current>.gerritTarget` wins; otherwise the upstream ref on `gerrit.remote` (default `origin`) is used. If either segment cannot be resolved, commands fail with a clear configuration error rather than picking a change on the wrong branch.
+
+A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to `main` and `dev`). The shared resolver narrows to the change on your configured destination branch and reports alternatives — see [spec/change-and-commit-identifiers.md](spec/change-and-commit-identifiers.md).
 
 ---
 
@@ -52,7 +68,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 
 | Key | Effect |
 |-----|--------|
-| `branch.<name>.gerritTarget` | **Optional override** for the Gerrit **destination branch** (e.g. `main`, `dev`). When unset, `ger push` and `ger rebase` infer the destination from `@{upstream}` if its remote name matches `gerrit.remote` (default `origin`). When set, it wins for push, merge-base, and `ger rebase --onto-remote`. The value must resolve to an existing ref—typically a local branch of that name or `refs/remotes/<remote>/<branch>` after `git fetch` on `gerrit.remote`. If the tool reports that the target is missing locally, fetch from the remote first; do not create a local branch literally named `origin/<branch>`—that is the remote-tracking name space, not a branch you should create by hand. |
+| `branch.<name>.gerritTarget` | **Optional override** for the Gerrit **destination branch** (e.g. `main`, `dev`). When unset, `ger push`, `ger rebase`, and change resolution infer the destination from `@{upstream}` if its remote name matches `gerrit.remote` (default `origin`). When set, it wins for push, merge-base, `ger rebase --onto-remote`, and **triplet building** when resolving a bare Change-Id (see [Change identity](#change-identity-triplet-resolution)). The value must resolve to an existing ref—typically a local branch of that name or `refs/remotes/<remote>/<branch>` after `git fetch` on `gerrit.remote`. If the tool reports that the target is missing locally, fetch from the remote first; do not create a local branch literally named `origin/<branch>`—that is the remote-tracking name space, not a branch you should create by hand. |
 | `branch.<name>.gerritReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
 
 Set via `git config` (or `set_branch_config` in code).
