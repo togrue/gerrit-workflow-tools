@@ -239,8 +239,8 @@ def _parse_gerrit_url_change_number(url: str) -> str:
 
 def _change_number_from_change_ref(ref: str) -> str:
     parts = ref.split("/")
-    if len(parts) >= 4 and parts[2].isdigit():
-        return parts[2]
+    if len(parts) >= 5 and parts[1] == "changes" and parts[3].isdigit():
+        return parts[3]
     raise ChangeResolutionError(f"invalid change ref: {ref!r}")
 
 

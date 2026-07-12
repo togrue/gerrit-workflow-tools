@@ -20,14 +20,6 @@ _ger_bash_completion() {
     fi
 }
 
-_ger_setup() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --local
-        return
-    fi
-}
-
 _ger_cache() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -104,7 +96,7 @@ _ger_fix() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -a --all --no-verify -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help -a --all --no-verify --json -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -164,6 +156,24 @@ _ger_rebase() {
     fi
 }
 
+_ger_resolve() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" -h --help --json --color -v --verbose --debug-log
+        return
+    fi
+    case "$prev" in
+        --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+    esac
+    if declare -F __git_complete_refs >/dev/null 2>&1; then
+        __git_complete_refs
+    fi
+}
+
 _ger_reword() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -215,7 +225,7 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix log push rebase restack reword setup sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix log push rebase resolve restack reword setup sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -229,6 +239,7 @@ _ger() {
         log) _ger_log ;;
         push) _ger_push ;;
         rebase|restack|stack) _ger_rebase ;;
+        resolve) _ger_resolve ;;
         reword) _ger_reword ;;
         setup) _ger_setup ;;
         sha) _ger_sha ;;
