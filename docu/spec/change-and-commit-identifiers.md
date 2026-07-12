@@ -2,14 +2,14 @@
 
 |  |  |
 |--|--|
-| **Status** | **Design / target behavior** (not fully implemented) |
+| **Status** | **Implemented** (Phases 0–6; see [plans/gerrit-native-change-resolution.md](../plans/gerrit-native-change-resolution.md)) |
 | **Audience** | Users, contributors, and AI agents driving `ger` |
 | **Supersedes** | The "ambiguity → hard error, no heuristics" stance in [plans/gerrit-native-change-resolution.md](../plans/gerrit-native-change-resolution.md) — see [Relationship to the resolution plan](#relationship-to-the-resolution-plan) |
 
 This document describes how `ger` **should** behave when the user (or an agent)
 points a command at "a change" or "a commit". It is written from the user's
-point of view first; implementation notes are secondary. Where today's code
-differs, that is called out as a gap, not as the contract.
+point of view first; implementation notes are secondary. Remaining gaps (e.g.
+[`ger assign`](commands/assign.md)) are called out explicitly.
 
 The guiding goals:
 
@@ -104,9 +104,7 @@ it as follows.
 ### 2.2 Disambiguation rules
 
 - A **bare integer** (`120045`) is a **git revision**, never a change number. To
-  mean the change, write `change:120045`. *(This is the deliberate reversal of
-  today's `resolve_change_ref`, which treats bare digits as `change:<n>` — see
-  gaps.)*
+  mean the change, write `change:120045`.
 - A **triplet**, **change number**, **change ref**, and **URL** each identify
   **exactly one** Gerrit change. No ambiguity is possible; if the change does not
   exist, that is a not-found error, not an ambiguity error.
@@ -124,10 +122,9 @@ comes from the **stack context** of the current (or `--branch`) branch:
 | `target branch` | `branch.<name>.gerritTarget` → upstream ref when its remote is `gerrit.remote` |
 | `push branch` | the branch Gerrit would receive `refs/for/<target>` |
 
-> **Gap:** `branch.<name>.gerritTarget` is documented but **not read** by
-> `effective_gerrit_destination_branch()` today (only upstream inference). The
-> target behavior requires reading it. See
-> [plan Phase 1](../plans/gerrit-native-change-resolution.md#phase-1--changeref-helpers--stack-context).
+Resolved by `resolve_stack_context()` in `core/gerrit/change_resolution.py`
+(including `branch.<name>.gerritTarget` when set). See
+[Configuration.md](../Configuration.md#change-identity-triplet-resolution).
 
 When the stack context cannot be resolved (no project, or no target branch), a
 command that *needs* it fails with the same actionable error as `ger push`
@@ -139,10 +136,9 @@ command that *needs* it fails with the same actionable error as `ger push`
 
 **Problem:** the same `Change-Id: I…` footer can appear on changes targeting
 different branches (e.g. a change cherry-picked from `main` to a release branch).
-A bare `Change-Id` therefore is **not** a unique Gerrit key. Today this breaks
-commands that assume one row per Change-Id (`_ingest_change_rows` keys by
-Change-Id → last-write-wins; `query_single_change` / `resolve_gerrit_change`
-return `rows[0]`).
+A bare `Change-Id` therefore is **not** a unique Gerrit key. The shared resolver
+in `core/gerrit/change_resolution.py` keys REST/cache lookups by triplet and
+never collapses multiple matches silently.
 
 ### 3.1 Expected behavior
 
@@ -199,11 +195,11 @@ All commands share the changeish grammar. Command-specific notes:
 | [`ger assign`](commands/assign.md) *(planned)* | `<targets>` | Accepts one or many changeishes (or the implicit stack). Mutations act on **resolved triplets**, so each target is unambiguous before any REST write. |
 | [`ger sha`](commands/sha-change-id.md) | `<change-id>` | Stays **local-git only**: Change-Id → local SHA. Duplicate exit code = duplicate **in local history**, unrelated to Gerrit branches. |
 
-### 4.1 Proposed helper: `ger resolve`
+### 4.1 Helper: `ger resolve`
 
 A small, **side-effect-free** command that reports what a changeish resolves to.
-Invaluable for humans debugging ambiguity and essential for agents that want to
-pre-flight a target before a mutation.
+Implemented as [`ger resolve`](commands/resolve.md) — same core as every other
+resolving command.
 
 ```
 ger resolve <changeish> [--json]
@@ -283,11 +279,9 @@ A consistent family across commands, so tooling can rely on them:
 | `3` | Gerrit API / git resolution error (unreachable, auth, not found) |
 | `4` | **Ambiguous** — multiple matches survived narrowing; `alternatives` lists them |
 
-> **Gap:** exit codes are currently uneven across commands (`ger sha` uses `3` for
-> "duplicate", `ger show` overloads `1`). The target contract carves out a
-> **dedicated ambiguity code** and a **dedicated not-found path** so automation can
-> tell them apart. Existing per-command codes should be reconciled toward this
-> family as the resolution work lands.
+`ger show`, `ger fix`, and `ger resolve` use exit code `4` for ambiguity.
+`ger sha` uses `3` for duplicate Change-Ids in **local** history (unrelated to
+Gerrit branch ambiguity).
 
 ---
 
@@ -310,18 +304,12 @@ prerequisite for the behavior described here.
 
 ---
 
-## 8. Known gaps (today vs. target)
+## 8. Remaining gaps
 
-| Area | Today | Target |
-|------|-------|--------|
-| Bare integer arg | `resolve_change_ref` → `change:<n>` (collides with short SHA) | git rev by default; `change:<n>` for the change |
-| Bare Change-Id, multi-branch | `rows[0]` / last-write-wins → wrong or broken | target-branch narrowing + transparency note |
-| `branch.*.gerritTarget` | documented, **not read** | read in destination resolution |
-| Cache key | bare Change-Id | triplet / `ChangeInfo.id` |
-| Triplet / URL / `q:` input | not accepted as a target | accepted per §1.1 |
-| `resolution` JSON block | absent | present on every resolving command |
-| `ger resolve` | does not exist | side-effect-free resolver for humans + agents |
-| Ambiguity exit code | overloaded per command | dedicated code `4` |
+| Area | Status |
+|------|--------|
+| [`ger assign`](commands/assign.md) | Planned — not in `cli_ger.py` yet |
+| Full `resolution` JSON block on every resolving command | Implemented on `ger show`, `ger fix`, and `ger resolve`; `ger log` emits `stack` + per-commit `resolution_note`; `ger push` / `ger edit` do not emit the §5 block |
 
 ---
 

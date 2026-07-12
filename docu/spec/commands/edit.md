@@ -21,7 +21,7 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit]
 
 ### Change resolution
 
-`REV` and `--first-attention-commit` targets are resolved as **changeishes** via **`core/gerrit/change_resolution.py`** (planned shared core), restricted to commits in the local stack. Change-Ids, triplets, and `change:<n>` map to the stack commit with that identity; otherwise error. Duplicate Change-Id narrowing uses stack **target branch** context when the arg is a bare Change-Id. Grammar and JSON `resolution` block ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)): [change-and-commit-identifiers.md](../change-and-commit-identifiers.md); resolution JSON not yet implemented.
+`REV` and `--first-attention-commit` targets are resolved as **changeishes** restricted to commits in the local stack (git ref or footer Change-Id via `resolve_stack_commit`). Change-Ids, triplets, and `change:<n>` map to the stack commit with that identity; otherwise error. Shared changeish grammar: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
 ---
 
