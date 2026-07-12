@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import ReviewerAccount
 
@@ -21,6 +22,7 @@ class _FakeRow:
 # Detail missing ``unresolved_comment_count`` and ``reviewers`` — triggers
 # both follow-up kinds.  Verified=0 so no checks follow-up.
 _DETAIL: dict[str, Any] = {
+    "id": "proj~main~Iabc123",
     "change_id": "Iabc123",
     "status": "NEW",
     "subject": "feat: thing",
@@ -29,6 +31,8 @@ _DETAIL: dict[str, Any] = {
     "project": "proj",
     "branch": "main",
 }
+
+_STACK = StackContext(project="proj", target_branch="origin/main", push_branch="main")
 
 
 def _make_service(detail: dict[str, Any] | None = None) -> GerritService:
@@ -46,6 +50,10 @@ def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
     alice = ReviewerAccount(slug="alice", account_id=42)
 
     with (
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            return_value=_STACK,
+        ),
         patch.object(service.comments, "get_file_map", side_effect=RuntimeError("boom")),
         patch.object(
             service.rest,

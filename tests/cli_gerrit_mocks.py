@@ -101,22 +101,25 @@ def build_details_by_change_id(
 
 
 def _lookup_detail(details: dict[str, dict[str, Any]], ref: str) -> dict[str, Any] | None:
+    matches = _lookup_details(details, ref)
+    return matches[0] if matches else None
+
+
+def _lookup_details(details: dict[str, dict[str, Any]], ref: str) -> list[dict[str, Any]]:
     if ref in details:
-        return details[ref]
+        return [details[ref]]
     if ref.isdigit():
-        for row in details.values():
-            if row.get("_number") == int(ref):
-                return row
+        out = [row for row in details.values() if row.get("_number") == int(ref)]
+        if out:
+            return out
     m = re.search(r"~(I[a-fA-F0-9]{40})$", ref)
     if m:
         suffix = m.group(1)
-        for row in details.values():
-            if row.get("change_id") == suffix:
-                return row
-    for row in details.values():
-        if row.get("change_id") == ref:
-            return row
-    return None
+        out = [row for row in details.values() if row.get("change_id") == suffix]
+        if out:
+            return out
+    out = [row for row in details.values() if row.get("change_id") == ref]
+    return out
 
 
 def make_query_changes_impl(details: dict[str, dict[str, Any]]):
@@ -138,17 +141,19 @@ def make_query_changes_impl(details: dict[str, dict[str, Any]]):
             if row is not None:
                 result.append(row)
 
-        for change_ref in re.findall(r"change:(\S+)", q):
-            if change_ref.isdigit():
-                key = f"num:{change_ref}"
-            else:
-                key = f"cid:{change_ref}"
-            if key in seen:
-                continue
-            seen.add(key)
-            row = _lookup_detail(details, change_ref)
-            if row is not None:
-                result.append(row)
+        # Bare ``change:`` lookup only for unscoped queries (not triplet OR batches).
+        if "project:" not in q:
+            for change_ref in re.findall(r"change:(\S+)", q):
+                if change_ref.isdigit():
+                    key = f"num:{change_ref}"
+                else:
+                    key = f"cid:{change_ref}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                for row in _lookup_details(details, change_ref):
+                    if row not in result:
+                        result.append(row)
 
         return result
 

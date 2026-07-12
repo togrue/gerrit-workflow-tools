@@ -135,9 +135,12 @@ def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytes
         code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
     assert code == 0, err
     data = json_stdout(out)
-    assert isinstance(data, list)
-    assert len(data) == len(rows)
-    for item in data:
+    assert "stack" in data
+    assert "commits" in data
+    commits = data["commits"]
+    assert isinstance(commits, list)
+    assert len(commits) == len(rows)
+    for item in commits:
         assert "sha" in item
         assert "patchset_status" in item
         assert "attention_reasons" in item
@@ -153,12 +156,13 @@ def test_log_json_contract_required_keys_and_types(stack_repo: Path, monkeypatch
         code, out, err = run_cli(stack_repo, log_main, ["--json", "--color=never"], monkeypatch)
     assert code in (0, 1), err
     data = json_stdout(out)
-    assert isinstance(data, list) and data
+    commits = data["commits"]
+    assert isinstance(commits, list) and commits
     required_str = ("sha", "summary", "patchset_status", "change_id", "change_status")
     required_bool = ("pushed", "submittable", "abandoned")
     optional_bool = ("merged_equivalent",)
     required_list = ("attention_reasons", "ci_failures")
-    for item in data:
+    for item in commits:
         for key in required_str:
             assert key in item
             assert isinstance(item[key], str), key
@@ -229,7 +233,7 @@ def test_log_no_reviewers_shown_in_attention(stack_repo: Path, monkeypatch: pyte
         code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
     assert code == 1, err
     data = json_stdout(out)
-    assert any("no-reviewers" in item.get("attention_reasons", []) for item in data)
+    assert any("no-reviewers" in item.get("attention_reasons", []) for item in data["commits"])
 
 
 def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -313,8 +317,9 @@ def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.Monke
         code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
     assert code == 1, err
     data = json_stdout(out)
-    assert data[-1]["abandoned"] is True
-    assert data[0]["abandoned"] is False
+    commits = data["commits"]
+    assert commits[-1]["abandoned"] is True
+    assert commits[0]["abandoned"] is False
 
 
 def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -544,3 +549,45 @@ def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path
     subjects = [row.summary for row in commit_data]
     assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"
     assert sum(1 for s in subjects if "side commit" in s) == 2
+
+
+def test_log_same_change_id_on_main_and_dev_shows_main_only(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Triplet-scoped overlay: main stack sees the main change, not the dev duplicate."""
+    from tests.cli_gerrit_mocks import change_info_for_sha
+
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    assert rows
+    target_row = rows[0]
+    cid = target_row.change_id
+    assert cid
+
+    main_detail = change_info_for_sha(
+        target_row.sha,
+        cid,
+        project="testproj",
+        branch="main",
+        number=100,
+    )
+    dev_detail = change_info_for_sha(
+        target_row.sha,
+        cid,
+        project="testproj",
+        branch="dev",
+        number=101,
+    )
+    details = {
+        str(main_detail["id"]): main_detail,
+        str(dev_detail["id"]): dev_detail,
+    }
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    assert code in (0, 1), err
+    data = json_stdout(out)
+    matched = [item for item in data["commits"] if item.get("change_id") == cid]
+    assert len(matched) == 1
+    assert matched[0]["pushed"] is True
+    assert matched[0]["patchset_status"] != "absent"
+    assert all(item.get("_number", item.get("gerrit_url", "")) != 101 for item in data["commits"])

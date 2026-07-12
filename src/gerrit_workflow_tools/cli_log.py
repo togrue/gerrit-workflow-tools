@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
+    EXIT_RESOLUTION_ERROR,
     HELP_JSON,
     add_color_args,
     add_follow_merges_args,
@@ -27,6 +28,12 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 from gerrit_workflow_tools.core.config import current_branch, log_defaults, resolve_working_branch
+from gerrit_workflow_tools.core.gerrit.change_resolution import (
+    ChangeResolutionError,
+    format_resolution_note,
+    resolve_changeish,
+    resolve_stack_context,
+)
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -55,17 +62,17 @@ def load_annotated_commits(
     rev_range: str,
     *,
     first_parent: bool = False,
-) -> tuple[list[LogCommit] | None, int]:
+) -> tuple[list[LogCommit] | None, int, dict[str, str]]:
     """Load local commits in *rev_range*, enrich from Gerrit, and annotate attention."""
     commit_data, exit_code = _load_commits_in_range(cwd, rev_range, first_parent=first_parent)
     if commit_data is None:
-        return None, exit_code
-    commits, gerrit_exit = _fetch_enriched_commits(cwd, commit_data)
+        return None, exit_code, {}
+    commits, gerrit_exit, notes_by_sha = _fetch_enriched_commits(cwd, commit_data)
     if gerrit_exit is not None:
-        return None, gerrit_exit
+        return None, gerrit_exit, {}
     assert commits is not None
     annotate_attention(commits)
-    return commits, 0
+    return commits, 0, notes_by_sha
 
 
 # ---------------------------------------------------------------------------
@@ -230,20 +237,41 @@ def _load_commits_in_range(
 def _fetch_enriched_commits(
     cwd: Path,
     commit_data: list[CommitStatusInput],
-) -> tuple[list[LogCommit] | None, int | None]:
-    """Fetch Gerrit-enriched commit status list, or (None, exit_code) on error."""
+) -> tuple[list[LogCommit] | None, int | None, dict[str, str]]:
+    """Fetch Gerrit-enriched commit status list, or (None, exit_code, {}) on error."""
     try:
         service = GerritService.from_cwd(cwd)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
-        return None, 3
+        return None, EXIT_RESOLUTION_ERROR, {}
 
     try:
         commits = service.fetch_gerrit_data(commit_data, cwd=cwd)
+    except ChangeResolutionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return None, EXIT_RESOLUTION_ERROR, {}
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
-        return None, 3
-    return commits, None
+        return None, EXIT_RESOLUTION_ERROR, {}
+
+    notes_by_sha: dict[str, str] = {}
+    for row in commit_data:
+        if not row.change_id:
+            continue
+        try:
+            resolution = resolve_changeish(
+                row.change_id,
+                client=service.rest,
+                cwd=cwd,
+                explicit_target=False,
+            )
+        except ChangeResolutionError:
+            continue
+        note = format_resolution_note(resolution)
+        if note:
+            notes_by_sha[row.sha] = note
+
+    return commits, None, notes_by_sha
 
 
 def _compute_url_start_visible(  # pylint: disable=too-many-arguments
@@ -345,16 +373,34 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
         if not require_branch_upstream(cwd, branch):
             return 1
 
-    commits, load_exit = load_annotated_commits(cwd, rev_range, first_parent=not args.follow_merges)
+    commits, load_exit, notes_by_sha = load_annotated_commits(cwd, rev_range, first_parent=not args.follow_merges)
     if commits is None:
         return load_exit
+
+    use_color = args.color != "never"
+    for commit in commits:
+        note = notes_by_sha.get(commit.sha)
+        if note:
+            text = color_text(note, ANSI_DIM) if use_color else note
+            print(text, file=sys.stderr)
 
     visible = commits
     has_attention = any(c.attention_reasons for c in commits)
 
     # JSON output
     if args.json_:
-        payload = [
+        try:
+            stack = resolve_stack_context(cwd)
+            stack_payload = {
+                "project": stack.project,
+                "target_branch": stack.target_branch,
+                "push_branch": stack.push_branch,
+            }
+        except ChangeResolutionError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return EXIT_RESOLUTION_ERROR
+
+        commit_payload = [
             {
                 "sha": c.sha,
                 "summary": c.summary,
@@ -371,9 +417,11 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
                 "attention_reasons": c.attention_reasons,
                 "change_status": c.change_status,
                 "merged_equivalent": c.merged_equivalent,
+                **({"resolution_note": notes_by_sha[c.sha]} if c.sha in notes_by_sha else {}),
             }
             for c in visible
         ]
+        payload = {"stack": stack_payload, "commits": commit_payload}
         print(json.dumps(payload, indent=2))
         return 1 if has_attention else 0
 

@@ -8,7 +8,7 @@ satisfy lives in
 read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 `resolution` output, and exit codes.
 
-**Status:** Phases 0–2 complete (common resolution core, gerritTarget config, triplet-aware REST layer); Phases 3–6 not yet implemented
+**Status:** Phases 0–2 complete (common resolution core, gerritTarget config, triplet-aware REST layer); Phase 3a complete (read-only overlay: log/show/rebase via resolution core); Phase 3b–6 not yet implemented
 
 ---
 
@@ -210,6 +210,10 @@ Phase 0 wired the surrounding docs to it (see **Status** below).
 **Done when:** Every command that resolves a changeish — `log`, `show`, `push`, `fix`, `edit`, `rebase`, `assign` (when it exists), reviewer plumbing — goes through the Phase 1 core. No command has its own copy of classification, narrowing, or triplet-building logic left.
 
 *(This phase is large; split it into multiple PRs by command family — e.g. "read-only overlay: log/show/rebase" then "mutations: push/fix/reviewers" — but land them under one phase/tracking issue since they share the same core and the same tests-for-the-core dependency.)*
+
+**Phase 3a status:** Complete — `fetch_gerrit_data` resolves stack context and triplet-keys detail lookup; `ger show` uses `resolve_changeish` with resolution JSON/notes and exit codes 3/4; `ger log` emits stack context in `--json` and resolution notes on stderr; tests updated for triplet-keyed mocks.
+
+**Phase 3b (not yet):** Wire `cli_push`, `cli_fix`, mutations, `push_reviewers`, `reviewer_catalog`.
 
 ---
 
