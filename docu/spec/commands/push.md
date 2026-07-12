@@ -20,7 +20,7 @@ ger push [options] [REV]
 
 ### Change resolution
 
-When `REV` / `--until` is given, it is resolved as a **changeish** via the shared core (**`core/gerrit/change_resolution.py`**, planned). Post-push reviewer REST and attribute preview resolve stack commits to Gerrit **triplets** (not bare Change-Ids). Push destination is inherently target-branch-scoped (`refs/for/<target>`). Shared grammar, target-branch narrowing for duplicate Change-Ids, and the `resolution` JSON block on `--json` ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)) are defined in [change-and-commit-identifiers.md](../change-and-commit-identifiers.md); resolution JSON not yet implemented.
+When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/gerrit/change_resolution.py`**. Post-push reviewer REST and attribute preview resolve stack commits to Gerrit **triplets** (not bare Change-Ids). Push destination is inherently target-branch-scoped (`refs/for/<target>`). Shared grammar and target-branch narrowing for duplicate Change-Ids are defined in [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
 ---
 

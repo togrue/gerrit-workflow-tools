@@ -20,7 +20,7 @@ ger log [options] [REV_RANGE]
 
 ### Change resolution
 
-`ger log` enriches each local commit against the Gerrit change on the **target branch** (stack context). Changeishes in `REV_RANGE` endpoints use the same shared grammar as other commands; resolution goes through **`core/gerrit/change_resolution.py`** (planned shared core). When a footer Change-Id matches multiple server changes, the resolver narrows to the target branch and reports the pick transparently; a duplicate on another branch is ignored for status (may surface as a note). Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, a top-level `resolution` block per resolved changeish is the target shape ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)); not yet implemented.
+`ger log` enriches each local commit against the Gerrit change on the **target branch** (stack context). Changeishes in `REV_RANGE` endpoints use the same shared grammar as other commands; resolution goes through **`core/gerrit/change_resolution.py`**. When a footer Change-Id matches multiple server changes, the resolver narrows to the target branch and reports the pick transparently; a duplicate on another branch is ignored for status (may surface as a note on stderr). Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, output includes a top-level `stack` object (project, target branch, push branch) and per-commit `resolution_note` when narrowing applied ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)).
 
 ---
 

@@ -20,7 +20,7 @@ ger fix [options] REF_OR_CHANGE
 
 ### Change resolution
 
-`REF_OR_CHANGE` is a **changeish** resolved through **`core/gerrit/change_resolution.py`** (planned shared core): same grammar as `ger show` (git ref default; `change:<n>` for a Gerrit change number; triplet/URL for an exact pick). Ambiguous bare Change-Ids follow target-branch narrowing ([§3](../change-and-commit-identifiers.md#3-duplicate-change-ids-the-important-case)). Full contract: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). Target `--json` `resolution` block ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)); not yet implemented.
+`REF_OR_CHANGE` is a **changeish** resolved through **`core/gerrit/change_resolution.py`**: same grammar as `ger show` (git ref default; `change:<n>` for a Gerrit change number; triplet/URL for an exact pick). Ambiguous bare Change-Ids follow target-branch narrowing ([§3](../change-and-commit-identifiers.md#3-duplicate-change-ids-the-important-case)). Full contract: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, output includes a `resolution` block when Gerrit resolution ran ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)). Ambiguity after narrowing exits `4`.
 
 ---
 

@@ -1,14 +1,12 @@
 # Plan: Gerrit-native change resolution
 
-Move from **bare Change-Id** (treated as unique) to **Gerrit's real identity model**: `project~branch~changeId`, numeric change id, or explicit REST triplet paths — resolved through **one shared core**, used by every command.
+**Status:** **Implemented** — Phases 0–6 complete (shared resolution core, triplet-aware REST/cache, commands wired, `ger resolve`, integration tests, operator docs).
 
-This is the **implementation plan**. The user-facing behavior contract it must
-satisfy lives in
-[spec/change-and-commit-identifiers.md](../spec/change-and-commit-identifiers.md);
-read that first for the changeish grammar, duplicate-Change-Id handling, JSON
-`resolution` output, and exit codes.
+Historical implementation plan for moving from **bare Change-Id** (treated as unique) to **Gerrit's real identity model**: `project~branch~changeId`, numeric change id, or explicit REST triplet paths — resolved through **one shared core**, used by every command.
 
-**Status:** Phases 0–6 complete — shared resolution core, triplet-aware REST/cache, all commands wired, `ger resolve`, integration tests, and operator docs shipped
+The user-facing behavior contract lives in
+[spec/change-and-commit-identifiers.md](../spec/change-and-commit-identifiers.md)
+(changeish grammar, duplicate-Change-Id handling, JSON `resolution` output, exit codes).
 
 ---
 
@@ -16,7 +14,7 @@ read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 
 1. **Change-Id alone is never a Gerrit unique key** — multiple `ChangeInfo` rows are valid.
 2. **Triplet is the default for stack commands** — built from `gerrit.project` + Gerrit destination branch + footer Change-Id (same branch Gerrit uses for `refs/for/<branch>`).
-3. **One resolver, every command.** A single core owns classification, stack context, and ambiguity narrowing ([behavior spec §2–§3](../spec/change-and-commit-identifiers.md#2-resolution-algorithm)). `ger log`, `ger show`, `ger push`, `ger fix`, `ger edit`, `ger rebase`, `ger assign`, and reviewer plumbing all call it — none re-implements resolution policy locally.
+3. **One resolver, every command.** A single core owns classification, stack context, and ambiguity narrowing ([behavior spec §2–§3](../spec/change-and-commit-identifiers.md#2-resolution-algorithm)). `ger log`, `ger show`, `ger push`, `ger fix`, `ger edit`, `ger rebase`, and reviewer plumbing call it; [`ger assign`](../spec/commands/assign.md) will when it ships.
 4. **Never collapse silently** — no `rows[0]` / last-wins dict. Ambiguity handling (target-branch narrowing + transparency) is defined in [the behavior spec, §3](../spec/change-and-commit-identifiers.md#3-duplicate-change-ids-the-important-case), and lives in the shared core, not in individual commands.
 5. **Change-Ids are case-sensitive strings.** No normalization (no lowercasing, no `norm_change_id`). A Change-Id is whatever string appears in the footer or `ChangeInfo.change_id`; it is compared and keyed on literally.
 6. **Alpha-stage tool: breaking changes ship directly.** No deprecation windows, no dual-read/dual-write migrations. Document the change in the changelog and move on.
@@ -24,28 +22,27 @@ read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 
 ---
 
-## Current state (what we're fixing)
+## Previous state (before Phases 0–6)
 
-| Layer | Problem |
-|-------|---------|
-| `batch_load_change_details` | Queries `change:I…` only; `_ingest_change_rows` keys by `norm_change_id(change_id)` → last wins |
-| `query_single_change` | Returns `rows[0]` |
-| `probe_changes_updated` | Same bare Change-Id keying |
-| `GerritCache` | `changes.change_id` PK = bare Change-Id or REST path fragment |
-| `fetch_gerrit_data` | Lookup via `norm_change_id` |
-| `resolve_gerrit_change` / `pick_change_from_query_result` | Hard-errors on any ambiguity — no target-branch narrowing, no transparency note ([spec §3.1](../spec/change-and-commit-identifiers.md#31-expected-behavior) supersedes this) |
-| `resolve_change_ref` | Bare digits → `change:<n>`, colliding with short SHAs ([spec §2.2](../spec/change-and-commit-identifiers.md#22-disambiguation-rules) reverses this) |
-| **No shared resolver** | `cli_push.py` (`get_payloads` + `stack_change_ids_ordered`), `reviewer_catalog.py`, `cli_fix.py`, and the `fetch_gerrit_data` callers (`cli_log.py`, `cli_show.py`, `rebase_enricher.py`) each carry their **own** copy of change-resolution logic. Fixing one does not fix the others, and the policy (ambiguity handling, casing, triplet building) can drift between them. |
-| `ger log` / enricher / push preview | All go through one of the broken/duplicated paths above |
+These problems existed before the shared resolver shipped; all rows below are **fixed** except `ger assign` (still planned).
 
-**Already in place:**
+| Layer | Was broken | Fixed in |
+|-------|------------|----------|
+| `batch_load_change_details` | Queried `change:I…` only; `_ingest_change_rows` keyed by `norm_change_id(change_id)` → last wins | Phase 2 |
+| `query_single_change` | Returned `rows[0]` | Phase 2 |
+| `probe_changes_updated` | Bare Change-Id keying | Phase 2 |
+| `GerritCache` | `changes.change_id` PK = bare Change-Id | Phase 4 (schema v2, triplet PK) |
+| `fetch_gerrit_data` | Lookup via `norm_change_id` | Phase 3 |
+| `resolve_gerrit_change` / `pick_change_from_query_result` | Hard-errors on any ambiguity — no target-branch narrowing | Phase 1 |
+| `resolve_change_ref` | Bare digits → `change:<n>`, colliding with short SHAs | Phase 1 |
+| Per-command resolution copies | `cli_push.py`, `reviewer_catalog.py`, `cli_fix.py`, `fetch_gerrit_data` callers each had own logic | Phase 3 |
+| `branch.*.gerritTarget` | Documented but not read in code | Phase 1 (`resolve_stack_context`) |
+
+**Already in place before this work:**
 
 - `resolve_gerrit_project_name()` (`core/gerrit_project_id.py`)
 - `change_id_for_gerrit_rest_path()` accepts triplets (`core/gerrit/rest.py`)
-- `pick_change_from_query_result()` errors on multiple matches (policy to be replaced, not the error path itself — see Phase 1)
 - `gerrit.project` config key
-
-**Gap:** `branch.*.gerritTarget` is documented but **not read in code** — only upstream inference. Implement it as part of stack-context resolution (Phase 1).
 
 ---
 
@@ -70,9 +67,8 @@ Local footer `Change-Id` vs. Gerrit change identity are kept distinct on purpose
 see [behavior spec §3.2 and §4](../spec/change-and-commit-identifiers.md#32-principles).
 
 **One resolver.** All of the above — classification, stack context, triplet
-building, and ambiguity narrowing — lives behind a single entry point (Phase 1)
-that every command calls. See [Phase 1](#phase-1--common-resolution-core) for
-the proposed shape.
+building, and ambiguity narrowing — lives in `core/gerrit/change_resolution.py`
+(`resolve_changeish`, `resolve_stack_context`). See [Phase 1](#phase-1--common-resolution-core).
 
 ---
 
@@ -99,26 +95,13 @@ Phase 0 wired the surrounding docs to it (see **Status** below).
 
 ### Phase 1 — Common resolution core
 
-**Goal:** One module, one function, that every command calls for *all* changeish resolution — classification, stack context, triplet building, **and** ambiguity narrowing. This is the piece that was previously split across Phase 1 ("helpers") and left as an unaddressed gap in the ambiguity/JSON/exit-code behavior; it now owns the full behavior contract from [spec §2–§6](../spec/change-and-commit-identifiers.md#2-resolution-algorithm).
+**Goal:** One module, one function, that every command calls for *all* changeish resolution — classification, stack context, triplet building, **and** ambiguity narrowing.
 
-> **Design note — open decision, not yet final.** The exact shape of the core
-> is a choice to make while implementing this phase, not before. Two options,
-> both workable:
->
-> 1. **Single function, `resolve_changeish(ref, *, cwd, need=...) -> Resolution`** in
->    a new `core/gerrit/change_resolution.py`. Stateless, takes a `GerritClient`
->    explicitly. Simplest to test; matches the existing functional style of
->    `core/gerrit/rest.py`.
-> 2. **Small `ChangeResolver` class** bound to a client + cwd at construction,
->    with methods `classify`, `resolve`, `resolve_many`. Nicer when a command
->    resolves several changeishes in one invocation (e.g. `ger assign`).
->
-> Either way, the **public contract** is what matters and is fixed by the spec:
-> given a changeish string and stack context, return a `Resolution` (mirrors the
-> [`resolution` JSON block](../spec/change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation):
-> `kind`, `selected`, `selected_reason`, `ambiguous`, `alternatives`, `local_sha`).
-> Pick the shape that falls out easiest during implementation; do not block the
-> phase on this choice.
+**Shipped as:** `resolve_changeish()` and `resolve_stack_context()` in
+`core/gerrit/change_resolution.py` (stateless functions taking an explicit
+`GerritClient`). Public contract: given a changeish string and stack context,
+return a `Resolution` (`kind`, `selected`, `selected_reason`, `ambiguous`,
+`alternatives`, `local_sha`) — mirrors the [`resolution` JSON block](../spec/change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation).
 
 **Responsibilities (all in this one module):**
 
@@ -144,6 +127,8 @@ Phase 0 wired the surrounding docs to it (see **Status** below).
 - **Absent case:** Change-Id only exists on a different branch → `absent` for read-only overlay commands, per [§3.1 item 4](../spec/change-and-commit-identifiers.md#31-expected-behavior).
 
 **Done when:** The core module exists, is fully tested against every scenario in spec §2–§5, and **no caller has been switched yet**. `pick_change_from_query_result`'s current hard-error stays as the low-level REST primitive the core calls internally when it decides "still ambiguous" — Phase 2 does not change its signature, only who calls it and when.
+
+**Status:** Complete — `core/gerrit/change_resolution.py`, tests in `tests/test_change_resolution.py` (and related).
 
 ---
 
@@ -333,7 +318,7 @@ Only SHA-based ranking stays out.)
 - [x] Command specs (`log`, `show`, `push`, `fix`, `edit`): change resolution cross-links
 - [x] Common resolution core module + tests (classification, stack context, narrowing, `Resolution` shape)
 - [x] `effective_gerrit_destination_branch` (or its Phase 1 replacement) reads `branch.*.gerritTarget`
-- [ ] No behavior change in any command yet — core exists, unused by callers
+- [x] All callers switched through Phase 3
 
 ---
 

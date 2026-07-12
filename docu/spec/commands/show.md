@@ -20,7 +20,7 @@ ger show [options] [REV]
 
 ### Change resolution
 
-`REV` is a **changeish** — same shared grammar as every other resolving command (git ref, Change-Id, triplet, `change:<n>`, URL, `q:…`). Resolution goes through **`core/gerrit/change_resolution.py`** (planned shared core). Bare Change-Ids that match multiple Gerrit changes are narrowed to the stack **target branch** with a transparency note; override with a triplet or `change:<n>`. Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, a `resolution` block is the target output ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)); not yet implemented.
+`REV` is a **changeish** — same shared grammar as every other resolving command (git ref, Change-Id, triplet, `change:<n>`, URL, `q:…`). Resolution goes through **`core/gerrit/change_resolution.py`**. Bare Change-Ids that match multiple Gerrit changes are narrowed to the stack **target branch** with a transparency note; override with a triplet or `change:<n>`. Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, output includes a `resolution` block ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)). Ambiguity after narrowing exits `4`.
 
 ---
 
