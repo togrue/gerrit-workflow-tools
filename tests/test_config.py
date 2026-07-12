@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import (
+    branch_gerrit_target,
     clear_gerrit_git_config_cache,
     effective_gerrit_destination_branch,
     gerrit_push_remote_policy,
@@ -108,6 +109,30 @@ def test_resolve_rebase_onto_remote_ref_from_upstream_without_gerrit_target(tmp_
     clear_gerrit_git_config_cache()
     assert resolve_rebase_onto_remote_ref(repo) == "origin/main"
     assert effective_gerrit_destination_branch(repo) == "origin/main"
+
+
+def test_effective_gerrit_destination_branch_prefers_gerrit_target(tmp_path: Path) -> None:
+    repo = tmp_path / "r"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("x", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "init", cwd=repo)
+    git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
+    git("checkout", "-b", "feature", cwd=repo)
+    _set_upstream_to_dev(repo)
+    git("config", "branch.feature.gerritTarget", "main", cwd=repo)
+    clear_gerrit_git_config_cache()
+
+    assert branch_gerrit_target(repo, "feature") == "main"
+    assert effective_gerrit_destination_branch(repo, "feature") == "main"
+    assert effective_gerrit_destination_branch(repo, "feature") != "origin/dev"
+
+
+def _set_upstream_to_dev(repo: Path) -> None:
+    main_sha = git_out("rev-parse", "main", cwd=repo)
+    git("update-ref", "refs/remotes/origin/dev", main_sha, cwd=repo)
+    git("branch", "--set-upstream-to=origin/dev", "feature", cwd=repo)
 
 
 def test_resolve_rebase_onto_remote_ref_from_upstream_origin_slash_branch(tmp_path: Path) -> None:
