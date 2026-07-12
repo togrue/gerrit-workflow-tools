@@ -29,6 +29,10 @@ HELP_DEBUG_LOG = (
     "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, and Gerrit API response bodies)."
 )
 
+# Resolution-related exit codes (see docu/spec/change-and-commit-identifiers.md §6).
+EXIT_RESOLUTION_ERROR = 3
+EXIT_AMBIGUOUS = 4
+
 
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
     """Register ``--follow-merges`` (used by commands that display a local stack)."""

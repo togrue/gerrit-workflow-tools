@@ -8,6 +8,8 @@ import logging
 import sys
 
 from gerrit_workflow_tools.cli_common import (
+    EXIT_AMBIGUOUS,
+    EXIT_RESOLUTION_ERROR,
     HELP_JSON,
     add_color_args,
     add_verbose_and_debug_log_args,
@@ -21,6 +23,11 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
+from gerrit_workflow_tools.core.gerrit.change_resolution import (
+    ChangeAmbiguousError,
+    ChangeResolutionError,
+    format_resolution_note,
+)
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -36,6 +43,21 @@ logger = logging.getLogger(__name__)
 
 _EXIT_ATTENTION = 1
 _EXIT_ERROR = 2
+
+
+def _print_resolution_note(resolution_note: str | None, *, use_color: bool) -> None:
+    if not resolution_note:
+        return
+    text = color_text(resolution_note, ANSI_DIM) if use_color else resolution_note
+    print(text, file=sys.stderr)
+
+
+def _gerrit_rest_key(commit: object, resolution: object) -> str | None:
+    selected = getattr(resolution, "selected", None)
+    if selected is not None:
+        return selected.triplet
+    change_id = getattr(commit, "change_id", None)
+    return change_id if isinstance(change_id, str) and change_id else None
 
 
 def _print_comment_chain(
@@ -114,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
     p = _build_parser()
     args = p.parse_args(argv)
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    use_color = args.color != "never"
 
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
         print(
@@ -134,34 +157,46 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
 
     try:
         resolved = resolve_show_commit_row(cwd, args.rev, service.rest)
+    except ChangeAmbiguousError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_AMBIGUOUS
+    except ChangeResolutionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_RESOLUTION_ERROR
     except GerritApiError as e:
         print(f"error: {e}", file=sys.stderr)
-        return _EXIT_ERROR
+        return EXIT_RESOLUTION_ERROR
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR
+
+    resolution = resolved.resolution
+    _print_resolution_note(format_resolution_note(resolution), use_color=use_color)
 
     row = resolved.row
     is_local = resolved.is_local_commit
     try:
         commits = service.fetch_gerrit_data([row], cwd=cwd)
+    except ChangeResolutionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_RESOLUTION_ERROR
     except GerritApiError as e:
         print(f"gerrit error: {e}", file=sys.stderr)
-        return _EXIT_ERROR
+        return EXIT_RESOLUTION_ERROR
 
     if not commits:
         print("error: no commit data", file=sys.stderr)
         return _EXIT_ERROR
     commit = commits[0]
     attention = determine_attention(commit, chain_blocked=False)
-    cid = commit.change_id
 
-    if commit.pushed:
+    rest_key = _gerrit_rest_key(commit, resolution)
+    if commit.pushed and rest_key:
         try:
-            file_map = service.comments.get_file_map(cid)
+            file_map = service.comments.get_file_map(rest_key)
         except GerritApiError as e:
             print(f"gerrit error: {e}", file=sys.stderr)
-            return _EXIT_ERROR
+            return EXIT_RESOLUTION_ERROR
     else:
         file_map = {}
 
@@ -196,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             )
         payload = {
             "sha": commit.sha if commit.sha else None,
-            "change_id": cid,
+            "change_id": commit.change_id,
             "summary": commit.summary,
             "pushed": commit.pushed,
             "patchset_status": commit.patchset_status,
@@ -212,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
             "local_commit": is_local,
             "change_status": commit.change_status,
             "merged_equivalent": commit.merged_equivalent,
+            "resolution": resolution.to_json_dict(),
         }
         print(json.dumps(payload, indent=2))
         return _EXIT_ATTENTION if attention else 0

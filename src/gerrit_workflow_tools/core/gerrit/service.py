@@ -21,7 +21,6 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     GerritClient,
     batch_load_change_details,
     change_id_for_gerrit_rest_path,
-    norm_change_id,
     parallel_map,
     resolve_gerrit_web_base,
 )
@@ -166,48 +165,55 @@ class GerritService:
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
-        ids = [row.change_id for row in commits if row.change_id]
-        detail_map = self.changes.get_payloads(ids)
-        normalized: dict[str, dict[str, Any]] = {norm_change_id(key): payload for key, payload in detail_map.items()}
+        effective_cwd = cwd if cwd is not None else _effective_cwd(self)
+        stack = resolve_stack_context(effective_cwd)
+
+        change_ids = [row.change_id for row in commits if row.change_id]
+        detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
+        detail_by_triplet: dict[str, dict[str, Any]] = {}
+        for payload in detail_map.values():
+            triplet = payload.get("id")
+            if isinstance(triplet, str) and triplet:
+                detail_by_triplet[triplet] = payload
 
         result: list[Any] = []
-        pending: list[tuple[int, frozenset[str]]] = []
+        pending: list[tuple[int, frozenset[str], str]] = []
 
         for row in commits:
-            nkey = norm_change_id(row.change_id) if row.change_id else None
-            detail = normalized.get(nkey) if nkey else None
+            detail = None
+            if row.change_id:
+                triplet = build_triplet(stack.project, stack.push_branch, row.change_id)
+                detail = detail_by_triplet.get(triplet)
             lc, needed = build_log_commit(row, detail, self.web_base, cwd)
             result.append(lc)
-            if needed:
-                pending.append((len(result) - 1, needed))
+            if needed and detail is not None:
+                triplet = detail.get("id")
+                if isinstance(triplet, str) and triplet:
+                    pending.append((len(result) - 1, needed, triplet))
 
         if not pending:
             return result
 
-        def _follow_up(item: tuple[int, frozenset[str]]) -> tuple[int, dict[str, Any]]:
-            idx, kinds = item
-            commit = result[idx]
+        def _follow_up(item: tuple[int, frozenset[str], str]) -> tuple[int, dict[str, Any]]:
+            idx, kinds, triplet = item
             updates: dict[str, Any] = {}
-            cid = commit.change_id
-            if not cid:
-                return idx, updates
             if "comments" in kinds:
                 try:
-                    file_map = self.comments.get_file_map(cid)
+                    file_map = self.comments.get_file_map(triplet)
                     updates["comments"] = count_unresolved_in_file_map(file_map)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
-                    logger.debug("comments follow-up failed for %s: %s", cid, exc)
+                    logger.debug("comments follow-up failed for %s: %s", triplet, exc)
             if "checks" in kinds:
                 try:
-                    updates["checks"] = self._fetch_ci_failures(cid)
+                    updates["checks"] = self._fetch_ci_failures(triplet)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
-                    logger.debug("checks follow-up failed for %s: %s", cid, exc)
+                    logger.debug("checks follow-up failed for %s: %s", triplet, exc)
             if "reviewers" in kinds:
                 try:
-                    rows = self.rest.list_change_reviewers(cid)
+                    rows = self.rest.list_change_reviewers(triplet)
                     updates["reviewers"] = reviewer_accounts_from_reviewer_list(rows)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
-                    logger.debug("reviewers follow-up failed for %s: %s", cid, exc)
+                    logger.debug("reviewers follow-up failed for %s: %s", triplet, exc)
             return idx, updates
 
         jobs = [lambda item=item: _follow_up(item) for item in pending]

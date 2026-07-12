@@ -5,8 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
-from gerrit_workflow_tools.core.gerrit.rest import GerritClient, resolve_gerrit_change
+from gerrit_workflow_tools.core.gerrit.change_resolution import (
+    ChangeResolutionError,
+    Resolution,
+    resolve_changeish,
+)
+from gerrit_workflow_tools.core.gerrit.rest import GerritClient
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import parse_change_id
@@ -14,10 +18,11 @@ from gerrit_workflow_tools.core.stack import parse_change_id
 
 @dataclass(frozen=True)
 class ShowCommitResolution:
-    """Resolved commit row for status lookup plus source marker."""
+    """Resolved commit row for status lookup plus resolution metadata."""
 
     row: CommitStatusInput
     is_local_commit: bool
+    resolution: Resolution
 
 
 def _arg_has_range(arg: str) -> bool:
@@ -25,47 +30,12 @@ def _arg_has_range(arg: str) -> bool:
     return ".." in token or "..." in token
 
 
-def _looks_like_change_id(arg: str) -> bool:
-    token = arg.strip()
-    if is_change_id_token(token):
-        return True
-    return bool(CHANGE_ID_VALUE_RE.match(token))
-
-
-def _is_gerrit_change_ref(arg: str) -> bool:
-    token = arg.strip()
-    if not token:
-        return False
-    lower = token.lower()
-    if lower.startswith(("change:", "cl:")):
-        return True
-    if _looks_like_change_id(token):
-        return True
-    if "~" in token:
-        parts = token.split("~")
-        if len(parts) == 3 and _looks_like_change_id(parts[2]):
-            return True
-    return False
-
-
-def _normalize_user_arg(arg: str) -> str:
-    token = arg.strip()
-    if not token:
-        raise GitError(
-            "git log failed: empty revision",
-            stderr="",
-            returncode=-1,
-        )
-    return token
-
-
-def _resolved_row_from_gerrit(client: GerritClient, raw_arg: str) -> CommitStatusInput:
-    change = resolve_gerrit_change(client, change_arg=raw_arg, local_change_id=None)
+def _row_from_gerrit_change(change: dict[str, object]) -> CommitStatusInput:
     rev = change.get("current_revision")
     sha = rev if isinstance(rev, str) else ""
     change_id = change.get("change_id")
     if not isinstance(change_id, str):
-        raise GitError("Gerrit change has no change_id")
+        raise ChangeResolutionError("Gerrit change has no change_id")
     subject = change.get("subject")
     summary = subject if isinstance(subject, str) else ""
     short = sha[:8] if len(sha) >= 8 else "?" * min(8, max(1, len(sha) or 1))
@@ -75,27 +45,28 @@ def _resolved_row_from_gerrit(client: GerritClient, raw_arg: str) -> CommitStatu
 
 
 def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritClient) -> ShowCommitResolution:
-    """Resolve one `ger show` argument to a structured status input row."""
+    """Resolve one `ger show` argument via the shared changeish core."""
 
     raw_arg = (arg or "HEAD").strip()
     if _arg_has_range(raw_arg):
         raise GitError(f"ger show does not support revision ranges: {arg!r}")
 
-    if _is_gerrit_change_ref(raw_arg):
-        return ShowCommitResolution(row=_resolved_row_from_gerrit(client, raw_arg), is_local_commit=False)
+    resolution = resolve_changeish(raw_arg, client=client, cwd=cwd, explicit_target=True)
 
-    try:
-        resolved = _normalize_user_arg(raw_arg)
-    except GitError:
-        return ShowCommitResolution(row=_resolved_row_from_gerrit(client, raw_arg), is_local_commit=False)
+    if resolution.kind == "git-rev":
+        sha = resolution.local_sha
+        if sha is None:
+            raise ChangeResolutionError(f"cannot resolve git revision {raw_arg!r}")
+        raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
+        summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
+        short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
+        change_id = parse_change_id(raw)
+        row = CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
+        return ShowCommitResolution(row=row, is_local_commit=True, resolution=resolution)
 
-    if ".." in resolved or "..." in resolved:
-        raise GitError(f"ger show does not support revision ranges: {arg!r}")
+    if resolution.selected is None:
+        raise ChangeResolutionError(f"no matching Gerrit change for {raw_arg!r}")
 
-    sha = git_out("rev-parse", "--verify", resolved, cwd=cwd)
-    raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
-    summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
-    short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
-    change_id = parse_change_id(raw)
-    row = CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
-    return ShowCommitResolution(row=row, is_local_commit=True)
+    change = client.get_change(resolution.selected.triplet)
+    row = _row_from_gerrit_change(change)
+    return ShowCommitResolution(row=row, is_local_commit=False, resolution=resolution)

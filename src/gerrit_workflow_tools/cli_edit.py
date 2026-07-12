@@ -44,7 +44,7 @@ def resolve_first_edit_attention_sha(cwd: Path) -> str:
     for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
         if not require_branch_upstream(cwd, branch):
             raise GitError("upstream not configured")
-    commits, load_exit = load_annotated_commits(cwd, rev_range)
+    commits, load_exit, _notes_by_sha = load_annotated_commits(cwd, rev_range)
     if commits is None:
         if load_exit == 0:
             raise GitError("no commits in stack")

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from gerrit_workflow_tools.cli_common import EXIT_AMBIGUOUS
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
@@ -28,12 +29,15 @@ def _detail_ok(
     cr_value: int = 2,
     v_value: int = 1,
     number: int = 99,
+    project: str = "testproj",
+    branch: str = "main",
 ) -> dict:
     """Minimal ChangeInfo for :func:`fetch_gerrit_data`."""
     return {
-        "id": f"proj~master~{change_id}",
+        "id": f"{project}~{branch}~{change_id}",
         "change_id": change_id,
-        "project": "proj",
+        "project": project,
+        "branch": branch,
         "_number": number,
         "subject": "subj",
         "current_revision": sha,
@@ -75,6 +79,7 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
         inst = MagicMock()
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = {}
         code, out, _err = run_cli(
             stack_repo,
@@ -85,10 +90,10 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     assert code == 0
     data = json_stdout(out)
     assert data["sha"] == sha
-    # resolve_gerrit_change + fetch_gerrit_data batch_load each query the change
-    first = inst.query_changes.call_args_list[0]
-    assert first.kwargs.get("options") == list(LOG_QUERY_OPTIONS)
-    assert all("CURRENT_REVISION" in (c.kwargs.get("options") or []) for c in inst.query_changes.call_args_list)
+    assert any(
+        call.kwargs.get("options") == list(LOG_QUERY_OPTIONS)
+        for call in inst.query_changes.call_args_list
+    )
 
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,6 +113,7 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
         inst = MagicMock()
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = {}
         code, out, _err = run_cli(
             stack_repo,
@@ -139,6 +145,7 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
         inst = MagicMock()
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = {}
         code, out, _err = run_cli(
             stack_repo,
@@ -180,6 +187,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
         inst.web_base = "https://g.example"
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
         code, out, _err = run_cli(
             stack_repo,
@@ -193,7 +201,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     assert c0["message"] == long_msg
     assert "line0" in c0["message"] and "line14" in c0["message"]
     assert "lines omitted above" not in c0["message"]
-    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/42/comment/TvcXrmjM/"
+    assert data["comments"][0]["url"] == "https://g.example/c/testproj/+/42/comment/TvcXrmjM/"
 
 
 def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -232,6 +240,7 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
         inst = MagicMock()
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
         code, out, _err = run_cli(
             stack_repo,
@@ -273,6 +282,7 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
         inst = MagicMock()
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
         code, out, _err = run_cli(
             stack_repo,
@@ -313,6 +323,7 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
         inst = MagicMock()
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
         code, out, _err = run_cli(
             stack_repo,
@@ -353,6 +364,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
         inst.web_base = "https://g.example"
         client_cls.return_value = inst
         inst.query_changes.return_value = [ch]
+        inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
         code, out, _err = run_cli(
             stack_repo,
@@ -365,7 +377,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     c0 = data["comments"][0]
     assert c0["message"] == long_msg
     assert "line0" in c0["message"] and "line14" in c0["message"]
-    assert data["comments"][0]["url"] == "https://g.example/c/proj/+/42/comment/TvcXrmjM/"
+    assert data["comments"][0]["url"] == "https://g.example/c/testproj/+/42/comment/TvcXrmjM/"
 
 
 def _configure_gshow_repo(stack_repo: Path) -> None:
@@ -494,3 +506,52 @@ def test_gshow_smoke_argv_head_mocked(stack_repo: Path, monkeypatch: pytest.Monk
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
         code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch)
     assert code in (0, 1), err
+
+
+def _mock_show_details(*rows: dict) -> dict[str, dict]:
+    """Key by triplet; duplicate triplets get suffixed keys so all rows are kept."""
+    out: dict[str, dict] = {}
+    for row in rows:
+        triplet = str(row["id"])
+        key = triplet if triplet not in out else f"{triplet}#{row.get('_number', len(out))}"
+        out[key] = row
+    return out
+
+
+def test_gshow_json_change_id_narrowing_includes_resolution(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare Change-Id on two branches narrows to target branch with resolution JSON."""
+    _configure_gshow_repo(stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    main_row = _detail_ok(change_id=cid, sha=sha, number=120045, branch="main")
+    dev_row = _detail_ok(change_id=cid, sha=sha, number=119870, branch="dev")
+    details = _mock_show_details(main_row, dev_row)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch)
+    assert code == 0, err
+    data = json_stdout(out)
+    resolution = data["resolution"]
+    assert resolution["kind"] == "change-id"
+    assert resolution["ambiguous"] is True
+    assert resolution["selected_reason"] == "target-branch"
+    assert resolution["selected"]["number"] == 120045
+    assert resolution["selected"]["branch"] == "main"
+    assert len(resolution["alternatives"]) == 1
+    assert resolution["alternatives"][0]["number"] == 119870
+
+
+def test_gshow_ambiguity_after_narrowing_exits_four(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two open changes on the target branch exit with ambiguity code 4."""
+    _configure_gshow_repo(stack_repo)
+    cid = "Icccccccccccccccccccccccccccccccccccccccc"
+    sha = "def12345678901234567890123456789012345678"
+    first = _detail_ok(change_id=cid, sha=sha, number=120045, branch="main")
+    second = _detail_ok(change_id=cid, sha=sha, number=120046, branch="main")
+    second["_number"] = 120046
+    details = _mock_show_details(first, second)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
+        code, _out, err = run_cli(stack_repo, gshow_main, [cid], monkeypatch)
+    assert code == EXIT_AMBIGUOUS
+    assert "ambiguous" in err.lower()
