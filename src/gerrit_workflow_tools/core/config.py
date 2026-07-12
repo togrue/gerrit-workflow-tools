@@ -243,13 +243,24 @@ def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -
     return (remote_name, rest)
 
 
-def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
-    """Gerrit destination for push/rebase from the branch's upstream.
+def branch_gerrit_target(cwd: Path | str | None, branch: str | None = None) -> str | None:
+    """Return ``branch.<name>.gerritTarget`` override for the Gerrit destination branch, if set."""
+    b = branch
+    if b is None:
+        b = resolve_working_branch(cwd) or current_branch(cwd)
+    return _config_get(cwd, f"branch.{b}.gerritTarget")
 
-    Returns upstream ref when its remote matches :func:`gerrit_remote`
-    (e.g. ``origin/main``), suitable for :func:`refs_for_push_branch_name`.
-    Returns ``None`` when there is no upstream on the Gerrit remote.
+
+def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
+    """Gerrit destination for push/rebase from branch config or upstream.
+
+    Prefers ``branch.<name>.gerritTarget`` when set; otherwise returns upstream ref
+    when its remote matches :func:`gerrit_remote` (e.g. ``origin/main``), suitable
+    for :func:`refs_for_push_branch_name`. Returns ``None`` when neither is available.
     """
+    override = branch_gerrit_target(cwd, branch)
+    if override:
+        return override
     parsed = resolve_upstream_parsed(cwd, branch)
     if not parsed:
         return None

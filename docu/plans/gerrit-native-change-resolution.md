@@ -8,7 +8,7 @@ satisfy lives in
 read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 `resolution` output, and exit codes.
 
-**Status:** Phase 0 complete (docs wired to contract); Phases 1–6 not yet implemented
+**Status:** Phase 1 complete (common resolution core + gerritTarget config); Phases 2–6 not yet implemented
 
 ---
 
@@ -311,8 +311,8 @@ Only SHA-based ranking stays out.)
 
 - [x] Architecture section: change identity, naming the shared core
 - [x] Command specs (`log`, `show`, `push`, `fix`, `edit`): change resolution cross-links
-- [ ] Common resolution core module + tests (classification, stack context, narrowing, `Resolution` shape)
-- [ ] `effective_gerrit_destination_branch` (or its Phase 1 replacement) reads `branch.*.gerritTarget`
+- [x] Common resolution core module + tests (classification, stack context, narrowing, `Resolution` shape)
+- [x] `effective_gerrit_destination_branch` (or its Phase 1 replacement) reads `branch.*.gerritTarget`
 - [ ] No behavior change in any command yet — core exists, unused by callers
 
 ---
