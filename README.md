@@ -16,6 +16,10 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 
 **Documentation:** [Getting started](docu/Getting-Started.md) · [Reading `ger log`](docu/Reading-ger-log.md) · [Full index](docu/README.md)
 
+### Change-Id vs Gerrit change identity
+
+Each commit carries a footer **Change-Id** (`I…`), but Gerrit's unique key for a review is the **triplet** `project~branch~Change-Id` (plus the numeric change number for URLs). The same Change-Id can exist on multiple branches; `ger` resolves a bare Change-Id using your stack context (`gerrit.project` and `branch.*.gerritTarget` or upstream) and never silently picks the wrong branch. Use `ger resolve <changeish> --json` to inspect how an input was classified. Full rules, ambiguity handling, and JSON output: [docu/spec/change-and-commit-identifiers.md](docu/spec/change-and-commit-identifiers.md).
+
 ## Install
 
 Python installs a single CLI: **`ger`**. After install, run **`ger`** subcommands from any repository without activating a virtual environment.
