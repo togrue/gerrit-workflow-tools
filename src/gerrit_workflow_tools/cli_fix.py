@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import sys
@@ -10,17 +11,26 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.cli_common import (
+    EXIT_AMBIGUOUS,
+    EXIT_RESOLUTION_ERROR,
+    HELP_JSON,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE, is_change_id_token
+from gerrit_workflow_tools.core.gerrit.change_resolution import (
+    ChangeAmbiguousError,
+    ChangeResolutionError,
+    Resolution,
+    classify_changeish,
+    format_resolution_note,
+    resolve_changeish,
+)
 from gerrit_workflow_tools.core.config import gerrit_remote
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritClient,
-    resolve_gerrit_change,
     resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
@@ -28,24 +38,6 @@ from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 logger = logging.getLogger(__name__)
 
 _REFS_CHANGES = re.compile(r"^refs/changes/\d+/\d+/\d+$")
-
-
-def _wants_gerrit_resolution(arg: str) -> bool:
-    token = arg.strip()
-    if not token:
-        return False
-    lower = token.lower()
-    if lower.startswith(("change:", "cl:")):
-        return True
-    if is_change_id_token(token):
-        return True
-    if CHANGE_ID_VALUE_RE.match(token):
-        return True
-    if "~" in token:
-        parts = token.split("~")
-        if len(parts) == 3 and CHANGE_ID_VALUE_RE.match(parts[2]):
-            return True
-    return False
 
 
 def _refs_changes_ref(arg: str) -> str | None:
@@ -100,8 +92,7 @@ def _resolve_fixup_sha_refs_changes(cwd: Path, ref: str) -> str:
     return git_out("rev-parse", "FETCH_HEAD", cwd=cwd)
 
 
-def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritClient, arg: str) -> str:
-    change = resolve_gerrit_change(client, change_arg=arg.strip(), local_change_id=None)
+def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any]) -> str:
     sha = change.get("current_revision")
     if not isinstance(sha, str) or not sha.strip():
         raise GitError("Gerrit change has no current_revision", stderr="", returncode=1)
@@ -124,7 +115,16 @@ def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritClient, arg: str) -> str:
     return got
 
 
-def _resolve_fixup_sha_git(cwd: Path, arg: str) -> str:
+def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritClient, arg: str) -> tuple[str, Resolution]:
+    resolution = resolve_changeish(arg.strip(), client=client, cwd=cwd, explicit_target=True)
+    if resolution.selected is None:
+        raise ChangeResolutionError(f"Gerrit change not found for {arg.strip()!r}")
+    change = client.get_change(resolution.selected.triplet)
+    fixup_sha = _resolve_fixup_sha_from_change_row(cwd, change)
+    return fixup_sha, resolution
+
+
+def _resolve_fixup_sha_git(cwd: Path, arg: str) -> tuple[str, Resolution | None]:
     token = arg.strip()
     p = git("rev-parse", "--verify", f"{token}^{{commit}}", cwd=cwd, check=False)
     if p.returncode != 0:
@@ -133,12 +133,27 @@ def _resolve_fixup_sha_git(cwd: Path, arg: str) -> str:
             stderr=p.stderr,
             returncode=p.returncode,
         )
-    return git_out("rev-parse", token, cwd=cwd)
+    sha = git_out("rev-parse", token, cwd=cwd)
+    resolution: Resolution | None = None
+    try:
+        web_base = resolve_gerrit_web_base(cwd)
+        client = GerritClient(web_base, cwd=str(cwd))
+        resolution = resolve_changeish(token, client=client, cwd=cwd, explicit_target=True)
+    except (ValueError, ChangeResolutionError, GerritApiError):
+        resolution = None
+    return sha, resolution
 
 
 def _index_has_staged_changes(cwd: Path) -> bool:
     d = git("diff", "--cached", "--quiet", cwd=cwd, check=False)
     return d.returncode != 0
+
+
+def _gerrit_changeish_kind(arg: str) -> str | None:
+    kind = classify_changeish(arg)
+    if kind == "git-rev":
+        return None
+    return kind
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -157,7 +172,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="REF_OR_CHANGE",
         help=(
             "Commit-ish (branch, SHA, HEAD~n, …), a Gerrit ``refs/changes/AA/NNNNN/PS`` ref, "
-            "a numeric change number, or a Change-Id (I…)."
+            "``change:<n>`` for a numeric change id, or a Change-Id (I…)."
         ),
     )
     p.add_argument(
@@ -172,6 +187,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Bypass pre-commit and commit-msg hooks (passed through to ``git commit``).",
     )
+    p.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
     add_verbose_and_debug_log_args(p, debug_log_help="Log resolution steps to stderr.")
     return p
 
@@ -185,17 +201,23 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         raw = args.target
+        resolution: Resolution | None = None
         rc_ref = _refs_changes_ref(raw)
         if rc_ref is not None:
             fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
-        elif _wants_gerrit_resolution(raw):
+        elif _gerrit_changeish_kind(raw) is not None:
             web_base = resolve_gerrit_web_base(cwd)
             client = GerritClient(web_base, cwd=str(cwd))
-            fixup_sha = _resolve_fixup_sha_gerrit(cwd, client, raw)
+            fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
         else:
-            fixup_sha = _resolve_fixup_sha_git(cwd, raw)
+            fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw)
 
         logger.info("fixup target commit: %s", fixup_sha)
+
+        if resolution is not None:
+            note = format_resolution_note(resolution)
+            if note:
+                print(note, file=sys.stderr)
 
         if not args.commit_all and not _index_has_staged_changes(cwd):
             print(
@@ -216,8 +238,20 @@ def main(argv: list[str] | None = None) -> int:
         if cp.returncode != 0:
             print(cp.stderr.strip() or cp.stdout.strip() or "git commit failed", file=sys.stderr)
             return cp.returncode or 1
+
+        if args.json_:
+            payload: dict[str, object] = {"fixup_sha": fixup_sha}
+            if resolution is not None:
+                payload["resolution"] = resolution.to_json_dict()
+            print(json.dumps(payload, indent=2))
         return 0
 
+    except ChangeAmbiguousError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_AMBIGUOUS
+    except ChangeResolutionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_RESOLUTION_ERROR
     except GerritApiError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
