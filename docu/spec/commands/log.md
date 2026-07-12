@@ -18,6 +18,10 @@ ger log [options] [REV_RANGE]
 
 `REV_RANGE` — optional (e.g. `origin/main..HEAD`). Default: `branch@{upstream}..branch` when upstream exists; otherwise error with hint to set upstream (`git branch --set-upstream-to=…`). On a TTY, `ger log` may prompt via `ensure_branch_upstream_interactive`.
 
+### Change resolution
+
+`ger log` enriches each local commit against the Gerrit change on the **target branch** (stack context). Changeishes in `REV_RANGE` endpoints use the same shared grammar as other commands; resolution goes through **`core/gerrit/change_resolution.py`** (planned shared core). When a footer Change-Id matches multiple server changes, the resolver narrows to the target branch and reports the pick transparently; a duplicate on another branch is ignored for status (may surface as a note). Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, a top-level `resolution` block per resolved changeish is the target shape ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)); not yet implemented.
+
 ---
 
 ## Options
@@ -38,9 +42,11 @@ ger log [options] [REV_RANGE]
 
 Default: one primary line per commit, optional `# …` detail lines, trailing **summary** line.
 
-Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker, submittability hint, subject. See [architecture.md](../../architecture.md#patchset-status-log--show--rebase-annotations).
+**User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md).
 
-**Summary example:** `summary: ready 2/6 · CI 1 · comments 1 · review 3`
+Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker, attention hints, subject. Patchset tokens: [architecture.md](../../architecture.md#patchset-status-log--show--rebase-annotations).
+
+**Summary example:** `summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4`
 
 Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when color is on.
 
@@ -80,6 +86,8 @@ Full list: [Configuration.md](../../Configuration.md).
 
 ## See also
 
+- [Reading-ger-log.md](../../Reading-ger-log.md) — user guide for text output
+- [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger show`](show.md)
 - [`ger edit`](edit.md) (`--first-attention-commit`)
 - [architecture.md](../../architecture.md)

@@ -18,6 +18,10 @@ ger show [options] [REV]
 
 `REV` — git ref, Change-Id (`I…`), change number, or Gerrit query. Default: `HEAD`.
 
+### Change resolution
+
+`REV` is a **changeish** — same shared grammar as every other resolving command (git ref, Change-Id, triplet, `change:<n>`, URL, `q:…`). Resolution goes through **`core/gerrit/change_resolution.py`** (planned shared core). Bare Change-Ids that match multiple Gerrit changes are narrowed to the stack **target branch** with a transparency note; override with a triplet or `change:<n>`. Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). With `--json`, a `resolution` block is the target output ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)); not yet implemented.
+
 ---
 
 ## Options
@@ -68,6 +72,7 @@ ger show [options] [REV]
 
 ## See also
 
+- [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger edit`](edit.md)
 - [architecture.md](../../architecture.md)

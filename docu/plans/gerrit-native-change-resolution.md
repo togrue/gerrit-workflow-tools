@@ -8,7 +8,7 @@ satisfy lives in
 read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 `resolution` output, and exit codes.
 
-**Status:** Planned (not yet implemented)
+**Status:** Phase 0 complete (docs wired to contract); Phases 1–6 not yet implemented
 
 ---
 
@@ -84,7 +84,7 @@ the proposed shape.
 
 The contract is written:
 [spec/change-and-commit-identifiers.md](../spec/change-and-commit-identifiers.md).
-Remaining Phase 0 work is to wire the surrounding docs to it.
+Phase 0 wired the surrounding docs to it (see **Status** below).
 
 **Deliverables:**
 
@@ -92,6 +92,8 @@ Remaining Phase 0 work is to wire the surrounding docs to it.
 - Update [spec/commands/log.md](../spec/commands/log.md), [show.md](../spec/commands/show.md), [push.md](../spec/commands/push.md), [fix.md](../spec/commands/fix.md), [edit.md](../spec/commands/edit.md) — note that every command resolves via the shared core, cross-linking the spec.
 
 **Done when:** Surrounding docs point at the contract; no code changes required yet.
+
+**Status:** Complete — [architecture.md](../architecture.md) has a **Change identity** section; [log](../spec/commands/log.md), [show](../spec/commands/show.md), [push](../spec/commands/push.md), [fix](../spec/commands/fix.md), and [edit](../spec/commands/edit.md) command specs cross-link the behavior contract and name the shared core.
 
 ---
 
@@ -307,7 +309,8 @@ Only SHA-based ranking stays out.)
 
 ## First PR checklist (Phase 0 + 1)
 
-- [ ] Architecture section: change identity, naming the shared core
+- [x] Architecture section: change identity, naming the shared core
+- [x] Command specs (`log`, `show`, `push`, `fix`, `edit`): change resolution cross-links
 - [ ] Common resolution core module + tests (classification, stack context, narrowing, `Resolution` shape)
 - [ ] `effective_gerrit_destination_branch` (or its Phase 1 replacement) reads `branch.*.gerritTarget`
 - [ ] No behavior change in any command yet — core exists, unused by callers
@@ -317,6 +320,6 @@ Only SHA-based ranking stays out.)
 ## See also
 
 - [spec/change-and-commit-identifiers.md](../spec/change-and-commit-identifiers.md) — the behavior contract this plan implements
-- [architecture.md](../architecture.md) — shared concepts (to be extended in Phase 0)
+- [architecture.md](../architecture.md) — shared concepts (**Change identity** section)
 - [Configuration.md](../Configuration.md) — `gerrit.project`, `branch.*.gerritTarget`
 - [spec/commands/log.md](../spec/commands/log.md) — primary consumer of stack overlay

@@ -18,6 +18,10 @@ ger fix [options] REF_OR_CHANGE
 
 `REF_OR_CHANGE` — commit-ish, `refs/changes/…`, numeric change id, or Change-Id (`I…`).
 
+### Change resolution
+
+`REF_OR_CHANGE` is a **changeish** resolved through **`core/gerrit/change_resolution.py`** (planned shared core): same grammar as `ger show` (git ref default; `change:<n>` for a Gerrit change number; triplet/URL for an exact pick). Ambiguous bare Change-Ids follow target-branch narrowing ([§3](../change-and-commit-identifiers.md#3-duplicate-change-ids-the-important-case)). Full contract: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md). Target `--json` `resolution` block ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)); not yet implemented.
+
 ---
 
 ## Options
@@ -53,5 +57,6 @@ Default: only **staged** changes are committed.
 
 ## See also
 
+- [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger edit`](edit.md)
 - [`ger sha`](sha-change-id.md)

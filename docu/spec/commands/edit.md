@@ -19,6 +19,10 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit]
 
 `ger edit` defaults to **edit** stop; `ger reword` defaults to **reword**. Each command exposes the other actions via flags.
 
+### Change resolution
+
+`REV` and `--first-attention-commit` targets are resolved as **changeishes** via **`core/gerrit/change_resolution.py`** (planned shared core), restricted to commits in the local stack. Change-Ids, triplets, and `change:<n>` map to the stack commit with that identity; otherwise error. Duplicate Change-Id narrowing uses stack **target branch** context when the arg is a bare Change-Id. Grammar and JSON `resolution` block ([§5](../change-and-commit-identifiers.md#5-machine-readable-resolution-for-automation)): [change-and-commit-identifiers.md](../change-and-commit-identifiers.md); resolution JSON not yet implemented.
+
 ---
 
 ## Options
@@ -42,6 +46,7 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit]
 
 ## See also
 
+- [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger sha`](sha-change-id.md)
 - [`ger rebase`](rebase.md)
