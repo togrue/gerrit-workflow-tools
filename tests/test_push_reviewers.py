@@ -80,8 +80,8 @@ def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
 
     service = MagicMock()
     service.changes.get_payloads.return_value = {
-        change_id_for_gerrit_rest_path(cid_a): detail_empty,
-        change_id_for_gerrit_rest_path(cid_b): detail_has,
+        triplet_a: detail_empty,
+        triplet_b: detail_has,
     }
 
     res = apply_reviewer_strategy_after_push_service(
@@ -106,7 +106,7 @@ def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
         ],
     )
     service = MagicMock()
-    service.changes.get_payloads.return_value = {change_id_for_gerrit_rest_path(cid): detail}
+    service.changes.get_payloads.return_value = {triplet: detail}
 
     res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["alice"], [triplet])
 

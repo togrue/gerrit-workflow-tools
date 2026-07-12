@@ -11,9 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
-from gerrit_workflow_tools.core.gerrit.rest import change_id_for_gerrit_rest_path
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_ACCOUNT_TTL_SECONDS = 24 * 60 * 60
 
@@ -57,15 +56,9 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
-def _change_key(change_id: str) -> str:
-    return change_id_for_gerrit_rest_path(change_id)
-
-
-def _payload_change_id(payload: dict[str, Any], fallback: str) -> str:
-    raw = payload.get("change_id")
-    if isinstance(raw, str):
-        return _change_key(raw)
-    return _change_key(fallback)
+def _payload_triplet(payload: dict[str, Any]) -> str | None:
+    raw = payload.get("id")
+    return raw if isinstance(raw, str) and raw else None
 
 
 def _payload_updated(payload: dict[str, Any]) -> str | None:
@@ -185,16 +178,15 @@ class GerritCache:
             comments = int(conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0])
         return CacheInfo(path=self.path, host=self.host, changes=changes, accounts=accounts, comments=comments)
 
-    def _lookup_changes(self, change_ids: list[str]) -> dict[str, _ChangeRow]:
-        keys = [_change_key(cid) for cid in change_ids]
-        if not keys:
+    def _lookup_changes(self, triplets: list[str]) -> dict[str, _ChangeRow]:
+        if not triplets:
             return {}
-        placeholders = ",".join("?" for _ in keys)
+        placeholders = ",".join("?" for _ in triplets)
         out: dict[str, _ChangeRow] = {}
         with self._connect() as conn:
             rows = conn.execute(
                 f"SELECT change_id, payload, updated, fetched_at FROM changes WHERE change_id IN ({placeholders})",
-                keys,
+                triplets,
             ).fetchall()
         for row in rows:
             payload = json.loads(str(row["payload"]))
@@ -208,39 +200,38 @@ class GerritCache:
 
     def load_changes(
         self,
-        change_ids: list[str],
+        triplets: list[str],
         *,
         probe_updated: Callable[[list[str]], dict[str, str]],
         fetch_changes: Callable[[list[str]], dict[str, dict[str, Any]]],
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
     ) -> dict[str, dict[str, Any]]:
-        """Load ChangeInfo payloads using cache, freshness probe, and batched fetch fallback."""
+        """Load ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
-        keys = [_change_key(cid) for cid in change_ids]
-        rows = self._lookup_changes(keys)
+        rows = self._lookup_changes(triplets)
         now = _now()
         out: dict[str, dict[str, Any]] = {}
         probe_ids: list[str] = []
         fetch_ids: list[str] = []
 
-        for key in keys:
-            row = rows.get(key)
+        for triplet in triplets:
+            row = rows.get(triplet)
             if row is None:
-                fetch_ids.append(key)
+                fetch_ids.append(triplet)
             elif not refresh and now - row.fetched_at < trust_window_seconds:
-                out[key] = row.payload
+                out[triplet] = row.payload
             else:
-                probe_ids.append(key)
+                probe_ids.append(triplet)
 
         if probe_ids:
             updated_by_id = probe_updated(probe_ids)
-            for key in probe_ids:
-                row = rows[key]
-                if row.updated and updated_by_id.get(key) == row.updated:
-                    out[key] = row.payload
+            for triplet in probe_ids:
+                row = rows[triplet]
+                if row.updated and updated_by_id.get(triplet) == row.updated:
+                    out[triplet] = row.payload
                 else:
-                    fetch_ids.append(key)
+                    fetch_ids.append(triplet)
 
         if fetch_ids:
             fetched = fetch_changes(fetch_ids)
@@ -250,35 +241,36 @@ class GerritCache:
         return out
 
     def upsert_changes(self, changes: dict[str, dict[str, Any]] | list[dict[str, Any]]) -> None:
-        """Store ChangeInfo payloads."""
+        """Store ChangeInfo payloads under ``payload["id"]`` (Gerrit triplet)."""
 
-        items = list(changes.items()) if isinstance(changes, dict) else [("", payload) for payload in changes]
+        items = changes.values() if isinstance(changes, dict) else changes
         now = _now()
         with self._connect() as conn:
-            for fallback, payload in items:
-                cid = _payload_change_id(payload, fallback)
+            for payload in items:
+                triplet = _payload_triplet(payload)
+                if triplet is None:
+                    continue
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO changes(change_id, number, payload, updated, fetched_at)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (cid, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now),
+                    (triplet, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now),
                 )
 
-    def invalidate_changes(self, change_ids: list[str]) -> None:
-        """Drop cached change and comment rows for *change_ids*."""
+    def invalidate_changes(self, triplets: list[str]) -> None:
+        """Drop cached change and comment rows for *triplets*."""
 
-        keys = [_change_key(cid) for cid in change_ids]
-        if not keys:
+        if not triplets:
             return
-        placeholders = ",".join("?" for _ in keys)
+        placeholders = ",".join("?" for _ in triplets)
         with self._connect() as conn:
-            conn.execute(f"DELETE FROM changes WHERE change_id IN ({placeholders})", keys)
-            conn.execute(f"DELETE FROM comments WHERE change_id IN ({placeholders})", keys)
+            conn.execute(f"DELETE FROM changes WHERE change_id IN ({placeholders})", triplets)
+            conn.execute(f"DELETE FROM comments WHERE change_id IN ({placeholders})", triplets)
 
     def load_comments(
         self,
-        change_id: str,
+        triplet: str,
         *,
         fetch_comments: Callable[[str], dict[str, list[dict[str, Any]]]],
         change_updated: str | None = None,
@@ -287,13 +279,12 @@ class GerritCache:
     ) -> dict[str, list[dict[str, Any]]]:
         """Load comment payloads with trust-window and optional change-updated validation."""
 
-        key = _change_key(change_id)
         now = _now()
         row: _CommentRow | None = None
         with self._connect() as conn:
             raw = conn.execute(
                 "SELECT payload, fetched_at, change_updated FROM comments WHERE change_id = ?",
-                (key,),
+                (triplet,),
             ).fetchone()
         if raw:
             payload = json.loads(str(raw["payload"]))
@@ -312,27 +303,26 @@ class GerritCache:
             if change_updated is not None and row.change_updated == change_updated:
                 return row.payload
 
-        payload = fetch_comments(key)
-        self.upsert_comments(key, payload, change_updated=change_updated)
+        payload = fetch_comments(triplet)
+        self.upsert_comments(triplet, payload, change_updated=change_updated)
         return payload
 
     def upsert_comments(
         self,
-        change_id: str,
+        triplet: str,
         payload: dict[str, list[dict[str, Any]]],
         *,
         change_updated: str | None = None,
     ) -> None:
         """Store comments for one change."""
 
-        key = _change_key(change_id)
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO comments(change_id, payload, fetched_at, change_updated)
                 VALUES (?, ?, ?, ?)
                 """,
-                (key, _json_dumps(payload), _now(), change_updated),
+                (triplet, _json_dumps(payload), _now(), change_updated),
             )
 
     def load_accounts(
