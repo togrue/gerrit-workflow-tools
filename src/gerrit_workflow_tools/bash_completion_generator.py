@@ -16,6 +16,7 @@ from gerrit_workflow_tools import (
     cli_log,
     cli_push,
     cli_rebase,
+    cli_resolve,
     cli_sha,
     cli_show,
 )
@@ -100,6 +101,7 @@ def _parser_builders() -> dict[str, Callable[[], argparse.ArgumentParser]]:
         "log": cli_log._build_parser,
         "push": cli_push._build_arg_parser,
         "rebase": cli_rebase._build_parser,
+        "resolve": cli_resolve._build_parser,
         "reword": cli_edit._build_parser_reword,
         "sha": cli_sha._build_parser,
         "show": cli_show._build_parser,
