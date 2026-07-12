@@ -8,7 +8,7 @@ satisfy lives in
 read that first for the changeish grammar, duplicate-Change-Id handling, JSON
 `resolution` output, and exit codes.
 
-**Status:** Phase 1 complete (common resolution core + gerritTarget config); Phases 2–6 not yet implemented
+**Status:** Phases 0–2 complete (common resolution core, gerritTarget config, triplet-aware REST layer); Phases 3–6 not yet implemented
 
 ---
 
@@ -173,6 +173,8 @@ Phase 0 wired the surrounding docs to it (see **Status** below).
 - Case-sensitivity regression test: a Change-Id and its differently-cased twin are treated as **different** keys (documents the "no normalization" decision so it can't regress silently).
 
 **Done when:** REST layer is correct and policy-free in isolation; tests prove the new API; nothing here decides *which* of several matches to use — that's Phase 1's job.
+
+**Status:** Complete — `batch_load_change_details`, `query_single_change`, `probe_changes_updated`, and `resolve_change_ref` are triplet/numeric aware; `_ingest_change_rows` keys by `row["id"]` verbatim; tests in `tests/test_gerrit_rest.py`.
 
 ---
 

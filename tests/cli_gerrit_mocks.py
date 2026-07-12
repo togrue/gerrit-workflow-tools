@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, parse_change_id
 
@@ -19,6 +18,7 @@ def change_info_for_sha(
     change_id: str,
     *,
     project: str = "testproj",
+    branch: str = "main",
     number: int = 100,
     cr: int = 2,
     verified: int = 1,
@@ -31,9 +31,10 @@ def change_info_for_sha(
 ) -> dict[str, Any]:
     """Minimal ChangeInfo for :func:`batch_load_change_details` / ``query_changes``."""
     out: dict[str, Any] = {
-        "id": f"{project}~main~{change_id}",
+        "id": f"{project}~{branch}~{change_id}",
         "change_id": change_id,
         "project": project,
+        "branch": branch,
         "_number": number,
         "status": status,
         "subject": "subj",
@@ -67,7 +68,7 @@ def build_details_by_change_id(
     per_index_overrides: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """
-    Map normalized Change-Id -> ChangeInfo for each row with a Change-Id.
+    Map triplet ``id`` -> ChangeInfo for each row with a Change-Id.
 
     *per_index_overrides* aligns with *rows* (e.g. ``[{"cr": 1}]`` to force attention).
     """
@@ -95,25 +96,60 @@ def build_details_by_change_id(
             private=bool(ov.get("private", False)),
             status=str(ov.get("status", "NEW")),
         )
-        out[norm_change_id(cid)] = detail
+        out[str(detail["id"])] = detail
     return out
 
 
+def _lookup_detail(details: dict[str, dict[str, Any]], ref: str) -> dict[str, Any] | None:
+    if ref in details:
+        return details[ref]
+    if ref.isdigit():
+        for row in details.values():
+            if row.get("_number") == int(ref):
+                return row
+    m = re.search(r"~(I[a-fA-F0-9]{40})$", ref)
+    if m:
+        suffix = m.group(1)
+        for row in details.values():
+            if row.get("change_id") == suffix:
+                return row
+    for row in details.values():
+        if row.get("change_id") == ref:
+            return row
+    return None
+
+
 def make_query_changes_impl(details: dict[str, dict[str, Any]]):
-    """Return a ``query_changes`` callable matching batched ``change:Id OR ...`` queries."""
+    """Return a ``query_changes`` callable matching scoped triplet OR queries."""
 
     def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
-        matches = re.findall(r"change:(\S+)", q)
         result: list[dict[str, Any]] = []
         seen: set[str] = set()
-        for m in matches:
-            key = norm_change_id(m)
+
+        for project, branch, change_id in re.findall(
+            r"project:(\S+)\s+branch:(\S+)\s+change:(\S+)",
+            q,
+        ):
+            triplet = f"{project}~{branch}~{change_id}"
+            if triplet in seen:
+                continue
+            seen.add(triplet)
+            row = details.get(triplet)
+            if row is not None:
+                result.append(row)
+
+        for change_ref in re.findall(r"change:(\S+)", q):
+            if change_ref.isdigit():
+                key = f"num:{change_ref}"
+            else:
+                key = f"cid:{change_ref}"
             if key in seen:
                 continue
             seen.add(key)
-            row = details.get(key)
+            row = _lookup_detail(details, change_ref)
             if row is not None:
                 result.append(row)
+
         return result
 
     return query_changes
@@ -131,11 +167,9 @@ def patch_gerrit_client_for_queries(
     inst.query_changes.side_effect = make_query_changes_impl(details_by_change_id)
 
     def _get_change(change_id: str) -> dict[str, Any]:
-        m = re.search(r"~(I[a-f0-9]{40})$", change_id, re.IGNORECASE)
-        key = norm_change_id(m.group(1) if m else change_id)
-        row = details_by_change_id.get(key)
+        row = _lookup_detail(details_by_change_id, change_id)
         if row is None:
-            raise AssertionError(f"test mock: no ChangeInfo for {change_id!r} (normalized {key!r})")
+            raise AssertionError(f"test mock: no ChangeInfo for {change_id!r}")
         return row
 
     inst.get_change.side_effect = _get_change

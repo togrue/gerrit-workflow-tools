@@ -55,11 +55,11 @@ def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypat
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     ch = change_info_for_sha(sha, cid, number=4242)
     ch["revisions"][sha]["ref"] = "refs/changes/42/4242/1"
-    details = {"4242": ch}
+    details = {str(ch["id"]): ch}
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
         (stack_repo / "b.txt").write_text("via gerrit\n", encoding="utf-8")
         git("add", "b.txt", cwd=stack_repo)
-        code, _out, err = run_cli(stack_repo, ger_fix_main, ["4242"], monkeypatch)
+        code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:4242"], monkeypatch)
     assert code == 0, err
     subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
     assert subj.startswith("fixup! ")
@@ -83,11 +83,11 @@ def test_ger_fix_gerrit_missing_local_object_reports_fetch_error(
     cid = "Icccccccccccccccccccccccccccccccccccccccc"
     ch = change_info_for_sha(missing, cid, number=7777)
     ch["revisions"][missing]["ref"] = "refs/changes/77/7777/3"
-    details = {"7777": ch}
+    details = {str(ch["id"]): ch}
     (stack_repo / "c.txt").write_text("fetch path\n", encoding="utf-8")
     git("add", "c.txt", cwd=stack_repo)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
-        code, _out, err = run_cli(stack_repo, ger_fix_main, ["7777"], monkeypatch)
+        code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch)
     assert code != 0
     combined = f"{err} {_out}".lower()
     assert "refs/changes/77/7777/3" in err

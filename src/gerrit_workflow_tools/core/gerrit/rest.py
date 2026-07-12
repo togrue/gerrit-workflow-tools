@@ -38,6 +38,7 @@ class GerritApiError(RuntimeError):
 
 
 _CHANGE_ID_REST_PATH_RE = re.compile(r"^[iI]([0-9a-fA-F]{40})$")
+_CHANGE_ID_SUFFIX_RE = re.compile(r"^[iI][0-9a-fA-F]{40}$")
 _BATCH_OR_CHUNK = 25
 
 
@@ -361,22 +362,20 @@ class GerritClient:
         )
         return out
 
-    def probe_changes_updated(self, change_ids: list[str]) -> dict[str, str]:
-        """Return Gerrit ``updated`` values keyed by canonical Change-Id for a cheap freshness check."""
+    def probe_changes_updated(self, refs: list[str]) -> dict[str, str]:
+        """Return Gerrit ``updated`` values keyed by triplet ``id`` for a cheap freshness check."""
 
         out: dict[str, str] = {}
         unique: list[str] = []
         seen: set[str] = set()
-        for raw in change_ids:
-            cid = change_id_for_gerrit_rest_path(raw)
-            key = cid.lower()
-            if key in seen:
+        for raw in refs:
+            if raw in seen:
                 continue
-            seen.add(key)
-            unique.append(cid)
+            seen.add(raw)
+            unique.append(raw)
 
         def _probe_chunk(chunk: list[str]) -> list[dict[str, Any]]:
-            q = " OR ".join(f"change:{cid}" for cid in chunk)
+            q = " OR ".join(_ref_to_query(ref) for ref in chunk)
             return self.query_changes(q, n=len(chunk) + 10, options=["SKIP_DIFFSTAT"])
 
         def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
@@ -390,19 +389,26 @@ class GerritClient:
         rows_by_chunk = parallel_map(jobs)
         for rows in rows_by_chunk:
             for row in rows:
-                raw_id = row.get("change_id")
+                triplet = row.get("id")
                 updated = row.get("updated")
-                if isinstance(raw_id, str) and isinstance(updated, str):
-                    out[change_id_for_gerrit_rest_path(raw_id)] = updated
+                if isinstance(triplet, str) and isinstance(updated, str):
+                    out[triplet] = updated
         return out
 
 
 def resolve_change_ref(arg: str) -> str:
-    """Build a ``changes/`` query string (numeric id, Change-Id, or passthrough)."""
+    """Build a ``changes/?q=`` query string from a triplet, Change-Id, or passthrough ref."""
     s = arg.strip()
-    if re.fullmatch(r"\d+", s):
-        return f"change:{s}"
-    if s.upper().startswith("I") and len(s) == 41:
+    lower = s.lower()
+    if lower.startswith("q:"):
+        return s[2:].strip()
+    if lower.startswith(("change:", "cl:")):
+        return s
+    if "~" in s:
+        parts = s.split("~")
+        if len(parts) == 3 and _CHANGE_ID_SUFFIX_RE.fullmatch(parts[2]):
+            return _triplet_query(parts[0], parts[1], parts[2])
+    if _CHANGE_ID_SUFFIX_RE.fullmatch(s):
         return f"change:{s}"
     return s
 
@@ -478,27 +484,54 @@ def resolve_gerrit_change(
 # ---------------------------------------------------------------------------
 
 
+def _parse_batch_ref(ref: str) -> tuple[str, ...]:
+    """Return ``('triplet', project, branch, change_id)`` or ``('numeric', number)``."""
+    s = ref.strip()
+    if re.fullmatch(r"\d+", s):
+        return ("numeric", s)
+    if "~" in s:
+        parts = s.split("~")
+        if len(parts) == 3 and _CHANGE_ID_SUFFIX_RE.fullmatch(parts[2]):
+            return ("triplet", parts[0], parts[1], parts[2])
+    raise GerritApiError(f"batch ref must be triplet or numeric change id, got {ref!r}")
+
+
+def _triplet_query(project: str, branch: str, change_id: str) -> str:
+    return f"project:{project} branch:{branch} change:{change_id}"
+
+
+def _ref_to_query(ref: str) -> str:
+    kind = _parse_batch_ref(ref)
+    if kind[0] == "triplet":
+        return _triplet_query(kind[1], kind[2], kind[3])
+    return f"change:{kind[1]}"
+
+
 def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        raw_id = row.get("change_id")
-        if isinstance(raw_id, str):
-            out[norm_change_id(raw_id)] = row
+        triplet = row.get("id")
+        if isinstance(triplet, str) and triplet:
+            out[triplet] = row
 
 
 def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
-    """Query each Change-Id in *chunk* when a batched OR query fails (same session, sequential)."""
+    """Query each ref in *chunk* when a batched OR query fails (same session, sequential)."""
     rows: list[dict[str, Any]] = []
-    for change_id in chunk:
-        one = query_single_change(client, change_id)
+    for ref in chunk:
+        try:
+            one = query_single_change(client, ref)
+        except GerritApiError as e:
+            logger.warning("Gerrit query failed for %s: %s", ref, e)
+            continue
         if one:
             rows.append(one)
     return rows
 
 
 def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
-    q = " OR ".join(f"change:{c}" for c in chunk)
+    q = " OR ".join(_ref_to_query(ref) for ref in chunk)
     try:
         return client.query_changes(q, n=len(chunk) + 10, options=opts)
     except GerritApiError as e:
@@ -506,28 +539,27 @@ def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str])
         return _fallback_query_chunk(client, chunk)
 
 
-def query_single_change(client: GerritClient, change_id: str) -> dict[str, Any] | None:
-    """Query one Gerrit change by Change-Id and return first matching ``ChangeInfo`` row."""
+def query_single_change(client: GerritClient, ref: str) -> dict[str, Any] | None:
+    """Query one Gerrit change by triplet or numeric id; raise on ambiguous multi-match."""
     try:
-        rows = client.query_changes(f"change:{change_id}", n=5, options=list(LOG_QUERY_OPTIONS))
+        rows = client.query_changes(_ref_to_query(ref), n=5, options=list(LOG_QUERY_OPTIONS))
     except GerritApiError as e:
-        logger.warning("Gerrit query failed for %s: %s", change_id, e)
+        logger.warning("Gerrit query failed for %s: %s", ref, e)
         return None
     if not rows:
         return None
-    return rows[0]
+    return pick_change_from_query_result(rows)
 
 
-def batch_load_change_details(client: GerritClient, change_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Map normalized Change-Id to ChangeInfo using chunked ``change:I1 OR change:I2`` queries."""
+def batch_load_change_details(client: GerritClient, refs: list[str]) -> dict[str, dict[str, Any]]:
+    """Map triplet ``id`` to ChangeInfo using scoped OR-chunked queries."""
     out: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
     unique: list[str] = []
-    for cid in change_ids:
-        k = norm_change_id(cid)
-        if k not in seen:
-            seen.add(k)
-            unique.append(cid)
+    for ref in refs:
+        if ref not in seen:
+            seen.add(ref)
+            unique.append(ref)
 
     opts = list(LOG_QUERY_OPTIONS)
     chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
