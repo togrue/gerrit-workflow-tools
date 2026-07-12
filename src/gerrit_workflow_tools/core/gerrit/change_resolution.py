@@ -446,6 +446,52 @@ def resolve_changeish(
     raise ChangeResolutionError(f"unsupported changeish kind: {kind!r}")
 
 
+def resolve_to_stack_sha(
+    ref: str,
+    *,
+    cwd: Path | str | None,
+    branch: str | None = None,
+    client: GerritClient | None = None,
+) -> str:
+    """Resolve a changeish to a full SHA on the current local stack."""
+    from gerrit_workflow_tools.core.stack import get_stack_snapshot
+
+    raw = ref.strip()
+    kind = classify_changeish(raw)
+
+    if kind == "git-rev":
+        return git_out("rev-parse", raw, cwd=cwd)
+
+    change_id: str | None = None
+    if kind == "change-id":
+        change_id = raw
+    elif kind == "triplet":
+        _, _, change_id = parse_triplet(raw)
+    elif kind in ("change-number", "change-ref", "url", "query"):
+        if client is None:
+            raise ChangeResolutionError(
+                f"cannot resolve {kind!r} to a stack commit without a Gerrit client"
+            )
+        resolution = resolve_changeish(raw, client=client, cwd=cwd, branch=branch, explicit_target=True)
+        if resolution.selected is None:
+            raise ChangeResolutionError(f"no Gerrit change resolved for {raw!r}")
+        change_id = resolution.selected.change_id
+    else:
+        raise ChangeResolutionError(f"unsupported changeish kind for stack resolution: {kind!r}")
+
+    snap = get_stack_snapshot(cwd, branch)
+    matches = [c for c in snap.commits if c.change_id == change_id]
+    if not matches:
+        raise ChangeResolutionError(f"no commit in current stack with Change-Id {change_id}")
+    if len(matches) > 1:
+        shorts = [c.short_sha for c in matches]
+        raise ChangeAmbiguousError(
+            f"ambiguous Change-Id {change_id} in stack ({', '.join(shorts)})",
+            alternatives=[],
+        )
+    return matches[0].sha
+
+
 def format_resolution_note(resolution: Resolution) -> str | None:
     """Return a one-line stderr transparency note when narrowing occurred."""
     if not resolution.ambiguous or resolution.selected is None:

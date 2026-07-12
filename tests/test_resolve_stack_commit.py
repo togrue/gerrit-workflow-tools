@@ -15,12 +15,13 @@ def test_resolve_by_change_id(stack_repo, monkeypatch):
     assert subj == "Extract command routing"
 
 
-def test_resolve_change_id_case_insensitive(stack_repo, monkeypatch):
+def test_resolve_change_id_case_sensitive(stack_repo, monkeypatch):
     monkeypatch.chdir(stack_repo)
     cid = _cid("2")
-    full_lower = resolve_stack_commit(stack_repo, cid.lower())
-    full_mixed = resolve_stack_commit(stack_repo, cid)
-    assert full_lower == full_mixed
+    full = resolve_stack_commit(stack_repo, cid)
+    with pytest.raises(GitError, match="no commit in current stack"):
+        resolve_stack_commit(stack_repo, cid.lower())
+    assert full == resolve_stack_commit(stack_repo, cid)
 
 
 def test_resolve_by_short_sha(stack_repo, monkeypatch):

@@ -147,7 +147,15 @@ def _run_interactive_stack_rebase(
             rev_arg = git_out("rev-parse", "--short", full, cwd=cwd)
         else:
             assert rev_arg is not None
-            full = resolve_stack_commit(cwd, rev_arg.strip(), branch=branch)
+            client = None
+            from gerrit_workflow_tools.core.gerrit.change_resolution import classify_changeish
+
+            kind = classify_changeish(rev_arg.strip())
+            if kind in ("change-number", "change-ref", "url", "query"):
+                from gerrit_workflow_tools.core.gerrit.service import GerritService
+
+                client = GerritService.from_cwd(cwd).rest
+            full = resolve_stack_commit(cwd, rev_arg.strip(), branch=branch, client=client)
         if not commit_in_stack(cwd, full, branch=branch):
             raise GitError(f"commit {rev_arg} is not in the current local stack")
         rebase_fork, _, _ = merge_base_with_target(cwd, branch)

@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
+from gerrit_workflow_tools.core.gerrit.rest import GerritClient
 from gerrit_workflow_tools.core.config import current_branch
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
@@ -213,20 +213,27 @@ def resolve_stack_commit(
     *,
     branch: str | None = None,
     _snap: StackSnapshot | None = None,
+    client: GerritClient | None = None,
 ) -> str:
-    """Resolve *ref* to a full SHA, or map a Change-Id to the unique commit on the current stack."""
+    """Resolve *ref* to a full SHA, or map a changeish to the unique commit on the current stack."""
+    from gerrit_workflow_tools.core.gerrit.change_resolution import (
+        ChangeAmbiguousError,
+        ChangeResolutionError,
+        classify_changeish,
+        resolve_to_stack_sha,
+    )
+
     s = ref.strip()
-    if CHANGE_ID_VALUE_RE.match(s):
-        snap = _snap or get_stack_snapshot(cwd, branch)
-        want = s.lower()
-        matches = [(c.sha, c.short_sha) for c in snap.commits if c.change_id and c.change_id.lower() == want]
-        if not matches:
-            raise GitError(f"no commit in current stack with Change-Id {s}")
-        if len(matches) > 1:
-            shorts = [m[1] for m in matches]
-            raise GitError(f"ambiguous Change-Id {s} in stack ({', '.join(shorts)})")
-        logger.debug("resolve_stack_commit: Change-Id %s -> %s", s, matches[0][0][:8])
-        return matches[0][0]
+    kind = classify_changeish(s)
+    if kind in ("change-id", "triplet", "change-number", "change-ref", "url", "query"):
+        try:
+            full = resolve_to_stack_sha(s, cwd=cwd, branch=branch, client=client)
+        except ChangeAmbiguousError as e:
+            raise GitError(str(e)) from e
+        except ChangeResolutionError as e:
+            raise GitError(str(e)) from e
+        logger.debug("resolve_stack_commit: changeish %r -> %s", s, full[:8])
+        return full
     full = git_out("rev-parse", s, cwd=cwd)
     logger.debug("resolve_stack_commit: ref %r -> %s", s, full[:8])
     return full
