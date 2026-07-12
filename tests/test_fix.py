@@ -103,3 +103,62 @@ def test_cli_ger_dispatches_fix(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert code == 0, err
     subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
     assert subj.startswith("fixup! ")
+
+
+def test_ger_fix_bare_integer_is_git_revision_not_change_number(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare digits resolve as a git revision, not a Gerrit change number (spec §2.2)."""
+
+    def _gerrit_must_not_run(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Gerrit must not be consulted for a bare integer changeish")
+
+    monkeypatch.setattr("gerrit_workflow_tools.cli_fix.GerritClient", _gerrit_must_not_run)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_fix.resolve_gerrit_web_base", _gerrit_must_not_run)
+
+    (stack_repo / "a.txt").write_text("bare int\n", encoding="utf-8")
+    git("add", "a.txt", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["42424242"], monkeypatch)
+    assert code != 0
+    assert "not a valid commit" in err.lower()
+
+
+def test_ger_fix_json_includes_resolution_for_change_id(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    cid = "Idddddddddddddddddddddddddddddddddddddddd"
+    ch = change_info_for_sha(sha, cid, number=5151)
+    details = {str(ch["id"]): ch}
+    (stack_repo / "d.txt").write_text("json fix\n", encoding="utf-8")
+    git("add", "d.txt", cwd=stack_repo)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
+        code, out, err = run_cli(stack_repo, ger_fix_main, ["--json", cid], monkeypatch)
+    assert code == 0, err
+    import json
+
+    data = json.loads(out)
+    assert data["fixup_sha"]
+    assert data["resolution"]["kind"] == "change-id"
+    assert data["resolution"]["selected"]["change_id"] == cid
+
+
+def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.cli_common import EXIT_AMBIGUOUS
+
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    cid = "Ieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    first = change_info_for_sha(sha, cid, number=120045, branch="main")
+    second = change_info_for_sha(sha, cid, number=120046, branch="main")
+    triplet = str(first["id"])
+    details = {triplet: first, f"{triplet}#120046": second}
+    (stack_repo / "e.txt").write_text("ambig\n", encoding="utf-8")
+    git("add", "e.txt", cwd=stack_repo)
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
+        code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
+    assert code == EXIT_AMBIGUOUS
+    assert "ambiguous" in err.lower()

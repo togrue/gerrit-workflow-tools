@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
-from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.reviewer_completion import (
     account_query_exact_lookup,
@@ -94,7 +94,11 @@ class ReviewerCatalog:
             change_id_hint=change_id_hint,
         )
 
-        project = resolve_gerrit_project_name(cwd)
+        try:
+            stack = resolve_stack_context(cwd)
+            project = stack.project
+        except ChangeResolutionError:
+            project = None
         if project:
             try:
                 plugin_rows = client.get_plugin_project_reviewers(project)

@@ -49,13 +49,14 @@ from gerrit_workflow_tools.core.config import (
     stop_patterns,
 )
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, norm_change_id, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.push_reviewers import (
     ReviewerApplyChangeOutcome,
     apply_reviewer_strategy_after_push_service,
-    stack_change_ids_ordered,
+    stack_change_refs_ordered,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
 from gerrit_workflow_tools.core.reviewer import (
@@ -406,7 +407,7 @@ def _print_post_push_assignment_report(
     by_cid: dict[str, tuple[str, str]] = {}
     for c in rows:
         if c.change_id:
-            by_cid[norm_change_id(c.change_id)] = (c.sha, c.subject)
+            by_cid[c.change_id] = (c.sha, c.subject)
     for outcome in outcomes:
         row = by_cid.get(outcome.change_id)
         if row is None:
@@ -428,8 +429,8 @@ def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
     plan: GerritPushReviewers,
 ) -> int:
     """Return 0 on success, non-zero if a required REST step failed."""
-    change_ids = stack_change_ids_ordered(cwd, r, first_parent)
-    result = apply_reviewer_strategy_after_push_service(service, strategy, reviewers, change_ids)
+    change_refs = stack_change_refs_ordered(cwd, r, first_parent)
+    result = apply_reviewer_strategy_after_push_service(service, strategy, reviewers, change_refs)
     for issue in result.issues:
         print(f"{issue.level}: {issue.message}", file=sys.stderr)
     if result.ok and result.outcomes:
@@ -464,13 +465,14 @@ def _commit_lines_for_preview(
     if not r.push_range:
         return []
     rows = commits_in_range(cwd, r.push_range, first_parent=first_parent)
-    details_by_cid: dict[str, dict[str, object]] | None = None
+    details_by_triplet: dict[str, dict[str, object]] | None = None
+    stack = resolve_stack_context(cwd) if show_attributes else None
     if show_attributes:
-        ids: list[str] = []
+        triplets: list[str] = []
         for c in rows:
-            if c.change_id:
-                ids.append(c.change_id)
-        if ids:
+            if c.change_id and stack is not None:
+                triplets.append(build_triplet(stack.project, stack.push_branch, c.change_id))
+        if triplets:
             try:
                 resolve_gerrit_web_base(cwd)
             except ValueError as e:
@@ -481,10 +483,14 @@ def _commit_lines_for_preview(
                     "gerrit.token (or gerrit.password) for REST access."
                 )
             service = _service_from_cwd(cwd)
-            raw_details = service.changes.get_payloads(ids)
-            details_by_cid = {norm_change_id(k): v for k, v in raw_details.items()}
+            raw_details = service.changes.get_payloads(triplets)
+            details_by_triplet = {
+                str(payload["id"]): payload
+                for payload in raw_details.values()
+                if isinstance(payload.get("id"), str)
+            }
         else:
-            details_by_cid = {}
+            details_by_triplet = {}
 
     lines: list[str] = []
     for c in rows:
@@ -492,10 +498,11 @@ def _commit_lines_for_preview(
         disp = summary_highlighter.highlight(subj)
         sha_p = short_sha.ljust(8)
         line = f"    {color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{disp}"
-        if show_attributes and details_by_cid is not None:
+        if show_attributes and details_by_triplet is not None and stack is not None:
             cid = c.change_id
             if cid:
-                detail = details_by_cid.get(norm_change_id(cid))
+                triplet = build_triplet(stack.project, stack.push_branch, cid)
+                detail = details_by_triplet.get(triplet)
                 line += _gpush_attribute_suffix(detail if isinstance(detail, dict) else None, merged_reviewers)
         lines.append(line)
     return lines
@@ -1059,7 +1066,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
         act = _prompt_gerrit_push_confirm_action()
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
-            return 1
+            return 0
         if act == "reviewers":
             res = _prompt_reviewers_line_ptk(cwd, ctx.branch, change_id_hint=_change_id_for_rev(cwd, tip))
             if not res.valid_for_apply:

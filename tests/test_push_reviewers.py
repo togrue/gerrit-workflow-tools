@@ -8,9 +8,25 @@ from gerrit_workflow_tools.core.gerrit.rest import change_id_for_gerrit_rest_pat
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 
+_PROJECT = "testproj"
+_BRANCH = "main"
+
+
+def _triplet(change_id: str) -> str:
+    return f"{_PROJECT}~{_BRANCH}~{change_id}"
+
 
 def _reviewer_entry(username: str) -> dict[str, object]:
     return {"account": {"username": username}, "state": "REVIEWER"}
+
+
+def _detail_payload(change_id: str, *, reviewers: list[dict[str, object]] | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": _triplet(change_id),
+        "change_id": change_id,
+        "reviewers": reviewers if reviewers is not None else [],
+    }
+    return payload
 
 
 def test_change_id_for_gerrit_rest_path_uppercases_leading_i() -> None:
@@ -42,11 +58,12 @@ def test_reviewer_accounts_from_change_info_dict_shaped_reviewers() -> None:
 
 def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:
     service = MagicMock()
+    cid = "Ia" * 20 + "a"
     res = apply_reviewer_strategy_after_push_service(
         service,
         ReviewerStrategy.PUSH,
         ["alice"],
-        ["Ia" * 20 + "a"],
+        [_triplet(cid)],
     )
     assert res.ok
     assert res.outcomes == []
@@ -56,8 +73,10 @@ def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:
 def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
     cid_a = "Ia" * 20 + "a"
     cid_b = "Ib" * 20 + "b"
-    detail_empty: dict[str, object] = {"reviewers": []}
-    detail_has: dict[str, object] = {"reviewers": [_reviewer_entry("bob")]}
+    triplet_a = _triplet(cid_a)
+    triplet_b = _triplet(cid_b)
+    detail_empty = _detail_payload(cid_a)
+    detail_has = _detail_payload(cid_b, reviewers=[_reviewer_entry("bob")])
 
     service = MagicMock()
     service.changes.get_payloads.return_value = {
@@ -65,29 +84,33 @@ def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
         change_id_for_gerrit_rest_path(cid_b): detail_has,
     }
 
-    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.LAZY, ["alice", "ben"], [cid_a, cid_b])
+    res = apply_reviewer_strategy_after_push_service(
+        service, ReviewerStrategy.LAZY, ["alice", "ben"], [triplet_a, triplet_b]
+    )
 
     assert res.ok
     assert [o.change_id for o in res.outcomes] == [cid_a, cid_b]
     assert res.outcomes[0].reviewers_assigned == ("alice", "ben")
     assert res.outcomes[1].reviewers_assigned == ()
-    service.changes.set_reviewers.assert_called_once_with(cid_a, add=["alice", "ben"], remove=[])
+    service.changes.set_reviewers.assert_called_once_with(triplet_a, add=["alice", "ben"], remove=[])
 
 
 def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
     cid = "Ic" * 20 + "c"
-    detail: dict[str, object] = {
-        "reviewers": [
+    triplet = _triplet(cid)
+    detail = _detail_payload(
+        cid,
+        reviewers=[
             {"account": {"username": "old", "_account_id": 5}, "state": "REVIEWER"},
             {"account": {"username": "gone", "_account_id": 7}, "state": "REVIEWER"},
-        ]
-    }
+        ],
+    )
     service = MagicMock()
     service.changes.get_payloads.return_value = {change_id_for_gerrit_rest_path(cid): detail}
 
-    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["alice"], [cid])
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["alice"], [triplet])
 
     assert res.ok
     assert len(res.outcomes) == 1
     assert res.outcomes[0].reviewers_assigned == ("alice",)
-    service.changes.set_reviewers.assert_has_calls([call(cid, add=["alice"], remove=[5, 7])])
+    service.changes.set_reviewers.assert_has_calls([call(triplet, add=["alice"], remove=[5, 7])])
