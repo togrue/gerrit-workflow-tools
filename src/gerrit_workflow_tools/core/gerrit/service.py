@@ -26,10 +26,6 @@ from gerrit_workflow_tools.core.gerrit.rest import (
 )
 
 
-def _change_key(change_id: str) -> str:
-    return change_id_for_gerrit_rest_path(change_id)
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -56,7 +52,7 @@ def _effective_cwd(service: GerritService) -> str | Path | None:
 
 
 def _batch_ref_for_change_key(service: GerritService, change_key: str) -> str:
-    """Map a cache Change-Id key to a triplet or numeric ref for batch REST queries."""
+    """Map a change ref to a triplet or numeric ref for cache and batch REST queries."""
     if "~" in change_key:
         return change_key
     if change_key.isdigit():
@@ -65,14 +61,9 @@ def _batch_ref_for_change_key(service: GerritService, change_key: str) -> str:
     return build_triplet(stack.project, stack.push_branch, change_key)
 
 
-def _payloads_by_change_key(payloads: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Re-key triplet-keyed batch results to canonical Change-Id keys for the cache layer."""
-    out: dict[str, dict[str, Any]] = {}
-    for payload in payloads.values():
-        raw = payload.get("change_id")
-        if isinstance(raw, str):
-            out[_change_key(raw)] = payload
-    return out
+def _cache_triplet(service: GerritService, change_ref: str) -> str:
+    """Return the verbatim cache key (triplet or numeric id) for *change_ref*."""
+    return _batch_ref_for_change_key(service, change_ref)
 
 
 class GerritService:
@@ -127,20 +118,11 @@ class GerritService:
 
         return self.rest.web_base
 
-    def _fetch_change_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
-        refs = [_batch_ref_for_change_key(self, cid) for cid in change_ids]
-        by_triplet = _canonical_change_map(batch_load_change_details(self.rest, refs))
-        return _payloads_by_change_key(by_triplet)
+    def _fetch_change_payloads(self, triplets: list[str]) -> dict[str, dict[str, Any]]:
+        return _canonical_change_map(batch_load_change_details(self.rest, triplets))
 
-    def _probe_changes_updated(self, change_ids: list[str]) -> dict[str, str]:
-        refs = [_batch_ref_for_change_key(self, cid) for cid in change_ids]
-        by_triplet = self.rest.probe_changes_updated(refs)
-        out: dict[str, str] = {}
-        for change_key, ref in zip(change_ids, refs):
-            updated = by_triplet.get(ref)
-            if updated is not None:
-                out[_change_key(change_key)] = updated
-        return out
+    def _probe_changes_updated(self, triplets: list[str]) -> dict[str, str]:
+        return self.rest.probe_changes_updated(triplets)
 
     def _fetch_account_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
         def _one(account_id: int | str) -> tuple[int, dict[str, Any]]:
@@ -248,14 +230,15 @@ class GerritService:
         return failed
 
     def _refresh_after_mutation(self, change_id: str) -> Change:
-        key = _change_key(change_id)
+        rest_ref = change_id_for_gerrit_rest_path(change_id)
+        cache_key = _cache_triplet(self, change_id)
         try:
-            payload = self.rest.get_change(key)
+            payload = self.rest.get_change(rest_ref)
         except GerritApiError:
-            self.cache.invalidate_changes([key])
+            self.cache.invalidate_changes([cache_key])
             raise
-        self.cache.invalidate_changes([key])
-        self.cache.upsert_changes({key: payload})
+        self.cache.invalidate_changes([cache_key])
+        self.cache.upsert_changes({cache_key: payload})
         return Change(payload)
 
 
@@ -268,10 +251,17 @@ class ChangeApi:
     def get_many(self, change_ids: list[str]) -> list[Change]:
         """Return changes in the same order as *change_ids*."""
 
-        payloads = self.get_payloads(change_ids)
+        triplets = [_cache_triplet(self._service, cid) for cid in change_ids]
+        payloads = self._service.cache.load_changes(
+            triplets,
+            probe_updated=self._service._probe_changes_updated,
+            fetch_changes=self._service._fetch_change_payloads,
+            trust_window_seconds=self._service.trust_window_seconds,
+            refresh=self._service.refresh,
+        )
         out: list[Change] = []
-        for cid in change_ids:
-            payload = payloads.get(_change_key(cid))
+        for triplet in triplets:
+            payload = payloads.get(triplet)
             if payload is not None:
                 out.append(Change(payload))
         return out
@@ -279,17 +269,25 @@ class ChangeApi:
     def get(self, change_id: str) -> Change:
         """Return one change or raise if Gerrit did not return it."""
 
-        payloads = self.get_payloads([change_id])
-        payload = payloads.get(_change_key(change_id))
+        triplet = _cache_triplet(self._service, change_id)
+        payloads = self._service.cache.load_changes(
+            [triplet],
+            probe_updated=self._service._probe_changes_updated,
+            fetch_changes=self._service._fetch_change_payloads,
+            trust_window_seconds=self._service.trust_window_seconds,
+            refresh=self._service.refresh,
+        )
+        payload = payloads.get(triplet)
         if payload is None:
             raise GerritApiError(f"no matching change {change_id}")
         return Change(payload)
 
     def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
-        """Return raw ChangeInfo payloads keyed by canonical Change-Id."""
+        """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
+        triplets = [_cache_triplet(self._service, cid) for cid in change_ids]
         return self._service.cache.load_changes(
-            change_ids,
+            triplets,
             probe_updated=self._service._probe_changes_updated,
             fetch_changes=self._service._fetch_change_payloads,
             trust_window_seconds=self._service.trust_window_seconds,
@@ -299,34 +297,37 @@ class ChangeApi:
     def set_topic(self, change_id: str, topic: str | None) -> Change:
         """Set or clear the change topic via REST and update cache."""
 
-        key = _change_key(change_id)
+        rest_ref = change_id_for_gerrit_rest_path(change_id)
+        cache_key = _cache_triplet(self._service, change_id)
         try:
-            self._service.rest.set_topic(key, topic)
-            return self._service._refresh_after_mutation(key)
+            self._service.rest.set_topic(rest_ref, topic)
+            return self._service._refresh_after_mutation(change_id)
         except GerritApiError:
-            self._service.cache.invalidate_changes([key])
+            self._service.cache.invalidate_changes([cache_key])
             raise
 
     def set_wip(self, change_id: str, on: bool) -> Change:
         """Set or clear work-in-progress state via REST and update cache."""
 
-        key = _change_key(change_id)
+        rest_ref = change_id_for_gerrit_rest_path(change_id)
+        cache_key = _cache_triplet(self._service, change_id)
         try:
-            self._service.rest.set_wip(key, on)
-            return self._service._refresh_after_mutation(key)
+            self._service.rest.set_wip(rest_ref, on)
+            return self._service._refresh_after_mutation(change_id)
         except GerritApiError:
-            self._service.cache.invalidate_changes([key])
+            self._service.cache.invalidate_changes([cache_key])
             raise
 
     def set_private(self, change_id: str, on: bool) -> Change:
         """Set or clear private state via REST and update cache."""
 
-        key = _change_key(change_id)
+        rest_ref = change_id_for_gerrit_rest_path(change_id)
+        cache_key = _cache_triplet(self._service, change_id)
         try:
-            self._service.rest.set_private(key, on)
-            return self._service._refresh_after_mutation(key)
+            self._service.rest.set_private(rest_ref, on)
+            return self._service._refresh_after_mutation(change_id)
         except GerritApiError:
-            self._service.cache.invalidate_changes([key])
+            self._service.cache.invalidate_changes([cache_key])
             raise
 
     def set_reviewers(
@@ -339,17 +340,18 @@ class ChangeApi:
     ) -> Change:
         """Add and remove reviewers via REST, then cache fresh ChangeInfo."""
 
-        key = _change_key(change_id)
+        rest_ref = change_id_for_gerrit_rest_path(change_id)
+        cache_key = _cache_triplet(self._service, change_id)
         try:
             calls: list[Callable[[], Any]] = []
             if add or ccs:
-                calls.append(self._set_reviewers_job(key, add or [], ccs or []))
+                calls.append(self._set_reviewers_job(rest_ref, add or [], ccs or []))
             for account_id in remove or []:
-                calls.append(self._delete_reviewer_job(key, account_id))
+                calls.append(self._delete_reviewer_job(rest_ref, account_id))
             parallel_map(calls)
-            return self._service._refresh_after_mutation(key)
+            return self._service._refresh_after_mutation(change_id)
         except GerritApiError:
-            self._service.cache.invalidate_changes([key])
+            self._service.cache.invalidate_changes([cache_key])
             raise
 
     def _set_reviewers_job(self, change_id: str, reviewers: list[str], ccs: list[str]) -> Callable[[], Any]:
