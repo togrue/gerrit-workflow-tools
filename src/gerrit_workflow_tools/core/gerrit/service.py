@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.cache import (
     DEFAULT_ACCOUNT_TTL_SECONDS,
     DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
@@ -41,14 +41,42 @@ def _effective_cwd(service: GerritService) -> str | Path | None:
     return os.getcwd()
 
 
-def _batch_ref_for_change_key(service: GerritService, change_key: str) -> str:
+def _service_stack_context(service: GerritService) -> StackContext:
+    """Resolve stack context once per service instance (batch paths may call this many times)."""
+    cached = getattr(service, "_stack_context", None)
+    if cached is None:
+        cached = resolve_stack_context(_effective_cwd(service))
+        service._stack_context = cached
+    return cached
+
+
+def _batch_ref_for_change_key(
+    service: GerritService,
+    change_key: str,
+    *,
+    stack: StackContext | None = None,
+) -> str:
     """Map a change ref to a triplet or numeric ref for cache and batch REST queries."""
     if "~" in change_key:
         return change_key
     if change_key.isdigit():
         return change_key
-    stack = resolve_stack_context(_effective_cwd(service))
-    return build_triplet(stack.project, stack.push_branch, change_key)
+    ctx = stack if stack is not None else _service_stack_context(service)
+    return build_triplet(ctx.project, ctx.push_branch, change_key)
+
+
+def _cache_triplets(service: GerritService, change_refs: list[str]) -> list[str]:
+    """Map change refs to cache keys, resolving stack context at most once."""
+    stack: StackContext | None = None
+    triplets: list[str] = []
+    for ref in change_refs:
+        if "~" in ref or ref.isdigit():
+            triplets.append(ref)
+            continue
+        if stack is None:
+            stack = _service_stack_context(service)
+        triplets.append(build_triplet(stack.project, stack.push_branch, ref))
+    return triplets
 
 
 def _cache_triplet(service: GerritService, change_ref: str) -> str:
@@ -139,7 +167,10 @@ class GerritService:
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         effective_cwd = cwd if cwd is not None else _effective_cwd(self)
-        stack = resolve_stack_context(effective_cwd)
+        if cwd is not None:
+            stack = resolve_stack_context(effective_cwd)
+        else:
+            stack = _service_stack_context(self)
 
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
@@ -243,7 +274,7 @@ class ChangeApi:
     def get_many(self, change_ids: list[str]) -> list[Change]:
         """Return changes in the same order as *change_ids*."""
 
-        triplets = [_cache_triplet(self._service, cid) for cid in change_ids]
+        triplets = _cache_triplets(self._service, change_ids)
         payloads = self._service.cache.load_changes(
             triplets,
             probe_updated=self._service._probe_changes_updated,
@@ -277,7 +308,7 @@ class ChangeApi:
     def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
-        triplets = [_cache_triplet(self._service, cid) for cid in change_ids]
+        triplets = _cache_triplets(self._service, change_ids)
         return self._service.cache.load_changes(
             triplets,
             probe_updated=self._service._probe_changes_updated,

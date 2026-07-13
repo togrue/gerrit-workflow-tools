@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.gerrit_project_id import (
         ("http://dev:secret@lenovo-pc:8081/it_v_abc", "it_v_abc"),
         ("user@gerrit.example.com:group/proj.git", "group/proj"),
         ("user@gerrit.example.com:a/group/proj", "group/proj"),
+        ("user@lenovo-pc:29418/test-git-graph-repo", "test-git-graph-repo"),
         ("", None),
     ],
 )

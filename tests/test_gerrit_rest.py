@@ -9,6 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
+    _chunk_to_query,
     alias_batch_fetch_results,
     batch_load_change_details,
     pick_change_from_query_result,
@@ -125,6 +126,65 @@ def test_case_sensitive_change_id_keys_in_batch() -> None:
     assert set(out.keys()) == {row_upper["id"], row_lower["id"]}
     assert out[row_upper["id"]]["_number"] == 20
     assert out[row_lower["id"]]["_number"] == 21
+
+
+def test_chunk_to_query_groups_same_project_branch() -> None:
+    cid_a = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    cid_b = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    chunk = [
+        f"p~dev~{cid_a}",
+        f"p~dev~{cid_b}",
+    ]
+    q = _chunk_to_query(chunk)
+    assert q == f"project:p branch:dev (change:{cid_a} OR change:{cid_b})"
+
+
+def test_batch_load_uses_chunked_queries_not_per_change() -> None:
+    """A 30-change stack must issue two batch queries, not 30 individual ones."""
+    refs = [f"p~dev~I{format(i, '040x')}" for i in range(30)]
+    row = _change_row(project="p", branch="dev", change_id=refs[0].split("~")[-1], number=1)
+    client = MagicMock()
+
+    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
+        del n, options
+        if q.startswith("project:p branch:dev (change:"):
+            return [row]
+        return []
+
+    client.query_changes.side_effect = query_changes
+
+    batch_load_change_details(client, refs)
+
+    assert client.query_changes.call_count == 2
+    first_q = client.query_changes.call_args_list[0].args[0]
+    assert first_q.startswith("project:p branch:dev (change:")
+    assert first_q.count("project:p branch:dev change:") == 0
+
+
+def test_batch_load_falls_back_to_bare_change_or_before_per_change() -> None:
+    """When scoped batch misses, retry with compact bare Change-Id OR."""
+    refs = [f"p~dev~I{format(i, '040x')}" for i in range(3)]
+    row = _change_row(project="p", branch="dev", change_id=refs[0].split("~")[-1], number=1)
+    calls: list[str] = []
+
+    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
+        del n, options
+        calls.append(q)
+        if q.startswith("project:p branch:dev ("):
+            return []
+        if q.startswith("change:I"):
+            return [row]
+        return []
+
+    client = MagicMock()
+    client.query_changes.side_effect = query_changes
+
+    batch_load_change_details(client, refs)
+
+    assert len(calls) == 2
+    assert calls[0].startswith("project:p branch:dev (")
+    assert calls[1].startswith("change:I")
+    assert client.query_changes.call_count == 2
 
 
 def test_resolve_change_ref_triplet_scoped_query() -> None:
