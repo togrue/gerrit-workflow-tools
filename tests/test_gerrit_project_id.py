@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.gerrit_project_id import (
         ("ssh://user@gerrit.example.com/a/group/proj.git", "group/proj"),
         ("https://gerrit.example.com/a/group/proj", "group/proj"),
         ("https://gerrit.example.com/group/proj.git", "group/proj"),
+        ("http://dev:secret@lenovo-pc:8081/it_v_abc", "it_v_abc"),
         ("user@gerrit.example.com:group/proj.git", "group/proj"),
         ("user@gerrit.example.com:a/group/proj", "group/proj"),
         ("", None),

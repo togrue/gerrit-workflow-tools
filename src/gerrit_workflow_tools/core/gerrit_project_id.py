@@ -15,16 +15,17 @@ def parse_project_name_from_remote_url(remote_url: str) -> str | None:
     if not s:
         return None
 
-    # scp-like syntax: user@host:path/to/repo(.git)
-    m = re.match(r"^[^@]+@[^:]+:(.+)$", s)
-    if m:
-        path = m.group(1)
-    else:
-        # URL syntax, including ssh://, http(s)://
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", s):
         m_url = re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]+/(.+)$", s)
         if not m_url:
             return None
         path = m_url.group(1)
+    else:
+        # scp-like syntax: user@host:path/to/repo(.git)
+        m = re.match(r"^[^@]+@[^:]+:(.+)$", s)
+        if not m:
+            return None
+        path = m.group(1)
 
     path = path.strip("/")
     if path.endswith(".git"):

@@ -516,6 +516,47 @@ def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None
             out[triplet] = row
 
 
+def alias_batch_fetch_results(
+    requested: list[str],
+    fetched: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Re-key batch results so each *requested* ref resolves to its ChangeInfo.
+
+    Gerrit may return compact ``project~number`` ids in ``payload["id"]`` while
+    callers look up by ``project~branch~Change-Id`` triplets.
+    """
+    out = dict(fetched)
+    by_change_id: dict[str, dict[str, Any]] = {}
+    by_number: dict[int, dict[str, Any]] = {}
+    for payload in fetched.values():
+        cid = payload.get("change_id")
+        if isinstance(cid, str):
+            by_change_id[norm_change_id(cid)] = payload
+        num = payload.get("_number")
+        if isinstance(num, int):
+            by_number[num] = payload
+
+    for ref in requested:
+        if ref in out:
+            continue
+        try:
+            kind = _parse_batch_ref(ref)
+        except GerritApiError:
+            continue
+        payload: dict[str, Any] | None = None
+        if kind[0] == "triplet":
+            branch = kind[2]
+            change_id = kind[3]
+            candidate = by_change_id.get(norm_change_id(change_id))
+            if candidate is not None and candidate.get("branch") == branch:
+                payload = candidate
+        elif kind[0] == "numeric":
+            payload = by_number.get(int(kind[1]))
+        if payload is not None:
+            out[ref] = payload
+    return out
+
+
 def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
     """Query each ref in *chunk* when a batched OR query fails (same session, sequential)."""
     rows: list[dict[str, Any]] = []
