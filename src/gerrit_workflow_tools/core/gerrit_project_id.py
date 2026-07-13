@@ -32,6 +32,10 @@ def parse_project_name_from_remote_url(remote_url: str) -> str | None:
         path = path[: -len(".git")]
     if path.startswith("a/"):
         path = path[2:]
+    # scp-style URL with non-default SSH port: user@host:29418/project → project
+    port_prefix = re.match(r"^(\d{1,5})/(.+)$", path)
+    if port_prefix and 0 < int(port_prefix.group(1)) <= 65535:
+        path = port_prefix.group(2)
     return path or None
 
 

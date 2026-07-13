@@ -375,7 +375,7 @@ class GerritClient:
             unique.append(raw)
 
         def _probe_chunk(chunk: list[str]) -> list[dict[str, Any]]:
-            q = " OR ".join(_ref_to_query(ref) for ref in chunk)
+            q = _chunk_to_query(chunk)
             return self.query_changes(q, n=len(chunk) + 10, options=["SKIP_DIFFSTAT"])
 
         def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
@@ -507,6 +507,51 @@ def _ref_to_query(ref: str) -> str:
     return f"change:{kind[1]}"
 
 
+def _change_ids_from_chunk(chunk: list[str]) -> list[str]:
+    """Extract footer Change-Ids from triplet refs in a batch chunk."""
+    ids: list[str] = []
+    for ref in chunk:
+        try:
+            kind = _parse_batch_ref(ref)
+        except GerritApiError:
+            continue
+        if kind[0] == "triplet":
+            ids.append(kind[3])
+    return ids
+
+
+def _bare_change_or_query(change_ids: list[str]) -> str:
+    return " OR ".join(f"change:{cid}" for cid in change_ids)
+
+
+def _chunk_to_query(chunk: list[str]) -> str:
+    """Build one OR query for a chunk, grouping shared project/branch triplets."""
+    triplet_groups: dict[tuple[str, str], list[str]] = {}
+    other_exprs: list[str] = []
+
+    for ref in chunk:
+        try:
+            kind = _parse_batch_ref(ref)
+        except GerritApiError:
+            other_exprs.append(_ref_to_query(ref))
+            continue
+        if kind[0] == "triplet":
+            key = (kind[1], kind[2])
+            triplet_groups.setdefault(key, []).append(kind[3])
+        else:
+            other_exprs.append(f"change:{kind[1]}")
+
+    group_exprs: list[str] = []
+    for (project, branch), change_ids in triplet_groups.items():
+        if len(change_ids) == 1:
+            group_exprs.append(_triplet_query(project, branch, change_ids[0]))
+        else:
+            inner = " OR ".join(f"change:{cid}" for cid in change_ids)
+            group_exprs.append(f"project:{project} branch:{branch} ({inner})")
+
+    return " OR ".join(group_exprs + other_exprs)
+
+
 def _ingest_change_rows(out: dict[str, dict[str, Any]], rows: list[Any]) -> None:
     for row in rows:
         if not isinstance(row, dict):
@@ -572,12 +617,32 @@ def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[s
 
 
 def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
-    q = " OR ".join(_ref_to_query(ref) for ref in chunk)
+    q = _chunk_to_query(chunk)
     try:
-        return client.query_changes(q, n=len(chunk) + 10, options=opts)
+        rows = client.query_changes(q, n=len(chunk) + 10, options=opts)
+        if rows:
+            return rows
     except GerritApiError as e:
-        logger.warning("batched Gerrit query failed (%s), falling back per change", e)
+        logger.warning("batched Gerrit query failed (%s), trying bare Change-Id OR", e)
+        rows = []
+    else:
+        rows = []
+
+    change_ids = _change_ids_from_chunk(chunk)
+    if len(change_ids) == len(chunk) and len(change_ids) > 1:
+        bare_q = _bare_change_or_query(change_ids)
+        if bare_q != q:
+            try:
+                rows = client.query_changes(bare_q, n=len(chunk) + 10, options=opts)
+                if rows:
+                    return rows
+            except GerritApiError as e:
+                logger.warning("bare Change-Id OR query failed (%s), falling back per change", e)
+
+    if len(chunk) == 1:
         return _fallback_query_chunk(client, chunk)
+    logger.warning("batched Gerrit query returned no rows for %d refs, falling back per change", len(chunk))
+    return _fallback_query_chunk(client, chunk)
 
 
 def query_single_change(client: GerritClient, ref: str) -> dict[str, Any] | None:
