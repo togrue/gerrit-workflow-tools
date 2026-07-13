@@ -59,7 +59,8 @@ def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool)
 
 def _payloads_by_triplet(payloads: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
     out: dict[str, dict[str, object]] = {}
-    for payload in payloads.values():
+    for ref, payload in payloads.items():
+        out[ref] = payload
         triplet = payload.get("id")
         if isinstance(triplet, str) and triplet:
             out[triplet] = payload

@@ -196,11 +196,21 @@ SCENARIOS: tuple[AttentionScenario, ...] = (
 )
 
 
-def _json_by_subject_tag(out: str) -> dict[str, dict]:
+def _json_commits(out: str) -> list[dict]:
     data = json.loads(out)
-    assert isinstance(data, list)
+    if isinstance(data, dict) and "commits" in data:
+        commits = data["commits"]
+    elif isinstance(data, list):
+        commits = data
+    else:
+        raise AssertionError(f"unexpected ger log --json shape: {type(data)!r}")
+    assert isinstance(commits, list)
+    return commits
+
+
+def _json_by_subject_tag(out: str) -> dict[str, dict]:
     out_map: dict[str, dict] = {}
-    for item in data:
+    for item in _json_commits(out):
         assert isinstance(item, dict)
         summary = str(item.get("summary", "")).strip()
         for scenario in sorted(SCENARIOS, key=lambda s: len(s.subject_tag), reverse=True):
@@ -277,8 +287,7 @@ def test_attention_labels_on_pushed_chain(
     )
     assert code_json == 1, ejson
     json_rows = _json_by_subject_tag(out_json)
-    json_list = json.loads(out_json)
-    first_block = _first_blocking_index(json_list)
+    first_block = _first_blocking_index(_json_commits(out_json))
 
     for scenario in SCENARIOS:
         labels = parse_trailing_attention_labels(out_log, scenario.subject_tag)

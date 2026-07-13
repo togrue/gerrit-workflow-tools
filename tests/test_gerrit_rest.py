@@ -9,6 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
+    alias_batch_fetch_results,
     batch_load_change_details,
     pick_change_from_query_result,
     query_single_change,
@@ -31,6 +32,21 @@ def _change_row(
         "_number": number,
         "subject": "subj",
     }
+
+
+def test_alias_batch_fetch_results_maps_compact_gerrit_id_to_requested_triplet() -> None:
+    cid = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    requested = f"p~feature~{cid}"
+    compact = "p~123"
+    payload = {
+        "id": compact,
+        "change_id": cid,
+        "branch": "feature",
+        "_number": 123,
+    }
+    out = alias_batch_fetch_results([requested], {compact: payload})
+    assert out[compact] is payload
+    assert out[requested] is payload
 
 
 def test_batch_load_same_change_id_different_branches_no_overwrite() -> None:

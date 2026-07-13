@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.gerrit.models import Account, Change, Comment
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritClient,
+    alias_batch_fetch_results,
     batch_load_change_details,
     change_id_for_gerrit_rest_path,
     parallel_map,
@@ -27,17 +28,6 @@ from gerrit_workflow_tools.core.gerrit.rest import (
 
 
 logger = logging.getLogger(__name__)
-
-
-def _canonical_change_map(rows: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    out: dict[str, dict[str, Any]] = {}
-    for fallback, payload in rows.items():
-        triplet = payload.get("id")
-        if isinstance(triplet, str) and triplet:
-            out[triplet] = payload
-        else:
-            out[fallback] = payload
-    return out
 
 
 def _effective_cwd(service: GerritService) -> str | Path | None:
@@ -119,7 +109,8 @@ class GerritService:
         return self.rest.web_base
 
     def _fetch_change_payloads(self, triplets: list[str]) -> dict[str, dict[str, Any]]:
-        return _canonical_change_map(batch_load_change_details(self.rest, triplets))
+        fetched = batch_load_change_details(self.rest, triplets)
+        return alias_batch_fetch_results(triplets, fetched)
 
     def _probe_changes_updated(self, triplets: list[str]) -> dict[str, str]:
         return self.rest.probe_changes_updated(triplets)
@@ -153,7 +144,8 @@ class GerritService:
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
         detail_by_triplet: dict[str, dict[str, Any]] = {}
-        for payload in detail_map.values():
+        for ref, payload in detail_map.items():
+            detail_by_triplet[ref] = payload
             triplet = payload.get("id")
             if isinstance(triplet, str) and triplet:
                 detail_by_triplet[triplet] = payload

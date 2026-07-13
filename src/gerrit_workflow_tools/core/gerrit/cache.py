@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
+from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results
 
 SCHEMA_VERSION = "2"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
@@ -228,34 +229,55 @@ class GerritCache:
             updated_by_id = probe_updated(probe_ids)
             for triplet in probe_ids:
                 row = rows[triplet]
-                if row.updated and updated_by_id.get(triplet) == row.updated:
+                remote_updated = updated_by_id.get(triplet)
+                if remote_updated is None:
+                    payload_id = row.payload.get("id")
+                    if isinstance(payload_id, str):
+                        remote_updated = updated_by_id.get(payload_id)
+                if row.updated and remote_updated == row.updated:
                     out[triplet] = row.payload
                 else:
                     fetch_ids.append(triplet)
 
         if fetch_ids:
             fetched = fetch_changes(fetch_ids)
-            self.upsert_changes(fetched)
-            out.update(fetched)
+            aliased = alias_batch_fetch_results(fetch_ids, fetched)
+            self.upsert_changes(aliased)
+            for ref in fetch_ids:
+                if ref in aliased:
+                    out[ref] = aliased[ref]
 
         return out
 
     def upsert_changes(self, changes: dict[str, dict[str, Any]] | list[dict[str, Any]]) -> None:
-        """Store ChangeInfo payloads under ``payload["id"]`` (Gerrit triplet)."""
+        """Store ChangeInfo payloads under lookup keys and ``payload["id"]``."""
 
-        items = changes.values() if isinstance(changes, dict) else changes
+        keyed: dict[str, dict[str, Any]] = {}
+        if isinstance(changes, dict):
+            for cache_key, payload in changes.items():
+                if not isinstance(payload, dict):
+                    continue
+                keyed[cache_key] = payload
+                triplet = _payload_triplet(payload)
+                if triplet:
+                    keyed[triplet] = payload
+        else:
+            for payload in changes:
+                if not isinstance(payload, dict):
+                    continue
+                triplet = _payload_triplet(payload)
+                if triplet:
+                    keyed[triplet] = payload
+
         now = _now()
         with self._connect() as conn:
-            for payload in items:
-                triplet = _payload_triplet(payload)
-                if triplet is None:
-                    continue
+            for cache_key, payload in keyed.items():
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO changes(change_id, number, payload, updated, fetched_at)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (triplet, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now),
+                    (cache_key, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now),
                 )
 
     def invalidate_changes(self, triplets: list[str]) -> None:
