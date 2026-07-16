@@ -15,7 +15,6 @@ from typing import Literal
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
-    add_stop_pattern_args,
     add_verbose_and_debug_log_args,
     handle_git_error,
     init_cli_runtime,
@@ -46,7 +45,7 @@ from gerrit_workflow_tools.core.config import (
     resolve_push_context_branch,
     resolve_upstream_parsed,
     set_branch_config,
-    stop_patterns,
+    stop_pattern,
 )
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
@@ -745,7 +744,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Push the full stack (ignore stop patterns).",
     )
     add_color_args(p)
-    add_stop_pattern_args(p)
     add_follow_merges_args(p)
     p.add_argument(
         "--reviewers",
@@ -803,14 +801,13 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) ->
         args.until
         or args.all_
         or args.reviewers
-        or args.ignore_pattern
         or args.topic is not None
         or args.wip
         or args.private
         or args.reviewer_strategy is not None
     ):
         print(
-            "warning: --until, --all, --reviewers, --ignore-pattern, --topic, --wip, --private, "
+            "warning: --until, --all, --reviewers, --topic, --wip, --private, "
             "and --reviewer-strategy apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
@@ -920,10 +917,9 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         branch=branch,
         head=branch,
         all_commits=args.all_,
-        ignore_patterns=args.ignore_pattern or None,
         until=args.until,
         first_parent=fp,
-        stop_patterns=stop_patterns(cwd),
+        stop_pattern=stop_pattern(cwd),
     )
     logger.debug(
         "gpush ready tip=%s range=%s boundary=%s",

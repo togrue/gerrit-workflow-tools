@@ -14,8 +14,8 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). |
 | `gerrit.user` | Username for HTTP Basic auth to the REST API. |
 | `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
-| `gerrit.stopPattern` | **Repeatable.** Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` or pattern overrides apply. If **no** `stopPattern` is set, built-in defaults apply: `^dropme!`, `^TODO\b`, `^test!`. Add or replace lines with multiple `git config --add gerrit.stopPattern '…'` entries. Use `ger push --ignore-pattern` to drop specific patterns without editing config. |
-| `gerrit.warningPattern` | **Repeatable.** Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, and `ger show` when color output is enabled. Defaults when unset: single-word subject (`^[^\\s]+$`), `wip`, `todo` (case-insensitive). Stop-pattern highlighting takes precedence when both match the same text span. |
+| `gerrit.stopPattern` | Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` applies. If unset, built-in default: `^(?:dropme!|todo\b|test!|wip\b)` (case-insensitive). Override with `git config gerrit.stopPattern '…'`. |
+| `gerrit.warningPattern` | Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, and `ger show` when color output is enabled. If unset, built-in default: `(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))`. Stop-pattern highlighting takes precedence when both match the same text span. Override with `git config gerrit.warningPattern '…'`. |
 | `gerrit.showCommentTailLines` | Positive integer; truncates long comment bodies in `ger show` (default `10`). |
 | `gerrit.project` | **Gerrit project name** for change resolution and REST calls (e.g. `mygroup/myrepo`). When unset, parsed from the `gerrit.remote` URL. Set this when the remote URL does not encode the project path Gerrit expects, or when you use a mirror/fork whose URL differs from the server project name. Required input for building **triplets** (`project~branch~Change-Id`) used by `ger log`, `ger show`, `ger push`, `ger fix`, and `ger resolve`. |
 
@@ -83,19 +83,16 @@ Set via `git config` (or `set_branch_config` in code).
     webUrl = https://gerrit.example.com
     user = me
     token = secret
-    stopPattern = ^dropme!
-    stopPattern = ^WIP:
-    warningPattern = ^[^\\s]+$
+    stopPattern = ^(?:dropme!|WIP:|hold:)
     warningPattern = (?i:\\bwip\\b)
-    warningPattern = (?i:\\btodo\\b)
     logShowUrl = true
     pushShowAttributes = true
     lastPushedBranch = true
 ```
 
 ```bash
-# Append another stop pattern (repeatable key)
-git config --add gerrit.stopPattern '^hold:'
+# Custom stop pattern for this repo
+git config gerrit.stopPattern '^(?:dropme!|hold:)'
 
 # Show Gerrit URLs by default in ger log
 git config gerrit.logShowUrl true

@@ -45,7 +45,6 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--private" in out
     scrubbed = out.replace("--reviewers", "").replace("--reviewer-strategy", "")
     assert "--reviewer" not in scrubbed
-    assert "--ignore-pattern" in out
     assert "--no-rebase-check" in out
     assert "-i" in out
     assert "--follow-merges" in out
@@ -420,7 +419,7 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    ready = compute_ready(stack_repo, stop_patterns=[r"^test!"])
+    ready = compute_ready(stack_repo, stop_pattern=r"^test!")
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
     details = build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []} for _ in rows])
@@ -452,7 +451,7 @@ def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    ready = compute_ready(stack_repo, stop_patterns=[r"^test!"])
+    ready = compute_ready(stack_repo, stop_pattern=r"^test!")
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
     reviewer_existing = {
@@ -503,7 +502,6 @@ def test_gpush_reviewers_cli_overwrites_branch_and_dedupes(stack_repo: Path, mon
     [
         [],
         ["--all"],
-        ["--ignore-pattern", "^nope$"],
         ["--debug-log"],
     ],
 )
@@ -521,10 +519,8 @@ def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.
 def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     first_subject = rows[0].subject
-    git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
-    git("config", "--add", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
-    git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
-    git("config", "--add", "gerrit.warningPattern", f"^{re.escape(first_subject)}$", cwd=stack_repo)
+    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
+    git("config", "gerrit.warningPattern", f"^{re.escape(first_subject)}$", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all", "--color", "always"], monkeypatch)
     assert code == 0
@@ -536,8 +532,7 @@ def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkey
     rows = stack_rows_mb_to_head(stack_repo)
     assert len(rows) >= 2
     boundary_subject = rows[1].subject
-    git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
-    git("config", "--add", "gerrit.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
+    git("config", "gerrit.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--color", "always"], monkeypatch)
     assert code == 0
@@ -832,7 +827,7 @@ def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pyt
 def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    expected_tip = compute_ready(stack_repo, stop_patterns=[r"^test!"]).push_tip_sha
+    expected_tip = compute_ready(stack_repo, stop_pattern=r"^test!").push_tip_sha
     assert expected_tip
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))

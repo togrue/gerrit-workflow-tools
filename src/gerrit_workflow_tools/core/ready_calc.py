@@ -26,21 +26,15 @@ class ReadyResult:
     push_range: str | None  # "upstream_tip..tip" (target_tip field holds upstream tip SHA)
 
 
-def _filter_patterns(patterns: list[str], *, ignore_exact: list[str]) -> list[str]:
-    out = list(patterns)
-    for ign in ignore_exact:
-        out = [p for p in out if p != ign]
-    return out
-
-
-def _first_block_index(subjects: list[str], patterns: list[str]) -> tuple[int | None, str | None]:
+def _first_block_index(subjects: list[str], pattern: str) -> tuple[int | None, str | None]:
+    if not pattern:
+        return None, None
     for i, sub in enumerate(subjects):
-        for pat in patterns:
-            try:
-                if re.search(pat, sub, re.IGNORECASE):
-                    return i, pat
-            except re.error:
-                continue
+        try:
+            if re.search(pattern, sub, re.IGNORECASE):
+                return i, pattern
+        except re.error:
+            continue
     return None, None
 
 
@@ -51,23 +45,21 @@ def compute_ready(
     branch: str | None = None,
     head: str = "HEAD",
     all_commits: bool = False,
-    ignore_patterns: list[str] | None = None,
     until: str | None = None,
     first_parent: bool = True,
-    stop_patterns: list[str],
+    stop_pattern: str,
 ) -> ReadyResult:
     """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
     _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=head)
-    patterns = _filter_patterns(stop_patterns, ignore_exact=list(ignore_patterns or []))
     rows = commits_in_range(cwd, f"{target_tip}..{head}", first_parent=first_parent)
     shas = [r.sha for r in rows]
     subjects = [r.subject for r in rows]
     logger.debug(
-        "compute_ready target_tip=%s commits=%d all_commits=%s stop_patterns=%d",
+        "compute_ready target_tip=%s commits=%d all_commits=%s stop_pattern=%r",
         target_tip[:8],
         len(shas),
         all_commits,
-        len(patterns),
+        stop_pattern,
     )
 
     until_sha: str | None = None
@@ -90,7 +82,7 @@ def compute_ready(
             push_range=f"{target_tip}..{tip}" if tip else None,
         )
 
-    block_idx, matched_pat = _first_block_index(subjects, patterns)
+    block_idx, matched_pat = _first_block_index(subjects, stop_pattern)
     logger.debug(
         "compute_ready block_idx=%s matched_pat=%s",
         block_idx,

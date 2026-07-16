@@ -22,7 +22,6 @@ from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 HELP_JSON = "Write machine-readable JSON to stdout."
-HELP_IGNORE_PATTERN = "Ignore this configured stop pattern (repeatable)."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_VERBOSE_PLACEHOLDER = "Reserved for richer command output in a future release (currently no effect)."
 HELP_DEBUG_LOG = (
@@ -45,17 +44,6 @@ def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
             "only the first-parent chain. By default only the first-parent chain "
             "is shown, matching Gerrit's relation-chain semantics."
         ),
-    )
-
-
-def add_stop_pattern_args(parser: argparse.ArgumentParser) -> None:
-    """Register ``--ignore-pattern`` (used by ``ger push``)."""
-    parser.add_argument(
-        "--ignore-pattern",
-        action="append",
-        default=[],
-        metavar="REGEX",
-        help=HELP_IGNORE_PATTERN,
     )
 
 

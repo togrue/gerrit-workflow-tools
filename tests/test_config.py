@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import (
+    _DEFAULT_STOP_PATTERN,
+    _DEFAULT_WARNING_PATTERN,
     branch_gerrit_target,
     clear_gerrit_git_config_cache,
     effective_gerrit_destination_branch,
@@ -14,23 +16,33 @@ from gerrit_workflow_tools.core.config import (
     rebase_in_progress_branch,
     resolve_rebase_onto_remote_ref,
     resolve_working_branch,
-    warning_patterns,
+    stop_pattern,
+    warning_pattern,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.helpers import write_rebase_head
 
 
-def test_warning_patterns_defaults(stack_repo: Path) -> None:
+def test_stop_pattern_defaults(stack_repo: Path) -> None:
     clear_gerrit_git_config_cache()
-    assert warning_patterns(stack_repo) == [r"^[^\s]+$", r"(?i:\bwip\b)", r"(?i:\btodo\b)"]
+    assert stop_pattern(stack_repo) == _DEFAULT_STOP_PATTERN
 
 
-def test_warning_patterns_from_git_config(stack_repo: Path) -> None:
-    git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
-    git("config", "--add", "gerrit.warningPattern", r"^feat:", cwd=stack_repo)
-    git("config", "--add", "gerrit.warningPattern", r"^WIP:", cwd=stack_repo)
+def test_stop_pattern_from_git_config(stack_repo: Path) -> None:
+    git("config", "gerrit.stopPattern", r"^hold:", cwd=stack_repo)
     clear_gerrit_git_config_cache()
-    assert warning_patterns(stack_repo) == [r"^feat:", r"^WIP:"]
+    assert stop_pattern(stack_repo) == r"^hold:"
+
+
+def test_warning_pattern_defaults(stack_repo: Path) -> None:
+    clear_gerrit_git_config_cache()
+    assert warning_pattern(stack_repo) == _DEFAULT_WARNING_PATTERN
+
+
+def test_warning_pattern_from_git_config(stack_repo: Path) -> None:
+    git("config", "gerrit.warningPattern", r"^feat:", cwd=stack_repo)
+    clear_gerrit_git_config_cache()
+    assert warning_pattern(stack_repo) == r"^feat:"
 
 
 def test_rebase_defaults(stack_repo: Path) -> None:
