@@ -91,10 +91,8 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     first_subject = rows[0].subject
-    git("config", "--unset-all", "gerrit.stopPattern", cwd=stack_repo, check=False)
-    git("config", "--add", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
-    git("config", "--unset-all", "gerrit.warningPattern", cwd=stack_repo, check=False)
-    git("config", "--add", "gerrit.warningPattern", first_subject, cwd=stack_repo)
+    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
+    git("config", "gerrit.warningPattern", first_subject, cwd=stack_repo)
     clear_gerrit_git_config_cache()
     details = build_details_by_change_id(rows)
     with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):

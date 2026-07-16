@@ -32,9 +32,9 @@ def is_color_enabled() -> bool:
     return _COLOR_ENABLED
 
 
-def init_color_mode(*, color: str = "auto", stream: TextIO | None = None) -> bool:
+def init_color_mode(*, color: str = "auto") -> bool:
     """Initialize global color mode from ``--color`` and output TTY capability."""
-    out = stream or sys.stdout
+    out = sys.stdout
     tty = bool(getattr(out, "isatty", lambda: False)())
     if color == "always":
         enabled = True
@@ -48,7 +48,7 @@ def init_color_mode(*, color: str = "auto", stream: TextIO | None = None) -> boo
 
 def color_text(text: str, code: str) -> str:
     """Colorize text using ANSI SGR when global color mode is enabled."""
-    if not is_color_enabled():
+    if not _COLOR_ENABLED:
         return text
     return f"{code}{text}{ANSI_RESET}"
 

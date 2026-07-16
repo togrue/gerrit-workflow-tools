@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
-from gerrit_workflow_tools.core.config import stop_patterns, warning_patterns
+from gerrit_workflow_tools.core.config import stop_pattern, warning_pattern
 
 
 @dataclass(frozen=True)
@@ -39,22 +39,18 @@ class SummaryHighlighter:
         return "".join(out)
 
 
-def _named_groups(patterns: list[str], prefix: str) -> list[str]:
-    groups: list[str] = []
-    for i, pat in enumerate(patterns):
-        try:
-            re.compile(pat)
-        except re.error:
-            continue
-        groups.append(f"(?P<{prefix}_{i}>{pat})")
-    return groups
-
-
 def build_summary_highlighter(cwd: Path | str | None) -> SummaryHighlighter:
     """Build a highlighter where stop-pattern matches have precedence over warnings."""
-    stop_groups = _named_groups(stop_patterns(cwd), "stop")
-    warning_groups = _named_groups(warning_patterns(cwd), "warning")
-    if not stop_groups and not warning_groups:
+    groups: list[str] = []
+    stop = stop_pattern(cwd)
+    if stop:
+        re.compile(stop)
+        groups.append(f"(?P<stop_0>{stop})")
+    warning = warning_pattern(cwd)
+    if warning:
+        re.compile(warning)
+        groups.append(f"(?P<warning_0>{warning})")
+    if not groups:
         return SummaryHighlighter(combined_re=None)
-    combined = "|".join([*stop_groups, *warning_groups])
+    combined = "|".join(groups)
     return SummaryHighlighter(combined_re=re.compile(combined, re.IGNORECASE))

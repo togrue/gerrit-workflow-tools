@@ -31,8 +31,7 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 | `--dry-run` | Print preview only |
 | `-y`, `--yes` | Skip confirmation (required when stdin is not a TTY) |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
-| `--all` | Push full stack (ignore stop patterns) |
-| `--ignore-pattern REGEX` | Disable one stop pattern (repeatable) |
+| `--all` | Push full stack (ignore stop pattern) |
 | `--reviewers ACCOUNTS` | Comma-separated reviewers (repeatable; merged, deduped) |
 | `--reviewer-strategy` | `push` \| `lazy` \| `overwrite` (see below) |
 | `--topic NAME` | Magic ref `%topic=…` |
@@ -108,7 +107,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | `gerrit.lastPushedBranch` | Local `lastPush/<branch>` after push |
 | `gerrit.push.remotePolicy` | Remote tip linearity |
 | `branch.*.gerritTarget`, `gerritReviewers` | Destination & default reviewers |
-| `gerrit.stopPattern` | Ready boundary |
+| `gerrit.stopPattern` | Ready boundary (single regex; see [Configuration.md](../../Configuration.md)) |
 
 ---
 

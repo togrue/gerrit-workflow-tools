@@ -11,20 +11,20 @@ from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 logger = logging.getLogger(__name__)
 
 # Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
-_GERRIT_STOP_PATTERN_CANONICAL = "gerrit.stoppattern"
-_GERRIT_WARNING_PATTERN_CANONICAL = "gerrit.warningpattern"
+_GERRIT_STOP_PATTERN_KEY = "gerrit.stopPattern"
+_GERRIT_WARNING_PATTERN_KEY = "gerrit.warningPattern"
+_DEFAULT_STOP_PATTERN = r"^(?:dropme!|todo\b|test!|wip\b)"
+_DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
 
 # In-memory snapshot: one effective `git config --list` per process per cwd (lazy first access).
 _snapshot: dict[str, str] | None = None  # pylint: disable=invalid-name
-_snapshot_multi: dict[str, list[str]] | None = None  # pylint: disable=invalid-name
 _snapshot_cwd: str | None = None  # pylint: disable=invalid-name
 
 
 def clear_gerrit_git_config_cache() -> None:
     """Drop cached config so the next read loads from git again."""
-    global _snapshot, _snapshot_multi, _snapshot_cwd  # pylint: disable=global-statement
+    global _snapshot, _snapshot_cwd  # pylint: disable=global-statement
     _snapshot = None
-    _snapshot_multi = None
     _snapshot_cwd = None
 
 
@@ -41,33 +41,27 @@ def _resolve_cwd_key(cwd: Path | str | None) -> str:
     return str(p.resolve())
 
 
-def _load_git_config_maps(cwd: Path | str | None) -> tuple[dict[str, str], dict[str, list[str]]]:
-    """Parse effective `git config --list` (all scopes); last value wins for single-valued keys."""
+def _load_git_config_map(cwd: Path | str | None) -> dict[str, str]:
+    """Parse effective `git config --list` (all scopes); last value wins for each key."""
     p = git("config", "--list", cwd=cwd, check=False)
     single: dict[str, str] = {}
-    multi: dict[str, list[str]] = {}
     if p.returncode != 0 or not p.stdout:
-        return single, multi
+        return single
     for raw in p.stdout.splitlines():
         if not raw.strip() or "=" not in raw:
             continue
         k, v = raw.split("=", 1)
         ck = _canonical_cfg_key(k)
-        if ck in (_GERRIT_STOP_PATTERN_CANONICAL, _GERRIT_WARNING_PATTERN_CANONICAL):
-            multi.setdefault(ck, []).append(v)
-        else:
-            single[ck] = v
-    return single, multi
+        single[ck] = v
+    return single
 
 
 def _ensure_snapshot(cwd: Path | str | None) -> None:
-    global _snapshot, _snapshot_multi, _snapshot_cwd  # pylint: disable=global-statement
+    global _snapshot, _snapshot_cwd  # pylint: disable=global-statement
     key = _resolve_cwd_key(cwd)
     if _snapshot is not None and _snapshot_cwd == key:
         return
-    s, m = _load_git_config_maps(cwd)
-    _snapshot = s
-    _snapshot_multi = m
+    _snapshot = _load_git_config_map(cwd)
     _snapshot_cwd = key
 
 
@@ -75,8 +69,6 @@ def _config_get(cwd: Path | str | None, key: str) -> str | None:
     _ensure_snapshot(cwd)
     assert _snapshot is not None
     ck = _canonical_cfg_key(key)
-    if ck in (_GERRIT_STOP_PATTERN_CANONICAL, _GERRIT_WARNING_PATTERN_CANONICAL):
-        return None
     v = _snapshot.get(ck)
     return v.strip() if v else None
 
@@ -461,26 +453,16 @@ def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
     }
 
 
-def stop_patterns(cwd: Path | str | None) -> list[str]:
-    """Return ``gerrit.stopPattern`` lines as regex strings, or built-in defaults if none are configured."""
-    _ensure_snapshot(cwd)
-    assert _snapshot_multi is not None
-    lines = _snapshot_multi.get(_GERRIT_STOP_PATTERN_CANONICAL, [])
-    lines = [ln.strip() for ln in lines if ln.strip()]
-    if not lines:
-        return [r"^dropme!", r"^todo\b", r"^test!", r"^wip\b"]
-    return lines
+def stop_pattern(cwd: Path | str | None) -> str:
+    """Return ``gerrit.stopPattern`` regex, or the built-in default when unset."""
+    configured = _config_get(cwd, _GERRIT_STOP_PATTERN_KEY)
+    return configured if configured else _DEFAULT_STOP_PATTERN
 
 
-def warning_patterns(cwd: Path | str | None) -> list[str]:
-    """Return ``gerrit.warningPattern`` lines as regex strings, or built-in defaults if none are configured."""
-    _ensure_snapshot(cwd)
-    assert _snapshot_multi is not None
-    lines = _snapshot_multi.get(_GERRIT_WARNING_PATTERN_CANONICAL, [])
-    lines = [ln.strip() for ln in lines if ln.strip()]
-    if not lines:
-        return [r"^[^\s]+$", r"(?i:\bwip\b)", r"(?i:\btodo\b)"]
-    return lines
+def warning_pattern(cwd: Path | str | None) -> str:
+    """Return ``gerrit.warningPattern`` regex, or the built-in default when unset."""
+    configured = _config_get(cwd, _GERRIT_WARNING_PATTERN_KEY)
+    return configured if configured else _DEFAULT_WARNING_PATTERN
 
 
 def set_branch_config(
