@@ -149,6 +149,60 @@ def _index_has_staged_changes(cwd: Path) -> bool:
     return d.returncode != 0
 
 
+def _worktree_has_unstaged_tracked_changes(cwd: Path) -> bool:
+    """True when tracked files have unstaged modifications (``git diff``)."""
+    d = git("diff", "--quiet", cwd=cwd, check=False)
+    return d.returncode != 0
+
+
+def _stage_tracked_modifications(cwd: Path) -> None:
+    """Stage all modifications/deletions to tracked files (``git add -u``)."""
+    git("add", "-u", cwd=cwd)
+
+
+def _print_unstaged_diff(cwd: Path) -> None:
+    """Print the unstaged tracked-file diff to stderr."""
+    cp = git("diff", cwd=cwd, check=False)
+    text = (cp.stdout or "").rstrip("\n")
+    if text:
+        print(text, file=sys.stderr)
+    else:
+        print("(no unstaged diff)", file=sys.stderr)
+
+
+def _prompt_stage_modified_changes(cwd: Path) -> bool:
+    """Interactively offer to stage unstaged tracked modifications.
+
+    Returns True if the user accepted and files were staged. Only runs when
+    stdin is a TTY and there are unstaged tracked changes.
+    """
+    if not sys.stdin.isatty():
+        return False
+    if not _worktree_has_unstaged_tracked_changes(cwd):
+        return False
+
+    print(
+        "No staged changes. Stage all modifications to tracked files for this fixup?",
+        file=sys.stderr,
+    )
+    while True:
+        try:
+            print("[y/n/d] (d = show diff): ", end="", file=sys.stderr, flush=True)
+            raw = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("", file=sys.stderr)
+            return False
+        if raw in ("y", "yes"):
+            _stage_tracked_modifications(cwd)
+            return True
+        if raw in ("n", "no", ""):
+            return False
+        if raw in ("d", "diff"):
+            _print_unstaged_diff(cwd)
+            continue
+        print("Please answer y, n, or d.", file=sys.stderr)
+
+
 def _gerrit_changeish_kind(arg: str) -> str | None:
     kind = classify_changeish(arg)
     if kind == "git-rev":
@@ -164,7 +218,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "Create a fixup commit (``git commit --fixup``) targeting a local ref, a ``refs/changes/…`` ref, "
             "or a Gerrit change (numeric id or Change-Id). "
             "By default only **staged** changes are committed; use ``-a`` to include all modifications to "
-            "tracked files."
+            "tracked files. When the index is empty and stdin is a TTY, you are prompted to stage "
+            "tracked modifications (with an option to show the diff)."
         ),
     )
     p.add_argument(
@@ -220,12 +275,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(note, file=sys.stderr)
 
         if not args.commit_all and not _index_has_staged_changes(cwd):
-            print(
-                "error: no staged changes (index empty). Stage edits with `git add`, "
-                "or use `ger fix -a …` to commit all changes to tracked files.",
-                file=sys.stderr,
-            )
-            return 1
+            if not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd):
+                print(
+                    "error: no staged changes (index empty). Stage edits with `git add`, "
+                    "or use `ger fix -a …` to commit all changes to tracked files.",
+                    file=sys.stderr,
+                )
+                return 1
 
         cmd: list[str] = ["-c", "core.editor=true", "commit"]
         if args.no_verify:
