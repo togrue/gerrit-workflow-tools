@@ -32,14 +32,16 @@ ger fix [options] REF_OR_CHANGE
 | `--no-verify` | Pass `-n` to `git commit` (skip hooks) |
 | `--debug-log`, `-v` | Standard helpers |
 
-Default: only **staged** changes are committed.
+Default: only **staged** changes are committed. On a TTY with an empty index, prompts to stage tracked modifications (`y` / `n` / `d` for diff).
 
 ---
 
 ## Behavior
 
 1. Resolve `REF_OR_CHANGE` to a commit SHA (local ref, `refs/changes/…` fetch, or Gerrit API + fetch when the argument is a Change-Id or numeric change id).
-2. If the index has no staged changes and `-a` was not passed, exit `1` with a hint to stage edits or use `-a`.
+2. If the index has no staged changes and `-a` was not passed:
+   - **Interactive TTY** and there are unstaged modifications to tracked files: prompt `[y/n/d]` — `y` runs `git add -u` and continues; `d` prints the unstaged diff to stderr and re-prompts; `n` / empty / interrupt declines.
+   - Otherwise (non-TTY, declined, or nothing to stage): exit `1` with a hint to stage edits or use `-a`.
 3. Run `git commit --fixup=<sha>` (honours `--no-verify` and `-a`).
 
 ---

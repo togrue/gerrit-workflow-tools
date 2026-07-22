@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,42 @@ def test_ger_fix_requires_staged_changes(stack_repo: Path, monkeypatch: pytest.M
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
     assert code == 1
     assert "staged" in err.lower()
+
+
+def test_ger_fix_prompt_stages_on_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (stack_repo / "a.txt").write_text("prompt yes\n", encoding="utf-8")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "y")
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
+    assert code == 0, err
+    subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
+    assert subj.startswith("fixup! ")
+    assert "No staged changes" in err
+
+
+def test_ger_fix_prompt_declines_on_no(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (stack_repo / "a.txt").write_text("prompt no\n", encoding="utf-8")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
+    assert code == 1
+    assert "staged" in err.lower()
+    # Declined: working tree still dirty, index still empty
+    assert git("diff", "--quiet", cwd=stack_repo, check=False).returncode != 0
+    assert git("diff", "--cached", "--quiet", cwd=stack_repo, check=False).returncode == 0
+
+
+def test_ger_fix_prompt_diff_then_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (stack_repo / "a.txt").write_text("see the diff\n", encoding="utf-8")
+    answers = iter(["d", "y"])
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
+    assert code == 0, err
+    assert "see the diff" in err
+    assert "diff --git" in err or "---" in err
+    subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
+    assert subj.startswith("fixup! ")
 
 
 def test_ger_fix_commit_fixup_on_ref(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
