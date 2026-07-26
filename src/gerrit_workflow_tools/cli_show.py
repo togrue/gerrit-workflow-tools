@@ -28,7 +28,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
@@ -131,7 +131,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
+def main(  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
+    argv: list[str] | None = None,
+    *,
+    gerrit: GerritRest | None = None,
+) -> int:
     """Resolve one revision and print human-readable or JSON Gerrit status details."""
     p = _build_parser()
     args = p.parse_args(argv)
@@ -150,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-retu
         tail_n = gshow_comment_tail_lines(cwd)
 
     try:
-        service = GerritService.from_cwd(cwd)
+        service = GerritService.from_cwd(cwd, rest=gerrit)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return _EXIT_ERROR

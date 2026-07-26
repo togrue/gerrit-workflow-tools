@@ -22,7 +22,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_resolution_note,
     resolve_changeish,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
 _EXIT_USAGE = 2
@@ -76,7 +76,7 @@ def _print_text_resolution(resolution: Resolution) -> None:
         print("(no local commit or Gerrit change resolved)")
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Resolve *changeish* and print human-readable or JSON resolution details."""
     p = _build_parser()
     args = p.parse_args(argv)
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     use_color = args.color != "never"
 
     try:
-        service = GerritService.from_cwd(cwd)
+        service = GerritService.from_cwd(cwd, rest=gerrit)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return EXIT_RESOLUTION_ERROR

@@ -34,7 +34,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     resolution_from_change_rows,
     resolve_stack_context,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
@@ -62,12 +62,13 @@ def load_annotated_commits(
     rev_range: str,
     *,
     first_parent: bool = False,
+    gerrit: GerritRest | None = None,
 ) -> tuple[list[LogCommit] | None, int, dict[str, str]]:
     """Load local commits in *rev_range*, enrich from Gerrit, and annotate attention."""
     commit_data, exit_code = _load_commits_in_range(cwd, rev_range, first_parent=first_parent)
     if commit_data is None:
         return None, exit_code, {}
-    commits, gerrit_exit, notes_by_sha = _fetch_enriched_commits(cwd, commit_data)
+    commits, gerrit_exit, notes_by_sha = _fetch_enriched_commits(cwd, commit_data, gerrit=gerrit)
     if gerrit_exit is not None:
         return None, gerrit_exit, {}
     assert commits is not None
@@ -237,10 +238,12 @@ def _load_commits_in_range(
 def _fetch_enriched_commits(
     cwd: Path,
     commit_data: list[CommitStatusInput],
+    *,
+    gerrit: GerritRest | None = None,
 ) -> tuple[list[LogCommit] | None, int | None, dict[str, str]]:
     """Fetch Gerrit-enriched commit status list, or (None, exit_code, {}) on error."""
     try:
-        service = GerritService.from_cwd(cwd)
+        service = GerritService.from_cwd(cwd, rest=gerrit)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return None, EXIT_RESOLUTION_ERROR, {}
@@ -358,7 +361,7 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
             )
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-locals
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:  # pylint: disable=too-many-locals
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -377,7 +380,9 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-loca
         if not require_branch_upstream(cwd, branch):
             return 1
 
-    commits, load_exit, notes_by_sha = load_annotated_commits(cwd, rev_range, first_parent=not args.follow_merges)
+    commits, load_exit, notes_by_sha = load_annotated_commits(
+        cwd, rev_range, first_parent=not args.follow_merges, gerrit=gerrit
+    )
     if commits is None:
         return load_exit
 

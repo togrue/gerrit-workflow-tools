@@ -23,6 +23,7 @@ from gerrit_workflow_tools.cli_log import (
     rev_range_needs_upstream_resolution,
 )
 from gerrit_workflow_tools.core.config import resolve_working_branch
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import first_commit_needing_edit_attention
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import (
@@ -35,7 +36,7 @@ from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstr
 logger = logging.getLogger(__name__)
 
 
-def resolve_first_edit_attention_sha(cwd: Path) -> str:
+def resolve_first_edit_attention_sha(cwd: Path, *, gerrit: GerritRest | None = None) -> str:
     """Return full SHA of the oldest commit with unresolved comments or a failed build."""
     rev_range, rev_range_exit = resolve_rev_range(cwd, None)
     if rev_range_exit is not None:
@@ -44,7 +45,7 @@ def resolve_first_edit_attention_sha(cwd: Path) -> str:
     for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
         if not require_branch_upstream(cwd, branch):
             raise GitError("upstream not configured")
-    commits, load_exit, _notes_by_sha = load_annotated_commits(cwd, rev_range)
+    commits, load_exit, _notes_by_sha = load_annotated_commits(cwd, rev_range, gerrit=gerrit)
     if commits is None:
         if load_exit == 0:
             raise GitError("no commits in stack")
@@ -120,6 +121,7 @@ def _run_interactive_stack_rebase(
     prog: str,
     description: str,
     default_action: Literal["edit", "reword"],
+    gerrit: GerritRest | None = None,
 ) -> int:
     """Shared implementation for ``ger edit`` and ``ger reword``."""
     p = _build_parser(prog=prog, description=description, default_action=default_action)
@@ -143,7 +145,7 @@ def _run_interactive_stack_rebase(
         if branch is not None and not require_branch_upstream(cwd, branch):
             return 1
         if args.first_attention_commit:
-            full = resolve_first_edit_attention_sha(cwd)
+            full = resolve_first_edit_attention_sha(cwd, gerrit=gerrit)
             rev_arg = git_out("rev-parse", "--short", full, cwd=cwd)
         else:
             assert rev_arg is not None
@@ -154,7 +156,7 @@ def _run_interactive_stack_rebase(
             if kind in ("change-number", "change-ref", "url", "query"):
                 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
-                client = GerritService.from_cwd(cwd).rest
+                client = gerrit if gerrit is not None else GerritService.from_cwd(cwd).rest
             full = resolve_stack_commit(cwd, rev_arg.strip(), branch=branch, client=client)
         if not commit_in_stack(cwd, full, branch=branch):
             raise GitError(f"commit {rev_arg} is not in the current local stack")
@@ -185,23 +187,25 @@ def _run_interactive_stack_rebase(
     return r.returncode
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger edit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
     return _run_interactive_stack_rebase(
         argv,
         prog="ger edit",
         description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
         default_action="edit",
+        gerrit=gerrit,
     )
 
 
-def main_reword(argv: list[str] | None = None) -> int:
+def main_reword(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger reword``: interactive rebase with reword as the default action."""
     return _run_interactive_stack_rebase(
         argv,
         prog="ger reword",
         description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
         default_action="reword",
+        gerrit=gerrit,
     )
 
 

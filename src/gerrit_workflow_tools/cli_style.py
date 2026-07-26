@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import sys
-from typing import TextIO
 
 ANSI_RESET = "\033[0m"
 ANSI_DIM = "\033[2m"

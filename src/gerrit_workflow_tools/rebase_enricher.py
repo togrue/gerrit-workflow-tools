@@ -11,7 +11,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.config import gerrit_web_url
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
@@ -164,7 +164,12 @@ def _resolve_editor(cwd: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branches,too-many-locals
+def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
+    text: str,
+    cwd: Path,
+    *,
+    gerrit: GerritRest | None = None,
+) -> str:
     """Rewrite rebase todo lines with Gerrit status annotations.
 
     Returns the original *text* unchanged if Gerrit is not configured for this
@@ -208,7 +213,7 @@ def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branc
     if not commit_inputs:
         return text
 
-    service = GerritService.from_cwd(cwd)
+    service = GerritService.from_cwd(cwd, rest=gerrit)
     commits = service.fetch_gerrit_data(commit_inputs, cwd=cwd)
 
     # Annotate attention (chain-blocked aware, oldest-first).
@@ -261,7 +266,7 @@ def _enrich_todo(text: str, cwd: Path) -> str:  # pylint: disable=too-many-branc
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Invoked as ``GIT_SEQUENCE_EDITOR``: enrich the rebase todo then open the real editor."""
     if os.environ.get("GREBASE_DEBUG_LOG"):
         configure_logging(True)
@@ -283,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     # Attempt enrichment; on failure fall back to original text with a diagnostic comment.
     error_header: str | None = None
     try:
-        final_text = _enrich_todo(original_text, cwd)
+        final_text = _enrich_todo(original_text, cwd, gerrit=gerrit)
         logger.debug("rebase_enricher: todo enriched successfully")
     except (GerritApiError, GitError, ValueError, OSError) as e:
         logger.debug("rebase_enricher: enrichment failed: %s", e)

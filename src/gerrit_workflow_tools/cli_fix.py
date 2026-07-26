@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
+    GerritRest,
     HttpGerritRest,
     resolve_gerrit_web_base,
 )
@@ -115,7 +116,7 @@ def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any]) -> str
     return got
 
 
-def _resolve_fixup_sha_gerrit(cwd: Path, client: HttpGerritRest, arg: str) -> tuple[str, Resolution]:
+def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritRest, arg: str) -> tuple[str, Resolution]:
     resolution = resolve_changeish(arg.strip(), client=client, cwd=cwd, explicit_target=True)
     if resolution.selected is None:
         raise ChangeResolutionError(f"Gerrit change not found for {arg.strip()!r}")
@@ -124,7 +125,7 @@ def _resolve_fixup_sha_gerrit(cwd: Path, client: HttpGerritRest, arg: str) -> tu
     return fixup_sha, resolution
 
 
-def _resolve_fixup_sha_git(cwd: Path, arg: str) -> tuple[str, Resolution | None]:
+def _resolve_fixup_sha_git(cwd: Path, arg: str, *, gerrit: GerritRest | None = None) -> tuple[str, Resolution | None]:
     token = arg.strip()
     p = git("rev-parse", "--verify", f"{token}^{{commit}}", cwd=cwd, check=False)
     if p.returncode != 0:
@@ -136,8 +137,7 @@ def _resolve_fixup_sha_git(cwd: Path, arg: str) -> tuple[str, Resolution | None]
     sha = git_out("rev-parse", token, cwd=cwd)
     resolution: Resolution | None = None
     try:
-        web_base = resolve_gerrit_web_base(cwd)
-        client = HttpGerritRest.from_cwd(web_base, cwd)
+        client = gerrit if gerrit is not None else HttpGerritRest.from_cwd(resolve_gerrit_web_base(cwd), cwd)
         resolution = resolve_changeish(token, client=client, cwd=cwd, explicit_target=True)
     except (ValueError, ChangeResolutionError, GerritApiError):
         resolution = None
@@ -247,7 +247,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Create a fixup commit with ``git commit --fixup=<target>``."""
     p = _build_parser()
     args = p.parse_args(argv)
@@ -261,11 +261,10 @@ def main(argv: list[str] | None = None) -> int:
         if rc_ref is not None:
             fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
         elif _gerrit_changeish_kind(raw) is not None:
-            web_base = resolve_gerrit_web_base(cwd)
-            client = HttpGerritRest.from_cwd(web_base, cwd)
+            client = gerrit if gerrit is not None else HttpGerritRest.from_cwd(resolve_gerrit_web_base(cwd), cwd)
             fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
         else:
-            fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw)
+            fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw, gerrit=gerrit)
 
         logger.info("fixup target commit: %s", fixup_sha)
 

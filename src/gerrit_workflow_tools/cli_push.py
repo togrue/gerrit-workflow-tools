@@ -48,7 +48,7 @@ from gerrit_workflow_tools.core.config import (
     stop_pattern,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.push_reviewers import (
@@ -438,6 +438,7 @@ def _commit_lines_for_preview(
     show_attributes: bool,
     merged_reviewers: list[str],
     first_parent: bool = True,
+    gerrit: GerritRest | None = None,
 ) -> list[str]:
     """
     Generate a list of formatted commit lines for stack preview.
@@ -473,7 +474,7 @@ def _commit_lines_for_preview(
                     "Gerrit credentials are not configured; set gerrit.user and "
                     "gerrit.token (or gerrit.password) for REST access."
                 )
-            service = GerritService.from_cwd(cwd)
+            service = GerritService.from_cwd(cwd, rest=gerrit)
             raw_details = service.changes.get_payloads(triplets)
             details_by_triplet = {
                 str(payload["id"]): payload
@@ -963,6 +964,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     ctx: GerritPushContext,
     args: argparse.Namespace,
     summary_highlighter: SummaryHighlighter,
+    gerrit: GerritRest | None = None,
 ) -> int:
     """Run the interactive approval loop, execute the push, and handle post-push steps."""
     tip = ctx.ready.push_tip_sha
@@ -990,6 +992,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 show_attributes=ctx.show_attributes,
                 merged_reviewers=ctx.plan.reviewers,
                 first_parent=ctx.first_parent,
+                gerrit=gerrit,
             )
         except (ValueError, GerritApiError) as e:
             print(f"error: {e}", file=sys.stderr)
@@ -1100,7 +1103,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        service = GerritService.from_cwd(cwd)
+        service = GerritService.from_cwd(cwd, rest=gerrit)
         rc_rest = _apply_reviewer_strategy_after_push(
             cwd,
             service,
@@ -1138,7 +1141,7 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None) -> str:
     return b
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
     args = _build_arg_parser().parse_args(argv)
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
@@ -1192,7 +1195,7 @@ def main(argv: list[str] | None = None) -> int:
         ctx_or_rc = _build_gerrit_context(cwd, b, args, gdef, remote_policy, fp)
         if isinstance(ctx_or_rc, int):
             return ctx_or_rc
-        return _execute_gerrit_push(cwd, ctx_or_rc, args, summary_highlighter)
+        return _execute_gerrit_push(cwd, ctx_or_rc, args, summary_highlighter, gerrit=gerrit)
     except GitError as e:
         return handle_git_error(e)
 

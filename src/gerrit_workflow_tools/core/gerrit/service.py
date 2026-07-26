@@ -105,17 +105,26 @@ class GerritService:
         *,
         refresh: bool = False,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
+        rest: GerritRest | None = None,
+        cache: GerritCache | None = None,
     ) -> GerritService:
-        """Construct a service from git-configured Gerrit settings."""
+        """Construct a service from git-configured Gerrit settings.
+
+        Pass *rest* to supply the Gerrit implementation instead of building an
+        :class:`HttpGerritRest`. Doing so also skips ``gerrit.webUrl`` resolution — the web
+        base comes from the implementation — so callers that inject need no Gerrit config.
+        """
 
         if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
             refresh = True
-        web_base = resolve_gerrit_web_base(cwd)
-        rest = HttpGerritRest.from_cwd(web_base, cwd)
-        cache = GerritCache.for_web_base(web_base)
+        if rest is None:
+            web_base = resolve_gerrit_web_base(cwd)
+            rest = HttpGerritRest.from_cwd(web_base, cwd)
+        else:
+            web_base = rest.web_base
         return cls(
             rest,
-            cache,
+            cache if cache is not None else GerritCache.for_web_base(web_base),
             refresh=refresh,
             trust_window_seconds=trust_window_seconds,
             cwd=cwd,
