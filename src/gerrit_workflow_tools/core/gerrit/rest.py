@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -93,6 +93,78 @@ def parallel_map(
     workers = min(max_workers, len(jobs))
     with ThreadPoolExecutor(max_workers=workers) as ex:
         return list(ex.map(lambda fn: fn(), jobs))
+
+
+class GerritRest(Protocol):
+    """Single-round-trip Gerrit operations — one call in, one Gerrit payload out.
+
+    This is the seam. Everything that composes round trips — chunking, ``OR`` batching,
+    triplet aliasing, the SQLite cache, parallelism — sits *above* it in
+    :mod:`~gerrit_workflow_tools.core.gerrit.service` and the module-level helpers below,
+    so an implementation only has to answer individual Gerrit questions.
+
+    Implementations return Gerrit payloads verbatim and raise :class:`GerritApiError` on
+    failure; interpreting or filtering those payloads is the caller's job. There is
+    deliberately no raw-path escape hatch (``get_json``) — that would make the set of
+    things crossing this seam unbounded. ``cli_fetch_api`` uses a concrete
+    :class:`GerritClient` for exactly that reason.
+    """
+
+    web_base: str
+
+    def query_changes(self, query: str, *, n: int = 25, options: list[str] | None = None) -> list[dict[str, Any]]:
+        """Return ChangeInfo rows matching a Gerrit search query."""
+
+    def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
+        """Return AccountInfo rows matching an account search query."""
+
+    def get_change(self, change_id: str) -> dict[str, Any]:
+        """Return ChangeInfo detail for one change."""
+
+    def get_account(self, account_id: int | str) -> dict[str, Any]:
+        """Return AccountInfo detail for one account."""
+
+    def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Return inline comments grouped by file path."""
+
+    def get_checks(self, change_id: str) -> list[dict[str, Any]]:
+        """Return Checks-plugin rows for the current revision."""
+
+    def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
+        """Return reviewer rows for one change."""
+
+    def suggest_change_reviewers(
+        self,
+        change_id: str,
+        *,
+        query: str | None = None,
+        n: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Return suggested reviewer rows for one change."""
+
+    def get_plugin_project_reviewers(self, project: str) -> list[dict[str, Any]] | None:
+        """Return project-level reviewer defaults, or ``None`` when the plugin is absent."""
+
+    def set_reviewers_batch(
+        self,
+        change_id: str,
+        *,
+        reviewers: list[str] | None = None,
+        ccs: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Add reviewers and CCs to one change in a single request."""
+
+    def delete_reviewer(self, change_id: str, account_id: int) -> Any:
+        """Remove one reviewer or CC from a change."""
+
+    def set_topic(self, change_id: str, topic: str | None) -> None:
+        """Set or clear the change topic."""
+
+    def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
+        """Mark a change work-in-progress or ready for review."""
+
+    def set_private(self, change_id: str, on: bool) -> dict[str, Any]:
+        """Set or clear the private flag on a change."""
 
 
 class GerritClient:
@@ -362,40 +434,17 @@ class GerritClient:
         )
         return out
 
-    def probe_changes_updated(self, refs: list[str]) -> dict[str, str]:
-        """Return Gerrit ``updated`` values keyed by requested refs (and payload ids)."""
+    def get_checks(self, change_id: str) -> list[dict[str, Any]]:
+        """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.
 
-        out: dict[str, str] = {}
-        unique: list[str] = []
-        seen: set[str] = set()
-        for raw in refs:
-            if raw in seen:
-                continue
-            seen.add(raw)
-            unique.append(raw)
-
-        def _probe_chunk(chunk: list[str]) -> list[dict[str, Any]]:
-            q = _chunk_to_query(chunk)
-            return self.query_changes(q, n=_batch_query_limit(chunk), options=["SKIP_DIFFSTAT"])
-
-        def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
-            def _job() -> list[dict[str, Any]]:
-                return _probe_chunk(chunk)
-
-            return _job
-
-        chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
-        jobs = [_probe_job(chunk) for chunk in chunks]
-        rows_by_chunk = parallel_map(jobs)
-        fetched: dict[str, dict[str, Any]] = {}
-        for rows in rows_by_chunk:
-            _ingest_change_rows(fetched, rows)
-        aliased = alias_batch_fetch_results(unique, fetched)
-        for key, payload in aliased.items():
-            updated = payload.get("updated")
-            if isinstance(updated, str):
-                out[key] = updated
-        return out
+        Rows are returned verbatim; deciding which states count as a failure is the
+        caller's job (see ``GerritService._fetch_ci_failures``).
+        """
+        enc = quote(change_id_for_gerrit_rest_path(change_id), safe="")
+        data = self._request_json(f"changes/{enc}/revisions/current/checks")
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected checks response")
+        return [row for row in data if isinstance(row, dict)]
 
 
 def resolve_change_ref(arg: str) -> str:
@@ -455,7 +504,7 @@ _RESOLVE_CHANGE_QUERY_OPTIONS = LOG_QUERY_OPTIONS
 
 
 def resolve_gerrit_change(
-    client: GerritClient,
+    client: GerritRest,
     *,
     change_arg: str | None,
     local_change_id: str | None,
@@ -613,7 +662,7 @@ def alias_batch_fetch_results(
     return out
 
 
-def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[str, Any]]:
+def _fallback_query_chunk(client: GerritRest, chunk: list[str]) -> list[dict[str, Any]]:
     """Query each ref in *chunk* when a batched OR query fails (same session, sequential)."""
     rows: list[dict[str, Any]] = []
     for ref in chunk:
@@ -627,7 +676,7 @@ def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[s
     return rows
 
 
-def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
+def _query_change_chunk(client: GerritRest, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
     """Run one batched OR query. Empty means none exist — do not per-change fallback."""
     q = _chunk_to_query(chunk)
     try:
@@ -637,7 +686,7 @@ def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str])
         return _fallback_query_chunk(client, chunk)
 
 
-def query_single_change(client: GerritClient, ref: str) -> dict[str, Any] | None:
+def query_single_change(client: GerritRest, ref: str) -> dict[str, Any] | None:
     """Query one Gerrit change by triplet or numeric id; raise on ambiguous multi-match."""
     try:
         rows = client.query_changes(_ref_to_query(ref), n=5, options=list(LOG_QUERY_OPTIONS))
@@ -649,7 +698,43 @@ def query_single_change(client: GerritClient, ref: str) -> dict[str, Any] | None
     return pick_change_from_query_result(rows)
 
 
-def batch_load_change_details(client: GerritClient, refs: list[str]) -> dict[str, dict[str, Any]]:
+def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]:
+    """Return Gerrit ``updated`` values keyed by requested refs (and payload ids).
+
+    Composes round trips (chunk, parallelise, alias) over :class:`GerritRest`, so it lives
+    above the seam rather than on it — every implementation would otherwise have to repeat
+    this. Mirrors :func:`batch_load_change_details`.
+    """
+    out: dict[str, str] = {}
+    unique: list[str] = []
+    seen: set[str] = set()
+    for raw in refs:
+        if raw in seen:
+            continue
+        seen.add(raw)
+        unique.append(raw)
+
+    def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
+        def _job() -> list[dict[str, Any]]:
+            q = _chunk_to_query(chunk)
+            return client.query_changes(q, n=_batch_query_limit(chunk), options=["SKIP_DIFFSTAT"])
+
+        return _job
+
+    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
+    rows_by_chunk = parallel_map(_probe_job(chunk) for chunk in chunks)
+    fetched: dict[str, dict[str, Any]] = {}
+    for rows in rows_by_chunk:
+        _ingest_change_rows(fetched, rows)
+    aliased = alias_batch_fetch_results(unique, fetched)
+    for key, payload in aliased.items():
+        updated = payload.get("updated")
+        if isinstance(updated, str):
+            out[key] = updated
+    return out
+
+
+def batch_load_change_details(client: GerritRest, refs: list[str]) -> dict[str, dict[str, Any]]:
     """Map Gerrit ``id`` to ChangeInfo using project-scoped Change-Id OR chunks.
 
     Branch filtering is not applied in the query; callers use

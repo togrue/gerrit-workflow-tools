@@ -10,7 +10,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     Resolution,
     resolve_changeish,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritClient
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import parse_change_id
@@ -44,7 +44,7 @@ def _row_from_gerrit_change(change: dict[str, object]) -> CommitStatusInput:
     return CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
 
 
-def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritClient) -> ShowCommitResolution:
+def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritRest) -> ShowCommitResolution:
     """Resolve one `ger show` argument via the shared changeish core."""
 
     raw_arg = (arg or "HEAD").strip()

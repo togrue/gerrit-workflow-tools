@@ -7,7 +7,6 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.cache import (
@@ -19,10 +18,12 @@ from gerrit_workflow_tools.core.gerrit.models import Account, Change, Comment
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritClient,
+    GerritRest,
     alias_batch_fetch_results,
     batch_load_change_details,
     change_id_for_gerrit_rest_path,
     parallel_map,
+    probe_changes_updated,
     resolve_gerrit_web_base,
 )
 
@@ -89,7 +90,7 @@ class GerritService:
 
     def __init__(
         self,
-        rest: GerritClient,
+        rest: GerritRest,
         cache: GerritCache,
         *,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
@@ -146,7 +147,7 @@ class GerritService:
         return alias_batch_fetch_results(triplets, fetched)
 
     def _probe_changes_updated(self, triplets: list[str]) -> dict[str, str]:
-        return self.rest.probe_changes_updated(triplets)
+        return probe_changes_updated(self.rest, triplets)
 
     def _fetch_account_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
         def _one(account_id: int | str) -> tuple[int, dict[str, Any]]:
@@ -238,19 +239,19 @@ class GerritService:
         return result
 
     def _fetch_ci_failures(self, change_id: str) -> list[str]:
-        """Fetch failed CI check names via the Gerrit Checks API."""
+        """Return failed CI check names.
 
-        enc = quote(change_id_for_gerrit_rest_path(change_id), safe="")
+        Which states count as a failure is policy, so it stays above the seam; the
+        :class:`GerritRest` implementation just returns the rows. A missing Checks plugin
+        surfaces as :class:`GerritApiError` and means "no failures to report".
+        """
+
         try:
-            data = self.rest.get_json(f"changes/{enc}/revisions/current/checks")
+            rows = self.rest.get_checks(change_id)
         except GerritApiError:
             return []
-        if not isinstance(data, list):
-            return []
         failed: list[str] = []
-        for check in data:
-            if not isinstance(check, dict):
-                continue
+        for check in rows:
             if check.get("state") == "FAILED":
                 name = check.get("checker_name") or check.get("name") or ""
                 if name:

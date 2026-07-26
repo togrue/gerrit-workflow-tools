@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.gerrit.rest import GerritClient
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.config import current_branch
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
@@ -213,7 +213,7 @@ def resolve_stack_commit(
     *,
     branch: str | None = None,
     _snap: StackSnapshot | None = None,
-    client: GerritClient | None = None,
+    client: GerritRest | None = None,
 ) -> str:
     """Resolve *ref* to a full SHA, or map a changeish to the unique commit on the current stack."""
     from gerrit_workflow_tools.core.gerrit.change_resolution import (

@@ -15,7 +15,7 @@ from gerrit_workflow_tools.core.config import (
     refs_for_push_branch_name,
     resolve_working_branch,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, pick_change_from_query_result
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, pick_change_from_query_result
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 
@@ -251,21 +251,21 @@ def _resolve_local_sha(cwd: Path | str | None, rev: str) -> str:
         raise ChangeResolutionError(f"cannot resolve git revision {rev!r}: {e}") from e
 
 
-def _fetch_change_row(client: GerritClient, change_key: str) -> dict[str, Any]:
+def _fetch_change_row(client: GerritRest, change_key: str) -> dict[str, Any]:
     try:
         return client.get_change(change_key)
     except GerritApiError as e:
         raise ChangeResolutionError(f"Gerrit change not found: {change_key!r}") from e
 
 
-def _query_changes(client: GerritClient, query: str, *, n: int = 25) -> list[dict[str, Any]]:
+def _query_changes(client: GerritRest, query: str, *, n: int = 25) -> list[dict[str, Any]]:
     try:
         return client.query_changes(query, n=n)
     except GerritApiError as e:
         raise ChangeResolutionError(f"Gerrit query failed: {e}") from e
 
 
-def _fetch_single_from_query(client: GerritClient, query: str) -> dict[str, Any]:
+def _fetch_single_from_query(client: GerritRest, query: str) -> dict[str, Any]:
     rows = _query_changes(client, query)
     try:
         return pick_change_from_query_result(rows)
@@ -340,7 +340,7 @@ def _narrow_change_id_matches(
 def _resolve_change_id(
     change_id: str,
     *,
-    client: GerritClient,
+    client: GerritRest,
     stack: StackContext,
     explicit_target: bool,
 ) -> tuple[SelectedChange | None, SelectedReason | None, bool, list[SelectedChange]]:
@@ -400,7 +400,7 @@ def resolution_from_change_rows(
 def resolve_changeish(
     ref: str,
     *,
-    client: GerritClient,
+    client: GerritRest,
     cwd: Path | str | None,
     branch: str | None = None,
     explicit_target: bool = False,
@@ -488,7 +488,7 @@ def resolve_to_stack_sha(
     *,
     cwd: Path | str | None,
     branch: str | None = None,
-    client: GerritClient | None = None,
+    client: GerritRest | None = None,
 ) -> str:
     """Resolve a changeish to a full SHA on the current local stack."""
     from gerrit_workflow_tools.core.stack import get_stack_snapshot
