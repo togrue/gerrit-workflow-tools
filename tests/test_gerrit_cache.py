@@ -10,14 +10,25 @@ import pytest
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 
 
-def _change(triplet: str, *, change_id: str | None = None, updated: str = "u1") -> dict[str, Any]:
-    footer = change_id if change_id is not None else triplet.rsplit("~", maxsplit=2)[-1]
+def _change(
+    triplet: str,
+    *,
+    change_id: str | None = None,
+    updated: str = "u1",
+    branch: str | None = None,
+    number: int = 123,
+) -> dict[str, Any]:
+    parts = triplet.split("~")
+    footer = change_id if change_id is not None else parts[-1]
+    br = branch if branch is not None else (parts[1] if len(parts) == 3 else "main")
     return {
         "id": triplet,
         "change_id": footer,
-        "_number": 123,
+        "branch": br,
+        "_number": number,
         "updated": updated,
         "subject": "cached",
+        "status": "NEW",
     }
 
 
@@ -144,3 +155,19 @@ def test_schema_version_bump_clears_old_cache(tmp_path: Path) -> None:
 
     cleared = GerritCache(db_path, web_base="https://g.example")
     assert cleared.info().changes == 0
+
+
+def test_find_payloads_by_footer_change_ids_dedupes_aliases(tmp_path: Path) -> None:
+    cid = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    main = _change(f"proj~main~{cid}", branch="main", number=1)
+    dev = _change(f"proj~dev~{cid}", branch="dev", number=2)
+    compact = dict(main)
+    compact["id"] = "proj~1"
+    cache = GerritCache(tmp_path / "cache.db", web_base="https://g.example")
+    # Same main payload under triplet + compact keys; plus other branch.
+    cache.upsert_changes({f"proj~main~{cid}": main, "proj~1": compact, f"proj~dev~{cid}": dev})
+
+    found = cache.find_payloads_by_footer_change_ids([cid])
+    assert len(found[cid]) == 2
+    numbers = {row["_number"] for row in found[cid]}
+    assert numbers == {1, 2}

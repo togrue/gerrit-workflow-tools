@@ -109,6 +109,32 @@ def test_log_on_main_target_uses_main_triplet_not_dev(
     assert row["pushed"] is True
     assert row["code_review"] == 2
     assert "/+/120100" in (row.get("gerrit_url") or "")
+    assert "resolution_note" in row
+    assert "120100" in row["resolution_note"]
+    assert "119900" in row["resolution_note"]
+
+
+def test_log_resolution_notes_do_not_requery_per_change_id(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Notes must come from cache/batch payloads — no bare change:I storm after overlay."""
+    _configure_web(stack_repo)
+    sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
+    cid = _cid("2")
+    details = _mock_dual_branch_details(change_id=cid, sha=sha)
+    with patch_gerrit_client_for_queries(
+        "gerrit_workflow_tools.cli_log", details_by_change_id=details
+    ) as client:
+        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    assert code in (0, 1), err
+    bare = [
+        call.args[0]
+        for call in client.query_changes.call_args_list
+        if call.args and isinstance(call.args[0], str) and call.args[0].startswith("change:")
+    ]
+    assert bare == [], f"unexpected per-Change-Id queries: {bare!r}"
+    row = next(c for c in json_stdout(out)["commits"] if c["change_id"] == cid)
+    assert "resolution_note" in row
 
 
 def test_log_on_dev_target_uses_dev_triplet_not_main(

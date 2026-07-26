@@ -385,7 +385,7 @@ First commit whose subject matches `gerrit.stopPattern`. Logic: `core/ready_calc
 
 Gerrit canonical key: **triplet** `project~branch~Change-Id` (cache PK and follow-up REST paths). Bare Change-Id is ambiguous across branches; the shared resolver narrows with stack context.
 
-**Fetch ≠ identity:** stack overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status.
+**Fetch ≠ identity:** stack overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch transparency notes for `ger log` are derived from the local cache (no per-Change-Id re-query). Remaining overlay cost (reviewer follow-ups, etc.): [plans/gerrit-log-performance.md](plans/gerrit-log-performance.md).
 
 ### Patchset status tokens
 

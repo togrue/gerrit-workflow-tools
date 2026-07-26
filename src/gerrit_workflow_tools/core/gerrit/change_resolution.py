@@ -345,9 +345,23 @@ def _resolve_change_id(
     explicit_target: bool,
 ) -> tuple[SelectedChange | None, SelectedReason | None, bool, list[SelectedChange]]:
     rows = _query_changes(client, f"change:{change_id}")
+    return resolution_fields_from_change_rows(
+        rows,
+        push_branch=stack.push_branch,
+        explicit_target=explicit_target,
+    )
+
+
+def resolution_fields_from_change_rows(
+    rows: list[dict[str, Any]],
+    *,
+    push_branch: str,
+    explicit_target: bool,
+) -> tuple[SelectedChange | None, SelectedReason | None, bool, list[SelectedChange]]:
+    """Narrow ChangeInfo rows for one Change-Id without contacting Gerrit."""
     if len(rows) == 1:
         only = SelectedChange.from_change_row(rows[0])
-        if only.branch == stack.push_branch:
+        if only.branch == push_branch:
             return only, "unique", False, []
         if explicit_target:
             return only, "branch-mismatch", True, []
@@ -355,8 +369,31 @@ def _resolve_change_id(
 
     return _narrow_change_id_matches(
         rows,
-        push_branch=stack.push_branch,
+        push_branch=push_branch,
         explicit_target=explicit_target,
+    )
+
+
+def resolution_from_change_rows(
+    change_id: str,
+    rows: list[dict[str, Any]],
+    *,
+    push_branch: str,
+    explicit_target: bool = False,
+) -> Resolution:
+    """Build a :class:`Resolution` from already-fetched/cached ChangeInfo rows."""
+    selected, reason, ambiguous, alternatives = resolution_fields_from_change_rows(
+        rows,
+        push_branch=push_branch,
+        explicit_target=explicit_target,
+    )
+    return Resolution(
+        input=change_id,
+        kind="change-id",
+        selected=selected,
+        selected_reason=reason,
+        ambiguous=ambiguous,
+        alternatives=alternatives,
     )
 
 

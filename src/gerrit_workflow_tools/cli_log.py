@@ -31,7 +31,7 @@ from gerrit_workflow_tools.core.config import current_branch, log_defaults, reso
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
-    resolve_changeish,
+    resolution_from_change_rows,
     resolve_stack_context,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
@@ -247,6 +247,7 @@ def _fetch_enriched_commits(
 
     try:
         commits = service.fetch_gerrit_data(commit_data, cwd=cwd)
+        stack = resolve_stack_context(cwd)
     except ChangeResolutionError as e:
         print(f"error: {e}", file=sys.stderr)
         return None, EXIT_RESOLUTION_ERROR, {}
@@ -254,15 +255,18 @@ def _fetch_enriched_commits(
         print(f"gerrit error: {e}", file=sys.stderr)
         return None, EXIT_RESOLUTION_ERROR, {}
 
+    # Resolution notes from cache only — batch fetch already upserted all branches.
+    footer_ids = [row.change_id for row in commit_data if row.change_id]
+    by_footer = service.cache.find_payloads_by_footer_change_ids(footer_ids)
     notes_by_sha: dict[str, str] = {}
     for row in commit_data:
         if not row.change_id:
             continue
         try:
-            resolution = resolve_changeish(
+            resolution = resolution_from_change_rows(
                 row.change_id,
-                client=service.rest,
-                cwd=cwd,
+                by_footer.get(row.change_id, []),
+                push_branch=stack.push_branch,
                 explicit_target=False,
             )
         except ChangeResolutionError:

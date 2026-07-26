@@ -199,6 +199,40 @@ class GerritCache:
                 )
         return out
 
+    def find_payloads_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Return cached ChangeInfo rows grouped by footer ``change_id`` (local only).
+
+        The same logical change may be stored under both a requested triplet key and
+        Gerrit's compact ``id``; duplicates are collapsed by ``(id, _number, branch)``.
+        """
+        unique = list(dict.fromkeys(cid for cid in change_ids if cid))
+        if not unique:
+            return {}
+        placeholders = ",".join("?" for _ in unique)
+        out: dict[str, list[dict[str, Any]]] = {cid: [] for cid in unique}
+        seen: dict[str, set[tuple[Any, Any, Any]]] = {cid: set() for cid in unique}
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT payload FROM changes
+                WHERE json_extract(payload, '$.change_id') IN ({placeholders})
+                """,
+                unique,
+            ).fetchall()
+        for row in rows:
+            payload = json.loads(str(row["payload"]))
+            if not isinstance(payload, dict):
+                continue
+            cid = payload.get("change_id")
+            if not isinstance(cid, str) or cid not in out:
+                continue
+            key = (payload.get("_number"), payload.get("branch"))
+            if key in seen[cid]:
+                continue
+            seen[cid].add(key)
+            out[cid].append(payload)
+        return out
+
     def load_changes(
         self,
         triplets: list[str],
