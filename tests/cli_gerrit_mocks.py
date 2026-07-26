@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, parse_change_id
 
@@ -100,82 +100,18 @@ def build_details_by_change_id(
     return out
 
 
-def _lookup_detail(details: dict[str, dict[str, Any]], ref: str) -> dict[str, Any] | None:
-    matches = _lookup_details(details, ref)
-    return matches[0] if matches else None
-
-
-def _lookup_details(details: dict[str, dict[str, Any]], ref: str) -> list[dict[str, Any]]:
-    if ref in details:
-        return [details[ref]]
-    if ref.isdigit():
-        out = [row for row in details.values() if row.get("_number") == int(ref)]
-        if out:
-            return out
-    m = re.search(r"~(I[a-fA-F0-9]{40})$", ref)
-    if m:
-        suffix = m.group(1)
-        out = [row for row in details.values() if row.get("change_id") == suffix]
-        if out:
-            return out
-    out = [row for row in details.values() if row.get("change_id") == ref]
-    return out
-
-
 def make_query_changes_impl(details: dict[str, dict[str, Any]]):
-    """Return a ``query_changes`` callable for project-scoped OR and triplet queries."""
+    """Return a ``query_changes`` callable over *details* (delegates to :class:`ChangeStore`)."""
 
-    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
-        del n, options
-        result: list[dict[str, Any]] = []
-        seen: set[str] = set()
+    store = ChangeStore(details)
 
-        def _add(row: dict[str, Any] | None) -> None:
-            if row is None:
-                return
-            key = (str(row.get("id") or ""), row.get("_number"))
-            if key in seen:
-                return
-            seen.add(key)
-            result.append(row)
-
-        # Split on project: clauses so batch ``project:P (change:… OR …)`` works.
-        parts = re.split(r"(?=project:)", q)
-        for part in parts:
-            part = part.strip().rstrip(")")
-            if not part.startswith("project:"):
-                continue
-            pm = re.match(r"project:(\S+)\s+(.*)", part, flags=re.DOTALL)
-            if not pm:
-                continue
-            project, rest = pm.group(1), pm.group(2).strip()
-            # Exact triplet scope: project:P branch:B change:I (single / fallback)
-            if re.match(r"branch:\S+\s+change:", rest) and "(" not in rest:
-                for branch, change_id in re.findall(r"branch:(\S+)\s+change:(\S+)", rest):
-                    change_id = change_id.rstrip(")")
-                    triplet = f"{project}~{branch}~{change_id}"
-                    _add(details.get(triplet))
-                continue
-            # Project-scoped Change-Id OR — return all branches for those ids.
-            for change_id in re.findall(r"change:(\S+)", rest):
-                change_id = change_id.rstrip(")")
-                for row in details.values():
-                    if row.get("project") == project and row.get("change_id") == change_id:
-                        _add(row)
-
-        # Bare ``change:`` when no project scope.
-        if "project:" not in q:
-            for change_ref in re.findall(r"change:(\S+)", q):
-                change_ref = change_ref.rstrip(")")
-                for row in _lookup_details(details, change_ref):
-                    _add(row)
-
-        return result
+    def query_changes(q: str, n: int = 25, options: list[str] | None = None) -> list[dict[str, Any]]:
+        return store.query_changes(q, n=n, options=options)
 
     return query_changes
 
 
-def gerrit_client_class_stub(inst: MagicMock) -> MagicMock:
+def gerrit_client_class_stub(inst: object) -> MagicMock:
     """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
 
     Production builds clients via ``HttpGerritRest.from_cwd(web_base, cwd)``; patching the
@@ -193,42 +129,18 @@ def patch_gerrit_client_for_queries(
     *,
     details_by_change_id: dict[str, dict[str, Any]],
     web_base: str = "https://g.example",
-) -> Iterator[MagicMock]:
-    """Patch ``resolve_gerrit_web_base`` and ``HttpGerritRest`` on *module* (e.g. ``cli_log``)."""
-    inst = MagicMock()
-    inst.query_changes.side_effect = make_query_changes_impl(details_by_change_id)
+) -> Iterator[ChangeStore]:
+    """Run *module* against a :class:`ChangeStore` seeded with *details_by_change_id*.
 
-    def _get_change(change_id: str) -> dict[str, Any]:
-        row = _lookup_detail(details_by_change_id, change_id)
-        if row is None:
-            raise AssertionError(f"test mock: no ChangeInfo for {change_id!r}")
-        return row
+    Yields the store, so tests can seed more payloads, stub unmodelled queries, or inspect
+    ``store.queries()``. Everything above the seam — batching, triplet aliasing, the SQLite
+    cache, status derivation — runs for real.
 
-    inst.get_change.side_effect = _get_change
-
-    def _list_change_reviewers(change_id: str) -> list[dict[str, Any]]:
-        row = _get_change(change_id)
-        reviewers = row.get("reviewers")
-        if isinstance(reviewers, list):
-            return reviewers
-        if isinstance(reviewers, dict):
-            out: list[dict[str, Any]] = []
-            for role in ("REVIEWER", "CC"):
-                bucket = reviewers.get(role)
-                if isinstance(bucket, list):
-                    for account in bucket:
-                        if isinstance(account, dict):
-                            out.append({"account": account, "state": role})
-            return out
-        return []
-
-    inst.list_change_reviewers.side_effect = _list_change_reviewers
-    inst.add_reviewer.return_value = {}
-    inst.delete_reviewer.return_value = None
-    inst.get_comments.return_value = {}
-    inst.web_base = web_base
-
-    client_cls = gerrit_client_class_stub(inst)
+    The ``resolve_gerrit_web_base`` / ``HttpGerritRest`` patching is still here only because
+    commands construct their own Gerrit access; it goes away once they accept an adapter.
+    """
+    store = ChangeStore(details_by_change_id, web_base=web_base)
+    client_cls = gerrit_client_class_stub(store)
 
     with (
         patch(f"{module}.resolve_gerrit_web_base", return_value=web_base, create=True),
@@ -239,7 +151,7 @@ def patch_gerrit_client_for_queries(
         ),
         patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest", client_cls),
     ):
-        yield inst
+        yield store
 
 
 def head_change_id(repo: Path) -> str:

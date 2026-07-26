@@ -127,11 +127,7 @@ def test_log_resolution_notes_do_not_requery_per_change_id(
     ) as client:
         code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
     assert code in (0, 1), err
-    bare = [
-        call.args[0]
-        for call in client.query_changes.call_args_list
-        if call.args and isinstance(call.args[0], str) and call.args[0].startswith("change:")
-    ]
+    bare = [query for query in client.queries() if query.startswith("change:")]
     assert bare == [], f"unexpected per-Change-Id queries: {bare!r}"
     row = next(c for c in json_stdout(out)["commits"] if c["change_id"] == cid)
     assert "resolution_note" in row

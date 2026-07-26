@@ -162,8 +162,8 @@ def test_resolve_query(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=120006)
     details = {str(ch["id"]): ch}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_resolve", details_by_change_id=details) as inst:
-        inst.query_changes.side_effect = lambda q, n=25, options=None: [ch] if q == "status:open" else []
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_resolve", details_by_change_id=details) as store:
+        store.stub_query("status:open", [ch])
         code, out, err = run_cli(stack_repo, resolve_main, ["q:status:open"], monkeypatch)
     assert code == 0, err
     assert "Gerrit change: #120006" in out
