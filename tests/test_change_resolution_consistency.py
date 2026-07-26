@@ -130,6 +130,29 @@ def test_log_on_dev_target_uses_dev_triplet_not_main(
     assert "/+/119900" in (row.get("gerrit_url") or "")
 
 
+def test_log_absent_when_change_only_on_other_branch(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Target-branch overlay must not pick a Change-Id that exists only on another branch."""
+    _configure_web(stack_repo)
+    _configure_dev_gerrit_target(stack_repo)
+    sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
+    cid = _cid("2")
+    # Only main-branch row exists; stack target is dev → absent.
+    main_only = {
+        str(
+            change_info_for_sha(sha, cid, number=120100, branch="main", cr=2)["id"]
+        ): change_info_for_sha(sha, cid, number=120100, branch="main", cr=2)
+    }
+    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=main_only):
+        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    assert code in (0, 1), err
+    commits = json_stdout(out)["commits"]
+    row = next(c for c in commits if c["change_id"] == cid)
+    assert row["pushed"] is False
+    assert "/+/120100" not in (row.get("gerrit_url") or "")
+
+
 def test_push_stack_resolve_and_show_agree_on_triplet(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,19 +1,19 @@
-"""Phase 6: change resolution against a live Gerrit (integration).
+"""Change resolution against a live Gerrit (integration).
 
 Requires Docker Gerrit — see ``tests/integration/README.md``.
 
-These tests prove **cross-command resolution consistency** (``ger resolve`` vs
-``ger show``) and **branch-aware narrowing** on a real server. Stack overlay
-via ``ger log --json`` (triplet-keyed batch fetch) is covered in unit tests
-(``tests/test_change_resolution_consistency.py``) because this Gerrit instance
-returns compact ``project~number`` change ids that do not match the
-``project~branch~Change-Id`` lookup key ``ger log`` builds locally.
+Covers cross-command resolution consistency, branch-aware narrowing, live
+``ger log --json`` overlay (including compact ``project~number`` ids), and
+batch query call budgets (project-scoped Change-Id OR, not per-change).
 """
 
 from __future__ import annotations
 
 import json
+import math
 import secrets
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -23,6 +23,11 @@ from gerrit_workflow_tools.cli_resolve import main as ger_resolve_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.rest import (
+    _BATCH_OR_CHUNK,
+    GerritClient,
+    resolve_gerrit_web_base,
+)
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import head_change_id
 from tests.conftest import run_cli
@@ -30,6 +35,7 @@ from tests.integration.gerrit_http import GerritHttpSession
 from tests.integration.integration_helpers import (
     open_changes_on_branch,
     prepare_clone_at_branch,
+    prepare_topic_repo,
 )
 from tests.integration.repo_builder import build_linear_chain, install_commit_msg_hook
 
@@ -37,6 +43,13 @@ from tests.integration.repo_builder import build_linear_chain, install_commit_ms
 def _configure_gerrit_project(repo, project: str) -> None:
     git("config", "gerrit.project", project, cwd=repo)
     clear_gerrit_git_config_cache()
+
+
+def _clear_gerrit_cache(repo) -> None:
+    from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+
+    web = resolve_gerrit_web_base(repo)
+    GerritCache.for_web_base(web).clear()
 
 
 def _push_shared_change_to_main_and_dev(
@@ -100,7 +113,7 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     gerrit_admin_session: GerritHttpSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Same Change-Id on main and dev: resolve/show JSON agree; log notes narrowing."""
+    """Same Change-Id on main and dev: resolve/show JSON agree; log overlays target branch."""
     ctx = gerrit_integration_context
     proj = ctx.project_verified
     main_repo, cid, dev_ctx = _push_shared_change_to_main_and_dev(ctx, tmp_path, monkeypatch)
@@ -112,10 +125,16 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     stack = resolve_stack_context(main_repo)
     assert stack.push_branch == "main"
 
-    code_log, out_log, elog = run_cli(main_repo, ger_log_main, ["--color", "never"], monkeypatch)
+    _clear_gerrit_cache(main_repo)
+    code_log, out_log, elog = run_cli(
+        main_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
+    )
     assert code_log in (0, 1), elog
-    assert "cross-branch resolution" in out_log
-    assert str(main_change["_number"]) in elog
+    log_commits = json.loads(out_log)["commits"]
+    main_row = next(c for c in log_commits if c.get("change_id") == cid)
+    assert main_row["pushed"] is True
+    assert f"/+/{main_change['_number']}" in (main_row.get("gerrit_url") or "")
+    assert f"/+/{dev_change['_number']}" not in (main_row.get("gerrit_url") or "")
 
     code_show, out_show, eshow = run_cli(main_repo, ger_show_main, ["--json", cid], monkeypatch)
     code_resolve, out_resolve, eresolve = run_cli(
@@ -131,12 +150,23 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     assert show_resolution["selected_reason"] == "target-branch"
     assert show_resolution["ambiguous"] is True
 
+    # Compact project~number ids still alias to the selected change.
+    selected_triplet = show_resolution["selected"]["triplet"]
+    assert "~" in selected_triplet
+    assert cid in selected_triplet or selected_triplet == str(main_change.get("id"))
+
     dev_repo = dev_ctx["repo"]
     git("checkout", "feat_dev", cwd=dev_repo)
-    _code_log_dev, _out_log_dev, elog_dev = run_cli(
-        dev_repo, ger_log_main, ["--color", "never"], monkeypatch
+    _clear_gerrit_cache(dev_repo)
+    code_log_dev, out_log_dev, elog_dev = run_cli(
+        dev_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
     )
-    assert str(dev_change["_number"]) in elog_dev
+    assert code_log_dev in (0, 1), elog_dev
+    dev_commits = json.loads(out_log_dev)["commits"]
+    dev_row = next(c for c in dev_commits if c.get("change_id") == cid)
+    assert dev_row["pushed"] is True
+    assert f"/+/{dev_change['_number']}" in (dev_row.get("gerrit_url") or "")
+    assert f"/+/{main_change['_number']}" not in (dev_row.get("gerrit_url") or "")
 
 
 def test_push_then_resolve_triplet_consistency(
@@ -146,8 +176,6 @@ def test_push_then_resolve_triplet_consistency(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``ger push`` then ``ger resolve`` / ``ger show`` agree on the same resolution block."""
-    from tests.integration.integration_helpers import prepare_topic_repo
-
     topic = f"triplet_{secrets.token_hex(4)}"
     repo = prepare_topic_repo(gerrit_integration_context, tmp_path, topic)
     _configure_gerrit_project(repo, gerrit_integration_context.project_verified)
@@ -176,3 +204,64 @@ def test_push_then_resolve_triplet_consistency(
     assert resolve_block["selected"]["number"] == live["_number"]
     assert resolve_block["selected"]["branch"] == topic
     assert resolve_block["selected"]["change_id"] == cid
+
+
+def test_ger_log_batch_query_budget_with_unpublished(
+    tmp_path,
+    gerrit_integration_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stack overlay must use O(chunks) project-scoped OR queries, not per Change-Id."""
+    topic = f"batch_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(gerrit_integration_context, tmp_path, topic)
+    _configure_gerrit_project(repo, gerrit_integration_context.project_verified)
+
+    n_pushed = _BATCH_OR_CHUNK + 5
+    messages = [f"batch commit {i}" for i in range(n_pushed)]
+    build_linear_chain(repo, messages)
+    code, _out, err = run_cli(
+        repo,
+        ger_push_main,
+        ["--yes", "--no-rebase-check"],
+        monkeypatch,
+    )
+    assert code == 0, err
+
+    # Local-only Change-Ids that Gerrit has never seen (empty batch must not N+1).
+    build_linear_chain(repo, ["unpublished a", "unpublished b", "unpublished c"])
+    total_with_ids = n_pushed + 3
+    expected_chunks = math.ceil(total_with_ids / _BATCH_OR_CHUNK)
+
+    _clear_gerrit_cache(repo)
+    queries: list[str] = []
+    original = GerritClient.query_changes
+
+    def _counting_query_changes(
+        self: GerritClient,
+        q: str,
+        *,
+        n: int = 25,
+        options: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        queries.append(q)
+        return original(self, q, n=n, options=options)
+
+    with patch.object(GerritClient, "query_changes", _counting_query_changes):
+        code_log, out_log, elog = run_cli(
+            repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
+        )
+    assert code_log in (0, 1), elog
+    commits = json.loads(out_log)["commits"]
+    assert len([c for c in commits if c.get("change_id")]) >= total_with_ids
+
+    batch_qs = [q for q in queries if "project:" in q and "change:" in q]
+    # Cold cache: one detail fetch pass (no probe). May be 1–2 chunks.
+    assert len(batch_qs) <= expected_chunks + 1, (
+        f"expected ~{expected_chunks} batch queries, got {len(batch_qs)}: {batch_qs!r}"
+    )
+    assert len(batch_qs) >= 1
+    for q in batch_qs:
+        assert "branch:" not in q, f"batch query must not scope by branch: {q!r}"
+    # Empty unpublished must not fall back to per-ref triplet queries.
+    per_change = [q for q in queries if "branch:" in q and q.count("change:") == 1]
+    assert per_change == [], f"unexpected per-change fallbacks: {per_change!r}"

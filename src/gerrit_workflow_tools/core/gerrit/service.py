@@ -137,6 +137,11 @@ class GerritService:
         return self.rest.web_base
 
     def _fetch_change_payloads(self, triplets: list[str]) -> dict[str, dict[str, Any]]:
+        """Batch-fetch ChangeInfo for *triplets* via project-scoped Change-Id OR.
+
+        Gerrit may return extra rows (same Change-Id on other branches); those are
+        kept under their ``id`` and aliased onto the requested target-branch keys.
+        """
         fetched = batch_load_change_details(self.rest, triplets)
         return alias_batch_fetch_results(triplets, fetched)
 

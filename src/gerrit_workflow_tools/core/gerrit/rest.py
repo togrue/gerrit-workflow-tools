@@ -363,7 +363,7 @@ class GerritClient:
         return out
 
     def probe_changes_updated(self, refs: list[str]) -> dict[str, str]:
-        """Return Gerrit ``updated`` values keyed by triplet ``id`` for a cheap freshness check."""
+        """Return Gerrit ``updated`` values keyed by requested refs (and payload ids)."""
 
         out: dict[str, str] = {}
         unique: list[str] = []
@@ -376,7 +376,7 @@ class GerritClient:
 
         def _probe_chunk(chunk: list[str]) -> list[dict[str, Any]]:
             q = _chunk_to_query(chunk)
-            return self.query_changes(q, n=len(chunk) + 10, options=["SKIP_DIFFSTAT"])
+            return self.query_changes(q, n=_batch_query_limit(chunk), options=["SKIP_DIFFSTAT"])
 
         def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
             def _job() -> list[dict[str, Any]]:
@@ -387,12 +387,14 @@ class GerritClient:
         chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
         jobs = [_probe_job(chunk) for chunk in chunks]
         rows_by_chunk = parallel_map(jobs)
+        fetched: dict[str, dict[str, Any]] = {}
         for rows in rows_by_chunk:
-            for row in rows:
-                triplet = row.get("id")
-                updated = row.get("updated")
-                if isinstance(triplet, str) and isinstance(updated, str):
-                    out[triplet] = updated
+            _ingest_change_rows(fetched, rows)
+        aliased = alias_batch_fetch_results(unique, fetched)
+        for key, payload in aliased.items():
+            updated = payload.get("updated")
+            if isinstance(updated, str):
+                out[key] = updated
         return out
 
 
@@ -507,26 +509,21 @@ def _ref_to_query(ref: str) -> str:
     return f"change:{kind[1]}"
 
 
-def _change_ids_from_chunk(chunk: list[str]) -> list[str]:
-    """Extract footer Change-Ids from triplet refs in a batch chunk."""
-    ids: list[str] = []
-    for ref in chunk:
-        try:
-            kind = _parse_batch_ref(ref)
-        except GerritApiError:
-            continue
-        if kind[0] == "triplet":
-            ids.append(kind[3])
-    return ids
-
-
-def _bare_change_or_query(change_ids: list[str]) -> str:
-    return " OR ".join(f"change:{cid}" for cid in change_ids)
+def _batch_query_limit(chunk: list[str]) -> int:
+    """Allow room for the same Change-Id on multiple branches in one response."""
+    return max(len(chunk) * 3 + 10, 25)
 
 
 def _chunk_to_query(chunk: list[str]) -> str:
-    """Build one OR query for a chunk, grouping shared project/branch triplets."""
-    triplet_groups: dict[tuple[str, str], list[str]] = {}
+    """Build one OR query for a chunk: project-scoped Change-Id OR (no branch filter).
+
+    Branch disambiguation is client-side via :func:`alias_batch_fetch_results`.
+    When project is unknown (non-triplet refs), fall back to bare ``change:I… OR …``.
+    """
+    by_project: dict[str, list[str]] = {}
+    seen_per_project: dict[str, set[str]] = {}
+    bare_ids: list[str] = []
+    seen_bare: set[str] = set()
     other_exprs: list[str] = []
 
     for ref in chunk:
@@ -536,18 +533,31 @@ def _chunk_to_query(chunk: list[str]) -> str:
             other_exprs.append(_ref_to_query(ref))
             continue
         if kind[0] == "triplet":
-            key = (kind[1], kind[2])
-            triplet_groups.setdefault(key, []).append(kind[3])
+            project, change_id = kind[1], kind[3]
+            seen = seen_per_project.setdefault(project, set())
+            if change_id in seen:
+                continue
+            seen.add(change_id)
+            by_project.setdefault(project, []).append(change_id)
         else:
-            other_exprs.append(f"change:{kind[1]}")
+            num = kind[1]
+            if num not in seen_bare:
+                seen_bare.add(num)
+                bare_ids.append(num)
 
     group_exprs: list[str] = []
-    for (project, branch), change_ids in triplet_groups.items():
+    for project, change_ids in by_project.items():
         if len(change_ids) == 1:
-            group_exprs.append(_triplet_query(project, branch, change_ids[0]))
+            group_exprs.append(f"project:{project} change:{change_ids[0]}")
         else:
             inner = " OR ".join(f"change:{cid}" for cid in change_ids)
-            group_exprs.append(f"project:{project} branch:{branch} ({inner})")
+            group_exprs.append(f"project:{project} ({inner})")
+
+    if bare_ids:
+        if len(bare_ids) == 1:
+            group_exprs.append(f"change:{bare_ids[0]}")
+        else:
+            group_exprs.append(" OR ".join(f"change:{cid}" for cid in bare_ids))
 
     return " OR ".join(group_exprs + other_exprs)
 
@@ -567,16 +577,19 @@ def alias_batch_fetch_results(
 ) -> dict[str, dict[str, Any]]:
     """Re-key batch results so each *requested* ref resolves to its ChangeInfo.
 
-    Gerrit may return compact ``project~number`` ids in ``payload["id"]`` while
-    callers look up by ``project~branch~Change-Id`` triplets.
+    Indexes by ``(change_id, branch)`` so duplicate Change-Ids on different
+    branches never last-wins. Keeps every fetched row under its Gerrit ``id``
+    (including compact ``project~number`` ids) and aliases requested
+    ``project~branch~Change-Id`` triplets onto the matching branch row.
     """
     out = dict(fetched)
-    by_change_id: dict[str, dict[str, Any]] = {}
+    by_change_branch: dict[tuple[str, str], dict[str, Any]] = {}
     by_number: dict[int, dict[str, Any]] = {}
     for payload in fetched.values():
         cid = payload.get("change_id")
-        if isinstance(cid, str):
-            by_change_id[norm_change_id(cid)] = payload
+        branch = payload.get("branch")
+        if isinstance(cid, str) and isinstance(branch, str) and branch:
+            by_change_branch[(cid, branch)] = payload
         num = payload.get("_number")
         if isinstance(num, int):
             by_number[num] = payload
@@ -592,9 +605,7 @@ def alias_batch_fetch_results(
         if kind[0] == "triplet":
             branch = kind[2]
             change_id = kind[3]
-            candidate = by_change_id.get(norm_change_id(change_id))
-            if candidate is not None and candidate.get("branch") == branch:
-                payload = candidate
+            payload = by_change_branch.get((change_id, branch))
         elif kind[0] == "numeric":
             payload = by_number.get(int(kind[1]))
         if payload is not None:
@@ -617,32 +628,13 @@ def _fallback_query_chunk(client: GerritClient, chunk: list[str]) -> list[dict[s
 
 
 def _query_change_chunk(client: GerritClient, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
+    """Run one batched OR query. Empty means none exist — do not per-change fallback."""
     q = _chunk_to_query(chunk)
     try:
-        rows = client.query_changes(q, n=len(chunk) + 10, options=opts)
-        if rows:
-            return rows
+        return client.query_changes(q, n=_batch_query_limit(chunk), options=opts)
     except GerritApiError as e:
-        logger.warning("batched Gerrit query failed (%s), trying bare Change-Id OR", e)
-        rows = []
-    else:
-        rows = []
-
-    change_ids = _change_ids_from_chunk(chunk)
-    if len(change_ids) == len(chunk) and len(change_ids) > 1:
-        bare_q = _bare_change_or_query(change_ids)
-        if bare_q != q:
-            try:
-                rows = client.query_changes(bare_q, n=len(chunk) + 10, options=opts)
-                if rows:
-                    return rows
-            except GerritApiError as e:
-                logger.warning("bare Change-Id OR query failed (%s), falling back per change", e)
-
-    if len(chunk) == 1:
+        logger.warning("batched Gerrit query failed (%s), falling back per change", e)
         return _fallback_query_chunk(client, chunk)
-    logger.warning("batched Gerrit query returned no rows for %d refs, falling back per change", len(chunk))
-    return _fallback_query_chunk(client, chunk)
 
 
 def query_single_change(client: GerritClient, ref: str) -> dict[str, Any] | None:
@@ -658,7 +650,11 @@ def query_single_change(client: GerritClient, ref: str) -> dict[str, Any] | None
 
 
 def batch_load_change_details(client: GerritClient, refs: list[str]) -> dict[str, dict[str, Any]]:
-    """Map triplet ``id`` to ChangeInfo using scoped OR-chunked queries."""
+    """Map Gerrit ``id`` to ChangeInfo using project-scoped Change-Id OR chunks.
+
+    Branch filtering is not applied in the query; callers use
+    :func:`alias_batch_fetch_results` to bind requested target-branch triplets.
+    """
     out: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
     unique: list[str] = []

@@ -137,8 +137,10 @@ command that *needs* it fails with the same actionable error as `ger push`
 **Problem:** the same `Change-Id: I…` footer can appear on changes targeting
 different branches (e.g. a change cherry-picked from `main` to a release branch).
 A bare `Change-Id` therefore is **not** a unique Gerrit key. The shared resolver
-in `core/gerrit/change_resolution.py` keys REST/cache lookups by triplet and
-never collapses multiple matches silently.
+in `core/gerrit/change_resolution.py` selects among matches using stack context.
+Stack overlay **batch-fetches** by Change-Id (optionally project-scoped) and keys
+the disk cache by triplet / `ChangeInfo.id`, never collapsing multiple matches
+silently.
 
 ### 3.1 Expected behavior
 

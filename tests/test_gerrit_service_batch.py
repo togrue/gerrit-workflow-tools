@@ -7,7 +7,11 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
-from gerrit_workflow_tools.core.gerrit.rest import _BATCH_OR_CHUNK, batch_load_change_details
+from gerrit_workflow_tools.core.gerrit.rest import (
+    _BATCH_OR_CHUNK,
+    alias_batch_fetch_results,
+    batch_load_change_details,
+)
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
 
@@ -65,7 +69,7 @@ def test_batch_load_uses_gerrit_project_not_scp_port_prefix() -> None:
     def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
         del n, options
         queries.append(q)
-        if f"project:test-git-graph-repo branch:dev change:{cid}" in q:
+        if f"project:test-git-graph-repo change:{cid}" in q:
             return [row]
         return []
 
@@ -76,7 +80,8 @@ def test_batch_load_uses_gerrit_project_not_scp_port_prefix() -> None:
     assert out[triplet] == row
     assert queries
     assert "project:29418/" not in queries[0]
-    assert f"project:test-git-graph-repo branch:dev change:{cid}" in queries[0]
+    assert "branch:" not in queries[0]
+    assert f"project:test-git-graph-repo change:{cid}" in queries[0]
 
 
 def test_batch_load_many_changes_issues_one_query_per_chunk() -> None:
@@ -94,7 +99,7 @@ def test_batch_load_many_changes_issues_one_query_per_chunk() -> None:
 
     def query_changes(q: str, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         del args, kwargs
-        if q.startswith("project:test-git-graph-repo branch:dev (change:"):
+        if q.startswith("project:test-git-graph-repo (change:"):
             return [row]
         return []
 
@@ -103,3 +108,59 @@ def test_batch_load_many_changes_issues_one_query_per_chunk() -> None:
     batch_load_change_details(client, refs)
 
     assert client.query_changes.call_count == 2
+
+
+def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
+    """Other-branch rows are cached but only the target-branch triplet is returned for lookup."""
+    cid = _change_id(1)
+    target = f"test-git-graph-repo~dev~{cid}"
+    other = f"test-git-graph-repo~main~{cid}"
+    row_dev = {
+        "id": "test-git-graph-repo~10",
+        "change_id": cid,
+        "project": "test-git-graph-repo",
+        "branch": "dev",
+        "_number": 10,
+        "updated": "2026-01-01 00:00:00.000000000",
+    }
+    row_main = {
+        "id": "test-git-graph-repo~11",
+        "change_id": cid,
+        "project": "test-git-graph-repo",
+        "branch": "main",
+        "_number": 11,
+        "updated": "2026-01-01 00:00:00.000000000",
+    }
+
+    rest = MagicMock()
+
+    def query_changes(q: str, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        del args, kwargs
+        assert "branch:" not in q
+        return [row_main, row_dev]
+
+    rest.query_changes.side_effect = query_changes
+
+    cache = MagicMock()
+    stored: dict[str, dict[str, Any]] = {}
+
+    def load_changes(triplets, **kwargs):
+        del kwargs
+        fetched = batch_load_change_details(rest, triplets)
+        aliased = alias_batch_fetch_results(triplets, fetched)
+        stored.update(aliased)
+        return {t: aliased[t] for t in triplets if t in aliased}
+
+    cache.load_changes.side_effect = load_changes
+
+    service = GerritService(rest, cache, cwd=tmp_path)
+    with patch(
+        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        return_value=_stack(),
+    ):
+        payloads = service.changes.get_payloads([cid])
+
+    assert payloads[target]["_number"] == 10
+    assert other not in payloads
+    assert stored[row_main["id"]]["_number"] == 11
+    assert stored[target]["_number"] == 10

@@ -188,8 +188,9 @@ sequenceDiagram
   Svc->>Res: resolve_stack_context, build_triplet
   Svc->>Cache: get/put change payloads
   Cache-->>Svc: cache hit/miss
-  Svc->>REST: batch GET changes/… (on miss)
-  REST-->>Svc: ChangeInfo JSON
+  Svc->>REST: batch project:P (change:I OR …) on miss
+  REST-->>Svc: ChangeInfo JSON (all branches)
+  Note over Svc: alias to target-branch triplets
   Svc->>Status: build_log_commit per row
   Svc->>Status: parallel follow-ups (comments, checks, reviewers)
   Svc-->>CLI: list[LogCommit]
@@ -382,7 +383,9 @@ First commit whose subject matches `gerrit.stopPattern`. Logic: `core/ready_calc
 
 ### Change identity
 
-Gerrit canonical key: **triplet** `project~branch~Change-Id`. Bare Change-Id is ambiguous across branches; always resolved with stack context.
+Gerrit canonical key: **triplet** `project~branch~Change-Id` (cache PK and follow-up REST paths). Bare Change-Id is ambiguous across branches; the shared resolver narrows with stack context.
+
+**Fetch ≠ identity:** stack overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status.
 
 ### Patchset status tokens
 

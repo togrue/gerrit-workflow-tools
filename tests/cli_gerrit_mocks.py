@@ -123,37 +123,52 @@ def _lookup_details(details: dict[str, dict[str, Any]], ref: str) -> list[dict[s
 
 
 def make_query_changes_impl(details: dict[str, dict[str, Any]]):
-    """Return a ``query_changes`` callable matching scoped triplet OR queries."""
+    """Return a ``query_changes`` callable for project-scoped OR and triplet queries."""
 
     def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
+        del n, options
         result: list[dict[str, Any]] = []
         seen: set[str] = set()
 
-        for project, branch, change_id in re.findall(
-            r"project:(\S+)\s+branch:(\S+)\s+change:(\S+)",
-            q,
-        ):
-            triplet = f"{project}~{branch}~{change_id}"
-            if triplet in seen:
-                continue
-            seen.add(triplet)
-            row = details.get(triplet)
-            if row is not None:
-                result.append(row)
+        def _add(row: dict[str, Any] | None) -> None:
+            if row is None:
+                return
+            key = (str(row.get("id") or ""), row.get("_number"))
+            if key in seen:
+                return
+            seen.add(key)
+            result.append(row)
 
-        # Bare ``change:`` lookup only for unscoped queries (not triplet OR batches).
+        # Split on project: clauses so batch ``project:P (change:… OR …)`` works.
+        parts = re.split(r"(?=project:)", q)
+        for part in parts:
+            part = part.strip().rstrip(")")
+            if not part.startswith("project:"):
+                continue
+            pm = re.match(r"project:(\S+)\s+(.*)", part, flags=re.DOTALL)
+            if not pm:
+                continue
+            project, rest = pm.group(1), pm.group(2).strip()
+            # Exact triplet scope: project:P branch:B change:I (single / fallback)
+            if re.match(r"branch:\S+\s+change:", rest) and "(" not in rest:
+                for branch, change_id in re.findall(r"branch:(\S+)\s+change:(\S+)", rest):
+                    change_id = change_id.rstrip(")")
+                    triplet = f"{project}~{branch}~{change_id}"
+                    _add(details.get(triplet))
+                continue
+            # Project-scoped Change-Id OR — return all branches for those ids.
+            for change_id in re.findall(r"change:(\S+)", rest):
+                change_id = change_id.rstrip(")")
+                for row in details.values():
+                    if row.get("project") == project and row.get("change_id") == change_id:
+                        _add(row)
+
+        # Bare ``change:`` when no project scope.
         if "project:" not in q:
             for change_ref in re.findall(r"change:(\S+)", q):
-                if change_ref.isdigit():
-                    key = f"num:{change_ref}"
-                else:
-                    key = f"cid:{change_ref}"
-                if key in seen:
-                    continue
-                seen.add(key)
+                change_ref = change_ref.rstrip(")")
                 for row in _lookup_details(details, change_ref):
-                    if row not in result:
-                        result.append(row)
+                    _add(row)
 
         return result
 

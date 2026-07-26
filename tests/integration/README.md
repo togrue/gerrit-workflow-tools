@@ -1,6 +1,6 @@
 # Integration tests (Docker + Gerrit)
 
-These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Phase 6 change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, push→resolve/show JSON agreement). Full **`ger log`** triplet-keyed overlay against live Gerrit is also exercised in unit tests (`tests/test_change_resolution_consistency.py`) because some Gerrit builds expose compact `project~number` ids that differ from the triplet lookup key `ger log` constructs locally.
+These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Phase 6 change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, live ``ger log --json`` overlay with compact ``project~number`` ids, batch query call budget, push→resolve/show JSON agreement).
 
 Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly.
 
