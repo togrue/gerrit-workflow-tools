@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from gerrit_workflow_tools.core.gerrit.rest import GerritClient
+from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit
 
 # Tokens accepted as bare reviewer login prefixes (aligned with push-input grammar).
@@ -65,7 +65,7 @@ def sorted_slugs_from_account_rows(
 
 
 def fetch_suggested_reviewer_slugs(
-    client: GerritClient,
+    client: HttpGerritRest,
     change_id: str,
     *,
     n: int = 100,
@@ -76,7 +76,7 @@ def fetch_suggested_reviewer_slugs(
 
 
 def fetch_reviewer_slugs_for_prefix(
-    client: GerritClient,
+    client: HttpGerritRest,
     *,
     change_id: str | None,
     token: str,

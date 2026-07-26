@@ -19,6 +19,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
+from gerrit_workflow_tools.core.config import gerrit_remote
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
     ChangeResolutionError,
@@ -27,10 +28,9 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_resolution_note,
     resolve_changeish,
 )
-from gerrit_workflow_tools.core.config import gerrit_remote
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
-    GerritClient,
+    HttpGerritRest,
     resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
@@ -115,7 +115,7 @@ def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any]) -> str
     return got
 
 
-def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritClient, arg: str) -> tuple[str, Resolution]:
+def _resolve_fixup_sha_gerrit(cwd: Path, client: HttpGerritRest, arg: str) -> tuple[str, Resolution]:
     resolution = resolve_changeish(arg.strip(), client=client, cwd=cwd, explicit_target=True)
     if resolution.selected is None:
         raise ChangeResolutionError(f"Gerrit change not found for {arg.strip()!r}")
@@ -137,7 +137,7 @@ def _resolve_fixup_sha_git(cwd: Path, arg: str) -> tuple[str, Resolution | None]
     resolution: Resolution | None = None
     try:
         web_base = resolve_gerrit_web_base(cwd)
-        client = GerritClient.from_cwd(web_base, cwd)
+        client = HttpGerritRest.from_cwd(web_base, cwd)
         resolution = resolve_changeish(token, client=client, cwd=cwd, explicit_target=True)
     except (ValueError, ChangeResolutionError, GerritApiError):
         resolution = None
@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
         elif _gerrit_changeish_kind(raw) is not None:
             web_base = resolve_gerrit_web_base(cwd)
-            client = GerritClient.from_cwd(web_base, cwd)
+            client = HttpGerritRest.from_cwd(web_base, cwd)
             fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
         else:
             fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw)

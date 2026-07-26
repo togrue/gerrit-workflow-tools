@@ -8,17 +8,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.cache import (
     DEFAULT_ACCOUNT_TTL_SECONDS,
     DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
     GerritCache,
 )
+from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.models import Account, Change, Comment
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
-    GerritClient,
     GerritRest,
+    HttpGerritRest,
     alias_batch_fetch_results,
     batch_load_change_details,
     change_id_for_gerrit_rest_path,
@@ -26,7 +26,6 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     probe_changes_updated,
     resolve_gerrit_web_base,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +111,7 @@ class GerritService:
         if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
             refresh = True
         web_base = resolve_gerrit_web_base(cwd)
-        rest = GerritClient.from_cwd(web_base, cwd)
+        rest = HttpGerritRest.from_cwd(web_base, cwd)
         cache = GerritCache.for_web_base(web_base)
         return cls(
             rest,

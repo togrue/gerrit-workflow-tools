@@ -216,7 +216,7 @@ flowchart TB
   classify[change_resolution.classify_changeish]
   stack_ctx[change_resolution.resolve_stack_context]
   resolve[change_resolution.resolve_changeish]
-  rest[GerritClient REST queries]
+  rest[HttpGerritRest REST queries]
   output[Resolution: local_sha + SelectedChange + note]
 
   input --> classify
@@ -311,13 +311,13 @@ flowchart LR
 | `cli_push.py` | `ger push` | ready_calc, change_id, push_reviewers, GerritService |
 | `cli_edit.py` | `ger edit`, `ger reword` | stack, cli_log (attention), rebase_sequence_editor |
 | `cli_rebase.py` | `ger rebase` | stack, rebase_enricher |
-| `cli_fix.py` | `ger fix` | change_resolution, GerritClient |
+| `cli_fix.py` | `ger fix` | change_resolution, HttpGerritRest |
 | `cli_resolve.py` | `ger resolve` | change_resolution, GerritService |
 | `cli_sha.py` | `ger sha` | stack, change_id |
 | `cli_changeid.py` | `ger change-id` | change_id, stack |
 | `cli_setup.py` | `ger setup` | config |
 | `cli_cache.py` | `ger cache` | GerritCache |
-| `cli_fetch_api.py` | `ger fetch-api` | GerritClient (debug) |
+| `cli_fetch_api.py` | `ger fetch-api` | HttpGerritRest (debug) |
 | `cli_bash_completion.py` | `ger bash-completion` | bash_completion_generator |
 
 Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli_style.py` (ANSI helpers).
@@ -344,7 +344,7 @@ Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli
 
 | Module | Role |
 |--------|------|
-| `rest.py` | `GerritClient` — HTTP, auth, batch/chunked GET, parallel helpers |
+| `rest.py` | `HttpGerritRest` — HTTP, auth, batch/chunked GET, parallel helpers |
 | `cache.py` | `GerritCache` — SQLite persistence keyed by triplet |
 | `service.py` | `GerritService` — cache-aware batch fetch, `fetch_gerrit_data`, sub-APIs |
 | `change_resolution.py` | Changeish classification, stack context, ambiguity narrowing |
@@ -419,12 +419,13 @@ Two nearly identical “last-line footer” extractors with **different validati
 
 Used inconsistently: stack/enrichment paths use `parse_change_id`; change-id CLI and `change_resolution` use `extract_change_id_from_msg`. A single canonical parser would avoid subtle mismatches.
 
-### 2. Two ways to construct `GerritService`
+### 2. Commands construct their own Gerrit access
 
-- `GerritService.from_cwd()` — used by log, show, resolve, rebase enricher
-- Manual `GerritClient` + `GerritCache` + `GerritService(...)` — duplicated in `cli_push._service_from_cwd`
+`GerritService.from_cwd()` is now the single construction path (`cli_push._service_from_cwd`, a drifting second copy that ignored `GER_CACHE_REFRESH`, was removed).
 
-`cli_fix`, `cli_fetch_api`, and `reviewer_catalog` bypass `GerritService` entirely and call `GerritClient` directly for one-off REST calls.
+Remaining friction: every command still *constructs* its own access rather than receiving it, so there is no place to substitute Gerrit. `cli_fix`, `cli_fetch_api`, and `reviewer_catalog` bypass `GerritService` entirely and build an `HttpGerritRest` for one-off REST calls.
+
+`GerritRest` (in `rest.py`) is the seam this is heading toward: single-round-trip Gerrit operations, with batching, aliasing and caching above it. `HttpGerritRest` is currently its only implementation; injecting it into commands is the remaining step.
 
 ### 3. CLI-layer coupling
 
@@ -448,7 +449,7 @@ Consider consolidating under `core/reviewer/` or similar.
 
 ### 6. Show resolution vs generic resolution
 
-`core/gerrit_show.py` wraps `change_resolution.resolve_changeish` but also calls `GerritClient.get_change` directly to build a `CommitStatusInput` for remote-only changes. Overlaps with what `ger resolve` already exposes; show-specific row building could sit closer to the status model.
+`core/gerrit_show.py` wraps `change_resolution.resolve_changeish` but also calls `HttpGerritRest.get_change` directly to build a `CommitStatusInput` for remote-only changes. Overlaps with what `ger resolve` already exposes; show-specific row building could sit closer to the status model.
 
 ### 7. Presentation depending on CLI styling
 
@@ -456,7 +457,7 @@ Consider consolidating under `core/reviewer/` or similar.
 
 ### 8. `stack.py` depends on Gerrit REST types
 
-`resolve_stack_commit` accepts an optional `GerritClient` and imports `change_resolution` lazily. Stack inspection is mostly git-only; the Gerrit type hint and changeish branches blur the boundary between **local stack** and **Gerrit resolution** (the latter already lives in `change_resolution.py`).
+`resolve_stack_commit` accepts an optional `HttpGerritRest` and imports `change_resolution` lazily. Stack inspection is mostly git-only; the Gerrit type hint and changeish branches blur the boundary between **local stack** and **Gerrit resolution** (the latter already lives in `change_resolution.py`).
 
 ### 9. Parallel rebase editor modules
 

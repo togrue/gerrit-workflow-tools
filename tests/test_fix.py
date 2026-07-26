@@ -150,7 +150,7 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
     def _gerrit_must_not_run(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("Gerrit must not be consulted for a bare integer changeish")
 
-    monkeypatch.setattr("gerrit_workflow_tools.cli_fix.GerritClient", _gerrit_must_not_run)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_fix.HttpGerritRest", _gerrit_must_not_run)
     monkeypatch.setattr("gerrit_workflow_tools.cli_fix.resolve_gerrit_web_base", _gerrit_must_not_run)
 
     (stack_repo / "a.txt").write_text("bare int\n", encoding="utf-8")

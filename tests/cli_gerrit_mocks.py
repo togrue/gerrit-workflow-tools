@@ -176,10 +176,10 @@ def make_query_changes_impl(details: dict[str, dict[str, Any]]):
 
 
 def gerrit_client_class_stub(inst: MagicMock) -> MagicMock:
-    """Stand-in for the ``GerritClient`` class where both construction paths yield *inst*.
+    """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
 
-    Production builds clients via ``GerritClient.from_cwd(web_base, cwd)``; patching the
-    class with a plain ``return_value`` only covers ``GerritClient(...)`` and leaves
+    Production builds clients via ``HttpGerritRest.from_cwd(web_base, cwd)``; patching the
+    class with a plain ``return_value`` only covers ``HttpGerritRest(...)`` and leaves
     ``.from_cwd()`` handing back a fresh auto-mock.
     """
     cls = MagicMock(return_value=inst)
@@ -194,7 +194,7 @@ def patch_gerrit_client_for_queries(
     details_by_change_id: dict[str, dict[str, Any]],
     web_base: str = "https://g.example",
 ) -> Iterator[MagicMock]:
-    """Patch ``resolve_gerrit_web_base`` and ``GerritClient`` on *module* (e.g. ``cli_log``)."""
+    """Patch ``resolve_gerrit_web_base`` and ``HttpGerritRest`` on *module* (e.g. ``cli_log``)."""
     inst = MagicMock()
     inst.query_changes.side_effect = make_query_changes_impl(details_by_change_id)
 
@@ -232,12 +232,12 @@ def patch_gerrit_client_for_queries(
 
     with (
         patch(f"{module}.resolve_gerrit_web_base", return_value=web_base, create=True),
-        patch(f"{module}.GerritClient", client_cls, create=True),
+        patch(f"{module}.HttpGerritRest", client_cls, create=True),
         patch(
             "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
             return_value=web_base,
         ),
-        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", client_cls),
+        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest", client_cls),
     ):
         yield inst
 

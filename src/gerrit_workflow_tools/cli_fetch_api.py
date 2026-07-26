@@ -7,7 +7,7 @@ import json
 import sys
 
 from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, configure_logging, cwd_from_env
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    client = GerritClient.from_cwd(web_base, cwd)
+    client = HttpGerritRest.from_cwd(web_base, cwd)
     try:
         data = client.get_json(args.path)
     except GerritApiError as e:

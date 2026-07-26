@@ -121,7 +121,7 @@ class GerritRest(Protocol):
     failure; interpreting or filtering those payloads is the caller's job. There is
     deliberately no raw-path escape hatch (``get_json``) — that would make the set of
     things crossing this seam unbounded. ``cli_fetch_api`` uses a concrete
-    :class:`GerritClient` for exactly that reason.
+    :class:`HttpGerritRest` for exactly that reason.
     """
 
     web_base: str
@@ -181,7 +181,7 @@ class GerritRest(Protocol):
         """Set or clear the private flag on a change."""
 
 
-class GerritClient:
+class HttpGerritRest:
     """HTTP client for Gerrit REST ``/a/`` endpoints using git-config credentials."""
 
     def __init__(self, web_base: str, *, auth: GerritAuth | None = None) -> None:
@@ -194,7 +194,7 @@ class GerritClient:
         self.auth = auth
 
     @classmethod
-    def from_cwd(cls, web_base: str, cwd: Path | str | None) -> GerritClient:
+    def from_cwd(cls, web_base: str, cwd: Path | str | None) -> HttpGerritRest:
         """Build a client with credentials read from *cwd*'s git config."""
         return cls(web_base, auth=gerrit_auth_from_config(cwd))
 

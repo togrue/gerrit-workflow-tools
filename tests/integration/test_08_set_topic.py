@@ -1,4 +1,4 @@
-"""Integration: GerritClient.set_topic sets and clears the topic on a change."""
+"""Integration: HttpGerritRest.set_topic sets and clears the topic on a change."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import secrets
 import pytest
 
 from gerrit_workflow_tools.cli_push import main as ger_push_main
-from gerrit_workflow_tools.core.gerrit.rest import GerritClient
+from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest
 from tests.conftest import run_cli
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.integration_helpers import (
@@ -23,7 +23,7 @@ def test_set_topic_sets_and_clears(
     gerrit_admin_session: GerritHttpSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """GerritClient.set_topic must set a non-empty topic and clear it without raising."""
+    """HttpGerritRest.set_topic must set a non-empty topic and clear it without raising."""
     ctx = gerrit_integration_context
     topic_branch = f"st_{secrets.token_hex(4)}"
     repo = prepare_topic_repo(ctx, tmp_path, topic_branch)
@@ -35,8 +35,8 @@ def test_set_topic_sets_and_clears(
     change_id = first_change_id_from_tip(gerrit_admin_session, ctx.project_verified, topic_branch)
     assert change_id, "expected an open change after push"
 
-    # GerritClient reads credentials from the git config set by prepare_topic_repo.
-    client = GerritClient.from_cwd(ctx.http_base, repo)
+    # HttpGerritRest reads credentials from the git config set by prepare_topic_repo.
+    client = HttpGerritRest.from_cwd(ctx.http_base, repo)
 
     # --- set a non-empty topic ---
     new_topic = f"my-topic-{secrets.token_hex(3)}"

@@ -25,7 +25,7 @@ from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import (
     _BATCH_OR_CHUNK,
-    GerritClient,
+    HttpGerritRest,
     resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -234,10 +234,10 @@ def test_ger_log_batch_query_budget_with_unpublished(
 
     _clear_gerrit_cache(repo)
     queries: list[str] = []
-    original = GerritClient.query_changes
+    original = HttpGerritRest.query_changes
 
     def _counting_query_changes(
-        self: GerritClient,
+        self: HttpGerritRest,
         q: str,
         *,
         n: int = 25,
@@ -246,7 +246,7 @@ def test_ger_log_batch_query_budget_with_unpublished(
         queries.append(q)
         return original(self, q, n=n, options=options)
 
-    with patch.object(GerritClient, "query_changes", _counting_query_changes):
+    with patch.object(HttpGerritRest, "query_changes", _counting_query_changes):
         code_log, out_log, elog = run_cli(
             repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
         )

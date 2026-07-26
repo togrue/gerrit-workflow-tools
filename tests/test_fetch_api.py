@@ -31,7 +31,7 @@ def test_fetch_api_prints_json(
     mock_client.get_json.return_value = {"_number": 1, "subject": "hi"}
 
     monkeypatch.setattr(
-        "gerrit_workflow_tools.cli_fetch_api.GerritClient",
+        "gerrit_workflow_tools.cli_fetch_api.HttpGerritRest",
         gerrit_client_class_stub(mock_client),
     )
 
@@ -60,7 +60,7 @@ def test_fetch_api_gerrit_error(
     mock_client.get_json.side_effect = GerritApiError("Gerrit HTTP 404", status=404)
 
     monkeypatch.setattr(
-        "gerrit_workflow_tools.cli_fetch_api.GerritClient",
+        "gerrit_workflow_tools.cli_fetch_api.HttpGerritRest",
         gerrit_client_class_stub(mock_client),
     )
 

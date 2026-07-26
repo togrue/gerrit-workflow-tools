@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_context
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.reviewer_completion import (
     account_query_exact_lookup,
@@ -42,7 +42,7 @@ class ReviewerCatalog:
     def __init__(
         self,
         *,
-        client: GerritClient | None,
+        client: HttpGerritRest | None,
         status_note: str | None = None,
         candidates: list[str] | None = None,
         change_id_hint: str | None = None,
@@ -86,7 +86,7 @@ class ReviewerCatalog:
                 change_id_hint=None,
             )
 
-        client = GerritClient.from_cwd(web_base, cwd)
+        client = HttpGerritRest.from_cwd(web_base, cwd)
         catalog = cls(
             client=client,
             status_note=None,
