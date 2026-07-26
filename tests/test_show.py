@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -69,29 +68,18 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = {}
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--json", cid],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", cid],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 0
     data = json_stdout(out)
     assert data["sha"] == sha
-    assert any(call.kwargs.get("options") == list(LOG_QUERY_OPTIONS) for call in inst.query_changes.call_args_list)
+    assert any(call.kwargs.get("options") == list(LOG_QUERY_OPTIONS) for call in store.calls_to("query_changes"))
 
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,25 +89,14 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
     ch["_number"] = 42
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = {}
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--json", "change:42"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 0
     data = json_stdout(out)
     assert data["change_id"] == cid
@@ -134,25 +111,14 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=1, number=42)
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = {}
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--json", "change:42"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 1
     data = json_stdout(out)
     assert "awaiting-review" in data["attention_reasons"]
@@ -176,26 +142,15 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
             }
         ]
     }
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        inst.web_base = "https://g.example"
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = comments
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--json", "change:42", "--comment-tail-lines", "3"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "change:42", "--comment-tail-lines", "3"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 0
     data = json_stdout(out)
     c0 = data["comments"][0]
@@ -231,25 +186,15 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
             },
         ]
     }
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = comments
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--color=never", "change:42"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 0
     assert "please fix" not in out
     assert "done" not in out
@@ -274,25 +219,15 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
             }
         ]
     }
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = comments
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--color=never", "change:42"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 1
     assert "epsilon.txt:908" in out
     assert "grt (Tobias Grün)" in out
@@ -316,25 +251,15 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
             }
         ]
     }
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = comments
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--json", "change:42"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 0
     data = json_stdout(out)
     assert data["comments"][0]["author"] == "grt (Tobias Grün)"
@@ -357,26 +282,15 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
             }
         ]
     }
-    with (
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value="https://g.example",
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest") as client_cls,
-    ):
-        inst = MagicMock()
-        inst.web_base = "https://g.example"
-        client_cls.return_value = inst
-        client_cls.from_cwd.return_value = inst
-        inst.query_changes.return_value = [ch]
-        inst.get_change.return_value = ch
-        inst.get_comments.return_value = comments
-        code, out, _err = run_cli(
-            stack_repo,
-            gshow_main,
-            ["--json", "change:42", "--full"],
-            monkeypatch,
-        )
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "change:42", "--full"],
+        monkeypatch,
+        gerrit=store,
+    )
     assert code == 0
     data = json_stdout(out)
     c0 = data["comments"][0]

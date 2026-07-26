@@ -175,8 +175,11 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
     Returns the original *text* unchanged if Gerrit is not configured for this
     repository (no ``gerrit.webUrl`` in git config).  Raises on Gerrit API errors
     so the caller can attach a diagnostic comment and fall back gracefully.
+
+    A supplied *gerrit* implementation makes the config check moot: it already knows its
+    own web base, matching ``GerritService.from_cwd(rest=…)``.
     """
-    if not gerrit_web_url(cwd):
+    if gerrit is None and not gerrit_web_url(cwd):
         return text  # Not a Gerrit repository — pass through silently.
 
     lines = text.splitlines(keepends=True)
