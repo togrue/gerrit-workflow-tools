@@ -419,13 +419,22 @@ Two nearly identical “last-line footer” extractors with **different validati
 
 Used inconsistently: stack/enrichment paths use `parse_change_id`; change-id CLI and `change_resolution` use `extract_change_id_from_msg`. A single canonical parser would avoid subtle mismatches.
 
-### 2. Commands construct their own Gerrit access
+### 2. Gerrit access — resolved
 
-`GerritService.from_cwd()` is now the single construction path (`cli_push._service_from_cwd`, a drifting second copy that ignored `GER_CACHE_REFRESH`, was removed).
+**`GerritRest`** (`core/gerrit/rest.py`) is the seam: single-round-trip Gerrit operations, with chunking, `OR` batching, triplet aliasing, the SQLite cache and parallelism all *above* it. No raw-path escape hatch crosses it, and it carries no `cwd` — credentials are resolved when an implementation is constructed.
 
-Remaining friction: every command still *constructs* its own access rather than receiving it, so there is no place to substitute Gerrit. `cli_fix`, `cli_fetch_api`, and `reviewer_catalog` bypass `GerritService` entirely and build an `HttpGerritRest` for one-off REST calls.
+Two implementations:
 
-`GerritRest` (in `rest.py`) is the seam this is heading toward: single-round-trip Gerrit operations, with batching, aliasing and caching above it. `HttpGerritRest` is currently its only implementation; injecting it into commands is the remaining step.
+| Implementation | Use |
+|----------------|-----|
+| `HttpGerritRest` | Talks to a real Gerrit over HTTP |
+| `ChangeStore` | Answers from ChangeInfo payloads; stateful writes; authored payloads in unit tests, recorded payloads for replay |
+
+Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd(cwd, rest=…)`; when supplied, `gerrit.webUrl` resolution is skipped and the web base comes from the implementation. `GerritService.from_cwd()` is the single construction path (`cli_push._service_from_cwd`, a drifting copy that ignored `GER_CACHE_REFRESH`, was removed).
+
+Cache-only / offline operation is a **trust window** policy on `GerritService`, not another `GerritRest` — the cache sits above the seam, so an implementation cannot express staleness.
+
+Two deliberate exceptions: `cli_fetch_api` builds a concrete `HttpGerritRest` (its purpose is GETting a raw path from the real server), and `reviewer_catalog` builds one from inside the interactive push prompt, where threading an implementation through prompt-toolkit is not currently worth it.
 
 ### 3. CLI-layer coupling
 
