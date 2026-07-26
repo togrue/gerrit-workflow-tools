@@ -306,6 +306,19 @@ class ChangeApi:
             raise GerritApiError(f"no matching change {change_id}")
         return Change(payload)
 
+    def find_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Return already-known ChangeInfo rows grouped by footer Change-Id, across all branches.
+
+        Answers from local state only — this never contacts Gerrit. It relies on a prior
+        :meth:`get_payloads` having stored every branch carrying these Change-Ids, which the
+        stack overlay's project-scoped ``OR`` batch does as a side effect. Call it after the
+        overlay, not before: on a cold cache it returns nothing rather than fetching.
+
+        Used to derive multi-branch resolution notes without a per-Change-Id query storm.
+        """
+
+        return self._service.cache.find_payloads_by_footer_change_ids(change_ids)
+
     def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 

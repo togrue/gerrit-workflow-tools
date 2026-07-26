@@ -258,9 +258,8 @@ def _fetch_enriched_commits(
         print(f"gerrit error: {e}", file=sys.stderr)
         return None, EXIT_RESOLUTION_ERROR, {}
 
-    # Resolution notes from cache only — batch fetch already upserted all branches.
     footer_ids = [row.change_id for row in commit_data if row.change_id]
-    by_footer = service.cache.find_payloads_by_footer_change_ids(footer_ids)
+    by_footer = service.changes.find_by_footer_change_ids(footer_ids)
     notes_by_sha: dict[str, str] = {}
     for row in commit_data:
         if not row.change_id:

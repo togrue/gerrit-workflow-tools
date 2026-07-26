@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
+from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.gerrit.rest import (
     _BATCH_OR_CHUNK,
     alias_batch_fetch_results,
@@ -164,3 +166,43 @@ def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
     assert other not in payloads
     assert stored[row_main["id"]]["_number"] == 11
     assert stored[target]["_number"] == 10
+
+
+def test_find_by_footer_change_ids_returns_every_branch_after_an_overlay_fetch(tmp_path: Path) -> None:
+    """The multi-branch note source: one batch fetch, then a local lookup across branches."""
+    cid = _change_id(7)
+    rows = {
+        f"proj~main~{cid}": {
+            "id": f"proj~main~{cid}",
+            "change_id": cid,
+            "project": "proj",
+            "branch": "main",
+            "_number": 1,
+            "updated": "2026-01-01 00:00:00.000000000",
+        },
+        f"proj~dev~{cid}": {
+            "id": f"proj~dev~{cid}",
+            "change_id": cid,
+            "project": "proj",
+            "branch": "dev",
+            "_number": 2,
+            "updated": "2026-01-01 00:00:00.000000000",
+        },
+    }
+    store = ChangeStore(rows)
+    service = GerritService(store, GerritCache(tmp_path / "cache.db", web_base=store.web_base), cwd=tmp_path)
+
+    with patch(
+        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        return_value=StackContext(project="proj", target_branch="main", push_branch="main"),
+    ):
+        # Cold: nothing stored yet, so the lookup finds nothing rather than fetching.
+        assert service.changes.find_by_footer_change_ids([cid]) == {cid: []}
+        assert store.queries() == []
+
+        service.changes.get_payloads([cid])
+        found = service.changes.find_by_footer_change_ids([cid])
+
+    assert sorted(row["branch"] for row in found[cid]) == ["dev", "main"]
+    # The lookup itself is local: the only query issued was the overlay's batch fetch.
+    assert len(store.queries()) == 1
