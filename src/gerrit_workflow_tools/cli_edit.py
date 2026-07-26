@@ -17,13 +17,14 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.cli_log import (
-    load_annotated_commits,
+from gerrit_workflow_tools.core.annotated_stack import (
+    branches_needing_upstream,
+    load_annotated_stack,
     resolve_rev_range,
-    rev_range_needs_upstream_resolution,
 )
 from gerrit_workflow_tools.core.config import resolve_working_branch
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import first_commit_needing_edit_attention
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.stack import (
@@ -38,19 +39,17 @@ logger = logging.getLogger(__name__)
 
 def resolve_first_edit_attention_sha(cwd: Path, *, gerrit: GerritRest | None = None) -> str:
     """Return full SHA of the oldest commit with unresolved comments or a failed build."""
-    rev_range, rev_range_exit = resolve_rev_range(cwd, None)
-    if rev_range_exit is not None:
-        raise GitError("could not resolve commit range for stack")
-    assert rev_range is not None
-    for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
+    rev_range = resolve_rev_range(cwd, None)
+    for branch in branches_needing_upstream(cwd, rev_range):
         if not require_branch_upstream(cwd, branch):
             raise GitError("upstream not configured")
-    commits, load_exit, _notes_by_sha = load_annotated_commits(cwd, rev_range, gerrit=gerrit)
-    if commits is None:
-        if load_exit == 0:
-            raise GitError("no commits in stack")
-        raise GitError("could not load stack commits")
-    target = first_commit_needing_edit_attention(commits)
+    try:
+        stack_view = load_annotated_stack(cwd, rev_range, gerrit=gerrit)
+    except (ValueError, ChangeResolutionError, GerritApiError) as e:
+        raise GitError(f"could not load stack commits: {e}") from e
+    if not stack_view.commits:
+        raise GitError("no commits in stack")
+    target = first_commit_needing_edit_attention(stack_view.commits)
     if target is None:
         raise GitError("no commit needs edit attention (unresolved comments or build failed)")
     return target.sha

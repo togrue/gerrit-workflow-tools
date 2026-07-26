@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_log import (
-    _load_commits_in_range,
-    resolve_rev_range,
-    rev_range_needs_upstream_resolution,
-)
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
+from gerrit_workflow_tools.core.annotated_stack import (
+    branches_needing_upstream,
+    commit_rows_in_range,
+    resolve_rev_range,
+)
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
@@ -358,7 +358,7 @@ def _install_log_git_mocks(
 
     monkeypatch.setattr("gerrit_workflow_tools.core.config.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: None)
+    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: None)
     return git_out_calls, git_calls
 
 
@@ -366,13 +366,11 @@ def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: py
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="feat/x")
 
-    rev_range, exit_code = resolve_rev_range(cwd, None)
-    assert exit_code is None
+    rev_range = resolve_rev_range(cwd, None)
     assert rev_range == "feat/x@{upstream}..feat/x"
 
-    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
-    assert load_exit == 0
-    assert commit_data is None
+    commit_data = commit_rows_in_range(cwd, rev_range)
+    assert commit_data == []
 
     assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
     assert [args for args, _cwd, _check in git_calls] == [
@@ -384,13 +382,11 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
 
-    rev_range, exit_code = resolve_rev_range(cwd, None)
-    assert exit_code is None
+    rev_range = resolve_rev_range(cwd, None)
     assert rev_range == "@{upstream}..HEAD"
 
-    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
-    assert load_exit == 0
-    assert commit_data is None
+    commit_data = commit_rows_in_range(cwd, rev_range)
+    assert commit_data == []
 
     assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
     assert [args for args, _cwd, _check in git_calls] == [
@@ -401,15 +397,13 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
 def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: "feat/x")
+    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: "feat/x")
 
-    rev_range, exit_code = resolve_rev_range(cwd, None)
-    assert exit_code is None
+    rev_range = resolve_rev_range(cwd, None)
     assert rev_range == "feat/x@{upstream}..feat/x"
 
-    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
-    assert load_exit == 0
-    assert commit_data is None
+    commit_data = commit_rows_in_range(cwd, rev_range)
+    assert commit_data == []
 
     assert git_out_calls == []
     assert [args for args, _cwd, _check in git_calls] == [
@@ -421,13 +415,11 @@ def test_log_rev_range_single_branch_expands_to_branch_upstream_range(monkeypatc
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range, exit_code = resolve_rev_range(cwd, "bak")
-    assert exit_code is None
+    rev_range = resolve_rev_range(cwd, "bak")
     assert rev_range == "bak@{upstream}..bak"
 
-    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
-    assert load_exit == 0
-    assert commit_data is None
+    commit_data = commit_rows_in_range(cwd, rev_range)
+    assert commit_data == []
 
     assert git_out_calls == []
     assert [args for args, _cwd, _check in git_calls] == [
@@ -443,13 +435,11 @@ def test_log_rev_range_explicit_ranges_are_forwarded_verbatim(
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range, exit_code = resolve_rev_range(cwd, arg_rev_range)
-    assert exit_code is None
+    rev_range = resolve_rev_range(cwd, arg_rev_range)
     assert rev_range == arg_rev_range
 
-    commit_data, load_exit = _load_commits_in_range(cwd, rev_range)
-    assert load_exit == 0
-    assert commit_data is None
+    commit_data = commit_rows_in_range(cwd, rev_range)
+    assert commit_data == []
 
     assert git_out_calls == []
     assert [args for args, _cwd, _check in git_calls] == [
@@ -462,13 +452,11 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
     _ = git_out_calls
 
-    rev_range, exit_code = resolve_rev_range(cwd, "a..b")
-    assert exit_code is None
+    rev_range = resolve_rev_range(cwd, "a..b")
     assert rev_range == "a..b"
 
-    commit_data, load_exit = _load_commits_in_range(cwd, rev_range, first_parent=False)
-    assert load_exit == 0
-    assert commit_data is None
+    commit_data = commit_rows_in_range(cwd, rev_range, first_parent=False)
+    assert commit_data == []
 
     assert [args for args, _cwd, _check in git_calls] == [
         ("log", "--reverse", "a..b", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
@@ -484,15 +472,15 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
         ("one@{upstream}...two@{upstream}", "unused", ["one", "two"]),
     ],
 )
-def test_rev_range_needs_upstream_resolution(
+def test_branches_needing_upstream(
     monkeypatch: pytest.MonkeyPatch,
     rev_range: str,
     head_branch: str,
     want: list[str],
 ) -> None:
-    monkeypatch.setattr("gerrit_workflow_tools.cli_log.current_branch", lambda _cwd: head_branch)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_log.resolve_working_branch", lambda _cwd: None)
-    got = rev_range_needs_upstream_resolution(Path("mock-repo"), rev_range)
+    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.current_branch", lambda _cwd: head_branch)
+    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: None)
+    got = branches_needing_upstream(Path("mock-repo"), rev_range)
     assert got == want
 
 
@@ -503,7 +491,7 @@ def test_rev_range_needs_upstream_resolution(
 
 def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_path: Path) -> None:
     """
-    By default ``_load_commits_in_range`` uses ``first_parent=True``, matching
+    By default ``commit_rows_in_range`` uses ``first_parent=True``, matching
     Gerrit's relation-chain semantics.  Only the 2 first-parent commits are
     returned; the 2 side-branch commits are excluded.
     """
@@ -513,8 +501,7 @@ def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_pat
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data, exit_code = _load_commits_in_range(repo, rev_range)
-    assert exit_code == 0
+    commit_data = commit_rows_in_range(repo, rev_range)
     assert commit_data is not None
     subjects = [row.summary for row in commit_data]
     assert len(subjects) == 2, f"expected 2 first-parent commits, got {len(subjects)}: {subjects}"
@@ -534,8 +521,7 @@ def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data, exit_code = _load_commits_in_range(repo, rev_range, first_parent=False)
-    assert exit_code == 0
+    commit_data = commit_rows_in_range(repo, rev_range, first_parent=False)
     assert commit_data is not None
     subjects = [row.summary for row in commit_data]
     assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"

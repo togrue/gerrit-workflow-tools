@@ -50,6 +50,10 @@ _Avoid_: enrichment, sync, fetch
 How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`).
 _Avoid_: state, sync status
 
+**Annotated stack**:
+The **local stack** after the **Gerrit overlay** and **attention** have been applied — what `ger log` prints, `ger edit --first-attention-commit` searches, and the rebase enricher annotates a todo from. Not a separate fetch: it is the local stack plus what Gerrit knows about it.
+_Avoid_: stack view, review stack, enriched commits
+
 **Attention**:
 The verdict that a commit needs the author's action — unresolved comments, failed CI, missing Code-Review +2, or a blocked position in the chain. Drives `ger log`'s exit code and `ger edit --first-attention-commit`.
 _Avoid_: needs work, flagged, blocked

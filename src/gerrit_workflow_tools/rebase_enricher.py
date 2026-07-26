@@ -10,14 +10,13 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
+from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.config import gerrit_web_url
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommitStatusInput,
     LogCommit,
-    commit_blocks_chain_for_submittability,
-    determine_attention,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import parse_change_id
@@ -217,17 +216,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
         return text
 
     service = GerritService.from_cwd(cwd, rest=gerrit)
-    commits = service.fetch_gerrit_data(commit_inputs, cwd=cwd)
-
-    # Annotate attention (chain-blocked aware, oldest-first).
-    for idx, commit in enumerate(commits):
-        chain_blocked = False
-        if commit.pushed:
-            for earlier in commits[:idx]:
-                if earlier.pushed and commit_blocks_chain_for_submittability(earlier):
-                    chain_blocked = True
-                    break
-        commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
+    commits = annotate(commit_inputs, service=service, cwd=cwd)
 
     # Build short_sha → LogCommit lookup.
     commit_by_sha: dict[str, LogCommit] = {c.short_sha: c for c in commits}

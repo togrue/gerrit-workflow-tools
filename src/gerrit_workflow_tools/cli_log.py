@@ -5,9 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import re
 import sys
-from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     EXIT_RESOLUTION_ERROR,
@@ -27,22 +25,16 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
     visible_len,
 )
-from gerrit_workflow_tools.core.config import current_branch, log_defaults, resolve_working_branch
-from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeResolutionError,
-    format_resolution_note,
-    resolution_from_change_rows,
-    resolve_stack_context,
+from gerrit_workflow_tools.core.annotated_stack import (
+    branches_needing_upstream,
+    load_annotated_stack,
+    resolve_rev_range,
 )
+from gerrit_workflow_tools.core.config import log_defaults
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    CommitStatusInput,
-    LogCommit,
-    annotate_attention,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError
-from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -54,26 +46,6 @@ from gerrit_workflow_tools.render.commit_row import (
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
-_UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
-
-
-def load_annotated_commits(
-    cwd: Path,
-    rev_range: str,
-    *,
-    first_parent: bool = False,
-    gerrit: GerritRest | None = None,
-) -> tuple[list[LogCommit] | None, int, dict[str, str]]:
-    """Load local commits in *rev_range*, enrich from Gerrit, and annotate attention."""
-    commit_data, exit_code = _load_commits_in_range(cwd, rev_range, first_parent=first_parent)
-    if commit_data is None:
-        return None, exit_code, {}
-    commits, gerrit_exit, notes_by_sha = _fetch_enriched_commits(cwd, commit_data, gerrit=gerrit)
-    if gerrit_exit is not None:
-        return None, gerrit_exit, {}
-    assert commits is not None
-    annotate_attention(commits)
-    return commits, 0, notes_by_sha
 
 
 # ---------------------------------------------------------------------------
@@ -185,101 +157,6 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_rev_range(cwd: Path, arg_rev_range: str | None) -> tuple[str | None, int | None]:
-    """Return revision range or (None, exit_code) on error."""
-    if arg_rev_range:
-        if ".." in arg_rev_range:
-            return arg_rev_range, None
-        return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}", None
-    try:
-        branch = resolve_working_branch(cwd) or current_branch(cwd)
-    except GitError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return None, 2
-    if branch == "HEAD":
-        return "@{upstream}..HEAD", None
-    return f"{branch}@{{upstream}}..{branch}", None
-
-
-def rev_range_needs_upstream_resolution(cwd: Path, rev_range: str) -> list[str]:
-    """Return branch names that need upstream resolution for *rev_range*."""
-    current = resolve_working_branch(cwd) or current_branch(cwd)
-    required: list[str] = []
-    seen: set[str] = set()
-    for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):
-        branch = (match.group("branch") or current).lstrip(".")
-        if branch in ("HEAD", ""):
-            branch = current
-        if branch in seen:
-            continue
-        seen.add(branch)
-        required.append(branch)
-    return required
-
-
-def _load_commits_in_range(
-    cwd: Path, rev_range: str, *, first_parent: bool = True
-) -> tuple[list[CommitStatusInput] | None, int]:
-    """Load local commits for Gerrit enrichment; return (commit_data, exit_code)."""
-    try:
-        rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
-    except GitError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return None, 2
-    if not rows:
-        print("(no commits in range)")
-        return None, 0
-    commit_data = [
-        CommitStatusInput(sha=c.sha, short_sha=c.short_sha, summary=c.subject, change_id=c.change_id) for c in rows
-    ]
-    return commit_data, 0
-
-
-def _fetch_enriched_commits(
-    cwd: Path,
-    commit_data: list[CommitStatusInput],
-    *,
-    gerrit: GerritRest | None = None,
-) -> tuple[list[LogCommit] | None, int | None, dict[str, str]]:
-    """Fetch Gerrit-enriched commit status list, or (None, exit_code, {}) on error."""
-    try:
-        service = GerritService.from_cwd(cwd, rest=gerrit)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return None, EXIT_RESOLUTION_ERROR, {}
-
-    try:
-        commits = service.fetch_gerrit_data(commit_data, cwd=cwd)
-        stack = resolve_stack_context(cwd)
-    except ChangeResolutionError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return None, EXIT_RESOLUTION_ERROR, {}
-    except GerritApiError as e:
-        print(f"gerrit error: {e}", file=sys.stderr)
-        return None, EXIT_RESOLUTION_ERROR, {}
-
-    footer_ids = [row.change_id for row in commit_data if row.change_id]
-    by_footer = service.changes.find_by_footer_change_ids(footer_ids)
-    notes_by_sha: dict[str, str] = {}
-    for row in commit_data:
-        if not row.change_id:
-            continue
-        try:
-            resolution = resolution_from_change_rows(
-                row.change_id,
-                by_footer.get(row.change_id, []),
-                push_branch=stack.push_branch,
-                explicit_target=False,
-            )
-        except ChangeResolutionError:
-            continue
-        note = format_resolution_note(resolution)
-        if note:
-            notes_by_sha[row.sha] = note
-
-    return commits, None, notes_by_sha
-
-
 def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     visible: list[LogCommit],
     *,
@@ -371,20 +248,33 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
     show_url = bool(args.url) or gdef["show_url"] or verbose
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
-    rev_range, rev_range_exit = resolve_rev_range(cwd, args.rev_range)
-    if rev_range_exit is not None:
-        return rev_range_exit
-    assert rev_range is not None
-    for branch in rev_range_needs_upstream_resolution(cwd, rev_range):
+    try:
+        rev_range = resolve_rev_range(cwd, args.rev_range)
+    except GitError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    for branch in branches_needing_upstream(cwd, rev_range):
         if not require_branch_upstream(cwd, branch):
             return 1
 
-    commits, load_exit, notes_by_sha = load_annotated_commits(
-        cwd, rev_range, first_parent=not args.follow_merges, gerrit=gerrit
-    )
-    if commits is None:
-        return load_exit
+    try:
+        stack_view = load_annotated_stack(cwd, rev_range, first_parent=not args.follow_merges, gerrit=gerrit)
+    except GitError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    except (ValueError, ChangeResolutionError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_RESOLUTION_ERROR
+    except GerritApiError as e:
+        print(f"gerrit error: {e}", file=sys.stderr)
+        return EXIT_RESOLUTION_ERROR
 
+    if not stack_view.commits:
+        print("(no commits in range)")
+        return 0
+
+    commits = stack_view.commits
+    notes_by_sha = stack_view.notes_by_sha
     use_color = args.color != "never"
     for commit in commits:
         note = notes_by_sha.get(commit.sha)

@@ -331,6 +331,7 @@ Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli
 | `stack.py` | Stack snapshot, commit ranges, merge-base, changeish→SHA for stack |
 | `change_id.py` | Change-Id parse/validate/generate/fix helpers |
 | `ready_calc.py` | Ready boundary and push-range computation |
+| `annotated_stack.py` | Annotated stack: rev-range resolution, Gerrit overlay, attention, multi-branch notes |
 | `gerrit_change_status.py` | `LogCommit` model, patchset status, attention, merged equivalence |
 | `comment_chains.py` | Unresolved inline comment threads |
 | `gerrit_show.py` | `ger show`-specific commit row resolution |
@@ -436,16 +437,24 @@ Cache-only / offline operation is a **trust window** policy on `GerritService`, 
 
 Two deliberate exceptions: `cli_fetch_api` builds a concrete `HttpGerritRest` (its purpose is GETting a raw path from the real server), and `reviewer_catalog` builds one from inside the interactive push prompt, where threading an implementation through prompt-toolkit is not currently worth it.
 
-### 3. CLI-layer coupling
+### 3. The annotated stack — resolved
 
-- `cli_edit.py` imports `load_annotated_commits`, `resolve_rev_range` from **`cli_log.py`**. Stack loading and Gerrit enrichment logic lives in a command module instead of core or a shared `core/stack_view.py`.
-- `_print_resolution_note` is copy-pasted in `cli_show.py` and `cli_resolve.py`.
+`core/annotated_stack.py` owns the **annotated stack**: the local stack plus Gerrit overlay plus attention. It replaces `cli_log.load_annotated_commits` and the rev-range helpers that lived beside it, so `cli_edit` no longer imports upward into a command module.
 
-### 4. Rev-range resolution in the wrong layer
+Two entry points, because only some callers start from a revision range:
 
-`resolve_rev_range` and `rev_range_needs_upstream_resolution` live in `cli_log.py` but are needed by edit (and conceptually by any stack-scoped command). Belongs in `core/stack.py` or a small `core/rev_range.py`.
+| Entry point | Used by |
+|-------------|---------|
+| `annotate(rows, service=…, cwd=…)` | `ger log`, `ger show` (one row), rebase enricher (rows from a todo) |
+| `load_annotated_stack(cwd, rev_range, …)` | `ger log`, `ger edit --first-attention-commit` |
 
-### 5. Split reviewer concerns
+The module neither prints nor prompts. `branches_needing_upstream` reports which branches lack an upstream and each CLI decides whether to prompt; `resolve_rev_range` raises rather than returning an exit code.
+
+Chain-blocking now has one implementation. `rebase_enricher` previously carried its own copy of the rule, which agreed with `annotate_attention` by coincidence rather than construction.
+
+Remaining coupling: `_print_resolution_note` is still copy-pasted in `cli_show.py` and `cli_resolve.py`.
+
+### 4. Split reviewer concerns
 
 Reviewer logic spans four locations:
 
@@ -456,23 +465,23 @@ Reviewer logic spans four locations:
 
 Consider consolidating under `core/reviewer/` or similar.
 
-### 6. Show resolution vs generic resolution
+### 5. Show resolution vs generic resolution
 
 `core/gerrit_show.py` wraps `change_resolution.resolve_changeish` but also calls `HttpGerritRest.get_change` directly to build a `CommitStatusInput` for remote-only changes. Overlaps with what `ger resolve` already exposes; show-specific row building could sit closer to the status model.
 
-### 7. Presentation depending on CLI styling
+### 6. Presentation depending on CLI styling
 
 `summary_highlight.py` imports `cli_style.py` (ANSI colors). `render/commit_row.py` also depends on `cli_style`. Core-ish highlighting rules (`stopPattern`) are mixed with terminal color concerns — a thin split between “what to highlight” (core/config) and “how to colorize” (presentation) would be cleaner.
 
-### 8. `stack.py` depends on Gerrit REST types
+### 7. `stack.py` depends on Gerrit REST types
 
 `resolve_stack_commit` accepts an optional `HttpGerritRest` and imports `change_resolution` lazily. Stack inspection is mostly git-only; the Gerrit type hint and changeish branches blur the boundary between **local stack** and **Gerrit resolution** (the latter already lives in `change_resolution.py`).
 
-### 9. Parallel rebase editor modules
+### 8. Parallel rebase editor modules
 
 `rebase_enricher.py` (full-stack Gerrit annotations) and `rebase_sequence_editor.py` (single-commit edit/reword/drop) are separate entry points invoked via `GIT_SEQUENCE_EDITOR`. Functionally distinct but both are subprocess hooks at package root with no shared module.
 
-### 10. Legacy doc reference
+### 9. Legacy doc reference
 
 Earlier versions of this document referenced `core/gerrit_client.py`. That module was merged into `core/gerrit/service.py` + `core/gerrit/rest.py`. All high-level fetch paths should go through `GerritService`.
 

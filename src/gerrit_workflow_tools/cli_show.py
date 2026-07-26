@@ -21,6 +21,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_text,
 )
+from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -32,7 +33,6 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
-    determine_attention,
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
@@ -180,7 +180,7 @@ def main(  # pylint: disable=too-many-return-statements,too-many-branches,too-ma
     row = resolved.row
     is_local = resolved.is_local_commit
     try:
-        commits = service.fetch_gerrit_data([row], cwd=cwd)
+        commits = annotate([row], service=service, cwd=cwd)
     except ChangeResolutionError as e:
         print(f"error: {e}", file=sys.stderr)
         return EXIT_RESOLUTION_ERROR
@@ -192,7 +192,7 @@ def main(  # pylint: disable=too-many-return-statements,too-many-branches,too-ma
         print("error: no commit data", file=sys.stderr)
         return _EXIT_ERROR
     commit = commits[0]
-    attention = determine_attention(commit, chain_blocked=False)
+    attention = commit.attention_reasons
 
     rest_key = _gerrit_rest_key(commit, resolution)
     if commit.pushed and rest_key:
