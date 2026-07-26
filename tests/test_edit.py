@@ -11,8 +11,8 @@ from gerrit_workflow_tools.cli_edit import main as gedit_main
 from gerrit_workflow_tools.cli_edit import main_reword as greword_main
 from gerrit_workflow_tools.cli_edit import resolve_first_edit_attention_sha
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git
+from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
 

@@ -13,4 +13,4 @@ Freshness is a policy question, and `GerritService` already owns the knobs for i
 
 ## Consequences
 
-`GerritRest` has two implementations rather than three: `HttpGerritRest` and `ChangeStore`. If you are looking at the seam and thinking "there is only one production implementation, we should add a cache-only one" — that is this decision, and the reason it doesn't work is not visible from the code.
+This leaves `HttpGerritRest` as the only shipped implementation of `GerritRest` (`ChangeStore` lives under `tests/`). So the observation "there is only one production implementation, we should add a cache-only one" is *correct* — and is exactly what this decision rejects. Cache-only behaviour belongs above the seam, not beside `HttpGerritRest`.

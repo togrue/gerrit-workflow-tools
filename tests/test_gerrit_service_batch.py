@@ -8,13 +8,13 @@ from unittest.mock import MagicMock, patch
 
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.gerrit.rest import (
     _BATCH_OR_CHUNK,
     alias_batch_fetch_results,
     batch_load_change_details,
 )
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from tests.change_store import ChangeStore
 
 
 def _change_id(n: int) -> str:

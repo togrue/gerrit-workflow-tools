@@ -1,5 +1,10 @@
 """ChangeStore — a :class:`~gerrit_workflow_tools.core.gerrit.rest.GerritRest` backed by payloads.
 
+Lives under ``tests/`` because no shipped code path constructs one: it exists so tests and
+integration replay can substitute at the Gerrit seam. Conformance to ``GerritRest`` is
+therefore not covered by mypy (which runs on ``src/``) and is asserted at runtime instead —
+see ``test_change_store.py::test_change_store_implements_every_gerrit_rest_operation``.
+
 Answers Gerrit questions from a dictionary of ChangeInfo payloads instead of HTTP. The
 payloads can be authored by hand (unit tests) or recorded from a real server (integration
 replay); the store does not care which, which is what makes it one adapter with two data
@@ -22,9 +27,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
 DEFAULT_WEB_BASE = "https://gerrit.example"
 
@@ -310,10 +315,3 @@ class ChangeStore:
         payload = self._row_or_raise(change_id)
         payload["private"] = on
         return payload
-
-
-if TYPE_CHECKING:
-
-    def _conforms(store: ChangeStore) -> GerritRest:
-        """Type-check only: fail the build if ChangeStore drifts from the seam."""
-        return store

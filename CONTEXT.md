@@ -69,7 +69,7 @@ The **GerritRest** implementation that speaks HTTP to a real Gerrit. Credentials
 _Avoid_: GerritClient, real client
 
 **ChangeStore**:
-The **GerritRest** implementation backed by a dictionary of ChangeInfo payloads. Stateful — writes update the payloads, so reads see them. Fed by authored payloads in unit tests and by recorded payloads when replaying integration fixtures.
+The **GerritRest** implementation backed by a dictionary of ChangeInfo payloads. Lives under `tests/` and is not shipped — no `ger` command constructs one. Stateful — writes update the payloads, so reads see them. Fed by authored payloads in unit tests and by recorded payloads when replaying integration fixtures.
 _Avoid_: mock, fake client, stub
 
 **Trust window**:

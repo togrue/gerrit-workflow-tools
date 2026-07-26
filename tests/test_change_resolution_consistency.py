@@ -17,8 +17,8 @@ from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git, git_out
+from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
     stack_rows_mb_to_head,

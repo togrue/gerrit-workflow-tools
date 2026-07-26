@@ -7,8 +7,8 @@ import pytest
 
 from gerrit_workflow_tools.cli_fix import main as ger_fix_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git, git_out
+from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
 from tests.conftest import run_cli
 

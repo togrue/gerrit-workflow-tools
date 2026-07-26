@@ -18,7 +18,6 @@ from gerrit_workflow_tools.cli_log import (
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     PatchsetStatus,
@@ -26,6 +25,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     determine_attention,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
+from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     stack_rows_mb_to_head,

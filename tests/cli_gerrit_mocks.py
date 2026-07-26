@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, parse_change_id
+from tests.change_store import ChangeStore
 
 
 def change_info_for_sha(

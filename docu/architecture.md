@@ -423,12 +423,12 @@ Used inconsistently: stack/enrichment paths use `parse_change_id`; change-id CLI
 
 **`GerritRest`** (`core/gerrit/rest.py`) is the seam: single-round-trip Gerrit operations, with chunking, `OR` batching, triplet aliasing, the SQLite cache and parallelism all *above* it. No raw-path escape hatch crosses it, and it carries no `cwd` — credentials are resolved when an implementation is constructed.
 
-Two implementations:
+Two implementations, only one of which ships:
 
 | Implementation | Use |
 |----------------|-----|
 | `HttpGerritRest` | Talks to a real Gerrit over HTTP |
-| `ChangeStore` | Answers from ChangeInfo payloads; stateful writes; authored payloads in unit tests, recorded payloads for replay |
+| `ChangeStore` (`tests/change_store.py`) | Answers from ChangeInfo payloads; stateful writes; authored payloads in unit tests, recorded payloads for replay. Not shipped — nothing in `src/` constructs one |
 
 Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd(cwd, rest=…)`; when supplied, `gerrit.webUrl` resolution is skipped and the web base comes from the implementation. `GerritService.from_cwd()` is the single construction path (`cli_push._service_from_cwd`, a drifting copy that ignored `GER_CACHE_REFRESH`, was removed).
 

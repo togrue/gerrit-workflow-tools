@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
-from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
+from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
 
 CID_A = "I" + "a" * 40
@@ -183,3 +185,38 @@ def test_comments_seeded_by_number_are_found_by_triplet() -> None:
     store = _store()
     store.set_comments("1", {"a.py": [{"id": "c1", "message": "hi"}]})
     assert store.get_comments(f"testproj~main~{CID_A}")["a.py"][0]["message"] == "hi"
+
+
+# ---------------------------------------------------------------------------
+# Conformance to the seam
+# ---------------------------------------------------------------------------
+
+
+def _protocol_operations() -> dict[str, inspect.Signature]:
+    return {
+        name: inspect.signature(member)
+        for name, member in vars(GerritRest).items()
+        if callable(member) and not name.startswith("_")
+    }
+
+
+def test_change_store_implements_every_gerrit_rest_operation() -> None:
+    """ChangeStore must satisfy GerritRest.
+
+    mypy only runs over ``src/`` and ChangeStore lives here, so the type checker cannot
+    catch drift between the two. This asserts it instead — without it, adding an operation
+    to the seam would silently leave ChangeStore behind and every test using it would keep
+    passing against a stale surface.
+    """
+    operations = _protocol_operations()
+    assert len(operations) >= 14, f"expected the full seam, discovered {sorted(operations)}"
+
+    for name, signature in operations.items():
+        implementation = getattr(ChangeStore, name, None)
+        assert implementation is not None, f"ChangeStore does not implement GerritRest.{name}"
+        assert inspect.signature(implementation) == signature, f"ChangeStore.{name} has drifted from GerritRest.{name}"
+
+
+def test_change_store_exposes_web_base() -> None:
+    """``web_base`` is part of the seam, not just an implementation detail."""
+    assert ChangeStore({}, web_base="https://g.example/").web_base == "https://g.example"
