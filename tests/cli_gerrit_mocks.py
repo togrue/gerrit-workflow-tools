@@ -175,6 +175,18 @@ def make_query_changes_impl(details: dict[str, dict[str, Any]]):
     return query_changes
 
 
+def gerrit_client_class_stub(inst: MagicMock) -> MagicMock:
+    """Stand-in for the ``GerritClient`` class where both construction paths yield *inst*.
+
+    Production builds clients via ``GerritClient.from_cwd(web_base, cwd)``; patching the
+    class with a plain ``return_value`` only covers ``GerritClient(...)`` and leaves
+    ``.from_cwd()`` handing back a fresh auto-mock.
+    """
+    cls = MagicMock(return_value=inst)
+    cls.from_cwd.return_value = inst
+    return cls
+
+
 @contextmanager
 def patch_gerrit_client_for_queries(
     module: str,
@@ -216,17 +228,16 @@ def patch_gerrit_client_for_queries(
     inst.get_comments.return_value = {}
     inst.web_base = web_base
 
+    client_cls = gerrit_client_class_stub(inst)
+
     with (
         patch(f"{module}.resolve_gerrit_web_base", return_value=web_base, create=True),
-        patch(f"{module}.GerritClient", return_value=inst, create=True),
+        patch(f"{module}.GerritClient", client_cls, create=True),
         patch(
             "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
             return_value=web_base,
         ),
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.GerritClient",
-            return_value=inst,
-        ),
+        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", client_cls),
     ):
         yield inst
 

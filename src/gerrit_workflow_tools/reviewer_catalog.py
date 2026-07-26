@@ -86,7 +86,7 @@ class ReviewerCatalog:
                 change_id_hint=None,
             )
 
-        client = GerritClient(web_base, cwd=str(cwd))
+        client = GerritClient.from_cwd(web_base, cwd)
         catalog = cls(
             client=client,
             status_note=None,

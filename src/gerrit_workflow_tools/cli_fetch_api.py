@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    client = GerritClient(web_base, cwd=str(cwd))
+    client = GerritClient.from_cwd(web_base, cwd)
     try:
         data = client.get_json(args.path)
     except GerritApiError as e:

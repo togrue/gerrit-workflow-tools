@@ -8,6 +8,7 @@ import logging
 import re
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 from urllib.error import HTTPError, URLError
@@ -71,13 +72,26 @@ def _strip_magic_json_prefix(raw: str) -> str:
     return raw
 
 
-def _basic_auth_header(cwd: str | None) -> str | None:
+@dataclass(frozen=True)
+class GerritAuth:
+    """Resolved HTTP Basic credentials for one Gerrit host."""
+
+    user: str
+    secret: str
+
+    def header(self) -> str:
+        """Return the ``Authorization`` header value."""
+        token = base64.b64encode(f"{self.user}:{self.secret}".encode()).decode()
+        return f"Basic {token}"
+
+
+def gerrit_auth_from_config(cwd: Path | str | None) -> GerritAuth | None:
+    """Read ``gerrit.user`` plus ``gerrit.token``/``gerrit.password``, or ``None`` when unset."""
     user = gerrit_user(cwd)
     secret = gerrit_token(cwd) or gerrit_password(cwd)
     if not user or secret is None:
         return None
-    token = base64.b64encode(f"{user}:{secret}".encode()).decode()
-    return f"Basic {token}"
+    return GerritAuth(user=user, secret=secret)
 
 
 def parallel_map(
@@ -170,20 +184,27 @@ class GerritRest(Protocol):
 class GerritClient:
     """HTTP client for Gerrit REST ``/a/`` endpoints using git-config credentials."""
 
-    def __init__(self, web_base: str, *, cwd: str | None = None) -> None:
-        """Use *web_base* (HTTPS origin) and optional *cwd* for resolving ``gerrit.user`` / token config."""
+    def __init__(self, web_base: str, *, auth: GerritAuth | None = None) -> None:
+        """Use *web_base* (HTTPS origin) with credentials already resolved.
+
+        Credentials are a construction-time input, not something read from git config per
+        request — that is what keeps ``cwd`` off :class:`GerritRest`.
+        """
         self.web_base = web_base.rstrip("/")
-        self.cwd = cwd
+        self.auth = auth
+
+    @classmethod
+    def from_cwd(cls, web_base: str, cwd: Path | str | None) -> GerritClient:
+        """Build a client with credentials read from *cwd*'s git config."""
+        return cls(web_base, auth=gerrit_auth_from_config(cwd))
 
     def _auth_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {"Accept": "*/*"}
-        auth = _basic_auth_header(self.cwd)
-        if auth:
-            headers["Authorization"] = auth
-        else:
+        if self.auth is None:
             raise GerritApiError(
                 "missing Gerrit credentials in git config; set gerrit.user and gerrit.password (or gerrit.token)"
             )
+        headers["Authorization"] = self.auth.header()
         return headers
 
     def _url(self, path: str, *, params: dict[str, str] | list[tuple[str, str]] | None) -> str:

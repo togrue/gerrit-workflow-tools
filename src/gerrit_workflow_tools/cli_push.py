@@ -47,9 +47,8 @@ from gerrit_workflow_tools.core.config import (
     set_branch_config,
     stop_pattern,
 )
-from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritClient, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.push_reviewers import (
@@ -73,13 +72,6 @@ from gerrit_workflow_tools.push_input_line import (
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)
-
-
-def _service_from_cwd(cwd: Path) -> GerritService:
-    web_base = resolve_gerrit_web_base(cwd)
-    client = GerritClient(web_base, cwd=str(cwd))
-    client.web_base = web_base
-    return GerritService(client, GerritCache.for_web_base(web_base))
 
 
 _REBASE_ONTO_REMOTE_HINT = (
@@ -481,7 +473,7 @@ def _commit_lines_for_preview(
                     "Gerrit credentials are not configured; set gerrit.user and "
                     "gerrit.token (or gerrit.password) for REST access."
                 )
-            service = _service_from_cwd(cwd)
+            service = GerritService.from_cwd(cwd)
             raw_details = service.changes.get_payloads(triplets)
             details_by_triplet = {
                 str(payload["id"]): payload
@@ -1108,7 +1100,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        service = _service_from_cwd(cwd)
+        service = GerritService.from_cwd(cwd)
         rc_rest = _apply_reviewer_strategy_after_push(
             cwd,
             service,

@@ -36,7 +36,7 @@ def test_set_topic_sets_and_clears(
     assert change_id, "expected an open change after push"
 
     # GerritClient reads credentials from the git config set by prepare_topic_repo.
-    client = GerritClient(ctx.http_base, cwd=str(repo))
+    client = GerritClient.from_cwd(ctx.http_base, repo)
 
     # --- set a non-empty topic ---
     new_topic = f"my-topic-{secrets.token_hex(3)}"

@@ -137,7 +137,7 @@ def _resolve_fixup_sha_git(cwd: Path, arg: str) -> tuple[str, Resolution | None]
     resolution: Resolution | None = None
     try:
         web_base = resolve_gerrit_web_base(cwd)
-        client = GerritClient(web_base, cwd=str(cwd))
+        client = GerritClient.from_cwd(web_base, cwd)
         resolution = resolve_changeish(token, client=client, cwd=cwd, explicit_target=True)
     except (ValueError, ChangeResolutionError, GerritApiError):
         resolution = None
@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
         elif _gerrit_changeish_kind(raw) is not None:
             web_base = resolve_gerrit_web_base(cwd)
-            client = GerritClient(web_base, cwd=str(cwd))
+            client = GerritClient.from_cwd(web_base, cwd)
             fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
         else:
             fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw)

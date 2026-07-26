@@ -31,22 +31,11 @@ from gerrit_workflow_tools.core.gerrit.rest import (
 logger = logging.getLogger(__name__)
 
 
-def _effective_cwd(service: GerritService) -> str | Path | None:
-    cwd = getattr(service, "_cwd", None) or getattr(service.rest, "cwd", None)
-    if isinstance(cwd, (str, Path)):
-        text = str(cwd)
-        if text and "MagicMock" not in text:
-            path = Path(text)
-            if path.is_dir():
-                return path
-    return os.getcwd()
-
-
 def _service_stack_context(service: GerritService) -> StackContext:
     """Resolve stack context once per service instance (batch paths may call this many times)."""
     cached = getattr(service, "_stack_context", None)
     if cached is None:
-        cached = resolve_stack_context(_effective_cwd(service))
+        cached = resolve_stack_context(service.cwd)
         service._stack_context = cached
     return cached
 
@@ -100,7 +89,9 @@ class GerritService:
     ) -> None:
         self.rest = rest
         self.cache = cache
-        self._cwd = str(cwd) if cwd is not None else getattr(rest, "cwd", None)
+        # The repo this service reports on. Explicit, because GerritRest has no cwd to
+        # scavenge it from; defaults to the process cwd for callers that don't care.
+        self.cwd = str(cwd) if cwd is not None else os.getcwd()
         self.trust_window_seconds = trust_window_seconds
         self.account_ttl_seconds = account_ttl_seconds
         self.refresh = refresh
@@ -121,7 +112,7 @@ class GerritService:
         if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
             refresh = True
         web_base = resolve_gerrit_web_base(cwd)
-        rest = GerritClient(web_base, cwd=str(cwd) if cwd is not None else None)
+        rest = GerritClient.from_cwd(web_base, cwd)
         cache = GerritCache.for_web_base(web_base)
         return cls(
             rest,
@@ -172,11 +163,7 @@ class GerritService:
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
-        effective_cwd = cwd if cwd is not None else _effective_cwd(self)
-        if cwd is not None:
-            stack = resolve_stack_context(effective_cwd)
-        else:
-            stack = _service_stack_context(self)
+        stack = resolve_stack_context(cwd) if cwd is not None else _service_stack_context(self)
 
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}

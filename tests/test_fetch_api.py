@@ -10,6 +10,7 @@ import pytest
 from gerrit_workflow_tools.cli_fetch_api import main as fetch_api_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git
+from tests.cli_gerrit_mocks import gerrit_client_class_stub
 from tests.conftest import json_stdout, run_cli
 
 
@@ -31,7 +32,7 @@ def test_fetch_api_prints_json(
 
     monkeypatch.setattr(
         "gerrit_workflow_tools.cli_fetch_api.GerritClient",
-        lambda *a, **k: mock_client,
+        gerrit_client_class_stub(mock_client),
     )
 
     code, out, err = run_cli(stack_repo, fetch_api_main, ["accounts/self/detail"], monkeypatch)
@@ -60,7 +61,7 @@ def test_fetch_api_gerrit_error(
 
     monkeypatch.setattr(
         "gerrit_workflow_tools.cli_fetch_api.GerritClient",
-        lambda *a, **k: mock_client,
+        gerrit_client_class_stub(mock_client),
     )
 
     code, _out, err = run_cli(stack_repo, fetch_api_main, ["changes/nope"], monkeypatch)

@@ -12,6 +12,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import Commit
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
+    gerrit_client_class_stub,
     make_query_changes_impl,
     stack_rows_mb_to_head,
 )
@@ -46,7 +47,7 @@ def _patch_gerrit(details: dict, *, web_base: str = "https://g.example"):
     return (
         patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=web_base),
         patch("gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base", return_value=web_base),
-        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", return_value=mock_client),
+        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", gerrit_client_class_stub(mock_client)),
     )
 
 
@@ -315,7 +316,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     with (
         patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value="https://g.example"),
         patch("gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base", return_value="https://g.example"),
-        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", return_value=broken_client),
+        patch("gerrit_workflow_tools.core.gerrit.service.GerritClient", gerrit_client_class_stub(broken_client)),
     ):
         result = _enrich_todo(text, stack_repo)
 

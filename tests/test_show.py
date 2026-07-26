@@ -78,6 +78,7 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     ):
         inst = MagicMock()
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = {}
@@ -112,6 +113,7 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
     ):
         inst = MagicMock()
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = {}
@@ -144,6 +146,7 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
     ):
         inst = MagicMock()
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = {}
@@ -186,6 +189,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
         inst = MagicMock()
         inst.web_base = "https://g.example"
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
@@ -239,6 +243,7 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
     ):
         inst = MagicMock()
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
@@ -281,6 +286,7 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
     ):
         inst = MagicMock()
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
@@ -322,6 +328,7 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
     ):
         inst = MagicMock()
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
@@ -363,6 +370,7 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
         inst = MagicMock()
         inst.web_base = "https://g.example"
         client_cls.return_value = inst
+        client_cls.from_cwd.return_value = inst
         inst.query_changes.return_value = [ch]
         inst.get_change.return_value = ch
         inst.get_comments.return_value = comments
