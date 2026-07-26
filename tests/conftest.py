@@ -123,16 +123,21 @@ def malformed_cid_repo(tmp_path: Path, _malformed_cid_repo_template: Path) -> Pa
 
 def run_cli(
     cwd: Path,
-    main_fn: Callable[[list[str] | None], int],
+    main_fn: Callable[..., int],
     argv: Sequence[str],
     monkeypatch: pytest.MonkeyPatch,
     *,
     catch_sys_exit: bool = False,
+    gerrit: object | None = None,
 ) -> tuple[int, str, str]:
     """Run a CLI main with cwd set; capture stdout and stderr.
 
     If *catch_sys_exit* is true, ``SystemExit`` (e.g. from ``--help``) is
     turned into a return code instead of propagating.
+
+    Pass *gerrit* to hand the command a ``GerritRest`` implementation (usually a
+    :class:`ChangeStore`) instead of letting it build an ``HttpGerritRest``. Commands that
+    take no ``gerrit`` parameter must not be given one.
     """
     import io
     import sys
@@ -142,8 +147,9 @@ def run_cli(
     err_buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", out_buf)
     monkeypatch.setattr(sys, "stderr", err_buf)
+    kwargs = {"gerrit": gerrit} if gerrit is not None else {}
     try:
-        code = main_fn(list(argv))
+        code = main_fn(list(argv), **kwargs)
     except SystemExit as e:
         if not catch_sys_exit:
             raise

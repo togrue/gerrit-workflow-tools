@@ -12,12 +12,12 @@ from gerrit_workflow_tools.cli_common import EXIT_AMBIGUOUS
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
     head_change_id,
-    patch_gerrit_client_for_queries,
 )
 from tests.conftest import json_stdout, run_cli
 
@@ -91,10 +91,7 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     assert code == 0
     data = json_stdout(out)
     assert data["sha"] == sha
-    assert any(
-        call.kwargs.get("options") == list(LOG_QUERY_OPTIONS)
-        for call in inst.query_changes.call_args_list
-    )
+    assert any(call.kwargs.get("options") == list(LOG_QUERY_OPTIONS) for call in inst.query_changes.call_args_list)
 
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -408,8 +405,7 @@ def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.Monke
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=77)
     details = {str(detail["id"]): detail}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch)
+    code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "commit " in out and sha in out
     assert sha[:8] in out
@@ -429,8 +425,7 @@ def test_gshow_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.Monke
         cwd=stack_repo,
     )
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id={}):
-        code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch)
+    code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch, gerrit=ChangeStore({}))
     assert code == 1, err
     assert "commit " in out and sha in out
     assert "local only wip" in out
@@ -451,8 +446,7 @@ def test_gshow_json_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.
         f"not pushed yet\n\nChange-Id: {cid}",
         cwd=stack_repo,
     )
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id={}):
-        code, out, err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch)
+    code, out, err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch, gerrit=ChangeStore({}))
     assert code == 1, err
     data = json_stdout(out)
     assert data["pushed"] is False
@@ -471,8 +465,7 @@ def test_gshow_human_prints_no_unresolved_comments_when_clean(
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=92)
     details = {str(detail["id"]): detail}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch)
+    code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "Unresolved comments:" in out
     assert "  (no unresolved comments)" in out
@@ -488,8 +481,7 @@ def test_gshow_highlights_warning_pattern_on_summary_line(stack_repo: Path, monk
     clear_gerrit_git_config_cache()
     detail = change_info_for_sha(sha, cid, number=91)
     details = {str(detail["id"]): detail}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, gshow_main, ["--color", "always"], monkeypatch)
+    code, out, err = run_cli(stack_repo, gshow_main, ["--color", "always"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert ANSI_YELLOW in out
     assert subj in out
@@ -509,8 +501,7 @@ def test_gshow_smoke_argv_head_mocked(stack_repo: Path, monkeypatch: pytest.Monk
     cid = head_change_id(stack_repo)
     detail = change_info_for_sha(sha, cid, number=88)
     details = {str(detail["id"]): detail}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
-        code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch)
+    code, _out, err = run_cli(stack_repo, gshow_main, argv, monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), err
 
 
@@ -524,9 +515,7 @@ def _mock_show_details(*rows: dict) -> dict[str, dict]:
     return out
 
 
-def test_gshow_json_change_id_narrowing_includes_resolution(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_json_change_id_narrowing_includes_resolution(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Bare Change-Id on two branches narrows to target branch with resolution JSON."""
     _configure_gshow_repo(stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -534,8 +523,7 @@ def test_gshow_json_change_id_narrowing_includes_resolution(
     main_row = _detail_ok(change_id=cid, sha=sha, number=120045, branch="main")
     dev_row = _detail_ok(change_id=cid, sha=sha, number=119870, branch="dev")
     details = _mock_show_details(main_row, dev_row)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch)
+    code, out, err = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     data = json_stdout(out)
     resolution = data["resolution"]
@@ -557,7 +545,6 @@ def test_gshow_ambiguity_after_narrowing_exits_four(stack_repo: Path, monkeypatc
     second = _detail_ok(change_id=cid, sha=sha, number=120046, branch="main")
     second["_number"] = 120046
     details = _mock_show_details(first, second)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_show", details_by_change_id=details):
-        code, _out, err = run_cli(stack_repo, gshow_main, [cid], monkeypatch)
+    code, _out, err = run_cli(stack_repo, gshow_main, [cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == EXIT_AMBIGUOUS
     assert "ambiguous" in err.lower()

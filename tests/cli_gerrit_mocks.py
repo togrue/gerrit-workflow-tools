@@ -1,12 +1,15 @@
-"""Reusable Gerrit API mocks for CLI tests (no network)."""
+"""ChangeInfo fixture builders for CLI tests (no network).
+
+Commands take a ``GerritRest`` directly, so tests seed a
+:class:`~gerrit_workflow_tools.core.gerrit.change_store.ChangeStore` with payloads built
+here and pass it in. No module-path patching is involved.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git_out
@@ -121,37 +124,6 @@ def gerrit_client_class_stub(inst: object) -> MagicMock:
     cls = MagicMock(return_value=inst)
     cls.from_cwd.return_value = inst
     return cls
-
-
-@contextmanager
-def patch_gerrit_client_for_queries(
-    module: str,
-    *,
-    details_by_change_id: dict[str, dict[str, Any]],
-    web_base: str = "https://g.example",
-) -> Iterator[ChangeStore]:
-    """Run *module* against a :class:`ChangeStore` seeded with *details_by_change_id*.
-
-    Yields the store, so tests can seed more payloads, stub unmodelled queries, or inspect
-    ``store.queries()``. Everything above the seam — batching, triplet aliasing, the SQLite
-    cache, status derivation — runs for real.
-
-    The ``resolve_gerrit_web_base`` / ``HttpGerritRest`` patching is still here only because
-    commands construct their own Gerrit access; it goes away once they accept an adapter.
-    """
-    store = ChangeStore(details_by_change_id, web_base=web_base)
-    client_cls = gerrit_client_class_stub(store)
-
-    with (
-        patch(f"{module}.resolve_gerrit_web_base", return_value=web_base, create=True),
-        patch(f"{module}.HttpGerritRest", client_cls, create=True),
-        patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-            return_value=web_base,
-        ),
-        patch("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest", client_cls),
-    ):
-        yield store
 
 
 def head_change_id(repo: Path) -> str:

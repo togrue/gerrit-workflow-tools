@@ -7,8 +7,9 @@ import pytest
 
 from gerrit_workflow_tools.cli_fix import main as ger_fix_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git, git_out
-from tests.cli_gerrit_mocks import change_info_for_sha, patch_gerrit_client_for_queries
+from tests.cli_gerrit_mocks import change_info_for_sha
 from tests.conftest import run_cli
 
 
@@ -93,10 +94,9 @@ def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypat
     ch = change_info_for_sha(sha, cid, number=4242)
     ch["revisions"][sha]["ref"] = "refs/changes/42/4242/1"
     details = {str(ch["id"]): ch}
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
-        (stack_repo / "b.txt").write_text("via gerrit\n", encoding="utf-8")
-        git("add", "b.txt", cwd=stack_repo)
-        code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:4242"], monkeypatch)
+    (stack_repo / "b.txt").write_text("via gerrit\n", encoding="utf-8")
+    git("add", "b.txt", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:4242"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
     assert subj.startswith("fixup! ")
@@ -123,8 +123,7 @@ def test_ger_fix_gerrit_missing_local_object_reports_fetch_error(
     details = {str(ch["id"]): ch}
     (stack_repo / "c.txt").write_text("fetch path\n", encoding="utf-8")
     git("add", "c.txt", cwd=stack_repo)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
-        code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch, gerrit=ChangeStore(details))
     assert code != 0
     combined = f"{err} {_out}".lower()
     assert "refs/changes/77/7777/3" in err
@@ -160,9 +159,7 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
     assert "not a valid commit" in err.lower()
 
 
-def test_ger_fix_json_includes_resolution_for_change_id(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
@@ -171,8 +168,7 @@ def test_ger_fix_json_includes_resolution_for_change_id(
     details = {str(ch["id"]): ch}
     (stack_repo / "d.txt").write_text("json fix\n", encoding="utf-8")
     git("add", "d.txt", cwd=stack_repo)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, ger_fix_main, ["--json", cid], monkeypatch)
+    code, out, err = run_cli(stack_repo, ger_fix_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     import json
 
@@ -195,7 +191,6 @@ def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pyte
     details = {triplet: first, f"{triplet}#120046": second}
     (stack_repo / "e.txt").write_text("ambig\n", encoding="utf-8")
     git("add", "e.txt", cwd=stack_repo)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_fix", details_by_change_id=details):
-        code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == EXIT_AMBIGUOUS
     assert "ambiguous" in err.lower()

@@ -15,11 +15,12 @@ import gerrit_workflow_tools.cli_push as cli_push_mod
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
+from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
-from tests.cli_gerrit_mocks import build_details_by_change_id, patch_gerrit_client_for_queries, stack_rows_mb_to_head
+from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import make_repo_with_merged_side_branch
 from tests.helpers import ref_exists, write_rebase_head
@@ -433,13 +434,13 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--yes", "--reviewer-strategy", "lazy", "--reviewers", "alice"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--yes", "--reviewer-strategy", "lazy", "--reviewers", "alice"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assert any(" assigned " in ln and "r=alice" in ln for ln in out.splitlines())
 
@@ -461,13 +462,13 @@ def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--yes", "--reviewer-strategy", "overwrite", "--reviewers", "alice,ben"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--yes", "--reviewer-strategy", "overwrite", "--reviewers", "alice,ben"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assignment_lines = [ln for ln in out.splitlines() if " assigned " in ln]
     assert len(assignment_lines) == len(rows)
@@ -576,13 +577,13 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
             {},
         ],
     )
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--dry-run", "--reviewers", "alice"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assert "About to push commits:" in out
     assert "`r=alice`" in out
@@ -607,13 +608,13 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
             {},
         ],
     )
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assert "->" in out
     assert "`r=alice` -> `r=alice,r=bob`" in out
@@ -635,13 +636,13 @@ def test_gpush_config_default_show_attributes(stack_repo: Path, monkeypatch: pyt
             {},
         ],
     )
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--dry-run", "--reviewers", "alice"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assert "`r=alice`" in out
 
@@ -664,13 +665,13 @@ def test_gpush_push_show_attributes_false_skips_attribute_suffix(
             {},
         ],
     )
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--dry-run", "--reviewers", "alice"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assert "`r=alice`" not in out
 
@@ -699,13 +700,13 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
             {},
         ],
     )
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_push", details_by_change_id=details):
-        code, out, _err = run_cli(
-            stack_repo,
-            gpush_main,
-            ["--dry-run", "--reviewers", "alice"],
-            monkeypatch,
-        )
+    code, out, _err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["--dry-run", "--reviewers", "alice"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
     assert code == 0
     assert "`r=alice,wip`" in out
     assert "->" not in out

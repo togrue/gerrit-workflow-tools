@@ -8,7 +8,6 @@ See ``docu/plans/gerrit-native-change-resolution.md`` Phase 6 for the full matri
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -18,10 +17,10 @@ from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet
+from gerrit_workflow_tools.core.gerrit.change_store import ChangeStore
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
-    patch_gerrit_client_for_queries,
     stack_rows_mb_to_head,
 )
 from tests.conftest import json_stdout, run_cli
@@ -67,20 +66,16 @@ def _configure_dev_gerrit_target(repo: Path) -> None:
     clear_gerrit_git_config_cache()
 
 
-def test_resolve_and_show_json_agree_on_narrowed_change_id(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_and_show_json_agree_on_narrowed_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger resolve --json`` and ``ger show --json`` emit the same ``resolution`` block."""
     _configure_web(stack_repo)
     cid = _cid("a6")
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     details = _mock_dual_branch_details(change_id=cid, sha=sha)
-    with patch_gerrit_client_for_queries(
-        "gerrit_workflow_tools.cli_resolve",
-        details_by_change_id=details,
-    ):
-        code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", cid], monkeypatch)
-        code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch)
+    # One store for both commands: they must agree against identical Gerrit state.
+    store = ChangeStore(details)
+    code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", cid], monkeypatch, gerrit=store)
+    code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch, gerrit=store)
     assert code_r == 0, err_r
     assert code_s == 0, err_s
     resolve_block = json_stdout(out_r)["resolution"]
@@ -93,16 +88,13 @@ def test_resolve_and_show_json_agree_on_narrowed_change_id(
     assert "119900" in err_s
 
 
-def test_log_on_main_target_uses_main_triplet_not_dev(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_log_on_main_target_uses_main_triplet_not_dev(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger log --json`` on a main-target stack overlays the main-branch Gerrit change."""
     _configure_web(stack_repo)
     sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
     cid = _cid("2")
     details = _mock_dual_branch_details(change_id=cid, sha=sha, main_cr=2, dev_cr=-1)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), err
     commits = json_stdout(out)["commits"]
     row = next(c for c in commits if c["change_id"] == cid)
@@ -114,36 +106,29 @@ def test_log_on_main_target_uses_main_triplet_not_dev(
     assert "119900" in row["resolution_note"]
 
 
-def test_log_resolution_notes_do_not_requery_per_change_id(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_log_resolution_notes_do_not_requery_per_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Notes must come from cache/batch payloads — no bare change:I storm after overlay."""
     _configure_web(stack_repo)
     sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
     cid = _cid("2")
     details = _mock_dual_branch_details(change_id=cid, sha=sha)
-    with patch_gerrit_client_for_queries(
-        "gerrit_workflow_tools.cli_log", details_by_change_id=details
-    ) as client:
-        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    store = ChangeStore(details)
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
-    bare = [query for query in client.queries() if query.startswith("change:")]
+    bare = [query for query in store.queries() if query.startswith("change:")]
     assert bare == [], f"unexpected per-Change-Id queries: {bare!r}"
     row = next(c for c in json_stdout(out)["commits"] if c["change_id"] == cid)
     assert "resolution_note" in row
 
 
-def test_log_on_dev_target_uses_dev_triplet_not_main(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_log_on_dev_target_uses_dev_triplet_not_main(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger log --json`` with ``branch.*.gerritTarget=dev`` overlays the dev-branch change."""
     _configure_web(stack_repo)
     _configure_dev_gerrit_target(stack_repo)
     sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
     cid = _cid("2")
     details = _mock_dual_branch_details(change_id=cid, sha=sha, main_cr=2, dev_cr=-1)
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=details):
-        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), err
     commits = json_stdout(out)["commits"]
     row = next(c for c in commits if c["change_id"] == cid)
@@ -152,9 +137,7 @@ def test_log_on_dev_target_uses_dev_triplet_not_main(
     assert "/+/119900" in (row.get("gerrit_url") or "")
 
 
-def test_log_absent_when_change_only_on_other_branch(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_log_absent_when_change_only_on_other_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Target-branch overlay must not pick a Change-Id that exists only on another branch."""
     _configure_web(stack_repo)
     _configure_dev_gerrit_target(stack_repo)
@@ -162,12 +145,11 @@ def test_log_absent_when_change_only_on_other_branch(
     cid = _cid("2")
     # Only main-branch row exists; stack target is dev → absent.
     main_only = {
-        str(
-            change_info_for_sha(sha, cid, number=120100, branch="main", cr=2)["id"]
-        ): change_info_for_sha(sha, cid, number=120100, branch="main", cr=2)
+        str(change_info_for_sha(sha, cid, number=120100, branch="main", cr=2)["id"]): change_info_for_sha(
+            sha, cid, number=120100, branch="main", cr=2
+        )
     }
-    with patch_gerrit_client_for_queries("gerrit_workflow_tools.cli_log", details_by_change_id=main_only):
-        code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(main_only))
     assert code in (0, 1), err
     commits = json_stdout(out)["commits"]
     row = next(c for c in commits if c["change_id"] == cid)
@@ -175,9 +157,7 @@ def test_log_absent_when_change_only_on_other_branch(
     assert "/+/120100" not in (row.get("gerrit_url") or "")
 
 
-def test_push_stack_resolve_and_show_agree_on_triplet(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_push_stack_resolve_and_show_agree_on_triplet(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """After stack overlay, ``ger resolve`` and ``ger show`` pick the same triplet as ``ger log``."""
     from tests.cli_gerrit_mocks import build_details_by_change_id
 
@@ -188,13 +168,11 @@ def test_push_stack_resolve_and_show_agree_on_triplet(
     assert cid is not None
     expected_triplet = build_triplet("testproj", "main", cid)
 
-    with patch_gerrit_client_for_queries(
-        "gerrit_workflow_tools.cli_resolve",
-        details_by_change_id=details,
-    ):
-        code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", cid], monkeypatch)
-        code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch)
-        code_l, out_l, err_l = run_cli(stack_repo, log_main, ["--json"], monkeypatch)
+    # One store for all three commands: they must pick the same triplet from one state.
+    store = ChangeStore(details)
+    code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", cid], monkeypatch, gerrit=store)
+    code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch, gerrit=store)
+    code_l, out_l, err_l = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert code_r == 0, err_r
     assert code_s == 0, err_s
     assert code_l == 0, err_l
