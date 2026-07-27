@@ -6,7 +6,8 @@ import argparse
 import json
 import sys
 
-from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, configure_logging, cwd_from_env
+from gerrit_workflow_tools.cli_common import ExitCode, add_verbose_and_debug_log_args, configure_logging, cwd_from_env
+from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
 
 
@@ -42,16 +43,16 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         web_base = resolve_gerrit_web_base(cwd)
-    except ValueError as e:
+    except ConfigError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 1
+        return int(ExitCode.CONFIG)
 
     client = HttpGerritRest.from_cwd(web_base, cwd)
     try:
         data = client.get_json(args.path)
     except GerritApiError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 1
+        return int(ExitCode.GERRIT)
 
     indent = None if args.compact else 2
     print(json.dumps(data, indent=indent, sort_keys=True))

@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from gerrit_workflow_tools.cli_common import add_color_args, add_verbose_and_debug_log_args, init_cli_runtime
+from gerrit_workflow_tools.cli_common import ExitCode, add_color_args, add_verbose_and_debug_log_args, init_cli_runtime
+from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base
 
@@ -29,9 +30,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         web_base = resolve_gerrit_web_base(cwd)
-    except ValueError as e:
+    except ConfigError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 1
+        return int(ExitCode.CONFIG)
 
     cache = GerritCache.for_web_base(web_base)
     if args.cmd == "clear":

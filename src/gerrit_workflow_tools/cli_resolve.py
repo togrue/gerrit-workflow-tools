@@ -7,22 +7,21 @@ import json
 import sys
 
 from gerrit_workflow_tools.cli_common import (
-    EXIT_AMBIGUOUS,
-    EXIT_RESOLUTION_ERROR,
     HELP_JSON,
+    ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeAmbiguousError,
     ChangeResolutionError,
     Resolution,
     format_resolution_note,
     resolve_changeish,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
 _EXIT_USAGE = 2
@@ -68,56 +67,40 @@ def _print_text_resolution(resolution: Resolution) -> None:
         print(f"local SHA: {resolution.local_sha}")
     if resolution.selected is not None:
         sel = resolution.selected
-        print(
-            f"Gerrit change: #{sel.number} {sel.triplet} "
-            f"(branch {sel.branch}, status {sel.status})"
-        )
+        print(f"Gerrit change: #{sel.number} {sel.triplet} (branch {sel.branch}, status {sel.status})")
     elif resolution.local_sha is None:
         print("(no local commit or Gerrit change resolved)")
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Resolve *changeish* and print human-readable or JSON resolution details."""
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+
+
+def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     cwd, _summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
     use_color = args.color != "never"
 
-    try:
-        service = GerritService.from_cwd(cwd, rest=gerrit)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-
-    try:
-        resolution = resolve_changeish(
-            args.changeish,
-            client=service.rest,
-            cwd=cwd,
-            explicit_target=True,
-        )
-    except ChangeAmbiguousError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_AMBIGUOUS
-    except ChangeResolutionError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-    except GerritApiError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-
+    service = GerritService.from_cwd(cwd, rest=gerrit)
+    resolution = resolve_changeish(
+        args.changeish,
+        client=service.rest,
+        cwd=cwd,
+        explicit_target=True,
+    )
     if resolution.selected is None and resolution.kind == "change-id":
-        print(f"error: Gerrit change not found for {args.changeish!r}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
+        raise ChangeResolutionError(f"Gerrit change not found for {args.changeish!r}")
 
     _print_resolution_note(format_resolution_note(resolution), use_color=use_color)
 
     if args.json_:
         print(json.dumps({"resolution": resolution.to_json_dict()}, indent=2))
-        return 0
+        return int(ExitCode.OK)
 
     _print_text_resolution(resolution)
-    return 0
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

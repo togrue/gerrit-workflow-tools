@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_fix import main as ger_fix_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -106,7 +107,7 @@ def test_ger_fix_missing_weburl_for_change_id(stack_repo: Path, monkeypatch: pyt
     clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.CONFIG
     assert "gerrit.webUrl" in err
 
 
@@ -179,7 +180,7 @@ def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkey
 
 
 def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from gerrit_workflow_tools.cli_common import EXIT_AMBIGUOUS
+    from gerrit_workflow_tools.cli_common import ExitCode
 
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     clear_gerrit_git_config_cache()
@@ -192,5 +193,5 @@ def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pyte
     (stack_repo / "e.txt").write_text("ambig\n", encoding="utf-8")
     git("add", "e.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch, gerrit=ChangeStore(details))
-    assert code == EXIT_AMBIGUOUS
+    assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()

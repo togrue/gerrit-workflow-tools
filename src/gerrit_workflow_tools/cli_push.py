@@ -32,6 +32,7 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.change_id import classify_issues
 from gerrit_workflow_tools.core.config import (
+    ConfigError,
     branch_gerrit_reviewers,
     checked_out_branch_name,
     effective_gerrit_destination_branch,
@@ -470,16 +471,14 @@ def _commit_lines_for_preview(
             except ValueError as e:
                 raise ValueError(str(e)) from e
             if not _gerrit_credentials_configured(cwd):
-                raise ValueError(
+                raise ConfigError(
                     "Gerrit credentials are not configured; set gerrit.user and "
                     "gerrit.token (or gerrit.password) for REST access."
                 )
             service = GerritService.from_cwd(cwd, rest=gerrit)
             raw_details = service.changes.get_payloads(triplets)
             details_by_triplet = {
-                str(payload["id"]): payload
-                for payload in raw_details.values()
-                if isinstance(payload.get("id"), str)
+                str(payload["id"]): payload for payload in raw_details.values() if isinstance(payload.get("id"), str)
             }
         else:
             details_by_triplet = {}

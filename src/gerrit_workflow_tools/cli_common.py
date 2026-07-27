@@ -14,10 +14,14 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
+from enum import IntEnum
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import init_color_mode
-from gerrit_workflow_tools.core.gerrit.rest import set_log_gerrit_response_bodies
+from gerrit_workflow_tools.core.config import ConfigError
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -28,9 +32,69 @@ HELP_DEBUG_LOG = (
     "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, and Gerrit API response bodies)."
 )
 
-# Resolution-related exit codes (see docu/spec/change-and-commit-identifiers.md §6).
-EXIT_RESOLUTION_ERROR = 3
-EXIT_AMBIGUOUS = 4
+
+class ExitCode(IntEnum):
+    """One exit code per distinct failure reason, shared by every ``ger`` command.
+
+    Codes are semantic, not per-command: the same reason exits the same way whichever
+    command hit it. ``0``–``2`` are fixed by convention (argparse exits ``2`` on bad
+    arguments); the rest split what used to be lumped together or reused.
+
+    Contract: [docu/spec/exit-codes.md](../../docu/spec/exit-codes.md).
+    """
+
+    OK = 0
+    ATTENTION = 1
+    """Ran fine, but something wants the user: unresolved comments, failed CI, or the
+    user declining a prompt. Not a failure."""
+    USAGE = 2
+    NOT_FOUND = 3
+    """A changeish or Change-Id resolved to nothing."""
+    AMBIGUOUS = 4
+    """Several candidates survived narrowing."""
+    GERRIT = 5
+    """Gerrit answered badly, or not at all: HTTP, auth, unreachable."""
+    CONFIG = 6
+    """Required git configuration is missing (``gerrit.webUrl``, credentials)."""
+    GIT = 7
+    """A git command failed."""
+    DUPLICATE_CHANGE_ID = 8
+    """The same Change-Id appears on more than one local commit."""
+    MISSING_CHANGE_ID = 9
+    """A local commit has no Change-Id footer."""
+
+
+# Ordered longest-subclass-first: ChangeAmbiguousError derives from ChangeResolutionError,
+# and ConfigError from ValueError, so the more specific entry has to be matched first.
+_FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
+    (ChangeAmbiguousError, ExitCode.AMBIGUOUS, "error"),
+    (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
+    (GerritApiError, ExitCode.GERRIT, "gerrit error"),
+    (ConfigError, ExitCode.CONFIG, "error"),
+    (GitError, ExitCode.GIT, "error"),
+)
+
+
+def run_cli_command(body: Callable[[], int]) -> int:
+    """Run a command body, turning known failures into a message and an exit code.
+
+    The single place the error-to-exit-code contract lives. Commands raise; only this
+    decides what a failure is worth.
+
+    Deliberately catches nothing else: an unmapped exception is a bug and should surface
+    as a traceback rather than a tidy exit code. ``SystemExit`` (argparse ``--help`` and
+    usage errors) and ``KeyboardInterrupt`` derive from ``BaseException`` and pass through
+    untouched, as do exit codes a command returns after running a child process — those
+    are git's codes, not ours.
+    """
+    try:
+        return body()
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        for failure_type, code, prefix in _FAILURE_EXITS:
+            if isinstance(error, failure_type):
+                print(f"{prefix}: {error}", file=sys.stderr)
+                return int(code)
+        raise
 
 
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
@@ -124,8 +188,12 @@ def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Summar
 
 
 def handle_git_error(e: Exception) -> int:
-    """Print a :class:`~gerrit_workflow_tools.git_run.GitError` and return 1; re-raise other exceptions."""
+    """Print a :class:`~gerrit_workflow_tools.git_run.GitError` and return :attr:`ExitCode.GIT`.
+
+    Retained for commands not yet routed through :func:`run_cli_command`; it now uses the
+    same exit code and message prefix, so the two agree.
+    """
     if isinstance(e, GitError):
-        print(e.args[0], file=sys.stderr)
-        return 1
+        print(f"error: {e.args[0]}", file=sys.stderr)
+        return int(ExitCode.GIT)
     raise e

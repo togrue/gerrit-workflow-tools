@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_fetch_api import main as fetch_api_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git
@@ -44,7 +45,7 @@ def test_fetch_api_prints_json(
 
 def test_fetch_api_missing_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, fetch_api_main, ["changes/"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.CONFIG
     assert "gerrit.webUrl" in err
 
 
@@ -65,5 +66,5 @@ def test_fetch_api_gerrit_error(
     )
 
     code, _out, err = run_cli(stack_repo, fetch_api_main, ["changes/nope"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.GERRIT
     assert "404" in err

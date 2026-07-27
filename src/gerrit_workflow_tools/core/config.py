@@ -10,6 +10,16 @@ from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
 
+
+class ConfigError(ValueError):
+    """Required git configuration is missing or unusable.
+
+    Subclasses :class:`ValueError` so pre-existing ``except ValueError`` handlers keep
+    working; it exists so the CLI can tell "you have not configured this" apart from any
+    other :class:`ValueError`, which would otherwise be reported as a config problem.
+    """
+
+
 # Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
 _GERRIT_STOP_PATTERN_KEY = "gerrit.stopPattern"
 _GERRIT_WARNING_PATTERN_KEY = "gerrit.warningPattern"

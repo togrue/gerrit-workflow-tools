@@ -15,7 +15,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user, gerrit_web_url
+from gerrit_workflow_tools.core.config import (
+    ConfigError,
+    gerrit_password,
+    gerrit_token,
+    gerrit_user,
+    gerrit_web_url,
+)
 from gerrit_workflow_tools.core.git_run import GitError
 
 logger = logging.getLogger(__name__)
@@ -506,7 +512,7 @@ def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
         base = override.rstrip("/")
         logger.debug("resolve_gerrit_web_base: gerrit.webUrl -> %s", base)
         return base
-    raise ValueError(
+    raise ConfigError(
         "gerrit.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
         "`git config gerrit.webUrl https://gerrit.example.com`"
     )

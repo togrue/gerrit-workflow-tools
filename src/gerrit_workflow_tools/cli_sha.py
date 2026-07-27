@@ -55,6 +55,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
+    ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
     configure_logging,
@@ -129,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
 
     if not CHANGE_ID_VALUE_RE.match(args.change_id):
         print(f"error: invalid Change-Id: {args.change_id!r}", file=sys.stderr)
-        return 1
+        return int(ExitCode.USAGE)
 
     want = args.change_id.lower()
 
@@ -152,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
             commits = commits_in_range(cwd, rev_range)
     except GitError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 4
+        return int(ExitCode.GIT)
 
     matches: list[tuple[str, str, str]] = []
     for c in commits:
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
 
     if not matches:
         print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)
-        return 2
+        return int(ExitCode.NOT_FOUND)
 
     if len(matches) > 1 and not args.all_commits:
         shorts = ", ".join(color_short_sha(m[1]) for m in matches)
@@ -170,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
             f"error: multiple commits with Change-Id {args.change_id}: {shorts}",
             file=sys.stderr,
         )
-        return 3
+        return int(ExitCode.DUPLICATE_CHANGE_ID)
 
     for sha, short_sha, subject in matches:
         if args.json_out:
@@ -182,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
         else:
             print(sha)
 
-    return 3 if len(matches) > 1 else 0
+    return int(ExitCode.DUPLICATE_CHANGE_ID) if len(matches) > 1 else int(ExitCode.OK)
 
 
 if __name__ == "__main__":

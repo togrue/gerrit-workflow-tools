@@ -8,12 +8,12 @@ import logging
 import sys
 
 from gerrit_workflow_tools.cli_common import (
-    EXIT_AMBIGUOUS,
-    EXIT_RESOLUTION_ERROR,
     HELP_JSON,
+    ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
     ANSI_CYAN,
@@ -25,24 +25,20 @@ from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeAmbiguousError,
     ChangeResolutionError,
     format_resolution_note,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.render.commit_row import attention_column, extra_detail_lines, oneline_body
 
 logger = logging.getLogger(__name__)
-
-_EXIT_ATTENTION = 1
-_EXIT_ERROR = 2
 
 
 def _print_resolution_note(resolution_note: str | None, *, use_color: bool) -> None:
@@ -131,78 +127,49 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(  # pylint: disable=too-many-return-statements,too-many-branches,too-many-locals,too-many-statements
-    argv: list[str] | None = None,
-    *,
-    gerrit: GerritRest | None = None,
-) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Resolve one revision and print human-readable or JSON Gerrit status details."""
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+
+
+def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statements
+    argv: list[str] | None,
+    *,
+    gerrit: GerritRest | None,
+) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
     use_color = args.color != "never"
 
+    if args.rev and ".." in args.rev:
+        print(f"error: ger show does not support revision ranges: {args.rev!r}", file=sys.stderr)
+        return int(ExitCode.USAGE)
+
     if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
-        print(
-            "error: --comment-tail-lines must be a positive integer",
-            file=sys.stderr,
-        )
-        return _EXIT_ERROR
+        print("error: --comment-tail-lines must be a positive integer", file=sys.stderr)
+        return int(ExitCode.USAGE)
 
     tail_n = args.comment_tail_lines
     if tail_n is None:
         tail_n = gshow_comment_tail_lines(cwd)
 
-    try:
-        service = GerritService.from_cwd(cwd, rest=gerrit)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return _EXIT_ERROR
-
-    try:
-        resolved = resolve_show_commit_row(cwd, args.rev, service.rest)
-    except ChangeAmbiguousError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_AMBIGUOUS
-    except ChangeResolutionError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-    except GerritApiError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-    except GitError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return _EXIT_ERROR
+    service = GerritService.from_cwd(cwd, rest=gerrit)
+    resolved = resolve_show_commit_row(cwd, args.rev, service.rest)
 
     resolution = resolved.resolution
     _print_resolution_note(format_resolution_note(resolution), use_color=use_color)
 
     row = resolved.row
     is_local = resolved.is_local_commit
-    try:
-        commits = annotate([row], service=service, cwd=cwd)
-    except ChangeResolutionError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-    except GerritApiError as e:
-        print(f"gerrit error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-
+    commits = annotate([row], service=service, cwd=cwd)
     if not commits:
-        print("error: no commit data", file=sys.stderr)
-        return _EXIT_ERROR
+        raise ChangeResolutionError("no commit data")
     commit = commits[0]
     attention = commit.attention_reasons
 
     rest_key = _gerrit_rest_key(commit, resolution)
-    if commit.pushed and rest_key:
-        try:
-            file_map = service.comments.get_file_map(rest_key)
-        except GerritApiError as e:
-            print(f"gerrit error: {e}", file=sys.stderr)
-            return EXIT_RESOLUTION_ERROR
-    else:
-        file_map = {}
+    file_map = service.comments.get_file_map(rest_key) if (commit.pushed and rest_key) else {}
 
     unresolved_chains = collect_unresolved_comment_chains(file_map)
 
@@ -254,14 +221,10 @@ def main(  # pylint: disable=too-many-return-statements,too-many-branches,too-ma
             "resolution": resolution.to_json_dict(),
         }
         print(json.dumps(payload, indent=2))
-        return _EXIT_ATTENTION if attention else 0
+        return int(ExitCode.ATTENTION) if attention else int(ExitCode.OK)
 
     if is_local and commit.sha:
-        try:
-            msg = git_out("show", "-s", "--no-patch", "--pretty=medium", commit.sha, cwd=cwd)
-        except GitError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return _EXIT_ERROR
+        msg = git_out("show", "-s", "--no-patch", "--pretty=medium", commit.sha, cwd=cwd)
         print()
         print(msg.rstrip())
 
@@ -284,7 +247,7 @@ def main(  # pylint: disable=too-many-return-statements,too-many-branches,too-ma
     else:
         print("  (no unresolved comments)")
 
-    return _EXIT_ATTENTION if attention else 0
+    return int(ExitCode.ATTENTION) if attention else int(ExitCode.OK)
 
 
 if __name__ == "__main__":

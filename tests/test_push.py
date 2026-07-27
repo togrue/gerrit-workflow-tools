@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import gerrit_workflow_tools.cli_push as cli_push_mod
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
@@ -75,7 +76,7 @@ def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
     # no configure_gerrit_target, no upstream → no push destination
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.GIT
     assert "push destination" in err.lower() or "upstream" in err.lower()
 
 
@@ -137,7 +138,7 @@ def test_gpush_detached_head_no_local_branch_errors(stack_repo: Path, monkeypatc
     git("commit", "-m", "detached-only", cwd=stack_repo)
     clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.GIT
     assert "detached" in err.lower()
 
 
@@ -191,7 +192,7 @@ def test_gpush_branch_flag_pushes_specified_branch(stack_repo: Path, monkeypatch
 
 def test_gpush_branch_flag_unknown_branch_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, gpush_main, ["--branch", "no-such-branch", "--dry-run"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.GIT
     assert "no-such-branch" in err
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_common import EXIT_AMBIGUOUS
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
@@ -460,5 +460,5 @@ def test_gshow_ambiguity_after_narrowing_exits_four(stack_repo: Path, monkeypatc
     second["_number"] = 120046
     details = _mock_show_details(first, second)
     code, _out, err = run_cli(stack_repo, gshow_main, [cid], monkeypatch, gerrit=ChangeStore(details))
-    assert code == EXIT_AMBIGUOUS
+    assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()

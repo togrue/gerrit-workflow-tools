@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_sha import main as gsha_main
 from tests.conftest import run_cli
 from tests.fixtures import _cid
@@ -25,6 +26,6 @@ def test_gsha_invalid_rev_range_returns_git_error(stack_repo: Path, monkeypatch:
         ["--range", "not-a-real-revision", _cid("1")],
         monkeypatch,
     )
-    assert code == 4
+    assert code == ExitCode.GIT
     assert out == ""
     assert "error:" in err.lower()

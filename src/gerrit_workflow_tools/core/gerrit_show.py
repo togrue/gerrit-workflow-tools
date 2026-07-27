@@ -12,7 +12,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.stack import parse_change_id
 
 
@@ -23,11 +23,6 @@ class ShowCommitResolution:
     row: CommitStatusInput
     is_local_commit: bool
     resolution: Resolution
-
-
-def _arg_has_range(arg: str) -> bool:
-    token = arg.strip()
-    return ".." in token or "..." in token
 
 
 def _row_from_gerrit_change(change: dict[str, object]) -> CommitStatusInput:
@@ -45,12 +40,12 @@ def _row_from_gerrit_change(change: dict[str, object]) -> CommitStatusInput:
 
 
 def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritRest) -> ShowCommitResolution:
-    """Resolve one `ger show` argument via the shared changeish core."""
+    """Resolve one `ger show` argument via the shared changeish core.
+
+    *arg* names a single revision; rejecting ranges is the caller's input validation.
+    """
 
     raw_arg = (arg or "HEAD").strip()
-    if _arg_has_range(raw_arg):
-        raise GitError(f"ger show does not support revision ranges: {arg!r}")
-
     resolution = resolve_changeish(raw_arg, client=client, cwd=cwd, explicit_target=True)
 
     if resolution.kind == "git-rev":

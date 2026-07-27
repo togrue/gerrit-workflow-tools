@@ -24,6 +24,7 @@ import tempfile
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
+    ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
     configure_logging,
@@ -88,7 +89,9 @@ def check_duplicate_change_ids(cwd, input_arg) -> None:
     """Raise :class:`ChangeIdError` when duplicate Change-Ids are found in a commit selection."""
 
     if is_change_id_token(input_arg):
-        raise ChangeIdError("error: --check-duplicates needs a commit or range, not a Change-Id", code=2)
+        raise ChangeIdError(
+            "error: --check-duplicates needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE)
+        )
 
     resolved = resolve_gcid_user_arg(cwd, input_arg)
     rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
@@ -134,11 +137,11 @@ def _ensure_clean_tree_for_fix(cwd: Path) -> None:
     if status.returncode != 0:
         raise GitError("git status failed", stderr=status.stderr, returncode=status.returncode)
     if status.stdout.strip():
-        raise ChangeIdError("error: --fix requires a clean working tree", code=2)
+        raise ChangeIdError("error: --fix requires a clean working tree", code=int(ExitCode.USAGE))
 
     merge_head = git("rev-parse", "--verify", "MERGE_HEAD", cwd=cwd, check=False)
     if merge_head.returncode == 0:
-        raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=2)
+        raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=int(ExitCode.USAGE))
 
     git_dir = git("rev-parse", "--git-dir", cwd=cwd, check=False)
     if git_dir.returncode != 0:
@@ -147,7 +150,7 @@ def _ensure_clean_tree_for_fix(cwd: Path) -> None:
     if not git_dir_path.is_absolute():
         git_dir_path = cwd / git_dir_path
     if (git_dir_path / "rebase-merge").exists() or (git_dir_path / "rebase-apply").exists():
-        raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=2)
+        raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
 
 
 def _msg_filter_script() -> str:
@@ -180,7 +183,7 @@ def _msg_filter_script() -> str:
 def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     """Rewrite stack commit messages, assigning Change-Ids where missing on the last line."""
     if is_change_id_token(input_arg):
-        raise ChangeIdError("error: --fix needs a commit or range, not a Change-Id", code=2)
+        raise ChangeIdError("error: --fix needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE))
 
     _ensure_clean_tree_for_fix(cwd)
     resolved = resolve_gcid_user_arg(cwd, input_arg)
@@ -225,7 +228,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
             check=False,
         )
         if p.returncode != 0:
-            raise ChangeIdError(f"error: --fix failed: {p.stderr.strip() or p.stdout.strip()}", code=2)
+            raise ChangeIdError(f"error: --fix failed: {p.stderr.strip() or p.stdout.strip()}", code=int(ExitCode.GIT))
     finally:
         script_path.unlink(missing_ok=True)
 
@@ -253,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
 
         if args.fix and args.check_duplicates:
-            raise ChangeIdError("error: --fix cannot be combined with --check-duplicates", code=2)
+            raise ChangeIdError("error: --fix cannot be combined with --check-duplicates", code=int(ExitCode.USAGE))
 
         if args.fix:
             fix_change_ids_for_stack(cwd, input_arg)

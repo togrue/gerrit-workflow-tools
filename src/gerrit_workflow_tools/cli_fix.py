@@ -11,17 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.cli_common import (
-    EXIT_AMBIGUOUS,
-    EXIT_RESOLUTION_ERROR,
     HELP_JSON,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
-    handle_git_error,
+    run_cli_command,
 )
 from gerrit_workflow_tools.core.config import gerrit_remote
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeAmbiguousError,
     ChangeResolutionError,
     Resolution,
     classify_changeish,
@@ -249,72 +246,60 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Create a fixup commit with ``git commit --fixup=<target>``."""
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+
+
+def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
 
-    try:
-        raw = args.target
-        resolution: Resolution | None = None
-        rc_ref = _refs_changes_ref(raw)
-        if rc_ref is not None:
-            fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
-        elif _gerrit_changeish_kind(raw) is not None:
-            client = gerrit if gerrit is not None else HttpGerritRest.from_cwd(resolve_gerrit_web_base(cwd), cwd)
-            fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
-        else:
-            fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw, gerrit=gerrit)
+    raw = args.target
+    resolution: Resolution | None = None
+    rc_ref = _refs_changes_ref(raw)
+    if rc_ref is not None:
+        fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
+    elif _gerrit_changeish_kind(raw) is not None:
+        client = gerrit if gerrit is not None else HttpGerritRest.from_cwd(resolve_gerrit_web_base(cwd), cwd)
+        fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
+    else:
+        fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw, gerrit=gerrit)
 
-        logger.info("fixup target commit: %s", fixup_sha)
+    logger.info("fixup target commit: %s", fixup_sha)
 
+    if resolution is not None:
+        note = format_resolution_note(resolution)
+        if note:
+            print(note, file=sys.stderr)
+
+    if not args.commit_all and not _index_has_staged_changes(cwd):
+        if not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd):
+            print(
+                "error: no staged changes (index empty). Stage edits with `git add`, "
+                "or use `ger fix -a …` to commit all changes to tracked files.",
+                file=sys.stderr,
+            )
+            return 1
+
+    cmd: list[str] = ["-c", "core.editor=true", "commit"]
+    if args.no_verify:
+        cmd.append("--no-verify")
+    if args.commit_all:
+        cmd.append("-a")
+    cmd.extend(["--fixup", fixup_sha])
+
+    cp = git(*cmd, cwd=cwd, check=False)
+    if cp.returncode != 0:
+        print(cp.stderr.strip() or cp.stdout.strip() or "git commit failed", file=sys.stderr)
+        return cp.returncode or 1
+
+    if args.json_:
+        payload: dict[str, object] = {"fixup_sha": fixup_sha}
         if resolution is not None:
-            note = format_resolution_note(resolution)
-            if note:
-                print(note, file=sys.stderr)
-
-        if not args.commit_all and not _index_has_staged_changes(cwd):
-            if not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd):
-                print(
-                    "error: no staged changes (index empty). Stage edits with `git add`, "
-                    "or use `ger fix -a …` to commit all changes to tracked files.",
-                    file=sys.stderr,
-                )
-                return 1
-
-        cmd: list[str] = ["-c", "core.editor=true", "commit"]
-        if args.no_verify:
-            cmd.append("--no-verify")
-        if args.commit_all:
-            cmd.append("-a")
-        cmd.extend(["--fixup", fixup_sha])
-
-        cp = git(*cmd, cwd=cwd, check=False)
-        if cp.returncode != 0:
-            print(cp.stderr.strip() or cp.stdout.strip() or "git commit failed", file=sys.stderr)
-            return cp.returncode or 1
-
-        if args.json_:
-            payload: dict[str, object] = {"fixup_sha": fixup_sha}
-            if resolution is not None:
-                payload["resolution"] = resolution.to_json_dict()
-            print(json.dumps(payload, indent=2))
-        return 0
-
-    except ChangeAmbiguousError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_AMBIGUOUS
-    except ChangeResolutionError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-    except GerritApiError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
-    except GitError as e:
-        return handle_git_error(e)
+            payload["resolution"] = resolution.to_json_dict()
+        print(json.dumps(payload, indent=2))
+    return 0
 
 
 if __name__ == "__main__":

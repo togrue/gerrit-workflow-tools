@@ -195,7 +195,7 @@ All commands share the changeish grammar. Command-specific notes:
 | [`ger edit`](commands/edit.md) / `reword` | `REV` in stack | Changeish restricted to the local stack; resolves to one stack commit. Change numbers/triplets map to the stack commit sharing that Change-Id, else error. |
 | [`ger rebase`](commands/rebase.md) | `REV` base | Changeish for the base commit; enrichment uses target-branch resolution. |
 | [`ger assign`](commands/assign.md) *(planned)* | `<targets>` | Accepts one or many changeishes (or the implicit stack). Mutations act on **resolved triplets**, so each target is unambiguous before any REST write. |
-| [`ger sha`](commands/sha-change-id.md) | `<change-id>` | Stays **local-git only**: Change-Id → local SHA. Duplicate exit code = duplicate **in local history**, unrelated to Gerrit branches. |
+| [`ger sha`](commands/sha-change-id.md) | `<change-id>` | Stays **local-git only**: Change-Id → local SHA. A duplicate **in local history** now exits `8` (`DUPLICATE_CHANGE_ID`), distinct from Gerrit-side ambiguity (`4`). |
 
 ### 4.1 Helper: `ger resolve`
 
@@ -273,13 +273,20 @@ pick, escalate instead of guessing.
 
 A consistent family across commands, so tooling can rely on them:
 
+Exit codes are shared across every command: see **[exit-codes.md](exit-codes.md)**. The ones resolution produces:
+
 | Code | Meaning |
 |------|---------|
 | `0` | Resolved to exactly one target (no attention required, where applicable) |
-| `1` | Resolved, but attention/no-op condition (command-specific, unchanged) |
+| `1` | Resolved, but attention/no-op condition |
 | `2` | Usage error — malformed changeish, unknown prefix |
-| `3` | Gerrit API / git resolution error (unreachable, auth, not found) |
+| `3` | Not found — the changeish resolved to nothing |
 | `4` | **Ambiguous** — multiple matches survived narrowing; `alternatives` lists them |
+| `5` | Gerrit API error (unreachable, auth, bad response) |
+| `6` | Required git configuration missing (`gerrit.webUrl`, credentials) |
+| `7` | A git command failed |
+
+`3` no longer covers Gerrit and git failures; those are `5` and `7`.
 
 `ger show`, `ger fix`, and `ger resolve` use exit code `4` for ambiguity.
 `ger sha` uses `3` for duplicate Change-Ids in **local** history (unrelated to

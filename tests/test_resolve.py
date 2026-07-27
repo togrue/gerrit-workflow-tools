@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from gerrit_workflow_tools.cli_common import EXIT_AMBIGUOUS, EXIT_RESOLUTION_ERROR
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -192,7 +192,7 @@ def test_resolve_ambiguous_exits_four(stack_repo: Path, monkeypatch: pytest.Monk
     second = _detail(change_id=cid, sha=sha, number=120046, branch="main")
     details = _mock_details(first, second)
     code, _out, err = run_cli(stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore(details))
-    assert code == EXIT_AMBIGUOUS
+    assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()
 
 
@@ -200,7 +200,7 @@ def test_resolve_not_found_exits_three(stack_repo: Path, monkeypatch: pytest.Mon
     _configure_resolve_repo(stack_repo)
     cid = CID_MISSING
     code, _out, err = run_cli(stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore({}))
-    assert code == EXIT_RESOLUTION_ERROR
+    assert code == ExitCode.NOT_FOUND
     assert "error:" in err.lower()
 
 

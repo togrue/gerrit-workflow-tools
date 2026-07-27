@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.annotated_stack import (
@@ -17,7 +18,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     commit_rows_in_range,
     resolve_rev_range,
 )
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import ConfigError, clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     PatchsetStatus,
@@ -244,7 +245,7 @@ def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     code, out, err = run_cli(stack_repo, log_main, ["not-a-real-revision"], monkeypatch)
-    assert code == 2
+    assert code == ExitCode.GIT
     assert out == ""
     assert "error:" in err.lower()
 
@@ -263,10 +264,10 @@ def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkey
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
-        lambda _cwd: (_ for _ in ()).throw(ValueError("missing gerrit.webUrl")),
+        lambda _cwd: (_ for _ in ()).throw(ConfigError("missing gerrit.webUrl")),
     )
     code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch)
-    assert code == 3
+    assert code == ExitCode.CONFIG
     assert "error" in err.lower()
 
 

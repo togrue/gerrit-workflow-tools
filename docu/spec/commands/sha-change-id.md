@@ -35,13 +35,15 @@ Default range: configured Gerrit stack window, else upstream..HEAD, else merge-b
 
 ### Exit codes
 
+Shared table: **[exit-codes.md](../exit-codes.md)**.
+
 | Code | Meaning |
 |------|---------|
 | `0` | Exactly one match |
-| `1` | Usage / invalid Change-Id |
-| `2` | Not found |
-| `3` | Duplicate Change-Id |
-| `4` | Git error |
+| `2` | Usage / invalid Change-Id |
+| `3` | Not found |
+| `7` | Git error |
+| `8` | Duplicate Change-Id |
 
 ---
 
@@ -71,8 +73,8 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged.
 | Code | Meaning |
 |------|---------|
 | `0` | OK |
-| `1` | Missing Change-Id |
-| `2` | Duplicate |
+| `8` | Duplicate Change-Id |
+| `9` | Missing Change-Id |
 
 ---
 

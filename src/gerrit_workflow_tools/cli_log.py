@@ -8,12 +8,13 @@ import logging
 import sys
 
 from gerrit_workflow_tools.cli_common import (
-    EXIT_RESOLUTION_ERROR,
     HELP_JSON,
+    ExitCode,
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
@@ -31,10 +32,9 @@ from gerrit_workflow_tools.core.annotated_stack import (
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.config import log_defaults
-from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_context
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -237,8 +237,12 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
             )
 
 
-def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:  # pylint: disable=too-many-locals
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+
+
+def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint: disable=too-many-locals
     parser = _build_parser()
     args = parser.parse_args(argv)
     cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
@@ -248,30 +252,15 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
     show_url = bool(args.url) or gdef["show_url"] or verbose
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
-    try:
-        rev_range = resolve_rev_range(cwd, args.rev_range)
-    except GitError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
+    rev_range = resolve_rev_range(cwd, args.rev_range)
     for branch in branches_needing_upstream(cwd, rev_range):
         if not require_branch_upstream(cwd, branch):
-            return 1
+            return int(ExitCode.ATTENTION)
 
-    try:
-        stack_view = load_annotated_stack(cwd, rev_range, first_parent=not args.follow_merges, gerrit=gerrit)
-    except GitError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-    except (ValueError, ChangeResolutionError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-    except GerritApiError as e:
-        print(f"gerrit error: {e}", file=sys.stderr)
-        return EXIT_RESOLUTION_ERROR
-
+    stack_view = load_annotated_stack(cwd, rev_range, first_parent=not args.follow_merges, gerrit=gerrit)
     if not stack_view.commits:
         print("(no commits in range)")
-        return 0
+        return int(ExitCode.OK)
 
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
@@ -287,16 +276,12 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 
     # JSON output
     if args.json_:
-        try:
-            stack = resolve_stack_context(cwd)
-            stack_payload = {
-                "project": stack.project,
-                "target_branch": stack.target_branch,
-                "push_branch": stack.push_branch,
-            }
-        except ChangeResolutionError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return EXIT_RESOLUTION_ERROR
+        stack = resolve_stack_context(cwd)
+        stack_payload = {
+            "project": stack.project,
+            "target_branch": stack.target_branch,
+            "push_branch": stack.push_branch,
+        }
 
         commit_payload = [
             {
@@ -321,7 +306,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         ]
         payload = {"stack": stack_payload, "commits": commit_payload}
         print(json.dumps(payload, indent=2))
-        return 1 if has_attention else 0
+        return int(ExitCode.ATTENTION) if has_attention else int(ExitCode.OK)
 
     _render_text_output(
         visible=visible,
@@ -341,7 +326,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         )
     )
 
-    return 1 if has_attention else 0
+    return int(ExitCode.ATTENTION) if has_attention else int(ExitCode.OK)
 
 
 if __name__ == "__main__":
