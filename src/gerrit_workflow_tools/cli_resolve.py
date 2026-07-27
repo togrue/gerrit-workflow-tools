@@ -80,14 +80,15 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, _summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, _summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
     use_color = args.color != "never"
 
-    service = GerritService.from_cwd(cwd, rest=gerrit)
+    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     resolution = resolve_changeish(
         args.changeish,
         client=service.rest,
         cwd=cwd,
+        settings=settings,
         explicit_target=True,
     )
     if resolution.selected is None and resolution.kind == "change-id":

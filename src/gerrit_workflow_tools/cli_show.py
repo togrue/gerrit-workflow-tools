@@ -23,7 +23,6 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
-from gerrit_workflow_tools.core.config import gshow_comment_tail_lines
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
@@ -139,7 +138,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 ) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
     use_color = args.color != "never"
 
     if args.rev and ".." in args.rev:
@@ -152,10 +151,10 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 
     tail_n = args.comment_tail_lines
     if tail_n is None:
-        tail_n = gshow_comment_tail_lines(cwd)
+        tail_n = settings.show_comment_tail_lines
 
-    service = GerritService.from_cwd(cwd, rest=gerrit)
-    resolved = resolve_show_commit_row(cwd, args.rev, service.rest)
+    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    resolved = resolve_show_commit_row(cwd, args.rev, service.rest, settings=settings)
 
     resolution = resolved.resolution
     _print_resolution_note(format_resolution_note(resolution), use_color=use_color)

@@ -15,12 +15,20 @@ The first commit in the **local stack** whose subject matches the configured sto
 _Avoid_: cutoff, watermark, stop commit
 
 **Stack context**:
-The `(project, target branch, push branch)` triple resolved from git config and the remote URL. Every **triplet** is built from it, and every bare **Change-Id** is narrowed against it.
+The `(project, target branch, push branch)` triple resolved from **Settings** and the remote URL. Every **triplet** is built from it, and every bare **Change-Id** is narrowed against it.
 _Avoid_: repo context, gerrit config
 
 **Target branch** / **push branch**:
 The **target branch** is the Gerrit destination (may be `origin/main`). The **push branch** is the branch segment inside `refs/for/<branch>` (`main`). They differ whenever the target is written in remote-tracking form.
 _Avoid_: using either name for the other
+
+**Settings**:
+An immutable snapshot of the repository's effective `git config`, read once per command with a single `git config --list`. Values written after the snapshot are not visible in it; the answer is a new snapshot, not an invalidation. Settings only — nothing in it asks what the repository currently looks like.
+_Avoid_: config, config cache, options
+
+**Repository state**:
+What the repository looks like right now — branch, detached HEAD, in-progress rebase, upstream, remote-tracking refs, the Gerrit push destination. Answered by running git, not by reading **Settings**, though interpreting the answer may consult them (e.g. whether the upstream's remote is `gerrit.remote`). The dependency runs one way: **Settings** never asks about **repository state**.
+_Avoid_: git config (for these), environment, context
 
 ### Identity
 
@@ -106,3 +114,7 @@ It has meant the HTTP object, the layered service, and the CLI caller. Resolutio
 > **Dev:** And when I'm on a plane with no network?
 >
 > **Maintainer:** That's an unbounded **trust window**, not a different Gerrit. Same **GerritRest**, cache served without the freshness probe.
+>
+> **Dev:** Last thing — I set `gerrit.stopPattern` halfway through a run and nothing changed.
+>
+> **Maintainer:** **Settings** are a snapshot taken at the entry point. A write after that is invisible by design — otherwise a command could see two different configurations while it runs. Re-run it.

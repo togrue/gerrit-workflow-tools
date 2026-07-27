@@ -39,6 +39,7 @@ from gerrit_workflow_tools.core.change_id import (
     parse_change_id_footer,
     validate_change_id_value,
 )
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import (
     commits_in_range,
@@ -259,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.debug_log)
     init_color_mode(color=args.color)
     cwd = cwd_from_env()
+    settings = Settings.from_cwd(cwd)
 
     input_arg = args.rev_or_range or "HEAD"
 
@@ -268,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
             head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
             if head_ref_proc.returncode == 0:
                 branch = head_ref_proc.stdout.strip()
-                if branch != "HEAD" and not require_branch_upstream(cwd, branch):
+                if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
                     return 1
 
         if args.fix and args.check_duplicates:

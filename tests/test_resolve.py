@@ -9,7 +9,6 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha, head_change_id
@@ -30,7 +29,6 @@ CID_MISSING = _cid("0a")
 
 def _configure_resolve_repo(stack_repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
 
 
 def _detail(

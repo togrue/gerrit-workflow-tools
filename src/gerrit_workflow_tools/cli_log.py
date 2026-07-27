@@ -31,7 +31,6 @@ from gerrit_workflow_tools.core.annotated_stack import (
     load_annotated_stack,
     resolve_rev_range,
 )
-from gerrit_workflow_tools.core.config import log_defaults
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
@@ -245,19 +244,21 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint: disable=too-many-locals
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
-    gdef = log_defaults(cwd)
+    gdef = settings.log_defaults
     verbose = bool(args.verbose)
     show_url = bool(args.url) or gdef["show_url"] or verbose
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
-    rev_range = resolve_rev_range(cwd, args.rev_range)
-    for branch in branches_needing_upstream(cwd, rev_range):
-        if not require_branch_upstream(cwd, branch):
+    rev_range = resolve_rev_range(cwd, settings=settings, arg_rev_range=args.rev_range)
+    for branch in branches_needing_upstream(cwd, rev_range, settings=settings):
+        if not require_branch_upstream(cwd, branch, settings=settings):
             return int(ExitCode.ATTENTION)
 
-    stack_view = load_annotated_stack(cwd, rev_range, first_parent=not args.follow_merges, gerrit=gerrit)
+    stack_view = load_annotated_stack(
+        cwd, rev_range, settings=settings, first_parent=not args.follow_merges, gerrit=gerrit
+    )
     if not stack_view.commits:
         print("(no commits in range)")
         return int(ExitCode.OK)
@@ -276,7 +277,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     # JSON output
     if args.json_:
-        stack = resolve_stack_context(cwd)
+        stack = resolve_stack_context(cwd, settings=settings)
         stack_payload = {
             "project": stack.project,
             "target_branch": stack.target_branch,

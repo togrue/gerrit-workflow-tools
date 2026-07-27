@@ -26,10 +26,10 @@ def main(argv: list[str] | None = None) -> int:
     """Run ``ger cache`` administration commands."""
 
     args = _build_parser().parse_args(argv)
-    cwd, _summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    _cwd, settings, _summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
 
     try:
-        web_base = resolve_gerrit_web_base(cwd)
+        web_base = resolve_gerrit_web_base(settings)
     except ConfigError as e:
         print(f"error: {e}", file=sys.stderr)
         return int(ExitCode.CONFIG)

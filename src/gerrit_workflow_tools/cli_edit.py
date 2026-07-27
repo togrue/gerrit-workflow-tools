@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     load_annotated_stack,
     resolve_rev_range,
 )
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import first_commit_needing_edit_attention
@@ -37,14 +38,14 @@ from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstr
 logger = logging.getLogger(__name__)
 
 
-def resolve_first_edit_attention_sha(cwd: Path, *, gerrit: GerritRest | None = None) -> str:
+def resolve_first_edit_attention_sha(cwd: Path, *, settings: Settings, gerrit: GerritRest | None = None) -> str:
     """Return full SHA of the oldest commit with unresolved comments or a failed build."""
-    rev_range = resolve_rev_range(cwd, None)
-    for branch in branches_needing_upstream(cwd, rev_range):
-        if not require_branch_upstream(cwd, branch):
+    rev_range = resolve_rev_range(cwd, None, settings=settings)
+    for branch in branches_needing_upstream(cwd, rev_range, settings=settings):
+        if not require_branch_upstream(cwd, branch, settings=settings):
             raise GitError("upstream not configured")
     try:
-        stack_view = load_annotated_stack(cwd, rev_range, gerrit=gerrit)
+        stack_view = load_annotated_stack(cwd, rev_range, settings=settings, gerrit=gerrit)
     except (ValueError, ChangeResolutionError, GerritApiError) as e:
         raise GitError(f"could not load stack commits: {e}") from e
     if not stack_view.commits:
@@ -127,6 +128,7 @@ def _run_interactive_stack_rebase(
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
+    settings = Settings.from_cwd(cwd)
 
     if args.first_attention_commit and args.rev:
         p.error("cannot use REV with --first-attention-commit")
@@ -140,11 +142,11 @@ def _run_interactive_stack_rebase(
     )
 
     try:
-        branch = resolve_working_branch(cwd)
-        if branch is not None and not require_branch_upstream(cwd, branch):
+        branch = resolve_working_branch(cwd, settings=settings)
+        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
             return 1
         if args.first_attention_commit:
-            full = resolve_first_edit_attention_sha(cwd, gerrit=gerrit)
+            full = resolve_first_edit_attention_sha(cwd, settings=settings, gerrit=gerrit)
             rev_arg = git_out("rev-parse", "--short", full, cwd=cwd)
         else:
             assert rev_arg is not None
@@ -155,9 +157,9 @@ def _run_interactive_stack_rebase(
             if kind in ("change-number", "change-ref", "url", "query"):
                 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
-                client = gerrit if gerrit is not None else GerritService.from_cwd(cwd).rest
-            full = resolve_stack_commit(cwd, rev_arg.strip(), branch=branch, client=client)
-        if not commit_in_stack(cwd, full, branch=branch):
+                client = gerrit if gerrit is not None else GerritService.from_cwd(cwd, settings=settings).rest
+            full = resolve_stack_commit(cwd, rev_arg.strip(), settings=settings, branch=branch, client=client)
+        if not commit_in_stack(cwd, full, settings=settings, branch=branch):
             raise GitError(f"commit {rev_arg} is not in the current local stack")
         rebase_fork, _, _ = merge_base_with_target(cwd, branch)
         short = git_out("rev-parse", "--short", full, cwd=cwd)

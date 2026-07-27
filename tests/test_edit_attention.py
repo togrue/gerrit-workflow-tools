@@ -8,7 +8,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_edit import resolve_first_edit_attention_sha
 from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     PatchsetStatus,
@@ -79,7 +79,6 @@ def test_first_attention_commit_ignores_merged_side_branches(tmp_path: Path) -> 
     repo = make_repo_with_merged_side_branch(tmp_path / "r")
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
     git("config", "gerrit.project", "testproj", cwd=repo)
-    clear_gerrit_git_config_cache()
 
     # Only the side-branch commits need attention; nothing on the first-parent chain does.
     side_cids = ["I" + "2" * 40, "I" + "3" * 40]
@@ -94,7 +93,7 @@ def test_first_attention_commit_ignores_merged_side_branches(tmp_path: Path) -> 
     store = ChangeStore(payloads, web_base="https://g.example")
 
     with pytest.raises(GitError, match="no commit needs edit attention"):
-        resolve_first_edit_attention_sha(repo, gerrit=store)
+        resolve_first_edit_attention_sha(repo, settings=Settings.from_cwd(repo), gerrit=store)
 
 
 def test_follow_merges_would_have_found_the_side_branch_commit(tmp_path: Path) -> None:
@@ -106,13 +105,18 @@ def test_follow_merges_would_have_found_the_side_branch_commit(tmp_path: Path) -
     repo = make_repo_with_merged_side_branch(tmp_path / "r")
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
     git("config", "gerrit.project", "testproj", cwd=repo)
-    clear_gerrit_git_config_cache()
 
     cid = "I" + "2" * 40
     payload = change_info_for_sha("0" * 40, cid, number=200, unresolved_comment_count=3)
     store = ChangeStore({str(payload["id"]): payload}, web_base="https://g.example")
 
-    stack = load_annotated_stack(repo, resolve_rev_range(repo, None), first_parent=False, gerrit=store)
+    stack = load_annotated_stack(
+        repo,
+        resolve_rev_range(repo, None, settings=Settings.from_cwd(repo)),
+        settings=Settings.from_cwd(repo),
+        first_parent=False,
+        gerrit=store,
+    )
 
     flagged = [c for c in stack.commits if c.comments_unresolved > 0]
     assert [c.change_id for c in flagged] == [cid]

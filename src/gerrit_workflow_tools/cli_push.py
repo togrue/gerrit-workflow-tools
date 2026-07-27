@@ -31,15 +31,7 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
 )
 from gerrit_workflow_tools.core.change_id import classify_issues, extract_valid_change_id
-from gerrit_workflow_tools.core.config import (
-    ConfigError,
-    branch_gerrit_reviewers,
-    ger_push_defaults,
-    gerrit_push_remote_policy,
-    gerrit_remote,
-    set_branch_config,
-    stop_pattern,
-)
+from gerrit_workflow_tools.core.config import ConfigError, Settings, set_branch_config
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -132,6 +124,7 @@ def _resolve_push_reviewers(
     branch: str,
     reviewer_flag_segments: list[str],
     *,
+    settings: Settings,
     interactive: str | None = None,
 ) -> list[str]:
     """Resolve reviewers without merging unrelated sources.
@@ -144,12 +137,12 @@ def _resolve_push_reviewers(
         return _parse_reviewers_list(interactive)
     if reviewer_flag_segments:
         return _parse_reviewers_list(",".join(reviewer_flag_segments))
-    cfg = branch_gerrit_reviewers(cwd, branch)
+    cfg = settings.branch_gerrit_reviewers(branch)
     return _parse_reviewers_list(cfg) if cfg else []
 
 
-def _gerrit_credentials_configured(cwd: Path) -> bool:
-    return gerrit_credentials_configured(cwd)
+def _gerrit_credentials_configured(settings: Settings) -> bool:
+    return gerrit_credentials_configured(settings)
 
 
 def _reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[str]:
@@ -189,9 +182,9 @@ def _gpush_attribute_suffix(
     return f" - `{cur_s}` -> `{new_s}`"
 
 
-def _reviewer_seeds_for_prompt(cwd: Path, branch: str) -> list[str]:
+def _reviewer_seeds_for_prompt(branch: str, *, settings: Settings) -> list[str]:
     seeds: list[str] = []
-    cfg = branch_gerrit_reviewers(cwd, branch)
+    cfg = settings.branch_gerrit_reviewers(branch)
     if cfg:
         seeds.extend(_parse_reviewers_list(cfg))
     return seeds
@@ -209,16 +202,18 @@ def _prompt_interactive_reviewers(
     cwd: Path | None = None,
     branch: str | None = None,
     *,
+    settings: Settings,
     change_id_hint: str | None = None,
 ) -> ParseResult:
     """Pre-push interactive prompt (``-i``); reuses the new push-options input line."""
     from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
-    seeds = _reviewer_seeds_for_prompt(cwd, branch) if (cwd is not None and branch is not None) else []
+    seeds = _reviewer_seeds_for_prompt(branch, settings=settings) if branch is not None else []
     return prompt_push_options_line(
         reviewer_seeds=seeds,
         message="Push options: ",
         cwd=cwd,
+        settings=settings,
         change_id_hint=change_id_hint,
     )
 
@@ -305,16 +300,18 @@ def _prompt_reviewers_line_ptk(
     cwd: Path | None = None,
     branch: str | None = None,
     *,
+    settings: Settings,
     change_id_hint: str | None = None,
 ) -> ParseResult:
     """Confirm-loop ``r`` action: open the highlighted push-options input line."""
     from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
-    seeds = _reviewer_seeds_for_prompt(cwd, branch) if (cwd is not None and branch is not None) else []
+    seeds = _reviewer_seeds_for_prompt(branch, settings=settings) if branch is not None else []
     return prompt_push_options_line(
         reviewer_seeds=seeds,
         message="Push options: ",
         cwd=cwd,
+        settings=settings,
         change_id_hint=change_id_hint,
     )
 
@@ -331,16 +328,16 @@ def _needs_rest_assignment(strategy: ReviewerStrategy, reviewers: list[str]) -> 
     return strategy in (ReviewerStrategy.LAZY, ReviewerStrategy.OVERWRITE) and bool(reviewers)
 
 
-def _validate_rest_plan(cwd: Path, plan: GerritPushReviewers) -> str | None:
+def _validate_rest_plan(plan: GerritPushReviewers, *, settings: Settings) -> str | None:
     if not _needs_rest_assignment(plan.strategy, plan.reviewers):
         return None
-    if not _gerrit_credentials_configured(cwd):
+    if not _gerrit_credentials_configured(settings):
         return (
             "error: lazy/overwrite reviewer strategies need Gerrit REST; set gerrit.user and "
             "gerrit.token (or gerrit.password)"
         )
     try:
-        resolve_gerrit_web_base(cwd)
+        resolve_gerrit_web_base(settings)
     except ValueError as e:
         return f"error: {e}"
     return None
@@ -421,9 +418,11 @@ def _apply_reviewer_strategy_after_push(  # pragma: no cover - thin CLI adapter
     r: ReadyResult,
     first_parent: bool,
     plan: GerritPushReviewers,
+    *,
+    settings: Settings,
 ) -> int:
     """Return 0 on success, non-zero if a required REST step failed."""
-    change_refs = stack_change_refs_ordered(cwd, r, first_parent)
+    change_refs = stack_change_refs_ordered(cwd, r, first_parent, settings=settings)
     result = apply_reviewer_strategy_after_push_service(service, strategy, reviewers, change_refs)
     for issue in result.issues:
         print(f"{issue.level}: {issue.message}", file=sys.stderr)
@@ -440,6 +439,7 @@ def _commit_lines_for_preview(
     summary_highlighter: SummaryHighlighter,
     show_attributes: bool,
     merged_reviewers: list[str],
+    settings: Settings,
     first_parent: bool = True,
     gerrit: GerritRest | None = None,
 ) -> list[str]:
@@ -461,7 +461,7 @@ def _commit_lines_for_preview(
         return []
     rows = commits_in_range(cwd, r.push_range, first_parent=first_parent)
     details_by_triplet: dict[str, dict[str, object]] | None = None
-    stack = resolve_stack_context(cwd) if show_attributes else None
+    stack = resolve_stack_context(cwd, settings=settings) if show_attributes else None
     if show_attributes:
         triplets: list[str] = []
         for c in rows:
@@ -469,15 +469,15 @@ def _commit_lines_for_preview(
                 triplets.append(build_triplet(stack.project, stack.push_branch, c.change_id))
         if triplets:
             try:
-                resolve_gerrit_web_base(cwd)
+                resolve_gerrit_web_base(settings)
             except ValueError as e:
                 raise ValueError(str(e)) from e
-            if not _gerrit_credentials_configured(cwd):
+            if not _gerrit_credentials_configured(settings):
                 raise ConfigError(
                     "Gerrit credentials are not configured; set gerrit.user and "
                     "gerrit.token (or gerrit.password) for REST access."
                 )
-            service = GerritService.from_cwd(cwd, rest=gerrit)
+            service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
             raw_details = service.changes.get_payloads(triplets)
             details_by_triplet = {
                 str(payload["id"]): payload for payload in raw_details.values() if isinstance(payload.get("id"), str)
@@ -640,6 +640,7 @@ def _maybe_check_rebased_onto_remote(
     head: str,
     policy: str,
     no_rebase_check: bool,
+    settings: Settings,
 ) -> int | None:
     """Check branch linearity on the fetched remote target.
 
@@ -652,7 +653,7 @@ def _maybe_check_rebased_onto_remote(
             policy,
         )
         return None
-    remote_name = gerrit_remote(cwd)
+    remote_name = settings.gerrit_remote
     logger.debug("gpush rebase check: fetching remote %r", remote_name)
     try:
         git("fetch", remote_name, cwd=cwd)
@@ -664,7 +665,7 @@ def _maybe_check_rebased_onto_remote(
         )
         return None
     try:
-        ok, onto = head_is_linear_on_remote_gerrit_target(cwd, branch, head=head)
+        ok, onto = head_is_linear_on_remote_gerrit_target(cwd, branch, head=head, settings=settings)
     except GitError as e:
         print(
             f"warning: could not compare HEAD to remote target; skipping remote rebase check: {e}",
@@ -848,12 +849,13 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     gdef: dict[str, bool],
     remote_policy: str,
     fp: bool,
+    settings: Settings,
 ) -> GerritPushContext | int:
     """Resolve all Gerrit push parameters and return a context, or an exit code on early failure."""
-    eff = effective_gerrit_destination_branch(cwd, branch)
+    eff = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     if not eff:
         raise GitError("Internal error: Gerrit push mode without effective destination.")
-    push_branch = refs_for_push_branch_name(cwd, eff)
+    push_branch = refs_for_push_branch_name(eff, settings=settings)
     target = eff
 
     rc_early = _maybe_check_rebased_onto_remote(
@@ -861,6 +863,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         branch,
         head=branch,
         policy=remote_policy,
+        settings=settings,
         no_rebase_check=bool(args.no_rebase_check),
     )
     if rc_early is not None:
@@ -868,7 +871,9 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
 
     interactive_state: PushLineState | None = None
     if args.i:
-        res = _prompt_interactive_reviewers(cwd, branch, change_id_hint=_change_id_for_rev(cwd, branch))
+        res = _prompt_interactive_reviewers(
+            cwd, branch, settings=settings, change_id_hint=_change_id_for_rev(cwd, branch)
+        )
         if (
             res.state.reviewers
             or res.state.topic
@@ -879,11 +884,11 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
             interactive_state = res.state
             reviewers = list(res.state.reviewers)
         else:
-            reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers))
+            reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers), settings=settings)
         if _prompt_save_reviewers():
             set_branch_config(cwd, branch, gerrit_reviewers=",".join(reviewers))
     else:
-        reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers))
+        reviewers = _resolve_push_reviewers(cwd, branch, list(args.reviewers), settings=settings)
 
     selected_strategy = (
         interactive_state.strategy
@@ -913,7 +918,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         all_commits=args.all_,
         until=args.until,
         first_parent=fp,
-        stop_pattern=stop_pattern(cwd),
+        stop_pattern=settings.stop_pattern,
     )
     logger.debug(
         "gpush ready tip=%s range=%s boundary=%s",
@@ -935,7 +940,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         )
         return 2
 
-    remote = gerrit_remote(cwd)
+    remote = settings.gerrit_remote
     if not r.push_tip_sha:
         print("error: nothing to push (empty ready prefix)", file=sys.stderr)
         return 1
@@ -965,6 +970,8 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     ctx: GerritPushContext,
     args: argparse.Namespace,
     summary_highlighter: SummaryHighlighter,
+    *,
+    settings: Settings,
     gerrit: GerritRest | None = None,
 ) -> int:
     """Run the interactive approval loop, execute the push, and handle post-push steps."""
@@ -992,6 +999,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
                 summary_highlighter=summary_highlighter,
                 show_attributes=ctx.show_attributes,
                 merged_reviewers=ctx.plan.reviewers,
+                settings=settings,
                 first_parent=ctx.first_parent,
                 gerrit=gerrit,
             )
@@ -1038,7 +1046,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             return 1
 
         if args.yes:
-            err = _validate_rest_plan(cwd, ctx.plan)
+            err = _validate_rest_plan(ctx.plan, settings=settings)
             if err:
                 print(err, file=sys.stderr)
                 return 1
@@ -1060,7 +1068,9 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             print("Push cancelled.", file=sys.stderr)
             return 0
         if act == "reviewers":
-            res = _prompt_reviewers_line_ptk(cwd, ctx.branch, change_id_hint=_change_id_for_rev(cwd, tip))
+            res = _prompt_reviewers_line_ptk(
+                cwd, ctx.branch, settings=settings, change_id_hint=_change_id_for_rev(cwd, tip)
+            )
             if not res.valid_for_apply:
                 print("Invalid push options; nothing changed.", file=sys.stderr)
                 continue
@@ -1077,7 +1087,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             ctx.plan.replace_from_state(new_state)
             continue
 
-        err = _validate_rest_plan(cwd, ctx.plan)
+        err = _validate_rest_plan(ctx.plan, settings=settings)
         if err:
             print(err, file=sys.stderr)
             continue
@@ -1100,11 +1110,11 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
         return proc.returncode
     if _needs_rest_assignment(ctx.plan.strategy, ctx.plan.reviewers):
         try:
-            resolve_gerrit_web_base(cwd)
+            resolve_gerrit_web_base(settings)
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        service = GerritService.from_cwd(cwd, rest=gerrit)
+        service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
         rc_rest = _apply_reviewer_strategy_after_push(
             cwd,
             service,
@@ -1113,6 +1123,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             ctx.ready,
             ctx.first_parent,
             ctx.plan,
+            settings=settings,
         )
         if rc_rest != 0:
             return rc_rest
@@ -1125,7 +1136,7 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     return 0
 
 
-def _resolve_push_branch(cwd: Path, branch_arg: str | None) -> str:
+def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Settings) -> str:
     """Return the local branch ``ger push`` operates on."""
     if branch_arg:
         try:
@@ -1133,7 +1144,7 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None) -> str:
         except GitError as e:
             raise GitError(f"branch {branch_arg!r} not found") from e
         return branch_arg
-    b = resolve_push_context_branch(cwd)
+    b = resolve_push_context_branch(cwd, settings=settings)
     if b is None:
         raise GitError(
             "ger push requires a branch (detached HEAD with no local branch at this commit). "
@@ -1145,9 +1156,9 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None) -> str:
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
     args = _build_arg_parser().parse_args(argv)
-    cwd, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
-    gdef = ger_push_defaults(cwd)
-    remote_policy = gerrit_push_remote_policy(cwd)
+    cwd, settings, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    gdef = settings.push_defaults
+    remote_policy = settings.push_remote_policy
     fp = not args.follow_merges
 
     logger.debug(
@@ -1175,12 +1186,12 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 
     try:
         detached = is_detached_head(cwd)
-        b = _resolve_push_branch(cwd, args.branch)
-        mode = ger_push_mode(cwd, b)
+        b = _resolve_push_branch(cwd, args.branch, settings=settings)
+        mode = ger_push_mode(cwd, b, settings=settings)
         if not args.yes and mode in ("gerrit", None) and (args.branch or not detached):
-            if not require_branch_upstream(cwd, b):
+            if not require_branch_upstream(cwd, b, settings=settings):
                 return 1
-            mode = ger_push_mode(cwd, b)
+            mode = ger_push_mode(cwd, b, settings=settings)
         if mode is None:
             raise GitError(
                 "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
@@ -1193,10 +1204,10 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         if mode == "vanilla":
             return _handle_vanilla_push(cwd, args, branch=b)
 
-        ctx_or_rc = _build_gerrit_context(cwd, b, args, gdef, remote_policy, fp)
+        ctx_or_rc = _build_gerrit_context(cwd, b, args, gdef, remote_policy, fp, settings)
         if isinstance(ctx_or_rc, int):
             return ctx_or_rc
-        return _execute_gerrit_push(cwd, ctx_or_rc, args, summary_highlighter, gerrit=gerrit)
+        return _execute_gerrit_push(cwd, ctx_or_rc, args, summary_highlighter, settings=settings, gerrit=gerrit)
     except GitError as e:
         return handle_git_error(e)
 

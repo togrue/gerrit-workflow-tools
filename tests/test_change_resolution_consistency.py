@@ -15,7 +15,6 @@ import pytest
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as gshow_main
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
@@ -29,7 +28,6 @@ from tests.fixtures import _cid
 
 def _configure_web(repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def _mock_dual_branch_details(
@@ -63,7 +61,6 @@ def _configure_dev_gerrit_target(repo: Path) -> None:
     git("config", "branch.feature.gerritTarget", "dev", cwd=repo)
     main_sha = git_out("rev-parse", "main", cwd=repo).strip()
     git("update-ref", "refs/remotes/origin/dev", main_sha, cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def test_resolve_and_show_json_agree_on_narrowed_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.config import branch_gerrit_target, gerrit_remote
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
@@ -83,11 +83,11 @@ def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
     return names
 
 
-def _push_context_branch_rank(cwd: Path | str | None, branch: str) -> tuple[int, int, str]:
+def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: Settings) -> tuple[int, int, str]:
     """Lower is better when choosing a branch for detached-HEAD push config."""
     from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream
 
-    mode = ger_push_mode(cwd, branch)
+    mode = ger_push_mode(cwd, branch, settings=settings)
     mode_rank = 0 if mode == "gerrit" else (1 if mode == "vanilla" else 2)
     return (
         mode_rank,
@@ -96,7 +96,7 @@ def _push_context_branch_rank(cwd: Path | str | None, branch: str) -> tuple[int,
     )
 
 
-def resolve_working_branch(cwd: Path | str | None) -> str | None:
+def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
     """Best branch for commands that need branch config while HEAD may be detached."""
     checked = checked_out_branch_name(cwd)
     if checked:
@@ -107,28 +107,27 @@ def resolve_working_branch(cwd: Path | str | None) -> str | None:
     candidates = _branches_pointing_at_head(cwd)
     if not candidates:
         return None
-    return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b))
+    return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b, settings=settings))
 
 
-def resolve_push_context_branch(cwd: Path | str | None) -> str | None:
+def resolve_push_context_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
     """Branch name for ``ger push`` mode and ``branch.<name>.*`` config.
 
     Uses the checked-out branch when present. During rebase, uses Git's recorded
     rebased branch. Otherwise on detached HEAD, picks a local branch that points at
     ``HEAD`` (preferring Gerrit upstream, then any upstream).
     """
-    return resolve_working_branch(cwd)
+    return resolve_working_branch(cwd, settings=settings)
 
 
-def refs_for_push_branch_name(cwd: Path | str | None, target: str) -> str:
+def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:
     """Branch segment for Gerrit ``refs/for/<branch>``.
 
-    When *target* is ``<remote>/<branch>`` and *remote* equals :func:`gerrit_remote`,
+    When *target* is ``<remote>/<branch>`` and *remote* equals ``gerrit.remote``,
     returns *branch* only (e.g. ``origin/dev`` → ``dev``). Otherwise returns *target*
     unchanged (e.g. ``main``, ``release/1.0``).
     """
-    r = gerrit_remote(cwd)
-    prefix = f"{r}/"
+    prefix = f"{settings.gerrit_remote}/"
     if target.startswith(prefix):
         return target[len(prefix) :]
     return target
@@ -168,33 +167,37 @@ def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -
     return (remote_name, rest)
 
 
-def resolve_branch_for_branch_config(cwd: Path | str | None, branch: str | None = None) -> str:
+def resolve_branch_for_branch_config(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:
     """Branch whose ``branch.<name>.*`` settings apply, defaulting to the working branch."""
     if branch is not None:
         return branch
-    return resolve_working_branch(cwd) or current_branch(cwd)
+    return resolve_working_branch(cwd, settings=settings) or current_branch(cwd)
 
 
-def effective_gerrit_destination_branch(cwd: Path | str | None, branch: str | None = None) -> str | None:
+def effective_gerrit_destination_branch(
+    cwd: Path | str | None, branch: str | None = None, *, settings: Settings
+) -> str | None:
     """Gerrit destination for push/rebase from branch config or upstream.
 
     Prefers ``branch.<name>.gerritTarget`` when set; otherwise returns upstream ref
-    when its remote matches :func:`gerrit_remote` (e.g. ``origin/main``), suitable
+    when its remote matches ``gerrit.remote`` (e.g. ``origin/main``), suitable
     for :func:`refs_for_push_branch_name`. Returns ``None`` when neither is available.
     """
-    override = branch_gerrit_target(cwd, resolve_branch_for_branch_config(cwd, branch))
+    override = settings.branch_gerrit_target(resolve_branch_for_branch_config(cwd, branch, settings=settings))
     if override:
         return override
     parsed = resolve_upstream_parsed(cwd, branch)
     if not parsed:
         return None
     remote_name, _rest = parsed
-    if remote_name != gerrit_remote(cwd):
+    if remote_name != settings.gerrit_remote:
         return None
     return resolve_upstream_abbrev_ref(cwd, branch)
 
 
-def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal["gerrit", "vanilla"] | None:
+def ger_push_mode(
+    cwd: Path | str | None, branch: str | None = None, *, settings: Settings
+) -> Literal["gerrit", "vanilla"] | None:
     """Return push mode for current branch destination.
 
     ``gerrit`` uses ``refs/for/…``, ``vanilla`` uses plain ``git push``.
@@ -204,7 +207,7 @@ def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal[
     if not parsed:
         return None
     remote_name, _rest = parsed
-    if remote_name == gerrit_remote(cwd):
+    if remote_name == settings.gerrit_remote:
         return "gerrit"
     return "vanilla"
 
@@ -213,6 +216,8 @@ def ger_push_mode(cwd: Path | str | None, branch: str | None = None) -> Literal[
 def infer_nearest_remote_tracking_branch(
     cwd: Path | str | None,
     head: str = "HEAD",
+    *,
+    settings: Settings,
 ) -> tuple[str, int, int, int] | None:
     """Pick the remote-tracking ref with minimum symmetric divergence from *head*.
 
@@ -224,7 +229,7 @@ def infer_nearest_remote_tracking_branch(
     Returns ``(abbrev_ref, symmetric_total, ahead, behind)`` where *abbrev_ref* is suitable for
     ``git branch --set-upstream-to`` (e.g. ``origin/main``), or ``None`` if no candidate applies.
     """
-    remote_ref_prefix = f"refs/remotes/{gerrit_remote(cwd)}/"
+    remote_ref_prefix = f"refs/remotes/{settings.gerrit_remote}/"
     p = git("for-each-ref", "--format=%(refname)", remote_ref_prefix, cwd=cwd, check=False)
     if p.returncode != 0 or not (p.stdout or "").strip():
         return None
@@ -266,6 +271,7 @@ def head_is_linear_on_remote_gerrit_target(
     branch: str | None = None,
     *,
     head: str = "HEAD",
+    settings: Settings,
 ) -> tuple[bool, str]:
     """Return whether *head* contains the remote target tip (linear stack).
 
@@ -274,7 +280,7 @@ def head_is_linear_on_remote_gerrit_target(
 
     Returns ``(ok, onto_ref)`` where *onto_ref* is the symbolic remote ref (e.g. ``origin/main``).
     """
-    onto = resolve_rebase_onto_remote_ref(cwd, branch)
+    onto = resolve_rebase_onto_remote_ref(cwd, branch, settings=settings)
     p = git("merge-base", "--is-ancestor", onto, head, cwd=cwd, check=False)
     ok = p.returncode == 0
     logger.debug(
@@ -303,7 +309,7 @@ def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -
     return [f"{remote_name}/{t}"]
 
 
-def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = None) -> str:
+def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:
     """
     Return a ref accepted by ``git rebase -i <ref>`` for rebasing onto the **latest fetched**
     remote-tracking tip of the configured Gerrit target branch (e.g. ``origin/main``).
@@ -313,8 +319,8 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     ``<gerrit.remote>/main`` when upstream is unavailable.
     """
     b = branch or current_branch(cwd)
-    remote_name = gerrit_remote(cwd)
-    eff = effective_gerrit_destination_branch(cwd, b)
+    remote_name = settings.gerrit_remote
+    eff = effective_gerrit_destination_branch(cwd, b, settings=settings)
     if not eff:
         raise GitError(
             f"No Gerrit destination branch for `ger rebase --onto-remote` on branch {b!r}. "

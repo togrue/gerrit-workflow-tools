@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
-from gerrit_workflow_tools.core.config import stop_pattern, warning_pattern
+from gerrit_workflow_tools.core.config import Settings
 
 
 @dataclass(frozen=True)
@@ -39,14 +38,14 @@ class SummaryHighlighter:
         return "".join(out)
 
 
-def build_summary_highlighter(cwd: Path | str | None) -> SummaryHighlighter:
+def build_summary_highlighter(settings: Settings) -> SummaryHighlighter:
     """Build a highlighter where stop-pattern matches have precedence over warnings."""
     groups: list[str] = []
-    stop = stop_pattern(cwd)
+    stop = settings.stop_pattern
     if stop:
         re.compile(stop)
         groups.append(f"(?P<stop_0>{stop})")
-    warning = warning_pattern(cwd)
+    warning = settings.warning_pattern
     if warning:
         re.compile(warning)
         groups.append(f"(?P<warning_0>{warning})")

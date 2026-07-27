@@ -12,7 +12,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     load_annotated_stack,
     resolve_rev_range,
 )
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
@@ -21,11 +21,10 @@ from tests.cli_gerrit_mocks import build_details_by_change_id, change_info_for_s
 
 def _configure(repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def _service(repo: Path, store: ChangeStore) -> GerritService:
-    return GerritService.from_cwd(repo, rest=store)
+    return GerritService.from_cwd(repo, settings=Settings.from_cwd(repo), rest=store)
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +37,9 @@ def test_empty_range_returns_an_empty_stack_not_an_error(stack_repo: Path) -> No
     _configure(stack_repo)
     head = git_out("rev-parse", "HEAD", cwd=stack_repo)
 
-    stack = load_annotated_stack(stack_repo, f"{head}..{head}", gerrit=ChangeStore({}))
+    stack = load_annotated_stack(
+        stack_repo, f"{head}..{head}", settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore({})
+    )
 
     assert stack.commits == []
     assert stack.notes_by_sha == {}
@@ -50,7 +51,7 @@ def test_loads_commits_with_overlay_and_attention(stack_repo: Path) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
-    stack = load_annotated_stack(stack_repo, _range(stack_repo), gerrit=store)
+    stack = load_annotated_stack(stack_repo, _range(stack_repo), settings=Settings.from_cwd(stack_repo), gerrit=store)
 
     assert [c.short_sha for c in stack.commits] == [r.short_sha for r in rows]
     assert all(c.pushed for c in stack.commits)
@@ -69,7 +70,10 @@ def test_multi_branch_change_id_produces_a_resolution_note(stack_repo: Path) -> 
     payloads[str(other_branch["id"])] = other_branch
 
     stack = load_annotated_stack(
-        stack_repo, _range(stack_repo), gerrit=ChangeStore(payloads, web_base="https://g.example")
+        stack_repo,
+        _range(stack_repo),
+        settings=Settings.from_cwd(stack_repo),
+        gerrit=ChangeStore(payloads, web_base="https://g.example"),
     )
 
     assert target.sha in stack.notes_by_sha
@@ -81,7 +85,7 @@ def test_single_branch_change_ids_produce_no_notes(stack_repo: Path) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
-    stack = load_annotated_stack(stack_repo, _range(stack_repo), gerrit=store)
+    stack = load_annotated_stack(stack_repo, _range(stack_repo), settings=Settings.from_cwd(stack_repo), gerrit=store)
 
     assert stack.notes_by_sha == {}
 
@@ -138,7 +142,7 @@ def test_a_lone_commit_is_never_chain_blocked(stack_repo: Path) -> None:
 
 
 def _range(repo: Path) -> str:
-    return resolve_rev_range(repo, None)
+    return resolve_rev_range(repo, None, settings=Settings.from_cwd(repo))
 
 
 @pytest.mark.parametrize(
@@ -150,4 +154,4 @@ def _range(repo: Path) -> str:
     ],
 )
 def test_resolve_rev_range_expands_bare_refs_only(stack_repo: Path, arg: str, expected: str) -> None:
-    assert resolve_rev_range(stack_repo, arg) == expected
+    assert resolve_rev_range(stack_repo, arg, settings=Settings.from_cwd(stack_repo)) == expected

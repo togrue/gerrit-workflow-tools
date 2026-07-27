@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.core.config import rebase_defaults
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target, resolve_stack_commit
@@ -90,7 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 
-    rdef = rebase_defaults(cwd)
+    settings = Settings.from_cwd(cwd)
+    rdef = settings.rebase_defaults
     if args.no_onto_remote:
         use_onto_remote = False
     elif args.onto_remote:
@@ -103,14 +104,14 @@ def main(argv: list[str] | None = None) -> int:
     drop_merged = bool(args.drop_merged_equivalent or rdef["drop_merged_equivalent"])
 
     try:
-        branch = resolve_working_branch(cwd)
+        branch = resolve_working_branch(cwd, settings=settings)
         if use_onto_remote:
-            base = resolve_rebase_onto_remote_ref(cwd, branch)
+            base = resolve_rebase_onto_remote_ref(cwd, branch, settings=settings)
         elif args.rev:
             # resolve_stack_commit handles both Change-Id (I…) and plain git refs.
-            base = resolve_stack_commit(cwd, args.rev.strip(), branch=branch)
+            base = resolve_stack_commit(cwd, args.rev.strip(), settings=settings, branch=branch)
         else:
-            if branch is not None and not require_branch_upstream(cwd, branch):
+            if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
                 return 1
             base, _, _ = merge_base_with_target(cwd, branch)
     except GitError as e:

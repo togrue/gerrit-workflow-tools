@@ -9,7 +9,6 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_fetch_api import main as fetch_api_main
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git
 from tests.cli_gerrit_mocks import gerrit_client_class_stub
 from tests.conftest import json_stdout, run_cli
@@ -19,7 +18,6 @@ def _configure_gerrit_http(repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=repo)
     git("config", "gerrit.user", "testuser", cwd=repo)
     git("config", "gerrit.token", "secrettok", cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def test_fetch_api_prints_json(

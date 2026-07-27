@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_project_id import (
     parse_project_name_from_remote_url,
     resolve_gerrit_project_name,
@@ -26,16 +27,14 @@ def test_parse_project_name_from_remote_url(remote_url: str, expected: str | Non
 
 
 def test_resolve_gerrit_project_name_prefers_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit_project_id.gerrit_project", lambda cwd: "cfg/proj")
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit_project_id.git_out", lambda *a, **k: "unused")
-    assert resolve_gerrit_project_name(None) == "cfg/proj"
+    settings = Settings.from_map({"gerrit.project": "cfg/proj"})
+    assert resolve_gerrit_project_name(None, settings=settings) == "cfg/proj"
 
 
 def test_resolve_gerrit_project_name_from_remote_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit_project_id.gerrit_project", lambda cwd: None)
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit_project_id.gerrit_remote", lambda cwd: "origin")
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.gerrit_project_id.git_out",
         lambda *a, **k: "ssh://user@gerrit.example.com/a/team/my-project.git",
     )
-    assert resolve_gerrit_project_name(None) == "team/my-project"
+    assert resolve_gerrit_project_name(None, settings=Settings.from_map({})) == "team/my-project"

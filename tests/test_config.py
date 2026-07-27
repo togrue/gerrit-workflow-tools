@@ -5,52 +5,100 @@ from pathlib import Path
 from gerrit_workflow_tools.core.config import (
     _DEFAULT_STOP_PATTERN,
     _DEFAULT_WARNING_PATTERN,
-    clear_gerrit_git_config_cache,
-    gerrit_push_remote_policy,
-    rebase_defaults,
-    stop_pattern,
-    warning_pattern,
+    Settings,
 )
 from gerrit_workflow_tools.core.git_run import git
 
-
-def test_stop_pattern_defaults(stack_repo: Path) -> None:
-    clear_gerrit_git_config_cache()
-    assert stop_pattern(stack_repo) == _DEFAULT_STOP_PATTERN
+# Most of these need no repository: a Settings is just the key/value map git would have
+# produced, so the defaults and the parsing of each value can be stated directly.
 
 
-def test_stop_pattern_from_git_config(stack_repo: Path) -> None:
+def test_stop_pattern_defaults() -> None:
+    assert Settings.from_map({}).stop_pattern == _DEFAULT_STOP_PATTERN
+
+
+def test_stop_pattern_from_settings() -> None:
+    assert Settings.from_map({"gerrit.stopPattern": r"^hold:"}).stop_pattern == r"^hold:"
+
+
+def test_warning_pattern_defaults() -> None:
+    assert Settings.from_map({}).warning_pattern == _DEFAULT_WARNING_PATTERN
+
+
+def test_warning_pattern_from_settings() -> None:
+    assert Settings.from_map({"gerrit.warningPattern": r"^feat:"}).warning_pattern == r"^feat:"
+
+
+def test_rebase_defaults() -> None:
+    assert Settings.from_map({}).rebase_defaults == {"onto_remote": False, "drop_merged_equivalent": False}
+    configured = Settings.from_map(
+        {"gerrit.rebaseOntoRemote": "true", "gerrit.rebaseDropMergedEquivalent": "1"},
+    )
+    assert configured.rebase_defaults == {"onto_remote": True, "drop_merged_equivalent": True}
+
+
+def test_push_remote_policy_defaults_and_aliases() -> None:
+    assert Settings.from_map({}).push_remote_policy == "ignore-not-rebased"
+    assert Settings.from_map({"gerrit.push.remotePolicy": "WARN-NOT-REBASED"}).push_remote_policy == "warn-not-rebased"
+    assert Settings.from_map({"gerrit.push.remotePolicy": "bogus"}).push_remote_policy == "ignore-not-rebased"
+
+
+def test_gerrit_remote_defaults_to_origin() -> None:
+    assert Settings.from_map({}).gerrit_remote == "origin"
+    assert Settings.from_map({"gerrit.remote": "gerrit"}).gerrit_remote == "gerrit"
+
+
+def test_show_comment_tail_lines_rejects_non_positive_and_garbage() -> None:
+    assert Settings.from_map({}).show_comment_tail_lines == 10
+    assert Settings.from_map({"gerrit.showCommentTailLines": "3"}).show_comment_tail_lines == 3
+    assert Settings.from_map({"gerrit.showCommentTailLines": "0"}).show_comment_tail_lines == 10
+    assert Settings.from_map({"gerrit.showCommentTailLines": "nope"}).show_comment_tail_lines == 10
+
+
+def test_flag_accepts_git_truthy_spellings() -> None:
+    for raw in ("1", "true", "TRUE", "yes", "on"):
+        assert Settings.from_map({"gerrit.someFlag": raw}).flag("gerrit.someFlag") is True
+    for raw in ("0", "false", "no", "off", ""):
+        assert Settings.from_map({"gerrit.someFlag": raw}).flag("gerrit.someFlag") is False
+    assert Settings.from_map({}).flag("gerrit.someFlag", default=True) is True
+
+
+def test_keys_are_canonicalized_like_git_config_list() -> None:
+    """Git lowercases the last segment only; a snapshot must answer either spelling."""
+    settings = Settings.from_map({"gerrit.webUrl": "https://g.example"})
+    assert settings.get("gerrit.weburl") == "https://g.example"
+    assert settings.get("gerrit.WEBURL") == "https://g.example"
+    assert settings.gerrit_web_url == "https://g.example"
+
+
+def test_values_are_stripped_and_blank_reads_as_unset() -> None:
+    settings = Settings.from_map({"gerrit.remote": "  gerrit  ", "gerrit.project": "   "})
+    assert settings.gerrit_remote == "gerrit"
+    assert settings.get("gerrit.remote") == "gerrit"
+    assert settings.gerrit_project is None
+
+
+def test_branch_scoped_keys_preserve_branch_name_case() -> None:
+    settings = Settings.from_map({"branch.Feature/X.gerritTarget": "main"})
+    assert settings.branch_gerrit_target("Feature/X") == "main"
+    assert settings.branch_gerrit_target("feature/x") is None
+
+
+def test_from_cwd_reads_effective_git_config(stack_repo: Path) -> None:
+    """The one test that needs a repository: that ``git config --list`` is what feeds the map."""
     git("config", "gerrit.stopPattern", r"^hold:", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    assert stop_pattern(stack_repo) == r"^hold:"
+    git("config", "gerrit.remote", "gerrit", cwd=stack_repo)
+
+    settings = Settings.from_cwd(stack_repo)
+
+    assert settings.stop_pattern == r"^hold:"
+    assert settings.gerrit_remote == "gerrit"
 
 
-def test_warning_pattern_defaults(stack_repo: Path) -> None:
-    clear_gerrit_git_config_cache()
-    assert warning_pattern(stack_repo) == _DEFAULT_WARNING_PATTERN
+def test_from_cwd_is_a_snapshot_not_a_live_view(stack_repo: Path) -> None:
+    """A write after the read is invisible; taking a new snapshot is how you see it."""
+    before = Settings.from_cwd(stack_repo)
+    git("config", "gerrit.stopPattern", r"^hold:", cwd=stack_repo)
 
-
-def test_warning_pattern_from_git_config(stack_repo: Path) -> None:
-    git("config", "gerrit.warningPattern", r"^feat:", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    assert warning_pattern(stack_repo) == r"^feat:"
-
-
-def test_rebase_defaults(stack_repo: Path) -> None:
-    clear_gerrit_git_config_cache()
-    assert rebase_defaults(stack_repo) == {"onto_remote": False, "drop_merged_equivalent": False}
-    git("config", "gerrit.rebaseOntoRemote", "true", cwd=stack_repo)
-    git("config", "gerrit.rebaseDropMergedEquivalent", "1", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    assert rebase_defaults(stack_repo) == {"onto_remote": True, "drop_merged_equivalent": True}
-
-
-def test_gerrit_push_remote_policy_defaults_and_aliases(stack_repo: Path) -> None:
-    clear_gerrit_git_config_cache()
-    assert gerrit_push_remote_policy(stack_repo) == "ignore-not-rebased"
-    git("config", "gerrit.push.remotePolicy", "WARN-NOT-REBASED", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    assert gerrit_push_remote_policy(stack_repo) == "warn-not-rebased"
-    git("config", "gerrit.push.remotePolicy", "bogus", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    assert gerrit_push_remote_policy(stack_repo) == "ignore-not-rebased"
+    assert before.stop_pattern == _DEFAULT_STOP_PATTERN
+    assert Settings.from_cwd(stack_repo).stop_pattern == r"^hold:"

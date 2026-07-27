@@ -21,7 +21,6 @@ from gerrit_workflow_tools.cli_log import main as ger_log_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_resolve import main as ger_resolve_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import (
     _BATCH_OR_CHUNK,
@@ -42,7 +41,6 @@ from tests.integration.repo_builder import build_linear_chain, install_commit_ms
 
 def _configure_gerrit_project(repo, project: str) -> None:
     git("config", "gerrit.project", project, cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def _clear_gerrit_cache(repo) -> None:

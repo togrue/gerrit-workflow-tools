@@ -118,12 +118,12 @@ def make_query_changes_impl(details: dict[str, dict[str, Any]]):
 def gerrit_client_class_stub(inst: object) -> MagicMock:
     """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
 
-    Production builds clients via ``HttpGerritRest.from_cwd(web_base, cwd)``; patching the
-    class with a plain ``return_value`` only covers ``HttpGerritRest(...)`` and leaves
-    ``.from_cwd()`` handing back a fresh auto-mock.
+    Production builds clients via ``HttpGerritRest.from_settings(web_base, settings)``;
+    patching the class with a plain ``return_value`` only covers ``HttpGerritRest(...)`` and
+    leaves ``.from_settings()`` handing back a fresh auto-mock.
     """
     cls = MagicMock(return_value=inst)
-    cls.from_cwd.return_value = inst
+    cls.from_settings.return_value = inst
     return cls
 
 

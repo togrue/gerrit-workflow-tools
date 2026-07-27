@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.config import gerrit_remote
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
@@ -75,10 +75,10 @@ def _commit_object_exists(cwd: Path, sha: str) -> bool:
     return p.returncode == 0
 
 
-def _resolve_fixup_sha_refs_changes(cwd: Path, ref: str) -> str:
+def _resolve_fixup_sha_refs_changes(cwd: Path, ref: str, *, settings: Settings) -> str:
     if _commit_object_exists(cwd, ref):
         return git_out("rev-parse", ref, cwd=cwd)
-    remote = gerrit_remote(cwd)
+    remote = settings.gerrit_remote
     fp = git("fetch", remote, ref, cwd=cwd, check=False)
     if fp.returncode != 0:
         raise GitError(
@@ -90,7 +90,7 @@ def _resolve_fixup_sha_refs_changes(cwd: Path, ref: str) -> str:
     return git_out("rev-parse", "FETCH_HEAD", cwd=cwd)
 
 
-def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any]) -> str:
+def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any], *, settings: Settings) -> str:
     sha = change.get("current_revision")
     if not isinstance(sha, str) or not sha.strip():
         raise GitError("Gerrit change has no current_revision", stderr="", returncode=1)
@@ -98,7 +98,7 @@ def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any]) -> str
     if _commit_object_exists(cwd, sha):
         return git_out("rev-parse", sha, cwd=cwd)
     fetch_ref = _revision_fetch_ref(change, sha)
-    remote = gerrit_remote(cwd)
+    remote = settings.gerrit_remote
     fp = git("fetch", remote, fetch_ref, cwd=cwd, check=False)
     if fp.returncode != 0:
         raise GitError(
@@ -113,16 +113,18 @@ def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any]) -> str
     return got
 
 
-def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritRest, arg: str) -> tuple[str, Resolution]:
-    resolution = resolve_changeish(arg.strip(), client=client, cwd=cwd, explicit_target=True)
+def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritRest, arg: str, *, settings: Settings) -> tuple[str, Resolution]:
+    resolution = resolve_changeish(arg.strip(), client=client, cwd=cwd, settings=settings, explicit_target=True)
     if resolution.selected is None:
         raise ChangeResolutionError(f"Gerrit change not found for {arg.strip()!r}")
     change = client.get_change(resolution.selected.triplet)
-    fixup_sha = _resolve_fixup_sha_from_change_row(cwd, change)
+    fixup_sha = _resolve_fixup_sha_from_change_row(cwd, change, settings=settings)
     return fixup_sha, resolution
 
 
-def _resolve_fixup_sha_git(cwd: Path, arg: str, *, gerrit: GerritRest | None = None) -> tuple[str, Resolution | None]:
+def _resolve_fixup_sha_git(
+    cwd: Path, arg: str, *, settings: Settings, gerrit: GerritRest | None = None
+) -> tuple[str, Resolution | None]:
     token = arg.strip()
     p = git("rev-parse", "--verify", f"{token}^{{commit}}", cwd=cwd, check=False)
     if p.returncode != 0:
@@ -134,8 +136,12 @@ def _resolve_fixup_sha_git(cwd: Path, arg: str, *, gerrit: GerritRest | None = N
     sha = git_out("rev-parse", token, cwd=cwd)
     resolution: Resolution | None = None
     try:
-        client = gerrit if gerrit is not None else HttpGerritRest.from_cwd(resolve_gerrit_web_base(cwd), cwd)
-        resolution = resolve_changeish(token, client=client, cwd=cwd, explicit_target=True)
+        client = (
+            gerrit
+            if gerrit is not None
+            else HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
+        )
+        resolution = resolve_changeish(token, client=client, cwd=cwd, settings=settings, explicit_target=True)
     except (ValueError, ChangeResolutionError, GerritApiError):
         resolution = None
     return sha, resolution
@@ -254,17 +260,22 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
+    settings = Settings.from_cwd(cwd)
 
     raw = args.target
     resolution: Resolution | None = None
     rc_ref = _refs_changes_ref(raw)
     if rc_ref is not None:
-        fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref)
+        fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref, settings=settings)
     elif _gerrit_changeish_kind(raw) is not None:
-        client = gerrit if gerrit is not None else HttpGerritRest.from_cwd(resolve_gerrit_web_base(cwd), cwd)
-        fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw)
+        client = (
+            gerrit
+            if gerrit is not None
+            else HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
+        )
+        fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw, settings=settings)
     else:
-        fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw, gerrit=gerrit)
+        fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw, gerrit=gerrit, settings=settings)
 
     logger.info("fixup target commit: %s", fixup_sha)
 

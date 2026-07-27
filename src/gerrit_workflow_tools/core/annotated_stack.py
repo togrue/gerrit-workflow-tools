@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import validate_change_id_value
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
@@ -56,7 +57,7 @@ class AnnotatedStack:
         return bool(self.commits)
 
 
-def resolve_rev_range(cwd: Path | str | None, arg_rev_range: str | None) -> str:
+def resolve_rev_range(cwd: Path | str | None, arg_rev_range: str | None, *, settings: Settings) -> str:
     """Return the revision range to inspect.
 
     A bare ref becomes ``<ref>@{upstream}..<ref>``; a range is taken as given. With no
@@ -67,18 +68,18 @@ def resolve_rev_range(cwd: Path | str | None, arg_rev_range: str | None) -> str:
         if ".." in arg_rev_range:
             return arg_rev_range
         return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}"
-    branch = resolve_working_branch(cwd) or current_branch(cwd)
+    branch = resolve_working_branch(cwd, settings=settings) or current_branch(cwd)
     if branch == "HEAD":
         return "@{upstream}..HEAD"
     return f"{branch}@{{upstream}}..{branch}"
 
 
-def branches_needing_upstream(cwd: Path | str | None, rev_range: str) -> list[str]:
+def branches_needing_upstream(cwd: Path | str | None, rev_range: str, *, settings: Settings) -> list[str]:
     """Return branch names in *rev_range* whose ``@{upstream}`` the caller must ensure exists.
 
     Reports only; resolving an upstream is interactive and stays with the caller.
     """
-    current = resolve_working_branch(cwd) or current_branch(cwd)
+    current = resolve_working_branch(cwd, settings=settings) or current_branch(cwd)
     required: list[str] = []
     seen: set[str] = set()
     for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):
@@ -139,7 +140,7 @@ def _multi_branch_notes(
     footer_ids = [row.change_id for row in rows if row.change_id]
     if not footer_ids:
         return {}
-    stack = resolve_stack_context(cwd)
+    stack = resolve_stack_context(cwd, settings=service.settings)
     by_footer = service.changes.find_by_footer_change_ids(footer_ids)
     notes: dict[str, str] = {}
     for row in rows:
@@ -164,6 +165,7 @@ def load_annotated_stack(
     cwd: Path,
     rev_range: str,
     *,
+    settings: Settings,
     first_parent: bool = True,
     gerrit: GerritRest | None = None,
 ) -> AnnotatedStack:
@@ -180,6 +182,6 @@ def load_annotated_stack(
     rows = commit_rows_in_range(cwd, rev_range, first_parent=first_parent)
     if not rows:
         return AnnotatedStack()
-    service = GerritService.from_cwd(cwd, rest=gerrit)
+    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     commits = annotate(rows, service=service, cwd=cwd)
     return AnnotatedStack(commits=commits, notes_by_sha=_multi_branch_notes(service, rows, cwd))

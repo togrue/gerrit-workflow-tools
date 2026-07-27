@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, stop_pattern
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
@@ -18,7 +18,6 @@ def _merge_branch_repo(tmp_path: Path) -> Path:
 
 def test_compute_ready_stop_pattern_boundary_push_tip_before_block(stack_repo: Path) -> None:
     """Default stop pattern (^test!) blocks at commit 3; push tip is the prior commit."""
-    clear_gerrit_git_config_cache()
     _fork, _display, target_tip = merge_base_with_target(stack_repo)
     rows = commits_in_range(stack_repo, f"{target_tip}..HEAD", first_parent=True)
     assert len(rows) >= 3
@@ -34,7 +33,6 @@ def test_compute_ready_stop_pattern_boundary_push_tip_before_block(stack_repo: P
 
 def test_compute_ready_all_commits_ignores_stop_pattern(stack_repo: Path) -> None:
     """``all_commits=True`` (--all) includes commits through HEAD despite stop pattern."""
-    clear_gerrit_git_config_cache()
     _fork, _display, target_tip = merge_base_with_target(stack_repo)
     rows = commits_in_range(stack_repo, f"{target_tip}..HEAD", first_parent=True)
 
@@ -47,7 +45,6 @@ def test_compute_ready_all_commits_ignores_stop_pattern(stack_repo: Path) -> Non
 
 def test_compute_ready_empty_range_above_upstream(stack_repo: Path) -> None:
     """When HEAD equals upstream, result is stable with zero pushable commits."""
-    clear_gerrit_git_config_cache()
     git("checkout", "main", cwd=stack_repo)
     git("merge", "feature", cwd=stack_repo)
     git("branch", "--set-upstream-to", "main", "main", cwd=stack_repo, check=False)
@@ -94,8 +91,7 @@ def test_compute_ready_zero_pushable_when_first_commit_blocks(stack_repo: Path) 
     rows = commits_in_range(stack_repo, "main..HEAD", first_parent=True)
     first_subject = rows[0].subject
     git("config", "gerrit.stopPattern", f"^{first_subject}$", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
-    result = compute_ready(stack_repo, stop_pattern=stop_pattern(stack_repo))
+    result = compute_ready(stack_repo, stop_pattern=Settings.from_cwd(stack_repo).stop_pattern)
     assert result.pushable_count == 0
     assert result.push_tip_sha is None
     assert result.push_range is None

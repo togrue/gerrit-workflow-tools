@@ -19,7 +19,7 @@ from enum import IntEnum
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import init_color_mode
-from gerrit_workflow_tools.core.config import ConfigError
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.git_run import GitError
@@ -178,13 +178,19 @@ def cwd_from_env() -> Path:
     return Path.cwd()
 
 
-def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, SummaryHighlighter]:
-    """Configure logging/color and return ``(cwd, summary_highlighter)`` for CLI commands."""
+def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Settings, SummaryHighlighter]:
+    """Configure logging/color and return ``(cwd, settings, summary_highlighter)`` for CLI commands.
+
+    This is where a command's :class:`Settings` snapshot is taken: once, at the entry
+    point, from a single ``git config --list``. Everything below receives it as an
+    argument rather than reading configuration again.
+    """
 
     configure_logging(debug_log)
     cwd = cwd_from_env()
     init_color_mode(color=color)
-    return cwd, build_summary_highlighter(cwd)
+    settings = Settings.from_cwd(cwd)
+    return cwd, settings, build_summary_highlighter(settings)
 
 
 def handle_git_error(e: Exception) -> int:

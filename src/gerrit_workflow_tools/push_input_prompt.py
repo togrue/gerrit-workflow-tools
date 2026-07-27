@@ -25,6 +25,7 @@ from prompt_toolkit.lexers import Lexer
 from prompt_toolkit.validation import ValidationError, Validator
 
 from gerrit_workflow_tools.cli_style import is_color_enabled
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.push_input_line import (
     KW_LAZY,
     KW_OVERWRITE,
@@ -238,6 +239,7 @@ def prompt_push_options_line(
     reviewer_seeds: Iterable[str] = (),
     message: str = "Push options: ",
     cwd: Path | None = None,
+    settings: Settings,
     change_id_hint: str | None = None,
 ) -> ParseResult:
     """Show the prompt and return the parsed result for the accepted line.
@@ -249,7 +251,9 @@ def prompt_push_options_line(
     history = load_push_options_history()
     initial = default if default is not None else (history[0] if history else "")
     seed_list = [s for s in reviewer_seeds if s]
-    catalog = ReviewerCatalog.from_runtime(cwd=cwd, reviewer_seeds=seed_list, change_id_hint=change_id_hint)
+    catalog = ReviewerCatalog.from_runtime(
+        cwd=cwd, settings=settings, reviewer_seeds=seed_list, change_id_hint=change_id_hint
+    )
     completion_candidates = catalog.completion_candidates()
     session: PromptSession[str] = PromptSession(
         message=message,

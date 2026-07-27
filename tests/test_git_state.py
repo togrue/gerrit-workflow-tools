@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import branch_gerrit_target, clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
@@ -29,7 +29,7 @@ def test_rebase_in_progress_branch_reads_git_rebase_state(stack_repo: Path) -> N
 
 
 def test_resolve_working_branch_prefers_checked_out_branch(stack_repo: Path) -> None:
-    assert resolve_working_branch(stack_repo) == "feature"
+    assert resolve_working_branch(stack_repo, settings=Settings.from_cwd(stack_repo)) == "feature"
 
 
 def test_resolve_working_branch_prefers_rebase_branch_over_points_at_head(stack_repo: Path) -> None:
@@ -37,20 +37,18 @@ def test_resolve_working_branch_prefers_rebase_branch_over_points_at_head(stack_
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
     write_rebase_head(stack_repo, "rebasing", state_dir="rebase-merge")
 
-    assert resolve_working_branch(stack_repo) == "rebasing"
+    assert resolve_working_branch(stack_repo, settings=Settings.from_cwd(stack_repo)) == "rebasing"
 
 
 def test_resolve_rebase_onto_remote_ref(stack_repo: Path) -> None:
-    clear_gerrit_git_config_cache()
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
-    assert resolve_rebase_onto_remote_ref(stack_repo) == "origin/main"
+    assert resolve_rebase_onto_remote_ref(stack_repo, settings=Settings.from_cwd(stack_repo)) == "origin/main"
 
 
 def test_head_is_linear_on_remote_gerrit_target(stack_repo: Path) -> None:
-    clear_gerrit_git_config_cache()
     m = git_out("rev-parse", "main", cwd=stack_repo)
     git("update-ref", "refs/remotes/origin/main", m, cwd=stack_repo)
-    ok, onto = head_is_linear_on_remote_gerrit_target(stack_repo)
+    ok, onto = head_is_linear_on_remote_gerrit_target(stack_repo, settings=Settings.from_cwd(stack_repo))
     assert ok
     assert onto == "origin/main"
 
@@ -69,9 +67,8 @@ def test_resolve_rebase_onto_remote_ref_from_upstream_without_gerrit_target(tmp_
     git("branch", "--set-upstream-to=origin/main", "topic", cwd=repo)
     m = git_out("rev-parse", "main", cwd=repo)
     git("update-ref", "refs/remotes/origin/main", m, cwd=repo)
-    clear_gerrit_git_config_cache()
-    assert resolve_rebase_onto_remote_ref(repo) == "origin/main"
-    assert effective_gerrit_destination_branch(repo) == "origin/main"
+    assert resolve_rebase_onto_remote_ref(repo, settings=Settings.from_cwd(repo)) == "origin/main"
+    assert effective_gerrit_destination_branch(repo, settings=Settings.from_cwd(repo)) == "origin/main"
 
 
 def test_effective_gerrit_destination_branch_prefers_gerrit_target(tmp_path: Path) -> None:
@@ -85,11 +82,10 @@ def test_effective_gerrit_destination_branch_prefers_gerrit_target(tmp_path: Pat
     git("checkout", "-b", "feature", cwd=repo)
     _set_upstream_to_dev(repo)
     git("config", "branch.feature.gerritTarget", "main", cwd=repo)
-    clear_gerrit_git_config_cache()
 
-    assert branch_gerrit_target(repo, "feature") == "main"
-    assert effective_gerrit_destination_branch(repo, "feature") == "main"
-    assert effective_gerrit_destination_branch(repo, "feature") != "origin/dev"
+    assert Settings.from_cwd(repo).branch_gerrit_target("feature") == "main"
+    assert effective_gerrit_destination_branch(repo, "feature", settings=Settings.from_cwd(repo)) == "main"
+    assert effective_gerrit_destination_branch(repo, "feature", settings=Settings.from_cwd(repo)) != "origin/dev"
 
 
 def _set_upstream_to_dev(repo: Path) -> None:
@@ -110,13 +106,11 @@ def test_resolve_rebase_onto_remote_ref_from_upstream_origin_slash_branch(tmp_pa
     git("update-ref", "refs/remotes/origin/dev", "HEAD", cwd=repo)
     git("config", "branch.dev2.remote", "origin", cwd=repo)
     git("config", "branch.dev2.merge", "refs/heads/dev", cwd=repo)
-    clear_gerrit_git_config_cache()
-    assert resolve_rebase_onto_remote_ref(repo) == "origin/dev"
+    assert resolve_rebase_onto_remote_ref(repo, settings=Settings.from_cwd(repo)) == "origin/dev"
 
 
 def test_infer_nearest_remote_tracking_branch(tmp_path: Path) -> None:
     """Symmetric divergence vs origin/main: one local commit on feature."""
-    clear_gerrit_git_config_cache()
     repo = tmp_path / "r"
     repo.mkdir()
     git("init", "-b", "main", cwd=repo)
@@ -128,7 +122,7 @@ def test_infer_nearest_remote_tracking_branch(tmp_path: Path) -> None:
     (repo / "f").write_text("2\n", encoding="utf-8")
     git("commit", "-am", "feat", cwd=repo)
     git("update-ref", "refs/remotes/origin/main", main_sha, cwd=repo)
-    got = infer_nearest_remote_tracking_branch(repo)
+    got = infer_nearest_remote_tracking_branch(repo, settings=Settings.from_cwd(repo))
     assert got is not None
     abbrev, sym, ahead, behind = got
     assert abbrev == "origin/main"
@@ -136,7 +130,6 @@ def test_infer_nearest_remote_tracking_branch(tmp_path: Path) -> None:
 
 
 def test_infer_nearest_remote_tracking_branch_only_searches_gerrit_remote(tmp_path: Path) -> None:
-    clear_gerrit_git_config_cache()
     repo = tmp_path / "gerrit-only"
     repo.mkdir()
     git("init", "-b", "main", cwd=repo)
@@ -152,7 +145,7 @@ def test_infer_nearest_remote_tracking_branch_only_searches_gerrit_remote(tmp_pa
     git("update-ref", "refs/remotes/gerrit/main", main_sha, cwd=repo)
     git("update-ref", "refs/remotes/origin/feature", feature_sha, cwd=repo)
 
-    got = infer_nearest_remote_tracking_branch(repo)
+    got = infer_nearest_remote_tracking_branch(repo, settings=Settings.from_cwd(repo))
 
     assert got is not None
     abbrev, sym, ahead, behind = got
@@ -161,11 +154,10 @@ def test_infer_nearest_remote_tracking_branch_only_searches_gerrit_remote(tmp_pa
 
 
 def test_infer_nearest_remote_tracking_branch_without_remotes(tmp_path: Path) -> None:
-    clear_gerrit_git_config_cache()
     repo = tmp_path / "r2"
     repo.mkdir()
     git("init", "-b", "main", cwd=repo)
     (repo / "f").write_text("1\n", encoding="utf-8")
     git("add", "f", cwd=repo)
     git("commit", "-m", "init", cwd=repo)
-    assert infer_nearest_remote_tracking_branch(repo) is None
+    assert infer_nearest_remote_tracking_branch(repo, settings=Settings.from_cwd(repo)) is None

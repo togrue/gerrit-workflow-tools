@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import (
     DEFAULT_ACCOUNT_TTL_SECONDS,
     DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
@@ -34,7 +35,7 @@ def _service_stack_context(service: GerritService) -> StackContext:
     """Resolve stack context once per service instance (batch paths may call this many times)."""
     cached = getattr(service, "_stack_context", None)
     if cached is None:
-        cached = resolve_stack_context(service.cwd)
+        cached = resolve_stack_context(service.cwd, settings=service.settings)
         service._stack_context = cached
     return cached
 
@@ -85,9 +86,13 @@ class GerritService:
         account_ttl_seconds: int = DEFAULT_ACCOUNT_TTL_SECONDS,
         refresh: bool = False,
         cwd: Path | str | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.rest = rest
         self.cache = cache
+        # Settings for *cwd*, read once. Explicit for the same reason cwd is: nothing
+        # below this layer may reach for process-wide configuration.
+        self.settings = settings if settings is not None else Settings.from_cwd(cwd)
         # The repo this service reports on. Explicit, because GerritRest has no cwd to
         # scavenge it from; defaults to the process cwd for callers that don't care.
         self.cwd = str(cwd) if cwd is not None else os.getcwd()
@@ -103,6 +108,7 @@ class GerritService:
         cls,
         cwd: Path | str | None,
         *,
+        settings: Settings | None = None,
         refresh: bool = False,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         rest: GerritRest | None = None,
@@ -112,14 +118,18 @@ class GerritService:
 
         Pass *rest* to supply the Gerrit implementation instead of building an
         :class:`HttpGerritRest`. Doing so also skips ``gerrit.webUrl`` resolution — the web
-        base comes from the implementation — so callers that inject need no Gerrit config.
+        base comes from the implementation — so callers that inject need no Gerrit config,
+        so callers that inject need no Gerrit config. *settings* defaults to one read from
+        *cwd*; pass it when the caller has already taken a snapshot, so the whole command
+        works from a single ``git config --list``.
         """
 
         if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
             refresh = True
+        resolved = settings if settings is not None else Settings.from_cwd(cwd)
         if rest is None:
-            web_base = resolve_gerrit_web_base(cwd)
-            rest = HttpGerritRest.from_cwd(web_base, cwd)
+            web_base = resolve_gerrit_web_base(resolved)
+            rest = HttpGerritRest.from_settings(web_base, resolved)
         else:
             web_base = rest.web_base
         return cls(
@@ -128,6 +138,7 @@ class GerritService:
             refresh=refresh,
             trust_window_seconds=trust_window_seconds,
             cwd=cwd,
+            settings=resolved,
         )
 
     @property
@@ -171,7 +182,7 @@ class GerritService:
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
-        stack = resolve_stack_context(cwd) if cwd is not None else _service_stack_context(self)
+        stack = resolve_stack_context(cwd, settings=self.settings) if cwd is not None else _service_stack_context(self)
 
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}

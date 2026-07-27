@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
@@ -63,13 +64,14 @@ class ReviewerCatalog:
         cls,
         *,
         cwd: Path | None,
+        settings: Settings,
         reviewer_seeds: list[str],
         change_id_hint: str | None,
     ) -> ReviewerCatalog:
         """Build a catalog; gracefully degrade to local seeds when unavailable."""
         if cwd is None:
             return cls(client=None, status_note=None, candidates=reviewer_seeds, change_id_hint=None)
-        if not _gerrit_creds_configured(cwd):
+        if not _gerrit_creds_configured(settings):
             return cls(
                 client=None,
                 status_note="Gerrit reviewer validation unavailable (missing gerrit.user + token/password).",
@@ -77,7 +79,7 @@ class ReviewerCatalog:
                 change_id_hint=None,
             )
         try:
-            web_base = resolve_gerrit_web_base(cwd)
+            web_base = resolve_gerrit_web_base(settings)
         except ValueError:
             return cls(
                 client=None,
@@ -86,7 +88,7 @@ class ReviewerCatalog:
                 change_id_hint=None,
             )
 
-        client = HttpGerritRest.from_cwd(web_base, cwd)
+        client = HttpGerritRest.from_settings(web_base, settings)
         catalog = cls(
             client=client,
             status_note=None,
@@ -95,7 +97,7 @@ class ReviewerCatalog:
         )
 
         try:
-            stack = resolve_stack_context(cwd)
+            stack = resolve_stack_context(cwd, settings=settings)
             project = stack.project
         except ChangeResolutionError:
             project = None
@@ -262,5 +264,5 @@ class ReviewerCatalog:
         return "ok"
 
 
-def _gerrit_creds_configured(cwd: Path) -> bool:
-    return gerrit_credentials_configured(cwd)
+def _gerrit_creds_configured(settings: Settings) -> bool:
+    return gerrit_credentials_configured(settings)

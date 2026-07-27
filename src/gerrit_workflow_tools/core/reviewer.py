@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from enum import Enum
-from pathlib import Path
 
-from gerrit_workflow_tools.core.config import gerrit_password, gerrit_token, gerrit_user
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import ReviewerAccount
 
 
@@ -17,10 +16,10 @@ class ReviewerStrategy(str, Enum):
     OVERWRITE = "overwrite"
 
 
-def gerrit_credentials_configured(cwd: Path) -> bool:
+def gerrit_credentials_configured(settings: Settings) -> bool:
     """Whether Gerrit REST credentials are configured in git config."""
 
-    return bool(gerrit_user(cwd) and (gerrit_token(cwd) or gerrit_password(cwd)) is not None)
+    return bool(settings.gerrit_user and (settings.gerrit_token or settings.gerrit_password) is not None)
 
 
 def account_slug_from_gerrit(account: dict[str, object]) -> str | None:

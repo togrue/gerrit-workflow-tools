@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
@@ -39,14 +40,16 @@ def _row_from_gerrit_change(change: dict[str, object]) -> CommitStatusInput:
     return CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
 
 
-def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritRest) -> ShowCommitResolution:
+def resolve_show_commit_row(
+    cwd: Path | str, arg: str | None, client: GerritRest, *, settings: Settings
+) -> ShowCommitResolution:
     """Resolve one `ger show` argument via the shared changeish core.
 
     *arg* names a single revision; rejecting ranges is the caller's input validation.
     """
 
     raw_arg = (arg or "HEAD").strip()
-    resolution = resolve_changeish(raw_arg, client=client, cwd=cwd, explicit_target=True)
+    resolution = resolve_changeish(raw_arg, client=client, cwd=cwd, settings=settings, explicit_target=True)
 
     if resolution.kind == "git-rev":
         sha = resolution.local_sha

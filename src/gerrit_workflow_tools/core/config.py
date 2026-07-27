@@ -1,13 +1,20 @@
-"""Read and normalize git/Gerrit *settings* — one effective ``git config --list`` per cwd.
+"""The git/Gerrit settings snapshot — one effective ``git config --list``, read once.
 
 Settings only. Anything that asks what the repository currently looks like (branch, HEAD,
 upstream, rebase state) lives in :mod:`gerrit_workflow_tools.core.git_state`, which imports
 from here; this module never queries repository state, so the dependency stays one-way.
+
+A :class:`Settings` is immutable and carries every key it will ever answer, so reading one
+costs a single ``git config --list``. Build it once per command (``Settings.from_cwd``) and
+pass it down; tests build one from a plain mapping (``Settings.from_map``) with no repository
+and nothing to invalidate.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git
@@ -30,16 +37,10 @@ _GERRIT_WARNING_PATTERN_KEY = "gerrit.warningPattern"
 _DEFAULT_STOP_PATTERN = r"^(?:dropme!|todo\b|test!|wip\b)"
 _DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
 
-# In-memory snapshot: one effective `git config --list` per process per cwd (lazy first access).
-_snapshot: dict[str, str] | None = None  # pylint: disable=invalid-name
-_snapshot_cwd: str | None = None  # pylint: disable=invalid-name
-
-
-def clear_gerrit_git_config_cache() -> None:
-    """Drop cached config so the next read loads from git again."""
-    global _snapshot, _snapshot_cwd  # pylint: disable=global-statement
-    _snapshot = None
-    _snapshot_cwd = None
+_TRUTHY = ("1", "true", "yes", "on")
+_REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
+_DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
+_DEFAULT_COMMENT_TAIL_LINES = 10
 
 
 def _canonical_cfg_key(key: str) -> str:
@@ -48,11 +49,6 @@ def _canonical_cfg_key(key: str) -> str:
         return key.lower()
     head, tail = key.rsplit(".", 1)
     return f"{head}.{tail.lower()}"
-
-
-def _resolve_cwd_key(cwd: Path | str | None) -> str:
-    p = Path.cwd() if cwd is None else Path(cwd)
-    return str(p.resolve())
 
 
 def _load_git_config_map(cwd: Path | str | None) -> dict[str, str]:
@@ -65,153 +61,156 @@ def _load_git_config_map(cwd: Path | str | None) -> dict[str, str]:
         if not raw.strip() or "=" not in raw:
             continue
         k, v = raw.split("=", 1)
-        ck = _canonical_cfg_key(k)
-        single[ck] = v
+        single[_canonical_cfg_key(k)] = v
     return single
 
 
-def _ensure_snapshot(cwd: Path | str | None) -> None:
-    global _snapshot, _snapshot_cwd  # pylint: disable=global-statement
-    key = _resolve_cwd_key(cwd)
-    if _snapshot is not None and _snapshot_cwd == key:
-        return
-    _snapshot = _load_git_config_map(cwd)
-    _snapshot_cwd = key
+@dataclass(frozen=True)
+class Settings:
+    """Effective git/Gerrit settings for one repository, as of when it was read.
 
-
-def _config_get(cwd: Path | str | None, key: str) -> str | None:
-    _ensure_snapshot(cwd)
-    assert _snapshot is not None
-    ck = _canonical_cfg_key(key)
-    v = _snapshot.get(ck)
-    return v.strip() if v else None
-
-
-def branch_gerrit_reviewers(cwd: Path | str | None, branch: str) -> str | None:
-    """Return ``branch.<branch>.gerritReviewers`` (comma-separated list), if set."""
-    return _config_get(cwd, f"branch.{branch}.gerritReviewers")
-
-
-def branch_gerrit_target(cwd: Path | str | None, branch: str) -> str | None:
-    """Return ``branch.<branch>.gerritTarget`` override for the Gerrit destination branch, if set."""
-    return _config_get(cwd, f"branch.{branch}.gerritTarget")
-
-
-def gerrit_remote(cwd: Path | str | None) -> str:
-    """Return ``gerrit.remote`` or ``origin``."""
-    v = _config_get(cwd, "gerrit.remote")
-    return v or "origin"
-
-
-def gerrit_web_url(cwd: Path | str | None) -> str | None:
-    """Gerrit HTTPS base URL (scheme + host, optional port, no path).
-
-    Required for commands that call Gerrit HTTP (e.g. ``ger log``,
-    ``ger show``).
+    Immutable on purpose: a value written after this snapshot was taken is not visible
+    here, and the fix is to take a new snapshot rather than to invalidate a shared cache.
     """
-    return _config_get(cwd, "gerrit.webUrl")
 
+    values: Mapping[str, str]
 
-def gerrit_project(cwd: Path | str | None) -> str | None:
-    """Return explicit ``gerrit.project`` override, if set."""
-    return _config_get(cwd, "gerrit.project")
+    @classmethod
+    def from_cwd(cls, cwd: Path | str | None) -> Settings:
+        """Read the effective configuration for *cwd* with one ``git config --list``."""
+        return cls(values=_load_git_config_map(cwd))
 
+    @classmethod
+    def from_map(cls, raw: Mapping[str, str]) -> Settings:
+        """Build a snapshot from literal ``key -> value`` pairs, keys canonicalized as git does."""
+        return cls(values={_canonical_cfg_key(k): v for k, v in raw.items()})
 
-def gerrit_user(cwd: Path | str | None) -> str | None:
-    """Return ``gerrit.user`` for HTTP Basic auth, if set."""
-    return _config_get(cwd, "gerrit.user")
+    def get(self, key: str) -> str | None:
+        """Return the value for *key*, stripped, or ``None`` when unset or blank.
 
+        A whitespace-only value reads as unset, not as the empty string, so the return type
+        is honest: every caller already treated ``""`` as absent.
+        """
+        v = self.values.get(_canonical_cfg_key(key))
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
 
-def gerrit_password(cwd: Path | str | None) -> str | None:
-    """Return ``gerrit.password`` for HTTP Basic auth, if set."""
-    return _config_get(cwd, "gerrit.password")
+    def flag(self, key: str, *, default: bool = False) -> bool:
+        """Return whether *key* is truthy (``1``, ``true``, ``yes``, ``on``; case-insensitive)."""
+        v = self.get(key)
+        if v is None:
+            return default
+        return v.lower() in _TRUTHY
 
+    # -- Gerrit host and identity ------------------------------------------------
 
-def gerrit_token(cwd: Path | str | None) -> str | None:
-    """Return ``gerrit.token`` (preferred over password for Basic auth), if set."""
-    return _config_get(cwd, "gerrit.token")
+    @property
+    def gerrit_remote(self) -> str:
+        """``gerrit.remote``, or ``origin``."""
+        return self.get("gerrit.remote") or "origin"
 
+    @property
+    def gerrit_web_url(self) -> str | None:
+        """``gerrit.webUrl``: HTTPS base URL (scheme + host, optional port, no path).
 
-def gshow_comment_tail_lines(cwd: Path | str | None) -> int:
-    """Return ``gerrit.showCommentTailLines``.
+        Required for commands that call Gerrit HTTP (e.g. ``ger log``, ``ger show``).
+        """
+        return self.get("gerrit.webUrl")
 
-    Must be a positive integer; defaults to ``10`` if unset or invalid.
-    """
-    v = _config_get(cwd, "gerrit.showCommentTailLines")
-    if not v:
-        return 10
-    try:
-        n = int(v.strip())
-    except ValueError:
-        return 10
-    if n < 1:
-        return 10
-    return n
+    @property
+    def gerrit_project(self) -> str | None:
+        """``gerrit.project`` override, if set."""
+        return self.get("gerrit.project")
 
+    @property
+    def gerrit_user(self) -> str | None:
+        """``gerrit.user`` for HTTP Basic auth, if set."""
+        return self.get("gerrit.user")
 
-def config_bool(cwd: Path | str | None, key: str, *, default: bool = False) -> bool:
-    """Return whether ``git config`` *key* is truthy.
+    @property
+    def gerrit_password(self) -> str | None:
+        """``gerrit.password`` for HTTP Basic auth, if set."""
+        return self.get("gerrit.password")
 
-    Truthy values: ``1``, ``true``, ``yes``, ``on`` (case-insensitive).
-    """
-    v = _config_get(cwd, key)
-    if v is None or not str(v).strip():
-        return default
-    return str(v).strip().lower() in ("1", "true", "yes", "on")
+    @property
+    def gerrit_token(self) -> str | None:
+        """``gerrit.token``, preferred over password for Basic auth, if set."""
+        return self.get("gerrit.token")
 
+    # -- Branch-scoped ------------------------------------------------------------
 
-def log_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger log`` from ``gerrit.log*`` keys (CLI flags override when passed)."""
-    return {
-        "show_url": config_bool(cwd, "gerrit.logShowUrl"),
-        "show_change_id": config_bool(cwd, "gerrit.logShowChangeId"),
-    }
+    def branch_gerrit_reviewers(self, branch: str) -> str | None:
+        """``branch.<branch>.gerritReviewers`` (comma-separated list), if set."""
+        return self.get(f"branch.{branch}.gerritReviewers")
 
+    def branch_gerrit_target(self, branch: str) -> str | None:
+        """``branch.<branch>.gerritTarget`` override for the Gerrit destination branch, if set."""
+        return self.get(f"branch.{branch}.gerritTarget")
 
-def ger_push_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger push`` from ``gerrit.push*`` keys.
+    # -- Per-command defaults -----------------------------------------------------
 
-    Includes ``gerrit.lastPushedBranch``.
-    """
-    return {
-        "show_attributes": config_bool(cwd, "gerrit.pushShowAttributes"),
-        "last_pushed_branch": config_bool(cwd, "gerrit.lastPushedBranch", default=True),
-    }
+    @property
+    def log_defaults(self) -> dict[str, bool]:
+        """Defaults for ``ger log`` from ``gerrit.log*`` keys (CLI flags override when passed)."""
+        return {
+            "show_url": self.flag("gerrit.logShowUrl"),
+            "show_change_id": self.flag("gerrit.logShowChangeId"),
+        }
 
+    @property
+    def push_defaults(self) -> dict[str, bool]:
+        """Defaults for ``ger push`` from ``gerrit.push*`` keys, plus ``gerrit.lastPushedBranch``."""
+        return {
+            "show_attributes": self.flag("gerrit.pushShowAttributes"),
+            "last_pushed_branch": self.flag("gerrit.lastPushedBranch", default=True),
+        }
 
-def gerrit_push_remote_policy(cwd: Path | str | None) -> str:
-    """Return ``gerrit.push.remotePolicy``: how to treat a branch not linearly on the fetched Gerrit target tip.
+    @property
+    def rebase_defaults(self) -> dict[str, bool]:
+        """Defaults for ``ger rebase`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
+        return {
+            "onto_remote": self.flag("gerrit.rebaseOntoRemote"),
+            "drop_merged_equivalent": self.flag("gerrit.rebaseDropMergedEquivalent"),
+        }
 
-    Values: ``ignore-not-rebased`` (default), ``warn-not-rebased``, ``error-not-rebased``.
-    Unset, empty, or unknown values use ``ignore-not-rebased``.
-    """
-    v = _config_get(cwd, "gerrit.push.remotePolicy")
-    if not v:
-        return "ignore-not-rebased"
-    s = v.strip().lower()
-    if s in ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased"):
-        return s
-    return "ignore-not-rebased"
+    @property
+    def push_remote_policy(self) -> str:
+        """``gerrit.push.remotePolicy``: how to treat a branch not linearly on the fetched target tip.
 
+        Values: ``ignore-not-rebased`` (default), ``warn-not-rebased``, ``error-not-rebased``.
+        Unset, empty, or unknown values use ``ignore-not-rebased``.
+        """
+        v = self.get("gerrit.push.remotePolicy")
+        if not v:
+            return _DEFAULT_REMOTE_POLICY
+        s = v.lower()
+        return s if s in _REMOTE_POLICIES else _DEFAULT_REMOTE_POLICY
 
-def rebase_defaults(cwd: Path | str | None) -> dict[str, bool]:
-    """Defaults for ``ger rebase`` from ``gerrit.rebase*`` keys (CLI flags override when passed)."""
-    return {
-        "onto_remote": config_bool(cwd, "gerrit.rebaseOntoRemote"),
-        "drop_merged_equivalent": config_bool(cwd, "gerrit.rebaseDropMergedEquivalent"),
-    }
+    @property
+    def show_comment_tail_lines(self) -> int:
+        """``gerrit.showCommentTailLines``: positive integer, defaulting to ``10`` if unset or invalid."""
+        v = self.get("gerrit.showCommentTailLines")
+        if not v:
+            return _DEFAULT_COMMENT_TAIL_LINES
+        try:
+            n = int(v)
+        except ValueError:
+            return _DEFAULT_COMMENT_TAIL_LINES
+        return n if n >= 1 else _DEFAULT_COMMENT_TAIL_LINES
 
+    # -- Commit-message patterns ---------------------------------------------------
 
-def stop_pattern(cwd: Path | str | None) -> str:
-    """Return ``gerrit.stopPattern`` regex, or the built-in default when unset."""
-    configured = _config_get(cwd, _GERRIT_STOP_PATTERN_KEY)
-    return configured if configured else _DEFAULT_STOP_PATTERN
+    @property
+    def stop_pattern(self) -> str:
+        """``gerrit.stopPattern`` regex, or the built-in default when unset."""
+        return self.get(_GERRIT_STOP_PATTERN_KEY) or _DEFAULT_STOP_PATTERN
 
-
-def warning_pattern(cwd: Path | str | None) -> str:
-    """Return ``gerrit.warningPattern`` regex, or the built-in default when unset."""
-    configured = _config_get(cwd, _GERRIT_WARNING_PATTERN_KEY)
-    return configured if configured else _DEFAULT_WARNING_PATTERN
+    @property
+    def warning_pattern(self) -> str:
+        """``gerrit.warningPattern`` regex, or the built-in default when unset."""
+        return self.get(_GERRIT_WARNING_PATTERN_KEY) or _DEFAULT_WARNING_PATTERN
 
 
 def set_branch_config(
@@ -220,7 +219,10 @@ def set_branch_config(
     *,
     gerrit_reviewers: str | None = None,
 ) -> None:
-    """Write branch-scoped Gerrit settings via ``git config`` and clear the config cache."""
+    """Write branch-scoped Gerrit settings via ``git config``.
+
+    Any :class:`Settings` read before this call still reports the old value; take a fresh
+    snapshot if the new one has to be visible.
+    """
     if gerrit_reviewers is not None:
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
-    clear_gerrit_git_config_cache()

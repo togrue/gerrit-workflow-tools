@@ -12,7 +12,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
-from gerrit_workflow_tools.core.config import gerrit_web_url
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -178,7 +178,8 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
     A supplied *gerrit* implementation makes the config check moot: it already knows its
     own web base, matching ``GerritService.from_cwd(rest=…)``.
     """
-    if gerrit is None and not gerrit_web_url(cwd):
+    settings = Settings.from_cwd(cwd)
+    if gerrit is None and not settings.gerrit_web_url:
         return text  # Not a Gerrit repository — pass through silently.
 
     lines = text.splitlines(keepends=True)
@@ -215,7 +216,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
     if not commit_inputs:
         return text
 
-    service = GerritService.from_cwd(cwd, rest=gerrit)
+    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     commits = annotate(commit_inputs, service=service, cwd=cwd)
 
     # Build short_sha → LogCommit lookup.

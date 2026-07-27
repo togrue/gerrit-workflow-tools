@@ -10,7 +10,6 @@ import pytest
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
@@ -53,7 +52,6 @@ def _detail_ok(
 
 def test_gshow_rejects_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gshow_main, ["main..HEAD"], monkeypatch)
     assert code == 2
     assert "range" in err.lower()
@@ -64,7 +62,6 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
 ) -> None:
     """Regression: bare ``changes/?q=`` omits ``current_revision`` unless ``o=CURRENT_REVISION``."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -84,7 +81,6 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -107,7 +103,6 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
 
 def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=1, number=42)
@@ -127,7 +122,6 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
 def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """--comment-tail-lines only affects text mode; JSON always has the full message."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -163,7 +157,6 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
 def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Resolved thread: last reply unresolved=false hides entire chain."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -203,7 +196,6 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
 
 def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -236,7 +228,6 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
 
 def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -267,7 +258,6 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
 
 def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
     ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
@@ -301,7 +291,6 @@ def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPat
 
 def _configure_gshow_repo(stack_repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
 
 
 def test_gshow_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -392,7 +381,6 @@ def test_gshow_highlights_warning_pattern_on_summary_line(stack_repo: Path, monk
     cid = head_change_id(stack_repo)
     git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
     git("config", "gerrit.warningPattern", subj, cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     detail = change_info_for_sha(sha, cid, number=91)
     details = {str(detail["id"]): detail}
     code, out, err = run_cli(stack_repo, gshow_main, ["--color", "always"], monkeypatch, gerrit=ChangeStore(details))

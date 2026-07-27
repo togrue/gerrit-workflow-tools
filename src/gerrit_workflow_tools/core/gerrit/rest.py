@@ -9,19 +9,12 @@ import re
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Protocol, TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from gerrit_workflow_tools.core.config import (
-    ConfigError,
-    gerrit_password,
-    gerrit_token,
-    gerrit_user,
-    gerrit_web_url,
-)
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.git_run import GitError
 
 logger = logging.getLogger(__name__)
@@ -91,10 +84,10 @@ class GerritAuth:
         return f"Basic {token}"
 
 
-def gerrit_auth_from_config(cwd: Path | str | None) -> GerritAuth | None:
+def gerrit_auth_from_settings(settings: Settings) -> GerritAuth | None:
     """Read ``gerrit.user`` plus ``gerrit.token``/``gerrit.password``, or ``None`` when unset."""
-    user = gerrit_user(cwd)
-    secret = gerrit_token(cwd) or gerrit_password(cwd)
+    user = settings.gerrit_user
+    secret = settings.gerrit_token or settings.gerrit_password
     if not user or secret is None:
         return None
     return GerritAuth(user=user, secret=secret)
@@ -200,9 +193,9 @@ class HttpGerritRest:
         self.auth = auth
 
     @classmethod
-    def from_cwd(cls, web_base: str, cwd: Path | str | None) -> HttpGerritRest:
-        """Build a client with credentials read from *cwd*'s git config."""
-        return cls(web_base, auth=gerrit_auth_from_config(cwd))
+    def from_settings(cls, web_base: str, settings: Settings) -> HttpGerritRest:
+        """Build a client with credentials taken from *settings*."""
+        return cls(web_base, auth=gerrit_auth_from_settings(settings))
 
     def _auth_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {"Accept": "*/*"}
@@ -501,13 +494,13 @@ def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return rows[0]
 
 
-def resolve_gerrit_web_base(cwd: Path | str | None) -> str:
+def resolve_gerrit_web_base(settings: Settings) -> str:
     """
     Gerrit HTTPS base for the REST API and web links.
 
     Requires ``gerrit.webUrl`` in git config (no inference from remotes).
     """
-    override = gerrit_web_url(cwd)
+    override = settings.gerrit_web_url
     if override:
         base = override.rstrip("/")
         logger.debug("resolve_gerrit_web_base: gerrit.webUrl -> %s", base)

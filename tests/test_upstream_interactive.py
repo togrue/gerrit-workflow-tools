@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream_interactive import (
@@ -57,9 +58,9 @@ def test_ensure_branch_upstream_interactive_sets_upstream(tmp_path: Path, monkey
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
-        lambda _cwd, _branch: "origin/main",
+        lambda _cwd, _branch, **_kw: "origin/main",
     )
-    assert ensure_branch_upstream_interactive(repo, "feature")
+    assert ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
     assert git_out("rev-parse", "--abbrev-ref", "@{upstream}", cwd=repo) == "origin/main"
     assert "origin/main" in read_recent_upstream_abbrevs(repo)
 
@@ -75,7 +76,7 @@ def test_ensure_branch_upstream_interactive_detached_skips_prompt(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompt must not run on detached HEAD")),
     )
-    assert not ensure_branch_upstream_interactive(repo, "feature")
+    assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
 
 
 def test_ensure_branch_upstream_interactive_non_tty_skips_prompt(
@@ -89,7 +90,7 @@ def test_ensure_branch_upstream_interactive_non_tty_skips_prompt(
         raise AssertionError("prompt must not run without tty")
 
     monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _boom)
-    assert not ensure_branch_upstream_interactive(repo, "feature")
+    assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
 
 
 def test_require_branch_upstream_non_tty_prints_hint(
@@ -99,7 +100,7 @@ def test_require_branch_upstream_non_tty_prints_hint(
     assert not branch_has_upstream(repo, "feature")
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
 
-    assert not require_branch_upstream(repo, "feature")
+    assert not require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
 
     err = capsys.readouterr().err
     assert "No upstream configured for branch 'feature'" in err

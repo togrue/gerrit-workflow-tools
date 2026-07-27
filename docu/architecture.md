@@ -47,7 +47,7 @@ flowchart TB
   subgraph core [Core domain — core/]
     stack[stack.py · ready_calc.py · change_id.py]
     status[gerrit_change_status.py · comment_chains.py]
-    config[config.py · upstream_interactive.py]
+    config[config.py · git_state.py · upstream_interactive.py]
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
     push_core[push_reviewers.py · gerrit_show.py]
@@ -123,17 +123,23 @@ Most commands eventually read git config or invoke git:
 ```mermaid
 flowchart LR
   cmd[CLI command]
-  config[core/config.py]
+  config[core/config.py · Settings]
+  state[core/git_state.py]
   git[core/git_run.py]
   repo[(git repo)]
 
   cmd --> config
+  cmd --> state
   cmd --> git
+  state --> config
   config --> git
+  state --> git
   git --> repo
 ```
 
-`config.py` snapshots `git config --list` once per cwd. Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
+`config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list`, then passes it down; there is no process-wide cache and nothing to invalidate. Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
+
+`git_state.py` answers what the repository currently looks like — branch, HEAD, rebase state, upstream, and the Gerrit push destination. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
 `upstream_interactive.py` prompts the user when a branch lacks `@{upstream}` — used by log, push, edit, rebase, change-id, sha.
 
@@ -235,7 +241,7 @@ flowchart TB
 | `ger push` | `cli_push.py`, `push_reviewers.py` | Triplet building for REST |
 | `stack.resolve_stack_commit` | `core/stack.py` | Map changeish → SHA within current stack |
 
-Stack context (`project`, `target_branch`, `push_branch`) comes from `config.py` + `gerrit_project_id.py`. Contract: [spec/change-and-commit-identifiers.md](spec/change-and-commit-identifiers.md).
+Stack context (`project`, `target_branch`, `push_branch`) comes from `git_state.py` + `gerrit_project_id.py`, over a `Settings`. Contract: [spec/change-and-commit-identifiers.md](spec/change-and-commit-identifiers.md).
 
 ---
 
@@ -327,7 +333,8 @@ Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli
 | Module | Role |
 |--------|------|
 | `git_run.py` | Subprocess wrapper for git commands |
-| `config.py` | Read/normalize all `gerrit.*` and `branch.*` git config |
+| `config.py` | `Settings`: one `git config --list` snapshot of all `gerrit.*` and `branch.*` values |
+| `git_state.py` | Current branch/HEAD/rebase state, upstream resolution, Gerrit push destination |
 | `stack.py` | Stack snapshot, commit ranges, merge-base, changeish→SHA for stack |
 | `change_id.py` | Change-Id parse/validate/generate/fix helpers |
 | `ready_calc.py` | Ready boundary and push-range computation |
@@ -457,7 +464,13 @@ Chain-blocking now has one implementation. `rebase_enricher` previously carried 
 
 Remaining coupling: `_print_resolution_note` is still copy-pasted in `cli_show.py` and `cli_resolve.py`.
 
-### 4. Split reviewer concerns
+### 4. Settings vs repository state — resolved
+
+`core/config.py` was two modules under one filename: 17 functions read a git *setting*, 11 ran git commands about *repository state* and never touched a setting. The state half now lives in `core/git_state.py`, which may read settings; `config.py` never queries repository state, so the dependency runs one way.
+
+Settings are an immutable `Settings` snapshot built once per command from a single `git config --list` and passed down like `cwd`. The process-wide cache is gone, and with it `clear_gerrit_git_config_cache()` — which had been the single most-imported name in the module (85 call sites, mostly tests re-reading config they had just written). Tests now build a snapshot from a plain mapping (`Settings.from_map`) with no repository and nothing to invalidate.
+
+### 5. Split reviewer concerns
 
 Reviewer logic spans four locations:
 
@@ -468,23 +481,23 @@ Reviewer logic spans four locations:
 
 Consider consolidating under `core/reviewer/` or similar.
 
-### 5. Show resolution vs generic resolution
+### 6. Show resolution vs generic resolution
 
 `core/gerrit_show.py` wraps `change_resolution.resolve_changeish` but also calls `HttpGerritRest.get_change` directly to build a `CommitStatusInput` for remote-only changes. Overlaps with what `ger resolve` already exposes; show-specific row building could sit closer to the status model.
 
-### 6. Presentation depending on CLI styling
+### 7. Presentation depending on CLI styling
 
-`summary_highlight.py` imports `cli_style.py` (ANSI colors). `render/commit_row.py` also depends on `cli_style`. Core-ish highlighting rules (`stopPattern`) are mixed with terminal color concerns — a thin split between “what to highlight” (core/config) and “how to colorize” (presentation) would be cleaner.
+`summary_highlight.py` imports `cli_style.py` (ANSI colors). `render/commit_row.py` also depends on `cli_style`. Core-ish highlighting rules (`stopPattern`) are mixed with terminal color concerns — a thin split between “what to highlight” (the `Settings` patterns) and “how to colorize” (presentation) would be cleaner.
 
-### 7. `stack.py` depends on Gerrit REST types
+### 8. `stack.py` depends on Gerrit REST types
 
 `resolve_stack_commit` accepts an optional `HttpGerritRest` and imports `change_resolution` lazily. Stack inspection is mostly git-only; the Gerrit type hint and changeish branches blur the boundary between **local stack** and **Gerrit resolution** (the latter already lives in `change_resolution.py`).
 
-### 8. Parallel rebase editor modules
+### 9. Parallel rebase editor modules
 
 `rebase_enricher.py` (full-stack Gerrit annotations) and `rebase_sequence_editor.py` (single-commit edit/reword/drop) are separate entry points invoked via `GIT_SEQUENCE_EDITOR`. Functionally distinct but both are subprocess hooks at package root with no shared module.
 
-### 9. Legacy doc reference
+### 10. Legacy doc reference
 
 Earlier versions of this document referenced `core/gerrit_client.py`. That module was merged into `core/gerrit/service.py` + `core/gerrit/rest.py`. All high-level fetch paths should go through `GerritService`.
 

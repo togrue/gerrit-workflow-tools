@@ -29,8 +29,8 @@ def test_get_payloads_resolves_stack_context_once(tmp_path: Path) -> None:
     """Batch change loading must not call resolve_stack_context per Change-Id."""
     calls = 0
 
-    def counting_resolve(cwd: Path | str | None, branch: str | None = None) -> StackContext:
-        del cwd, branch
+    def counting_resolve(cwd: Path | str | None, branch: str | None = None, **kwargs: object) -> StackContext:
+        del cwd, branch, kwargs
         nonlocal calls
         calls += 1
         return _stack()

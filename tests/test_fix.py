@@ -7,7 +7,6 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_fix import main as ger_fix_main
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
@@ -89,7 +88,6 @@ def test_ger_fix_all_flag(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     ch = change_info_for_sha(sha, cid, number=4242)
@@ -104,7 +102,6 @@ def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypat
 
 
 def test_ger_fix_missing_weburl_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_gerrit_git_config_cache()
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
     assert code == ExitCode.CONFIG
@@ -116,7 +113,6 @@ def test_ger_fix_gerrit_missing_local_object_reports_fetch_error(
 ) -> None:
     """When Gerrit points at an object not in the repo, we try ``git fetch`` and surface failure."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     missing = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     cid = "Icccccccccccccccccccccccccccccccccccccccc"
     ch = change_info_for_sha(missing, cid, number=7777)
@@ -162,7 +158,6 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
 
 def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     cid = "Idddddddddddddddddddddddddddddddddddddddd"
     ch = change_info_for_sha(sha, cid, number=5151)
@@ -183,7 +178,6 @@ def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pyte
     from gerrit_workflow_tools.cli_common import ExitCode
 
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     cid = "Ieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     first = change_info_for_sha(sha, cid, number=120045, branch="main")

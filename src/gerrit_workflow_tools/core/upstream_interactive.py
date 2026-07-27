@@ -6,7 +6,7 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import infer_nearest_remote_tracking_branch, is_detached_head
 
@@ -72,9 +72,9 @@ def _remote_tracking_ref_abbrevs(cwd: Path | str | None) -> list[str]:
     )
 
 
-def _upstream_choice_candidates(cwd: Path | str | None) -> tuple[list[str], str]:
+def _upstream_choice_candidates(cwd: Path | str | None, *, settings: Settings) -> tuple[list[str], str]:
     recent = read_recent_upstream_abbrevs(cwd)
-    inferred = infer_nearest_remote_tracking_branch(cwd, "HEAD")
+    inferred = infer_nearest_remote_tracking_branch(cwd, "HEAD", settings=settings)
     inferred_ref = inferred[0] if inferred else ""
     refs = _remote_tracking_ref_abbrevs(cwd)
     ordered = _dedupe_preserve_order([*recent, inferred_ref, *refs])
@@ -85,11 +85,11 @@ def _upstream_choice_candidates(cwd: Path | str | None) -> tuple[list[str], str]
     return ordered, inferred_ref
 
 
-def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str) -> str | None:
+def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, settings: Settings) -> str | None:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.completion import WordCompleter
 
-    candidates, inferred_ref = _upstream_choice_candidates(cwd)
+    candidates, inferred_ref = _upstream_choice_candidates(cwd, settings=settings)
     default = inferred_ref or (candidates[0] if candidates else "")
     completer = WordCompleter(candidates, ignore_case=False, sentence=True)
     session = PromptSession()
@@ -128,24 +128,23 @@ def missing_upstream_error_message(branch: str) -> str:
     )
 
 
-def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str) -> bool:
+def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str, *, settings: Settings) -> bool:
     if is_detached_head(cwd):
         return False
     if branch_has_upstream(cwd, branch):
         return True
     if not sys.stdin.isatty():
         return False
-    choice = prompt_upstream_abbrev_interactive(cwd, branch)
+    choice = prompt_upstream_abbrev_interactive(cwd, branch, settings=settings)
     if not choice:
         return False
     git("branch", "--set-upstream-to", choice, branch, cwd=cwd)
-    clear_gerrit_git_config_cache()
     append_recent_upstream_abbrev(cwd, choice)
     print(f"Upstream for {branch!r} set to {choice}.", file=sys.stderr)
     return True
 
 
-def require_branch_upstream(cwd: Path | str | None, branch: str) -> bool:
+def require_branch_upstream(cwd: Path | str | None, branch: str, *, settings: Settings) -> bool:
     """Return True when *branch* has upstream (possibly set via TTY prompt).
 
     When upstream is still missing and stdin is not a TTY, print setup guidance
@@ -156,7 +155,7 @@ def require_branch_upstream(cwd: Path | str | None, branch: str) -> bool:
         return True
     if branch_has_upstream(cwd, branch):
         return True
-    if ensure_branch_upstream_interactive(cwd, branch):
+    if ensure_branch_upstream_interactive(cwd, branch, settings=settings):
         return True
     if not sys.stdin.isatty():
         print(f"error: {missing_upstream_error_message(branch)}", file=sys.stderr)

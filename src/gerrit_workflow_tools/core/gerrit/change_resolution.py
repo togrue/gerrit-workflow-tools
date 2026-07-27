@@ -9,7 +9,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
-from gerrit_workflow_tools.core.config import gerrit_remote
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, pick_change_from_query_result
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.git_run import GitError, git_out
@@ -170,29 +170,29 @@ def build_triplet(project: str, branch: str, change_id: str) -> str:
     return f"{project}~{branch}~{change_id}"
 
 
-def _stack_branch_name(cwd: Path | str | None, branch: str | None) -> str:
+def _stack_branch_name(cwd: Path | str | None, branch: str | None, *, settings: Settings) -> str:
     if branch is not None:
         return branch
-    working = resolve_working_branch(cwd)
+    working = resolve_working_branch(cwd, settings=settings)
     if working:
         return working
     raise ChangeResolutionError("cannot determine working branch (detached HEAD with no branch context)")
 
 
-def resolve_stack_context(cwd: Path | str | None, branch: str | None = None) -> StackContext:
+def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> StackContext:
     """Resolve project, target branch, and push branch for the current stack."""
-    branch_name = _stack_branch_name(cwd, branch)
-    project = resolve_gerrit_project_name(cwd)
+    branch_name = _stack_branch_name(cwd, branch, settings=settings)
+    project = resolve_gerrit_project_name(cwd, settings=settings)
     if not project:
-        remote = gerrit_remote(cwd)
+        remote = settings.gerrit_remote
         raise ChangeResolutionError(
             f"cannot resolve Gerrit project name; set `gerrit.project` or configure remote `{remote}` "
             "with a parseable URL"
         )
 
-    target = effective_gerrit_destination_branch(cwd, branch_name)
+    target = effective_gerrit_destination_branch(cwd, branch_name, settings=settings)
     if not target:
-        remote = gerrit_remote(cwd)
+        remote = settings.gerrit_remote
         raise ChangeResolutionError(
             f"No Gerrit destination branch for branch {branch_name!r}. "
             f"Set upstream to a branch on `{remote}` (`gerrit.remote`), "
@@ -200,7 +200,7 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None) -> 
             f"or configure `branch.{branch_name}.gerritTarget`."
         )
 
-    push_branch = refs_for_push_branch_name(cwd, target)
+    push_branch = refs_for_push_branch_name(target, settings=settings)
     return StackContext(project=project, target_branch=target, push_branch=push_branch)
 
 
@@ -402,6 +402,7 @@ def resolve_changeish(
     *,
     client: GerritRest,
     cwd: Path | str | None,
+    settings: Settings,
     branch: str | None = None,
     explicit_target: bool = False,
 ) -> Resolution:
@@ -409,7 +410,7 @@ def resolve_changeish(
     raw = ref.strip()
     kind = classify_changeish(raw)
     resolution = Resolution(input=raw, kind=kind)
-    stack = resolve_stack_context(cwd, branch)
+    stack = resolve_stack_context(cwd, branch, settings=settings)
 
     if kind == "git-rev":
         rev = _strip_force_git_prefix(raw)
@@ -487,6 +488,7 @@ def resolve_to_stack_sha(
     ref: str,
     *,
     cwd: Path | str | None,
+    settings: Settings,
     branch: str | None = None,
     client: GerritRest | None = None,
 ) -> str:
@@ -509,7 +511,9 @@ def resolve_to_stack_sha(
             raise ChangeResolutionError(
                 f"cannot resolve {kind!r} to a stack commit without a Gerrit client"
             )
-        resolution = resolve_changeish(raw, client=client, cwd=cwd, branch=branch, explicit_target=True)
+        resolution = resolve_changeish(
+            raw, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
+        )
         if resolution.selected is None:
             raise ChangeResolutionError(f"no Gerrit change resolved for {raw!r}")
         change_id = resolution.selected.change_id

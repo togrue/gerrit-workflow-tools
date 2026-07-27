@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import Commit
@@ -192,7 +193,7 @@ def test_enrich_todo_passthrough_without_gerrit_url(tmp_path: Path):
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "pick abc1234 some commit\n# comment\n"
-    with patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=None):
+    with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
         result = _enrich_todo(text, tmp_path)
 
     assert result == text
@@ -203,7 +204,7 @@ def test_enrich_todo_preserves_comment_and_blank_lines(tmp_path: Path):
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "\n# some comment\n\n"
-    with patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value=None):
+    with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
         result = _enrich_todo(text, tmp_path)
 
     assert result == text
@@ -214,7 +215,7 @@ def test_enrich_todo_passthrough_when_no_commit_lines(tmp_path: Path):
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "# pick abc no pick lines here\n"
-    with patch("gerrit_workflow_tools.rebase_enricher.gerrit_web_url", return_value="https://g.example"):
+    with patch.object(Settings, "gerrit_web_url", property(lambda self: "https://g.example")):
         result = _enrich_todo(text, tmp_path)
 
     assert result == text

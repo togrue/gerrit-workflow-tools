@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     commit_rows_in_range,
     resolve_rev_range,
 )
-from gerrit_workflow_tools.core.config import ConfigError, clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     PatchsetStatus,
@@ -37,7 +37,6 @@ from tests.fixtures import make_repo_with_merged_side_branch
 
 def _configure_repo(repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -92,7 +91,6 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
     first_subject = rows[0].subject
     git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
     git("config", "gerrit.warningPattern", first_subject, cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(stack_repo, log_main, ["--color", "always"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
@@ -318,7 +316,6 @@ def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.Monke
 def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     git("config", "gerrit.logShowUrl", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
@@ -359,7 +356,7 @@ def _install_log_git_mocks(
 
     monkeypatch.setattr("gerrit_workflow_tools.core.git_state.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
-    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: None)
+    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: None)
     return git_out_calls, git_calls
 
 
@@ -367,7 +364,7 @@ def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: py
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="feat/x")
 
-    rev_range = resolve_rev_range(cwd, None)
+    rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "feat/x@{upstream}..feat/x"
 
     commit_data = commit_rows_in_range(cwd, rev_range)
@@ -383,7 +380,7 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
 
-    rev_range = resolve_rev_range(cwd, None)
+    rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "@{upstream}..HEAD"
 
     commit_data = commit_rows_in_range(cwd, rev_range)
@@ -398,9 +395,11 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
 def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
-    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: "feat/x")
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: "feat/x"
+    )
 
-    rev_range = resolve_rev_range(cwd, None)
+    rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "feat/x@{upstream}..feat/x"
 
     commit_data = commit_rows_in_range(cwd, rev_range)
@@ -416,7 +415,7 @@ def test_log_rev_range_single_branch_expands_to_branch_upstream_range(monkeypatc
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range = resolve_rev_range(cwd, "bak")
+    rev_range = resolve_rev_range(cwd, "bak", settings=Settings.from_map({}))
     assert rev_range == "bak@{upstream}..bak"
 
     commit_data = commit_rows_in_range(cwd, rev_range)
@@ -436,7 +435,7 @@ def test_log_rev_range_explicit_ranges_are_forwarded_verbatim(
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range = resolve_rev_range(cwd, arg_rev_range)
+    rev_range = resolve_rev_range(cwd, arg_rev_range, settings=Settings.from_map({}))
     assert rev_range == arg_rev_range
 
     commit_data = commit_rows_in_range(cwd, rev_range)
@@ -453,7 +452,7 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
     _ = git_out_calls
 
-    rev_range = resolve_rev_range(cwd, "a..b")
+    rev_range = resolve_rev_range(cwd, "a..b", settings=Settings.from_map({}))
     assert rev_range == "a..b"
 
     commit_data = commit_rows_in_range(cwd, rev_range, first_parent=False)
@@ -480,8 +479,8 @@ def test_branches_needing_upstream(
     want: list[str],
 ) -> None:
     monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.current_branch", lambda _cwd: head_branch)
-    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: None)
-    got = branches_needing_upstream(Path("mock-repo"), rev_range)
+    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: None)
+    got = branches_needing_upstream(Path("mock-repo"), rev_range, settings=Settings.from_map({}))
     assert got == want
 
 

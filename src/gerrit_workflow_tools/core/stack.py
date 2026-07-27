@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import current_branch
@@ -202,8 +203,8 @@ def resolve_stack_commit(
     cwd: Path | str | None,
     ref: str,
     *,
+    settings: Settings,
     branch: str | None = None,
-    _snap: StackSnapshot | None = None,
     client: GerritRest | None = None,
 ) -> str:
     """Resolve *ref* to a full SHA, or map a changeish to the unique commit on the current stack."""
@@ -218,7 +219,7 @@ def resolve_stack_commit(
     kind = classify_changeish(s)
     if kind in ("change-id", "triplet", "change-number", "change-ref", "url", "query"):
         try:
-            full = resolve_to_stack_sha(s, cwd=cwd, branch=branch, client=client)
+            full = resolve_to_stack_sha(s, cwd=cwd, settings=settings, branch=branch, client=client)
         except ChangeAmbiguousError as e:
             raise GitError(str(e)) from e
         except ChangeResolutionError as e:
@@ -234,6 +235,7 @@ def commit_in_stack(
     cwd: Path | str | None,
     commit: str,
     *,
+    settings: Settings,
     branch: str | None = None,
 ) -> bool:
     """True if commit is in the default ``upstream_tip..HEAD`` stack."""
@@ -241,5 +243,5 @@ def commit_in_stack(
         snap = get_stack_snapshot(cwd, branch)
     except GitError:
         return False
-    c = resolve_stack_commit(cwd, commit, branch=branch, _snap=snap)
+    c = resolve_stack_commit(cwd, commit, settings=settings, branch=branch)
     return c in {x.sha for x in snap.commits}

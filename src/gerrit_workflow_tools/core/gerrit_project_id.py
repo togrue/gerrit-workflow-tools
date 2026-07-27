@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import gerrit_project, gerrit_remote
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 
 
@@ -39,12 +39,12 @@ def parse_project_name_from_remote_url(remote_url: str) -> str | None:
     return path or None
 
 
-def resolve_gerrit_project_name(cwd: Path | str | None) -> str | None:
+def resolve_gerrit_project_name(cwd: Path | str | None, *, settings: Settings) -> str | None:
     """Resolve project name for this repo, preferring ``gerrit.project``."""
-    override = gerrit_project(cwd)
+    override = settings.gerrit_project
     if override:
         return override
-    remote = gerrit_remote(cwd)
+    remote = settings.gerrit_remote
     try:
         url = git_out("remote", "get-url", remote, cwd=cwd)
     except GitError:

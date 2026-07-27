@@ -63,6 +63,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
@@ -127,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
     configure_logging(args.debug_log)
     init_color_mode(color=args.color)
     cwd = cwd_from_env()
+    settings = Settings.from_cwd(cwd)
 
     if not CHANGE_ID_VALUE_RE.match(args.change_id):
         print(f"error: invalid Change-Id: {args.change_id!r}", file=sys.stderr)
@@ -145,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
             head_ref = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
             if head_ref.returncode == 0:
                 branch = head_ref.stdout.strip()
-                if branch != "HEAD" and not require_branch_upstream(cwd, branch):
+                if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
                     return 1
             _fork, display, target_tip = merge_base_with_target(cwd)
             rev_range = f"{target_tip}..HEAD"

@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git
 
 _PROMPTS: tuple[tuple[str, str, str], ...] = (
@@ -162,7 +161,6 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
     _git_config_set(global_config=global_config, key="gerrit.webUrl", value=web_url, cwd=cwd)
     _git_config_set(global_config=global_config, key="gerrit.user", value=user, cwd=cwd)
     _git_config_set(global_config=global_config, key="gerrit.token", value=token, cwd=cwd)
-    clear_gerrit_git_config_cache()
 
     print(
         f"\nConfigured ({scope}): gerrit.webUrl={web_url!r}, gerrit.user={user!r}, gerrit.token=<set>",

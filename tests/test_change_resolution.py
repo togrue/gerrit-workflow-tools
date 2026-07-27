@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gerrit_workflow_tools.core.config import branch_gerrit_target, clear_gerrit_git_config_cache
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
     ChangeResolutionError,
@@ -46,7 +46,6 @@ def _change_row(
 
 def _configure_stack_repo_project(repo: Path, project: str = "myproject") -> None:
     git("config", "gerrit.project", project, cwd=repo)
-    clear_gerrit_git_config_cache()
 
 
 def _set_upstream_to_dev(repo: Path) -> None:
@@ -119,9 +118,8 @@ def test_resolve_stack_context_project_from_remote_url(tmp_path: Path) -> None:
     git("remote", "add", "origin", "ssh://user@gerrit.example.com/a/team/my-project.git", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
     configure_gerrit_target(repo, "main")
-    clear_gerrit_git_config_cache()
 
-    ctx = resolve_stack_context(repo, branch="feature")
+    ctx = resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
     assert ctx.project == "team/my-project"
     assert ctx.push_branch == "main"
@@ -138,9 +136,8 @@ def test_resolve_stack_context_project_override(tmp_path: Path) -> None:
     git("config", "gerrit.project", "cfg/override", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
     configure_gerrit_target(repo, "main")
-    clear_gerrit_git_config_cache()
 
-    ctx = resolve_stack_context(repo, branch="feature")
+    ctx = resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
     assert ctx.project == "cfg/override"
 
@@ -156,12 +153,11 @@ def test_effective_gerrit_destination_branch_gerrit_target_override(tmp_path: Pa
     git("checkout", "-b", "feature", cwd=repo)
     _set_upstream_to_dev(repo)
     git("config", "branch.feature.gerritTarget", "main", cwd=repo)
-    clear_gerrit_git_config_cache()
 
-    assert branch_gerrit_target(repo, "feature") == "main"
-    assert effective_gerrit_destination_branch(repo, "feature") == "main"
+    assert Settings.from_cwd(repo).branch_gerrit_target("feature") == "main"
+    assert effective_gerrit_destination_branch(repo, "feature", settings=Settings.from_cwd(repo)) == "main"
 
-    ctx = resolve_stack_context(repo, branch="feature")
+    ctx = resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
     assert ctx.push_branch == "main"
     assert ctx.target_branch == "main"
 
@@ -175,10 +171,9 @@ def test_resolve_stack_context_errors_when_project_missing(tmp_path: Path) -> No
     git("commit", "-m", "init", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
     configure_gerrit_target(repo, "main")
-    clear_gerrit_git_config_cache()
 
     with pytest.raises(ChangeResolutionError, match="gerrit.project"):
-        resolve_stack_context(repo, branch="feature")
+        resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
 
 def test_resolve_stack_context_errors_when_destination_missing(tmp_path: Path) -> None:
@@ -190,10 +185,9 @@ def test_resolve_stack_context_errors_when_destination_missing(tmp_path: Path) -
     git("commit", "-m", "init", cwd=repo)
     git("remote", "add", "origin", "ssh://user@gerrit.example.com/a/proj.git", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
-    clear_gerrit_git_config_cache()
 
     with pytest.raises(ChangeResolutionError, match="gerritTarget"):
-        resolve_stack_context(repo, branch="feature")
+        resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
 
 def test_narrowing_target_branch_selected(stack_repo: Path) -> None:
@@ -204,7 +198,7 @@ def test_narrowing_target_branch_selected(stack_repo: Path) -> None:
     ]
     client = _mock_client({f"change:{CHANGE_ID}": rows})
 
-    resolution = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo)
+    resolution = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
 
     assert resolution.selected is not None
     assert resolution.selected.number == 120045
@@ -222,7 +216,7 @@ def test_narrowing_prefer_open_on_target_branch(stack_repo: Path) -> None:
     ]
     client = _mock_client({f"change:{CHANGE_ID}": rows})
 
-    resolution = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo)
+    resolution = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
 
     assert resolution.selected is not None
     assert resolution.selected.number == 120045
@@ -240,7 +234,7 @@ def test_narrowing_two_open_on_target_raises(stack_repo: Path) -> None:
     client = _mock_client({f"change:{CHANGE_ID}": rows})
 
     with pytest.raises(ChangeAmbiguousError) as exc:
-        resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo)
+        resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
 
     assert len(exc.value.alternatives) == 2
     nums = {alt.number for alt in exc.value.alternatives}
@@ -252,7 +246,9 @@ def test_change_id_only_on_other_branch_is_absent(stack_repo: Path) -> None:
     rows = [_change_row(number=119870, branch="release-2.1")]
     client = _mock_client({f"change:{CHANGE_ID}": rows})
 
-    resolution = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo, explicit_target=False)
+    resolution = resolve_changeish(
+        CHANGE_ID, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo), explicit_target=False
+    )
 
     assert resolution.selected is None
     assert len(resolution.alternatives) == 1
@@ -275,8 +271,10 @@ def test_change_id_case_sensitive_queries(stack_repo: Path) -> None:
 
     client.query_changes.side_effect = query_changes
 
-    first = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo)
-    second = resolve_changeish(CHANGE_ID_OTHER_CASE, client=client, cwd=stack_repo)
+    first = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
+    second = resolve_changeish(
+        CHANGE_ID_OTHER_CASE, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo)
+    )
 
     assert first.selected is not None
     assert second.selected is not None
@@ -291,7 +289,7 @@ def test_resolve_triplet(stack_repo: Path) -> None:
     row = _change_row(number=120045, branch="main")
     client = _mock_client({"": [row]})
 
-    resolution = resolve_changeish(triplet, client=client, cwd=stack_repo)
+    resolution = resolve_changeish(triplet, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
 
     assert resolution.kind == "triplet"
     assert resolution.selected is not None
@@ -304,7 +302,9 @@ def test_resolve_change_number(stack_repo: Path) -> None:
     row = _change_row(number=120045, branch="main")
     client = _mock_client({"": [row]})
 
-    resolution = resolve_changeish("change:120045", client=client, cwd=stack_repo)
+    resolution = resolve_changeish(
+        "change:120045", client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo)
+    )
 
     assert resolution.kind == "change-number"
     assert resolution.selected is not None
@@ -317,7 +317,7 @@ def test_git_rev_resolves_without_gerrit_query(stack_repo: Path) -> None:
     # Use init commit (no Change-Id footer) so git-rev path does not query Gerrit.
     sha = git_out("rev-parse", "main", cwd=stack_repo)
 
-    resolution = resolve_changeish("main", client=client, cwd=stack_repo)
+    resolution = resolve_changeish("main", client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
 
     assert resolution.kind == "git-rev"
     assert resolution.local_sha == sha

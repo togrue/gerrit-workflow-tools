@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, parse_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -38,12 +39,12 @@ class ReviewerApplyResult:
     outcomes: list[ReviewerApplyChangeOutcome] = field(default_factory=list)
 
 
-def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool) -> list[str]:
+def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool, *, settings: Settings) -> list[str]:
     """Unique Gerrit triplets in stack order for the current push range."""
 
     if not ready.push_range:
         return []
-    stack = resolve_stack_context(cwd)
+    stack = resolve_stack_context(cwd, settings=settings)
     rows = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
     out: list[str] = []
     seen: set[str] = set()

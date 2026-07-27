@@ -15,7 +15,7 @@ import gerrit_workflow_tools.cli_push as cli_push_mod
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
-from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache, set_branch_config
+from gerrit_workflow_tools.core.config import set_branch_config
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range
@@ -88,7 +88,7 @@ def test_gpush_prompts_for_missing_upstream_and_aborts(
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
-        lambda _cwd, _branch: None,
+        lambda _cwd, _branch, **_kw: None,
     )
     code, _out, _err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
@@ -105,7 +105,7 @@ def test_gpush_sets_missing_upstream_then_continues(
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
-        lambda _cwd, _branch: "origin/main",
+        lambda _cwd, _branch, **_kw: "origin/main",
     )
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
@@ -122,7 +122,6 @@ def test_gpush_vanilla_upstream_runs_plain_git_push(
     git("remote", "add", "fork", str(repo.resolve()), cwd=repo)
     git("fetch", "fork", cwd=repo)
     git("branch", "--set-upstream-to=fork/main", "feature", cwd=repo)
-    clear_gerrit_git_config_cache()
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
@@ -136,7 +135,6 @@ def test_gpush_detached_head_no_local_branch_errors(stack_repo: Path, monkeypatc
     (stack_repo / "detached-only.txt").write_text("x\n", encoding="utf-8")
     git("add", "detached-only.txt", cwd=stack_repo)
     git("commit", "-m", "detached-only", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == ExitCode.GIT
     assert "detached" in err.lower()
@@ -155,7 +153,6 @@ def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: p
         cwd=stack_repo,
     )
     write_rebase_head(stack_repo, "feature")
-    clear_gerrit_git_config_cache()
 
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
 
@@ -165,7 +162,6 @@ def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: p
 
 def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
@@ -177,7 +173,6 @@ def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypa
 
 def test_gpush_branch_flag_pushes_specified_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("checkout", "main", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--branch", "feature", "--dry-run"], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
@@ -203,7 +198,6 @@ def test_gpush_infers_gerrit_target_from_upstream(
     repo = stack_repo_unconfigured
     _add_self_origin_and_fetch(repo)
     git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
-    clear_gerrit_git_config_cache()
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
@@ -219,7 +213,6 @@ def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     repo = stack_repo_unconfigured
     _add_self_origin_and_fetch(repo)
     git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
-    clear_gerrit_git_config_cache()
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
@@ -420,7 +413,6 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     ready = compute_ready(stack_repo, stop_pattern=r"^test!")
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
@@ -452,7 +444,6 @@ def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     ready = compute_ready(stack_repo, stop_pattern=r"^test!")
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
@@ -523,7 +514,6 @@ def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch
     first_subject = rows[0].subject
     git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
     git("config", "gerrit.warningPattern", f"^{re.escape(first_subject)}$", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all", "--color", "always"], monkeypatch)
     assert code == 0
     assert ANSI_YELLOW in out
@@ -535,7 +525,6 @@ def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkey
     assert len(rows) >= 2
     boundary_subject = rows[1].subject
     git("config", "gerrit.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--color", "always"], monkeypatch)
     assert code == 0
     assert "Stopped at commit" in out
@@ -545,7 +534,6 @@ def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkey
 
 def test_gpush_show_attributes_fails_without_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "gerrit.webUrl" in err or "webUrl" in err
@@ -554,7 +542,6 @@ def test_gpush_show_attributes_fails_without_weburl(stack_repo: Path, monkeypatc
 def test_gpush_show_attributes_fails_without_credentials(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
     git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "credentials" in err.lower()
@@ -567,7 +554,6 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -598,7 +584,6 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -626,7 +611,6 @@ def test_gpush_config_default_show_attributes(stack_repo: Path, monkeypatch: pyt
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -655,7 +639,6 @@ def test_gpush_push_show_attributes_false_skips_attribute_suffix(
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     git("config", "gerrit.pushShowAttributes", "false", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -684,7 +667,6 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
     git("config", "gerrit.user", "testuser", cwd=stack_repo)
     git("config", "gerrit.password", "testpass", cwd=stack_repo)
     git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -828,7 +810,6 @@ def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pyt
 
 def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     expected_tip = compute_ready(stack_repo, stop_pattern=r"^test!").push_tip_sha
     assert expected_tip
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
@@ -841,7 +822,6 @@ def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: p
 
 def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
@@ -852,7 +832,6 @@ def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: 
 
 def test_gpush_dry_run_does_not_create_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
@@ -860,7 +839,6 @@ def test_gpush_dry_run_does_not_create_last_push_branch(stack_repo: Path, monkey
 
 def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=1))
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
@@ -922,7 +900,6 @@ def _advance_main_with_commit(repo: Path) -> None:
 def test_gpush_default_remote_policy_skips_rebase_check(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
@@ -933,7 +910,6 @@ def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch:
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
     git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
@@ -945,7 +921,6 @@ def test_gpush_error_not_rebased_exits(stack_repo: Path, monkeypatch: pytest.Mon
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
     git("config", "gerrit.push.remotePolicy", "error-not-rebased", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "error:" in err.lower()
@@ -956,7 +931,6 @@ def test_gpush_no_rebase_check_bypasses_error_policy(stack_repo: Path, monkeypat
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
     git("config", "gerrit.push.remotePolicy", "error-not-rebased", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--no-rebase-check"], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
@@ -973,7 +947,6 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
 
     monkeypatch.setattr(cli_push_mod, "git", git_fetch_fail)
     git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0, err
     assert "About to push commits:" in out
@@ -982,7 +955,6 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
 
 def test_gpush_cancel_at_prompt_does_not_create_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
-    clear_gerrit_git_config_cache()
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr("builtins.input", lambda _p="": "n")
     mock_run = MagicMock()
