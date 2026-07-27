@@ -6,11 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gerrit_workflow_tools.core.config import (
-    branch_gerrit_target,
-    clear_gerrit_git_config_cache,
-    effective_gerrit_destination_branch,
-)
+from gerrit_workflow_tools.core.config import branch_gerrit_target, clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
     ChangeResolutionError,
@@ -22,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     resolve_stack_context,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_state import effective_gerrit_destination_branch
 from tests.fixtures import _cid, configure_gerrit_target
 
 CHANGE_ID = _cid("a")

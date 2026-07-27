@@ -34,17 +34,9 @@ from gerrit_workflow_tools.core.change_id import classify_issues, extract_valid_
 from gerrit_workflow_tools.core.config import (
     ConfigError,
     branch_gerrit_reviewers,
-    checked_out_branch_name,
-    effective_gerrit_destination_branch,
     ger_push_defaults,
-    ger_push_mode,
     gerrit_push_remote_policy,
     gerrit_remote,
-    head_is_linear_on_remote_gerrit_target,
-    is_detached_head,
-    refs_for_push_branch_name,
-    resolve_push_context_branch,
-    resolve_upstream_parsed,
     set_branch_config,
     stop_pattern,
 )
@@ -52,6 +44,16 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, r
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.git_state import (
+    checked_out_branch_name,
+    effective_gerrit_destination_branch,
+    ger_push_mode,
+    head_is_linear_on_remote_gerrit_target,
+    is_detached_head,
+    refs_for_push_branch_name,
+    resolve_push_context_branch,
+    resolve_upstream_parsed,
+)
 from gerrit_workflow_tools.core.push_reviewers import (
     ReviewerApplyChangeOutcome,
     apply_reviewer_strategy_after_push_service,

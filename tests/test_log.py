@@ -357,7 +357,7 @@ def _install_log_git_mocks(
         git_calls.append((args, cwd, check))
         return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr("gerrit_workflow_tools.core.config.git_out", fake_git_out)
+    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
     monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd: None)
     return git_out_calls, git_calls

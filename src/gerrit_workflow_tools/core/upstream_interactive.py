@@ -6,12 +6,9 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import (
-    clear_gerrit_git_config_cache,
-    infer_nearest_remote_tracking_branch,
-    is_detached_head,
-)
+from gerrit_workflow_tools.core.config import clear_gerrit_git_config_cache
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_state import infer_nearest_remote_tracking_branch, is_detached_head
 
 logger = logging.getLogger(__name__)
 

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.core.config import is_detached_head
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream_interactive import (
     branch_has_upstream,
     ensure_branch_upstream_interactive,

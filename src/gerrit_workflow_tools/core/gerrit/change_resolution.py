@@ -9,15 +9,15 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
-from gerrit_workflow_tools.core.config import (
-    effective_gerrit_destination_branch,
-    gerrit_remote,
-    refs_for_push_branch_name,
-    resolve_working_branch,
-)
+from gerrit_workflow_tools.core.config import gerrit_remote
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, pick_change_from_query_result
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.git_state import (
+    effective_gerrit_destination_branch,
+    refs_for_push_branch_name,
+    resolve_working_branch,
+)
 
 ChangeishKind = Literal[
     "git-rev",

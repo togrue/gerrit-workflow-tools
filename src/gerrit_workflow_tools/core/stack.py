@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer
-from gerrit_workflow_tools.core.config import current_branch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.git_state import current_branch
 
 logger = logging.getLogger(__name__)
 
