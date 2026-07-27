@@ -11,12 +11,12 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_changeid import (
     CHANGE_ID_RE,
     _parse_sha_body_rs,
-    extract_change_id_from_msg,
 )
 from gerrit_workflow_tools.cli_changeid import (
     main as gcid_main,
 )
 from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id, parse_change_id_footer
 from gerrit_workflow_tools.core.change_id import is_change_id_token as is_change_id
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
@@ -142,20 +142,20 @@ def test_is_change_id_rejects_wrong_length_or_charset():
     assert not is_change_id("x" + "a" * 40)
 
 
-def test_extract_change_id_from_msg_last_line_only():
+def test_extract_valid_change_id_last_line_only():
     cid = "I" + "b" * 40
-    assert extract_change_id_from_msg(f"title\n\nChange-Id: {cid}\n") == cid
-    assert extract_change_id_from_msg(f"title\n\nChange-Id: {cid}") == cid
+    assert extract_valid_change_id(f"title\n\nChange-Id: {cid}\n") == cid
+    assert extract_valid_change_id(f"title\n\nChange-Id: {cid}") == cid
 
 
-def test_extract_change_id_from_msg_not_on_last_line():
+def test_extract_valid_change_id_not_on_last_line():
     cid = "I" + "c" * 40
     msg = f"title\n\nChange-Id: {cid}\n\nSigned-off-by: x\n"
-    assert extract_change_id_from_msg(msg) is None
+    assert extract_valid_change_id(msg) is None
 
 
-def test_extract_change_id_from_msg_missing():
-    assert extract_change_id_from_msg("only a subject") is None
+def test_extract_valid_change_id_missing():
+    assert extract_valid_change_id("only a subject") is None
 
 
 def test_parse_sha_body_rs_trailing_rs_stripped():
@@ -335,26 +335,33 @@ def test_gcid_check_duplicates_end_ref(stack_repo, monkeypatch):
 # --- CLI: synthetic repos ---
 
 
-def test_gcid_missing_change_id_exits_1(tmp_path, monkeypatch):
+def test_gcid_missing_change_id_exits_missing_change_id(tmp_path, monkeypatch):
     repo = _make_repo_no_change_id_footer(tmp_path / "r")
     code, out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.MISSING_CHANGE_ID
     assert out == ""
     assert "no Change-Id" in err
 
 
-def test_gcid_change_id_not_last_line_exits_1(tmp_path, monkeypatch):
+def test_gcid_change_id_not_last_line_exits_missing_change_id(tmp_path, monkeypatch):
     repo = _make_repo_change_id_not_last_line(tmp_path / "r2")
     code, _out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.MISSING_CHANGE_ID
     assert "no Change-Id" in err
 
 
-def test_gcid_malformed_change_id_last_line_exits_1(tmp_path, monkeypatch):
+def test_gcid_malformed_change_id_reports_invalid_not_missing(tmp_path, monkeypatch):
+    """A garbage footer must be reported as invalid, not as absent.
+
+    ``ger change-id`` used to extract strictly, so a malformed value came back as ``None``
+    and was indistinguishable from having no footer at all -- while ``ger push``, which
+    kept the raw value, correctly called the same commit malformed.
+    """
     repo = _make_repo_malformed_change_id_last_line(tmp_path / "r3")
     code, _out, err = run_cli(repo, gcid_main, ["HEAD"], monkeypatch)
-    assert code == 1
-    assert "no Change-Id" in err
+    assert code == ExitCode.MISSING_CHANGE_ID
+    assert "invalid Change-Id" in err
+    assert "no Change-Id" not in err
 
 
 def test_gcid_string_that_is_not_change_id_tries_git(gcid_cli_repo, monkeypatch):
@@ -375,7 +382,7 @@ def test_gcid_fix_assigns_missing_and_not_last_line(tmp_path, monkeypatch):
     bodies = _stack_bodies(repo)
     assert len(bodies) == 3
     for body in bodies:
-        assert extract_change_id_from_msg(body) is not None
+        assert extract_valid_change_id(body) is not None
 
     second = bodies[1]
     assert "Signed-off-by: test@example.com" in second
@@ -415,3 +422,24 @@ def test_gcid_fix_requires_clean_tree(stack_repo, monkeypatch):
     assert code == 2
     assert out == ""
     assert "clean working tree" in err
+
+
+def test_extract_valid_change_id_accepts_uppercase_hex_and_lowercase_label() -> None:
+    """The footer parser must agree with the project's own definition of a valid Change-Id.
+
+    validate_change_id_value, change_resolution and the REST layer all treat Change-Ids
+    case-insensitively; the old footer parser did not, so ``ger change-id`` reported
+    "no Change-Id" for commits ``ger push`` considered perfectly valid.
+    """
+    upper = "I" + "A" * 40
+    assert extract_valid_change_id("title\n\nChange-Id: " + upper) == upper
+    lower_label = "I" + "a" * 40
+    assert extract_valid_change_id("title\n\nchange-id: " + lower_label) == lower_label
+
+
+def test_malformed_footer_is_extracted_raw_but_not_valid() -> None:
+    """Extraction and validation are separate, so malformed can be told from missing."""
+    msg = "title\n\nChange-Id: garbage"
+    assert parse_change_id_footer(msg) == "garbage"
+    assert extract_valid_change_id(msg) is None
+    assert parse_change_id_footer("title only") is None

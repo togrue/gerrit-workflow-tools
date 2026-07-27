@@ -9,7 +9,8 @@
 # If it is, output the Change-Id.
 # Else normalize the revision with ``git rev-parse --verify`` (each side of ``..`` / ``...``), then run one
 # ``git log`` over the revision or range (RS-delimited %H / %B: :func:`stack.git_log_sha_body`).
-# Parse each commit message (last non-empty line must be the Change-Id: :func:`change_id.extract_change_id_from_msg`).
+# Parse each commit message (last non-empty line must be the Change-Id footer; see
+# :func:`change_id.parse_change_id_footer` for extraction and `validate_change_id_value` for the verdict).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
 # With ``--start-at-remote`` or ``--check-duplicates``, log ``upstream_tip..END``
@@ -33,9 +34,10 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
 from gerrit_workflow_tools.core.change_id import (
-    CHANGE_ID_LAST_LINE_FOOTER_RE,
-    extract_change_id_from_msg,
+    CHANGE_ID_FOOTER_RE,
     is_change_id_token,
+    parse_change_id_footer,
+    validate_change_id_value,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import (
@@ -48,7 +50,7 @@ from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstr
 
 # Re-export for tests and backwards compatibility.
 
-CHANGE_ID_RE = CHANGE_ID_LAST_LINE_FOOTER_RE
+CHANGE_ID_RE = CHANGE_ID_FOOTER_RE
 
 _parse_sha_body_rs = parse_git_log_sha_body_rs
 
@@ -100,9 +102,7 @@ def check_duplicate_change_ids(cwd, input_arg) -> None:
     pairs = parse_git_log_sha_body_rs(raw)
     seen: dict[str, str] = {}
     for sha, msg in pairs:
-        cid = extract_change_id_from_msg(msg)
-        if not cid:
-            raise ChangeIdError(f"error: no Change-Id found in commit {color_short_sha(sha)}", code=1)
+        cid = _require_change_id(sha, msg)
         if cid in seen:
             short = sha[:8]
             first = seen[cid][:8]
@@ -125,11 +125,27 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
 
     pairs = parse_git_log_sha_body_rs(raw)
     for sha, msg in pairs:
-        cid = extract_change_id_from_msg(msg)
-        if cid:
-            print(cid)
-        else:
-            raise ChangeIdError(f"error: no Change-Id found in commit {color_short_sha(sha)}", code=1)
+        print(_require_change_id(sha, msg))
+
+
+def _require_change_id(sha: str, msg: str) -> str:
+    """Return the commit's Change-Id, distinguishing a malformed footer from a missing one."""
+    raw = parse_change_id_footer(msg)
+    valid, malformed = validate_change_id_value(raw)
+    if valid:
+        assert raw is not None
+        return raw
+    if malformed:
+        # Same reason as missing -- no usable Change-Id -- but say which, since a garbage
+        # footer needs a different fix from an absent one.
+        raise ChangeIdError(
+            f"error: invalid Change-Id {raw!r} in commit {color_short_sha(sha)}",
+            code=int(ExitCode.MISSING_CHANGE_ID),
+        )
+    raise ChangeIdError(
+        f"error: no Change-Id found in commit {color_short_sha(sha)}",
+        code=int(ExitCode.MISSING_CHANGE_ID),
+    )
 
 
 def _ensure_clean_tree_for_fix(cwd: Path) -> None:
@@ -160,7 +176,7 @@ def _msg_filter_script() -> str:
         "import sys\n"
         "from gerrit_workflow_tools.core.change_id import (\n"
         "    append_change_id_footer,\n"
-        "    extract_change_id_from_msg,\n"
+        "    extract_valid_change_id,\n"
         "    generate_change_id_for_commit,\n"
         "    strip_change_id_lines,\n"
         ")\n"
@@ -170,7 +186,7 @@ def _msg_filter_script() -> str:
         "if commit not in targets:\n"
         "    sys.stdout.write(msg)\n"
         "    raise SystemExit(0)\n"
-        "if extract_change_id_from_msg(msg):\n"
+        "if extract_valid_change_id(msg):\n"
         "    sys.stdout.write(msg)\n"
         "    raise SystemExit(0)\n"
         "base = strip_change_id_lines(msg)\n"

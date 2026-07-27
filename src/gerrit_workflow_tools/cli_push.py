@@ -30,7 +30,7 @@ from gerrit_workflow_tools.cli_style import (
     color_short_sha,
     color_text,
 )
-from gerrit_workflow_tools.core.change_id import classify_issues
+from gerrit_workflow_tools.core.change_id import classify_issues, extract_valid_change_id
 from gerrit_workflow_tools.core.config import (
     ConfigError,
     branch_gerrit_reviewers,
@@ -63,7 +63,7 @@ from gerrit_workflow_tools.core.reviewer import (
     gerrit_credentials_configured,
     reviewer_accounts_from_change_info,
 )
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target, parse_change_id
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.push_input_line import (
     ParseResult,
@@ -200,7 +200,7 @@ def _change_id_for_rev(cwd: Path, rev: str) -> str | None:
         msg = git_out("show", "-s", "--format=%B", rev, cwd=cwd)
     except GitError:
         return None
-    return parse_change_id(msg)
+    return extract_valid_change_id(msg)
 
 
 def _prompt_interactive_reviewers(

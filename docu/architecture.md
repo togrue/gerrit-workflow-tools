@@ -409,16 +409,19 @@ Commit needs attention when `determine_attention()` finds unresolved comments, C
 
 Issues observed in the current codebase. Not blockers, but useful when extending or refactoring.
 
-### 1. Duplicate Change-Id parsing
+### 1. Change-Id parsing — resolved
 
-Two nearly identical “last-line footer” extractors with **different validation strictness**:
+There were two footer extractors with different strictness, and the split ran along the wrong axis. `core/change_id.py` now owns both halves as separate steps:
 
-| Function | Module | Validation |
-|----------|--------|------------|
-| `parse_change_id` | `core/stack.py` | Case-insensitive; any `\S+` after `Change-Id:` |
-| `extract_change_id_from_msg` | `core/change_id.py` | Strict `I` + 40 lowercase hex |
+| Function | Returns |
+|----------|---------|
+| `parse_change_id_footer` | The footer value **exactly as written**, valid or not |
+| `validate_change_id_value` | Whether that value is a well-formed Gerrit id, and if not, whether it is *malformed* or simply absent |
+| `extract_valid_change_id` | The two composed — a usable Change-Id or `None` |
 
-Used inconsistently: stack/enrichment paths use `parse_change_id`; change-id CLI and `change_resolution` use `extract_change_id_from_msg`. A single canonical parser would avoid subtle mismatches.
+Extraction and validation are separate because collapsing them destroys the malformed-vs-missing distinction: `classify_issues` can only report `Change-Id: garbage` as *invalid* rather than *absent* if it receives the raw value. `Commit.change_id` therefore stays raw; the Gerrit overlay validates when building its input, so a malformed footer never becomes a Gerrit query.
+
+The old strict extractor was also stricter than this project's own definition of a valid Change-Id — it rejected uppercase hex and a lowercase `change-id:` label, both of which `validate_change_id_value`, `change_resolution` and the REST layer accept. That made `ger change-id` report "no Change-Id" for commits `ger push` considered valid.
 
 ### 2. Gerrit access — resolved
 

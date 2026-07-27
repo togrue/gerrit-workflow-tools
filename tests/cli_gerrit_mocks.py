@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.git_run import git_out
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, parse_change_id
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target
 from tests.change_store import ChangeStore
 
 
@@ -82,7 +83,7 @@ def build_details_by_change_id(
             cid = row.change_id
         else:
             sha, _short, _sub, raw = row
-            cid = parse_change_id(raw)
+            cid = parse_change_id_footer(raw)
         if not cid:
             continue
         ov = per_index_overrides[i] if per_index_overrides and i < len(per_index_overrides) else {}
@@ -129,6 +130,6 @@ def gerrit_client_class_stub(inst: object) -> MagicMock:
 def head_change_id(repo: Path) -> str:
     """Change-Id from ``HEAD`` commit message."""
     raw = git_out("log", "-1", "--format=%B", "HEAD", cwd=repo)
-    cid = parse_change_id(raw)
+    cid = parse_change_id_footer(raw)
     assert cid is not None
     return cid

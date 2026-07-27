@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
@@ -13,7 +14,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
 from gerrit_workflow_tools.core.git_run import git_out
-from gerrit_workflow_tools.core.stack import parse_change_id
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ def resolve_show_commit_row(cwd: Path | str, arg: str | None, client: GerritRest
         raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
         summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
         short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
-        change_id = parse_change_id(raw)
+        change_id = extract_valid_change_id(raw)
         row = CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
         return ShowCommitResolution(row=row, is_local_commit=True, resolution=resolution)
 

@@ -23,6 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gerrit_workflow_tools.core.change_id import validate_change_id_value
 from gerrit_workflow_tools.core.config import current_branch, resolve_working_branch
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
@@ -99,7 +100,13 @@ def commit_rows_in_range(
 ) -> list[CommitStatusInput]:
     """Return overlay input rows for the local commits in *rev_range* (oldest first)."""
     return [
-        CommitStatusInput(sha=c.sha, short_sha=c.short_sha, summary=c.subject, change_id=c.change_id)
+        CommitStatusInput(
+            sha=c.sha,
+            short_sha=c.short_sha,
+            summary=c.subject,
+            # Validated here: a malformed footer must never become a Gerrit query.
+            change_id=c.change_id if validate_change_id_value(c.change_id)[0] else None,
+        )
         for c in commits_in_range(cwd, rev_range, first_parent=first_parent)
     ]
 

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.config import current_branch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
@@ -49,6 +49,11 @@ class Commit:
     subject: str
     body: str
     change_id: str | None
+    """The footer value exactly as written — not necessarily a valid Gerrit id.
+
+    Kept raw so Change-Id validation can report a malformed footer as malformed rather
+    than as missing. Anything about to send this to Gerrit should validate first (see
+    :func:`~gerrit_workflow_tools.core.change_id.extract_valid_change_id`)."""
 
 
 @dataclass(frozen=True)
@@ -67,20 +72,6 @@ def get_stack_snapshot(cwd: Path | str | None, branch: str | None = None) -> Sta
         upstream_tip=upstream_tip,
         commits=tuple(rows_list),
     )
-
-
-CHANGE_ID_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
-
-
-def parse_change_id(message: str) -> str | None:
-    """Extract ``Change-Id: …`` from the last non-empty line of a commit message body, or return None."""
-    s = message.rstrip("\n")
-    i = s.rfind("\n")
-    line = (s[i + 1 :] if i >= 0 else s).strip()
-    if line:
-        m = CHANGE_ID_RE.match(line)
-        return m.group(1) if m else None
-    return None
 
 
 def merge_base_with_target(
@@ -172,7 +163,7 @@ def _parse_rs_metadata_records(stdout: str) -> list[Commit]:
             short_sha=short_s.strip(),
             subject=subj.strip(),
             body=body.strip(),
-            change_id=parse_change_id(body.strip()),
+            change_id=parse_change_id_footer(body.strip()),
         )
         for sha, short_s, subj, body in zip(it, it, it, it, strict=False)
     ]

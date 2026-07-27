@@ -14,8 +14,10 @@ from gerrit_workflow_tools.core.git_run import GitError, git
 # Gerrit Change-Id line value: I + 40 hex digits
 CHANGE_ID_VALUE_RE = re.compile(r"^I[0-9a-f]{40}$", re.IGNORECASE)
 
-# Footer line as used by ger change-id: last line must be ``Change-Id: I...`` with lowercase hex.
-CHANGE_ID_LAST_LINE_FOOTER_RE = re.compile(r"^Change-Id:\s*(I[a-f0-9]{40})$", re.MULTILINE)
+# Footer line: the trailer key is case-insensitive (as git treats trailer keys), and the
+# value is captured verbatim so callers can tell a *malformed* Change-Id from a missing one.
+# Judging the value is validate_change_id_value's job, not the regex's.
+CHANGE_ID_FOOTER_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.IGNORECASE)
 CHANGE_ID_ANY_LINE_RE = re.compile(r"^\s*Change-Id:\s*\S+\s*$", re.IGNORECASE)
 EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -64,15 +66,33 @@ def is_change_id_token(s: str) -> bool:
     return s.startswith("I") and len(s) == 41 and all(c in "0123456789abcdef" for c in s[1:])
 
 
-def extract_change_id_from_msg(msg: str) -> str | None:
-    """Return the Change-Id from the last non-empty line of *msg*, if it matches ``Change-Id: I…``."""
-    s = msg.rstrip("\n")
-    i = s.rfind("\n")
-    line = (s[i + 1 :] if i >= 0 else s).strip()
-    if line:
-        m = CHANGE_ID_LAST_LINE_FOOTER_RE.match(line)
-        return m.group(1) if m else None
-    return None
+def parse_change_id_footer(msg: str) -> str | None:
+    """Return the raw Change-Id footer value from the last non-empty line of *msg*.
+
+    Extraction only — the value comes back exactly as written, valid or not. That is what
+    lets :func:`classify_issues` report ``Change-Id: garbage`` as *malformed* rather than
+    silently as *missing*. Callers that want a usable id want
+    :func:`extract_valid_change_id`.
+    """
+    body = msg.rstrip("\n")
+    newline = body.rfind("\n")
+    line = (body[newline + 1 :] if newline >= 0 else body).strip()
+    if not line:
+        return None
+    match = CHANGE_ID_FOOTER_RE.match(line)
+    return match.group(1) if match else None
+
+
+def extract_valid_change_id(msg: str) -> str | None:
+    """Return *msg*'s footer Change-Id only when it is a well-formed Gerrit id.
+
+    Extraction plus validation. Use this wherever the value is about to be sent to Gerrit
+    or compared against one; use :func:`parse_change_id_footer` when a malformed value
+    still needs reporting.
+    """
+    raw = parse_change_id_footer(msg)
+    valid, _malformed = validate_change_id_value(raw)
+    return raw if valid else None
 
 
 def strip_change_id_lines(msg: str) -> str:

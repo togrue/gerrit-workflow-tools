@@ -11,6 +11,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import gerrit_web_url
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -19,7 +20,6 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.stack import parse_change_id
 from gerrit_workflow_tools.render.status_fmt import (
     attention_text as _attention_text,
 )
@@ -112,7 +112,7 @@ def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, tuple[s
         i += 3
         if not full_sha or len(full_sha) < 7:
             continue
-        change_id = parse_change_id(body)
+        change_id = extract_valid_change_id(body)
         # Match full_sha back to the short SHA that was passed in.
         for s in short_shas:
             if full_sha.startswith(s):

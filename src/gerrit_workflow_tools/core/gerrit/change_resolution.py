@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from gerrit_workflow_tools.core.change_id import extract_change_id_from_msg
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import (
     effective_gerrit_destination_branch,
     gerrit_remote,
@@ -415,7 +415,7 @@ def resolve_changeish(
         rev = _strip_force_git_prefix(raw)
         resolution.local_sha = _resolve_local_sha(cwd, rev)
         msg = git_out("log", "-1", "--format=%B", resolution.local_sha, cwd=cwd)
-        footer_cid = extract_change_id_from_msg(msg)
+        footer_cid = extract_valid_change_id(msg)
         if footer_cid:
             selected, reason, ambiguous, alternatives = _resolve_change_id(
                 footer_cid,

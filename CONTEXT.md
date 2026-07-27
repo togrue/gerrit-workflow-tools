@@ -25,8 +25,12 @@ _Avoid_: using either name for the other
 ### Identity
 
 **Change-Id**:
-The `I…` footer on a commit message. Not unique on its own — the same Change-Id can exist on several branches.
+The `I…` footer on a commit message: `I` plus 40 hex digits, either case. Not unique on its own — the same Change-Id can exist on several branches.
 _Avoid_: change id (unqualified), CID
+
+**Footer value** vs **Change-Id**:
+The **footer value** is whatever follows `Change-Id:` on a commit's last line, valid or not. It becomes a **Change-Id** only once validated. Keeping them distinct is what lets a garbage footer be reported as *invalid* rather than *absent* — collapse them and the two look identical.
+_Avoid_: calling an unvalidated footer value a Change-Id
 
 **Triplet**:
 `project~branch~Change-Id` — Gerrit's canonical key for a review. The cache primary key and the path segment for follow-up REST calls.
@@ -81,9 +85,6 @@ How long a cached ChangeInfo is served without re-checking Gerrit. Offline / cac
 _Avoid_: TTL, cache timeout, offline mode
 
 ## Flagged ambiguities
-
-**Two Change-Id parsers.**
-`stack.parse_change_id` accepts any `\S+` after the footer label; `change_id.extract_change_id_from_msg` requires `I` plus 40 lowercase hex. The **Gerrit overlay** path uses the loose one and the **changeish** resolution path uses the strict one, so a malformed footer yields a **Change-Id** in one and nothing in the other. Resolution: one parser with strictness as an explicit parameter.
 
 **"Client" is overloaded.**
 It has meant the HTTP object, the layered service, and the CLI caller. Resolution: say **HttpGerritRest** for the HTTP implementation, `GerritService` for the cache-and-batch layer above it, and "command" for the CLI caller.
