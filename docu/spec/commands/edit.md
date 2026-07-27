@@ -30,7 +30,7 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit]
 | Option | Description |
 |--------|-------------|
 | `REV` | Optional SHA or Change-Id in stack |
-| `--first-attention-commit` | Oldest commit matching log attention (unresolved comments or CI failed) |
+| `--first-attention-commit` | Oldest commit matching log attention (unresolved comments or CI failed), searched over the same first-parent chain `ger log` shows |
 | `--reword` / `--edit` / `--drop` | Override action (mutually exclusive per command) |
 | `--debug-log`, `-v` | Standard helpers |
 

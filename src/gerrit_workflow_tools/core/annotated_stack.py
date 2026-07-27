@@ -157,10 +157,13 @@ def load_annotated_stack(
     cwd: Path,
     rev_range: str,
     *,
-    first_parent: bool = False,
+    first_parent: bool = True,
     gerrit: GerritRest | None = None,
 ) -> AnnotatedStack:
     """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
+
+    Defaults to first-parent traversal, matching Gerrit's relation-chain semantics and
+    :func:`commit_rows_in_range`. Pass ``first_parent=False`` for ``--follow-merges``.
 
     Returns an empty stack when the range holds no commits — deciding whether that is an
     error is the caller's business. Raises :class:`GitError` for git failures,
