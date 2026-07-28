@@ -10,15 +10,17 @@ import subprocess
 import sys
 
 from gerrit_workflow_tools.cli_common import (
+    ExitCode,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
-    handle_git_error,
+    run_cli_command,
 )
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.gerrit.change_resolution import format_resolution_note, resolve_stack_changeish
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
-from gerrit_workflow_tools.core.stack import merge_base_with_target, resolve_stack_commit
+from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 logger = logging.getLogger(__name__)
@@ -72,7 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger rebase``: interactive rebase with Gerrit status annotations.
 
     Sets ``GIT_SEQUENCE_EDITOR`` to the enricher wrapper
@@ -82,6 +84,10 @@ def main(argv: list[str] | None = None) -> int:
     The real editor is resolved by the enricher from ``GIT_EDITOR``, ``core.editor``,
     ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
     """
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+
+
+def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
@@ -103,19 +109,22 @@ def main(argv: list[str] | None = None) -> int:
 
     drop_merged = bool(args.drop_merged_equivalent or rdef["drop_merged_equivalent"])
 
-    try:
-        branch = resolve_working_branch(cwd, settings=settings)
-        if use_onto_remote:
-            base = resolve_rebase_onto_remote_ref(cwd, branch, settings=settings)
-        elif args.rev:
-            # resolve_stack_commit handles both Change-Id (I…) and plain git refs.
-            base = resolve_stack_commit(cwd, args.rev.strip(), settings=settings, branch=branch)
-        else:
-            if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-                return 1
-            base, _, _ = merge_base_with_target(cwd, branch)
-    except GitError as e:
-        return handle_git_error(e)
+    branch = resolve_working_branch(cwd, settings=settings)
+    if use_onto_remote:
+        base = resolve_rebase_onto_remote_ref(cwd, branch, settings=settings)
+    elif args.rev:
+        # Same changeish resolution as `ger fix` / `ger edit`, but without require_in_stack:
+        # this argument is the commit to rebase *from*, which normally sits below the stack.
+        target = resolve_stack_changeish(cwd, args.rev, settings=settings, gerrit=gerrit, branch=branch)
+        base = target.sha
+        if target.resolution is not None:
+            note = format_resolution_note(target.resolution)
+            if note:
+                print(note, file=sys.stderr)
+    else:
+        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+            return int(ExitCode.ATTENTION)
+        base, _, _ = merge_base_with_target(cwd, branch)
 
     env = os.environ.copy()
     # Point GIT_SEQUENCE_EDITOR at the enricher.  The enricher reads GIT_EDITOR /

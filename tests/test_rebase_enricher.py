@@ -533,10 +533,49 @@ def test_cli_rebase_uses_given_rev(stack_repo: Path, monkeypatch):
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
-        code = rebase_main([rows[0].short_sha])  # pass short SHA; resolve_stack_commit expands it
+        code = rebase_main([rows[0].short_sha])  # pass short SHA; resolve_stack_changeish expands it
 
     assert code == 0
     assert captured["cmd"][-1] == target_sha
+
+
+def test_cli_rebase_accepts_a_gerrit_change_number(stack_repo: Path, monkeypatch):
+    """`ger rebase change:<n>` now resolves. It could not before: cli_rebase passed no Gerrit
+    implementation, so every by-number changeish failed with 'without a Gerrit client'."""
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.core.change_id import extract_valid_change_id
+    from gerrit_workflow_tools.core.git_run import git_out
+    from tests.change_store import ChangeStore
+    from tests.cli_gerrit_mocks import change_info_for_sha
+
+    rows = stack_rows_mb_to_head(stack_repo)
+    target_sha = rows[0].sha
+    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", target_sha, cwd=stack_repo))
+    assert cid
+    ch = change_info_for_sha(target_sha, cid, number=8181)
+
+    captured: dict = {}
+    monkeypatch.chdir(stack_repo)
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        code = rebase_main(["change:8181"], gerrit=ChangeStore({str(ch["id"]): ch}))
+
+    assert code == 0
+    assert captured["cmd"][-1] == target_sha
+
+
+def test_cli_rebase_does_not_require_the_base_to_be_in_the_stack(stack_repo: Path, monkeypatch):
+    """REV is the commit to rebase *from*, so unlike `ger edit` it may sit below the stack."""
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.core.git_run import git_out
+
+    upstream_tip = git_out("rev-parse", "@{upstream}", cwd=stack_repo)
+    captured: dict = {}
+    monkeypatch.chdir(stack_repo)
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        code = rebase_main([upstream_tip])
+
+    assert code == 0
+    assert captured["cmd"][-1] == upstream_tip
 
 
 def test_cli_rebase_debug_log_sets_env_flag(stack_repo: Path, monkeypatch):

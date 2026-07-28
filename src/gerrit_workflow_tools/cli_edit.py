@@ -12,28 +12,28 @@ from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.cli_common import (
+    ExitCode,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
-    handle_git_error,
+    run_cli_command,
 )
 from gerrit_workflow_tools.core.annotated_stack import (
     branches_needing_upstream,
     load_annotated_stack,
     resolve_rev_range,
 )
-from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, parse
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.change_resolution import (
+    ChangeResolutionError,
+    format_resolution_note,
+    resolve_stack_changeish,
+)
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import first_commit_needing_edit_attention
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-from gerrit_workflow_tools.core.stack import (
-    commit_in_stack,
-    merge_base_with_target,
-    resolve_stack_commit,
-)
+from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 logger = logging.getLogger(__name__)
@@ -142,27 +142,29 @@ def _run_interactive_stack_rebase(
         "gedit cwd=%s rev_arg=%r first_attention=%s action=%s", cwd, rev_arg, args.first_attention_commit, action
     )
 
-    try:
-        branch = resolve_working_branch(cwd, settings=settings)
-        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-            return 1
-        if args.first_attention_commit:
-            full = resolve_first_edit_attention_sha(cwd, settings=settings, gerrit=gerrit)
-            rev_arg = git_out("rev-parse", "--short", full, cwd=cwd)
-        else:
-            assert rev_arg is not None
-            client = None
-            if parse(rev_arg).kind in KINDS_NEEDING_GERRIT:
-                from gerrit_workflow_tools.core.gerrit.service import GerritService
-
-                client = gerrit if gerrit is not None else GerritService.from_cwd(cwd, settings=settings).rest
-            full = resolve_stack_commit(cwd, rev_arg.strip(), settings=settings, branch=branch, client=client)
-        if not commit_in_stack(cwd, full, settings=settings, branch=branch):
-            raise GitError(f"commit {rev_arg} is not in the current local stack")
-        rebase_fork, _, _ = merge_base_with_target(cwd, branch)
-        short = git_out("rev-parse", "--short", full, cwd=cwd)
-    except GitError as e:
-        return handle_git_error(e)
+    branch = resolve_working_branch(cwd, settings=settings)
+    if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+        return int(ExitCode.ATTENTION)
+    if args.first_attention_commit:
+        full = resolve_first_edit_attention_sha(cwd, settings=settings, gerrit=gerrit)
+        rev_arg = git_out("rev-parse", "--short", full, cwd=cwd)
+    else:
+        assert rev_arg is not None
+        target = resolve_stack_changeish(
+            cwd,
+            rev_arg,
+            settings=settings,
+            gerrit=gerrit,
+            branch=branch,
+            require_in_stack=True,
+        )
+        full = target.sha
+        if target.resolution is not None:
+            note = format_resolution_note(target.resolution)
+            if note:
+                print(note, file=sys.stderr)
+    rebase_fork, _, _ = merge_base_with_target(cwd, branch)
+    short = git_out("rev-parse", "--short", full, cwd=cwd)
 
     env = os.environ.copy()
     env["GEDIT_FULL_SHA"] = full
@@ -188,23 +190,27 @@ def _run_interactive_stack_rebase(
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger edit``: interactive rebase to edit, reword, or drop a commit in the current stack."""
-    return _run_interactive_stack_rebase(
-        argv,
-        prog="ger edit",
-        description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
-        default_action="edit",
-        gerrit=gerrit,
+    return run_cli_command(
+        lambda: _run_interactive_stack_rebase(
+            argv,
+            prog="ger edit",
+            description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
+            default_action="edit",
+            gerrit=gerrit,
+        )
     )
 
 
 def main_reword(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger reword``: interactive rebase with reword as the default action."""
-    return _run_interactive_stack_rebase(
-        argv,
-        prog="ger reword",
-        description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
-        default_action="reword",
-        gerrit=gerrit,
+    return run_cli_command(
+        lambda: _run_interactive_stack_rebase(
+            argv,
+            prog="ger reword",
+            description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
+            default_action="reword",
+            gerrit=gerrit,
+        )
     )
 
 

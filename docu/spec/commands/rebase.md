@@ -20,6 +20,17 @@ ger rebase [options] [REV]
 
 `REV` — base commit, Change-Id, or ref (default: merge-base with target). Not used with `--onto-remote`.
 
+### Change resolution
+
+`REV` is resolved by `resolve_stack_changeish`, the same path as [`ger fix`](fix.md) and
+[`ger edit`](edit.md), so `change:<n>`, `refs/changes/…` refs, URLs and `q:` queries now work
+here too — they previously failed with "cannot resolve without a Gerrit client".
+
+One difference, deliberate: `ger rebase` does **not** require its target to be in the local
+stack. `REV` is the commit to rebase *from*, which normally sits below the stack, whereas
+`ger fix` / `ger edit` / `ger reword` rewrite a commit *in* it. Grammar:
+[change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
+
 ---
 
 ## Options

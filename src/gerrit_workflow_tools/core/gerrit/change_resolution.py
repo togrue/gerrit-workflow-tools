@@ -8,13 +8,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
-from gerrit_workflow_tools.core.changeish import Changeish, ChangeishKind, parse
+from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, Changeish, ChangeishKind, parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
+    HttpGerritRest,
     norm_change_id,
     pick_change_from_query_result,
+    resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
@@ -43,6 +45,7 @@ __all__ = [
     "resolution_fields_from_change_rows",
     "resolution_from_change_rows",
     "resolve_changeish",
+    "resolve_stack_changeish",
     "resolve_stack_context",
     "resolve_to_stack_sha",
 ]
@@ -439,6 +442,24 @@ class StackCommit:
     resolution: Resolution | None = None
 
 
+def _stack_commit(
+    cwd: Path | str | None,
+    branch: str | None,
+    sha: str,
+    *,
+    require_in_stack: bool,
+    resolution: Resolution | None = None,
+) -> StackCommit:
+    """Wrap *sha*, optionally insisting it is one of the **local stack**'s commits."""
+    from gerrit_workflow_tools.core.stack import get_stack_snapshot
+
+    if require_in_stack:
+        snap = get_stack_snapshot(cwd, branch)
+        if sha not in {c.sha for c in snap.commits}:
+            raise ChangeResolutionError(f"commit {sha[:8]} is not in the current local stack")
+    return StackCommit(sha=sha, resolution=resolution)
+
+
 def resolve_to_stack_sha(
     ref: str,
     *,
@@ -446,6 +467,7 @@ def resolve_to_stack_sha(
     settings: Settings,
     branch: str | None = None,
     client_factory: Callable[[], GerritRest] | None = None,
+    require_in_stack: bool = False,
 ) -> StackCommit:
     """Resolve a changeish to a full SHA on the current local stack.
 
@@ -455,20 +477,24 @@ def resolve_to_stack_sha(
     *client_factory* is called only on the paths that genuinely need Gerrit, so a caller can
     defer resolving ``gerrit.webUrl`` — a ``refs/changes/…`` ref the repository already has
     must not require Gerrit configuration to use.
-    """
-    from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
+    *require_in_stack* additionally insists the answer is a commit *in* the stack. Commands
+    that rewrite a stack commit (``ger edit``, ``ger reword``, ``ger fix``) want that; the one
+    that takes a commit to rebase *from* (``ger rebase``) does not, because its argument is
+    normally below the stack.
+    """
     parsed = parse_changeish(ref)
 
     if parsed.kind == "git-rev":
-        return StackCommit(sha=_verified_local_sha(cwd, parsed.raw))
+        sha = _verified_local_sha(cwd, parsed.raw)
+        return _stack_commit(cwd, branch, sha, require_in_stack=require_in_stack)
 
     if parsed.kind == "change-ref":
         # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a
         # ref the repository can resolve on its own would be a round trip for nothing.
         local = _local_sha_or_none(cwd, parsed.raw)
         if local is not None:
-            return StackCommit(sha=local)
+            return _stack_commit(cwd, branch, local, require_in_stack=require_in_stack)
 
     # A Change-Id or triplet already carries the id, so the stack can be searched offline.
     # The remaining kinds address a change by number, so Gerrit has to name the id first.
@@ -484,6 +510,10 @@ def resolve_to_stack_sha(
             raise ChangeResolutionError(f"no Gerrit change resolved for {parsed.raw!r}")
         change_id = resolution.selected.change_id
 
+    from gerrit_workflow_tools.core.stack import get_stack_snapshot
+
+    # Searching the stack for the Change-Id already guarantees membership, so this path needs
+    # no separate require_in_stack check.
     snap = get_stack_snapshot(cwd, branch)
     # Case-insensitively, because the grammar accepts either case: `ger edit I5F3A…` has to
     # find a commit whose footer spells the same id in lowercase.
@@ -498,6 +528,43 @@ def resolve_to_stack_sha(
             alternatives=[],
         )
     return StackCommit(sha=matches[0].sha, resolution=resolution)
+
+
+def resolve_stack_changeish(
+    cwd: Path | str | None,
+    ref: str,
+    *,
+    settings: Settings,
+    gerrit: GerritRest | None = None,
+    branch: str | None = None,
+    require_in_stack: bool = False,
+) -> StackCommit:
+    """Resolve *ref* to a stack commit the way every stack-rewriting command should.
+
+    The single entry point for ``ger fix``, ``ger edit``, ``ger reword`` and ``ger rebase``.
+    They used to differ in how they built the Gerrit implementation, which kinds they thought
+    needed one, whether a failure was a resolution error or a git error, and whether the
+    **resolution note** was printed at all.
+
+    Pass *gerrit* to supply an implementation; otherwise one is built from *settings* — but
+    only on the paths that need it, so ``gerrit.webUrl`` stays irrelevant to a purely local
+    resolution.
+    """
+    needs_gerrit = parse(ref).kind in KINDS_NEEDING_GERRIT
+
+    def _build_client() -> GerritRest:
+        if gerrit is not None:
+            return gerrit
+        return HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
+
+    return resolve_to_stack_sha(
+        ref,
+        cwd=cwd,
+        settings=settings,
+        branch=branch,
+        client_factory=_build_client if needs_gerrit else None,
+        require_in_stack=require_in_stack,
+    )
 
 
 def format_resolution_note(resolution: Resolution) -> str | None:

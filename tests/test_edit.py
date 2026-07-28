@@ -85,3 +85,43 @@ def test_gedit_first_attention_commit_starts_rebase(stack_repo: Path, monkeypatc
     )
     assert code == 0, err
     assert captured["full_sha"] == rows[0].sha
+
+
+# -- Semantic exit codes, shared with `ger fix` --------------------------------------
+
+
+def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
+    from gerrit_workflow_tools.cli_common import ExitCode
+
+    code, _out, err = run_cli(stack_repo, gedit_main, ["I" + "f" * 40], monkeypatch)
+    assert code == ExitCode.NOT_FOUND
+    assert "no commit in current stack" in err
+
+
+def test_gedit_ambiguous_change_id_exits_ambiguous(dup_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.cli_common import ExitCode
+    from tests.fixtures import _cid
+
+    code, _out, err = run_cli(dup_repo, gedit_main, [_cid("a")], monkeypatch)
+    assert code == ExitCode.AMBIGUOUS
+    assert "ambiguous" in err.lower()
+
+
+def test_gedit_rejects_a_commit_below_the_stack(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ger edit` rewrites a stack commit, so the upstream tip is out of range."""
+    from gerrit_workflow_tools.cli_common import ExitCode
+    from gerrit_workflow_tools.core.git_run import git_out
+
+    upstream_tip = git_out("rev-parse", "@{upstream}", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, gedit_main, [upstream_tip], monkeypatch)
+    assert code == ExitCode.NOT_FOUND
+    assert "not in the current local stack" in err
+
+
+def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.cli_common import ExitCode
+
+    code, _out, err = run_cli(stack_repo, greword_main, ["I" + "f" * 40], monkeypatch)
+    assert code == ExitCode.NOT_FOUND
+    assert "no commit in current stack" in err

@@ -15,43 +15,12 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, parse
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    StackCommit,
-    format_resolution_note,
-    resolve_to_stack_sha,
-)
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest, HttpGerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.change_resolution import format_resolution_note, resolve_stack_changeish
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_fixup_target(
-    cwd: Path,
-    target: str,
-    *,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> StackCommit:
-    """Resolve the fixup target to a commit on the **local stack** (see ADR-0003).
-
-    Never fetches: a fixup aimed at a commit outside your stack is not something a later
-    ``git rebase --autosquash`` can act on.
-    """
-    parsed = parse(target)
-    if parsed.kind not in KINDS_NEEDING_GERRIT:
-        return resolve_to_stack_sha(parsed.raw, cwd=cwd, settings=settings)
-
-    def _client() -> GerritRest:
-        # Built on demand: a refs/changes ref the repo already has resolves without Gerrit,
-        # and must not fail merely because gerrit.webUrl is unset.
-        if gerrit is not None:
-            return gerrit
-        return HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
-
-    return resolve_to_stack_sha(parsed.raw, cwd=cwd, settings=settings, client_factory=_client)
 
 
 def _index_has_staged_changes(cwd: Path) -> bool:
@@ -162,7 +131,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     cwd = cwd_from_env()
     settings = Settings.from_cwd(cwd)
 
-    target = _resolve_fixup_target(cwd, args.target, settings=settings, gerrit=gerrit)
+    # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
+    # `git rebase --autosquash` can actually place (ADR-0003).
+    target = resolve_stack_changeish(cwd, args.target, settings=settings, gerrit=gerrit, require_in_stack=True)
     fixup_sha = target.sha
     logger.info("fixup target commit: %s", fixup_sha)
 

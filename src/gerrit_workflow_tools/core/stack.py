@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import current_branch
 
@@ -197,45 +195,3 @@ def commits_in_range(
     if p.returncode != 0:
         raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
     return _parse_rs_metadata_records(p.stdout)
-
-
-def resolve_stack_commit(
-    cwd: Path | str | None,
-    ref: str,
-    *,
-    settings: Settings,
-    branch: str | None = None,
-    client: GerritRest | None = None,
-) -> str:
-    """Resolve *ref* to a full SHA, or map a changeish to the unique commit on the current stack.
-
-    Only translates errors: :func:`resolve_to_stack_sha` already handles every changeish kind,
-    including plain git revs, so this no longer classifies the input a second time to decide
-    whether to delegate.
-    """
-    from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_to_stack_sha
-
-    try:
-        factory = (lambda: client) if client is not None else None
-        full = resolve_to_stack_sha(ref, cwd=cwd, settings=settings, branch=branch, client_factory=factory).sha
-    except ChangeResolutionError as e:
-        # ChangeAmbiguousError subclasses ChangeResolutionError, so one clause covers both.
-        raise GitError(str(e)) from e
-    logger.debug("resolve_stack_commit: %r -> %s", ref.strip(), full[:8])
-    return full
-
-
-def commit_in_stack(
-    cwd: Path | str | None,
-    commit: str,
-    *,
-    settings: Settings,
-    branch: str | None = None,
-) -> bool:
-    """True if commit is in the default ``upstream_tip..HEAD`` stack."""
-    try:
-        snap = get_stack_snapshot(cwd, branch)
-    except GitError:
-        return False
-    c = resolve_stack_commit(cwd, commit, settings=settings, branch=branch)
-    return c in {x.sha for x in snap.commits}

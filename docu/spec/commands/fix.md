@@ -22,7 +22,12 @@ ger fix [options] REF_OR_CHANGE
 
 `REF_OR_CHANGE` is a **changeish** parsed by **`core/changeish.py`** — same grammar as `ger show` (git ref default; `change:<n>` for a Gerrit change number; triplet/URL for an exact pick). Full grammar: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
-It is then resolved **to a commit on the local stack**, and never fetched ([ADR-0003](../../adr/0003-ger-fix-targets-the-local-stack.md)). A change that exists on Gerrit but not on your stack exits `3`; rebase or cherry-pick it first.
+It is then resolved by `resolve_stack_changeish` — the same path as [`ger edit`](edit.md),
+[`ger reword`](edit.md) and [`ger rebase`](rebase.md) — **to a commit on the local stack**, and
+never fetched ([ADR-0003](../../adr/0003-ger-fix-targets-the-local-stack.md)). A change that
+exists on Gerrit but not on your stack exits `3`; rebase or cherry-pick it first. A plain git
+ref outside the stack is rejected for the same reason: `git rebase --autosquash` over the stack
+could not place the resulting `fixup!`.
 
 | Input | Network |
 |-------|---------|
