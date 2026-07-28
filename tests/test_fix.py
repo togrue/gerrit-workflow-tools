@@ -7,10 +7,12 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_fix import main as ger_fix_main
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
 from tests.conftest import run_cli
+from tests.fixtures import _cid
 
 
 def test_ger_fix_requires_staged_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,7 +91,10 @@ def test_ger_fix_all_flag(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> 
 def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    # The change must carry the footer that is actually on that commit: a ChangeInfo whose
+    # change_id disagrees with the commit it points at cannot occur in a real repository.
+    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", sha, cwd=stack_repo))
+    assert cid
     ch = change_info_for_sha(sha, cid, number=4242)
     ch["revisions"][sha]["ref"] = "refs/changes/42/4242/1"
     details = {str(ch["id"]): ch}
@@ -101,30 +106,32 @@ def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypat
     assert subj.startswith("fixup! ")
 
 
-def test_ger_fix_missing_weburl_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ger_fix_change_id_needs_no_gerrit_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Change-Id is matched against the local stack, so gerrit.webUrl is irrelevant (ADR-0003).
+
+    It used to be a CONFIG error: resolution went through Gerrit even though the answer was
+    always a local commit."""
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
-    assert code == ExitCode.CONFIG
-    assert "gerrit.webUrl" in err
+    assert code == ExitCode.NOT_FOUND
+    assert "no commit in current stack" in err
+    assert "gerrit.webUrl" not in err
 
 
-def test_ger_fix_gerrit_missing_local_object_reports_fetch_error(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """When Gerrit points at an object not in the repo, we try ``git fetch`` and surface failure."""
+def test_ger_fix_change_not_on_stack_is_an_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gerrit pointing at an object we do not have is a plain error now — no fetch (ADR-0003)."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     missing = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     cid = "Icccccccccccccccccccccccccccccccccccccccc"
     ch = change_info_for_sha(missing, cid, number=7777)
     ch["revisions"][missing]["ref"] = "refs/changes/77/7777/3"
     details = {str(ch["id"]): ch}
-    (stack_repo / "c.txt").write_text("fetch path\n", encoding="utf-8")
+    (stack_repo / "c.txt").write_text("no fetch path\n", encoding="utf-8")
     git("add", "c.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch, gerrit=ChangeStore(details))
-    assert code != 0
-    combined = f"{err} {_out}".lower()
-    assert "refs/changes/77/7777/3" in err
-    assert "fetch" in combined
+    assert code == ExitCode.NOT_FOUND
+    assert "no commit in current stack" in err
+    assert "fetch" not in err.lower()
 
 
 def test_cli_ger_dispatches_fix(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -159,7 +166,8 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
 def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
-    cid = "Idddddddddddddddddddddddddddddddddddddddd"
+    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", sha, cwd=stack_repo))
+    assert cid
     ch = change_info_for_sha(sha, cid, number=5151)
     details = {str(ch["id"]): ch}
     (stack_repo / "d.txt").write_text("json fix\n", encoding="utf-8")
@@ -170,22 +178,24 @@ def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkey
 
     data = json.loads(out)
     assert data["fixup_sha"]
-    assert data["resolution"]["kind"] == "change-id"
-    assert data["resolution"]["selected"]["change_id"] == cid
+    # No `selected`: a Change-Id resolves against the local stack without asking Gerrit, so
+    # there is no narrowing to report (ADR-0003).
+    assert "resolution" not in data
 
 
 def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from gerrit_workflow_tools.cli_common import ExitCode
+    """Ambiguity is now a property of the stack, not of Gerrit (ADR-0003).
 
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
-    first = change_info_for_sha(sha, cid, number=120045, branch="main")
-    second = change_info_for_sha(sha, cid, number=120046, branch="main")
-    triplet = str(first["id"])
-    details = {triplet: first, f"{triplet}#120046": second}
+    `ger fix` never asks Gerrit which change a Change-Id names, so a Change-Id on several
+    Gerrit branches is no longer ambiguous here. Two *stack commits* sharing one still are.
+    """
+    cid = _cid("2")
+    (stack_repo / "dup.txt").write_text("duplicate change-id\n", encoding="utf-8")
+    git("add", "dup.txt", cwd=stack_repo)
+    git("commit", "-m", f"Duplicate footer\n\nChange-Id: {cid}", cwd=stack_repo)
+
     (stack_repo / "e.txt").write_text("ambig\n", encoding="utf-8")
     git("add", "e.txt", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch, gerrit=ChangeStore(details))
+    code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
     assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()

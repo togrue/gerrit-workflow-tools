@@ -9,10 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from gerrit_workflow_tools.core.changeish import CHANGE_ID_RE
 from gerrit_workflow_tools.core.git_run import GitError, git
 
-# Gerrit Change-Id line value: I + 40 hex digits
-CHANGE_ID_VALUE_RE = re.compile(r"^I[0-9a-f]{40}$", re.IGNORECASE)
+# Gerrit Change-Id line value: I + 40 hex digits, either case. The grammar itself lives in
+# core.changeish; this alias keeps footer validation reading naturally at its call sites.
+CHANGE_ID_VALUE_RE = CHANGE_ID_RE
 
 # Footer line: the trailer key is case-insensitive (as git treats trailer keys), and the
 # value is captured verbatim so callers can tell a *malformed* Change-Id from a missing one.
@@ -55,15 +57,6 @@ class IssueSeverity(str, Enum):
 
     ERROR = "error"
     WARNING = "warning"
-
-
-def is_change_id_token(s: str) -> bool:
-    """Return True if *s* is a Change-Id token (``I`` + 40 lowercase hex digits).
-
-    Stricter than :data:`CHANGE_ID_VALUE_RE`: used for CLI passthrough (e.g. ``ger change-id``)
-    where uppercase hex is not accepted as a bare argument.
-    """
-    return s.startswith("I") and len(s) == 41 and all(c in "0123456789abcdef" for c in s[1:])
 
 
 def parse_change_id_footer(msg: str) -> str | None:

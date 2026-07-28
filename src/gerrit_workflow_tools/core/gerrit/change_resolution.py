@@ -2,39 +2,50 @@
 
 from __future__ import annotations
 
-import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
+from gerrit_workflow_tools.core.changeish import Changeish, ChangeishKind, parse
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, pick_change_from_query_result
+from gerrit_workflow_tools.core.gerrit.rest import (
+    GerritApiError,
+    GerritRest,
+    norm_change_id,
+    pick_change_from_query_result,
+)
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
     refs_for_push_branch_name,
     resolve_working_branch,
 )
 
-ChangeishKind = Literal[
-    "git-rev",
-    "change-id",
-    "triplet",
-    "change-number",
-    "change-ref",
-    "url",
-    "query",
-]
-
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
 
-_CHANGE_ID_RE = re.compile(r"^[iI][0-9a-fA-F]{40}$")
-_CHANGE_REF_RE = re.compile(r"^refs/changes/\d+/\d+/\d+$")
-_GERRIT_URL_CHANGE_RE = re.compile(r"/c/(?:[^/]+/)?\+/(\d+)")
 _INACTIVE_STATUSES = frozenset({"ABANDONED", "MERGED"})
+
+# The changeish grammar lives in core.changeish; this module decides what a parsed changeish
+# *means*. ChangeishKind is re-exported because Resolution.kind is part of the JSON contract.
+__all__ = [
+    "ChangeAmbiguousError",
+    "ChangeResolutionError",
+    "ChangeishKind",
+    "Resolution",
+    "SelectedChange",
+    "SelectedReason",
+    "StackContext",
+    "build_triplet",
+    "format_resolution_note",
+    "resolution_fields_from_change_rows",
+    "resolution_from_change_rows",
+    "resolve_changeish",
+    "resolve_stack_context",
+    "resolve_to_stack_sha",
+]
 
 
 class ChangeResolutionError(RuntimeError):
@@ -131,38 +142,16 @@ class Resolution:
         return out
 
 
-def classify_changeish(s: str) -> ChangeishKind:
-    """Classify *s* into a changeish kind per behavior spec §2.1."""
-    raw = s.strip()
-    if not raw:
+def parse_changeish(s: str) -> Changeish:
+    """Parse *s*, rejecting blank input.
+
+    The grammar itself is total (see :func:`gerrit_workflow_tools.core.changeish.parse`);
+    refusing an empty changeish is a resolution decision, so it lives here.
+    """
+    parsed = parse(s)
+    if not parsed.raw:
         raise ChangeResolutionError("empty changeish")
-
-    lower = raw.lower()
-    if lower.startswith(("rev:", "git:")):
-        return "git-rev"
-    if lower.startswith("change:") or lower.startswith("cl:"):
-        return "change-number"
-    if lower.startswith("q:"):
-        return "query"
-    if raw.startswith(("http://", "https://")):
-        return "url"
-    if _CHANGE_REF_RE.fullmatch(raw):
-        return "change-ref"
-    if "~" in raw:
-        parts = raw.split("~")
-        if len(parts) == 3 and _CHANGE_ID_RE.fullmatch(parts[2]):
-            return "triplet"
-    if _CHANGE_ID_RE.fullmatch(raw):
-        return "change-id"
-    return "git-rev"
-
-
-def parse_triplet(s: str) -> tuple[str, str, str]:
-    """Split ``project~branch~changeId`` into its three parts."""
-    parts = s.strip().split("~")
-    if len(parts) != 3 or not all(p.strip() for p in parts):
-        raise ChangeResolutionError(f"invalid triplet: {s!r}")
-    return parts[0], parts[1], parts[2]
+    return parsed
 
 
 def build_triplet(project: str, branch: str, change_id: str) -> str:
@@ -204,44 +193,20 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, 
     return StackContext(project=project, target_branch=target, push_branch=push_branch)
 
 
-def _strip_force_git_prefix(s: str) -> str:
-    lower = s.lower()
-    for prefix in ("rev:", "git:"):
-        if lower.startswith(prefix):
-            return s[len(prefix) :].strip()
-    return s.strip()
+def _local_sha_or_none(cwd: Path | str | None, rev: str) -> str | None:
+    """Full SHA for *rev* when the repository can resolve it to a commit, else ``None``."""
+    p = git("rev-parse", "-q", "--verify", f"{rev}^{{commit}}", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return None
+    return p.stdout.strip() or None
 
 
-def _strip_change_number_prefix(s: str) -> str:
-    lower = s.lower()
-    for prefix in ("change:", "cl:"):
-        if lower.startswith(prefix):
-            return s[len(prefix) :].strip()
-    return s.strip()
-
-
-def _strip_query_prefix(s: str) -> str:
-    if s.lower().startswith("q:"):
-        return s[2:].strip()
-    return s.strip()
-
-
-def _parse_gerrit_url_change_number(url: str) -> str:
-    m = _GERRIT_URL_CHANGE_RE.search(url)
-    if m:
-        return m.group(1)
-    path = urlparse(url).path or ""
-    tail = path.rstrip("/").split("/")[-1]
-    if tail.isdigit():
-        return tail
-    raise ChangeResolutionError(f"cannot parse Gerrit change number from URL: {url!r}")
-
-
-def _change_number_from_change_ref(ref: str) -> str:
-    parts = ref.split("/")
-    if len(parts) >= 5 and parts[1] == "changes" and parts[3].isdigit():
-        return parts[3]
-    raise ChangeResolutionError(f"invalid change ref: {ref!r}")
+def _verified_local_sha(cwd: Path | str | None, rev: str) -> str:
+    """Full SHA for *rev*, with a message that names the input rather than git's internals."""
+    sha = _local_sha_or_none(cwd, rev)
+    if sha is None:
+        raise ChangeResolutionError(f"not a valid commit-ish: {rev!r}")
+    return sha
 
 
 def _resolve_local_sha(cwd: Path | str | None, rev: str) -> str:
@@ -397,6 +362,28 @@ def resolution_from_change_rows(
     )
 
 
+def _fetch_unique_row(parsed: Changeish, client: GerritRest) -> dict[str, Any]:
+    """Fetch the one ChangeInfo a directly-addressed changeish names.
+
+    Triplet, change number, ``refs/changes/…`` ref, URL and query all name exactly one change
+    and differ only in how the address is spelled — which the grammar has already worked out.
+    """
+    if parsed.kind == "triplet":
+        return _fetch_change_row(client, parsed.raw)
+
+    if parsed.kind == "query":
+        if not parsed.query:
+            raise ChangeResolutionError("empty Gerrit query")
+        return _fetch_single_from_query(client, parsed.query)
+
+    number = parsed.number
+    if parsed.kind == "change-number" and not (number and number.isdigit()):
+        raise ChangeResolutionError(f"invalid change number: {parsed.raw!r}")
+    if number is None:
+        raise ChangeResolutionError(f"cannot parse Gerrit change number from URL: {parsed.raw!r}")
+    return _fetch_change_row(client, number)
+
+
 def resolve_changeish(
     ref: str,
     *,
@@ -407,32 +394,23 @@ def resolve_changeish(
     explicit_target: bool = False,
 ) -> Resolution:
     """Resolve *ref* to a :class:`Resolution` using stack context and Gerrit."""
-    raw = ref.strip()
-    kind = classify_changeish(raw)
-    resolution = Resolution(input=raw, kind=kind)
+    parsed = parse_changeish(ref)
+    resolution = Resolution(input=parsed.raw, kind=parsed.kind)
     stack = resolve_stack_context(cwd, branch, settings=settings)
 
-    if kind == "git-rev":
-        rev = _strip_force_git_prefix(raw)
-        resolution.local_sha = _resolve_local_sha(cwd, rev)
+    # A git rev and a bare Change-Id both go through Change-Id narrowing; they differ only in
+    # where the Change-Id comes from. Everything else addresses one change directly.
+    change_id = parsed.change_id
+    if parsed.kind == "git-rev":
+        resolution.local_sha = _resolve_local_sha(cwd, parsed.rev or parsed.raw)
         msg = git_out("log", "-1", "--format=%B", resolution.local_sha, cwd=cwd)
-        footer_cid = extract_valid_change_id(msg)
-        if footer_cid:
-            selected, reason, ambiguous, alternatives = _resolve_change_id(
-                footer_cid,
-                client=client,
-                stack=stack,
-                explicit_target=explicit_target,
-            )
-            resolution.selected = selected
-            resolution.selected_reason = reason
-            resolution.ambiguous = ambiguous
-            resolution.alternatives = alternatives
-        return resolution
+        change_id = extract_valid_change_id(msg)
+        if not change_id:
+            return resolution
 
-    if kind == "change-id":
+    if change_id is not None and parsed.kind in ("git-rev", "change-id"):
         selected, reason, ambiguous, alternatives = _resolve_change_id(
-            raw,
+            change_id,
             client=client,
             stack=stack,
             explicit_target=explicit_target,
@@ -443,45 +421,22 @@ def resolve_changeish(
         resolution.alternatives = alternatives
         return resolution
 
-    if kind == "triplet":
-        row = _fetch_change_row(client, raw)
-        resolution.selected = SelectedChange.from_change_row(row)
-        resolution.selected_reason = "unique"
-        return resolution
+    resolution.selected = SelectedChange.from_change_row(_fetch_unique_row(parsed, client))
+    resolution.selected_reason = "unique"
+    return resolution
 
-    if kind == "change-number":
-        number = _strip_change_number_prefix(raw)
-        if not number.isdigit():
-            raise ChangeResolutionError(f"invalid change number: {raw!r}")
-        row = _fetch_change_row(client, number)
-        resolution.selected = SelectedChange.from_change_row(row)
-        resolution.selected_reason = "unique"
-        return resolution
 
-    if kind == "change-ref":
-        number = _change_number_from_change_ref(raw)
-        row = _fetch_change_row(client, number)
-        resolution.selected = SelectedChange.from_change_row(row)
-        resolution.selected_reason = "unique"
-        return resolution
+@dataclass(frozen=True)
+class StackCommit:
+    """A changeish resolved to a commit on the **local stack**.
 
-    if kind == "url":
-        number = _parse_gerrit_url_change_number(raw)
-        row = _fetch_change_row(client, number)
-        resolution.selected = SelectedChange.from_change_row(row)
-        resolution.selected_reason = "unique"
-        return resolution
+    *resolution* is present only when Gerrit was actually consulted to get there. A
+    **Change-Id**, **triplet** or git rev is matched against the stack offline, so there is
+    nothing for Gerrit to have narrowed and nothing to report.
+    """
 
-    if kind == "query":
-        query = _strip_query_prefix(raw)
-        if not query:
-            raise ChangeResolutionError("empty Gerrit query")
-        row = _fetch_single_from_query(client, query)
-        resolution.selected = SelectedChange.from_change_row(row)
-        resolution.selected_reason = "unique"
-        return resolution
-
-    raise ChangeResolutionError(f"unsupported changeish kind: {kind!r}")
+    sha: str
+    resolution: Resolution | None = None
 
 
 def resolve_to_stack_sha(
@@ -490,38 +445,50 @@ def resolve_to_stack_sha(
     cwd: Path | str | None,
     settings: Settings,
     branch: str | None = None,
-    client: GerritRest | None = None,
-) -> str:
-    """Resolve a changeish to a full SHA on the current local stack."""
+    client_factory: Callable[[], GerritRest] | None = None,
+) -> StackCommit:
+    """Resolve a changeish to a full SHA on the current local stack.
+
+    Never fetches. Kinds that carry a Change-Id resolve without touching the network; kinds
+    that address a change by number cost one Gerrit round trip to learn the id first.
+
+    *client_factory* is called only on the paths that genuinely need Gerrit, so a caller can
+    defer resolving ``gerrit.webUrl`` — a ``refs/changes/…`` ref the repository already has
+    must not require Gerrit configuration to use.
+    """
     from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
-    raw = ref.strip()
-    kind = classify_changeish(raw)
+    parsed = parse_changeish(ref)
 
-    if kind == "git-rev":
-        return git_out("rev-parse", raw, cwd=cwd)
+    if parsed.kind == "git-rev":
+        return StackCommit(sha=_verified_local_sha(cwd, parsed.raw))
 
-    change_id: str | None = None
-    if kind == "change-id":
-        change_id = raw
-    elif kind == "triplet":
-        _, _, change_id = parse_triplet(raw)
-    elif kind in ("change-number", "change-ref", "url", "query"):
-        if client is None:
-            raise ChangeResolutionError(
-                f"cannot resolve {kind!r} to a stack commit without a Gerrit client"
-            )
+    if parsed.kind == "change-ref":
+        # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a
+        # ref the repository can resolve on its own would be a round trip for nothing.
+        local = _local_sha_or_none(cwd, parsed.raw)
+        if local is not None:
+            return StackCommit(sha=local)
+
+    # A Change-Id or triplet already carries the id, so the stack can be searched offline.
+    # The remaining kinds address a change by number, so Gerrit has to name the id first.
+    change_id = parsed.change_id
+    resolution: Resolution | None = None
+    if change_id is None:
+        if client_factory is None:
+            raise ChangeResolutionError(f"cannot resolve {parsed.kind!r} to a stack commit without a Gerrit client")
         resolution = resolve_changeish(
-            raw, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
+            parsed.raw, client=client_factory(), cwd=cwd, settings=settings, branch=branch, explicit_target=True
         )
         if resolution.selected is None:
-            raise ChangeResolutionError(f"no Gerrit change resolved for {raw!r}")
+            raise ChangeResolutionError(f"no Gerrit change resolved for {parsed.raw!r}")
         change_id = resolution.selected.change_id
-    else:
-        raise ChangeResolutionError(f"unsupported changeish kind for stack resolution: {kind!r}")
 
     snap = get_stack_snapshot(cwd, branch)
-    matches = [c for c in snap.commits if c.change_id == change_id]
+    # Case-insensitively, because the grammar accepts either case: `ger edit I5F3A…` has to
+    # find a commit whose footer spells the same id in lowercase.
+    want = norm_change_id(change_id)
+    matches = [c for c in snap.commits if c.change_id and norm_change_id(c.change_id) == want]
     if not matches:
         raise ChangeResolutionError(f"no commit in current stack with Change-Id {change_id}")
     if len(matches) > 1:
@@ -530,7 +497,7 @@ def resolve_to_stack_sha(
             f"ambiguous Change-Id {change_id} in stack ({', '.join(shorts)})",
             alternatives=[],
         )
-    return matches[0].sha
+    return StackCommit(sha=matches[0].sha, resolution=resolution)
 
 
 def format_resolution_note(resolution: Resolution) -> str | None:

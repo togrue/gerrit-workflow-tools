@@ -207,27 +207,21 @@ def resolve_stack_commit(
     branch: str | None = None,
     client: GerritRest | None = None,
 ) -> str:
-    """Resolve *ref* to a full SHA, or map a changeish to the unique commit on the current stack."""
-    from gerrit_workflow_tools.core.gerrit.change_resolution import (
-        ChangeAmbiguousError,
-        ChangeResolutionError,
-        classify_changeish,
-        resolve_to_stack_sha,
-    )
+    """Resolve *ref* to a full SHA, or map a changeish to the unique commit on the current stack.
 
-    s = ref.strip()
-    kind = classify_changeish(s)
-    if kind in ("change-id", "triplet", "change-number", "change-ref", "url", "query"):
-        try:
-            full = resolve_to_stack_sha(s, cwd=cwd, settings=settings, branch=branch, client=client)
-        except ChangeAmbiguousError as e:
-            raise GitError(str(e)) from e
-        except ChangeResolutionError as e:
-            raise GitError(str(e)) from e
-        logger.debug("resolve_stack_commit: changeish %r -> %s", s, full[:8])
-        return full
-    full = git_out("rev-parse", s, cwd=cwd)
-    logger.debug("resolve_stack_commit: ref %r -> %s", s, full[:8])
+    Only translates errors: :func:`resolve_to_stack_sha` already handles every changeish kind,
+    including plain git revs, so this no longer classifies the input a second time to decide
+    whether to delegate.
+    """
+    from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_to_stack_sha
+
+    try:
+        factory = (lambda: client) if client is not None else None
+        full = resolve_to_stack_sha(ref, cwd=cwd, settings=settings, branch=branch, client_factory=factory).sha
+    except ChangeResolutionError as e:
+        # ChangeAmbiguousError subclasses ChangeResolutionError, so one clause covers both.
+        raise GitError(str(e)) from e
+    logger.debug("resolve_stack_commit: %r -> %s", ref.strip(), full[:8])
     return full
 
 

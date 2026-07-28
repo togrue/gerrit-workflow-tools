@@ -5,10 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import re
 import sys
 from pathlib import Path
-from typing import Any
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
@@ -17,134 +15,43 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     run_cli_command,
 )
+from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeResolutionError,
-    Resolution,
-    classify_changeish,
+    StackCommit,
     format_resolution_note,
-    resolve_changeish,
+    resolve_to_stack_sha,
 )
-from gerrit_workflow_tools.core.gerrit.rest import (
-    GerritApiError,
-    GerritRest,
-    HttpGerritRest,
-    resolve_gerrit_web_base,
-)
-from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest, HttpGerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
 
-_REFS_CHANGES = re.compile(r"^refs/changes/\d+/\d+/\d+$")
 
+def _resolve_fixup_target(
+    cwd: Path,
+    target: str,
+    *,
+    settings: Settings,
+    gerrit: GerritRest | None,
+) -> StackCommit:
+    """Resolve the fixup target to a commit on the **local stack** (see ADR-0003).
 
-def _refs_changes_ref(arg: str) -> str | None:
-    token = arg.strip()
-    return token if _REFS_CHANGES.match(token) else None
+    Never fetches: a fixup aimed at a commit outside your stack is not something a later
+    ``git rebase --autosquash`` can act on.
+    """
+    parsed = parse(target)
+    if parsed.kind not in KINDS_NEEDING_GERRIT:
+        return resolve_to_stack_sha(parsed.raw, cwd=cwd, settings=settings)
 
+    def _client() -> GerritRest:
+        # Built on demand: a refs/changes ref the repo already has resolves without Gerrit,
+        # and must not fail merely because gerrit.webUrl is unset.
+        if gerrit is not None:
+            return gerrit
+        return HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
 
-def _revision_fetch_ref(change: dict[str, Any], sha: str) -> str:
-    """Return a ``refs/changes/…`` ref suitable for ``git fetch <remote> <ref>``."""
-    revs = change.get("revisions")
-    if isinstance(revs, dict):
-        info = revs.get(sha)
-        if isinstance(info, dict):
-            ref = info.get("ref")
-            if isinstance(ref, str) and ref.startswith("refs/changes/"):
-                return ref
-    num = change.get("_number")
-    if not isinstance(num, int):
-        raise GitError(
-            "Gerrit change has no usable refs/changes ref (missing revisions.ref and _number)",
-            stderr="",
-            returncode=1,
-        )
-    ps = 1
-    if isinstance(revs, dict):
-        info = revs.get(sha)
-        if isinstance(info, dict):
-            ps_n = info.get("_number")
-            if isinstance(ps_n, int):
-                ps = ps_n
-    mod = num % 100
-    return f"refs/changes/{mod:02d}/{num}/{ps}"
-
-
-def _commit_object_exists(cwd: Path, sha: str) -> bool:
-    p = git("rev-parse", "-q", "--verify", f"{sha}^{{commit}}", cwd=cwd, check=False)
-    return p.returncode == 0
-
-
-def _resolve_fixup_sha_refs_changes(cwd: Path, ref: str, *, settings: Settings) -> str:
-    if _commit_object_exists(cwd, ref):
-        return git_out("rev-parse", ref, cwd=cwd)
-    remote = settings.gerrit_remote
-    fp = git("fetch", remote, ref, cwd=cwd, check=False)
-    if fp.returncode != 0:
-        raise GitError(
-            f"could not resolve {ref!r} locally and `git fetch {remote} {ref}` failed: "
-            f"{fp.stderr.strip() or fp.stdout.strip()}",
-            stderr=fp.stderr,
-            returncode=fp.returncode,
-        )
-    return git_out("rev-parse", "FETCH_HEAD", cwd=cwd)
-
-
-def _resolve_fixup_sha_from_change_row(cwd: Path, change: dict[str, Any], *, settings: Settings) -> str:
-    sha = change.get("current_revision")
-    if not isinstance(sha, str) or not sha.strip():
-        raise GitError("Gerrit change has no current_revision", stderr="", returncode=1)
-    sha = sha.strip()
-    if _commit_object_exists(cwd, sha):
-        return git_out("rev-parse", sha, cwd=cwd)
-    fetch_ref = _revision_fetch_ref(change, sha)
-    remote = settings.gerrit_remote
-    fp = git("fetch", remote, fetch_ref, cwd=cwd, check=False)
-    if fp.returncode != 0:
-        raise GitError(
-            f"Gerrit revision {sha[:12]}… is not present locally; "
-            f"`git fetch {remote} {fetch_ref}` failed: {fp.stderr.strip() or fp.stdout.strip()}",
-            stderr=fp.stderr,
-            returncode=fp.returncode,
-        )
-    got = git_out("rev-parse", "FETCH_HEAD", cwd=cwd)
-    if not _commit_object_exists(cwd, got):
-        raise GitError("fetch did not yield a valid commit", stderr="", returncode=1)
-    return got
-
-
-def _resolve_fixup_sha_gerrit(cwd: Path, client: GerritRest, arg: str, *, settings: Settings) -> tuple[str, Resolution]:
-    resolution = resolve_changeish(arg.strip(), client=client, cwd=cwd, settings=settings, explicit_target=True)
-    if resolution.selected is None:
-        raise ChangeResolutionError(f"Gerrit change not found for {arg.strip()!r}")
-    change = client.get_change(resolution.selected.triplet)
-    fixup_sha = _resolve_fixup_sha_from_change_row(cwd, change, settings=settings)
-    return fixup_sha, resolution
-
-
-def _resolve_fixup_sha_git(
-    cwd: Path, arg: str, *, settings: Settings, gerrit: GerritRest | None = None
-) -> tuple[str, Resolution | None]:
-    token = arg.strip()
-    p = git("rev-parse", "--verify", f"{token}^{{commit}}", cwd=cwd, check=False)
-    if p.returncode != 0:
-        raise GitError(
-            f"not a valid commit-ish: {token!r} ({p.stderr.strip() or p.stdout.strip()})",
-            stderr=p.stderr,
-            returncode=p.returncode,
-        )
-    sha = git_out("rev-parse", token, cwd=cwd)
-    resolution: Resolution | None = None
-    try:
-        client = (
-            gerrit
-            if gerrit is not None
-            else HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
-        )
-        resolution = resolve_changeish(token, client=client, cwd=cwd, settings=settings, explicit_target=True)
-    except (ValueError, ChangeResolutionError, GerritApiError):
-        resolution = None
-    return sha, resolution
+    return resolve_to_stack_sha(parsed.raw, cwd=cwd, settings=settings, client_factory=_client)
 
 
 def _index_has_staged_changes(cwd: Path) -> bool:
@@ -206,13 +113,6 @@ def _prompt_stage_modified_changes(cwd: Path) -> bool:
         print("Please answer y, n, or d.", file=sys.stderr)
 
 
-def _gerrit_changeish_kind(arg: str) -> str | None:
-    kind = classify_changeish(arg)
-    if kind == "git-rev":
-        return None
-    return kind
-
-
 def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger fix``."""
     p = argparse.ArgumentParser(
@@ -262,25 +162,12 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     cwd = cwd_from_env()
     settings = Settings.from_cwd(cwd)
 
-    raw = args.target
-    resolution: Resolution | None = None
-    rc_ref = _refs_changes_ref(raw)
-    if rc_ref is not None:
-        fixup_sha = _resolve_fixup_sha_refs_changes(cwd, rc_ref, settings=settings)
-    elif _gerrit_changeish_kind(raw) is not None:
-        client = (
-            gerrit
-            if gerrit is not None
-            else HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
-        )
-        fixup_sha, resolution = _resolve_fixup_sha_gerrit(cwd, client, raw, settings=settings)
-    else:
-        fixup_sha, resolution = _resolve_fixup_sha_git(cwd, raw, gerrit=gerrit, settings=settings)
-
+    target = _resolve_fixup_target(cwd, args.target, settings=settings, gerrit=gerrit)
+    fixup_sha = target.sha
     logger.info("fixup target commit: %s", fixup_sha)
 
-    if resolution is not None:
-        note = format_resolution_note(resolution)
+    if target.resolution is not None:
+        note = format_resolution_note(target.resolution)
         if note:
             print(note, file=sys.stderr)
 
@@ -307,8 +194,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     if args.json_:
         payload: dict[str, object] = {"fixup_sha": fixup_sha}
-        if resolution is not None:
-            payload["resolution"] = resolution.to_json_dict()
+        if target.resolution is not None:
+            payload["resolution"] = target.resolution.to_json_dict()
         print(json.dumps(payload, indent=2))
     return 0
 

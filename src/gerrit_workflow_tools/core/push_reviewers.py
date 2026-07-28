@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, parse_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.ready_calc import ReadyResult
@@ -95,7 +96,10 @@ def apply_reviewer_strategy_after_push_service(
             issues.append(ReviewerApplyIssue(level="error", message=f"could not load change {triplet}"))
             return ReviewerApplyResult(ok=False, issues=issues)
 
-        _, _, footer_change_id = parse_triplet(triplet)
+        footer_change_id = parse(triplet).change_id
+        if footer_change_id is None:
+            issues.append(ReviewerApplyIssue(level="error", message=f"not a Gerrit triplet: {triplet}"))
+            return ReviewerApplyResult(ok=False, issues=issues)
         existing = reviewer_accounts_from_change_info(detail)
         if strategy == ReviewerStrategy.LAZY and existing:
             outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=()))
@@ -114,8 +118,6 @@ def apply_reviewer_strategy_after_push_service(
                 )
             )
             return ReviewerApplyResult(ok=False, issues=issues)
-        outcomes.append(
-            ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers))
-        )
+        outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
     return ReviewerApplyResult(ok=True, issues=issues, outcomes=outcomes)

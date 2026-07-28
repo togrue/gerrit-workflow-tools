@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_changeid import (
 )
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id, parse_change_id_footer
-from gerrit_workflow_tools.core.change_id import is_change_id_token as is_change_id
+from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
 from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid
@@ -138,8 +138,13 @@ def test_is_change_id_accepts_gerrit_form():
 def test_is_change_id_rejects_wrong_length_or_charset():
     assert not is_change_id("I" + "a" * 39)
     assert not is_change_id("I" + "a" * 41)
-    assert not is_change_id("I" + "A" * 40)
     assert not is_change_id("x" + "a" * 40)
+
+
+def test_is_change_id_accepts_uppercase_hex():
+    """One grammar, either case. This used to be rejected here and accepted everywhere else,
+    so `ger change-id` called a Change-Id invalid that `ger push` was happy to use."""
+    assert is_change_id("I" + "A" * 40)
 
 
 def test_extract_valid_change_id_last_line_only():

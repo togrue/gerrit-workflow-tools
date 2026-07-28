@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     load_annotated_stack,
     resolve_rev_range,
 )
+from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
@@ -151,10 +152,7 @@ def _run_interactive_stack_rebase(
         else:
             assert rev_arg is not None
             client = None
-            from gerrit_workflow_tools.core.gerrit.change_resolution import classify_changeish
-
-            kind = classify_changeish(rev_arg.strip())
-            if kind in ("change-number", "change-ref", "url", "query"):
+            if parse(rev_arg).kind in KINDS_NEEDING_GERRIT:
                 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
                 client = gerrit if gerrit is not None else GerritService.from_cwd(cwd, settings=settings).rest

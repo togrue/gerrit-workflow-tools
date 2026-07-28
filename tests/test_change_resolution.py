@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
     ChangeResolutionError,
     build_triplet,
-    classify_changeish,
     format_resolution_note,
-    parse_triplet,
+    parse_changeish,
     resolve_changeish,
     resolve_stack_context,
 )
@@ -74,38 +74,19 @@ def _mock_client(rows_by_query: dict[str, list[dict[str, Any]]] | None = None) -
     return client
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("HEAD", "git-rev"),
-        ("HEAD~2", "git-rev"),
-        ("a1b2c3d", "git-rev"),
-        ("120045", "git-rev"),
-        ("feature/x", "git-rev"),
-        ("rev:120045", "git-rev"),
-        ("git:120045", "git-rev"),
-        (CHANGE_ID, "change-id"),
-        ("myproject~main~" + CHANGE_ID, "triplet"),
-        ("change:120045", "change-number"),
-        ("cl:120045", "change-number"),
-        ("refs/changes/45/120045/3", "change-ref"),
-        ("https://gerrit.example.com/c/myproject/+/120045", "url"),
-        ("q:status:open", "query"),
-    ],
-)
-def test_classify_changeish(value: str, expected: str) -> None:
-    assert classify_changeish(value) == expected
+# The changeish grammar itself is covered by tests/test_changeish.py; this module covers what
+# a parsed changeish *resolves to*.
 
 
 def test_triplet_build_parse_round_trip() -> None:
     triplet = build_triplet("group/proj", "main", CHANGE_ID)
     assert triplet == f"group/proj~main~{CHANGE_ID}"
-    assert parse_triplet(triplet) == ("group/proj", "main", CHANGE_ID)
+    assert parse(triplet).change_id == CHANGE_ID
 
 
-def test_parse_triplet_rejects_invalid() -> None:
-    with pytest.raises(ChangeResolutionError, match="invalid triplet"):
-        parse_triplet("only~two")
+def test_empty_changeish_is_rejected_at_resolution() -> None:
+    with pytest.raises(ChangeResolutionError, match="empty changeish"):
+        parse_changeish("   ")
 
 
 def test_resolve_stack_context_project_from_remote_url(tmp_path: Path) -> None:

@@ -35,10 +35,10 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
 from gerrit_workflow_tools.core.change_id import (
     CHANGE_ID_FOOTER_RE,
-    is_change_id_token,
     parse_change_id_footer,
     validate_change_id_value,
 )
+from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import (
@@ -91,7 +91,7 @@ class ChangeIdError(Exception):
 def check_duplicate_change_ids(cwd, input_arg) -> None:
     """Raise :class:`ChangeIdError` when duplicate Change-Ids are found in a commit selection."""
 
-    if is_change_id_token(input_arg):
+    if is_change_id(input_arg):
         raise ChangeIdError(
             "error: --check-duplicates needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE)
         )
@@ -199,7 +199,7 @@ def _msg_filter_script() -> str:
 
 def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     """Rewrite stack commit messages, assigning Change-Ids where missing on the last line."""
-    if is_change_id_token(input_arg):
+    if is_change_id(input_arg):
         raise ChangeIdError("error: --fix needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE))
 
     _ensure_clean_tree_for_fix(cwd)
@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             check_duplicate_change_ids(cwd, input_arg)
             return 0
 
-        if is_change_id_token(input_arg):
+        if is_change_id(input_arg):
             print(input_arg)
             return 0
 

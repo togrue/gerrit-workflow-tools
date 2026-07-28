@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, call
 from gerrit_workflow_tools.core.gerrit.rest import change_id_for_gerrit_rest_path
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
+from tests.fixtures import _cid
 
 _PROJECT = "testproj"
 _BRANCH = "main"
@@ -58,7 +59,7 @@ def test_reviewer_accounts_from_change_info_dict_shaped_reviewers() -> None:
 
 def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:
     service = MagicMock()
-    cid = "Ia" * 20 + "a"
+    cid = _cid("a")
     res = apply_reviewer_strategy_after_push_service(
         service,
         ReviewerStrategy.PUSH,
@@ -71,8 +72,8 @@ def test_apply_reviewer_strategy_push_has_no_outcomes() -> None:
 
 
 def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
-    cid_a = "Ia" * 20 + "a"
-    cid_b = "Ib" * 20 + "b"
+    cid_a = _cid("a")
+    cid_b = _cid("b")
     triplet_a = _triplet(cid_a)
     triplet_b = _triplet(cid_b)
     detail_empty = _detail_payload(cid_a)
@@ -96,7 +97,7 @@ def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
 
 
 def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
-    cid = "Ic" * 20 + "c"
+    cid = _cid("c")
     triplet = _triplet(cid)
     detail = _detail_payload(
         cid,

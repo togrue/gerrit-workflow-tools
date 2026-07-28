@@ -16,13 +16,19 @@ def test_resolve_by_change_id(stack_repo, monkeypatch):
     assert subj == "Extract command routing"
 
 
-def test_resolve_change_id_case_sensitive(stack_repo, monkeypatch):
+def test_resolve_change_id_case_insensitive(stack_repo, monkeypatch):
+    """One Change-Id grammar, either case — so matching has to be case-insensitive too.
+
+    The grammar has always accepted a lowercase ``i`` prefix, and ``norm_change_id`` lowercases
+    ids for lookup, but the stack match compared footers exactly. Accepting a spelling and then
+    failing to find it was the drift; ``i2222…`` now resolves to the commit whose footer spells
+    it ``I2222…``.
+    """
     monkeypatch.chdir(stack_repo)
     cid = _cid("2")
     full = resolve_stack_commit(stack_repo, cid, settings=Settings.from_cwd(stack_repo))
-    with pytest.raises(GitError, match="no commit in current stack"):
-        resolve_stack_commit(stack_repo, cid.lower(), settings=Settings.from_cwd(stack_repo))
-    assert full == resolve_stack_commit(stack_repo, cid, settings=Settings.from_cwd(stack_repo))
+    assert full == resolve_stack_commit(stack_repo, cid.lower(), settings=Settings.from_cwd(stack_repo))
+    assert full == resolve_stack_commit(stack_repo, cid.upper(), settings=Settings.from_cwd(stack_repo))
 
 
 def test_resolve_by_short_sha(stack_repo, monkeypatch):

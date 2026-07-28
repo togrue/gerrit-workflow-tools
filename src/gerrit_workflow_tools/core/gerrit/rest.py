@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import re
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+from gerrit_workflow_tools.core.changeish import Changeish, is_change_id, parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.git_run import GitError
 
@@ -37,8 +37,6 @@ class GerritApiError(RuntimeError):
         self.status = status
 
 
-_CHANGE_ID_REST_PATH_RE = re.compile(r"^[iI]([0-9a-fA-F]{40})$")
-_CHANGE_ID_SUFFIX_RE = re.compile(r"^[iI][0-9a-fA-F]{40}$")
 _BATCH_OR_CHUNK = 25
 
 
@@ -56,9 +54,8 @@ def change_id_for_gerrit_rest_path(change_id: str) -> str:
     """
 
     s = change_id.strip()
-    m = _CHANGE_ID_REST_PATH_RE.fullmatch(s)
-    if m:
-        return "I" + m.group(1).lower()
+    if is_change_id(s):
+        return "I" + s[1:].lower()
     return s
 
 
@@ -468,20 +465,20 @@ class HttpGerritRest:
 
 
 def resolve_change_ref(arg: str) -> str:
-    """Build a ``changes/?q=`` query string from a triplet, Change-Id, or passthrough ref."""
-    s = arg.strip()
-    lower = s.lower()
-    if lower.startswith("q:"):
-        return s[2:].strip()
-    if lower.startswith(("change:", "cl:")):
-        return s
-    if "~" in s:
-        parts = s.split("~")
-        if len(parts) == 3 and _CHANGE_ID_SUFFIX_RE.fullmatch(parts[2]):
-            return _triplet_query(parts[0], parts[1], parts[2])
-    if _CHANGE_ID_SUFFIX_RE.fullmatch(s):
-        return f"change:{s}"
-    return s
+    """Build a ``changes/?q=`` query string from a changeish, or pass it through unchanged.
+
+    Query building is Gerrit dialect, so it stays here rather than in the grammar. A
+    ``change:``/``cl:`` prefix is already valid Gerrit query syntax and passes through as
+    written; anything the grammar does not recognize is handed to Gerrit as typed.
+    """
+    parsed = parse(arg)
+    if parsed.kind == "query":
+        return parsed.query or ""
+    if parsed.kind == "triplet":
+        return _triplet_query(parsed.project or "", parsed.branch or "", parsed.change_id or "")
+    if parsed.kind == "change-id":
+        return f"change:{parsed.raw}"
+    return parsed.raw
 
 
 def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -555,27 +552,20 @@ def resolve_gerrit_change(
 # ---------------------------------------------------------------------------
 
 
-def _parse_batch_ref(ref: str) -> tuple[str, ...]:
-    """Return ``('triplet', project, branch, change_id)`` or ``('numeric', number)``."""
-    s = ref.strip()
-    if re.fullmatch(r"\d+", s):
-        return ("numeric", s)
-    if "~" in s:
-        parts = s.split("~")
-        if len(parts) == 3 and _CHANGE_ID_SUFFIX_RE.fullmatch(parts[2]):
-            return ("triplet", parts[0], parts[1], parts[2])
-    raise GerritApiError(f"batch ref must be triplet or numeric change id, got {ref!r}")
-
-
 def _triplet_query(project: str, branch: str, change_id: str) -> str:
     return f"project:{project} branch:{branch} change:{change_id}"
 
 
+def _batch_ref_query(parsed: Changeish) -> str:
+    """One-change query for a batch ref, falling back to the ref as written."""
+    if parsed.kind == "triplet":
+        return _triplet_query(parsed.project or "", parsed.branch or "", parsed.change_id or "")
+    batch_ref = parsed.as_batch_ref()
+    return f"change:{batch_ref}" if batch_ref else resolve_change_ref(parsed.raw)
+
+
 def _ref_to_query(ref: str) -> str:
-    kind = _parse_batch_ref(ref)
-    if kind[0] == "triplet":
-        return _triplet_query(kind[1], kind[2], kind[3])
-    return f"change:{kind[1]}"
+    return _batch_ref_query(parse(ref))
 
 
 def _batch_query_limit(chunk: list[str]) -> int:
@@ -596,23 +586,23 @@ def _chunk_to_query(chunk: list[str]) -> str:
     other_exprs: list[str] = []
 
     for ref in chunk:
-        try:
-            kind = _parse_batch_ref(ref)
-        except GerritApiError:
-            other_exprs.append(_ref_to_query(ref))
-            continue
-        if kind[0] == "triplet":
-            project, change_id = kind[1], kind[3]
+        parsed = parse(ref)
+        if parsed.kind == "triplet":
+            project, change_id = parsed.project or "", parsed.change_id or ""
             seen = seen_per_project.setdefault(project, set())
             if change_id in seen:
                 continue
             seen.add(change_id)
             by_project.setdefault(project, []).append(change_id)
-        else:
-            num = kind[1]
-            if num not in seen_bare:
-                seen_bare.add(num)
-                bare_ids.append(num)
+            continue
+        num = parsed.as_batch_ref()
+        if num is None:
+            # Not a batch ref at all. Previously this raised GerritApiError, which the caller
+            # caught only to degrade the whole chunk to per-change queries.
+            other_exprs.append(_batch_ref_query(parsed))
+        elif num not in seen_bare:
+            seen_bare.add(num)
+            bare_ids.append(num)
 
     group_exprs: list[str] = []
     for project, change_ids in by_project.items():
@@ -666,19 +656,16 @@ def alias_batch_fetch_results(
     for ref in requested:
         if ref in out:
             continue
-        try:
-            kind = _parse_batch_ref(ref)
-        except GerritApiError:
-            continue
-        payload: dict[str, Any] | None = None
-        if kind[0] == "triplet":
-            branch = kind[2]
-            change_id = kind[3]
-            payload = by_change_branch.get((change_id, branch))
-        elif kind[0] == "numeric":
-            payload = by_number.get(int(kind[1]))
-        if payload is not None:
-            out[ref] = payload
+        parsed = parse(ref)
+        match: dict[str, Any] | None = None
+        if parsed.kind == "triplet":
+            match = by_change_branch.get((parsed.change_id or "", parsed.branch or ""))
+        else:
+            batch_ref = parsed.as_batch_ref()
+            if batch_ref is not None:
+                match = by_number.get(int(batch_ref))
+        if match is not None:
+            out[ref] = match
     return out
 
 
