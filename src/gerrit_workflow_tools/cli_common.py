@@ -178,6 +178,23 @@ def cwd_from_env() -> Path:
     return Path.cwd()
 
 
+def ensure_utf8_stdio() -> None:
+    """Force stdout/stderr to UTF-8 so redirected output can emit Unicode.
+
+    On Windows (and some other locales), ``ger log > file`` attaches a legacy
+    encoding such as cp1252. Combining strikethrough and other CLI glyphs then
+    raise ``UnicodeEncodeError``. Reconfigure when the stream supports it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (OSError, ValueError, AttributeError):
+            pass
+
+
 def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Settings, SummaryHighlighter]:
     """Configure logging/color and return ``(cwd, settings, summary_highlighter)`` for CLI commands.
 
@@ -186,6 +203,7 @@ def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Settin
     argument rather than reading configuration again.
     """
 
+    ensure_utf8_stdio()
     configure_logging(debug_log)
     cwd = cwd_from_env()
     init_color_mode(color=color)

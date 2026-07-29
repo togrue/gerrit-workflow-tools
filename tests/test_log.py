@@ -289,6 +289,39 @@ def test_log_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.Mon
     assert _unicode_strikethrough(rows[-1].subject) in out
 
 
+def test_log_file_redirect_encodes_unicode(
+    stack_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``ger log > output-file.txt`` must not raise UnicodeEncodeError on legacy encodings.
+
+    Redirected stdout often uses the locale encoding (e.g. cp1252 on Windows). Abandoned
+    summaries use combining strikethrough (U+0336), which is not encodable there.
+    """
+    import io
+    import sys
+
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[-1] = {"status": "ABANDONED"}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+
+    out_path = tmp_path / "output-file.txt"
+    err_buf = io.StringIO()
+    monkeypatch.chdir(stack_repo)
+    monkeypatch.setattr(sys, "stderr", err_buf)
+    with out_path.open("w", encoding="cp1252", errors="strict", newline="\n") as out_f:
+        monkeypatch.setattr(sys, "stdout", out_f)
+        code = log_main(["--color=never"], gerrit=ChangeStore(details))
+
+    assert code == 1, err_buf.getvalue()
+    text = out_path.read_text(encoding="utf-8")
+    assert "summary:" in text
+    assert _unicode_strikethrough(rows[-1].subject) in text
+
+
 def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
