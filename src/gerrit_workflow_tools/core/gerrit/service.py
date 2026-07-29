@@ -283,24 +283,6 @@ class ChangeApi:
     def __init__(self, service: GerritService) -> None:
         self._service = service
 
-    def get_many(self, change_ids: list[str]) -> list[Change]:
-        """Return changes in the same order as *change_ids*."""
-
-        triplets = _cache_triplets(self._service, change_ids)
-        payloads = self._service.cache.load_changes(
-            triplets,
-            probe_updated=self._service._probe_changes_updated,
-            fetch_changes=self._service._fetch_change_payloads,
-            trust_window_seconds=self._service.trust_window_seconds,
-            refresh=self._service.refresh,
-        )
-        out: list[Change] = []
-        for triplet in triplets:
-            payload = payloads.get(triplet)
-            if payload is not None:
-                out.append(Change(payload))
-        return out
-
     def get(self, change_id: str) -> Change:
         """Return one change or raise if Gerrit did not return it."""
 
@@ -420,17 +402,6 @@ class AccountApi:
 
     def __init__(self, service: GerritService) -> None:
         self._service = service
-
-    def get_many(self, account_ids: list[int | str]) -> list[Account]:
-        """Return accounts in input order when present."""
-
-        payloads = self.get_payloads(account_ids)
-        out: list[Account] = []
-        for account_id in account_ids:
-            payload = payloads.get(int(account_id))
-            if payload is not None:
-                out.append(Account(payload))
-        return out
 
     def get(self, account_id: int | str) -> Account:
         """Return one account."""

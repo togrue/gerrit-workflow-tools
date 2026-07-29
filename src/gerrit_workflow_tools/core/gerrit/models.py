@@ -61,11 +61,3 @@ class Comment:
     def message(self) -> str:
         raw = self.payload.get("message")
         return raw if isinstance(raw, str) else ""
-
-
-@dataclass(frozen=True)
-class ReviewerSlot:
-    """Reviewer assignment target for REST mutations."""
-
-    reviewer: str
-    state: str = "REVIEWER"

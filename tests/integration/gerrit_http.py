@@ -92,9 +92,3 @@ class GerritHttpSession:
 
 def quote_change_id(change_id: str) -> str:
     return quote(change_id, safe="")
-
-
-def change_review_path(change_id: str, revision: str = "current") -> str:
-    enc = quote_change_id(change_id)
-    rev = quote(revision, safe="")
-    return f"changes/{enc}/revisions/{rev}/review"

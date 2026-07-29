@@ -14,7 +14,6 @@ from unittest.mock import MagicMock
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target
-from tests.change_store import ChangeStore
 
 
 def change_info_for_sha(
@@ -102,17 +101,6 @@ def build_details_by_change_id(
         )
         out[str(detail["id"])] = detail
     return out
-
-
-def make_query_changes_impl(details: dict[str, dict[str, Any]]):
-    """Return a ``query_changes`` callable over *details* (delegates to :class:`ChangeStore`)."""
-
-    store = ChangeStore(details)
-
-    def query_changes(q: str, n: int = 25, options: list[str] | None = None) -> list[dict[str, Any]]:
-        return store.query_changes(q, n=n, options=options)
-
-    return query_changes
 
 
 def gerrit_client_class_stub(inst: object) -> MagicMock:

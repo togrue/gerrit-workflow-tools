@@ -17,7 +17,6 @@ from tests.fixtures import (
     finalize_git_template,
     make_gcid_cli_repo,
     make_repo_duplicate_change_id,
-    make_repo_malformed_cid,
     make_stack_repo,
 )
 
@@ -122,16 +121,6 @@ def _dup_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
-def _malformed_cid_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    root = tmp_path_factory.mktemp("tpl_malformed")
-    repo = make_repo_malformed_cid(root / "repo")
-    configure_gerrit_target(repo, "main")
-    git("remote", "set-url", "origin", ".", cwd=repo)
-    finalize_git_template(repo)
-    return repo
-
-
-@pytest.fixture(scope="session")
 def _gcid_cli_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("tpl_gcid_cli")
     repo = make_gcid_cli_repo(root / "repo")
@@ -167,11 +156,6 @@ def _isolate_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 @pytest.fixture
 def dup_repo(tmp_path: Path, _dup_repo_template: Path) -> Path:
     return _copy_git_repo(_dup_repo_template, tmp_path / "dup")
-
-
-@pytest.fixture
-def malformed_cid_repo(tmp_path: Path, _malformed_cid_repo_template: Path) -> Path:
-    return _copy_git_repo(_malformed_cid_repo_template, tmp_path / "mal")
 
 
 def run_cli(

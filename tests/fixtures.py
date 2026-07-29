@@ -103,26 +103,6 @@ def make_repo_duplicate_change_id(path: Path) -> Path:
     return path
 
 
-def make_repo_malformed_cid(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    env = {
-        "GIT_AUTHOR_NAME": "Test",
-        "GIT_AUTHOR_EMAIL": "test@example.com",
-        "GIT_COMMITTER_NAME": "Test",
-        "GIT_COMMITTER_EMAIL": "test@example.com",
-    }
-    git("init", "-b", "main", cwd=path, env=env)
-    (path / "README.md").write_text("x\n", encoding="utf-8")
-    git("add", "README.md", cwd=path, env=env)
-    git("commit", "-m", "init", cwd=path, env=env)
-    git("checkout", "-b", "bad", cwd=path, env=env)
-    (path / "x.txt").write_text("1\n", encoding="utf-8")
-    git("add", "x.txt", cwd=path, env=env)
-    git("commit", "-m", "bad\n\nChange-Id: not-valid", cwd=path, env=env)
-    git("branch", "--set-upstream-to", "main", "bad", cwd=path, env=env, check=False)
-    return path
-
-
 def make_repo_with_merged_side_branch(path: Path) -> Path:
     """
     Build a repo where a side branch has been merged into a feature branch.

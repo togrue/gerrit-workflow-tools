@@ -37,9 +37,3 @@ def gerrit_cache_db_path(web_base: str) -> Path:
     """Return the SQLite cache DB path for *web_base*."""
 
     return gerrit_cache_dir(web_base) / "cache.db"
-
-
-def reviewer_history_path(web_base: str) -> Path:
-    """Return the reviewer history path colocated with the Gerrit cache."""
-
-    return gerrit_cache_dir(web_base) / "reviewer_history.json"

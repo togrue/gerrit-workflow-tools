@@ -116,12 +116,3 @@ def collect_unresolved_comment_chains(file_map: dict[str, list[dict[str, Any]]])
     """Return comment chains whose last reply is still unresolved."""
 
     return [chain for chain in build_comment_chains(file_map) if not chain.resolved]
-
-
-def collect_unresolved_comments(file_map: dict[str, list[dict[str, Any]]]) -> list[InlineComment]:
-    """Flatten unresolved chains into individual comments (legacy flat list)."""
-
-    rows: list[InlineComment] = []
-    for chain in collect_unresolved_comment_chains(file_map):
-        rows.extend(chain.comments)
-    return rows

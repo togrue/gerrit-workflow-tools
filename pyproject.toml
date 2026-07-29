@@ -91,7 +91,7 @@ disable = [
 ]
 
 [tool.vulture]
-paths = ["src"]
+paths = ["src", "tests"]
 ignore_names = [
     # cli_changeid --fix: imported from dynamically built subprocess script only.
     "strip_change_id_lines",
@@ -101,6 +101,31 @@ ignore_names = [
     "lex_document",
     "validate",
     "get_completions",
+    # Prompt-toolkit key bindings registered via decorator.
+    "_history_up",
+    "_history_down",
+    # sqlite3.Connection attribute assignment.
+    "row_factory",
+    # pytest hooks / autouse fixtures / marks (plugin entry points).
+    "pytest_configure",
+    "pytest_fixture_setup",
+    "pytest_sessionfinish",
+    "_isolate_xdg_cache_home",
+    "_clear_git_cache",
+    "_profile_test_duration",
+    "pytestmark",
+    # pytest fixtures consumed via parameter name injection.
+    "history_home",
+    # unittest.mock attribute assignments.
+    "return_value",
+    "side_effect",
+    # CLI entry points / string-dispatched mains.
+    "main_reword",
+    "render_bash_completion_script",
+    # Settings constructed from plain maps in tests.
+    "from_map",
+    # Used by unit tests; keep as public test helper API.
+    "clear_git_cache",
 ]
 
 [tool.ruff.lint]

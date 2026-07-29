@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git, git_out
-
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from CLI output."""
-    return _ANSI_RE.sub("", text)
 
 
 def ref_exists(repo: Path, ref: str) -> bool:

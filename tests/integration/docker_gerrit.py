@@ -213,17 +213,6 @@ def stop_container(container: object | None, *, remove: bool) -> None:
         logger.warning("Could not stop/remove container: %s", e)
 
 
-def tail_logs(container: object, *, n: int = 80) -> str:
-    if container is None:
-        return ""
-    try:
-        c: Container = container  # type: ignore[assignment]
-        raw = c.logs(tail=n)
-        return raw.decode("utf-8", errors="replace")
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        return f"(could not read logs: {e})"
-
-
 def set_docker_host_from_env() -> None:
     """If ``GERRIT_IT_DOCKER_HOST`` is set, copy it to ``DOCKER_HOST`` for docker-py."""
     v = os.environ.get("GERRIT_IT_DOCKER_HOST")
