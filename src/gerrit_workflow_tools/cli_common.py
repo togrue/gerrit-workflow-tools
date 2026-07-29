@@ -37,7 +37,7 @@ class ExitCode(IntEnum):
     """One exit code per distinct failure reason, shared by every ``ger`` command.
 
     Codes are semantic, not per-command: the same reason exits the same way whichever
-    command hit it. ``0``–``2`` are fixed by convention (argparse exits ``2`` on bad
+    command hit it. ``0``-``2`` are fixed by convention (argparse exits ``2`` on bad
     arguments); the rest split what used to be lumped together or reused.
 
     Contract: [docu/spec/exit-codes.md](../../docu/spec/exit-codes.md).

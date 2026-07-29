@@ -142,14 +142,17 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         if note:
             print(note, file=sys.stderr)
 
-    if not args.commit_all and not _index_has_staged_changes(cwd):
-        if not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd):
-            print(
-                "error: no staged changes (index empty). Stage edits with `git add`, "
-                "or use `ger fix -a …` to commit all changes to tracked files.",
-                file=sys.stderr,
-            )
-            return 1
+    if (
+        not args.commit_all
+        and not _index_has_staged_changes(cwd)
+        and (not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd))
+    ):
+        print(
+            "error: no staged changes (index empty). Stage edits with `git add`, "
+            "or use `ger fix -a …` to commit all changes to tracked files.",
+            file=sys.stderr,
+        )
+        return 1
 
     cmd: list[str] = ["-c", "core.editor=true", "commit"]
     if args.no_verify:

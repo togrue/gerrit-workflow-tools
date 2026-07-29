@@ -245,7 +245,7 @@ def test_ger_log_batch_query_budget_with_unpublished(
     assert len([c for c in commits if c.get("change_id")]) >= total_with_ids
 
     batch_qs = [q for q in queries if "project:" in q and "change:" in q]
-    # Cold cache: one detail fetch pass (no probe). May be 1–2 chunks.
+    # Cold cache: one detail fetch pass (no probe). May be 1-2 chunks.
     assert len(batch_qs) <= expected_chunks + 1, (
         f"expected ~{expected_chunks} batch queries, got {len(batch_qs)}: {batch_qs!r}"
     )

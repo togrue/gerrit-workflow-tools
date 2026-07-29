@@ -153,7 +153,7 @@ def test_resolve_stack_context_errors_when_project_missing(tmp_path: Path) -> No
     git("checkout", "-b", "feature", cwd=repo)
     configure_gerrit_target(repo, "main")
 
-    with pytest.raises(ChangeResolutionError, match="gerrit.project"):
+    with pytest.raises(ChangeResolutionError, match=r"gerrit\.project"):
         resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
 
