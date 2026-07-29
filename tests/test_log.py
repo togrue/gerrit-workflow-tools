@@ -185,6 +185,41 @@ def test_determine_attention_no_reviewers_when_empty() -> None:
     assert "no-reviewers" in reasons
 
 
+def test_determine_attention_missing_change_id() -> None:
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="abc1234",
+        summary="subj",
+        change_id=None,
+        pushed=False,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ABSENT,
+        verified=None,
+        code_review=None,
+        comments_unresolved=0,
+    )
+    reasons = determine_attention(commit, chain_blocked=False)
+    assert reasons == ["missing-change-id"]
+
+
+def test_determine_attention_not_pushed_when_change_id_present() -> None:
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="abc1234",
+        summary="subj",
+        change_id="I" + "a" * 40,
+        pushed=False,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ABSENT,
+        verified=None,
+        code_review=None,
+        comments_unresolved=0,
+    )
+    reasons = determine_attention(commit, chain_blocked=False)
+    assert reasons == ["not-pushed"]
+    assert "missing-change-id" not in reasons
+
+
 def test_determine_attention_no_reviewers_absent_when_assigned() -> None:
     commit = LogCommit(
         sha="a" * 40,

@@ -287,36 +287,36 @@ def test_gcid_start_at_remote_change_id_passthrough(stack_repo, monkeypatch):
     assert out.strip() == cid
 
 
-# --- CLI: --check-duplicates ---
+# --- CLI: --check ---
 
 
-def test_gcid_check_duplicates_ok(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gcid_main, ["--check-duplicates"], monkeypatch)
+def test_gcid_check_ok(stack_repo, monkeypatch):
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check"], monkeypatch)
     assert code == 0
     assert out == ""
     assert err == ""
 
 
-def test_gcid_check_duplicates_fails_on_dup(dup_repo, monkeypatch):
-    code, out, err = run_cli(dup_repo, gcid_main, ["--check-duplicates"], monkeypatch)
-    assert code == 2
+def test_gcid_check_fails_on_dup(dup_repo, monkeypatch):
+    code, out, err = run_cli(dup_repo, gcid_main, ["--check"], monkeypatch)
+    assert code == ExitCode.DUPLICATE_CHANGE_ID
     assert out == ""
     assert "duplicate" in err.lower()
 
 
-def test_gcid_check_duplicates_rejects_change_id_arg(stack_repo, monkeypatch):
+def test_gcid_check_rejects_rev_or_range(stack_repo, monkeypatch):
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check", "HEAD~2"], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert out == ""
+    assert "full current stack" in err or "REV_OR_RANGE" in err
+
+
+def test_gcid_check_rejects_change_id_arg(stack_repo, monkeypatch):
     cid = _cid("4")
-    code, out, err = run_cli(stack_repo, gcid_main, ["--check-duplicates", cid], monkeypatch)
-    assert code == 2
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check", cid], monkeypatch)
+    assert code == ExitCode.USAGE
     assert out == ""
-    assert "change-id" in err.lower() or "Change-Id" in err
-
-
-def test_gcid_check_duplicates_end_ref(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gcid_main, ["--check-duplicates", "HEAD~2"], monkeypatch)
-    assert code == 0
-    assert out == ""
-    assert err == ""
+    assert "full current stack" in err or "REV_OR_RANGE" in err
 
 
 # --- CLI: synthetic repos ---
@@ -375,7 +375,7 @@ def test_gcid_fix_assigns_missing_and_not_last_line(tmp_path, monkeypatch):
     assert "Signed-off-by: test@example.com" in second
     assert second.count("Change-Id:") == 1
 
-    check_code, check_out, check_err = run_cli(repo, gcid_main, ["--check-duplicates"], monkeypatch)
+    check_code, check_out, check_err = run_cli(repo, gcid_main, ["--check"], monkeypatch)
     assert check_code == 0
     assert check_out == ""
     assert check_err == ""
@@ -396,8 +396,8 @@ def test_gcid_fix_skips_commit_with_valid_last_line_change_id(tmp_path, monkeypa
     assert after[2].count("Change-Id:") == 1
 
 
-def test_gcid_fix_rejects_check_duplicates_combo(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gcid_main, ["--fix", "--check-duplicates"], monkeypatch)
+def test_gcid_fix_rejects_check_combo(stack_repo, monkeypatch):
+    code, out, err = run_cli(stack_repo, gcid_main, ["--fix", "--check"], monkeypatch)
     assert code == 2
     assert out == ""
     assert "cannot be combined" in err

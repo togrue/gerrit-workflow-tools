@@ -89,7 +89,7 @@ def test_attention_text_variants():
             "sha": "abc" * 13 + "ab",
             "short_sha": "abc1234",
             "summary": "x",
-            "change_id": None,
+            "change_id": "I" + "a" * 40,
             "pushed": True,
             "abandoned": False,
             "patchset_status": "active",
@@ -101,6 +101,7 @@ def test_attention_text_variants():
         defaults.update(kw)
         return LogCommit(**defaults)
 
+    assert attention_text(_commit(change_id=None, pushed=False, patchset_status="absent")) == "missing Change-Id"
     assert attention_text(_commit(abandoned=True)) == "abandoned"
     assert attention_text(_commit(pushed=False, patchset_status="absent")) == "not-pushed"
     assert attention_text(_commit(submittable=True)) == "submittable"
@@ -162,7 +163,7 @@ def test_enriched_subject_truncates_long_summary():
     assert "\u2026" in subj  # ellipsis
 
 
-def test_enriched_subject_not_pushed_shows_dash():
+def test_enriched_subject_missing_change_id():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.rebase_enricher import _enriched_subject
 
@@ -171,6 +172,27 @@ def test_enriched_subject_not_pushed_shows_dash():
         short_sha="abc1234",
         summary="wip: local only",
         change_id=None,
+        pushed=False,
+        abandoned=False,
+        patchset_status="absent",
+        verified=None,
+        code_review=None,
+        comments_unresolved=0,
+    )
+    subj = _enriched_subject(commit)
+    assert "-" in subj
+    assert "missing Change-Id" in subj
+
+
+def test_enriched_subject_not_pushed_shows_dash():
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+    from gerrit_workflow_tools.rebase_enricher import _enriched_subject
+
+    commit = LogCommit(
+        sha="abc" * 13 + "ab",
+        short_sha="abc1234",
+        summary="wip: local only",
+        change_id="I" + "a" * 40,
         pushed=False,
         abandoned=False,
         patchset_status="absent",

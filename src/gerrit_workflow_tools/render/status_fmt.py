@@ -58,6 +58,8 @@ def comments_token(count: int) -> str:
 
 def attention_text(commit: LogCommit) -> str:
     """Short plain-text annotation for a trailing ``# …`` column, or empty string."""
+    if "missing-change-id" in commit.attention_reasons or not commit.change_id:
+        return "missing Change-Id"
     if commit.abandoned:
         return "abandoned"
     if not commit.pushed:

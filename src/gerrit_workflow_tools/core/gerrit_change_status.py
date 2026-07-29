@@ -395,6 +395,10 @@ def first_commit_needing_edit_attention(commits: list[LogCommit]) -> LogCommit |
 def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:  # pylint: disable=too-many-branches
     """Return reasons why this commit needs attention (empty = stable)."""
     reasons: list[str] = []
+    if not commit.change_id:
+        # Prefer missing-change-id over only not-pushed: overlay cannot match Gerrit without a footer.
+        reasons.append("missing-change-id")
+        return reasons
     if commit.abandoned:
         reasons.append("abandoned")
         return reasons

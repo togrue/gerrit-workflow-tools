@@ -934,7 +934,7 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
     if cid_exit >= 2:
         print(
-            "error: Change-Id check failed; inspect with `ger change-id --check-duplicates` "
+            "error: Change-Id check failed; inspect with `ger change-id --check` "
             "or auto-fix with `ger change-id --fix`",
             file=sys.stderr,
         )

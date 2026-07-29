@@ -148,6 +148,8 @@ def extra_detail_lines(commit: LogCommit) -> list[str]:
 
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
     """Attention (text, ANSI-color) pairs for the trailing annotation column."""
+    if "missing-change-id" in commit.attention_reasons or not commit.change_id:
+        return [("missing Change-Id", ANSI_YELLOW)]
     if commit.abandoned:
         return [("abandoned", ANSI_RED)]
     if not commit.pushed:

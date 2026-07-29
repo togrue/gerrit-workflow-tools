@@ -13,9 +13,11 @@
 # :func:`change_id.parse_change_id_footer` for extraction and `validate_change_id_value` for the verdict).
 # If the Change-Id is not found, output an error message.
 # If the Change-Id is found, output the Change-Id.
-# With ``--start-at-remote`` or ``--check-duplicates``, log ``upstream_tip..END``
+# With ``--start-at-remote``, log ``upstream_tip..END``
 # (same stack base as ``ger log`` default: :func:`stack.rev_spec_stack_base_to_end`).
-# ``--check-duplicates`` exits 0 if all footers are valid and unique, 1 if a footer is missing, 2 on duplicates.
+# ``--check`` always scans the full current stack (``upstream_tip..HEAD``): exits 0 if all footers
+# are valid and unique, ``MISSING_CHANGE_ID`` if a footer is missing/invalid, ``DUPLICATE_CHANGE_ID``
+# on duplicates. A ``REV_OR_RANGE`` with ``--check`` is a usage error.
 
 import argparse
 import os
@@ -88,16 +90,12 @@ class ChangeIdError(Exception):
         self.code = code
 
 
-def check_duplicate_change_ids(cwd, input_arg) -> None:
-    """Raise :class:`ChangeIdError` when duplicate Change-Ids are found in a commit selection."""
+def check_stack_change_ids(cwd) -> None:
+    """Raise :class:`ChangeIdError` when the current stack has missing/invalid/duplicate Change-Ids.
 
-    if is_change_id(input_arg):
-        raise ChangeIdError(
-            "error: --check-duplicates needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE)
-        )
-
-    resolved = resolve_gcid_user_arg(cwd, input_arg)
-    rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
+    Always scans ``upstream_tip..HEAD`` (the full local stack).
+    """
+    rev_spec = rev_spec_target_tip_to_end(cwd, "HEAD")
     raw = git_log_sha_body(cwd, rev_spec, single=False)
 
     pairs = parse_git_log_sha_body_rs(raw)
@@ -109,7 +107,7 @@ def check_duplicate_change_ids(cwd, input_arg) -> None:
             first = seen[cid][:8]
             raise ChangeIdError(
                 f"error: duplicate Change-Id {cid} (commit {color_short_sha(short)}, also on {color_short_sha(first)})",
-                code=2,
+                code=int(ExitCode.DUPLICATE_CHANGE_ID),
             )
         seen[cid] = sha
 
@@ -253,7 +251,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     """CLI for `ger change-id`.
 
-    Prints or validates Change-Ids for commits or ranges, with optional duplicate checking.
+    Prints or validates Change-Ids for commits or ranges, with optional stack checking.
     """
     p = _build_parser()
     args = p.parse_args(argv)
@@ -265,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     input_arg = args.rev_or_range or "HEAD"
 
     try:
-        needs_stack_upstream = bool(args.start_at_remote or args.check_duplicates or args.fix)
+        needs_stack_upstream = bool(args.start_at_remote or args.check or args.fix)
         if needs_stack_upstream:
             head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
             if head_ref_proc.returncode == 0:
@@ -273,15 +271,20 @@ def main(argv: list[str] | None = None) -> int:
                 if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
                     return 1
 
-        if args.fix and args.check_duplicates:
-            raise ChangeIdError("error: --fix cannot be combined with --check-duplicates", code=int(ExitCode.USAGE))
+        if args.fix and args.check:
+            raise ChangeIdError("error: --fix cannot be combined with --check", code=int(ExitCode.USAGE))
 
         if args.fix:
             fix_change_ids_for_stack(cwd, input_arg)
             return 0
 
-        if args.check_duplicates:
-            check_duplicate_change_ids(cwd, input_arg)
+        if args.check:
+            if args.rev_or_range is not None:
+                raise ChangeIdError(
+                    "error: --check always scans the full current stack; do not pass REV_OR_RANGE",
+                    code=int(ExitCode.USAGE),
+                )
+            check_stack_change_ids(cwd)
             return 0
 
         if is_change_id(input_arg):
@@ -308,7 +311,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="REV_OR_RANGE",
         help=(
             "Revision (anything git rev-parse --verify accepts), Change-Id (I…, passthrough), "
-            "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD."
+            "or range (rev1..rev2 or rev1...rev2). Defaults to HEAD. Not allowed with --check."
         ),
     )
     add_verbose_and_debug_log_args(p)
@@ -320,9 +323,12 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
-        "--check-duplicates",
+        "--check",
         action="store_true",
-        help="Check for duplicate Change-Ids across upstream_tip..END (same range as --start-at-remote).",
+        help=(
+            "Validate all commits in the current local stack (upstream_tip..HEAD): "
+            "every commit needs a valid unique Change-Id."
+        ),
     )
     p.add_argument(
         "--fix",
