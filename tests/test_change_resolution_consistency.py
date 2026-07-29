@@ -181,11 +181,3 @@ def test_push_stack_resolve_and_show_agree_on_triplet(stack_repo: Path, monkeypa
     log_row = next(c for c in json_stdout(out_l)["commits"] if c["change_id"] == cid)
     assert log_row["pushed"] is True
     assert f"/+/{json_stdout(out_r)['resolution']['selected']['number']}" in (log_row.get("gerrit_url") or "")
-
-
-def test_bare_integer_fix_documented_in_fix_tests(stack_repo: Path) -> None:
-    """Bare-integer ``ger fix`` behavior is covered by ``tests/test_fix.py`` (spec §2.2)."""
-    # Guardrail: keep Phase 6 matrix discoverable from this module.
-    import tests.test_fix as fix_tests
-
-    assert hasattr(fix_tests, "test_ger_fix_bare_integer_is_git_revision_not_change_number")

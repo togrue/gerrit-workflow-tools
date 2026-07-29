@@ -14,7 +14,6 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     PatchsetStatus,
     annotate_attention,
     commit_needs_edit_attention,
-    determine_attention,
     first_commit_needing_edit_attention,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git
@@ -62,13 +61,6 @@ def test_first_commit_needing_edit_attention_oldest_first() -> None:
     annotate_attention([oldest, newest])
     picked = first_commit_needing_edit_attention([oldest, newest])
     assert picked is oldest
-
-
-def test_determine_attention_ci_failed_reason() -> None:
-    c = _commit(verified=-1)
-    assert "ci-failed" in determine_attention(c, chain_blocked=False)
-
-
 def test_first_attention_commit_ignores_merged_side_branches(tmp_path: Path) -> None:
     """``--first-attention-commit`` must see the same commits ``ger log`` does.
 

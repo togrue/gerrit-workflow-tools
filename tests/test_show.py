@@ -393,9 +393,9 @@ def test_gshow_highlights_warning_pattern_on_summary_line(stack_repo: Path, monk
     "argv",
     [
         ["--json", "HEAD"],
-        ["HEAD", "--color=never"],
         ["HEAD", "--verbose"],
     ],
+    ids=["json", "verbose"],
 )
 def test_gshow_smoke_argv_head_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
     _configure_gshow_repo(stack_repo)

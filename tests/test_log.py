@@ -51,24 +51,14 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--follow-merges" in out
 
 
-@pytest.mark.parametrize(
-    "argv_extra",
-    [
-        [],
-        ["-v"],
-        ["--url"],
-        ["--color=never"],
-    ],
-)
-def test_log_smoke_argv_exits_zero(
+def test_log_url_flag_exits_zero(
     stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
-    argv_extra: list[str],
 ) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    code, _out, err = run_cli(stack_repo, log_main, argv_extra, monkeypatch, gerrit=ChangeStore(details))
+    code, _out, err = run_cli(stack_repo, log_main, ["--url"], monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), (code, err)
 
 

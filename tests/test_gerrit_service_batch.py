@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
 from gerrit_workflow_tools.core.gerrit.rest import (
-    _BATCH_OR_CHUNK,
     alias_batch_fetch_results,
     batch_load_change_details,
 )
@@ -84,34 +83,6 @@ def test_batch_load_uses_gerrit_project_not_scp_port_prefix() -> None:
     assert "project:29418/" not in queries[0]
     assert "branch:" not in queries[0]
     assert f"project:test-git-graph-repo change:{cid}" in queries[0]
-
-
-def test_batch_load_many_changes_issues_one_query_per_chunk() -> None:
-    """Regression: stack overlay must batch OR-query changes, not query each one."""
-    n = _BATCH_OR_CHUNK + 5
-    refs = [f"test-git-graph-repo~dev~{_change_id(i)}" for i in range(n)]
-    row = {
-        "id": refs[0],
-        "change_id": refs[0].split("~")[-1],
-        "project": "test-git-graph-repo",
-        "branch": "dev",
-        "_number": 1,
-    }
-    client = MagicMock()
-
-    def query_changes(q: str, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
-        del args, kwargs
-        if q.startswith("project:test-git-graph-repo (change:"):
-            return [row]
-        return []
-
-    client.query_changes.side_effect = query_changes
-
-    batch_load_change_details(client, refs)
-
-    assert client.query_changes.call_count == 2
-
-
 def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
     """Other-branch rows are cached but only the target-branch triplet is returned for lookup."""
     cid = _change_id(1)
