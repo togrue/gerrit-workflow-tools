@@ -40,7 +40,8 @@ ger --help
 
 For PATH details, bash completion, the Change-Id hook, branch settings, and verification: **[Getting started](docu/Getting-Started.md)**.
 
-## Development
+<details>
+<summary><strong>Development</strong></summary>
 
 Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user.
 
@@ -51,3 +52,5 @@ Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are
 ### Integration tests (optional)
 
 End-to-end tests against a real Gerrit in Docker are under [tests/integration/README.md](tests/integration/README.md). Default `pytest` **skips** them (`--ignore=tests/integration` in `pyproject.toml`). Install deps with `uv sync --group integration` and run `python scripts/run_integration.py` or `pytest tests/integration`.
+
+</details>
