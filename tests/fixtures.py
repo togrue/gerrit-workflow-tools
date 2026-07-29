@@ -192,3 +192,8 @@ def configure_gerrit_target(path: Path, target: str = "main") -> None:
     if main_sha.returncode == 0:
         git("update-ref", f"refs/remotes/{upstream}", main_sha.stdout.strip(), cwd=path, check=False)
     git("branch", "--set-upstream-to", upstream, branch, cwd=path, check=False)
+
+
+def finalize_git_template(path: Path) -> None:
+    """Pack a completed test repository so per-test copies create fewer files."""
+    git("gc", "--prune=now", cwd=path)
