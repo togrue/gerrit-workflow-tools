@@ -124,9 +124,7 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     assert stack.push_branch == "main"
 
     _clear_gerrit_cache(main_repo)
-    code_log, out_log, elog = run_cli(
-        main_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
-    )
+    code_log, out_log, elog = run_cli(main_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch)
     assert code_log in (0, 1), elog
     log_commits = json.loads(out_log)["commits"]
     main_row = next(c for c in log_commits if c.get("change_id") == cid)
@@ -135,9 +133,7 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     assert f"/+/{dev_change['_number']}" not in (main_row.get("gerrit_url") or "")
 
     code_show, out_show, eshow = run_cli(main_repo, ger_show_main, ["--json", cid], monkeypatch)
-    code_resolve, out_resolve, eresolve = run_cli(
-        main_repo, ger_resolve_main, ["--json", cid], monkeypatch
-    )
+    code_resolve, out_resolve, eresolve = run_cli(main_repo, ger_resolve_main, ["--json", cid], monkeypatch)
     assert code_show in (0, 1), eshow
     assert code_resolve == 0, eresolve
     show_resolution = json.loads(out_show)["resolution"]
@@ -156,9 +152,7 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     dev_repo = dev_ctx["repo"]
     git("checkout", "feat_dev", cwd=dev_repo)
     _clear_gerrit_cache(dev_repo)
-    code_log_dev, out_log_dev, elog_dev = run_cli(
-        dev_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
-    )
+    code_log_dev, out_log_dev, elog_dev = run_cli(dev_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch)
     assert code_log_dev in (0, 1), elog_dev
     dev_commits = json.loads(out_log_dev)["commits"]
     dev_row = next(c for c in dev_commits if c.get("change_id") == cid)
@@ -245,9 +239,7 @@ def test_ger_log_batch_query_budget_with_unpublished(
         return original(self, q, n=n, options=options)
 
     with patch.object(HttpGerritRest, "query_changes", _counting_query_changes):
-        code_log, out_log, elog = run_cli(
-            repo, ger_log_main, ["--json", "--color", "never"], monkeypatch
-        )
+        code_log, out_log, elog = run_cli(repo, ger_log_main, ["--json", "--color", "never"], monkeypatch)
     assert code_log in (0, 1), elog
     commits = json.loads(out_log)["commits"]
     assert len([c for c in commits if c.get("change_id")]) >= total_with_ids

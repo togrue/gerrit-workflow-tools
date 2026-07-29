@@ -82,8 +82,7 @@ def test_log_call_budget_on_stack_repo(stack_repo: Path, monkeypatch: pytest.Mon
     assert store.calls_to("list_change_reviewers") == [], "reviewers already on ChangeInfo"
     assert store.calls_to("get_change") == []
     assert run.call_count <= _LOG_GIT_BUDGET, (
-        f"git subprocesses={run.call_count} budget={_LOG_GIT_BUDGET}; "
-        f"args={[c.args[:4] for c in run.call_args_list]}"
+        f"git subprocesses={run.call_count} budget={_LOG_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
     )
 
 
@@ -127,8 +126,7 @@ def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     assert store.calls_to("list_change_reviewers") == []
     assert len(store.calls_to("get_change")) == 0
     assert run.call_count <= _SHOW_GIT_BUDGET, (
-        f"git subprocesses={run.call_count} budget={_SHOW_GIT_BUDGET}; "
-        f"args={[c.args[:4] for c in run.call_args_list]}"
+        f"git subprocesses={run.call_count} budget={_SHOW_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
     )
 
 
@@ -146,9 +144,7 @@ def test_resolve_call_budget_for_change_id(stack_repo: Path, monkeypatch: pytest
     assert code == 0, err
     assert len(store.queries()) == 1
     assert len(store.calls) == 1
-    assert run.call_count <= _RESOLVE_GIT_BUDGET, (
-        f"git subprocesses={run.call_count} budget={_RESOLVE_GIT_BUDGET}"
-    )
+    assert run.call_count <= _RESOLVE_GIT_BUDGET, f"git subprocesses={run.call_count} budget={_RESOLVE_GIT_BUDGET}"
 
 
 def test_fix_local_ref_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -164,8 +160,7 @@ def test_fix_local_ref_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pyte
     assert code == 0, err
     assert store.calls == []
     assert run.call_count <= _FIX_GIT_BUDGET, (
-        f"git subprocesses={run.call_count} budget={_FIX_GIT_BUDGET}; "
-        f"args={[c.args[:4] for c in run.call_args_list]}"
+        f"git subprocesses={run.call_count} budget={_FIX_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
     )
     assert git_out("log", "-1", "--format=%s", cwd=stack_repo).startswith("fixup! ")
 
