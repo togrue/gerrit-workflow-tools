@@ -63,11 +63,13 @@ Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when co
 
 Attention rules: shared `determine_attention()` in `core/gerrit_change_status.py` (same family as `ger edit --first-attention-commit`).
 
+A commit with no usable Change-Id footer (missing or malformed) must include `missing-change-id` in `attention_reasons` and show a matching attention hint in text output (see [Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)). Prefer this over only `not-pushed` when the root cause is a bad/absent footer — Gerrit overlay cannot identify the change without one.
+
 ---
 
 ## JSON fields
 
-Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `gerrit_url`, `submittable`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`).
+Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `gerrit_url`, `submittable`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid.
 
 ---
 

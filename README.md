@@ -92,7 +92,7 @@ If `gerrit.webUrl` is not set yet, configure it first (see [docu/Configuration.m
 After installing the hook, run:
 
 ```bash
-ger change-id --check-duplicates
+ger change-id --check
 ```
 
 ## Development

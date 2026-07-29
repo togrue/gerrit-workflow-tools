@@ -98,6 +98,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 
 | Hint | Meaning |
 |------|---------|
+| `missing Change-Id` | Commit message has no usable Change-Id footer (absent or malformed); JSON reason `missing-change-id` |
 | `not-pushed` | Commit not on Gerrit yet |
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comment(s)` | Open review threads |
@@ -106,7 +107,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `abandoned` | Change abandoned on Gerrit |
 | `merged drift` / `merged (equiv. unknown)` | Merged-state mismatch (see patchset tokens) |
 
-These correspond to `attention_reasons` in `--json` output (e.g. `ci-failed`, `awaiting-review`, `unresolved-comments`). The JSON field is authoritative for automation; the text hints are a human-readable subset.
+These correspond to `attention_reasons` in `--json` output (e.g. `missing-change-id`, `ci-failed`, `awaiting-review`, `unresolved-comments`). The JSON field is authoritative for automation; the text hints are a human-readable subset.
 
 ---
 

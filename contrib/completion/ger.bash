@@ -57,7 +57,7 @@ _ger_change_id() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -v --verbose --debug-log --start-at-remote --check-duplicates --fix --color
+        __gwt_flags "$cur" -h --help -v --verbose --debug-log --start-at-remote --check --fix --color
         return
     fi
     case "$prev" in

@@ -64,21 +64,26 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged.
 | Option | Description |
 |--------|-------------|
 | `--start-at-remote` | Use `upstream_tip..END` stack window |
-| `--check-duplicates` | Scan stack for missing/duplicate Change-Ids |
+| `--check` | Validate **all** commits in the current local stack (`upstream_tip..HEAD`): every commit must have a valid Change-Id footer, and no Change-Id may appear on more than one commit |
 | `--fix` | Interactive rebase: assign missing Change-Ids on last message line |
 | `--color`, `--debug-log`, `-v` | Standard helpers |
 
-### Exit codes (`--check-duplicates`)
+`--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`.
+
+### Exit codes (`--check`)
+
+Shared table: **[exit-codes.md](../exit-codes.md)**.
 
 | Code | Meaning |
 |------|---------|
-| `0` | OK |
+| `0` | OK — all stack commits have unique, valid Change-Ids |
 | `8` | Duplicate Change-Id |
-| `9` | Missing Change-Id |
+| `9` | Missing (or invalid) Change-Id |
 
 ---
 
 ## See also
 
-- [`ger push`](push.md) (runs duplicate check in Gerrit mode)
+- [`ger push`](push.md) (runs the same local Change-Id check in Gerrit mode)
+- [`ger log`](log.md) (surfaces missing Change-Id in attention hints)
 - [`ger show`](show.md)

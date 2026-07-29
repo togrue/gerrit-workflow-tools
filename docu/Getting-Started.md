@@ -101,10 +101,10 @@ chmod +x .git/hooks/commit-msg
 
 If `gerrit.webUrl` is not set yet, run step 2 first.
 
-After the hook is in place, check for duplicate Change-Ids in your stack:
+After the hook is in place, validate Change-Ids across the current stack (missing and duplicates):
 
 ```bash
-ger change-id --check-duplicates
+ger change-id --check
 ```
 
 ---

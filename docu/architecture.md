@@ -408,7 +408,7 @@ Computed in `gerrit_change_status.py`; displayed via `render/`.
 
 ### Attention
 
-Commit needs attention when `determine_attention()` finds unresolved comments, CI failure, missing CR+2, chain-blocked state, etc. Drives `ger log` exit code `1`, `ger edit --first-attention-commit`, and rebase enricher annotations.
+Commit needs attention when `determine_attention()` finds unresolved comments, CI failure, missing CR+2, chain-blocked state, a missing/malformed Change-Id footer (`missing-change-id`), etc. Drives `ger log` exit code `1`, `ger edit --first-attention-commit`, and rebase enricher annotations.
 
 ---
 

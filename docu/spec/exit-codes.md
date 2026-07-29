@@ -29,6 +29,6 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 
 ## History
 
-This replaces three separate and mutually contradictory tables. `3` used to mean "Gerrit API / git resolution error" for resolution commands but "duplicate Change-Id" for `ger sha`; `4` meant "ambiguous" in one and "git error" in the other; `ger change-id --check-duplicates` had a third scheme again. Codes for `ger sha` and `ger change-id` therefore **changed** when this table landed.
+This replaces three separate and mutually contradictory tables. `3` used to mean "Gerrit API / git resolution error" for resolution commands but "duplicate Change-Id" for `ger sha`; `4` meant "ambiguous" in one and "git error" in the other; `ger change-id --check` (formerly `--check-duplicates`) had a third scheme again. Codes for `ger sha` and `ger change-id` therefore **changed** when this table landed.
 
 Related: [change-and-commit-identifiers.md](change-and-commit-identifiers.md) for how changeishes resolve, and what `NOT_FOUND` and `AMBIGUOUS` mean in that context.

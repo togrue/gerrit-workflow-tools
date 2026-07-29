@@ -72,7 +72,7 @@ run_case "ger change-id help" ger change-id --help
 run_case "ger change-id default" ger change-id
 run_case "ger change-id HEAD" ger change-id HEAD
 run_case "ger change-id start-at-remote" ger change-id --start-at-remote
-run_case "ger change-id check-duplicates" ger change-id --check-duplicates
+run_case "ger change-id check" ger change-id --check
 run_case "ger sha help" ger sha --help
 
 if have_rev "HEAD~1"; then

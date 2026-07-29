@@ -190,7 +190,7 @@ All commands share the changeish grammar. Command-specific notes:
 |---------|------------------|-----------------------------|
 | [`ger log`](commands/log.md) | `REV_RANGE` | Enrich each local commit against the change **on the target branch** (triplet-resolved). A duplicate Change-Id on another branch is ignored for status; may surface as a note. |
 | [`ger show`](commands/show.md) | `REV` | Full changeish. Resolves local commit + one Gerrit change; applies §3 when the arg is a bare Change-Id. `--json` includes the `resolution` block ([§5](#5-machine-readable-resolution-for-automation)). |
-| [`ger push`](commands/push.md) | `REV` (until-boundary) | Pushes to `refs/for/<target>`; the target branch is authoritative, so pushed changes are inherently target-scoped. Duplicate-Change-Id warnings from `--check-duplicates` remain **local-git** checks. |
+| [`ger push`](commands/push.md) | `REV` (until-boundary) | Pushes to `refs/for/<target>`; the target branch is authoritative, so pushed changes are inherently target-scoped. Local Change-Id validation from `ger change-id --check` remains a **local-git** check. |
 | [`ger fix`](commands/fix.md) | `REF_OR_CHANGE` | Full changeish → resolve to a single commit SHA (fetch `refs/changes/…` when the change isn't local). Ambiguous bare Change-Id follows §3. |
 | [`ger edit`](commands/edit.md) / `reword` | `REV` in stack | Changeish restricted to the local stack; resolves to one stack commit. Change numbers/triplets map to the stack commit sharing that Change-Id, else error. |
 | [`ger rebase`](commands/rebase.md) | `REV` base | Changeish for the base commit; enrichment uses target-branch resolution. |
