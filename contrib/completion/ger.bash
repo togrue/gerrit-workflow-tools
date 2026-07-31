@@ -208,12 +208,16 @@ _ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --full --comment-tail-lines --json --color -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --stack --full --comment-tail-lines --json --format --ai --color -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human markdown
             return
             ;;
     esac
