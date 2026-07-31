@@ -50,12 +50,157 @@ def _detail_ok(
     }
 
 
-def test_gshow_rejects_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gshow_accepts_git_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ranges expand to local commits; multi-commit ranges wrap JSON in commits[]."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, gshow_main, ["main..HEAD"], monkeypatch)
-    assert code == 2
-    assert "range" in err.lower()
+    # Stack is upstream..HEAD with multiple commits; use main..HEAD for 2+.
+    tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    store = ChangeStore({})
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "main..HEAD"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code in (0, 1), err
+    data = json_stdout(out)
+    assert "commits" in data
+    assert len(data["commits"]) >= 2
+    assert data["commits"][-1]["sha"] == tip
 
+
+def test_gshow_stack_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "--stack"],
+        monkeypatch,
+        gerrit=ChangeStore({}),
+    )
+    assert code in (0, 1), err
+    data = json_stdout(out)
+    assert "commits" in data
+    assert len(data["commits"]) >= 2
+
+
+def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    ch["unresolved_comment_count"] = 1
+    comments = {
+        "epsilon.txt": [
+            {
+                "id": "root-id",
+                "line": 908,
+                "message": "please fix",
+                "unresolved": True,
+                "updated": "2024-01-01 10:00:00",
+                "author": {"username": "alice", "name": "Alice"},
+            },
+            {
+                "id": "reply-id",
+                "line": 908,
+                "message": "looking",
+                "unresolved": True,
+                "in_reply_to": "root-id",
+                "updated": "2024-01-01 11:00:00",
+                "author": {"username": "bob", "name": "Bob"},
+            },
+        ]
+    }
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--ai", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1
+    assert "## " in out
+    assert "### `epsilon.txt:908`" in out
+    assert "**alice (Alice)**" in out or "**Alice**" in out or "alice" in out.lower()
+    assert "> please fix" in out
+    assert "> looking" in out
+    assert "\033[" not in out
+
+
+def test_gshow_human_thread_gutter(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    ch["unresolved_comment_count"] = 1
+    comments = {
+        "f.py": [
+            {
+                "id": "root-id",
+                "line": 1,
+                "message": "please fix",
+                "unresolved": True,
+                "updated": "2024-01-01 10:00:00",
+                "author": {"username": "alice", "name": "Alice"},
+            },
+            {
+                "id": "reply-id",
+                "line": 1,
+                "message": "looking",
+                "unresolved": True,
+                "in_reply_to": "root-id",
+                "updated": "2024-01-01 11:00:00",
+                "author": {"username": "bob", "name": "Bob"},
+            },
+        ]
+    }
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1
+    assert "f.py:1" in out
+    assert "└ " in out
+    assert "looking" in out
+
+
+def test_gshow_multi_arg_json_wraps(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", parent, tip],
+        monkeypatch,
+        gerrit=ChangeStore({}),
+    )
+    assert code in (0, 1), err
+    data = json_stdout(out)
+    assert "commits" in data
+    assert len(data["commits"]) == 2
+    assert data["commits"][0]["sha"] == parent
+    assert data["commits"][1]["sha"] == tip
+
+
+def test_gshow_json_format_mutex(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "--ai"],
+        monkeypatch,
+        catch_sys_exit=True,
+    )
+    assert code == 2
+    assert "not allowed" in err.lower() or "exclusive" in err.lower()
 
 def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
@@ -297,7 +442,9 @@ def test_gshow_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = run_cli(stack_repo, gshow_main, ["--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0
     assert "gshow" in out.lower() or "ger show" in out
-    assert "[REV]" in out
+    assert "REV" in out
+    assert "--stack" in out
+    assert "--ai" in out or "markdown" in out
 
 
 def test_gshow_human_head_formatting(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
