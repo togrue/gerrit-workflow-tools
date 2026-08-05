@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
-from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.render.comments import (
     apply_comment_tail,
     format_comment_chain_human,

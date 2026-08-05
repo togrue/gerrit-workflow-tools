@@ -31,11 +31,11 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 )
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
-from gerrit_workflow_tools.render.commit_row import attention_column, extra_detail_lines, oneline_body
 from gerrit_workflow_tools.render.comments import (
     format_unresolved_section_human,
     format_unresolved_section_markdown,
 )
+from gerrit_workflow_tools.render.commit_row import attention_column, extra_detail_lines, oneline_body
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 logger = logging.getLogger(__name__)

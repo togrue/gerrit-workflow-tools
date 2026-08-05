@@ -12,6 +12,7 @@ Help text style (``help=`` on parsers and arguments):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import sys
 from collections.abc import Callable
@@ -189,10 +190,8 @@ def ensure_utf8_stdio() -> None:
         reconfigure = getattr(stream, "reconfigure", None)
         if not callable(reconfigure):
             continue
-        try:
+        with contextlib.suppress(OSError, ValueError, AttributeError):
             reconfigure(encoding="utf-8")
-        except (OSError, ValueError, AttributeError):
-            pass
 
 
 def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Settings, SummaryHighlighter]:
