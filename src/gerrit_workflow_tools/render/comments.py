@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.cli_style import ANSI_BOLD, ANSI_CYAN, ANSI_DIM, ANSI_YELLOW, color_text
+from gerrit_workflow_tools.cli_style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_YELLOW,
+    color_text,
+    visible_len,
+)
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, gerrit_inline_comment_url
+
+# Minimum inner width so short threads still look like a box.
+_MIN_BOX_INNER = 40
+_BOX_INDENT = "    "
 
 
 def apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
@@ -25,6 +36,36 @@ def chain_location(chain: CommentChain) -> str:
     return chain.path
 
 
+def _box_border(text: str) -> str:
+    return color_text(text, ANSI_YELLOW)
+
+
+def _pad_inner(text: str, inner_width: int) -> str:
+    pad = max(0, inner_width - visible_len(text))
+    return f"{text}{' ' * pad}"
+
+
+def _box_content_rows(
+    chain: CommentChain,
+    gerrit_url: str | None,
+    *,
+    tail_n: int,
+    full: bool,
+) -> list[str]:
+    """Inner lines of a comment box (no borders)."""
+    rows: list[str] = []
+    for row_item in chain.comments:
+        if row_item.author:
+            rows.append(color_text(row_item.author, ANSI_DIM))
+        body, _trunc = apply_comment_tail(row_item.message, tail_n, full=full)
+        for ln in body.splitlines() or [""]:
+            rows.append(f"  {ln}")
+    chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
+    if chain_url:
+        rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(chain_url, ANSI_YELLOW)}")
+    return rows
+
+
 def format_comment_chain_human(
     chain: CommentChain,
     gerrit_url: str | None,
@@ -32,30 +73,30 @@ def format_comment_chain_human(
     tail_n: int,
     full: bool,
 ) -> list[str]:
-    """Return human-readable lines for one unresolved comment chain (no trailing blank)."""
+    """Return human-readable lines for one unresolved comment chain in a yellow rounded box."""
     loc = chain_location(chain)
-    lines: list[str] = [f"  {color_text(loc, ANSI_BOLD + ANSI_CYAN)}"]
-    chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
-    if chain_url:
-        lines.append(f"  {color_text('url:', ANSI_DIM)} {color_text(chain_url, ANSI_YELLOW)}")
+    loc_styled = color_text(loc, ANSI_BOLD + ANSI_CYAN)
+    rows = _box_content_rows(chain, gerrit_url, tail_n=tail_n, full=full)
 
-    comments = chain.comments
-    for i, row_item in enumerate(comments):
-        is_reply = i > 0
-        is_last = i == len(comments) - 1
-        if is_reply:
-            gutter = color_text("└ " if is_last else "│ ", ANSI_DIM)
-            author_prefix = f"  {gutter}"
-            body_prefix = f"  {color_text('│ ' if not is_last else '  ', ANSI_DIM)}"
-        else:
-            author_prefix = "  "
-            body_prefix = "    "
+    # Top mid is ``─ {loc} ─…`` (3 fixed chars around loc). Content lines use
+    # ``│ `` + row, so row width needs +1 vs the inner span between corners.
+    inner_width = max(
+        _MIN_BOX_INNER,
+        3 + visible_len(loc) + 1,
+        *(1 + visible_len(r) for r in rows),
+    )
+    dashes = max(1, inner_width - 3 - visible_len(loc))
+    top_mid = f"{_box_border('─')} {loc_styled} {_box_border('─' * dashes)}"
+    top_line = f"{_BOX_INDENT}{_box_border('╭')}{top_mid}{_box_border('╮')}"
+    bottom_line = f"{_BOX_INDENT}{_box_border('╰')}{_box_border('─' * inner_width)}{_box_border('╯')}"
 
-        if row_item.author:
-            lines.append(f"{author_prefix}{color_text(row_item.author, ANSI_DIM)}")
-        body, _trunc = apply_comment_tail(row_item.message, tail_n, full=full)
-        for ln in body.splitlines():
-            lines.append(f"{body_prefix}{ln}")
+    lines: list[str] = [top_line]
+    content_width = max(1, inner_width - 1)
+    for row in rows:
+        lines.append(
+            f"{_BOX_INDENT}{_box_border('│')} {_pad_inner(row, content_width)}{_box_border('│')}"
+        )
+    lines.append(bottom_line)
     return lines
 
 
@@ -95,18 +136,12 @@ def format_unresolved_section_human(
     tail_n: int,
     full: bool,
 ) -> list[str]:
-    """Section header plus chain blocks for human output."""
-    out = [color_text("Unresolved comments:", ANSI_YELLOW)]
-    if not pushed:
-        out.append("  (not on Gerrit — no comments)")
-        return out
-    if not chains:
-        out.append("  (no unresolved comments)")
-        return out
-    for i, chain in enumerate(chains):
+    """Boxed unresolved chains for human output (empty list when there are none)."""
+    if not pushed or not chains:
+        return []
+    out: list[str] = []
+    for chain in chains:
         out.extend(format_comment_chain_human(chain, gerrit_url, tail_n=tail_n, full=full))
-        if i < len(chains) - 1:
-            out.append("")
     return out
 
 

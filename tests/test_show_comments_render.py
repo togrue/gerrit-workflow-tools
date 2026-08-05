@@ -37,7 +37,7 @@ def test_apply_comment_tail() -> None:
     assert full == text
 
 
-def test_format_comment_chain_human_gutter() -> None:
+def test_format_comment_chain_human_rounded_box() -> None:
     chain = CommentChain(
         root_id="r1",
         path="f.py",
@@ -50,9 +50,34 @@ def test_format_comment_chain_human_gutter() -> None:
     )
     lines = format_comment_chain_human(chain, "https://g.example/c/1", tail_n=10, full=True)
     joined = "\n".join(lines)
-    assert "f.py:3" in joined
-    assert "└ " in joined
+    assert "╭─ f.py:3" in joined
+    assert "╰" in joined
+    assert "│ alice" in joined or "│alice" in joined
+    assert "root" in joined
+    assert "bob" in joined
     assert "reply" in joined
+    assert "└ " not in joined
+    assert "url:" in joined
+
+
+def test_format_comment_chain_human_box_border_is_yellow() -> None:
+    from gerrit_workflow_tools.cli_style import ANSI_YELLOW, set_color_mode
+
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(InlineComment(path="f.py", line=3, message="root", author="alice"),),
+        resolved=False,
+    )
+    set_color_mode(True)
+    try:
+        lines = format_comment_chain_human(chain, "https://g.example/c/1", tail_n=10, full=True)
+    finally:
+        set_color_mode(False)
+    joined = "\n".join(lines)
+    assert ANSI_YELLOW in joined
+    assert "╭" in joined
 
 
 def test_format_comment_chain_markdown() -> None:

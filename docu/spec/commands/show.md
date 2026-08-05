@@ -52,15 +52,15 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 1. Resolve targets (`resolve_show_targets`: changeishes, ranges, optional `--stack`).
 2. Fetch labels, patchset status, attention via `GerritService` / `gerrit_change_status`.
-3. If **local** commit (human): print `git show` medium message body first.
-4. Print Gerrit URL (dim), detail lines, primary status line (same vocabulary as `ger log`).
-5. Print unresolved comment chains: location + URL once, then each comment in the thread (human uses a `│` / `└` gutter for replies).
+3. **Human, multi-target:** only commits with unresolved comment chains are printed (clean commits are omitted). If every target is clean, print a single dim `(no unresolved comments)`.
+4. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …`, indented commit message, then each unresolved chain in a yellow rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line.
+5. **Markdown / `--ai`:** headings per change; unresolved section still lists all targets (including clean).
 
 **Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`; only unresolved chains are listed. See `build_comment_chains()` / `collect_unresolved_comment_chains()` in `comment_chains.py`.
 
-**Change-Id-only:** When there is no local commit, the git message block is skipped.
+**Change-Id-only:** When there is no local commit, the Author/date/message block is skipped.
 
-**Exit code:** attention (`1`) if **any** listed commit has attention reasons.
+**Exit code:** attention (`1`) if **any** listed target has attention reasons (including omitted clean commits that still need attention).
 
 ---
 

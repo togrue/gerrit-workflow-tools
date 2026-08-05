@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text
+from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_short_sha, color_text
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -35,8 +35,17 @@ from gerrit_workflow_tools.render.comments import (
     format_unresolved_section_human,
     format_unresolved_section_markdown,
 )
-from gerrit_workflow_tools.render.commit_row import attention_column, extra_detail_lines, oneline_body
+from gerrit_workflow_tools.render.commit_row import (
+    attention_suffix,
+    extra_detail_lines,
+    fmt_code_review,
+    fmt_comments,
+    fmt_patchset_column,
+    fmt_verified,
+)
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
+
+_COMMIT_SEPARATOR = "═" * 64
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +194,49 @@ def _commit_json_payload(
     }
 
 
+def _show_headline(commit: LogCommit) -> str:
+    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
+    sha = color_short_sha(commit.short_sha)
+    push = fmt_patchset_column(commit)
+    if commit.pushed:
+        verified = fmt_verified(commit.verified)
+        cr = fmt_code_review(commit.code_review)
+        comments = fmt_comments(commit.comments_unresolved)
+    else:
+        verified = "   "
+        cr = "    "
+        comments = "   "
+    base = f"commit {sha} {push} {verified} {cr} {comments}"
+    suffix = attention_suffix(commit)
+    if suffix:
+        return f"{base}  {suffix}"
+    return base
+
+
+def _local_commit_meta(cwd: object, sha: str) -> tuple[str, str, str]:
+    """Return ``(author_line, date, message_body)`` from git for *sha*."""
+    raw = git_out(
+        "show",
+        "-s",
+        "--no-patch",
+        "--format=%an%n%ae%n%ad%n%B",
+        sha,
+        cwd=cwd,
+    )
+    lines = raw.splitlines()
+    while lines and lines[-1] == "":
+        lines.pop()
+    author = lines[0] if lines else ""
+    email = lines[1] if len(lines) > 1 else ""
+    date = lines[2] if len(lines) > 2 else ""
+    body = "\n".join(lines[3:]).rstrip("\n") if len(lines) > 3 else ""
+    if email:
+        author_line = f"{author} <{email}>"
+    else:
+        author_line = author
+    return author_line, date, body
+
+
 def _emit_human_commit(
     cwd: object,
     commit: LogCommit,
@@ -192,33 +244,43 @@ def _emit_human_commit(
     is_local: bool,
     unresolved_chains: list[CommentChain],
     summary_highlighter: SummaryHighlighter,
-    sibling_commits: list[LogCommit],
     tail_n: int,
     full: bool,
 ) -> None:
+    print(_show_headline(commit))
+
+    body = ""
     if is_local and commit.sha:
-        msg = git_out("show", "-s", "--no-patch", "--pretty=medium", commit.sha, cwd=cwd)
-        print()
-        print(msg.rstrip())
+        author_line, date, body = _local_commit_meta(cwd, commit.sha)
+        meta = f"Author: {author_line}"
+        if date:
+            meta = f"{meta} [{date}]"
+        print(meta)
 
-    ind = " " * 4
-    print()
     if commit.gerrit_url:
-        print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
+        print(f"{color_text('url:', ANSI_DIM)} {color_text(commit.gerrit_url, ANSI_YELLOW)}")
     for d in extra_detail_lines(commit):
-        print(f"{ind}{d}")
-    attn_col = attention_column(sibling_commits, summary_highlighter=summary_highlighter)
-    print(f"{ind}{oneline_body(commit, summary_highlighter=summary_highlighter, attention_col=attn_col)}")
+        print(d)
 
-    print()
-    for line in format_unresolved_section_human(
+    if body:
+        print()
+        body_lines = body.splitlines()
+        if body_lines and summary_highlighter is not None:
+            body_lines[0] = summary_highlighter.highlight(body_lines[0])
+        for ln in body_lines:
+            print(f"    {ln}")
+
+    comment_lines = format_unresolved_section_human(
         unresolved_chains,
         commit.gerrit_url,
         pushed=commit.pushed,
         tail_n=tail_n,
         full=full,
-    ):
-        print(line)
+    )
+    if comment_lines:
+        print()
+        for line in comment_lines:
+            print(line)
 
 
 def _attention_summary(commit: LogCommit) -> str:
@@ -297,6 +359,8 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 
     any_attention = False
     json_payloads: list[dict[str, object]] = []
+    multi = len(targets) > 1
+    human_shown = 0
 
     for resolved, commit in zip(targets, commits, strict=True):
         attention = commit.attention_reasons
@@ -320,16 +384,24 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             _emit_markdown_commit(commit, unresolved_chains=unresolved_chains)
             print()
         else:
+            # Multi-target: only expand commits that have unresolved comment chains.
+            if multi and not unresolved_chains:
+                continue
+            if human_shown:
+                print(color_text(_COMMIT_SEPARATOR, ANSI_YELLOW))
             _emit_human_commit(
                 cwd,
                 commit,
                 is_local=resolved.is_local_commit,
                 unresolved_chains=unresolved_chains,
                 summary_highlighter=summary_highlighter,
-                sibling_commits=commits,
                 tail_n=tail_n,
                 full=full_bodies,
             )
+            human_shown += 1
+
+    if out_fmt == "human" and multi and human_shown == 0:
+        print(color_text("(no unresolved comments)", ANSI_DIM))
 
     if out_fmt == "json":
         if len(json_payloads) == 1:
