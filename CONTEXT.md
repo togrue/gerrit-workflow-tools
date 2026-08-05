@@ -6,8 +6,12 @@ Vocabulary for **`ger`**, a CLI for working with stacked Gerrit reviews: several
 
 ### The local side
 
+**Commit row**:
+One commit as read by a single `git log` — sha, short sha, subject, body, and the **footer value** exactly as written. A commit row is not yet a **local stack** member: reading every ref, or reading named revisions directly, produces rows that are nowhere in the stack. Its footer is not yet validated either, so a row may carry a garbage **footer value** — whoever is about to ask Gerrit about it validates first.
+_Avoid_: commit, log line, record
+
 **Local stack**:
-The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch.
+The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing.
 _Avoid_: chain, series, branch commits
 
 **Ready boundary**:

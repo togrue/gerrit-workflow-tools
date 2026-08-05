@@ -91,9 +91,7 @@ def _local_sha_or_none(cwd: Path | str, rev: str) -> str | None:
     return p.stdout.strip() or None
 
 
-def resolve_range_endpoint_sha(
-    cwd: Path | str, arg: str, client: GerritRest, *, settings: Settings
-) -> str:
+def resolve_range_endpoint_sha(cwd: Path | str, arg: str, client: GerritRest, *, settings: Settings) -> str:
     """Resolve a range endpoint changeish to a local commit SHA."""
     raw = arg.strip()
     if not raw:

@@ -61,6 +61,8 @@ def test_first_commit_needing_edit_attention_oldest_first() -> None:
     annotate_attention([oldest, newest])
     picked = first_commit_needing_edit_attention([oldest, newest])
     assert picked is oldest
+
+
 def test_first_attention_commit_ignores_merged_side_branches(tmp_path: Path) -> None:
     """``--first-attention-commit`` must see the same commits ``ger log`` does.
 

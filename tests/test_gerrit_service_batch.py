@@ -83,6 +83,8 @@ def test_batch_load_uses_gerrit_project_not_scp_port_prefix() -> None:
     assert "project:29418/" not in queries[0]
     assert "branch:" not in queries[0]
     assert f"project:test-git-graph-repo change:{cid}" in queries[0]
+
+
 def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
     """Other-branch rows are cached but only the target-branch triplet is returned for lookup."""
     cid = _change_id(1)

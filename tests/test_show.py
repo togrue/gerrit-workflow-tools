@@ -202,6 +202,7 @@ def test_gshow_json_format_mutex(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     assert code == 2
     assert "not allowed" in err.lower() or "exclusive" in err.lower()
 
+
 def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

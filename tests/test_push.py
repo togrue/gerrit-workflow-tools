@@ -189,6 +189,8 @@ def test_gpush_branch_flag_unknown_branch_errors(stack_repo: Path, monkeypatch: 
     code, _out, err = run_cli(stack_repo, gpush_main, ["--branch", "no-such-branch", "--dry-run"], monkeypatch)
     assert code == ExitCode.GIT
     assert "no-such-branch" in err
+
+
 def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -572,6 +574,8 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     assert code == 0
     assert "->" in out
     assert "`r=alice` -> `r=alice,r=bob`" in out
+
+
 def test_gpush_push_show_attributes_false_skips_attribute_suffix(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
