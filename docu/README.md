@@ -66,6 +66,7 @@ Details: [architecture.md](architecture.md).
 
 ```bash
 ger log                  # stack vs Gerrit — see Reading-ger-log.md
+ger inbox                # chains waiting on your review
 ger show <ref>           # one change, full comments
 ger push                 # push ready prefix
 ```

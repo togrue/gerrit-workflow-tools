@@ -204,7 +204,7 @@ sequenceDiagram
   CLI->>Render: oneline_body, status tokens
 ```
 
-**Shared pipeline:** `GerritService.fetch_gerrit_data` is the single enrichment entry point used by `ger log`, `ger show`, and `rebase_enricher`.
+**Shared pipeline:** `GerritService.fetch_gerrit_data` is the local-stack enrichment entry point used by `ger log`, `ger show`, and the rebase enricher. `GerritService.fetch_review_chains` is the query-driven sibling used by `ger inbox` — it must not resolve stack context.
 
 **Status model:** `gerrit_change_status.py` defines `LogCommit`, patchset states (`active`, `newer`, `outdated`, `absent`, merged variants), and `determine_attention()`.
 
@@ -313,6 +313,7 @@ flowchart LR
 |--------|---------|---------------------------|
 | `cli_ger.py` | *(dispatcher)* | — |
 | `cli_log.py` | `ger log` | stack, gerrit_change_status, GerritService, render |
+| `cli_inbox.py` | `ger inbox` | review_chain, GerritService (query → chains; no stack context) |
 | `cli_show.py` | `ger show` | gerrit_show, GerritService, comment_chains, render |
 | `cli_push.py` | `ger push` | ready_calc, change_id, push_reviewers, GerritService |
 | `cli_edit.py` | `ger edit`, `ger reword` | stack, cli_log (attention), rebase_sequence_editor |
@@ -340,6 +341,7 @@ Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli
 | `ready_calc.py` | Ready boundary and push-range computation |
 | `annotated_stack.py` | Annotated stack: rev-range resolution, Gerrit overlay, attention, multi-branch notes |
 | `gerrit_change_status.py` | `LogCommit` model, patchset status, attention, merged equivalence |
+| `review_chain.py` | Review-chain assembly from ChangeInfo, unreviewed age, wait age |
 | `comment_chains.py` | Unresolved inline comment threads |
 | `gerrit_show.py` | `ger show`-specific commit row resolution |
 | `push_reviewers.py` | Post-push reviewer assignment strategies |
@@ -354,7 +356,7 @@ Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli
 |--------|------|
 | `rest.py` | `HttpGerritRest` — HTTP, auth, batch/chunked GET, parallel helpers |
 | `cache.py` | `GerritCache` — SQLite persistence keyed by triplet |
-| `service.py` | `GerritService` — cache-aware batch fetch, `fetch_gerrit_data`, sub-APIs |
+| `service.py` | `GerritService` — cache-aware batch fetch, `fetch_gerrit_data`, `fetch_review_chains` |
 | `change_resolution.py` | Changeish classification, stack context, ambiguity narrowing |
 | `models.py` | Thin dataclass wrappers over REST payloads |
 | `paths.py` | Cache DB path and host key |

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +23,18 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     HttpGerritRest,
     alias_batch_fetch_results,
     batch_load_change_details,
+    batch_load_changes_by_commit,
     change_id_for_gerrit_rest_path,
     parallel_map,
     probe_changes_updated,
     resolve_gerrit_web_base,
+)
+from gerrit_workflow_tools.core.review_chain import (
+    INBOX_QUERY_OPTIONS,
+    ReviewChain,
+    assemble_review_chains,
+    current_revision_sha,
+    missing_parent_shas,
 )
 
 logger = logging.getLogger(__name__)
@@ -243,6 +252,59 @@ class GerritService:
                 result[idx].reviewers = updates["reviewers"]
 
         return result
+
+    def fetch_review_chains(  # pylint: disable=too-many-locals
+        self,
+        query: str,
+        *,
+        now: datetime | None = None,
+        self_account_id: int | None = None,
+    ) -> list[ReviewChain]:
+        """Query Gerrit and assemble **review chains**. Never resolves stack context.
+
+        The inbox is scoped to a Gerrit host, not a working directory: this path
+        must not call :func:`resolve_stack_context`. Live query, then one batched
+        ``commit:<sha>`` follow-up for parents missing from the result set.
+        """
+        moment = now if now is not None else datetime.now(timezone.utc)
+        queried = self.rest.query_changes(query, n=500, options=list(INBOX_QUERY_OPTIONS))
+        rows = [row for row in queried if isinstance(row, dict)]
+        account_id = self_account_id
+        if account_id is None:
+            try:
+                raw = self.rest.get_account("self").get("_account_id")
+                account_id = raw if isinstance(raw, int) else None
+            except GerritApiError:
+                account_id = None
+        parent_shas = missing_parent_shas(rows)
+        follow_up_rows: list[dict[str, Any]] = []
+        unmatched: set[str] = set()
+        if parent_shas:
+            fetched = batch_load_changes_by_commit(self.rest, parent_shas, options=list(INBOX_QUERY_OPTIONS))
+            by_current: dict[str, dict[str, Any]] = {}
+            for payload in fetched.values():
+                follow_up_rows.append(payload)
+                sha = current_revision_sha(payload)
+                if sha:
+                    by_current[sha] = payload
+            for sha in parent_shas:
+                if sha in by_current:
+                    continue
+                for payload in fetched.values():
+                    revisions = payload.get("revisions")
+                    if isinstance(revisions, dict) and any(
+                        isinstance(key, str) and key.lower() == sha for key in revisions
+                    ):
+                        unmatched.add(sha)
+                        break
+        return assemble_review_chains(
+            rows,
+            follow_up_rows,
+            web_base=self.web_base,
+            now=moment,
+            self_account_id=account_id,
+            follow_up_unmatched=unmatched,
+        )
 
     def _fetch_ci_failures(self, change_id: str) -> list[str]:
         """Return failed CI check names.

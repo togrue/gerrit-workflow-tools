@@ -60,6 +60,12 @@ def test_stub_query_answers_searches_the_payload_engine_cannot_model() -> None:
     assert [r["_number"] for r in store.query_changes("status:open")] == [99]
 
 
+def test_commit_query_matches_current_revision() -> None:
+    store = _store()
+    rows = store.query_changes("commit:sha_a_main")
+    assert [row["_number"] for row in rows] == [1]
+
+
 # ---------------------------------------------------------------------------
 # Lookup by the several things Gerrit accepts as a change id
 # ---------------------------------------------------------------------------

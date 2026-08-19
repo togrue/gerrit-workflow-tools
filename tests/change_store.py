@@ -58,10 +58,12 @@ class ChangeStore:
         comments: dict[str, dict[str, list[dict[str, Any]]]] | None = None,
         checks: dict[str, list[dict[str, Any]]] | None = None,
         project_reviewers: dict[str, list[dict[str, Any]]] | None = None,
+        self_account_id: int | None = None,
     ) -> None:
         self.web_base = web_base.rstrip("/")
         self._changes: dict[str, dict[str, Any]] = dict(changes or {})
         self._accounts: dict[int, dict[str, Any]] = dict(accounts or {})
+        self._self_account_id = self_account_id
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
         self._checks: dict[str, list[dict[str, Any]]] = dict(checks or {})
         self._project_reviewers = dict(project_reviewers) if project_reviewers is not None else None
@@ -171,6 +173,19 @@ class ChangeStore:
                 for row in self._lookup_rows(change_ref.rstrip(")")):
                     _add(row)
 
+        for sha in re.findall(r"commit:(\S+)", query):
+            needle = sha.rstrip(")").lower()
+            for row in self._changes.values():
+                current = row.get("current_revision")
+                if isinstance(current, str) and current.lower() == needle:
+                    _add(row)
+                    continue
+                revisions = row.get("revisions")
+                if isinstance(revisions, dict) and any(
+                    isinstance(key, str) and key.lower() == needle for key in revisions
+                ):
+                    _add(row)
+
         return result
 
     def _reviewer_rows(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -217,6 +232,14 @@ class ChangeStore:
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
         self._record("get_account", account_id)
+        if isinstance(account_id, str) and account_id.lower() == "self":
+            if self._self_account_id is not None:
+                payload = self._accounts.get(self._self_account_id)
+            else:
+                payload = next(iter(self._accounts.values()), None)
+            if payload is None:
+                raise GerritApiError("no matching account self")
+            return payload
         try:
             payload = self._accounts.get(int(account_id))
         except (TypeError, ValueError):

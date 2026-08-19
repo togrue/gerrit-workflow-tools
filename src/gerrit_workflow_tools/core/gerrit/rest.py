@@ -736,3 +736,52 @@ def batch_load_change_details(client: GerritRest, refs: list[str]) -> dict[str, 
     for rows in parallel_map(_chunk_job(chunk) for chunk in chunks):
         _ingest_change_rows(out, rows)
     return out
+
+
+def batch_load_changes_by_commit(
+    client: GerritRest,
+    shas: list[str],
+    *,
+    options: list[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Map Gerrit ``id`` to ChangeInfo for commits, via batched ``commit:<sha> OR …``.
+
+    Used by inbox chain assembly to resolve parent SHAs that were not in the
+    original query result. Two round trips for the whole inbox: the section
+    query, then this follow-up — never a per-chain relation call.
+    """
+    unique: list[str] = []
+    seen: set[str] = set()
+    for raw in shas:
+        key = raw.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+    if not unique:
+        return {}
+
+    opts = list(options) if options is not None else list(LOG_QUERY_OPTIONS)
+    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
+    out: dict[str, dict[str, Any]] = {}
+
+    def _commit_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
+        def _job() -> list[dict[str, Any]]:
+            query = " OR ".join(f"commit:{sha}" for sha in chunk)
+            try:
+                return client.query_changes(query, n=_batch_query_limit(chunk), options=opts)
+            except GerritApiError as error:
+                logger.warning("batched commit query failed (%s), falling back per sha", error)
+                rows: list[dict[str, Any]] = []
+                for sha in chunk:
+                    try:
+                        rows.extend(client.query_changes(f"commit:{sha}", n=5, options=opts))
+                    except GerritApiError as inner:
+                        logger.warning("Gerrit query failed for commit:%s: %s", sha, inner)
+                return rows
+
+        return _job
+
+    for rows in parallel_map(_commit_job(chunk) for chunk in chunks):
+        _ingest_change_rows(out, rows)
+    return out

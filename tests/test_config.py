@@ -63,6 +63,29 @@ def test_flag_accepts_git_truthy_spellings() -> None:
     assert Settings.from_map({}).flag("gerrit.someFlag", default=True) is True
 
 
+def test_inbox_settings_defaults_and_overrides() -> None:
+    unset = Settings.from_map({})
+    assert unset.inbox_require_verified is True
+    assert unset.inbox_verified_label == "Verified"
+    assert unset.inbox_projects == []
+    assert unset.inbox_to_review_query is None
+    assert unset.inbox_limit is None
+    configured = Settings.from_map(
+        {
+            "inbox.requireVerified": "false",
+            "inbox.verifiedLabel": "CI",
+            "inbox.projects": "a, b",
+            "inbox.toReviewQuery": "reviewer:self",
+            "inbox.limit": "20",
+        }
+    )
+    assert configured.inbox_require_verified is False
+    assert configured.inbox_verified_label == "CI"
+    assert configured.inbox_projects == ["a", "b"]
+    assert configured.inbox_to_review_query == "reviewer:self"
+    assert configured.inbox_limit == 20
+
+
 def test_keys_are_canonicalized_like_git_config_list() -> None:
     """Git lowercases the last segment only; a snapshot must answer either spelling."""
     settings = Settings.from_map({"gerrit.webUrl": "https://g.example"})

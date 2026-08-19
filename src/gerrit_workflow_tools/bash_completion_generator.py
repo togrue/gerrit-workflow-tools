@@ -13,6 +13,7 @@ from gerrit_workflow_tools import (
     cli_edit,
     cli_fetch_api,
     cli_fix,
+    cli_inbox,
     cli_log,
     cli_push,
     cli_rebase,
@@ -22,7 +23,7 @@ from gerrit_workflow_tools import (
 )
 from gerrit_workflow_tools.cli_ger import _ALIASES, _COMMANDS
 
-_NO_REF_FALLBACK_COMMANDS = {"bash-completion", "fetch-api"}
+_NO_REF_FALLBACK_COMMANDS = {"bash-completion", "fetch-api", "inbox"}
 
 
 @dataclass
@@ -98,6 +99,7 @@ def _parser_builders() -> dict[str, Callable[[], argparse.ArgumentParser]]:
         "edit": cli_edit._build_parser_edit,
         "fetch-api": cli_fetch_api._build_parser,
         "fix": cli_fix._build_parser,
+        "inbox": cli_inbox._build_parser,
         "log": cli_log._build_parser,
         "push": cli_push._build_arg_parser,
         "rebase": cli_rebase._build_parser,

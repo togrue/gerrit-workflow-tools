@@ -42,6 +42,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | Command | Spec |
 |---------|------|
 | `ger log` | [spec/commands/log.md](spec/commands/log.md) |
+| `ger inbox` | [spec/commands/inbox.md](spec/commands/inbox.md) |
 | `ger push` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger show` | [spec/commands/show.md](spec/commands/show.md) |
 

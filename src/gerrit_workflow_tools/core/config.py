@@ -176,6 +176,41 @@ class Settings:
         }
 
     @property
+    def inbox_require_verified(self) -> bool:
+        """``inbox.requireVerified``: CI gate for ready chains. Default on."""
+        return self.flag("inbox.requireVerified", default=True)
+
+    @property
+    def inbox_verified_label(self) -> str:
+        """``inbox.verifiedLabel``: CI label name. Default ``Verified``."""
+        return self.get("inbox.verifiedLabel") or "Verified"
+
+    @property
+    def inbox_projects(self) -> list[str]:
+        """``inbox.projects``: default ``--project`` list, comma-separated."""
+        raw = self.get("inbox.projects")
+        if not raw:
+            return []
+        return [part.strip() for part in raw.split(",") if part.strip()]
+
+    @property
+    def inbox_to_review_query(self) -> str | None:
+        """``inbox.toReviewQuery``: wholesale override of the *to review* query."""
+        return self.get("inbox.toReviewQuery")
+
+    @property
+    def inbox_limit(self) -> int | None:
+        """``inbox.limit``: default ``--limit``, or ``None`` when unset/invalid."""
+        raw = self.get("inbox.limit")
+        if not raw:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        return value if value >= 1 else None
+
+    @property
     def push_remote_policy(self) -> str:
         """``gerrit.push.remotePolicy``: how to treat a branch not linearly on the fetched target tip.
 

@@ -74,6 +74,26 @@ _Avoid_: stack view, review stack, enriched commits
 The verdict that a commit needs the author's action — unresolved comments, failed CI, missing Code-Review +2, or a blocked position in the chain. Drives `ger log`'s exit code and `ger edit --first-attention-commit`.
 _Avoid_: needs work, flagged, blocked
 
+**Review chain**:
+A maximal set of open Gerrit changes linked by current-revision parent/child SHAs — Gerrit's relation chain, seen from the server. One chain is one review unit. Distinct from the **local stack**, which is always yours and defined only locally. Usually someone else's; may have no local commits at all.
+_Avoid_: stack (unqualified), series, relation chain (in user-facing text)
+
+**Chain top** / **chain base**:
+**Chain top** is the member whose current revision is not the parent of any other member — the change whose Gerrit URL the inbox prints. **Chain base** is the member whose current-revision parent is not a member (it sits on the target branch).
+_Avoid_: tip, root, HEAD of the chain
+
+**Unreviewed age**:
+How long a **review chain** has waited for *your* review. Prefer the attention-set timestamp for self; fall back to "current patch set after my last Code-Review vote". The inbox sort key.
+_Avoid_: wait age (that is last activity), stale time
+
+**Wait age**:
+Time since the last activity on a **review chain**: `now − max(updated)` over members. Shown next to unreviewed age so you can tell "waiting on me for 3d, last touched 4h ago" from a dead chain.
+_Avoid_: using this for "how long since I reviewed"
+
+**Inbox section**:
+One Gerrit query plus the **review chains** assembled from it. `ger inbox` currently ships **to review** (open chains where you are a reviewer). *Waiting on others* is planned.
+_Avoid_: inbox tab, queue (unqualified)
+
 **Reviewer strategy**:
 How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace on every change).
 _Avoid_: reviewer mode, assignment policy

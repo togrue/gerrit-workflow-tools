@@ -112,6 +112,21 @@ _ger_fix() {
     fi
 }
 
+_ger_inbox() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" -h --help --to-review --project --all --limit --json --url --show-url --no-url --color -v --verbose --debug-log
+        return
+    fi
+    case "$prev" in
+        --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+    esac
+}
+
 _ger_log() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -257,7 +272,7 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix log push rebase resolve restack reword setup sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix inbox log push rebase resolve restack reword setup sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -268,6 +283,7 @@ _ger() {
         edit) _ger_edit ;;
         fetch-api) _ger_fetch_api ;;
         fix) _ger_fix ;;
+        inbox) _ger_inbox ;;
         log) _ger_log ;;
         push) _ger_push ;;
         rebase|restack|stack) _ger_rebase ;;
