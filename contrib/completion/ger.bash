@@ -116,11 +116,15 @@ _ger_inbox() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --to-review --project --all --limit --json --url --show-url --no-url --color -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --to-review --project --all --limit --json --url --show-url --no-url --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
