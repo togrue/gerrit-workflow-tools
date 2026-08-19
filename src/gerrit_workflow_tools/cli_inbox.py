@@ -14,12 +14,21 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import ANSI_BOLD, ANSI_CYAN, ANSI_DIM, ANSI_RED, ANSI_YELLOW, color_text
+from gerrit_workflow_tools.cli_style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_RED,
+    ANSI_YELLOW,
+    color_short_sha,
+    color_text,
+    format_link,
+)
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age, host_from_web_base
-from gerrit_workflow_tools.render.status_fmt import code_review_token, comments_token, verified_token
+from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 DEFAULT_TO_REVIEW_QUERY = "is:open -is:wip -is:private -owner:self reviewer:self"
@@ -148,14 +157,40 @@ def _chain_json(chain: ReviewChain) -> dict[str, object]:
     }
 
 
+def _fmt_change_number(number: int) -> str:
+    """Identity of a chain or member — same cyan as ``ger log`` SHAs."""
+    return color_short_sha(f"c{number}")
+
+
+def _fmt_status(verified: int | None, code_review: int | None, comments: int) -> str:
+    """Verified / Code-Review / comments tokens — same palette as ``ger log``."""
+    return f"{fmt_verified(verified)} {fmt_code_review(code_review)} {fmt_comments(comments)}"
+
+
+def _fmt_unreviewed(seconds: int) -> str:
+    """Waiting-on-you clock: dim label, yellow age (attention)."""
+    return f"{color_text('unrevi', ANSI_DIM)} {color_text(format_age(seconds), ANSI_YELLOW)}"
+
+
+def _fmt_activity(seconds: int) -> str:
+    """Last-activity clock: dim label and age (context, not attention)."""
+    return f"{color_text('act', ANSI_DIM)} {color_text(format_age(seconds), ANSI_DIM)}"
+
+
+def _hash_suffix(body: str) -> str:
+    return f"{color_text('# ', ANSI_DIM)}{body}"
+
+
 def _attention_note(reasons: tuple[str, ...], comments: int) -> str:
+    """Colored attention text, matching ``ger log`` trailing hints."""
     if "ci-failed" in reasons:
-        return "build failed"
+        return color_text("build failed", ANSI_RED)
     if "unresolved-comments" in reasons:
         noun = "comment" if comments == 1 else "comments"
-        return f"{comments} unresolved {noun}" if comments else "unresolved comments"
+        text = f"{comments} unresolved {noun}" if comments else "unresolved comments"
+        return color_text(text, ANSI_YELLOW)
     if "review-issues" in reasons:
-        return "negative vote"
+        return color_text("negative vote", ANSI_YELLOW)
     return ""
 
 
@@ -166,28 +201,28 @@ def _render_chain_line(
     show_url: bool,
     verbose: bool,
 ) -> None:
-    comments_tok = comments_token(chain.comments_unresolved)
     subject = highlighter.highlight(chain.top.subject)
     line = (
-        f"c{chain.top.number}  {chain.depth}c  "
-        f"{verified_token(chain.verified)} {code_review_token(chain.code_review)} {comments_tok}  "
-        f"unrevi {format_age(chain.unreviewed_age_seconds)}  "
-        f"act {format_age(chain.wait_age_seconds)}  "
-        f"{chain.owner_name}   # {subject}"
+        f"{_fmt_change_number(chain.top.number)}  {color_text(f'{chain.depth}c', ANSI_DIM)}  "
+        f"{_fmt_status(chain.verified, chain.code_review, chain.comments_unresolved)}  "
+        f"{_fmt_unreviewed(chain.unreviewed_age_seconds)}  "
+        f"{_fmt_activity(chain.wait_age_seconds)}  "
+        f"{color_text(chain.owner_name, ANSI_DIM)}   {_hash_suffix(subject)}"
     )
     print(line)
     if show_url and chain.url:
-        print(f"  {chain.url}")
+        print(f"  {color_text(format_link(chain.url), ANSI_DIM)}")
     for member in chain.members:
         if member.number == chain.top.number and not verbose:
             continue
         if not verbose and not member.attention_reasons:
             continue
         note = _attention_note(member.attention_reasons, member.comments_unresolved)
-        suffix = f"  # {note}" if note else f"  # {member.subject}"
+        suffix_body = note if note else highlighter.highlight(member.subject)
         print(
-            f"   └ c{member.number}  {verified_token(member.verified)} {code_review_token(member.code_review)} "
-            f"{comments_token(member.comments_unresolved)}{suffix}"
+            f"{color_text('   └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  "
+            f"{_fmt_status(member.verified, member.code_review, member.comments_unresolved)}  "
+            f"{_hash_suffix(suffix_body)}"
         )
 
 
@@ -197,13 +232,11 @@ def _render_text(
     highlighter: SummaryHighlighter,
     show_url: bool,
     verbose: bool,
-    use_color: bool,
 ) -> None:
     heading = f"to review ({len(chains)})"
-    print(color_text(heading, ANSI_BOLD) if use_color else heading)
+    print(color_text(heading, f"{ANSI_BOLD}{ANSI_CYAN}"))
     if not chains:
-        empty = "(nothing to review)"
-        print(color_text(empty, ANSI_DIM) if use_color else empty)
+        print(color_text("(nothing to review)", ANSI_DIM))
         return
     for chain in chains:
         _render_chain_line(chain, highlighter=highlighter, show_url=show_url, verbose=verbose)
@@ -211,18 +244,23 @@ def _render_text(
     oldest = max((chain.unreviewed_age_seconds for chain in chains), default=0)
     ci = sum(1 for chain in chains if "ci-failed" in chain.attention_reasons)
     comments = sum(1 for chain in chains if "unresolved-comments" in chain.attention_reasons)
+    sep = color_text(" · ", ANSI_DIM)
     parts = [
-        color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}") if use_color else "summary:",
-        f" {len(chains)} chains",
-        f" · {changes} changes",
-        f" · oldest unrevi {format_age(oldest)}",
+        color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"),
+        " ",
+        color_text(str(len(chains)), ANSI_CYAN),
+        color_text(" chains", ANSI_DIM),
+        sep,
+        color_text(str(changes), ANSI_CYAN),
+        color_text(" changes", ANSI_DIM),
+        sep,
+        color_text("oldest unrevi ", ANSI_DIM),
+        color_text(format_age(oldest), ANSI_YELLOW),
     ]
     if ci:
-        ci_bit = color_text(str(ci), ANSI_RED) if use_color else str(ci)
-        parts.append(f" · CI {ci_bit}")
+        parts.extend([sep, color_text("CI ", ANSI_DIM), color_text(str(ci), ANSI_RED)])
     if comments:
-        com_bit = color_text(str(comments), ANSI_YELLOW) if use_color else str(comments)
-        parts.append(f" · comments {com_bit}")
+        parts.extend([sep, color_text("comments ", ANSI_DIM), color_text(str(comments), ANSI_YELLOW)])
     print()
     print("".join(parts))
 
@@ -235,7 +273,9 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, settings, highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, highlighter = init_cli_runtime(
+        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
+    )
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     query = build_to_review_query(
         settings,
@@ -274,7 +314,6 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         highlighter=highlighter,
         show_url=bool(args.url),
         verbose=bool(args.verbose),
-        use_color=args.color != "never",
     )
     return int(ExitCode.ATTENTION) if chains else int(ExitCode.OK)
 

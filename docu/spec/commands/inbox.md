@@ -100,7 +100,9 @@ Within the section, chains sort by **unreviewed age**, oldest first (longest wai
 | `--json` | Machine-readable output (see [JSON](#json)) |
 | `--url`, `--show-url` | Chain-top URL per entry (default: **on**) |
 | `--no-url` | Omit URLs from text output |
-| `--color`, `--debug-log`, `-v` | Standard helpers (see `cli_common`) |
+| `--color WHEN` | `always` \| `auto` \| `never` |
+| `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, the chain-top URL becomes a clickable `Open in gerrit` (OSC 8), same as `ger log`. JSON always includes the raw URL. |
+| `--debug-log`, `-v` | Standard helpers (see `cli_common`) |
 
 Planned, not in this slice: `--waiting`, `--since-last`, `--watch`, `--forget`, `--sort`, `--query`.
 
@@ -140,6 +142,20 @@ summary: 3 chains · 15 changes · oldest unrevi 6d · CI 1 · comments 1
 **Empty sections** print a dim `(nothing to review)` rather than vanishing, so the output shape is stable.
 
 `-v` lists every member, not only those with attention.
+
+### Colors
+
+Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log.md) for the same meaning. Color groups the line by semantics:
+
+| Group | Tokens | Color |
+|-------|--------|-------|
+| Identity | `c<n>`, heading, summary counts | cyan (SHA color) |
+| Status | `v…` / `cr…` / `com` | same as `ger log` (`v+1` green, `v-1` red, `cr+2` green, `cr-1` yellow, …) |
+| Waiting on you | unreviewed age, unresolved-comment notes | yellow |
+| CI / build | `build failed`, summary `CI` | red |
+| Context | depth `Nc`, `unrevi`/`act` labels, activity age, owner, `#`, URL, empty-section hint | dim |
+
+`--hyperlinks` shortens the chain-top URL the same way as `ger log --url`.
 
 ---
 
