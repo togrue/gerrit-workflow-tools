@@ -12,7 +12,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.cli_style import ANSI_YELLOW
+from gerrit_workflow_tools.cli_style import ANSI_YELLOW, GERRIT_LINK_LABEL, strip_ansi
 from gerrit_workflow_tools.core.annotated_stack import (
     branches_needing_upstream,
     commit_rows_in_range,
@@ -47,6 +47,7 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--json" in out
     assert "--show-change-id" in out
     assert "--show-url" in out
+    assert "--hyperlinks" in out
     assert "--verbose" in out or "-v" in out
     assert "--follow-merges" in out
 
@@ -379,6 +380,76 @@ def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.Monke
     code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "g.example" in out or "/+/" in out
+
+
+def test_log_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    code, out, err = run_cli(
+        stack_repo,
+        log_main,
+        ["--url", "--hyperlinks", "always", "--color=never"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
+    assert code == 0, err
+    assert "\x1b]8;;https://gerrit.example" in out
+    visible = strip_ansi(out)
+    assert GERRIT_LINK_LABEL in visible
+    assert "https://gerrit.example" not in visible
+
+
+def test_log_hyperlinks_verbose_uses_label(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    code, out, err = run_cli(
+        stack_repo,
+        log_main,
+        ["--verbose", "--hyperlinks", "always", "--color=never"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
+    assert code == 0, err
+    assert "\x1b]8;;https://gerrit.example" in out
+    assert GERRIT_LINK_LABEL in strip_ansi(out)
+    assert "https://gerrit.example" not in strip_ansi(out)
+
+
+def test_log_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    git("config", "gerrit.logShowUrl", "true", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    code, out, err = run_cli(
+        stack_repo,
+        log_main,
+        ["--hyperlinks", "never", "--color=never"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
+    assert code == 0, err
+    assert "\x1b]8;" not in out
+    assert "g.example" in out or "/+/" in out
+    assert GERRIT_LINK_LABEL not in out
+
+
+def test_log_json_keeps_raw_gerrit_url_with_hyperlinks(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    code, out, err = run_cli(
+        stack_repo,
+        log_main,
+        ["--json", "--hyperlinks", "always"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
+    assert code == 0, err
+    data = json_stdout(out)
+    assert "\x1b]8;" not in out
+    assert any((item.get("gerrit_url") or "").startswith("https://gerrit.example") for item in data["commits"])
 
 
 # ---------------------------------------------------------------------------

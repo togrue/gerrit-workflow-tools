@@ -19,7 +19,7 @@ from collections.abc import Callable
 from enum import IntEnum
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_style import init_color_mode
+from gerrit_workflow_tools.cli_style import init_color_mode, init_hyperlink_mode
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
@@ -28,6 +28,7 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_su
 
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_COLOR = "Colorize output: always, auto, or never."
+HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."
 HELP_VERBOSE_PLACEHOLDER = "Reserved for richer command output in a future release (currently no effect)."
 HELP_DEBUG_LOG = (
     "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, and Gerrit API response bodies)."
@@ -113,13 +114,20 @@ def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
 
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
-    """Register shared color-output flags."""
+    """Register shared color-output and hyperlink flags."""
     parser.add_argument(
         "--color",
         choices=("always", "auto", "never"),
         default="auto",
         metavar="WHEN",
         help=HELP_COLOR,
+    )
+    parser.add_argument(
+        "--hyperlinks",
+        choices=("always", "auto", "never"),
+        default="auto",
+        metavar="WHEN",
+        help=HELP_HYPERLINKS,
     )
 
 
@@ -194,7 +202,12 @@ def ensure_utf8_stdio() -> None:
             reconfigure(encoding="utf-8")
 
 
-def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Settings, SummaryHighlighter]:
+def init_cli_runtime(
+    *,
+    debug_log: int | bool,
+    color: str,
+    hyperlinks: str = "auto",
+) -> tuple[Path, Settings, SummaryHighlighter]:
     """Configure logging/color and return ``(cwd, settings, summary_highlighter)`` for CLI commands.
 
     This is where a command's :class:`Settings` snapshot is taken: once, at the entry
@@ -206,6 +219,7 @@ def init_cli_runtime(*, debug_log: int | bool, color: str) -> tuple[Path, Settin
     configure_logging(debug_log)
     cwd = cwd_from_env()
     init_color_mode(color=color)
+    init_hyperlink_mode(hyperlinks=hyperlinks)
     settings = Settings.from_cwd(cwd)
     return cwd, settings, build_summary_highlighter(settings)
 

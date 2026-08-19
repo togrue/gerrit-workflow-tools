@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_short_sha, color_text
+from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_short_sha, color_text, format_link
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -258,7 +258,7 @@ def _emit_human_commit(
         print(meta)
 
     if commit.gerrit_url:
-        print(f"{color_text('url:', ANSI_DIM)} {color_text(commit.gerrit_url, ANSI_YELLOW)}")
+        print(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(commit.gerrit_url), ANSI_YELLOW)}")
     for d in extra_detail_lines(commit):
         print(d)
 
@@ -323,7 +323,9 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 ) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, summary_highlighter = init_cli_runtime(
+        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
+    )
     use_color = args.color != "never"
     out_fmt = _output_format(args)
 

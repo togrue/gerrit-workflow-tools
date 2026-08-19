@@ -1156,7 +1156,9 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Setting
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
     args = _build_arg_parser().parse_args(argv)
-    cwd, settings, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, summary_highlighter = init_cli_runtime(
+        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
+    )
     gdef = settings.push_defaults
     remote_policy = settings.push_remote_policy
     fp = not args.follow_merges

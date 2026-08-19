@@ -25,6 +25,15 @@ _FIXTURE_PROFILE_SECONDS: dict[str, float] = defaultdict(float)
 _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)
 
 
+@pytest.fixture(autouse=True)
+def _reset_hyperlink_mode() -> Generator[None]:
+    """Keep OSC 8 mode off unless a test enables it; avoid leaks into later tests."""
+    yield
+    from gerrit_workflow_tools.cli_style import set_hyperlink_mode
+
+    set_hyperlink_mode(False)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Point Git at replacement global/system config so tests ignore the real ``~/.gitconfig``.
 

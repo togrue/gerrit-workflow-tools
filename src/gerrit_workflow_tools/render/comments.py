@@ -8,6 +8,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_DIM,
     ANSI_YELLOW,
     color_text,
+    format_link,
     visible_len,
 )
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, gerrit_inline_comment_url
@@ -62,7 +63,7 @@ def _box_content_rows(
             rows.append(f"  {ln}")
     chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
     if chain_url:
-        rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(chain_url, ANSI_YELLOW)}")
+        rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")
     return rows
 
 

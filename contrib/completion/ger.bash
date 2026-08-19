@@ -25,7 +25,7 @@ _ger_cache() {
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [ "${COMP_CWORD:-0}" -eq 2 ]; then
         if [[ "$cur" == -* ]]; then
-            __gwt_flags "$cur" -h --help --color -v --verbose --debug-log
+            __gwt_flags "$cur" -h --help --color --hyperlinks -v --verbose --debug-log
         else
             __gwt_flags "$cur" clear info
         fi
@@ -34,6 +34,10 @@ _ger_cache() {
     local sub="${COMP_WORDS[2]}"
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
@@ -57,11 +61,15 @@ _ger_change_id() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -v --verbose --debug-log --start-at-remote --check --fix --color
+        __gwt_flags "$cur" -h --help -v --verbose --debug-log --start-at-remote --check --fix --color --hyperlinks
         return
     fi
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
@@ -108,11 +116,15 @@ _ger_log() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --json --color --url --show-url --show-change-id -v --verbose --debug-log --follow-merges
+        __gwt_flags "$cur" -h --help --json --color --hyperlinks --url --show-url --show-change-id -v --verbose --debug-log --follow-merges
         return
     fi
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
@@ -126,11 +138,15 @@ _ger_push() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -i --branch --dry-run --no-rebase-check -y --yes --all --color --follow-merges --reviewers --reviewer-strategy --topic --wip --private -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help -i --branch --dry-run --no-rebase-check -y --yes --all --color --hyperlinks --follow-merges --reviewers --reviewer-strategy --topic --wip --private -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
@@ -160,11 +176,15 @@ _ger_resolve() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --json --color -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --json --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
@@ -190,11 +210,15 @@ _ger_sha() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --range --all --short --subject --json --color -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --range --all --short --subject --json --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
             __gwt_flags "$cur" always auto never
             return
             ;;
@@ -208,7 +232,7 @@ _ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --stack --full --comment-tail-lines --json --format --ai --color -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --stack --full --comment-tail-lines --json --format --ai --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
@@ -218,6 +242,10 @@ _ger_show() {
             ;;
         --format)
             __gwt_flags "$cur" human markdown
+            return
+            ;;
+        --hyperlinks)
+            __gwt_flags "$cur" always auto never
             return
             ;;
     esac

@@ -29,7 +29,7 @@ i9j0k1l2 p  v-1 cr+1 com  # Handle timeout                 # build failed, 1 unr
 m3n4o5p6 -       com      # WIP: experiment                # not-pushed
 ```
 
-With `--url` or `gerrit.logShowUrl`, a Gerrit web URL may appear at the end of the line (or on the next line with `-v`).
+With `--url` or `gerrit.logShowUrl`, a Gerrit web URL may appear at the end of the line (or on the next line with `-v`). When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), that URL is shown as a clickable `Open in gerrit` instead of the raw address. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep the copyable URL.
 
 With `--show-change-id`, a truncated Change-Id is appended after the subject.
 

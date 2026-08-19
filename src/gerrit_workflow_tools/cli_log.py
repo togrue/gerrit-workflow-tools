@@ -24,6 +24,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_RED,
     ANSI_YELLOW,
     color_text,
+    format_link,
     visible_len,
 )
 from gerrit_workflow_tools.core.annotated_stack import (
@@ -220,7 +221,7 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
             )
             print(intro)
             if show_url and commit.gerrit_url:
-                print(f"{ind}{color_text(commit.gerrit_url, ANSI_DIM)}")
+                print(f"{ind}{color_text(format_link(commit.gerrit_url), ANSI_DIM)}")
             for d in extra_detail_lines(commit):
                 print(f"{ind}{d}")
         else:
@@ -244,7 +245,9 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint: disable=too-many-locals
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, settings, summary_highlighter = init_cli_runtime(debug_log=args.debug_log, color=args.color)
+    cwd, settings, summary_highlighter = init_cli_runtime(
+        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
+    )
 
     gdef = settings.log_defaults
     verbose = bool(args.verbose)

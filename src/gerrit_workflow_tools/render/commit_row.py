@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_short_sha,
     color_text,
+    format_link,
     is_color_enabled,
     visible_len,
 )
@@ -244,8 +245,9 @@ def oneline_line(
         attention_col=attention_col,
     )
     if include_url and commit.gerrit_url:
+        url_text = color_text(format_link(commit.gerrit_url), ANSI_DIM)
         if url_start_visible is not None:
             pad = max(url_start_visible - visible_len(body), 2)
-            return f"{body}{' ' * pad}{color_text(commit.gerrit_url, ANSI_DIM)}"
-        return f"{body}  {color_text(commit.gerrit_url, ANSI_DIM)}"
+            return f"{body}{' ' * pad}{url_text}"
+        return f"{body}  {url_text}"
     return body

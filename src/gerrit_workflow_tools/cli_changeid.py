@@ -34,7 +34,7 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     handle_git_error,
 )
-from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode
+from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, init_hyperlink_mode
 from gerrit_workflow_tools.core.change_id import (
     CHANGE_ID_FOOTER_RE,
     parse_change_id_footer,
@@ -257,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     configure_logging(args.debug_log)
     init_color_mode(color=args.color)
+    init_hyperlink_mode(hyperlinks=args.hyperlinks)
     cwd = cwd_from_env()
     settings = Settings.from_cwd(cwd)
 

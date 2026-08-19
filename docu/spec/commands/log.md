@@ -30,6 +30,7 @@ ger log [options] [REV_RANGE]
 |--------|-------------|
 | `--json` | Machine-readable JSON (one object per commit) |
 | `--color WHEN` | `always` \| `auto` \| `never` |
+| `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8). JSON always includes the raw `gerrit_url`. |
 | `--url`, `--show-url` | Gerrit web URL per line (default: `gerrit.logShowUrl`) |
 | `--show-change-id` | Append Change-Id on text lines (default: `gerrit.logShowChangeId`) |
 | `-v`, `--verbose` | Expanded layout: indented detail lines; URLs on following line when URLs enabled |
@@ -42,7 +43,7 @@ ger log [options] [REV_RANGE]
 
 Default: one primary line per commit, optional `# …` detail lines, trailing **summary** line.
 
-**User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md).
+**User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md). With `--hyperlinks` on, `--url` prints a clickable `Open in gerrit` instead of the raw address.
 
 Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker, attention hints, subject. Patchset tokens: [architecture.md](../../architecture.md#patchset-status-log--show--rebase-annotations).
 

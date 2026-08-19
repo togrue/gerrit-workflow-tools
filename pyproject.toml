@@ -113,6 +113,7 @@ ignore_names = [
     "_isolate_xdg_cache_home",
     "_clear_git_cache",
     "_profile_test_duration",
+    "_reset_hyperlink_mode",
     "pytestmark",
     # pytest fixtures consumed via parameter name injection.
     "history_home",

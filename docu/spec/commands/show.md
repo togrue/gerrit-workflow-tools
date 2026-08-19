@@ -40,11 +40,11 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | `--json` | JSON payload (full comment text; ignores tail truncation) |
 | `--format {human,markdown}` | Output format (default: human) |
 | `--ai` | Alias for `--format markdown` |
-| `--color`, `--debug-log`, `-v` | Standard helpers |
+| `--color`, `--hyperlinks`, `--debug-log`, `-v` | Standard helpers (`--hyperlinks`: `always` \| `auto` \| `never`) |
 
 `--json`, `--format`, and `--ai` are mutually exclusive.
 
-**Markdown / `--ai`:** no ANSI; full comment bodies; headings per change and per `path:line` thread with blockquoted replies — suited for pasting into an AI review session.
+**Markdown / `--ai`:** no ANSI or OSC 8; full comment bodies; headings per change and per `path:line` thread with blockquoted replies — suited for pasting into an AI review session.
 
 ---
 
@@ -53,7 +53,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 1. Resolve targets (`resolve_show_targets`: changeishes, ranges, optional `--stack`).
 2. Fetch labels, patchset status, attention via `GerritService` / `gerrit_change_status`.
 3. **Human, multi-target:** only commits with unresolved comment chains are printed (clean commits are omitted). If every target is clean, print a single dim `(no unresolved comments)`.
-4. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …`, indented commit message, then each unresolved chain in a yellow rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line.
+4. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …` (full Gerrit URL, or a clickable `Open in gerrit` when `--hyperlinks` is on), indented commit message, then each unresolved chain in a yellow rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line (same hyperlink shortening).
 5. **Markdown / `--ai`:** headings per change; unresolved section still lists all targets (including clean).
 
 **Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`; only unresolved chains are listed. See `build_comment_chains()` / `collect_unresolved_comment_chains()` in `comment_chains.py`.

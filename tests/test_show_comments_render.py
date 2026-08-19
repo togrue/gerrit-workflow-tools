@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from gerrit_workflow_tools.cli_style import GERRIT_LINK_LABEL, set_hyperlink_mode, strip_ansi
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
@@ -60,6 +61,27 @@ def test_format_comment_chain_human_rounded_box() -> None:
     assert "url:" in joined
 
 
+def test_format_comment_chain_human_hyperlink_label() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(InlineComment(path="f.py", line=3, message="root", author="alice"),),
+        resolved=False,
+    )
+    set_hyperlink_mode(True)
+    try:
+        lines = format_comment_chain_human(chain, "https://g.example/c/1", tail_n=10, full=True)
+    finally:
+        set_hyperlink_mode(False)
+    joined = "\n".join(lines)
+    assert "\x1b]8;;https://g.example/c/1" in joined
+    visible = strip_ansi(joined)
+    assert GERRIT_LINK_LABEL in visible
+    assert "url:" in visible
+    assert "https://g.example/c/1" not in visible
+
+
 def test_format_comment_chain_human_box_border_is_yellow() -> None:
     from gerrit_workflow_tools.cli_style import ANSI_YELLOW, set_color_mode
 
@@ -99,3 +121,22 @@ def test_format_comment_chain_markdown() -> None:
     assert "> line2" in joined
     assert "**bob**" in joined
     assert "> reply" in joined
+
+
+def test_format_comment_chain_markdown_ignores_hyperlinks() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(InlineComment(path="f.py", line=3, message="root", author="alice"),),
+        resolved=False,
+    )
+    set_hyperlink_mode(True)
+    try:
+        lines = format_comment_chain_markdown(chain, "https://g.example/c/1")
+    finally:
+        set_hyperlink_mode(False)
+    joined = "\n".join(lines)
+    assert "https://g.example/c/1" in joined
+    assert "\x1b]8;" not in joined
+    assert GERRIT_LINK_LABEL not in joined
