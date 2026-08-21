@@ -40,7 +40,7 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.logShowUrl` | Default on: include Gerrit URLs in text output (same as `--url` / `--show-url`). |
+| `gerrit.logShowUrl` | When `true`, include Gerrit URLs in text output even without OSC 8 hyperlinks (same as `--url` / `--show-url`). Compact `Open in gerrit` links are shown by default when hyperlinks are on. |
 | `gerrit.logShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
 
 ---

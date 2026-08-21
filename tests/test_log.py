@@ -383,13 +383,14 @@ def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.Monke
 
 
 def test_log_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """OSC 8 terminals get a compact ``Open in gerrit`` link without ``--url``."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
         stack_repo,
         log_main,
-        ["--url", "--hyperlinks", "always", "--color=never"],
+        ["--hyperlinks", "always", "--color=never"],
         monkeypatch,
         gerrit=ChangeStore(details),
     )
@@ -398,6 +399,24 @@ def test_log_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypatc
     visible = strip_ansi(out)
     assert GERRIT_LINK_LABEL in visible
     assert "https://gerrit.example" not in visible
+
+
+def test_log_default_omits_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without hyperlinks or ``--url``, raw Gerrit addresses stay off (they are noisy)."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    code, out, err = run_cli(
+        stack_repo,
+        log_main,
+        ["--hyperlinks", "never", "--color=never"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
+    assert code == 0, err
+    assert "g.example" not in out
+    assert "/+/" not in out
+    assert GERRIT_LINK_LABEL not in out
 
 
 def test_log_hyperlinks_verbose_uses_label(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

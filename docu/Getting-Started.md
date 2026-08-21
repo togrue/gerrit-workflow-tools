@@ -146,6 +146,6 @@ ger edit / ger rebase → rework commits in the middle of the stack
 |-----|---------|
 | `gerrit.stopPattern` | Commits whose subject matches this regex start the non-pushable tail (WIP, etc.) |
 | `gerrit.warningPattern` | Highlight suspicious subjects in `ger log` / `ger push` (single regex) |
-| `gerrit.logShowUrl` | Show Gerrit web URLs on each line (default on) |
+| `gerrit.logShowUrl` | Show Gerrit web URLs on each line even without OSC 8 hyperlinks |
 
 See [Configuration.md](Configuration.md) for the full list.

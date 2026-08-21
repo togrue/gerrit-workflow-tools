@@ -155,7 +155,7 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
 | CI / build | `build failed`, summary `CI` | red |
 | Context | depth `Nc`, `unrevi`/`act` labels, activity age, owner, `#`, URL, empty-section hint | dim |
 
-`--hyperlinks` shortens the chain-top URL the same way as `ger log --url`.
+`--hyperlinks` shortens the chain-top URL the same way as `ger log`.
 
 ---
 

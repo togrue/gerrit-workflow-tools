@@ -30,8 +30,8 @@ ger log [options] [REV_RANGE]
 |--------|-------------|
 | `--json` | Machine-readable JSON (one object per commit) |
 | `--color WHEN` | `always` \| `auto` \| `never` |
-| `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8). JSON always includes the raw `gerrit_url`. |
-| `--url`, `--show-url` | Gerrit web URL per line (default: `gerrit.logShowUrl`) |
+| `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
+| `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `gerrit.logShowUrl`. |
 | `--show-change-id` | Append Change-Id on text lines (default: `gerrit.logShowChangeId`) |
 | `-v`, `--verbose` | Expanded layout: indented detail lines; URLs on following line when URLs enabled |
 | `--debug-log` | Log git commands to stderr (repeat for more detail) |
@@ -43,7 +43,7 @@ ger log [options] [REV_RANGE]
 
 Default: one primary line per commit, optional `# …` detail lines, trailing **summary** line.
 
-**User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md). With `--hyperlinks` on, `--url` prints a clickable `Open in gerrit` instead of the raw address.
+**User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md). With hyperlinks on, each line gets a clickable `Open in gerrit` instead of the raw address. `--url` forces the URL column even when hyperlinks are off.
 
 Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker, attention hints, subject. Patchset tokens: [architecture.md](../../architecture.md#patchset-status-log--show--rebase-annotations).
 
@@ -78,7 +78,7 @@ Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_rev
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.logShowUrl` | Default for `--url` |
+| `gerrit.logShowUrl` | Force Gerrit URLs in text output even when hyperlinks are off (same as `--url` / `--show-url`). Compact `Open in gerrit` links are already shown by default when OSC 8 hyperlinks are on. |
 | `gerrit.logShowChangeId` | Default for `--show-change-id` |
 | `gerrit.webUrl`, auth | Required for API |
 | `gerrit.stopPattern`, `gerrit.warningPattern` | Subject highlighting |

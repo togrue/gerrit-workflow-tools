@@ -25,6 +25,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_YELLOW,
     color_text,
     format_link,
+    is_hyperlink_enabled,
     visible_len,
 )
 from gerrit_workflow_tools.core.annotated_stack import (
@@ -130,7 +131,8 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="url",
         help=(
             "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url). "
-            "Default: ``gerrit.logShowUrl``."
+            "When OSC 8 hyperlinks are on, a compact ``Open in gerrit`` link is shown by default. "
+            "Otherwise default: ``gerrit.logShowUrl``."
         ),
     )
     parser.add_argument(
@@ -251,7 +253,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     gdef = settings.log_defaults
     verbose = bool(args.verbose)
-    show_url = bool(args.url) or gdef["show_url"] or verbose
+    show_url = bool(args.url) or gdef["show_url"] or verbose or is_hyperlink_enabled()
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
 
     rev_range = resolve_rev_range(cwd, settings=settings, arg_rev_range=args.rev_range)
