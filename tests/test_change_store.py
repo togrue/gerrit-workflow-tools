@@ -179,11 +179,14 @@ def test_comments_and_checks_default_empty_and_can_be_seeded() -> None:
     triplet = f"testproj~main~{CID_A}"
     assert store.get_comments(triplet) == {}
     assert store.get_checks(triplet) == []
+    assert store.get_messages(triplet) == []
 
     store.set_comments(triplet, {"a.py": [{"id": "c1", "message": "hi"}]})
     store.set_checks(triplet, [{"state": "FAILED", "checker_name": "build"}])
+    store.set_messages(triplet, [{"message": "Build failed"}])
     assert store.get_comments(triplet)["a.py"][0]["message"] == "hi"
     assert store.get_checks(triplet)[0]["checker_name"] == "build"
+    assert store.get_messages(triplet)[0]["message"] == "Build failed"
 
 
 def test_comments_seeded_by_number_are_found_by_triplet() -> None:

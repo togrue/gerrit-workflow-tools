@@ -170,6 +170,9 @@ def _commit_json_payload(
         "code_review": commit.code_review,
         "comments_unresolved": commit.comments_unresolved,
         "ci_failures": commit.ci_failures,
+        "ci_links": [
+            {"label": link.label, "url": link.url, "source": link.source} for link in commit.ci_links
+        ],
         "gerrit_url": commit.gerrit_url,
         "submittable": commit.submittable,
         "attention_reasons": commit.attention_reasons,

@@ -139,6 +139,9 @@ class GerritRest(Protocol):
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
 
+    def get_messages(self, change_id: str) -> list[dict[str, Any]]:
+        """Return change message rows (review/robot messages) for one change."""
+
     def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
         """Return reviewer rows for one change."""
 
@@ -454,12 +457,20 @@ class HttpGerritRest:
         """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.
 
         Rows are returned verbatim; deciding which states count as a failure is the
-        caller's job (see ``GerritService._fetch_ci_failures``).
+        caller's job (see ``GerritService._fetch_ci_result``).
         """
         enc = quote(change_id_for_gerrit_rest_path(change_id), safe="")
         data = self._request_json(f"changes/{enc}/revisions/current/checks")
         if not isinstance(data, list):
             raise GerritApiError("unexpected checks response")
+        return [row for row in data if isinstance(row, dict)]
+
+    def get_messages(self, change_id: str) -> list[dict[str, Any]]:
+        """GET ``changes/<id>/messages`` and return raw ChangeMessageInfo rows."""
+        enc = quote(change_id_for_gerrit_rest_path(change_id), safe="")
+        data = self._request_json(f"changes/{enc}/messages")
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected messages response")
         return [row for row in data if isinstance(row, dict)]
 
 

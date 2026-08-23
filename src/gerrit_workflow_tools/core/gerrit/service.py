@@ -231,7 +231,9 @@ class GerritService:
                     logger.debug("comments follow-up failed for %s: %s", triplet, exc)
             if "checks" in kinds:
                 try:
-                    updates["checks"] = self._fetch_ci_failures(triplet)
+                    names, links = self._fetch_ci_result(triplet, project=stack.project)
+                    updates["checks"] = names
+                    updates["ci_links"] = links
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("checks follow-up failed for %s: %s", triplet, exc)
             if "reviewers" in kinds:
@@ -248,6 +250,8 @@ class GerritService:
                 result[idx].comments_unresolved = updates["comments"]
             if "checks" in updates:
                 result[idx].ci_failures = updates["checks"]
+            if "ci_links" in updates:
+                result[idx].ci_links = updates["ci_links"]
             if "reviewers" in updates:
                 result[idx].reviewers = updates["reviewers"]
 
@@ -306,25 +310,39 @@ class GerritService:
             follow_up_unmatched=unmatched,
         )
 
-    def _fetch_ci_failures(self, change_id: str) -> list[str]:
-        """Return failed CI check names.
+    def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list]:
+        """Return failed CI check names and transformed :class:`CiLink` rows.
 
-        Which states count as a failure is policy, so it stays above the seam; the
-        :class:`GerritRest` implementation just returns the rows. A missing Checks plugin
-        surfaces as :class:`GerritApiError` and means "no failures to report".
+        Checks names always come from the Checks plugin (when present). Links come from
+        a repo-local ``.ger/ci`` strategy when one matches *project*; core prefers
+        Checks-derived links over message-derived ones.
         """
 
+        from gerrit_workflow_tools.core.ci_links import CiLink, failed_check_names
+        from gerrit_workflow_tools.core.ci_strategy import extract_ci_links_via_registry
+
         try:
-            rows = self.rest.get_checks(change_id)
+            check_rows = self.rest.get_checks(change_id)
         except GerritApiError:
-            return []
-        failed: list[str] = []
-        for check in rows:
-            if check.get("state") == "FAILED":
-                name = check.get("checker_name") or check.get("name") or ""
-                if name:
-                    failed.append(str(name))
-        return failed
+            check_rows = []
+        names = failed_check_names(check_rows)
+
+        try:
+            message_rows = self.rest.get_messages(change_id)
+        except GerritApiError:
+            message_rows = []
+
+        links: list[CiLink] = []
+        try:
+            links = extract_ci_links_via_registry(
+                self.cwd,
+                project=project,
+                checks=check_rows,
+                messages=message_rows,
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.debug("CI strategy failed for %s (%s): %s", change_id, project, exc)
+        return names, links
 
     def _refresh_after_mutation(self, change_id: str) -> Change:
         rest_ref = change_id_for_gerrit_rest_path(change_id)

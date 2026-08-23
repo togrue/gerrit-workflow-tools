@@ -147,7 +147,7 @@ def test_log_json_contract_required_keys_and_types(stack_repo: Path, monkeypatch
     required_str = ("sha", "summary", "patchset_status", "change_id", "change_status")
     required_bool = ("pushed", "submittable", "abandoned")
     optional_bool = ("merged_equivalent",)
-    required_list = ("attention_reasons", "ci_failures")
+    required_list = ("attention_reasons", "ci_failures", "ci_links")
     for item in commits:
         for key in required_str:
             assert key in item

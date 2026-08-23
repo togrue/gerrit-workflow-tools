@@ -57,6 +57,7 @@ class ChangeStore:
         accounts: dict[int, dict[str, Any]] | None = None,
         comments: dict[str, dict[str, list[dict[str, Any]]]] | None = None,
         checks: dict[str, list[dict[str, Any]]] | None = None,
+        messages: dict[str, list[dict[str, Any]]] | None = None,
         project_reviewers: dict[str, list[dict[str, Any]]] | None = None,
         self_account_id: int | None = None,
     ) -> None:
@@ -66,6 +67,7 @@ class ChangeStore:
         self._self_account_id = self_account_id
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
         self._checks: dict[str, list[dict[str, Any]]] = dict(checks or {})
+        self._messages: dict[str, list[dict[str, Any]]] = dict(messages or {})
         self._project_reviewers = dict(project_reviewers) if project_reviewers is not None else None
         self._stubbed_queries: dict[str, list[dict[str, Any]]] = {}
         self._next_account_id = 9000
@@ -88,6 +90,10 @@ class ChangeStore:
     def set_checks(self, change_ref: str, rows: list[dict[str, Any]]) -> None:
         """Seed Checks-plugin rows for one change."""
         self._checks[self._payload_id(change_ref)] = rows
+
+    def set_messages(self, change_ref: str, rows: list[dict[str, Any]]) -> None:
+        """Seed change message rows for one change."""
+        self._messages[self._payload_id(change_ref)] = rows
 
     def calls_to(self, method: str) -> list[RecordedCall]:
         """Recorded calls to one method, in order."""
@@ -260,6 +266,11 @@ class ChangeStore:
         """Return Checks-plugin rows for the current revision."""
         self._record("get_checks", change_id)
         return self._checks.get(self._payload_id(change_id), [])
+
+    def get_messages(self, change_id: str) -> list[dict[str, Any]]:
+        """Return change message rows for one change."""
+        self._record("get_messages", change_id)
+        return self._messages.get(self._payload_id(change_id), [])
 
     def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
         """Return reviewer rows for one change."""

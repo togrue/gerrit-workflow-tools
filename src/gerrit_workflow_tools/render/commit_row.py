@@ -15,8 +15,10 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
     format_link,
     is_color_enabled,
+    is_hyperlink_enabled,
     visible_len,
 )
+from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
     code_review_token,
@@ -136,15 +138,29 @@ def primary_line(
 
 def extra_detail_lines(commit: LogCommit) -> list[str]:
     """Indented CI failure lines (one or many), or empty list when CI is clean."""
+    if commit.ci_links:
+        if len(commit.ci_links) == 1:
+            return [color_text(f"# failed: {_format_ci_link_body(commit.ci_links[0])}", ANSI_RED)]
+        lines = [color_text("# failed checks:", ANSI_RED)]
+        for link in commit.ci_links:
+            lines.append(color_text(f"  · {_format_ci_link_body(link)}", ANSI_RED))
+        return lines
     failures = commit.ci_failures
     if not failures:
         return []
     if len(failures) == 1:
         return [color_text(f"# failed: {failures[0]}", ANSI_RED)]
-    lines: list[str] = [color_text("# failed checks:", ANSI_RED)]
+    lines = [color_text("# failed checks:", ANSI_RED)]
     for name in failures:
         lines.append(color_text(f"  · {name}", ANSI_RED))
     return lines
+
+
+def _format_ci_link_body(link: CiLink) -> str:
+    """OSC 8 label when hyperlinks are on; otherwise ``label url``."""
+    if is_hyperlink_enabled():
+        return format_link(link.url, label=link.label)
+    return f"{link.label} {link.url}"
 
 
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:

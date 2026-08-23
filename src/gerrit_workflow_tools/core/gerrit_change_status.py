@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     code_review: int | None  # -2, -1, 0, +1, +2; None = no vote
     comments_unresolved: int
     ci_failures: list[str] = field(default_factory=list)
+    ci_links: list[CiLink] = field(default_factory=list)
     gerrit_url: str | None = None
     submittable: bool = False
     attention_reasons: list[str] = field(default_factory=list)
@@ -350,6 +352,7 @@ def build_log_commit(
             code_review=code_review,
             comments_unresolved=unresolved,
             ci_failures=[],
+            ci_links=[],
             gerrit_url=url,
             submittable=submittable,
             change_status=change_status_val,

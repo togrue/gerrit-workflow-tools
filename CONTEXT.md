@@ -98,6 +98,14 @@ _Avoid_: inbox tab, queue (unqualified)
 How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace on every change).
 _Avoid_: reviewer mode, assignment policy
 
+**CI link**:
+A useful URL for a failed build (often a Jenkins console), after a project-specific transform. Shown by `ger log -v` and in JSON as `ci_links`. Distinct from raw Checks **names** (`ci_failures`).
+_Avoid_: build URL (unqualified), CI failure (the name alone)
+
+**CI strategy**:
+A repo-local Python callable under `.ger/ci/registry.py`, keyed by `gerrit.project`, that turns Checks rows and/or change messages into **CI links**. Committed with the clone; not personal git config.
+_Avoid_: CI plugin, hook script, config regex
+
 ### Talking to Gerrit
 
 **GerritRest**:

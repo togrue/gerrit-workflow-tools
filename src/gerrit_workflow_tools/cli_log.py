@@ -299,6 +299,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
                 "code_review": c.code_review,
                 "comments_unresolved": c.comments_unresolved,
                 "ci_failures": c.ci_failures,
+                "ci_links": [
+                    {"label": link.label, "url": link.url, "source": link.source} for link in c.ci_links
+                ],
                 "gerrit_url": c.gerrit_url,
                 "submittable": c.submittable,
                 "change_id": c.change_id,

@@ -70,7 +70,7 @@ A commit with no usable Change-Id footer (missing or malformed) must include `mi
 
 ## JSON fields
 
-Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `gerrit_url`, `submittable`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid.
+Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `ci_links`, `gerrit_url`, `submittable`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid. `ci_links` is a list of `{label, url, source}` (`source`: `checks` \| `message`) produced by a repo-local CI strategy when present; otherwise `[]`.
 
 ---
 

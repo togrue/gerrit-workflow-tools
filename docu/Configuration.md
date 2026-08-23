@@ -113,7 +113,25 @@ git config gerrit.logShowUrl true
 
 ---
 
+## CI build links (`.ger/ci`)
+
+Team-owned transforms for failed CI live in the **clone**, not in personal `git config`, so a fresh checkout already has them.
+
+| Path | Role |
+|------|------|
+| `.ger/ci/registry.py` | Loaded when Verified is −1. Export either `STRATEGIES: dict[str, Callable]` keyed by exact `gerrit.project`, or `get_strategy(project) -> Callable \| None`. |
+| Strategy callable | `extract_ci_links(*, project, checks, messages) -> list[CiLink]` — see `gerrit_workflow_tools.core.ci_links.CiLink`. |
+
+**Sources:** Checks plugin rows (preferred) and change messages (fallback). Core drops message-sourced links whenever any Checks-sourced link is returned.
+
+**Example:** copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` and edit the `STRATEGIES` keys.
+
+With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` allows). JSON includes `ci_links` alongside `ci_failures` (names only).
+
+---
+
 ## See also
 
 - [SPEC.md](SPEC.md) — specification index
 - [`ger push`](spec/commands/push.md), [`ger log`](spec/commands/log.md) — command specs
+- [`contrib/ger-ci-example`](../contrib/ger-ci-example/) — sample Jenkins → console strategy

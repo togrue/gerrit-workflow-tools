@@ -67,7 +67,7 @@ Aggregated **Verified** label vote on the current patch set.
 | `v0` | Verified 0 (neutral / no +1 yet) |
 | `v?` | Unknown or not applicable |
 
-With `-v` / `--verbose`, failed check names appear on indented lines below the commit (`# failed: …`).
+With `-v` / `--verbose`, failed check names appear on indented lines below the commit (`# failed: …`). When the repo provides a **CI strategy** under `.ger/ci/` (see [Configuration.md](Configuration.md#ci-build-links-gerci)), those lines become clickable console/deep links (OSC 8 when hyperlinks are on; otherwise `label url`).
 
 ### Code-Review (`cr+2`, `cr+1`, `cr0`, `cr-1`, `cr-2`, `cr?`)
 
