@@ -48,13 +48,6 @@ def test_gerrit_remote_defaults_to_origin() -> None:
     assert Settings.from_map({"gerrit.remote": "gerrit"}).gerrit_remote == "gerrit"
 
 
-def test_show_comment_tail_lines_rejects_non_positive_and_garbage() -> None:
-    assert Settings.from_map({}).show_comment_tail_lines == 10
-    assert Settings.from_map({"gerrit.showCommentTailLines": "3"}).show_comment_tail_lines == 3
-    assert Settings.from_map({"gerrit.showCommentTailLines": "0"}).show_comment_tail_lines == 10
-    assert Settings.from_map({"gerrit.showCommentTailLines": "nope"}).show_comment_tail_lines == 10
-
-
 def test_flag_accepts_git_truthy_spellings() -> None:
     for raw in ("1", "true", "TRUE", "yes", "on"):
         assert Settings.from_map({"gerrit.someFlag": raw}).flag("gerrit.someFlag") is True

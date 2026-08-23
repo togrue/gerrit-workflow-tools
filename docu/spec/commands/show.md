@@ -35,9 +35,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | Option | Description |
 |--------|-------------|
 | `--stack` | Include the local stack (`upstream_tip..HEAD`) |
-| `--full` | No tail truncation on comment bodies (human format) |
-| `--comment-tail-lines N` | Last N lines per comment (human format; overrides config) |
-| `--json` | JSON payload (full comment text; ignores tail truncation) |
+| `--json` | JSON payload |
 | `--format {human,markdown}` | Output format (default: human) |
 | `--ai` | Alias for `--format markdown` |
 | `--color`, `--hyperlinks`, `--debug-log`, `-v` | Standard helpers (`--hyperlinks`: `always` \| `auto` \| `never`) |
@@ -79,7 +77,6 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.showCommentTailLines` | Default tail lines (default `10`) |
 | `gerrit.warningPattern` | Subject highlighting on status line |
 
 ---

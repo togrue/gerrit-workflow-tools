@@ -315,8 +315,7 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
     assert "awaiting-review" in data["attention_reasons"]
 
 
-def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """--comment-tail-lines only affects text mode; JSON always has the full message."""
+def test_gshow_json_long_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"
@@ -337,7 +336,7 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     code, out, _err = run_cli(
         stack_repo,
         gshow_main,
-        ["--json", "change:42", "--comment-tail-lines", "3"],
+        ["--json", "change:42"],
         monkeypatch,
         gerrit=store,
     )
@@ -346,7 +345,6 @@ def test_gshow_json_full_comment_ignores_comment_tail_lines(stack_repo: Path, mo
     c0 = data["comments"][0]
     assert c0["message"] == long_msg
     assert "line0" in c0["message"] and "line14" in c0["message"]
-    assert "lines omitted above" not in c0["message"]
     assert data["comments"][0]["url"] == "https://g.example/c/testproj/+/42/comment/TvcXrmjM/"
 
 
@@ -451,39 +449,6 @@ def test_gshow_json_includes_comment_author(stack_repo: Path, monkeypatch: pytes
     assert code == 0
     data = json_stdout(out)
     assert data["comments"][0]["author"] == "grt (Tobias Grün)"
-
-
-def test_gshow_full_comment_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
-    long_msg = "\n".join(f"line{i}" for i in range(15))
-    comments = {
-        "f.py": [
-            {
-                "id": "TvcXrmjM",
-                "line": 1,
-                "message": long_msg,
-                "unresolved": True,
-            }
-        ]
-    }
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    store.set_comments(str(ch["id"]), comments)
-    code, out, _err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--json", "change:42", "--full"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 0
-    data = json_stdout(out)
-    c0 = data["comments"][0]
-    assert c0["message"] == long_msg
-    assert "line0" in c0["message"] and "line14" in c0["message"]
-    assert data["comments"][0]["url"] == "https://g.example/c/testproj/+/42/comment/TvcXrmjM/"
 
 
 def _configure_gshow_repo(stack_repo: Path) -> None:

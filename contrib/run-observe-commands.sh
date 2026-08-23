@@ -110,8 +110,6 @@ run_case "ger show help" ger show --help
 run_case "ger show default" ger show
 run_case "ger show HEAD" ger show HEAD
 run_case "ger show json" ger show --json
-run_case "ger show full" ger show --full
-run_case "ger show tail-lines" ger show --comment-tail-lines 3
 
 run_case "ger fetch-api help" ger fetch-api --help
 run_case "ger fetch-api detail" ger fetch-api accounts/self/detail

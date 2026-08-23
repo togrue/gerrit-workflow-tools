@@ -18,18 +18,6 @@ _MIN_BOX_INNER = 40
 _BOX_INDENT = "    "
 
 
-def apply_comment_tail(text: str, tail_lines: int, *, full: bool) -> tuple[str, bool]:
-    """Return ``(body, truncated)`` applying last-N-line truncation unless *full*."""
-    if full:
-        return text, False
-    lines = text.splitlines()
-    if len(lines) <= tail_lines:
-        return text, False
-    omitted = len(lines) - tail_lines
-    body = "\n".join(lines[-tail_lines:])
-    return f"[... {omitted} lines omitted above]\n{body}", True
-
-
 def chain_location(chain: CommentChain) -> str:
     """``path:line`` when a line is known, otherwise just the path."""
     if chain.line is not None:
@@ -49,17 +37,13 @@ def _pad_inner(text: str, inner_width: int) -> str:
 def _box_content_rows(
     chain: CommentChain,
     gerrit_url: str | None,
-    *,
-    tail_n: int,
-    full: bool,
 ) -> list[str]:
     """Inner lines of a comment box (no borders)."""
     rows: list[str] = []
     for row_item in chain.comments:
         if row_item.author:
             rows.append(color_text(row_item.author, ANSI_DIM))
-        body, _trunc = apply_comment_tail(row_item.message, tail_n, full=full)
-        for ln in body.splitlines() or [""]:
+        for ln in row_item.message.splitlines() or [""]:
             rows.append(f"  {ln}")
     chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
     if chain_url:
@@ -70,14 +54,11 @@ def _box_content_rows(
 def format_comment_chain_human(
     chain: CommentChain,
     gerrit_url: str | None,
-    *,
-    tail_n: int,
-    full: bool,
 ) -> list[str]:
     """Return human-readable lines for one unresolved comment chain in a yellow rounded box."""
     loc = chain_location(chain)
     loc_styled = color_text(loc, ANSI_BOLD + ANSI_CYAN)
-    rows = _box_content_rows(chain, gerrit_url, tail_n=tail_n, full=full)
+    rows = _box_content_rows(chain, gerrit_url)
 
     # Top mid is ``─ {loc} ─…`` (3 fixed chars around loc). Content lines use
     # ``│ `` + row, so row width needs +1 vs the inner span between corners.
@@ -134,15 +115,13 @@ def format_unresolved_section_human(
     gerrit_url: str | None,
     *,
     pushed: bool,
-    tail_n: int,
-    full: bool,
 ) -> list[str]:
     """Boxed unresolved chains for human output (empty list when there are none)."""
     if not pushed or not chains:
         return []
     out: list[str] = []
     for chain in chains:
-        out.extend(format_comment_chain_human(chain, gerrit_url, tail_n=tail_n, full=full))
+        out.extend(format_comment_chain_human(chain, gerrit_url))
     return out
 
 

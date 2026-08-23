@@ -85,18 +85,6 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include all commits in the local stack (upstream_tip..HEAD).",
     )
-    p.add_argument(
-        "--full",
-        action="store_true",
-        help="Show full comment bodies without tail truncation (human format only).",
-    )
-    p.add_argument(
-        "--comment-tail-lines",
-        type=int,
-        metavar="LINES",
-        default=None,
-        help=("Show only the last N lines of each comment body (positive integer; overrides config)."),
-    )
     fmt = p.add_mutually_exclusive_group()
     fmt.add_argument(
         "--json",
@@ -244,8 +232,6 @@ def _emit_human_commit(
     is_local: bool,
     unresolved_chains: list[CommentChain],
     summary_highlighter: SummaryHighlighter,
-    tail_n: int,
-    full: bool,
 ) -> None:
     print(_show_headline(commit))
 
@@ -274,8 +260,6 @@ def _emit_human_commit(
         unresolved_chains,
         commit.gerrit_url,
         pushed=commit.pushed,
-        tail_n=tail_n,
-        full=full,
     )
     if comment_lines:
         print()
@@ -328,17 +312,6 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     )
     use_color = args.color != "never"
     out_fmt = _output_format(args)
-
-    if args.comment_tail_lines is not None and args.comment_tail_lines < 1:
-        print("error: --comment-tail-lines must be a positive integer", file=sys.stderr)
-        return int(ExitCode.USAGE)
-
-    tail_n = args.comment_tail_lines
-    if tail_n is None:
-        tail_n = settings.show_comment_tail_lines
-
-    # Markdown / JSON ignore human tail truncation.
-    full_bodies = out_fmt != "human" or args.full
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     targets = resolve_show_targets(
@@ -397,8 +370,6 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                 is_local=resolved.is_local_commit,
                 unresolved_chains=unresolved_chains,
                 summary_highlighter=summary_highlighter,
-                tail_n=tail_n,
-                full=full_bodies,
             )
             human_shown += 1
 

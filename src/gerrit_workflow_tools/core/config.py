@@ -40,7 +40,6 @@ _DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
 _TRUTHY = ("1", "true", "yes", "on")
 _REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
 _DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
-_DEFAULT_COMMENT_TAIL_LINES = 10
 
 
 def _canonical_cfg_key(key: str) -> str:
@@ -222,18 +221,6 @@ class Settings:
             return _DEFAULT_REMOTE_POLICY
         s = v.lower()
         return s if s in _REMOTE_POLICIES else _DEFAULT_REMOTE_POLICY
-
-    @property
-    def show_comment_tail_lines(self) -> int:
-        """``gerrit.showCommentTailLines``: positive integer, defaulting to ``10`` if unset or invalid."""
-        v = self.get("gerrit.showCommentTailLines")
-        if not v:
-            return _DEFAULT_COMMENT_TAIL_LINES
-        try:
-            n = int(v)
-        except ValueError:
-            return _DEFAULT_COMMENT_TAIL_LINES
-        return n if n >= 1 else _DEFAULT_COMMENT_TAIL_LINES
 
     # -- Commit-message patterns ---------------------------------------------------
 

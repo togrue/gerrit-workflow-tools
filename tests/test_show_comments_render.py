@@ -9,7 +9,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
 from gerrit_workflow_tools.render.comments import (
-    apply_comment_tail,
     format_comment_chain_human,
     format_comment_chain_markdown,
 )
@@ -27,17 +26,6 @@ def test_parse_show_range_rejects_empty_left() -> None:
         parse_show_range("   ..HEAD")
 
 
-def test_apply_comment_tail() -> None:
-    text = "\n".join(f"L{i}" for i in range(5))
-    body, trunc = apply_comment_tail(text, 2, full=False)
-    assert trunc is True
-    assert "L3" in body and "L4" in body
-    assert "L0" not in body
-    full, trunc2 = apply_comment_tail(text, 2, full=True)
-    assert trunc2 is False
-    assert full == text
-
-
 def test_format_comment_chain_human_rounded_box() -> None:
     chain = CommentChain(
         root_id="r1",
@@ -49,7 +37,7 @@ def test_format_comment_chain_human_rounded_box() -> None:
         ),
         resolved=False,
     )
-    lines = format_comment_chain_human(chain, "https://g.example/c/1", tail_n=10, full=True)
+    lines = format_comment_chain_human(chain, "https://g.example/c/1")
     joined = "\n".join(lines)
     assert "╭─ f.py:3" in joined
     assert "╰" in joined
@@ -71,7 +59,7 @@ def test_format_comment_chain_human_hyperlink_label() -> None:
     )
     set_hyperlink_mode(True)
     try:
-        lines = format_comment_chain_human(chain, "https://g.example/c/1", tail_n=10, full=True)
+        lines = format_comment_chain_human(chain, "https://g.example/c/1")
     finally:
         set_hyperlink_mode(False)
     joined = "\n".join(lines)
@@ -94,7 +82,7 @@ def test_format_comment_chain_human_box_border_is_yellow() -> None:
     )
     set_color_mode(True)
     try:
-        lines = format_comment_chain_human(chain, "https://g.example/c/1", tail_n=10, full=True)
+        lines = format_comment_chain_human(chain, "https://g.example/c/1")
     finally:
         set_color_mode(False)
     joined = "\n".join(lines)
