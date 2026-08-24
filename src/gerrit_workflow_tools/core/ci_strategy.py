@@ -1,4 +1,4 @@
-"""Load CI link strategies from ``<scriptsDir>/ci/registry.py`` (and global cache)."""
+"""Load CI link strategies from ``<scriptsDir>/ci/registry.py`` (and global config dir)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import (
     clear_extension_registry_cache,
     local_domain_dir,
-    repo_toplevel,
-    resolve_registry_callable,
+    resolve_tier_callables,
+    run_registry_callables,
 )
 
 _DOMAIN = "ci"
@@ -19,7 +19,7 @@ _PACKAGE = "ger_ci"
 
 
 def ger_ci_dir(cwd: Path | str | None, *, settings: Settings | None = None) -> Path | None:
-    """Return ``<scriptsDir>/ci`` when that directory exists (default scriptsDir: ``.ger``)."""
+    """Return ``<scriptsDir>/ci`` when ``registry.py`` exists there (default scriptsDir: ``.ger``)."""
 
     snap = settings if settings is not None else Settings.from_cwd(cwd)
     return local_domain_dir(cwd, snap.scripts_dir, _DOMAIN)
@@ -38,9 +38,9 @@ def resolve_ci_strategy(
     settings: Settings | None = None,
     web_base: str | None = None,
 ) -> CiStrategy | None:
-    """Return the extract_ci_links callable for *project*, or ``None``."""
+    """Return the first matching ``extract_ci_links`` callable, or ``None``."""
 
-    return resolve_registry_callable(  # type: ignore[return-value]
+    local_callable, global_callable = resolve_tier_callables(
         cwd,
         project,
         domain=_DOMAIN,
@@ -48,6 +48,9 @@ def resolve_ci_strategy(
         settings=settings,
         web_base=web_base,
     )
+    if local_callable is not None:
+        return local_callable  # type: ignore[return-value]
+    return global_callable  # type: ignore[return-value]
 
 
 def extract_ci_links_via_registry(
@@ -59,18 +62,37 @@ def extract_ci_links_via_registry(
     settings: Settings | None = None,
     web_base: str | None = None,
 ) -> list[CiLink]:
-    """Load the project strategy (if any) and return filtered :class:`CiLink` rows."""
+    """Load tiered CI strategies and return filtered :class:`CiLink` rows."""
 
     from gerrit_workflow_tools.core.ci_links import apply_ci_strategy
 
-    strategy = resolve_ci_strategy(cwd, project, settings=settings, web_base=web_base)
-    return apply_ci_strategy(strategy, project=project, checks=checks, messages=messages)
+    tiers = resolve_tier_callables(
+        cwd,
+        project,
+        domain=_DOMAIN,
+        package_name=_PACKAGE,
+        settings=settings,
+        web_base=web_base,
+    )
+
+    def _invoke(strategy: CiStrategy) -> list[CiLink]:
+        return apply_ci_strategy(strategy, project=project, checks=checks, messages=messages)
+
+    def _builtin() -> list[CiLink]:
+        return apply_ci_strategy(None, project=project, checks=checks, messages=messages)
+
+    return run_registry_callables(
+        tiers,
+        invoke=_invoke,
+        builtin=_builtin,
+        label="CI links",
+        project=project,
+    )
 
 
 __all__ = [
     "clear_ci_strategy_cache",
     "extract_ci_links_via_registry",
     "ger_ci_dir",
-    "repo_toplevel",
     "resolve_ci_strategy",
 ]

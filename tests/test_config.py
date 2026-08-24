@@ -13,6 +13,11 @@ from gerrit_workflow_tools.core.git_run import git
 # produced, so the defaults and the parsing of each value can be stated directly.
 
 
+def test_scripts_dir_defaults_and_override() -> None:
+    assert Settings.from_map({}).scripts_dir == ".ger"
+    assert Settings.from_map({"gerrit.scriptsDir": "ext"}).scripts_dir == "ext"
+
+
 def test_stop_pattern_defaults() -> None:
     assert Settings.from_map({}).stop_pattern == _DEFAULT_STOP_PATTERN
 

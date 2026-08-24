@@ -27,6 +27,21 @@ def xdg_cache_home() -> Path:
     return Path.home() / ".cache"
 
 
+def xdg_config_home() -> Path:
+    """Return XDG config home with the standard ``~/.config`` fallback."""
+
+    raw = os.environ.get("XDG_CONFIG_HOME")
+    if raw and raw.strip():
+        return Path(raw).expanduser()
+    return Path.home() / ".config"
+
+
+def gerrit_config_dir(web_base: str) -> Path:
+    """Return the per-Gerrit-host directory for user-wide extension registries."""
+
+    return xdg_config_home() / "ger" / gerrit_cache_host(web_base)
+
+
 def gerrit_cache_dir(web_base: str) -> Path:
     """Return the per-Gerrit-host cache directory."""
 

@@ -26,7 +26,7 @@ from tests.fixtures import configure_gerrit_target
 # Calibrated on cold ``ger log`` / ``ger show`` / ``ger fix`` / ``ger resolve`` (Jul 2026).
 # Leave modest headroom for small refactors; fail hard on O(N) storms.
 _LOG_GIT_BUDGET = 20
-_SHOW_GIT_BUDGET = 20
+_SHOW_GIT_BUDGET = 24
 _FIX_GIT_BUDGET = 10
 _RESOLVE_GIT_BUDGET = 10
 

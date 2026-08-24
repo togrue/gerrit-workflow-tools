@@ -64,7 +64,10 @@ from gerrit_workflow_tools.push_input_line import (
     PushLineState,
     refspec_options,
 )
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
+from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
+from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 logger = logging.getLogger(__name__)
 
@@ -519,7 +522,7 @@ def _commit_lines_for_preview(
     lines: list[str] = []
     for c in rows:
         short_sha, subj = c.short_sha, c.subject
-        disp = summary_highlighter.highlight(subj)
+        disp = summary_highlighter.highlight(subj, sha=c.sha)
         sha_p = short_sha.ljust(8)
         line = f"    {color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{disp}"
         if show_attributes and details_by_triplet is not None and stack is not None:
@@ -530,6 +533,30 @@ def _commit_lines_for_preview(
                 line += _gpush_attribute_suffix(detail if isinstance(detail, dict) else None, merged_reviewers)
         lines.append(line)
     return lines
+
+
+def _summary_highlighter_for_push(
+    cwd: Path,
+    *,
+    branch: str,
+    first_parent: bool,
+    settings: Settings,
+) -> SummaryHighlighter:
+    """Highlighter aligned with the ready boundary for *branch*'s local stack."""
+
+    stack = resolve_stack_context(cwd, settings=settings)
+    _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
+    rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=first_parent)
+    ready_rows = [
+        ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
+    ]
+    return build_summary_highlighter(
+        settings,
+        cwd=cwd,
+        commits=ready_rows,
+        project=stack.project,
+        web_base=settings.gerrit_web_url,
+    )
 
 
 def _stop_pattern_from_reason(boundary_reason: str) -> str | None:
@@ -575,7 +602,7 @@ def _format_boundary_commit_line(
     except GitError:
         return None
     sha_p = short_sha.ljust(8)
-    return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{summary_highlighter.highlight(subject)}"
+    return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{summary_highlighter.highlight(subject, sha=boundary_sha)}"
 
 
 def _print_gpush_preview(  # pylint: disable=too-many-arguments
@@ -1014,6 +1041,12 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
     gerrit: GerritRest | None = None,
 ) -> int:
     """Run the interactive approval loop, execute the push, and handle post-push steps."""
+    summary_highlighter = _summary_highlighter_for_push(
+        cwd,
+        branch=ctx.branch,
+        first_parent=ctx.first_parent,
+        settings=settings,
+    )
     tip = ctx.ready.push_tip_sha
     assert tip is not None  # guaranteed by _build_gerrit_context
     cmd: list[str] = []

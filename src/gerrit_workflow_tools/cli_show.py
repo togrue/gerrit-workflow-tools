@@ -21,6 +21,7 @@ from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
+    resolve_stack_context,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -31,6 +32,9 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 )
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
+from gerrit_workflow_tools.core.git_state import current_branch
+from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
+from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.render.comments import (
     format_unresolved_section_human,
     format_unresolved_section_markdown,
@@ -43,7 +47,7 @@ from gerrit_workflow_tools.render.commit_row import (
     fmt_patchset_column,
     fmt_verified,
 )
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 _COMMIT_SEPARATOR = "═" * 64
 
@@ -255,7 +259,7 @@ def _emit_human_commit(
         print()
         body_lines = body.splitlines()
         if body_lines and summary_highlighter is not None:
-            body_lines[0] = summary_highlighter.highlight(body_lines[0])
+            body_lines[0] = summary_highlighter.highlight(body_lines[0], sha=commit.sha)
         for ln in body_lines:
             print(f"    {ln}")
 
@@ -334,6 +338,26 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     commits = annotate(rows, service=service, cwd=cwd)
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
+
+    if any(t.is_local_commit for t in targets):
+        stack = resolve_stack_context(cwd, settings=settings)
+        branch = current_branch(cwd)
+        _fork, _display, target_tip = merge_base_with_target(
+            cwd,
+            branch if branch != "HEAD" else None,
+            head="HEAD",
+        )
+        stack_rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
+        summary_highlighter = build_summary_highlighter(
+            settings,
+            cwd=cwd,
+            commits=[
+                ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id)
+                for r in stack_rows
+            ],
+            project=stack.project,
+            web_base=settings.gerrit_web_url,
+        )
 
     any_attention = False
     json_payloads: list[dict[str, object]] = []

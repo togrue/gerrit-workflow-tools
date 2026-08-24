@@ -3,11 +3,12 @@
 Resolution order per domain:
 
 1. **Project-local** — ``<gerrit.scriptsDir>/<domain>/registry.py`` (default ``.ger``)
-2. **Global** — ``$XDG_CACHE_HOME/ger/<host>/<domain>/registry.py``
-3. Caller falls back to built-in behavior when this returns ``None``
+2. **Global** — ``$XDG_CONFIG_HOME/ger/<host>/<domain>/registry.py`` (default ``~/.config/ger/``)
+3. Caller falls back to built-in behavior when no tier supplies a callable for *project*
 
-Local replaces global when the local registry file exists and loads successfully.
-Load failures fall through to the next tier.
+When ``registry.py`` exists but fails to import, the command fails (no silent fallback).
+When a tier loads but has no entry for *project*, the next tier is tried.
+When a callable raises at runtime, the next tier is tried, then built-in.
 """
 
 from __future__ import annotations
@@ -18,15 +19,21 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, TypeVar
 
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_dir
+from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
 from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 _MODULE_CACHE: dict[str, ModuleType | None] = {}
+
+
+class RegistryLoadError(ConfigError):
+    """``registry.py`` exists but could not be imported."""
 
 
 def repo_toplevel(cwd: Path | str | None) -> Path | None:
@@ -64,15 +71,15 @@ def local_domain_dir(cwd: Path | str | None, scripts_dir: str, domain: str) -> P
 
 
 def global_domain_dir(web_base: str | None, domain: str) -> Path | None:
-    """Return ``<cacheDir>/<domain>`` when ``registry.py`` exists there."""
+    """Return ``<configDir>/<domain>`` when ``registry.py`` exists there."""
 
     if not web_base or not web_base.strip():
         return None
-    path = gerrit_cache_dir(web_base.strip()) / domain
+    path = gerrit_config_dir(web_base.strip()) / domain
     return path if (path / "registry.py").is_file() else None
 
 
-_DYNAMIC_PACKAGE_PREFIXES = ("ger_ci", "ger_ready", "ger_attention", "ger_inbox", "ger_reviewers")
+_DYNAMIC_PACKAGE_PREFIXES = ("ger_ci", "ger_ready", "ger_attention", "ger_reviewers")
 
 
 def clear_extension_registry_cache(*, package_prefix: str | None = None) -> None:
@@ -96,7 +103,7 @@ def clear_extension_registry_cache(*, package_prefix: str | None = None) -> None
             del sys.modules[key]
 
 
-def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | None:
+def _load_registry_module(domain_dir: Path, package_name: str, *, strict: bool) -> ModuleType | None:
     """Import ``registry.py`` from *domain_dir* once per absolute path."""
 
     registry = domain_dir / "registry.py"
@@ -105,7 +112,10 @@ def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | N
     except OSError:
         cache_key = f"{package_name}:{registry}"
     if cache_key in _MODULE_CACHE:
-        return _MODULE_CACHE[cache_key]
+        cached = _MODULE_CACHE[cache_key]
+        if cached is None and strict:
+            raise RegistryLoadError(f"failed to load strategy registry {registry}")
+        return cached
     if not registry.is_file():
         _MODULE_CACHE[cache_key] = None
         return None
@@ -119,22 +129,25 @@ def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | N
         pkg.__path__ = [str(domain_dir)]  # type: ignore[attr-defined]
 
     module_name = f"{package_name}.registry"
-    # Drop a previously loaded registry for this package so a different tier can load cleanly.
     if module_name in sys.modules:
         del sys.modules[module_name]
 
     spec = importlib.util.spec_from_file_location(module_name, registry)
     if spec is None or spec.loader is None:
         _MODULE_CACHE[cache_key] = None
+        if strict:
+            raise RegistryLoadError(f"failed to load strategy registry {registry}")
         return None
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.warning("failed to load strategy registry %s: %s", registry, exc)
+    except Exception as exc:
         sys.modules.pop(module_name, None)
         _MODULE_CACHE[cache_key] = None
+        if strict:
+            raise RegistryLoadError(f"failed to load strategy registry {registry}: {exc}") from exc
+        logger.warning("failed to load strategy registry %s: %s", registry, exc)
         return None
     _MODULE_CACHE[cache_key] = module
     return module
@@ -168,6 +181,49 @@ def _callable_from_module(
     return None
 
 
+def resolve_tier_callables(
+    cwd: Path | str | None,
+    project: str,
+    *,
+    domain: str,
+    package_name: str,
+    settings: Settings | None = None,
+    web_base: str | None = None,
+    strategies_attr: str = "STRATEGIES",
+    getter_attr: str = "get_strategy",
+) -> tuple[Callable[..., Any] | None, Callable[..., Any] | None]:
+    """Return ``(local, global)`` callables for *project* (each may be ``None``)."""
+
+    snap = settings if settings is not None else Settings.from_cwd(cwd)
+    host_base = web_base if web_base is not None else snap.gerrit_web_url
+
+    local_callable: Callable[..., Any] | None = None
+    local_dir = local_domain_dir(cwd, snap.scripts_dir, domain)
+    if local_dir is not None:
+        module = _load_registry_module(local_dir, package_name, strict=True)
+        if module is not None:
+            local_callable = _callable_from_module(
+                module,
+                project,
+                strategies_attr=strategies_attr,
+                getter_attr=getter_attr,
+            )
+
+    global_callable: Callable[..., Any] | None = None
+    global_dir = global_domain_dir(host_base, domain)
+    if global_dir is not None:
+        module = _load_registry_module(global_dir, package_name, strict=True)
+        if module is not None:
+            global_callable = _callable_from_module(
+                module,
+                project,
+                strategies_attr=strategies_attr,
+                getter_attr=getter_attr,
+            )
+
+    return local_callable, global_callable
+
+
 def resolve_registry_callable(
     cwd: Path | str | None,
     project: str,
@@ -179,32 +235,44 @@ def resolve_registry_callable(
     strategies_attr: str = "STRATEGIES",
     getter_attr: str = "get_strategy",
 ) -> Callable[..., Any] | None:
-    """Return the project strategy callable: local registry → global → ``None``."""
+    """Return the first matching callable: local, then global, else ``None``."""
 
-    snap = settings if settings is not None else Settings.from_cwd(cwd)
-    host_base = web_base if web_base is not None else snap.gerrit_web_url
-
-    local = local_domain_dir(cwd, snap.scripts_dir, domain)
-    if local is not None:
-        module = _load_registry_module(local, package_name)
-        if module is not None:
-            return _callable_from_module(
-                module,
-                project,
-                strategies_attr=strategies_attr,
-                getter_attr=getter_attr,
-            )
-        # Local dir existed but load failed — fall through to global.
-
-    global_dir = global_domain_dir(host_base, domain)
-    if global_dir is None:
-        return None
-    module = _load_registry_module(global_dir, package_name)
-    if module is None:
-        return None
-    return _callable_from_module(
-        module,
+    local_callable, global_callable = resolve_tier_callables(
+        cwd,
         project,
+        domain=domain,
+        package_name=package_name,
+        settings=settings,
+        web_base=web_base,
         strategies_attr=strategies_attr,
         getter_attr=getter_attr,
     )
+    if local_callable is not None:
+        return local_callable
+    return global_callable
+
+
+def run_registry_callables(
+    callables: tuple[Callable[..., Any] | None, Callable[..., Any] | None],
+    *,
+    invoke: Callable[[Callable[..., Any]], T],
+    builtin: Callable[[], T],
+    label: str,
+    project: str,
+) -> T:
+    """Run *invoke* on local, then global, then *builtin* when a tier raises."""
+
+    for tier, strategy in (("local", callables[0]), ("global", callables[1])):
+        if strategy is None:
+            continue
+        try:
+            return invoke(strategy)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning(
+                "%s %s strategy for %r failed: %s; trying next tier",
+                label,
+                tier,
+                project,
+                exc,
+            )
+    return builtin()

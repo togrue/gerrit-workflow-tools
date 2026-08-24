@@ -129,7 +129,7 @@ def primary_line(
 ) -> str:
     summ = fmt_summary_strike(commit.summary) if commit.abandoned else commit.summary
     if summary_highlighter is not None and not commit.abandoned:
-        summ = summary_highlighter.highlight(summ)
+        summ = summary_highlighter.highlight(summ, sha=commit.sha)
     line = f"{primary_line_prefix(commit)}{summ}"
     if show_change_id:
         line += fmt_change_id_suffix(commit.change_id)

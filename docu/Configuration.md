@@ -114,28 +114,29 @@ git config gerrit.logShowUrl true
 
 ---
 
-## Extension scripts (`.ger` and cache)
+## Extension scripts (`.ger` and `~/.config/ger`)
 
-Team- or user-owned Python registries customize CI links, ready boundaries, attention rules, inbox queries, and default reviewers. Each domain uses a `registry.py` that exports either `STRATEGIES: dict[str, Callable]` keyed by exact `gerrit.project`, or `get_strategy(project) -> Callable | None`.
+Team- or user-owned Python registries customize CI links, ready boundaries, attention rules, and default reviewers. Each domain uses a `registry.py` that exports either `STRATEGIES: dict[str, Callable]` keyed by exact `gerrit.project`, or `get_strategy(project) -> Callable | None`.
 
 ### Resolution order
 
 1. **Project-local** — `<gerrit.scriptsDir>/<domain>/registry.py` (default scriptsDir: `.ger`)
-2. **Global** — `$XDG_CACHE_HOME/ger/<host>/<domain>/registry.py` (same host key as the API cache)
+2. **Global** — `$XDG_CONFIG_HOME/ger/<host>/<domain>/registry.py` (default `~/.config/ger/<host>/`)
 3. **Built-in** — hardcoded defaults (subject stop pattern, attention thresholds, etc.)
 
-Local replaces global when the local file exists and loads. Load failures fall through to the next tier. Strategy execution failures log a warning and use the built-in behavior.
+Per tier: if `registry.py` exists but fails to import, the command **fails** (no silent fallback). If the file loads but has no entry for `gerrit.project`, the next tier is tried. If a callable **raises at runtime**, the next tier is tried, then built-in.
 
-`ger cache info` prints the global scripts root next to the SQLite path.
+Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same ready-boundary rules as push (not a separate stop-pattern regex). `gerrit.warningPattern` still controls yellow warning highlights.
+
+`ger cache info` prints the global scripts root (`~/.config/ger/<host>/`) next to the SQLite cache path.
 
 ### Domains
 
 | Domain | Path segment | Role |
 |--------|--------------|------|
 | CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. |
-| Ready boundary | `ready/` | Choose the pushable stack tip. Callable: `find_ready_boundary(*, commits, stop_pattern, overlay) -> BoundaryResult`. |
+| Ready boundary | `ready/` | Choose the pushable stack tip and non-pushable tail highlighting. Callable: `find_ready_boundary(*, commits, stop_pattern, overlay) -> BoundaryResult`. |
 | Attention | `attention/` | Override attention reasons (`STRATEGIES` / `get_strategy`) and optional chain blocking (`CHAIN_BLOCK_STRATEGIES` / `get_chain_block_strategy`). |
-| Inbox | `inbox/` | Build the *to review* query. Callable: `build_to_review_query(*, settings, projects, include_unready) -> str`. (`inbox.toReviewQuery` still wins when set.) |
 | Reviewers | `reviewers/` | Default push reviewers when CLI/branch config does not. Callable: `default_reviewers(*, branch, commits, settings) -> list[str]`. |
 
 **Example (CI):** copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` and edit the `STRATEGIES` keys.

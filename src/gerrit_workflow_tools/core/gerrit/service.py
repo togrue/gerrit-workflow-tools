@@ -314,8 +314,8 @@ class GerritService:
         """Return failed CI check names and transformed :class:`CiLink` rows.
 
         Checks names always come from the Checks plugin (when present). Links come from
-        a repo-local ``.ger/ci`` strategy when one matches *project*; core prefers
-        Checks-derived links over message-derived ones.
+        a project CI strategy (``<scriptsDir>/ci`` or global cache) when one matches
+        *project*; core prefers Checks-derived links over message-derived ones.
         """
 
         from gerrit_workflow_tools.core.ci_links import CiLink, failed_check_names
@@ -339,6 +339,8 @@ class GerritService:
                 project=project,
                 checks=check_rows,
                 messages=message_rows,
+                settings=self.settings,
+                web_base=self.web_base,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("CI strategy failed for %s (%s): %s", change_id, project, exc)
