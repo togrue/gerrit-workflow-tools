@@ -17,6 +17,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.stopPattern` | Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` applies. If unset, built-in default: `^(?:dropme!|todo\b|test!|wip\b)` (case-insensitive). Override with `git config gerrit.stopPattern '…'`. |
 | `gerrit.warningPattern` | Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, `ger show`, and `ger inbox` when color output is enabled. If unset, built-in default: `(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))`. Stop-pattern highlighting takes precedence when both match the same text span. Override with `git config gerrit.warningPattern '…'`. |
 | `gerrit.project` | **Gerrit project name** for change resolution and REST calls (e.g. `mygroup/myrepo`). When unset, parsed from the `gerrit.remote` URL. Set this when the remote URL does not encode the project path Gerrit expects, or when you use a mirror/fork whose URL differs from the server project name. Required input for building **triplets** (`project~branch~Change-Id`) used by `ger log`, `ger show`, `ger push`, `ger fix`, and `ger resolve`. |
+| `gerrit.scriptsDir` | Project-local root for extension registries (default: `.ger`). Relative paths resolve from the repository toplevel; absolute paths are allowed. Domain scripts live at `<scriptsDir>/<domain>/registry.py` (e.g. `ci`, `ready`, `attention`, `inbox`, `reviewers`). When present, a local registry **replaces** the global cache-dir copy for that domain. |
 
 ---
 
@@ -113,18 +114,31 @@ git config gerrit.logShowUrl true
 
 ---
 
-## CI build links (`.ger/ci`)
+## Extension scripts (`.ger` and cache)
 
-Team-owned transforms for failed CI live in the **clone**, not in personal `git config`, so a fresh checkout already has them.
+Team- or user-owned Python registries customize CI links, ready boundaries, attention rules, inbox queries, and default reviewers. Each domain uses a `registry.py` that exports either `STRATEGIES: dict[str, Callable]` keyed by exact `gerrit.project`, or `get_strategy(project) -> Callable | None`.
 
-| Path | Role |
-|------|------|
-| `.ger/ci/registry.py` | Loaded when Verified is −1. Export either `STRATEGIES: dict[str, Callable]` keyed by exact `gerrit.project`, or `get_strategy(project) -> Callable \| None`. |
-| Strategy callable | `extract_ci_links(*, project, checks, messages) -> list[CiLink]` — see `gerrit_workflow_tools.core.ci_links.CiLink`. |
+### Resolution order
 
-**Sources:** Checks plugin rows (preferred) and change messages (fallback). Core drops message-sourced links whenever any Checks-sourced link is returned.
+1. **Project-local** — `<gerrit.scriptsDir>/<domain>/registry.py` (default scriptsDir: `.ger`)
+2. **Global** — `$XDG_CACHE_HOME/ger/<host>/<domain>/registry.py` (same host key as the API cache)
+3. **Built-in** — hardcoded defaults (subject stop pattern, attention thresholds, etc.)
 
-**Example:** copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` and edit the `STRATEGIES` keys.
+Local replaces global when the local file exists and loads. Load failures fall through to the next tier. Strategy execution failures log a warning and use the built-in behavior.
+
+`ger cache info` prints the global scripts root next to the SQLite path.
+
+### Domains
+
+| Domain | Path segment | Role |
+|--------|--------------|------|
+| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. |
+| Ready boundary | `ready/` | Choose the pushable stack tip. Callable: `find_ready_boundary(*, commits, stop_pattern, overlay) -> BoundaryResult`. |
+| Attention | `attention/` | Override attention reasons (`STRATEGIES` / `get_strategy`) and optional chain blocking (`CHAIN_BLOCK_STRATEGIES` / `get_chain_block_strategy`). |
+| Inbox | `inbox/` | Build the *to review* query. Callable: `build_to_review_query(*, settings, projects, include_unready) -> str`. (`inbox.toReviewQuery` still wins when set.) |
+| Reviewers | `reviewers/` | Default push reviewers when CLI/branch config does not. Callable: `default_reviewers(*, branch, commits, settings) -> list[str]`. |
+
+**Example (CI):** copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` and edit the `STRATEGIES` keys.
 
 With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` allows). JSON includes `ci_links` alongside `ci_failures` (names only).
 

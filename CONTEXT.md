@@ -15,7 +15,7 @@ The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open 
 _Avoid_: chain, series, branch commits
 
 **Ready boundary**:
-The first commit in the **local stack** whose subject matches the configured stop pattern. Everything below it is pushable; it and everything above are held back.
+The first commit in the **local stack** that a ready-boundary strategy (or the configured stop pattern) marks as blocking. Everything below it is pushable; it and everything above are held back.
 _Avoid_: cutoff, watermark, stop commit
 
 **Stack context**:

@@ -41,9 +41,13 @@ def main(argv: list[str] | None = None) -> int:
         cache.clear()
         print(f"cleared Gerrit cache for {cache.host}: {cache.path}")
         return 0
+    from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_dir
+
     info = cache.info()
+    scripts_root = gerrit_cache_dir(web_base)
     print(f"host: {info.host}")
     print(f"path: {info.path}")
+    print(f"scripts: {scripts_root}")
     print(f"changes: {info.changes}")
     print(f"accounts: {info.accounts}")
     print(f"comments: {info.comments}")

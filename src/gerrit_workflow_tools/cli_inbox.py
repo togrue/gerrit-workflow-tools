@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
@@ -40,24 +41,46 @@ def build_to_review_query(
     *,
     projects: list[str],
     include_unready: bool,
+    cwd: Path | str | None = None,
 ) -> str:
     """Section query for *to review*, with verified gate and project filters folded in."""
-    custom = settings.inbox_to_review_query
-    if custom:
-        base = custom
-    elif include_unready:
-        base = DEFAULT_TO_REVIEW_ALL_QUERY
-    else:
-        base = DEFAULT_TO_REVIEW_QUERY
-        if settings.inbox_require_verified:
-            base = f"{base} label:{settings.inbox_verified_label}+1"
+    from gerrit_workflow_tools.core.inbox_strategy import build_to_review_query_via_registry
+
     names = list(projects) if projects else list(settings.inbox_projects)
-    if not names:
-        return base
-    if len(names) == 1:
-        return f"{base} project:{names[0]}"
-    inner = " OR ".join(f"project:{name}" for name in names)
-    return f"{base} ({inner})"
+
+    def _builtin() -> str:
+        custom = settings.inbox_to_review_query
+        if custom:
+            base = custom
+        elif include_unready:
+            base = DEFAULT_TO_REVIEW_ALL_QUERY
+        else:
+            base = DEFAULT_TO_REVIEW_QUERY
+            if settings.inbox_require_verified:
+                base = f"{base} label:{settings.inbox_verified_label}+1"
+        if not names:
+            return base
+        if len(names) == 1:
+            return f"{base} project:{names[0]}"
+        inner = " OR ".join(f"project:{name}" for name in names)
+        return f"{base} ({inner})"
+
+    # Wholesale git-config override still wins over scripting.
+    if settings.inbox_to_review_query:
+        return _builtin()
+
+    project = settings.gerrit_project or (names[0] if len(names) == 1 else "")
+    default_query = _builtin()
+    scripted = build_to_review_query_via_registry(
+        cwd if cwd is not None else Path.cwd(),
+        project=project,
+        settings=settings,
+        projects=names,
+        include_unready=include_unready,
+        default_query=default_query,
+        web_base=settings.gerrit_web_url,
+    )
+    return scripted if scripted is not None else default_query
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -281,6 +304,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         settings,
         projects=list(args.project),
         include_unready=bool(args.include_unready),
+        cwd=cwd,
     )
     limit = args.limit if args.limit is not None else settings.inbox_limit
     now = datetime.now(timezone.utc)

@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
@@ -367,18 +368,43 @@ def build_log_commit(
 EDIT_ATTENTION_REASONS = frozenset({"unresolved-comments", "ci-failed"})
 
 
-def annotate_attention(commits: list[LogCommit]) -> None:
+def annotate_attention(
+    commits: list[LogCommit],
+    *,
+    cwd: Path | str | None = None,
+    project: str = "",
+    settings: Settings | None = None,
+    web_base: str | None = None,
+) -> None:
     """Populate ``attention_reasons`` on each commit, including chain-blocking.
 
-    Chain-blocking: an earlier pushed commit blocks later ones when
-    :func:`commit_blocks_chain_for_submittability` says so (Gerrit submittable,
-    plus MERGED equivalence rules). Same rules as ``ger log``.
+    Chain-blocking: an earlier pushed commit blocks later ones when the chain-block
+    strategy (or built-in :func:`commit_blocks_chain_for_submittability`) says so.
+    Same rules as ``ger log``.
     """
+    from gerrit_workflow_tools.core.attention_strategy import (
+        attention_reasons_via_registry,
+        commit_blocks_chain_via_registry,
+    )
+
     prefix_chain_blocks = False
     for commit in commits:
         chain_blocked = commit.pushed and prefix_chain_blocks
-        commit.attention_reasons = determine_attention(commit, chain_blocked=chain_blocked)
-        if commit.pushed and commit_blocks_chain_for_submittability(commit):
+        commit.attention_reasons = attention_reasons_via_registry(
+            cwd,
+            project=project,
+            commit=commit,
+            chain_blocked=chain_blocked,
+            settings=settings,
+            web_base=web_base,
+        )
+        if commit.pushed and commit_blocks_chain_via_registry(
+            cwd,
+            project=project,
+            commit=commit,
+            settings=settings,
+            web_base=web_base,
+        ):
             prefix_chain_blocks = True
 
 

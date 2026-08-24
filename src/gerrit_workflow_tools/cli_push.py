@@ -130,13 +130,44 @@ def _resolve_push_reviewers(
     """Resolve reviewers without merging unrelated sources.
 
     A non-empty ``-i`` line replaces branch config and ``--reviewers``.
-    ``--reviewers`` alone replaces branch config. Otherwise branch ``gerritReviewers`` applies.
+    ``--reviewers`` alone replaces branch config. Otherwise a project
+    ``.ger/reviewers`` strategy applies when present; else branch ``gerritReviewers``.
     Multiple ``--reviewers`` flags are concatenated and deduped in order.
     """
     if interactive:
         return _parse_reviewers_list(interactive)
     if reviewer_flag_segments:
         return _parse_reviewers_list(",".join(reviewer_flag_segments))
+
+    from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
+    from gerrit_workflow_tools.core.reviewers_strategy import default_reviewers_via_registry
+
+    project = settings.gerrit_project or ""
+    try:
+        stack = resolve_stack_context(cwd, settings=settings)
+        project = stack.project
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
+    try:
+        _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
+        rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=True)
+        ready_rows = [
+            ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id)
+            for r in rows
+        ]
+    except Exception:  # pylint: disable=broad-exception-caught
+        ready_rows = []
+    scripted = default_reviewers_via_registry(
+        cwd,
+        project=project,
+        branch=branch,
+        commits=ready_rows,
+        settings=settings,
+        web_base=settings.gerrit_web_url,
+    )
+    if scripted is not None:
+        return scripted
+
     cfg = settings.branch_gerrit_reviewers(branch)
     return _parse_reviewers_list(cfg) if cfg else []
 
@@ -911,6 +942,11 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         private=eff_private,
     )
 
+    project = settings.gerrit_project or ""
+    try:
+        project = resolve_stack_context(cwd, settings=settings).project
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
     r = compute_ready(
         cwd,
         branch=branch,
@@ -919,6 +955,9 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         until=args.until,
         first_parent=fp,
         stop_pattern=settings.stop_pattern,
+        project=project,
+        settings=settings,
+        web_base=settings.gerrit_web_url,
     )
     logger.debug(
         "gpush ready tip=%s range=%s boundary=%s",

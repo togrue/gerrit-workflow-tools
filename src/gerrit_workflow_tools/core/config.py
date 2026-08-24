@@ -36,6 +36,8 @@ _GERRIT_STOP_PATTERN_KEY = "gerrit.stopPattern"
 _GERRIT_WARNING_PATTERN_KEY = "gerrit.warningPattern"
 _DEFAULT_STOP_PATTERN = r"^(?:dropme!|todo\b|test!|wip\b)"
 _DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
+_DEFAULT_SCRIPTS_DIR = ".ger"
+
 
 _TRUTHY = ("1", "true", "yes", "on")
 _REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
@@ -122,6 +124,15 @@ class Settings:
     def gerrit_project(self) -> str | None:
         """``gerrit.project`` override, if set."""
         return self.get("gerrit.project")
+
+    @property
+    def scripts_dir(self) -> str:
+        """``gerrit.scriptsDir``: project-local extension root (default ``.ger``).
+
+        Relative values resolve from the repository toplevel. Absolute paths are allowed.
+        Domain registries live at ``<scriptsDir>/<domain>/registry.py``.
+        """
+        return self.get("gerrit.scriptsDir") or _DEFAULT_SCRIPTS_DIR
 
     @property
     def gerrit_user(self) -> str | None:

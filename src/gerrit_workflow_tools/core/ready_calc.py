@@ -1,15 +1,20 @@
-"""Compute stack push boundaries from stop-pattern rules."""
+"""Compute stack push boundaries from stop-pattern rules or project strategies."""
 
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.change_id import ChangeIdRow
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow, find_ready_boundary_via_registry
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
 logger = logging.getLogger(__name__)
 
@@ -26,18 +31,6 @@ class ReadyResult:
     push_range: str | None  # "upstream_tip..tip" (target_tip field holds upstream tip SHA)
 
 
-def _first_block_index(subjects: list[str], pattern: str) -> tuple[int | None, str | None]:
-    if not pattern:
-        return None, None
-    for i, sub in enumerate(subjects):
-        try:
-            if re.search(pattern, sub, re.IGNORECASE):
-                return i, pattern
-        except re.error:
-            continue
-    return None, None
-
-
 # pylint: disable=too-many-locals
 def compute_ready(
     cwd: Path | str | None,
@@ -48,18 +41,25 @@ def compute_ready(
     until: str | None = None,
     first_parent: bool = True,
     stop_pattern: str,
+    project: str = "",
+    settings: Settings | None = None,
+    web_base: str | None = None,
+    overlay: dict[str, LogCommit] | None = None,
 ) -> ReadyResult:
-    """Compute how many commits are safe to push before a stop-pattern boundary (or entire stack with ``--all``)."""
+    """Compute how many commits are safe to push before a ready boundary (or entire stack with ``--all``)."""
     _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=head)
     rows = commits_in_range(cwd, f"{target_tip}..{head}", first_parent=first_parent)
     shas = [r.sha for r in rows]
-    subjects = [r.subject for r in rows]
+    ready_rows = [
+        ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
+    ]
     logger.debug(
-        "compute_ready target_tip=%s commits=%d all_commits=%s stop_pattern=%r",
+        "compute_ready target_tip=%s commits=%d all_commits=%s stop_pattern=%r project=%r",
         target_tip[:8],
         len(shas),
         all_commits,
         stop_pattern,
+        project,
     )
 
     until_sha: str | None = None
@@ -82,15 +82,20 @@ def compute_ready(
             push_range=f"{target_tip}..{tip}" if tip else None,
         )
 
-    block_idx, matched_pat = _first_block_index(subjects, stop_pattern)
-    logger.debug(
-        "compute_ready block_idx=%s matched_pat=%s",
-        block_idx,
-        matched_pat,
+    boundary = find_ready_boundary_via_registry(
+        cwd,
+        project=project,
+        commits=ready_rows,
+        stop_pattern=stop_pattern,
+        overlay=overlay,
+        settings=settings,
+        web_base=web_base,
     )
+    block_idx = boundary.block_index
+    boundary_reason = boundary.reason
+    logger.debug("compute_ready block_idx=%s reason=%s", block_idx, boundary_reason)
 
     if block_idx is None:
-        # all ready
         tip_idx = len(shas) - 1 if shas else -1
         if until_sha:
             tip_idx = shas.index(until_sha)
@@ -99,16 +104,26 @@ def compute_ready(
         return ReadyResult(
             pushable_count=n,
             boundary_sha=None,
-            boundary_reason="no stop pattern matched",
+            boundary_reason=boundary_reason,
             target_tip=target_tip,
             push_tip_sha=tip,
             push_range=f"{target_tip}..{tip}" if tip else None,
         )
 
-    # Pushable: commits before block_idx
+    if block_idx < 0 or block_idx >= len(shas):
+        tip_idx = len(shas) - 1 if shas else -1
+        tip = shas[tip_idx] if tip_idx >= 0 else None
+        return ReadyResult(
+            pushable_count=len(shas),
+            boundary_sha=None,
+            boundary_reason=boundary_reason,
+            target_tip=target_tip,
+            push_tip_sha=tip,
+            push_range=f"{target_tip}..{tip}" if tip else None,
+        )
+
     pushable_count = block_idx
     boundary_sha = shas[block_idx]
-    boundary_reason = f"subject matches stop pattern {matched_pat!r}"
 
     if pushable_count == 0:
         return ReadyResult(

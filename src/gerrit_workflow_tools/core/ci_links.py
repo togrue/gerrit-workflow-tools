@@ -1,7 +1,8 @@
 """CI failure names and transformed build links for ``ger log``.
 
-Strategies live in the consumer repo under ``.ger/ci/`` and return :class:`CiLink`
-rows. Core prefers Checks-derived links over message-derived ones.
+Strategies live under ``<gerrit.scriptsDir>/ci/`` (default ``.ger/ci/``) or the
+per-host cache directory, and return :class:`CiLink` rows. Core prefers
+Checks-derived links over message-derived ones.
 """
 
 from __future__ import annotations

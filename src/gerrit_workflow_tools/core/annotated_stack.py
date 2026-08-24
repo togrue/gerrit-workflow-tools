@@ -124,7 +124,19 @@ def annotate(
     an earlier commit to block the ones after it.
     """
     commits = service.fetch_gerrit_data(rows, cwd=cwd)
-    annotate_attention(commits)
+    project = ""
+    try:
+        stack = resolve_stack_context(cwd, settings=service.settings)
+        project = stack.project
+    except Exception:  # pylint: disable=broad-exception-caught
+        project = service.settings.gerrit_project or ""
+    annotate_attention(
+        commits,
+        cwd=cwd,
+        project=project,
+        settings=service.settings,
+        web_base=service.web_base,
+    )
     return commits
 
 
