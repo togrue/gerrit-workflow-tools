@@ -111,6 +111,9 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     assert "# abandoned" in out
     assert "g.example" in out or "/+/" in out
     assert "✓" not in out
+    cid = rows[0].change_id
+    assert cid
+    assert cid[:12] not in out
 
 
 def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -301,6 +304,19 @@ def test_log_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest.
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
         stack_repo, log_main, ["--show-change-id", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
+    )
+    assert code == 0, err
+    cid = rows[0].change_id
+    assert cid
+    assert cid[:12] in out
+
+
+def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    code, out, err = run_cli(
+        stack_repo, log_main, ["-vv", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
     )
     assert code == 0, err
     cid = rows[0].change_id

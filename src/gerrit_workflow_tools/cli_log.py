@@ -144,8 +144,10 @@ def _build_parser() -> argparse.ArgumentParser:
     add_verbose_and_debug_log_args(
         parser,
         debug_log_help="Log git commands to stderr.",
+        verbose_count=True,
         verbose_help=(
             "Expanded layout: oneline summary, indented details, Gerrit URL on the next line when URLs are on. "
+            "Repeat (``-vv``) to also append Change-Id. "
             "Does not enable diagnostic logging; use ``--debug-log`` for that."
         ),
     )
@@ -253,9 +255,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     )
 
     gdef = settings.log_defaults
-    verbose = bool(args.verbose)
+    verbose_level = int(args.verbose)
+    verbose = verbose_level >= 1
     show_url = bool(args.url) or gdef["show_url"] or verbose or is_hyperlink_enabled()
-    show_change_id = bool(args.show_change_id) or gdef["show_change_id"]
+    show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
 
     rev_range = resolve_rev_range(cwd, settings=settings, arg_rev_range=args.rev_range)
     for branch in branches_needing_upstream(cwd, rev_range, settings=settings):
