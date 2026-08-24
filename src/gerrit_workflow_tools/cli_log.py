@@ -24,7 +24,6 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_RED,
     ANSI_YELLOW,
     color_text,
-    format_link,
     is_hyperlink_enabled,
     visible_len,
 )
@@ -41,7 +40,7 @@ from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstr
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
-    extra_detail_lines,
+    continuation_lines,
     oneline_body,
     oneline_line,
 )
@@ -139,15 +138,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--show-change-id",
         action="store_true",
-        help="Append Change-Id to each text line. Default: ``gerrit.logShowChangeId``.",
+        help="Show full Change-Id on an indented continuation line. Default: ``gerrit.logShowChangeId``.",
     )
     add_verbose_and_debug_log_args(
         parser,
         debug_log_help="Log git commands to stderr.",
         verbose_count=True,
         verbose_help=(
-            "Expanded layout: oneline summary, indented details, Gerrit URL on the next line when URLs are on. "
-            "Repeat (``-vv``) to also append Change-Id. "
+            "Add indented CI pipeline lines below each commit (``-vv`` also shows Change-Id). "
+            "The primary line layout is unchanged. "
             "Does not enable diagnostic logging; use ``--debug-log`` for that."
         ),
     )
@@ -166,20 +165,17 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
     visible: list[LogCommit],
     *,
     show_url: bool,
-    verbose: bool,
     summary_highlighter: SummaryHighlighter | None,
-    show_change_id: bool,
     attn_col: int,
 ) -> int | None:
     """Compute visible column where URLs should start for compact one-line output."""
-    if not show_url or verbose:
+    if not show_url:
         return None
     widths = [
         visible_len(
             oneline_body(
                 c,
                 summary_highlighter=summary_highlighter,
-                show_change_id=show_change_id,
                 attention_col=attn_col,
             )
         )
@@ -194,7 +190,7 @@ def _compute_url_start_visible(  # pylint: disable=too-many-arguments
 def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     *,
     visible: list[LogCommit],
-    verbose: bool,
+    verbose_level: int,
     show_url: bool,
     show_change_id: bool,
     summary_highlighter: SummaryHighlighter | None,
@@ -203,43 +199,33 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     attn_col = attention_column(
         visible,
         summary_highlighter=summary_highlighter,
-        show_change_id=show_change_id,
     )
     url_start_visible = _compute_url_start_visible(
         visible,
         show_url=show_url,
-        verbose=verbose,
         summary_highlighter=summary_highlighter,
-        show_change_id=show_change_id,
         attn_col=attn_col,
     )
 
     for commit in visible:
-        if verbose:
-            ind = " " * continuation_indent(commit)
-            intro = oneline_line(
+        print(
+            oneline_line(
                 commit,
                 summary_highlighter=summary_highlighter,
-                include_url=False,
-                show_change_id=show_change_id,
+                include_url=show_url,
                 attention_col=attn_col,
+                url_start_visible=url_start_visible,
             )
-            print(intro)
-            if show_url and commit.gerrit_url:
-                print(f"{ind}{color_text(format_link(commit.gerrit_url), ANSI_DIM)}")
-            for d in extra_detail_lines(commit):
-                print(f"{ind}{d}")
-        else:
-            print(
-                oneline_line(
-                    commit,
-                    summary_highlighter=summary_highlighter,
-                    include_url=show_url,
-                    show_change_id=show_change_id,
-                    attention_col=attn_col,
-                    url_start_visible=url_start_visible,
-                )
-            )
+        )
+        detail_lines = continuation_lines(
+            commit,
+            verbose_level=verbose_level,
+            show_change_id=show_change_id,
+        )
+        if detail_lines:
+            ind = " " * continuation_indent(commit)
+            for line in detail_lines:
+                print(f"{ind}{line}")
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -256,8 +242,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     gdef = settings.log_defaults
     verbose_level = int(args.verbose)
-    verbose = verbose_level >= 1
-    show_url = bool(args.url) or gdef["show_url"] or verbose or is_hyperlink_enabled()
+    show_url = bool(args.url) or gdef["show_url"] or is_hyperlink_enabled()
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
 
     rev_range = resolve_rev_range(cwd, settings=settings, arg_rev_range=args.rev_range)
@@ -266,7 +251,12 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             return int(ExitCode.ATTENTION)
 
     stack_view = load_annotated_stack(
-        cwd, rev_range, settings=settings, first_parent=not args.follow_merges, gerrit=gerrit
+        cwd,
+        rev_range,
+        settings=settings,
+        first_parent=not args.follow_merges,
+        gerrit=gerrit,
+        fetch_ci_pipelines=verbose_level >= 1,
     )
     if not stack_view.commits:
         print("(no commits in range)")
@@ -317,6 +307,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
                 "ci_links": [
                     {"label": link.label, "url": link.url, "source": link.source} for link in c.ci_links
                 ],
+                "ci_pipelines": [
+                    {
+                        "label": pipe.label,
+                        "state": pipe.state,
+                        **({"url": pipe.url} if pipe.url else {}),
+                    }
+                    for pipe in c.ci_pipelines
+                ],
                 "gerrit_url": c.gerrit_url,
                 "submittable": c.submittable,
                 "change_id": c.change_id,
@@ -334,7 +332,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     _render_text_output(
         visible=visible,
-        verbose=verbose,
+        verbose_level=verbose_level,
         show_url=show_url,
         show_change_id=show_change_id,
         summary_highlighter=summary_highlighter,

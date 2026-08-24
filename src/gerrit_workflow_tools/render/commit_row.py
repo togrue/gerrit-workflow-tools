@@ -18,7 +18,7 @@ from gerrit_workflow_tools.cli_style import (
     is_hyperlink_enabled,
     visible_len,
 )
-from gerrit_workflow_tools.core.ci_links import CiLink
+from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
     code_review_token,
@@ -30,6 +30,8 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 # Fixed width for the abbreviated SHA so status columns line up across commits.
 _STATUS_SHA_COL_WIDTH = 8
+
+_DETAIL_LABEL_WIDTH = len("Change-Id:")
 
 _PATCHSET_COLOR: dict[str, str] = {
     "a": ANSI_DIM,
@@ -114,46 +116,31 @@ def continuation_indent(commit: LogCommit) -> int:
     return visible_len(primary_line_prefix(commit))
 
 
-def fmt_change_id_suffix(change_id: str | None) -> str:
-    if not change_id:
-        return ""
-    disp = change_id if len(change_id) <= 14 else change_id[:12] + "…"
-    return color_text(f"  {disp}", ANSI_DIM)
+def _detail_label(text: str) -> str:
+    return color_text(text.ljust(_DETAIL_LABEL_WIDTH), ANSI_DIM)
+
+
+def _detail_value_pad() -> str:
+    return " " * (_DETAIL_LABEL_WIDTH + 1)
 
 
 def primary_line(
     commit: LogCommit,
     *,
     summary_highlighter: SummaryHighlighter | None = None,
-    show_change_id: bool = False,
 ) -> str:
     summ = fmt_summary_strike(commit.summary) if commit.abandoned else commit.summary
     if summary_highlighter is not None and not commit.abandoned:
         summ = summary_highlighter.highlight(summ, sha=commit.sha)
-    line = f"{primary_line_prefix(commit)}{summ}"
-    if show_change_id:
-        line += fmt_change_id_suffix(commit.change_id)
-    return line
+    return f"{primary_line_prefix(commit)}{summ}"
 
 
-def extra_detail_lines(commit: LogCommit) -> list[str]:
-    """Indented CI failure lines (one or many), or empty list when CI is clean."""
-    if commit.ci_links:
-        if len(commit.ci_links) == 1:
-            return [color_text(f"# failed: {_format_ci_link_body(commit.ci_links[0])}", ANSI_RED)]
-        lines = [color_text("# failed checks:", ANSI_RED)]
-        for link in commit.ci_links:
-            lines.append(color_text(f"  · {_format_ci_link_body(link)}", ANSI_RED))
-        return lines
-    failures = commit.ci_failures
-    if not failures:
-        return []
-    if len(failures) == 1:
-        return [color_text(f"# failed: {failures[0]}", ANSI_RED)]
-    lines = [color_text("# failed checks:", ANSI_RED)]
-    for name in failures:
-        lines.append(color_text(f"  · {name}", ANSI_RED))
-    return lines
+def _ci_state_color(state: str) -> str:
+    if state == "FAILED":
+        return ANSI_RED
+    if state == "SUCCESSFUL":
+        return ANSI_GREEN
+    return ANSI_DIM
 
 
 def _format_ci_link_body(link: CiLink) -> str:
@@ -161,6 +148,71 @@ def _format_ci_link_body(link: CiLink) -> str:
     if is_hyperlink_enabled():
         return format_link(link.url, label=link.label)
     return f"{link.label} {link.url}"
+
+
+def _format_ci_pipeline_item(pipeline: CiPipeline) -> str:
+    color = _ci_state_color(pipeline.state)
+    if pipeline.url and is_hyperlink_enabled():
+        return color_text(format_link(pipeline.url, label=pipeline.label), color)
+    if pipeline.url:
+        return color_text(f"{pipeline.label} {pipeline.url}", color)
+    return color_text(pipeline.label, color)
+
+
+def _pipelines_for_display(commit: LogCommit) -> list[CiPipeline]:
+    if commit.ci_pipelines:
+        return commit.ci_pipelines
+    if commit.ci_links:
+        return [
+            CiPipeline(label=link.label, state="FAILED", url=link.url) for link in commit.ci_links
+        ]
+    return [CiPipeline(label=name, state="FAILED", url=None) for name in commit.ci_failures]
+
+
+def format_ci_lines(commit: LogCommit) -> list[str]:
+    """Indented CI continuation lines, or empty when there is no CI data."""
+    pipelines = _pipelines_for_display(commit)
+    if not pipelines:
+        return []
+
+    label = _detail_label("CI:")
+    if is_hyperlink_enabled():
+        items = " ".join(_format_ci_pipeline_item(p) for p in pipelines)
+        return [f"{label} {items}"]
+
+    lines = [f"{label} {_format_ci_pipeline_item(pipelines[0])}"]
+    pad = _detail_value_pad()
+    for pipeline in pipelines[1:]:
+        lines.append(f"{pad}{_format_ci_pipeline_item(pipeline)}")
+    return lines
+
+
+def format_change_id_line(change_id: str | None) -> str | None:
+    if not change_id:
+        return None
+    return f"{_detail_label('Change-Id:')} {change_id}"
+
+
+def continuation_lines(
+    commit: LogCommit,
+    *,
+    verbose_level: int = 0,
+    show_change_id: bool = False,
+) -> list[str]:
+    """Continuation detail lines below the primary oneline row."""
+    lines: list[str] = []
+    if verbose_level >= 1:
+        lines.extend(format_ci_lines(commit))
+    if show_change_id:
+        change_line = format_change_id_line(commit.change_id)
+        if change_line:
+            lines.append(change_line)
+    return lines
+
+
+def extra_detail_lines(commit: LogCommit) -> list[str]:
+    """CI continuation lines for ``ger show`` and other compact detail views."""
+    return format_ci_lines(commit)
 
 
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
@@ -207,14 +259,12 @@ def attention_column(
     commits: list[LogCommit],
     *,
     summary_highlighter: SummaryHighlighter | None = None,
-    show_change_id: bool = False,
 ) -> int:
     widths = [
         visible_len(
             primary_line(
                 commit,
                 summary_highlighter=summary_highlighter,
-                show_change_id=show_change_id,
             )
         )
         for commit in commits
@@ -229,14 +279,12 @@ def oneline_body(
     commit: LogCommit,
     *,
     summary_highlighter: SummaryHighlighter | None = None,
-    show_change_id: bool = False,
     attention_col: int = 0,
 ) -> str:
     """Oneline text through attention suffix; excludes Gerrit URL."""
     base = primary_line(
         commit,
         summary_highlighter=summary_highlighter,
-        show_change_id=show_change_id,
     )
     suffix = attention_suffix(commit)
     if suffix:
@@ -250,14 +298,12 @@ def oneline_line(
     *,
     summary_highlighter: SummaryHighlighter | None = None,
     include_url: bool,
-    show_change_id: bool = False,
     attention_col: int = 0,
     url_start_visible: int | None = None,
 ) -> str:
     body = oneline_body(
         commit,
         summary_highlighter=summary_highlighter,
-        show_change_id=show_change_id,
         attention_col=attention_col,
     )
     if include_url and commit.gerrit_url:

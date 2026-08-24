@@ -29,9 +29,9 @@ i9j0k1l2 p  v-1 cr+1 com  # Handle timeout                 # build failed, 1 unr
 m3n4o5p6 -       com      # WIP: experiment                # not-pushed
 ```
 
-When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the line (or on the next line with `-v`). The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `gerrit.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
+When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the primary line. The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `gerrit.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
 
-With `--show-change-id`, a truncated Change-Id is appended after the subject.
+With `--show-change-id` (or `-vv`), the full Change-Id appears on an indented continuation line below the commit — never truncated, and never on the primary line.
 
 ---
 
@@ -67,7 +67,7 @@ Aggregated **Verified** label vote on the current patch set.
 | `v0` | Verified 0 (neutral / no +1 yet) |
 | `v?` | Unknown or not applicable |
 
-With `-v` / `--verbose`, failed check names appear on indented lines below the commit (`# failed: …`). When the repo provides a **CI strategy** under `.ger/ci/` (see [Configuration.md](Configuration.md#ci-build-links-gerci)), those lines become clickable console/deep links (OSC 8 when hyperlinks are on; otherwise `label url`).
+With `-v` / `--verbose`, CI pipeline names appear on indented `CI:` lines below the commit. Failed pipelines are red, successful ones green. When the repo provides a **CI strategy** under `.ger/ci/` (see [Configuration.md](Configuration.md#ci-build-links-gerci)), pipeline names become clickable links on one line when hyperlinks are on; otherwise each pipeline is shown as `label url` on its own line.
 
 ### Code-Review (`cr+2`, `cr+1`, `cr0`, `cr-1`, `cr-2`, `cr?`)
 
@@ -141,12 +141,12 @@ Only non-zero categories after `ready` are shown.
 
 ---
 
-## Verbose mode (`-v`)
+## Verbose mode (`-v` / `-vv`)
 
-Same columns on the first line, plus:
+The **primary line is identical** to default `ger log` (including inline `Open in gerrit` when hyperlinks are on). Verbosity only adds indented continuation lines:
 
-- Gerrit URL on the following indented line (when URLs are enabled)
-- Indented `# failed: …` lines listing CI check names
+- `-v`: `CI:` row listing all CI pipelines (failed in red, successful in green)
+- `-vv`: `CI:` row plus full `Change-Id:` line
 
 Use verbose mode when the compact line is not enough context.
 

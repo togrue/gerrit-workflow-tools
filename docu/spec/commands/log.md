@@ -32,8 +32,8 @@ ger log [options] [REV_RANGE]
 | `--color WHEN` | `always` \| `auto` \| `never` |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
 | `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `gerrit.logShowUrl`. |
-| `--show-change-id` | Append Change-Id on text lines (default: `gerrit.logShowChangeId`) |
-| `-v`, `--verbose` | Expanded layout: indented detail lines; URLs on following line when URLs enabled |
+| `--show-change-id` | Show full Change-Id on an indented continuation line (default: `gerrit.logShowChangeId`) |
+| `-v`, `--verbose` | Add indented `CI:` pipeline lines below each commit; primary line unchanged. Repeat (`-vv`) to also show Change-Id. |
 | `--debug-log` | Log git commands to stderr (repeat for more detail) |
 | `--follow-merges` | Include merge commits in range (see shared helper in `cli_common`) |
 
@@ -70,7 +70,7 @@ A commit with no usable Change-Id footer (missing or malformed) must include `mi
 
 ## JSON fields
 
-Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `ci_links`, `gerrit_url`, `submittable`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid. `ci_links` is a list of `{label, url, source}` (`source`: `checks` \| `message`) produced by a repo-local CI strategy when present; otherwise `[]`.
+Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `ci_links`, `ci_pipelines`, `gerrit_url`, `submittable`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid. `ci_links` is a list of `{label, url, source}` (`source`: `checks` \| `message`) produced by a repo-local CI strategy when present; otherwise `[]`. `ci_pipelines` lists Checks-plugin rows as `{label, state, url?}` when fetched (verbose log / show).
 
 ---
 

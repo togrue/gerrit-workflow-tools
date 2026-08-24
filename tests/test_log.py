@@ -90,7 +90,7 @@ def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch
 
 
 def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``--verbose``: oneline row with attention; indented URL; no duplicate comment-count detail line."""
+    """``--verbose``: same primary row as default; ``CI:`` on continuation lines."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{} for _ in rows]
@@ -98,10 +98,22 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     overrides[1] = {"verified": 0, "cr": 0, "unresolved_comment_count": 2, "submittable": False}
     overrides[-1] = {"status": "ABANDONED", "submittable": False}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    first_cid = rows[0].change_id
+    assert first_cid
+    store = ChangeStore(
+        details,
+        checks={f"testproj~main~{first_cid}": [{"state": "FAILED", "checker_name": "verify"}]},
+    )
+    base_args = ["--color=never", "--hyperlinks", "always"]
+    code_plain, out_plain, err_plain = run_cli(
+        stack_repo, log_main, base_args, monkeypatch, gerrit=store
+    )
     code, out, err = run_cli(
-        stack_repo, log_main, ["--verbose", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
+        stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store
     )
     assert code == 1, err
+    assert code_plain in (0, 1), err_plain
+    assert _primary_log_lines(out_plain) == _primary_log_lines(out)
     assert "v? " in out
     assert "cr? " in out
     assert "# submittable" in out
@@ -109,11 +121,22 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     assert "2 unresolved comments" in out
     assert "# comments:" not in out
     assert "# abandoned" in out
-    assert "g.example" in out or "/+/" in out
+    assert GERRIT_LINK_LABEL in strip_ansi(out)
+    assert "CI:" in out
+    assert "verify" in out
+    assert "# failed:" not in out
     assert "✓" not in out
-    cid = rows[0].change_id
-    assert cid
-    assert cid[:12] not in out
+    assert "Change-Id:" not in out
+
+
+def _primary_log_lines(out: str) -> list[str]:
+    lines: list[str] = []
+    for line in out.splitlines():
+        if line.startswith("summary:"):
+            break
+        if line and not line[0].isspace():
+            lines.append(line)
+    return lines
 
 
 def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -298,7 +321,7 @@ def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "error" in err.lower()
 
 
-def test_log_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_show_change_id_on_continuation_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
@@ -308,7 +331,9 @@ def test_log_show_change_id_appends_token(stack_repo: Path, monkeypatch: pytest.
     assert code == 0, err
     cid = rows[0].change_id
     assert cid
-    assert cid[:12] in out
+    assert f"Change-Id: {cid}" in out
+    for line in _primary_log_lines(out):
+        assert cid not in line
 
 
 def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -321,7 +346,9 @@ def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest
     assert code == 0, err
     cid = rows[0].change_id
     assert cid
-    assert cid[:12] in out
+    assert f"Change-Id: {cid}" in out
+    for line in _primary_log_lines(out):
+        assert cid not in line
 
 
 def _unicode_strikethrough(s: str) -> str:
@@ -449,7 +476,7 @@ def test_log_hyperlinks_verbose_uses_label(stack_repo: Path, monkeypatch: pytest
     assert code == 0, err
     assert "\x1b]8;;https://gerrit.example" in out
     assert GERRIT_LINK_LABEL in strip_ansi(out)
-    assert "https://gerrit.example" not in strip_ansi(out)
+    assert "https://gerrit.example" not in strip_ansi(_primary_log_lines(out)[0])
 
 
 def test_log_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

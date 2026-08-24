@@ -184,7 +184,13 @@ class GerritService:
         jobs = [_account_job(account_id) for account_id in account_ids]
         return dict(parallel_map(jobs))
 
-    def fetch_gerrit_data(self, commits: list[Any], *, cwd: Path | str | None = None) -> list[Any]:
+    def fetch_gerrit_data(
+        self,
+        commits: list[Any],
+        *,
+        cwd: Path | str | None = None,
+        fetch_ci_pipelines: bool = False,
+    ) -> list[Any]:
         """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
 
         from gerrit_workflow_tools.core.comment_chains import count_unresolved_in_file_map
@@ -211,6 +217,8 @@ class GerritService:
                 triplet = build_triplet(stack.project, stack.push_branch, row.change_id)
                 detail = detail_by_triplet.get(triplet)
             lc, needed = build_log_commit(row, detail, self.web_base, cwd)
+            if fetch_ci_pipelines and lc.pushed:
+                needed = needed | frozenset({"checks"})
             result.append(lc)
             if needed and detail is not None:
                 triplet = detail.get("id")
@@ -231,9 +239,10 @@ class GerritService:
                     logger.debug("comments follow-up failed for %s: %s", triplet, exc)
             if "checks" in kinds:
                 try:
-                    names, links = self._fetch_ci_result(triplet, project=stack.project)
+                    names, links, pipelines = self._fetch_ci_result(triplet, project=stack.project)
                     updates["checks"] = names
                     updates["ci_links"] = links
+                    updates["ci_pipelines"] = pipelines
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("checks follow-up failed for %s: %s", triplet, exc)
             if "reviewers" in kinds:
@@ -252,6 +261,8 @@ class GerritService:
                 result[idx].ci_failures = updates["checks"]
             if "ci_links" in updates:
                 result[idx].ci_links = updates["ci_links"]
+            if "ci_pipelines" in updates:
+                result[idx].ci_pipelines = updates["ci_pipelines"]
             if "reviewers" in updates:
                 result[idx].reviewers = updates["reviewers"]
 
@@ -310,15 +321,10 @@ class GerritService:
             follow_up_unmatched=unmatched,
         )
 
-    def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list]:
-        """Return failed CI check names and transformed :class:`CiLink` rows.
+    def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list, list]:
+        """Return failed CI names, transformed links, and all Checks-plugin pipelines."""
 
-        Checks names always come from the Checks plugin (when present). Links come from
-        a project CI strategy (``<scriptsDir>/ci`` or global cache) when one matches
-        *project*; core prefers Checks-derived links over message-derived ones.
-        """
-
-        from gerrit_workflow_tools.core.ci_links import CiLink, failed_check_names
+        from gerrit_workflow_tools.core.ci_links import CiLink, ci_pipelines_from_checks, failed_check_names
         from gerrit_workflow_tools.core.ci_strategy import extract_ci_links_via_registry
 
         try:
@@ -344,7 +350,8 @@ class GerritService:
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("CI strategy failed for %s (%s): %s", change_id, project, exc)
-        return names, links
+        pipelines = ci_pipelines_from_checks(check_rows, links)
+        return names, links, pipelines
 
     def _refresh_after_mutation(self, change_id: str) -> Change:
         rest_ref = change_id_for_gerrit_rest_path(change_id)

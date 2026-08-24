@@ -49,8 +49,8 @@ def test_ger_log_show_and_push_dry_run(
         monkeypatch,
     )
     assert code_log == 0, elog
-    # Text mode appends a shortened Change-Id token (not a "Change-Id:" footer line).
-    assert re.search(r"I[a-f0-9]{8}", out_log, re.IGNORECASE), out_log
+    # Text mode shows the full Change-Id on an indented continuation line.
+    assert re.search(r"Change-Id:\s+I[a-f0-9]{40}", out_log, re.IGNORECASE), out_log
 
     tip = git_out("rev-parse", "HEAD", cwd=repo).strip()
     code_show, out_show, eshow = run_cli(repo, ger_show_main, ["--color", "never", tip], monkeypatch)

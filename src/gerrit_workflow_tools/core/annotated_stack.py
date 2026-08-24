@@ -117,13 +117,14 @@ def annotate(
     *,
     service: GerritService,
     cwd: Path | str | None,
+    fetch_ci_pipelines: bool = False,
 ) -> list[LogCommit]:
     """Overlay Gerrit state onto *rows* and annotate attention, oldest first.
 
     Order matters: attention includes chain-blocking, so *rows* must be in stack order for
     an earlier commit to block the ones after it.
     """
-    commits = service.fetch_gerrit_data(rows, cwd=cwd)
+    commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
     project = ""
     try:
         stack = resolve_stack_context(cwd, settings=service.settings)
@@ -180,6 +181,7 @@ def load_annotated_stack(
     settings: Settings,
     first_parent: bool = True,
     gerrit: GerritRest | None = None,
+    fetch_ci_pipelines: bool = False,
 ) -> AnnotatedStack:
     """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
 
@@ -195,5 +197,5 @@ def load_annotated_stack(
     if not rows:
         return AnnotatedStack()
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    commits = annotate(rows, service=service, cwd=cwd)
+    commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
     return AnnotatedStack(commits=commits, notes_by_sha=_multi_branch_notes(service, rows, cwd))

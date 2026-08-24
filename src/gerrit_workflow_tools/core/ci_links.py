@@ -25,6 +25,15 @@ class CiLink:
     source: CiLinkSource
 
 
+@dataclass(frozen=True)
+class CiPipeline:
+    """One Checks-plugin row for verbose ``ger log`` CI display."""
+
+    label: str
+    state: str
+    url: str | None = None
+
+
 def failed_check_names(checks: Sequence[Mapping[str, Any]]) -> list[str]:
     """Return display names for Checks rows in ``FAILED`` state."""
 
@@ -36,6 +45,31 @@ def failed_check_names(checks: Sequence[Mapping[str, Any]]) -> list[str]:
         if name:
             failed.append(str(name))
     return failed
+
+
+def ci_pipelines_from_checks(
+    checks: Sequence[Mapping[str, Any]],
+    links: Sequence[CiLink],
+) -> list[CiPipeline]:
+    """Build display pipelines from Checks rows, overlaying strategy URLs by label."""
+
+    link_by_label = {link.label: link.url for link in links}
+    pipelines: list[CiPipeline] = []
+    for check in checks:
+        name = check.get("checker_name") or check.get("name") or ""
+        if not name:
+            continue
+        label = str(name)
+        raw_url = check.get("url") or check.get("external_id") or ""
+        row_url = str(raw_url) if isinstance(raw_url, str) and raw_url.startswith("http") else None
+        pipelines.append(
+            CiPipeline(
+                label=label,
+                state=str(check.get("state") or ""),
+                url=link_by_label.get(label) or row_url,
+            )
+        )
+    return pipelines
 
 
 def prefer_checks_links(links: Sequence[CiLink]) -> list[CiLink]:

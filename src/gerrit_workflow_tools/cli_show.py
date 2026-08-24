@@ -41,7 +41,7 @@ from gerrit_workflow_tools.render.comments import (
 )
 from gerrit_workflow_tools.render.commit_row import (
     attention_suffix,
-    extra_detail_lines,
+    continuation_lines,
     fmt_code_review,
     fmt_comments,
     fmt_patchset_column,
@@ -177,6 +177,14 @@ def _commit_json_payload(
         "ci_links": [
             {"label": link.label, "url": link.url, "source": link.source} for link in commit.ci_links
         ],
+        "ci_pipelines": [
+            {
+                "label": pipe.label,
+                "state": pipe.state,
+                **({"url": pipe.url} if pipe.url else {}),
+            }
+            for pipe in commit.ci_pipelines
+        ],
         "gerrit_url": commit.gerrit_url,
         "submittable": commit.submittable,
         "attention_reasons": commit.attention_reasons,
@@ -252,8 +260,8 @@ def _emit_human_commit(
 
     if commit.gerrit_url:
         print(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(commit.gerrit_url), ANSI_YELLOW)}")
-    for d in extra_detail_lines(commit):
-        print(d)
+    for line in continuation_lines(commit, verbose_level=1):
+        print(line)
 
     if body:
         print()
@@ -335,7 +343,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         _print_resolution_note(format_resolution_note(resolved.resolution), use_color=use_color)
 
     rows = [t.row for t in targets]
-    commits = annotate(rows, service=service, cwd=cwd)
+    commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=True)
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
 

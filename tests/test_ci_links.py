@@ -11,7 +11,9 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_style import init_hyperlink_mode, strip_ansi
 from gerrit_workflow_tools.core.ci_links import (
     CiLink,
+    CiPipeline,
     apply_ci_strategy,
+    ci_pipelines_from_checks,
     failed_check_names,
     prefer_checks_links,
 )
@@ -19,7 +21,7 @@ from gerrit_workflow_tools.core.ci_strategy import clear_ci_strategy_cache, reso
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.render.commit_row import extra_detail_lines
+from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_ci_lines
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -225,6 +227,70 @@ STRATEGIES = {"testproj": _msg_only}
     assert matched.ci_links[0].source == "message"
 
 
+def test_ci_pipelines_from_checks_overlays_strategy_urls() -> None:
+    checks = [
+        {"state": "FAILED", "checker_name": "build", "url": "https://ci/build"},
+        {"state": "SUCCESSFUL", "checker_name": "lint"},
+    ]
+    links = [CiLink(label="build", url="https://ci/build/console", source="checks")]
+    pipelines = ci_pipelines_from_checks(checks, links)
+    assert pipelines == [
+        CiPipeline(label="build", state="FAILED", url="https://ci/build/console"),
+        CiPipeline(label="lint", state="SUCCESSFUL", url=None),
+    ]
+
+
+def test_format_ci_lines_hyperlink_single_line() -> None:
+    init_hyperlink_mode(hyperlinks="always")
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="aaaaaaaa",
+        summary="x",
+        change_id=None,
+        pushed=True,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ACTIVE,
+        verified=-1,
+        code_review=None,
+        comments_unresolved=0,
+        ci_pipelines=[
+            CiPipeline(label="build", state="FAILED", url="https://ci/build"),
+            CiPipeline(label="lint", state="SUCCESSFUL", url="https://ci/lint"),
+        ],
+    )
+    lines = format_ci_lines(commit)
+    assert len(lines) == 1
+    assert strip_ansi(lines[0]).startswith("CI:")
+    assert "build" in strip_ansi(lines[0])
+    assert "lint" in strip_ansi(lines[0])
+    init_hyperlink_mode(hyperlinks="never")
+
+
+def test_format_ci_lines_plain_multi_line() -> None:
+    init_hyperlink_mode(hyperlinks="never")
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="aaaaaaaa",
+        summary="x",
+        change_id=None,
+        pushed=True,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ACTIVE,
+        verified=-1,
+        code_review=None,
+        comments_unresolved=0,
+        ci_pipelines=[
+            CiPipeline(label="build", state="FAILED", url="https://ci/build"),
+            CiPipeline(label="lint", state="SUCCESSFUL", url="https://ci/lint"),
+        ],
+    )
+    lines = format_ci_lines(commit)
+    assert len(lines) == 2
+    assert "CI:" in strip_ansi(lines[0])
+    assert "build https://ci/build" in strip_ansi(lines[0])
+    assert "lint https://ci/lint" in strip_ansi(lines[1])
+
+
 def test_extra_detail_lines_with_hyperlinks() -> None:
     init_hyperlink_mode(hyperlinks="always")
     commit = LogCommit(
@@ -244,6 +310,7 @@ def test_extra_detail_lines_with_hyperlinks() -> None:
     lines = extra_detail_lines(commit)
     assert len(lines) == 1
     plain = strip_ansi(lines[0])
+    assert plain.startswith("CI:")
     assert "verify" in plain
     assert "\x1b]8;;https://ci/console" in lines[0]
     init_hyperlink_mode(hyperlinks="never")
