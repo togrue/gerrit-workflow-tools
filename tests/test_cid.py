@@ -407,12 +407,16 @@ def test_gcid_fix_rejects_check_combo(stack_repo, monkeypatch):
     assert "cannot be combined" in err
 
 
-def test_gcid_fix_requires_clean_tree(stack_repo, monkeypatch):
-    (stack_repo / "dirty.txt").write_text("dirty\n", encoding="utf-8")
-    code, out, err = run_cli(stack_repo, gcid_main, ["--fix"], monkeypatch)
-    assert code == 2
+def test_gcid_fix_allows_dirty_tree(tmp_path, monkeypatch):
+    repo = _make_stack_repo_for_fix(tmp_path / "fix_dirty")
+    dirty = repo / "dirty.txt"
+    dirty.write_text("dirty\n", encoding="utf-8")
+    code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
+    assert code == 0
     assert out == ""
-    assert "clean working tree" in err
+    assert "clean working tree" not in err
+    assert err.count("Fixed ") == 2
+    assert dirty.read_text() == "dirty\n"
 
 
 def test_extract_valid_change_id_accepts_uppercase_hex_and_lowercase_label() -> None:

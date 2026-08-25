@@ -65,7 +65,7 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged.
 |--------|-------------|
 | `--start-at-remote` | Use `upstream_tip..END` stack window |
 | `--check` | Validate **all** commits in the current local stack (`upstream_tip..HEAD`): every commit must have a valid Change-Id footer, and no Change-Id may appear on more than one commit |
-| `--fix` | Interactive rebase: assign missing Change-Ids on last message line |
+| `--fix` | Assign missing Change-Ids on last message line (message-only rewrite via `commit-tree`) |
 | `--color`, `--debug-log`, `-v` | Standard helpers |
 
 `--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`.

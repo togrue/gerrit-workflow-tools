@@ -279,7 +279,7 @@ Push-specific UI lives in `push_input_line.py` (line editor state) and `push_inp
 | **`ger edit` / `ger reword`** | Resolve ref via `stack.resolve_stack_commit` → set `GIT_SEQUENCE_EDITOR=rebase_sequence_editor` → `git rebase -i` |
 | **`ger rebase`** | Compute onto ref via `stack.merge_base_with_target` → set `GIT_SEQUENCE_EDITOR=rebase_enricher` → `git rebase -i` (enricher fetches Gerrit data, then opens real editor) |
 | **`ger fix`** | `change_resolution.resolve_changeish` → `git commit --fixup` |
-| **`ger change-id --fix`** | Subprocess script using `change_id` helpers |
+| **`ger change-id --fix`** | `commit-tree` message rewrite using `change_id` helpers |
 | **`ger push`** | See push pipeline above |
 
 `cli_edit` reuses `cli_log.load_annotated_commits` for `--first-attention-commit` (same attention rules as log).

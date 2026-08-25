@@ -93,10 +93,6 @@ disable = [
 [tool.vulture]
 paths = ["src", "tests"]
 ignore_names = [
-    # cli_changeid --fix: imported from dynamically built subprocess script only.
-    "strip_change_id_lines",
-    "append_change_id_footer",
-    "generate_change_id_for_commit",
     # Prompt-toolkit Lexer / Validator / Completer callbacks.
     "lex_document",
     "validate",
