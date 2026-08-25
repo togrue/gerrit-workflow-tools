@@ -120,8 +120,8 @@ def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPa
         code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
 
     assert code == 0, err
-    # Resolution probe + detail query + CI checks/messages + comments follow-up.
-    assert len(store.calls) <= 5, [c.method for c in store.calls]
+    # Resolution probe + detail query; no CI fetch without -v when Verified passes.
+    assert len(store.calls) <= 4, [c.method for c in store.calls]
     assert len(store.queries()) <= 2, store.queries()
     assert store.calls_to("list_change_reviewers") == []
     assert len(store.calls_to("get_change")) == 0

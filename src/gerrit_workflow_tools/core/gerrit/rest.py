@@ -522,6 +522,7 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
 # labels + submittable + revisions in one round trip (no separate /detail call).
 LOG_QUERY_OPTIONS = (
     "DETAILED_LABELS",
+    "DETAILED_ACCOUNTS",
     "SUBMITTABLE",
     "CURRENT_REVISION",
     "ALL_REVISIONS",
