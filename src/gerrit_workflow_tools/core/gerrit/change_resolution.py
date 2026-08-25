@@ -399,7 +399,6 @@ def resolve_changeish(
     """Resolve *ref* to a :class:`Resolution` using stack context and Gerrit."""
     parsed = parse_changeish(ref)
     resolution = Resolution(input=parsed.raw, kind=parsed.kind)
-    stack = resolve_stack_context(cwd, branch, settings=settings)
 
     # A git rev and a bare Change-Id both go through Change-Id narrowing; they differ only in
     # where the Change-Id comes from. Everything else addresses one change directly.
@@ -412,10 +411,34 @@ def resolve_changeish(
             return resolution
 
     if change_id is not None and parsed.kind in ("git-rev", "change-id"):
-        selected, reason, ambiguous, alternatives = _resolve_change_id(
-            change_id,
-            client=client,
-            stack=stack,
+        rows = _query_changes(client, f"change:{change_id}")
+        if not rows:
+            return resolution
+        if len(rows) == 1:
+            only = SelectedChange.from_change_row(rows[0])
+            try:
+                stack = resolve_stack_context(cwd, branch, settings=settings)
+                selected, reason, ambiguous, alternatives = resolution_fields_from_change_rows(
+                    rows,
+                    push_branch=stack.push_branch,
+                    explicit_target=explicit_target,
+                )
+            except ChangeResolutionError:
+                if explicit_target:
+                    resolution.selected = only
+                    resolution.selected_reason = "unique"
+                    return resolution
+                raise
+            resolution.selected = selected
+            resolution.selected_reason = reason
+            resolution.ambiguous = ambiguous
+            resolution.alternatives = alternatives
+            return resolution
+
+        stack = resolve_stack_context(cwd, branch, settings=settings)
+        selected, reason, ambiguous, alternatives = resolution_fields_from_change_rows(
+            rows,
+            push_branch=stack.push_branch,
             explicit_target=explicit_target,
         )
         resolution.selected = selected

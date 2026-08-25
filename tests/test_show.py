@@ -18,6 +18,7 @@ from tests.cli_gerrit_mocks import (
     head_change_id,
 )
 from tests.conftest import json_stdout, run_cli
+from tests.helpers import write_rebase_head
 
 
 def _detail_ok(
@@ -695,3 +696,33 @@ def test_gshow_ambiguity_after_narrowing_exits_four(stack_repo: Path, monkeypatc
     code, _out, err = run_cli(stack_repo, gshow_main, [cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()
+
+
+def test_gshow_detached_head_during_rebase(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """During rebase, ger show resolves stack context from the branch being rebased."""
+    _configure_gshow_repo(stack_repo)
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    write_rebase_head(stack_repo, "feature")
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    cid = head_change_id(stack_repo)
+    detail = change_info_for_sha(sha, cid, number=77)
+    details = {str(detail["id"]): detail}
+    code, out, err = run_cli(stack_repo, gshow_main, ["HEAD"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0, err
+    assert git_out("rev-parse", "--short", sha, cwd=stack_repo) in out
+
+
+def test_gshow_stack_during_rebase(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_gshow_repo(stack_repo)
+    git("checkout", "--detach", "HEAD", cwd=stack_repo)
+    write_rebase_head(stack_repo, "feature")
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "--stack"],
+        monkeypatch,
+        gerrit=ChangeStore({}),
+    )
+    assert code in (0, 1), err
+    data = json_stdout(out)
+    assert len(data["commits"]) >= 2

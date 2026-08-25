@@ -59,7 +59,12 @@ def _row_from_stack_commit(commit: Commit) -> CommitStatusInput:
 
 
 def resolve_show_commit_row(
-    cwd: Path | str, arg: str | None, client: GerritRest, *, settings: Settings
+    cwd: Path | str,
+    arg: str | None,
+    client: GerritRest,
+    *,
+    settings: Settings,
+    branch: str | None = None,
 ) -> ShowCommitResolution:
     """Resolve one `ger show` argument via the shared changeish core.
 
@@ -67,7 +72,9 @@ def resolve_show_commit_row(
     """
 
     raw_arg = (arg or "HEAD").strip()
-    resolution = resolve_changeish(raw_arg, client=client, cwd=cwd, settings=settings, explicit_target=True)
+    resolution = resolve_changeish(
+        raw_arg, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
+    )
 
     if resolution.kind == "git-rev":
         sha = resolution.local_sha
@@ -91,12 +98,21 @@ def _local_sha_or_none(cwd: Path | str, rev: str) -> str | None:
     return p.stdout.strip() or None
 
 
-def resolve_range_endpoint_sha(cwd: Path | str, arg: str, client: GerritRest, *, settings: Settings) -> str:
+def resolve_range_endpoint_sha(
+    cwd: Path | str,
+    arg: str,
+    client: GerritRest,
+    *,
+    settings: Settings,
+    branch: str | None = None,
+) -> str:
     """Resolve a range endpoint changeish to a local commit SHA."""
     raw = arg.strip()
     if not raw:
         raise ChangeResolutionError("empty range endpoint")
-    resolution = resolve_changeish(raw, client=client, cwd=cwd, settings=settings, explicit_target=True)
+    resolution = resolve_changeish(
+        raw, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
+    )
     if resolution.local_sha:
         return resolution.local_sha
 
@@ -111,7 +127,7 @@ def resolve_range_endpoint_sha(cwd: Path | str, arg: str, client: GerritRest, *,
 
     if change_id:
         want = norm_change_id(change_id)
-        snap = get_stack_snapshot(cwd)
+        snap = get_stack_snapshot(cwd, branch, settings=settings)
         for commit in snap.commits:
             footer = extract_valid_change_id(commit.body)
             if footer and norm_change_id(footer) == want:
@@ -154,15 +170,20 @@ def _resolution_for_local_sha(sha: str, *, input_arg: str) -> Resolution:
 
 
 def expand_show_range(
-    cwd: Path | str, arg: str, client: GerritRest, *, settings: Settings
+    cwd: Path | str,
+    arg: str,
+    client: GerritRest,
+    *,
+    settings: Settings,
+    branch: str | None = None,
 ) -> list[ShowCommitResolution]:
     """Expand a changeish-resolved ``A..B`` / ``A...B`` range to local commits (oldest first)."""
     parsed = parse_show_range(arg)
     if parsed is None:
         raise ChangeResolutionError(f"not a revision range: {arg!r}")
     left, dots, right = parsed
-    left_sha = resolve_range_endpoint_sha(cwd, left, client, settings=settings)
-    right_sha = resolve_range_endpoint_sha(cwd, right, client, settings=settings)
+    left_sha = resolve_range_endpoint_sha(cwd, left, client, settings=settings, branch=branch)
+    right_sha = resolve_range_endpoint_sha(cwd, right, client, settings=settings, branch=branch)
     rev_range = f"{left_sha}{dots}{right_sha}"
     rows = commits_in_range(cwd, rev_range)
     return [
@@ -175,9 +196,14 @@ def expand_show_range(
     ]
 
 
-def expand_stack_range(cwd: Path | str) -> list[ShowCommitResolution]:
+def expand_stack_range(
+    cwd: Path | str,
+    *,
+    branch: str | None = None,
+    settings: Settings | None = None,
+) -> list[ShowCommitResolution]:
     """Oldest-first commits in ``upstream_tip..HEAD``."""
-    snap = get_stack_snapshot(cwd)
+    snap = get_stack_snapshot(cwd, branch, settings=settings)
     return [
         ShowCommitResolution(
             row=_row_from_stack_commit(c),
@@ -205,6 +231,7 @@ def resolve_show_targets(
     *,
     settings: Settings,
     stack: bool = False,
+    branch: str | None = None,
 ) -> list[ShowCommitResolution]:
     """Resolve positional changeishes / ranges and optional ``--stack`` into a deduped list.
 
@@ -214,14 +241,14 @@ def resolve_show_targets(
     """
     pieces: list[ShowCommitResolution] = []
     if stack:
-        pieces.extend(expand_stack_range(cwd))
+        pieces.extend(expand_stack_range(cwd, branch=branch, settings=settings))
     if not args and not stack:
-        pieces.append(resolve_show_commit_row(cwd, "HEAD", client, settings=settings))
+        pieces.append(resolve_show_commit_row(cwd, "HEAD", client, settings=settings, branch=branch))
     for raw in args:
         if parse_show_range(raw) is not None:
-            pieces.extend(expand_show_range(cwd, raw, client, settings=settings))
+            pieces.extend(expand_show_range(cwd, raw, client, settings=settings, branch=branch))
         else:
-            pieces.append(resolve_show_commit_row(cwd, raw, client, settings=settings))
+            pieces.append(resolve_show_commit_row(cwd, raw, client, settings=settings, branch=branch))
 
     seen: set[str] = set()
     out: list[ShowCommitResolution] = []

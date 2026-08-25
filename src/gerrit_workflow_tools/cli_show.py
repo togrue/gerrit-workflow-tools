@@ -32,7 +32,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 )
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
-from gerrit_workflow_tools.core.git_state import current_branch
+from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.render.comments import (
@@ -88,6 +88,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stack",
         action="store_true",
         help="Include all commits in the local stack (upstream_tip..HEAD).",
+    )
+    p.add_argument(
+        "--branch",
+        metavar="NAME",
+        default=None,
+        help="Use the specified local branch for stack/upstream context (default: working branch).",
     )
     fmt = p.add_mutually_exclusive_group()
     fmt.add_argument(
@@ -327,6 +333,8 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     )
     use_color = args.color != "never"
     out_fmt = _output_format(args)
+    verbose_level = int(args.verbose)
+    branch = args.branch or resolve_working_branch(cwd, settings=settings)
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     targets = resolve_show_targets(
@@ -335,6 +343,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         service.rest,
         settings=settings,
         stack=args.stack,
+        branch=branch,
     )
     if not targets:
         raise ChangeResolutionError("no commits to show")
@@ -343,18 +352,13 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         _print_resolution_note(format_resolution_note(resolved.resolution), use_color=use_color)
 
     rows = [t.row for t in targets]
-    commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=True)
+    commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=verbose_level >= 1)
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
 
     if any(t.is_local_commit for t in targets):
-        stack = resolve_stack_context(cwd, settings=settings)
-        branch = current_branch(cwd)
-        _fork, _display, target_tip = merge_base_with_target(
-            cwd,
-            branch if branch != "HEAD" else None,
-            head="HEAD",
-        )
+        stack = resolve_stack_context(cwd, branch, settings=settings)
+        _fork, _display, target_tip = merge_base_with_target(cwd, branch, settings=settings)
         stack_rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
         summary_highlighter = build_summary_highlighter(
             settings,

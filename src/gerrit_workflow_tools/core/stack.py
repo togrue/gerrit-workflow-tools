@@ -7,20 +7,39 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
-from gerrit_workflow_tools.core.git_state import current_branch
+from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
 
 logger = logging.getLogger(__name__)
 
 
-def upstream_tracking_tip_and_display(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str]:
+def _resolve_stack_branch(
+    cwd: Path | str | None,
+    branch: str | None,
+    *,
+    settings: Settings | None = None,
+) -> str:
+    """Local branch whose upstream defines the stack, including during rebase."""
+    if branch is not None:
+        return branch
+    snap = settings if settings is not None else Settings.from_cwd(cwd)
+    return resolve_working_branch(cwd, settings=snap) or current_branch(cwd)
+
+
+def upstream_tracking_tip_and_display(
+    cwd: Path | str | None,
+    branch: str | None = None,
+    *,
+    settings: Settings | None = None,
+) -> tuple[str, str]:
     """
     Return ``(upstream_tip_sha, display_name)`` for the branch's **upstream** only.
 
     The local stack is ``<sha>..HEAD`` (same *sha* as the first element here).
     """
-    b = branch or current_branch(cwd)
-    upstream_sym = f"{b}@{{upstream}}" if branch else "@{upstream}"
+    b = _resolve_stack_branch(cwd, branch, settings=settings)
+    upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
     upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
     if upstream_name.returncode != 0:
         raise GitError(
@@ -63,9 +82,14 @@ class StackSnapshot:
     commits: tuple[Commit, ...]
 
 
-def get_stack_snapshot(cwd: Path | str | None, branch: str | None = None) -> StackSnapshot:
+def get_stack_snapshot(
+    cwd: Path | str | None,
+    branch: str | None = None,
+    *,
+    settings: Settings | None = None,
+) -> StackSnapshot:
     """Return the upstream tip SHA and oldest-first ``upstream_tip..HEAD`` commits."""
-    upstream_tip, _display = upstream_tracking_tip_and_display(cwd, branch)
+    upstream_tip, _display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
     rows_list = commits_in_range(cwd, f"{upstream_tip}..HEAD")
     return StackSnapshot(
         upstream_tip=upstream_tip,
@@ -78,6 +102,7 @@ def merge_base_with_target(
     branch: str | None = None,
     *,
     head: str = "HEAD",
+    settings: Settings | None = None,
 ) -> tuple[str, str, str]:
     """
     Return ``(rebase_fork, upstream_display, upstream_tip_sha)``.
@@ -88,7 +113,7 @@ def merge_base_with_target(
     *rebase_fork* is ``merge-base(head, upstream_tip_sha)`` — the onto point for
     ``git rebase -i <fork>`` (not the same commit as *upstream_tip_sha* when histories diverge).
     """
-    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch)
+    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
     rebase_fork = git_out("merge-base", head, upstream_tip, cwd=cwd)
     logger.debug(
         "merge_base_with_target: rebase_fork=%s upstream_display=%r upstream_tip=%r",
@@ -99,9 +124,15 @@ def merge_base_with_target(
     return rebase_fork, display, upstream_tip
 
 
-def rev_spec_stack_base_to_end(cwd: Path | str | None, input_arg: str, branch: str | None = None) -> str:
+def rev_spec_stack_base_to_end(
+    cwd: Path | str | None,
+    input_arg: str,
+    branch: str | None = None,
+    *,
+    settings: Settings | None = None,
+) -> str:
     """``upstream_tip..END`` where END is *input_arg* or the right side of ``left..right``."""
-    _fork, _display, upstream_tip = merge_base_with_target(cwd, branch)
+    _fork, _display, upstream_tip = merge_base_with_target(cwd, branch, settings=settings)
     if ".." in input_arg:
         idx = input_arg.index("..")
         right = input_arg[idx + 2 :].strip() or "HEAD"
