@@ -364,7 +364,9 @@ def test_gcid_fix_assigns_missing_and_not_last_line(tmp_path, monkeypatch):
     code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
     assert code == 0
     assert out == ""
-    assert err == ""
+    assert '1/2 Fixed "first commit without footer"' in err
+    assert '2/2 Fixed "second commit footer not last"' in err
+    assert err.count("Fixed ") == 2
 
     bodies = _stack_bodies(repo)
     assert len(bodies) == 3
@@ -389,7 +391,9 @@ def test_gcid_fix_skips_commit_with_valid_last_line_change_id(tmp_path, monkeypa
     code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
     assert code == 0
     assert out == ""
-    assert err == ""
+    assert '1/2 Fixed "first commit without footer"' in err
+    assert '2/2 Fixed "second commit footer not last"' in err
+    assert err.count("Fixed ") == 2
 
     after = _stack_bodies(repo)
     assert "Change-Id: I" + "f" * 40 in after[2]

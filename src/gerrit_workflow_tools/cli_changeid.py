@@ -20,10 +20,12 @@
 # on duplicates. A ``REV_OR_RANGE`` with ``--check`` is a usage error.
 
 import argparse
+import json
 import os
 import shlex
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -37,6 +39,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, init_hyperlink_mode
 from gerrit_workflow_tools.core.change_id import (
     CHANGE_ID_FOOTER_RE,
+    extract_valid_change_id,
     parse_change_id_footer,
     validate_change_id_value,
 )
@@ -171,6 +174,7 @@ def _ensure_clean_tree_for_fix(cwd: Path) -> None:
 def _msg_filter_script() -> str:
     return (
         "from pathlib import Path\n"
+        "import json\n"
         "import os\n"
         "import sys\n"
         "from gerrit_workflow_tools.core.change_id import (\n"
@@ -188,11 +192,50 @@ def _msg_filter_script() -> str:
         "if extract_valid_change_id(msg):\n"
         "    sys.stdout.write(msg)\n"
         "    raise SystemExit(0)\n"
+        "progress_path = os.environ.get('GER_CID_PROGRESS')\n"
+        "log_path = os.environ.get('GER_CID_PROGRESS_LOG')\n"
+        "if progress_path:\n"
+        "    try:\n"
+        "        progress = json.loads(Path(progress_path).read_text(encoding='utf-8'))\n"
+        "        entry = progress.get('by_sha', {}).get(commit)\n"
+        "        if entry:\n"
+        "            idx, total, subject = entry['idx'], entry['total'], entry['subject']\n"
+        "            line = f'{idx}/{total} Fixed \"{subject}\"\\n'\n"
+        "            if log_path:\n"
+        "                with open(log_path, 'a', encoding='utf-8') as log:\n"
+        "                    log.write(line)\n"
+        "            print(line, end='', file=sys.stderr, flush=True)\n"
+        "    except OSError:\n"
+        "        pass\n"
         "base = strip_change_id_lines(msg)\n"
         "cwd = Path(os.environ['GER_CID_REPO'])\n"
         "cid = generate_change_id_for_commit(cwd, commit, base)\n"
         "sys.stdout.write(append_change_id_footer(base, cid))\n"
     )
+
+
+def _emit_progress_log_lines(log_path: Path, *, start: int = 0) -> int:
+    """Print new progress lines from *log_path* to stderr; return new file size."""
+    try:
+        text = log_path.read_text(encoding="utf-8")
+    except OSError:
+        return start
+    if len(text) <= start:
+        return start
+    for line in text[start:].splitlines():
+        if line.strip():
+            print(line, file=sys.stderr, flush=True)
+    return len(text)
+
+
+def _tail_progress_log(log_path: Path, stop: threading.Event) -> None:
+    """Forward progress log lines to stderr while filter-branch runs."""
+    offset = 0
+    while True:
+        offset = _emit_progress_log_lines(log_path, start=offset)
+        if stop.is_set():
+            break
+        stop.wait(0.05)
 
 
 def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
@@ -206,6 +249,19 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     rows = commits_in_range(cwd, rev_spec)
     if not rows:
         return
+
+    needs_fix = [c for c in rows if not extract_valid_change_id(c.body)]
+    if not needs_fix:
+        return
+
+    total = len(needs_fix)
+    progress_payload = {
+        "by_sha": {
+            c.sha: {"idx": i, "total": total, "subject": c.subject}
+            for i, c in enumerate(needs_fix, start=1)
+        }
+    }
+
     base, _end = rev_spec.split("..", 1)
     head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
     if head_ref_proc.returncode != 0:
@@ -227,25 +283,45 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     with tempfile.NamedTemporaryFile("w", delete=False, suffix=".py", encoding="utf-8") as f:
         f.write(_msg_filter_script())
         script_path = Path(f.name)
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json", encoding="utf-8") as f:
+        json.dump(progress_payload, f)
+        progress_path = Path(f.name)
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".log", encoding="utf-8") as f:
+        progress_log_path = Path(f.name)
     try:
+        env["GER_CID_PROGRESS"] = str(progress_path)
+        env["GER_CID_PROGRESS_LOG"] = str(progress_log_path)
         cmd = f"{shlex.quote(sys.executable)} {shlex.quote(str(script_path))}"
-        p = git(
-            "filter-branch",
-            "-f",
-            "--msg-filter",
-            cmd,
-            "--",
-            head_ref,
-            "--not",
-            base,
-            cwd=cwd,
-            env=env,
-            check=False,
+        stop_tail = threading.Event()
+        tail_thread = threading.Thread(
+            target=_tail_progress_log,
+            args=(progress_log_path, stop_tail),
+            daemon=True,
         )
+        tail_thread.start()
+        try:
+            p = git(
+                "filter-branch",
+                "-f",
+                "--msg-filter",
+                cmd,
+                "--",
+                head_ref,
+                "--not",
+                base,
+                cwd=cwd,
+                env=env,
+                check=False,
+            )
+        finally:
+            stop_tail.set()
+            tail_thread.join(timeout=2.0)
         if p.returncode != 0:
             raise ChangeIdError(f"error: --fix failed: {p.stderr.strip() or p.stdout.strip()}", code=int(ExitCode.GIT))
     finally:
         script_path.unlink(missing_ok=True)
+        progress_path.unlink(missing_ok=True)
+        progress_log_path.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:
