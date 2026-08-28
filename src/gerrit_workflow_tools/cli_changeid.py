@@ -21,7 +21,7 @@
 
 import argparse
 import sys
-import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -37,7 +37,7 @@ from gerrit_workflow_tools.core.change_id import (
     CHANGE_ID_FOOTER_RE,
     append_change_id_footer,
     extract_valid_change_id,
-    generate_change_id_for_commit,
+    generate_change_id_from_idents,
     parse_change_id_footer,
     strip_change_id_lines,
     validate_change_id_value,
@@ -46,7 +46,6 @@ from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import (
-    commits_in_range,
     git_log_sha_body,
     parse_git_log_sha_body_rs,
     rev_spec_target_tip_to_end,
@@ -165,60 +164,87 @@ def _ensure_safe_for_fix(cwd: Path) -> None:
         raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
 
 
-def _commit_author_env(cwd: Path, sha: str) -> dict[str, str]:
-    """Return GIT_AUTHOR_* / GIT_COMMITTER_* env vars copied from *sha*."""
+@dataclass(frozen=True)
+class _RewriteCommit:
+    """One stack commit with everything needed for a message-only ``commit-tree`` rewrite."""
+
+    sha: str
+    tree: str
+    parents: tuple[str, ...]
+    subject: str
+    body: str
+    ident_env: dict[str, str]
+    committer_ident: str
+
+
+def _load_rewrite_commits(cwd: Path, rev_spec: str) -> list[_RewriteCommit]:
+    """Oldest-first commits in *rev_spec* with tree/parents/idents in one ``git log``."""
+    # %ad/%cd are raw "unix_ts tz" when --date=raw (matches commit object / Change-Id hook).
+    fmt = "%H%x1e%T%x1e%P%x1e%an%x1e%ae%x1e%ad%x1e%cn%x1e%ce%x1e%cd%x1e%s%x1e%B%x1e"
     p = git(
         "log",
-        "-1",
-        "--format=%an%x1e%ae%x1e%ai%x1e%cn%x1e%ce%x1e%ci",
-        sha,
+        "--reverse",
+        "--date=raw",
+        rev_spec,
+        f"--format={fmt}",
         cwd=cwd,
         check=False,
     )
     if p.returncode != 0:
         raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
-    parts = p.stdout.rstrip("\n").split("\x1e")
-    if len(parts) != 6:
-        raise GitError("git log returned unexpected author format", stderr=p.stdout, returncode=1)
-    an, ae, ad, cn, ce, cd = parts
-    return {
-        "GIT_AUTHOR_NAME": an,
-        "GIT_AUTHOR_EMAIL": ae,
-        "GIT_AUTHOR_DATE": ad,
-        "GIT_COMMITTER_NAME": cn,
-        "GIT_COMMITTER_EMAIL": ce,
-        "GIT_COMMITTER_DATE": cd,
-    }
 
-
-def _commit_parents(cwd: Path, sha: str) -> list[str]:
-    """Return parent SHAs for *sha* (empty for root commits)."""
-    p = git("rev-list", "--parents", "-n", "1", sha, cwd=cwd, check=False)
-    if p.returncode != 0:
-        raise GitError("git rev-list failed", stderr=p.stderr, returncode=p.returncode)
-    fields = p.stdout.split()
-    return fields[1:]
+    # %B may contain newlines but not RS; each record ends with RS so split gives
+    # [H, T, P, an, ae, ad, cn, ce, cd, s, B, H, T, ...]. Git also inserts a newline
+    # between commits, so the field after RS may start with \\n (and a trailing \\n
+    # after the final RS yields an empty last field). Keep empty mid-record fields
+    # (root commits have empty %P).
+    fields = [f.lstrip("\n") for f in p.stdout.split("\x1e")]
+    while fields and fields[-1] == "":
+        fields.pop()
+    if len(fields) % 11 != 0:
+        raise GitError(
+            f"git log returned unexpected field count {len(fields)} (not divisible by 11)",
+            stderr=p.stdout[:200],
+            returncode=1,
+        )
+    rows: list[_RewriteCommit] = []
+    for i in range(0, len(fields), 11):
+        sha, tree, parents_s, an, ae, ad, cn, ce, cd, subject, body = fields[i : i + 11]
+        parents = tuple(parents_s.split()) if parents_s.strip() else ()
+        rows.append(
+            _RewriteCommit(
+                sha=sha,
+                tree=tree,
+                parents=parents,
+                subject=subject,
+                body=body,
+                ident_env={
+                    "GIT_AUTHOR_NAME": an,
+                    "GIT_AUTHOR_EMAIL": ae,
+                    "GIT_AUTHOR_DATE": ad,
+                    "GIT_COMMITTER_NAME": cn,
+                    "GIT_COMMITTER_EMAIL": ce,
+                    "GIT_COMMITTER_DATE": cd,
+                },
+                committer_ident=f"{cn} <{ce}> {cd}",
+            )
+        )
+    return rows
 
 
 def _commit_tree(cwd: Path, tree: str, parents: list[str], message: str, ident_env: dict[str, str]) -> str:
-    """Create a commit with *message* and return its SHA."""
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".msg", encoding="utf-8") as f:
-        f.write(message)
-        msg_path = Path(f.name)
-    try:
-        args = ["commit-tree", tree, "-F", str(msg_path)]
-        for parent in parents:
-            args.extend(["-p", parent])
-        p = git(*args, cwd=cwd, env=ident_env, check=False)
-        if p.returncode != 0:
-            raise GitError(
-                "git commit-tree failed",
-                stderr=p.stderr.strip() or p.stdout.strip(),
-                returncode=p.returncode,
-            )
-        return p.stdout.strip()
-    finally:
-        msg_path.unlink(missing_ok=True)
+    """Create a commit with *message* (via stdin) and return its SHA."""
+    args = ["commit-tree", tree, "-F", "-"]
+    for parent in parents:
+        args.extend(["-p", parent])
+    p = git(*args, cwd=cwd, env=ident_env, input=message, check=False)
+    if p.returncode != 0:
+        raise GitError(
+            "git commit-tree failed",
+            stderr=p.stderr.strip() or p.stdout.strip(),
+            returncode=p.returncode,
+        )
+    return p.stdout.strip()
 
 
 def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
@@ -229,13 +255,18 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     _ensure_safe_for_fix(cwd)
     resolved = resolve_gcid_user_arg(cwd, input_arg)
     rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
-    rows = commits_in_range(cwd, rev_spec)
+    rows = _load_rewrite_commits(cwd, rev_spec)
     if not rows:
         return
 
     needs_fix = [c for c in rows if not extract_valid_change_id(c.body)]
     if not needs_fix:
         return
+
+    # Commits before the first message change keep their SHAs; only rewrite from there.
+    first_fix_sha = needs_fix[0].sha
+    start = next(i for i, c in enumerate(rows) if c.sha == first_fix_sha)
+    to_rewrite = rows[start:]
 
     total = len(needs_fix)
     fix_progress = {c.sha: (i, c.subject) for i, c in enumerate(needs_fix, start=1)}
@@ -251,26 +282,20 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
 
     sha_map: dict[str, str] = {}
     new_head: str | None = None
-    for commit in rows:
-        tree_p = git("rev-parse", f"{commit.sha}^{{tree}}", cwd=cwd, check=False)
-        if tree_p.returncode != 0:
-            raise GitError("git rev-parse tree failed", stderr=tree_p.stderr, returncode=tree_p.returncode)
-        tree = tree_p.stdout.strip()
-
-        parents = _commit_parents(cwd, commit.sha)
-        new_parents = [sha_map.get(p, p) for p in parents]
+    for commit in to_rewrite:
+        new_parents = [sha_map.get(p, p) for p in commit.parents]
 
         if commit.sha in fix_progress:
             idx, subject = fix_progress[commit.sha]
             print(f'{idx}/{total} Fixed "{subject}"', file=sys.stderr, flush=True)
             base_msg = strip_change_id_lines(commit.body)
-            cid = generate_change_id_for_commit(cwd, commit.sha, base_msg)
+            first_parent = commit.parents[0] if commit.parents else None
+            cid = generate_change_id_from_idents(commit.committer_ident, first_parent, base_msg)
             message = append_change_id_footer(base_msg, cid)
         else:
             message = commit.body
 
-        ident_env = _commit_author_env(cwd, commit.sha)
-        new_sha = _commit_tree(cwd, tree, new_parents, message, ident_env)
+        new_sha = _commit_tree(cwd, commit.tree, new_parents, message, commit.ident_env)
         sha_map[commit.sha] = new_sha
         new_head = new_sha
 

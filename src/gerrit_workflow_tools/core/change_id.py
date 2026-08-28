@@ -142,6 +142,12 @@ def generate_change_id_for_commit(cwd: Path | str, commit_sha: str, message: str
     return generate_change_id_like_hook(committer_ident, refhash, message)
 
 
+def generate_change_id_from_idents(committer_ident: str, first_parent: str | None, message: str) -> str:
+    """Like :func:`generate_change_id_for_commit` but with already-known hook inputs (no git)."""
+    refhash = first_parent if first_parent else EMPTY_TREE_HASH
+    return generate_change_id_like_hook(committer_ident, refhash, message)
+
+
 def validate_change_id_value(raw: str | None) -> tuple[bool, bool]:
     """Return whether ``raw`` is a valid Gerrit Change-Id value and whether it is malformed vs missing."""
     if raw is None:
