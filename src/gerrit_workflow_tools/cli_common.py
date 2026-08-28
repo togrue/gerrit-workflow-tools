@@ -20,6 +20,7 @@ from enum import IntEnum
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import init_color_mode, init_hyperlink_mode
+from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
@@ -31,7 +32,8 @@ HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."
 HELP_VERBOSE_PLACEHOLDER = "Reserved for richer command output in a future release (currently no effect)."
 HELP_DEBUG_LOG = (
-    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, and Gerrit API response bodies)."
+    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, Gerrit API "
+    "response bodies, and a high-level request timing summary)."
 )
 
 
@@ -97,6 +99,8 @@ def run_cli_command(body: Callable[[], int]) -> int:
                 print(f"{prefix}: {error}", file=sys.stderr)
                 return int(code)
         raise
+    finally:
+        print_call_trace_summary()
 
 
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
@@ -174,6 +178,7 @@ def configure_logging(verbosity: int | bool) -> None:
     global _CONFIGURED, _DEBUG_LOG_ENABLED  # pylint: disable=global-statement
     v = int(verbosity)
     _DEBUG_LOG_ENABLED = bool(v)
+    set_call_trace_enabled(_DEBUG_LOG_ENABLED)
     set_log_gerrit_response_bodies(_DEBUG_LOG_ENABLED)
     level = logging.DEBUG if v >= 1 else logging.WARNING
     _LOG.setLevel(level)

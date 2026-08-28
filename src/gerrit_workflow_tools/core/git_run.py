@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import time
 from functools import lru_cache
 from pathlib import Path
+
+from gerrit_workflow_tools.core.call_trace import record_call
 
 logger = logging.getLogger(__name__)
 
@@ -44,19 +47,24 @@ def _run_git(
     *args: str,
     cwd: Path | str | None = None,
     env: dict[str, str] | None = None,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     cmd = ("git", *args)
     cwd_str = str(cwd) if cwd is not None else None
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd_str or ".")
     merged = {**os.environ, **env} if env else None
-    return subprocess.run(
+    t0 = time.perf_counter()
+    result = subprocess.run(
         cmd,
         cwd=cwd,
         env=merged,
+        input=input_text,
         text=True,
         capture_output=True,
         check=False,
     )
+    record_call("git", " ".join(cmd), time.perf_counter() - t0)
+    return result
 
 
 @lru_cache(maxsize=512)
@@ -91,14 +99,18 @@ def git(
     cwd: Path | str | None = None,
     env: dict[str, str] | None = None,
     check: bool = True,
+    input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run git with given args; cwd defaults to current directory."""
-    if args and args[0] in _CACHEABLE_SUBCOMMANDS:
+    """Run git with given args; cwd defaults to current directory.
+
+    Pass *input* to feed stdin (disables the rev-parse/log cache for that call).
+    """
+    if input is not None or not args or args[0] not in _CACHEABLE_SUBCOMMANDS:
+        _git_cached.cache_clear()
+        p = _run_git(*args, cwd=cwd, env=env, input_text=input)
+    else:
         env_key = tuple(sorted(env.items())) if env else None
         p = _git_cached(args, _resolve_cwd(cwd), env_key)
-    else:
-        _git_cached.cache_clear()
-        p = _run_git(*args, cwd=cwd, env=env)
     _raise_if_failed(args, p, check=check)
     return p
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url, record_call
 from gerrit_workflow_tools.core.changeish import Changeish, is_change_id, parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 
@@ -230,6 +232,8 @@ class HttpGerritRest:
             headers["Content-Type"] = "application/json; charset=UTF-8"
         logger.info("%s %s", method, url)
         req = Request(url, headers=headers, method=method, data=data)
+        label = gerrit_request_label_from_url(method, url)
+        t0 = time.perf_counter()
         try:
             with urlopen(req, timeout=120) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
@@ -240,6 +244,8 @@ class HttpGerritRest:
             ) from e
         except URLError as e:
             raise GerritApiError(f"Gerrit request failed: {e.reason!r}") from e
+        finally:
+            record_call("gerrit", label, time.perf_counter() - t0)
 
         if not raw.strip():
             return {}
