@@ -1,11 +1,11 @@
 # Example CI link strategy for ger
 
-Drop (or copy) this folder to ``.ger/ci/`` in a Gerrit-backed clone when you need
-**project-specific** CI URL transforms. ``ger log`` loads ``registry.py`` when
-Verified is −1 and runs the strategy for the current ``gerrit.project``.
+**Skip this directory** if built-in Jenkins / Checks parsing already gives you the
+URLs you want (most repos).
 
-**Built-in:** Jenkins ``Build Failed`` / Checks URLs are parsed without a local
-registry. See ``docu/gerrit-ci-strategies.md`` for message formats and how to
-write custom parsers.
+When you need a custom transform, copy this folder to ``.ger/ci/`` in a
+Gerrit-backed clone and edit ``STRATEGIES`` keys to match ``gerrit.project``.
 
-See ``registry.py`` for the ``extract_ci_links`` signature and Checks-first policy.
+The example rewrites built-in console links to Jenkins **test report** URLs.
+See ``docu/gerrit-ci-strategies.md`` for the extension template and lazy-`messages`
+behaviour.
