@@ -23,7 +23,7 @@ from typing import Any, TypeVar
 
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_state import repo_toplevel
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +34,6 @@ _MODULE_CACHE: dict[str, ModuleType | None] = {}
 
 class RegistryLoadError(ConfigError):
     """``registry.py`` exists but could not be imported."""
-
-
-def repo_toplevel(cwd: Path | str | None) -> Path | None:
-    """Return ``git rev-parse --show-toplevel``, or ``None`` outside a work tree."""
-
-    p = git("rev-parse", "--show-toplevel", cwd=cwd, check=False)
-    if p.returncode != 0 or not p.stdout.strip():
-        return None
-    return Path(p.stdout.strip())
 
 
 def resolve_scripts_root(cwd: Path | str | None, scripts_dir: str) -> Path | None:

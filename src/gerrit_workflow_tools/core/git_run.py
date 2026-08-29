@@ -33,8 +33,11 @@ class GitError(RuntimeError):
 
 
 def clear_git_cache() -> None:
-    """Drop all cached ``rev-parse`` / ``log`` results (mainly for tests)."""
+    """Drop all cached ``rev-parse`` / ``log`` results and Worktree snapshots."""
     _git_cached.cache_clear()
+    from gerrit_workflow_tools.core.git_state import clear_worktree_cache  # noqa: PLC0415
+
+    clear_worktree_cache()
 
 
 def _resolve_cwd(cwd: Path | str | None) -> str:

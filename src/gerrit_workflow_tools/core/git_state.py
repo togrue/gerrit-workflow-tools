@@ -9,6 +9,9 @@ answer (e.g. whether the upstream's remote is ``gerrit.remote``). The dependency
 from __future__ import annotations
 
 import logging
+import os
+import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -17,38 +20,118 @@ from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 logger = logging.getLogger(__name__)
 
+_WORKTREE_LOCK = threading.Lock()
+_WORKTREE_BY_CWD: dict[str, Worktree] = {}
+
+
+def _cwd_abs(cwd: Path | str | None) -> str:
+    if cwd is not None:
+        return os.path.abspath(os.path.expanduser(str(cwd)))
+    return os.getcwd()
+
+
+@dataclass(frozen=True)
+class Worktree:
+    """Live repository identity from one ``git rev-parse`` (toplevel, HEAD branch, git-dir)."""
+
+    toplevel: Path | None
+    checked_out_branch: str | None
+    """Named branch at HEAD, or ``None`` when detached (``abbrev-ref`` is ``HEAD``)."""
+    git_dir: Path | None
+
+    @classmethod
+    def from_cwd(cls, cwd: Path | str | None) -> Worktree:
+        cwd_abs = _cwd_abs(cwd)
+        with _WORKTREE_LOCK:
+            cached = _WORKTREE_BY_CWD.get(cwd_abs)
+            if cached is not None:
+                return cached
+            loaded = cls._load(cwd, cwd_abs)
+            _WORKTREE_BY_CWD[cwd_abs] = loaded
+            return loaded
+
+    @classmethod
+    def _load(cls, cwd: Path | str | None, cwd_abs: str) -> Worktree:
+        p = git(
+            "rev-parse",
+            "--show-toplevel",
+            "--abbrev-ref",
+            "HEAD",
+            "--git-dir",
+            cwd=cwd,
+            check=False,
+        )
+        if p.returncode != 0 or not (p.stdout or "").strip():
+            return cls(toplevel=None, checked_out_branch=None, git_dir=None)
+        lines = [line.strip() for line in p.stdout.splitlines() if line.strip()]
+        top_raw = lines[0] if lines else ""
+        abbrev = lines[1] if len(lines) > 1 else ""
+        git_dir_raw = lines[2] if len(lines) > 2 else ""
+        toplevel = Path(top_raw) if top_raw else None
+        checked = abbrev if abbrev and abbrev != "HEAD" else None
+        git_dir = _resolve_git_dir_path(git_dir_raw, cwd=cwd, cwd_abs=cwd_abs) if git_dir_raw else None
+        return cls(toplevel=toplevel, checked_out_branch=checked, git_dir=git_dir)
+
+
+def clear_worktree_cache() -> None:
+    """Drop memoized :class:`Worktree` snapshots (tests and :func:`clear_git_cache`)."""
+    with _WORKTREE_LOCK:
+        _WORKTREE_BY_CWD.clear()
+
+
+def _resolve_git_dir_path(raw: str, *, cwd: Path | str | None, cwd_abs: str) -> Path | None:
+    if not raw:
+        return None
+    git_dir = Path(raw)
+    if git_dir.is_absolute():
+        return git_dir
+    return Path(cwd_abs) / git_dir
+
+
+def repo_toplevel(cwd: Path | str | None) -> Path | None:
+    """Return ``git rev-parse --show-toplevel``, or ``None`` outside a work tree."""
+    return Worktree.from_cwd(cwd).toplevel
+
 
 def current_branch(cwd: Path | str | None) -> str:
     """Return the current branch name (``git rev-parse --abbrev-ref HEAD``)."""
-    return git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
+    wt = Worktree.from_cwd(cwd)
+    if wt.toplevel is None:
+        return git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
+    return wt.checked_out_branch or "HEAD"
 
 
 def is_detached_head(cwd: Path | str | None) -> bool:
     """True when HEAD is checked out directly (not via a branch)."""
-    return git("symbolic-ref", "-q", "HEAD", cwd=cwd, check=False).returncode != 0
+    wt = Worktree.from_cwd(cwd)
+    if wt.toplevel is None:
+        return git("symbolic-ref", "-q", "HEAD", cwd=cwd, check=False).returncode != 0
+    return wt.checked_out_branch is None
 
 
 def checked_out_branch_name(cwd: Path | str | None) -> str | None:
     """Named branch checked out, or ``None`` when HEAD is detached."""
-    p = git("branch", "--show-current", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    name = (p.stdout or "").strip()
-    return name or None
+    wt = Worktree.from_cwd(cwd)
+    if wt.toplevel is None:
+        p = git("branch", "--show-current", cwd=cwd, check=False)
+        if p.returncode != 0:
+            return None
+        name = (p.stdout or "").strip()
+        return name or None
+    return wt.checked_out_branch
 
 
 def _git_dir(cwd: Path | str | None) -> Path | None:
+    wt = Worktree.from_cwd(cwd)
+    if wt.toplevel is not None:
+        return wt.git_dir
     p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
     if p.returncode != 0:
         return None
     raw = (p.stdout or "").strip()
     if not raw:
         return None
-    git_dir = Path(raw)
-    if git_dir.is_absolute():
-        return git_dir
-    base = Path.cwd() if cwd is None else Path(cwd)
-    return base / git_dir
+    return _resolve_git_dir_path(raw, cwd=cwd, cwd_abs=_cwd_abs(cwd))
 
 
 def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
