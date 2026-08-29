@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,11 @@ from tests.cli_gerrit_mocks import (
 )
 from tests.conftest import json_stdout, run_cli
 from tests.helpers import write_rebase_head
+
+
+class _StdinTTY:
+    def isatty(self) -> bool:
+        return True
 
 
 def _detail_ok(
@@ -84,6 +90,94 @@ def test_gshow_stack_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> 
     data = json_stdout(out)
     assert "commits" in data
     assert len(data["commits"]) >= 2
+
+
+def test_gshow_stack_missing_upstream_non_tty_prints_setup_hint(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_gshow_repo(stack_repo)
+    git("branch", "--unset-upstream", cwd=stack_repo, check=False)
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--stack"],
+        monkeypatch,
+        gerrit=ChangeStore({}),
+    )
+    assert code == ExitCode.ATTENTION
+    assert out == ""
+    assert "No upstream configured for branch" in err
+    assert "git branch --set-upstream-to=" in err
+    assert "git log failed" not in err
+
+
+def test_gshow_stack_prompts_for_missing_upstream_and_aborts(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_gshow_repo(stack_repo)
+    git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda _cwd, _branch, **_kw: None,
+    )
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--stack"],
+        monkeypatch,
+        gerrit=ChangeStore({}),
+    )
+    assert code == ExitCode.ATTENTION
+    assert out == ""
+    p = git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo, check=False)
+    assert p.returncode != 0
+
+
+def test_gshow_stack_sets_missing_upstream_then_continues(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_gshow_repo(stack_repo)
+    git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda _cwd, _branch, **_kw: "origin/main",
+    )
+    code, _out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "--stack"],
+        monkeypatch,
+        gerrit=ChangeStore({}),
+    )
+    assert code in (0, 1), err
+    assert "Upstream for 'feature' set to origin/main." in err
+    assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo) == "origin/main"
+
+
+def test_gshow_head_does_not_prompt_for_missing_upstream(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_gshow_repo(stack_repo)
+    git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("upstream prompt without --stack")),
+    )
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    cid = head_change_id(stack_repo)
+    detail = change_info_for_sha(sha, cid, number=77)
+    code, _out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["HEAD"],
+        monkeypatch,
+        gerrit=ChangeStore({str(detail["id"]): detail}),
+    )
+    assert "upstream prompt without --stack" not in err
+    assert code != ExitCode.GIT
 
 
 def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

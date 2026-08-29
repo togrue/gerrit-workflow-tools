@@ -35,6 +35,7 @@ from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.comments import (
     format_unresolved_section_human,
     format_unresolved_section_markdown,
@@ -48,6 +49,7 @@ from gerrit_workflow_tools.render.commit_row import (
     fmt_verified,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+
 
 _COMMIT_SEPARATOR = "═" * 64
 
@@ -334,6 +336,9 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     verbose_level = int(args.verbose)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
 
+    if args.stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+        return int(ExitCode.ATTENTION)
+
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     targets = resolve_show_targets(
         cwd,
@@ -354,20 +359,24 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
 
-    if any(t.is_local_commit for t in targets):
-        stack = resolve_stack_context(cwd, branch, settings=settings)
-        _fork, _display, target_tip = merge_base_with_target(cwd, branch, settings=settings)
-        stack_rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
-        summary_highlighter = build_summary_highlighter(
-            settings,
-            cwd=cwd,
-            commits=[
-                ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id)
-                for r in stack_rows
-            ],
-            project=stack.project,
-            web_base=settings.gerrit_web_url,
-        )
+    if any(t.is_local_commit for t in targets) and branch is not None and branch_has_upstream(cwd, branch):
+        try:
+            stack = resolve_stack_context(cwd, branch, settings=settings)
+        except ChangeResolutionError:
+            pass
+        else:
+            _fork, _display, target_tip = merge_base_with_target(cwd, branch, settings=settings)
+            stack_rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
+            summary_highlighter = build_summary_highlighter(
+                settings,
+                cwd=cwd,
+                commits=[
+                    ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id)
+                    for r in stack_rows
+                ],
+                project=stack.project,
+                web_base=settings.gerrit_web_url,
+            )
 
     any_attention = False
     json_payloads: list[dict[str, object]] = []
