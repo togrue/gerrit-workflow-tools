@@ -103,7 +103,7 @@ A useful URL for a failed build (often a Jenkins console), after a project-speci
 _Avoid_: build URL (unqualified), CI failure (the name alone)
 
 **CI strategy**:
-A repo-local Python callable under `.ger/ci/registry.py`, keyed by `gerrit.project`, that turns Checks rows and/or change messages into **CI links**. Committed with the clone; not personal git config.
+Callable (built-in or under ``.ger/ci/registry.py``, keyed by ``gerrit.project``) that turns Checks rows and/or change messages into **CI links**. Built-in parsing covers common Jenkins Gerrit trigger messages; override per project when needed.
 _Avoid_: CI plugin, hook script, config regex
 
 ### Talking to Gerrit

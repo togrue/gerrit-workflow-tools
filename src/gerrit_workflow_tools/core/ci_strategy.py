@@ -7,6 +7,7 @@ from typing import Any
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiStrategy
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit_message_parsing import builtin_extract_ci_links
 from gerrit_workflow_tools.core.ger_registry import (
     clear_extension_registry_cache,
     local_domain_dir,
@@ -79,7 +80,12 @@ def extract_ci_links_via_registry(
         return apply_ci_strategy(strategy, project=project, checks=checks, messages=messages)
 
     def _builtin() -> list[CiLink]:
-        return apply_ci_strategy(None, project=project, checks=checks, messages=messages)
+        return apply_ci_strategy(
+            builtin_extract_ci_links,
+            project=project,
+            checks=checks,
+            messages=messages,
+        )
 
     return run_registry_callables(
         tiers,

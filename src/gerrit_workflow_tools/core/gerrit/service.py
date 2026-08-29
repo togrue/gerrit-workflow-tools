@@ -324,8 +324,8 @@ class GerritService:
     def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list, list]:
         """Return failed CI names, transformed links, and all Checks-plugin pipelines."""
 
-        from gerrit_workflow_tools.core.ci_links import CiLink, apply_ci_strategy, ci_pipelines_from_checks, failed_check_names
-        from gerrit_workflow_tools.core.ci_strategy import resolve_ci_strategy
+        from gerrit_workflow_tools.core.ci_links import ci_pipelines_from_checks, failed_check_names
+        from gerrit_workflow_tools.core.ci_strategy import extract_ci_links_via_registry
 
         try:
             check_rows = self.rest.get_checks(change_id)
@@ -333,22 +333,30 @@ class GerritService:
             check_rows = []
         names = failed_check_names(check_rows)
 
-        strategy = resolve_ci_strategy(
-            self.cwd,
-            project=project,
-            settings=self.settings,
-            web_base=self.web_base,
-        )
-        message_rows: list = []
-        links: list[CiLink] = []
+        links: list = []
         try:
-            links = apply_ci_strategy(strategy, project=project, checks=check_rows, messages=[])
-            if strategy is not None and not links:
+            links = extract_ci_links_via_registry(
+                self.cwd,
+                project=project,
+                checks=check_rows,
+                messages=[],
+                settings=self.settings,
+                web_base=self.web_base,
+            )
+            if not links:
                 try:
                     message_rows = self.rest.get_messages(change_id)
                 except GerritApiError:
                     message_rows = []
-                links = apply_ci_strategy(strategy, project=project, checks=check_rows, messages=message_rows)
+                else:
+                    links = extract_ci_links_via_registry(
+                        self.cwd,
+                        project=project,
+                        checks=check_rows,
+                        messages=message_rows,
+                        settings=self.settings,
+                        web_base=self.web_base,
+                    )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("CI strategy failed for %s (%s): %s", change_id, project, exc)
         pipelines = ci_pipelines_from_checks(check_rows, links)

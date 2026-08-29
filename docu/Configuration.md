@@ -134,12 +134,12 @@ Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same 
 
 | Domain | Path segment | Role |
 |--------|--------------|------|
-| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. |
+| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. Built-in Jenkins parsing applies when no registry matches — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md). |
 | Ready boundary | `ready/` | Choose the pushable stack tip and non-pushable tail highlighting. Callable: `find_ready_boundary(*, commits, stop_pattern, overlay) -> BoundaryResult`. |
 | Attention | `attention/` | Override attention reasons (`STRATEGIES` / `get_strategy`) and optional chain blocking (`CHAIN_BLOCK_STRATEGIES` / `get_chain_block_strategy`). |
 | Reviewers | `reviewers/` | Default push reviewers when CLI/branch config does not. Callable: `default_reviewers(*, branch, commits, settings) -> list[str]`. |
 
-**Example (CI):** copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` and edit the `STRATEGIES` keys.
+**Example (CI):** copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` and edit the `STRATEGIES` keys. For built-in Jenkins message parsing and how to extend it, see [gerrit-ci-strategies.md](gerrit-ci-strategies.md).
 
 With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` allows). JSON includes `ci_links` alongside `ci_failures` (names only).
 
