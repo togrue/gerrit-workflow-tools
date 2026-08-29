@@ -32,9 +32,7 @@ def extract_ci_links(
     """Built-in parsing with console URLs rewritten to Jenkins test reports."""
 
     links = default_extract_ci_links(project=project, checks=checks, messages=messages)
-    return [
-        CiLink(label=link.label, url=_to_test_report(link.url), source=link.source) for link in links
-    ]
+    return [CiLink(label=link.label, url=_to_test_report(link.url), source=link.source) for link in links]
 
 
 STRATEGIES = {

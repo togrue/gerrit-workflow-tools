@@ -111,9 +111,7 @@ def test_gshow_stack_missing_upstream_non_tty_prints_setup_hint(
     assert "git log failed" not in err
 
 
-def test_gshow_stack_prompts_for_missing_upstream_and_aborts(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_stack_prompts_for_missing_upstream_and_aborts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_gshow_repo(stack_repo)
     git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
@@ -134,9 +132,7 @@ def test_gshow_stack_prompts_for_missing_upstream_and_aborts(
     assert p.returncode != 0
 
 
-def test_gshow_stack_sets_missing_upstream_then_continues(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_stack_sets_missing_upstream_then_continues(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_gshow_repo(stack_repo)
     git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
@@ -156,9 +152,7 @@ def test_gshow_stack_sets_missing_upstream_then_continues(
     assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo) == "origin/main"
 
 
-def test_gshow_head_does_not_prompt_for_missing_upstream(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_gshow_head_does_not_prompt_for_missing_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_gshow_repo(stack_repo)
     git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
