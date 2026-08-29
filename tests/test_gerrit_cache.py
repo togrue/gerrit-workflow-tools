@@ -208,3 +208,30 @@ def test_load_comments_refetches_when_change_updated_moves(tmp_path: Path) -> No
     after = cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="u2", trust_window_seconds=0)
 
     assert after == _comment_map("second")
+
+
+def test_capability_round_trips_and_starts_unknown(tmp_path: Path) -> None:
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+
+    assert cache.capability("checks") is None
+    cache.set_capability("checks", False)
+    assert cache.capability("checks") is False
+    cache.set_capability("checks", True)
+    assert cache.capability("checks") is True
+
+
+def test_capability_expires_so_a_newly_installed_plugin_is_rediscovered(tmp_path: Path) -> None:
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    cache.set_capability("checks", False)
+
+    assert cache.capability("checks", ttl_seconds=0) is None
+
+
+def test_cache_clear_forgets_capabilities_but_keeps_schema_metadata(tmp_path: Path) -> None:
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    cache.set_capability("checks", False)
+
+    cache.clear()
+
+    assert cache.capability("checks") is None
+    assert cache.info().host == cache.host

@@ -39,6 +39,9 @@ from gerrit_workflow_tools.core.review_chain import (
 
 logger = logging.getLogger(__name__)
 
+# Host capability key: does this Gerrit serve the Checks plugin endpoint?
+_CHECKS_CAPABILITY = "checks"
+
 
 def _service_stack_context(service: GerritService) -> StackContext:
     """Resolve stack context once per service instance (batch paths may call this many times)."""
@@ -108,6 +111,10 @@ class GerritService:
         self.trust_window_seconds = trust_window_seconds
         self.account_ttl_seconds = account_ttl_seconds
         self.refresh = refresh
+        # Whether this host serves the Checks plugin: True / False / None when not yet
+        # known. A property of the host, not of any change, so it is answered from the
+        # cache and only rediscovered once that verdict expires.
+        self._checks_endpoint_available: bool | None = None
         self.changes = ChangeApi(self)
         self.accounts = AccountApi(self)
         self.comments = CommentApi(self)
@@ -329,16 +336,43 @@ class GerritService:
         except GerritApiError:
             return []
 
+    def _checks_or_empty(self, change_id: str) -> list[dict[str, Any]]:
+        """Checks-plugin rows for *change_id*, or ``[]``.
+
+        A host without the Checks plugin answers 404 for every CI-failed change, on every
+        run. Whether the endpoint exists is a fact about the *host*, not the change, so the
+        verdict is cached: the first run pays ``k`` 404s, later runs pay none.
+
+        An in-run memo alone would not help — the follow-ups run concurrently, so they all
+        ask before any 404 comes back. Only persistence removes the calls.
+
+        Other errors are per-change and must never disable the endpoint.
+        """
+
+        if self._checks_endpoint_available is None:
+            self._checks_endpoint_available = self.cache.capability(_CHECKS_CAPABILITY)
+        if self._checks_endpoint_available is False:
+            return []
+        try:
+            rows = self.rest.get_checks(change_id)
+        except GerritApiError as exc:
+            if exc.status == 404:
+                self._checks_endpoint_available = False
+                self.cache.set_capability(_CHECKS_CAPABILITY, False)
+                logger.debug("no Checks plugin on %s; skipping further checks calls", self.web_base)
+            return []
+        if self._checks_endpoint_available is None:
+            self._checks_endpoint_available = True
+            self.cache.set_capability(_CHECKS_CAPABILITY, True)
+        return rows
+
     def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list, list]:
         """Return failed CI names, transformed links, and all Checks-plugin pipelines."""
 
         from gerrit_workflow_tools.core.ci_links import ci_pipelines_from_checks, failed_check_names
         from gerrit_workflow_tools.core.ci_strategy import LazyRows, extract_ci_links_via_registry
 
-        try:
-            check_rows = self.rest.get_checks(change_id)
-        except GerritApiError:
-            check_rows = []
+        check_rows = self._checks_or_empty(change_id)
         names = failed_check_names(check_rows)
 
         links: list = []

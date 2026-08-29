@@ -16,6 +16,9 @@ from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results
 SCHEMA_VERSION = "2"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_ACCOUNT_TTL_SECONDS = 24 * 60 * 60
+DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
+
+_CAPABILITY_PREFIX = "capability:"
 
 
 @dataclass(frozen=True)
@@ -169,6 +172,38 @@ class GerritCache:
             conn.execute("DELETE FROM comments")
             conn.execute("DELETE FROM accounts")
             conn.execute("DELETE FROM changes")
+            # Capabilities are learned facts, not schema — `cache clear` must forget them
+            # too, so a host that gained a plugin is re-probed on the next run.
+            conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{_CAPABILITY_PREFIX}%",))
+
+    def capability(self, name: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> bool | None:
+        """Whether this host supports *name*, or ``None`` when unknown or stale.
+
+        Host capabilities (does this Gerrit serve the Checks plugin?) are discovered by
+        being told "404" and cost one request per change to rediscover. They change only
+        when an admin installs or removes a plugin, so they are cached with a long TTL
+        rather than forever: a stale ``False`` would hide a newly installed plugin.
+        """
+
+        with self._connect() as conn:
+            raw = self._meta_get(conn, f"{_CAPABILITY_PREFIX}{name}")
+        if not raw:
+            return None
+        try:
+            record = json.loads(raw)
+            value = record["value"]
+            checked_at = int(record["at"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return None
+        if not isinstance(value, bool) or _now() - checked_at >= ttl_seconds:
+            return None
+        return value
+
+    def set_capability(self, name: str, value: bool) -> None:
+        """Record whether this host supports *name*."""
+
+        with self._connect() as conn:
+            self._meta_set(conn, f"{_CAPABILITY_PREFIX}{name}", _json_dumps({"value": value, "at": _now()}))
 
     def info(self) -> CacheInfo:
         """Return row counts for cache administration."""

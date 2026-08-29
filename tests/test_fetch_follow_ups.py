@@ -40,6 +40,7 @@ def _make_service(detail: dict[str, Any] | None = None) -> GerritService:
     rest.web_base = "https://gerrit.example.com"
     cache = MagicMock()
     cache.load_changes.return_value = {"Iabc123": detail} if detail is not None else {}
+    cache.capability.return_value = None  # host capability not yet discovered
     return GerritService(rest, cache)
 
 
@@ -131,3 +132,51 @@ def test_comments_follow_up_passes_change_updated_as_the_cache_key() -> None:
         "proj~main~Iabc123",
         change_updated="2026-06-03 00:31:56.000000000",
     )
+
+
+def test_checks_endpoint_is_probed_once_per_host_not_once_per_change() -> None:
+    """A 404 means the host has no Checks plugin — stop asking for the rest of the run."""
+
+    from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+
+    service = _make_service()
+    service.rest.get_checks.side_effect = GerritApiError("nope", status=404)
+
+    assert service._checks_or_empty("proj~main~I1") == []
+    assert service._checks_or_empty("proj~main~I2") == []
+    assert service._checks_or_empty("proj~main~I3") == []
+
+    service.rest.get_checks.assert_called_once()
+
+
+def test_a_later_run_skips_checks_entirely_once_the_host_said_404() -> None:
+    """The verdict is cached, so run 2 makes no /checks call at all.
+
+    An in-run memo cannot achieve this: `ger log`'s follow-ups run concurrently, so they
+    all ask before the first 404 comes back. Only the persisted verdict removes the calls.
+    """
+
+    from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+
+    first = _make_service()
+    first.rest.get_checks.side_effect = GerritApiError("nope", status=404)
+    first._checks_or_empty("proj~main~I1")
+    first.cache.set_capability.assert_called_once_with("checks", False)
+
+    second = _make_service()
+    second.cache.capability.return_value = False  # what run 1 persisted
+
+    assert second._checks_or_empty("proj~main~I1") == []
+    second.rest.get_checks.assert_not_called()
+
+
+def test_a_non_404_checks_error_stays_per_change() -> None:
+    """A transient failure on one change must not disable checks for the others."""
+
+    from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+
+    service = _make_service()
+    service.rest.get_checks.side_effect = [GerritApiError("boom", status=500), [{"state": "FAILED"}]]
+
+    assert service._checks_or_empty("proj~main~I1") == []
+    assert service._checks_or_empty("proj~main~I2") == [{"state": "FAILED"}]
