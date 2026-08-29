@@ -23,12 +23,44 @@ from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
 
-# Calibrated on cold ``ger log`` / ``ger show`` / ``ger fix`` / ``ger resolve`` (Jul 2026).
+# Calibrated on cold ``ger log`` / ``ger show`` / ``ger fix`` / ``ger resolve`` (Aug 2026).
 # Leave modest headroom for small refactors; fail hard on O(N) storms.
-_LOG_GIT_BUDGET = 20
-_SHOW_GIT_BUDGET = 24
+_LOG_GIT_BUDGET = 6
+_SHOW_GIT_BUDGET = 12
 _FIX_GIT_BUDGET = 10
 _RESOLVE_GIT_BUDGET = 10
+
+
+def _git_subcommand_counts(run: MagicMock) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for call in run.call_args_list:
+        args = call.args
+        if not args or args[0] != "git":
+            continue
+        git_args = args[1:]
+        if not git_args:
+            continue
+        if git_args[0] == "remote" and len(git_args) >= 2 and git_args[1] == "get-url":
+            key = "remote get-url"
+        elif git_args[0] == "branch" and "--show-current" in git_args:
+            key = "branch --show-current"
+        elif git_args[0] == "rev-parse" and "--show-toplevel" in git_args:
+            key = "rev-parse --show-toplevel"
+        else:
+            key = git_args[0]
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _assert_log_git_budget(run: MagicMock) -> None:
+    counts = _git_subcommand_counts(run)
+    assert run.call_count <= _LOG_GIT_BUDGET, (
+        f"git subprocesses={run.call_count} budget={_LOG_GIT_BUDGET}; counts={counts}; "
+        f"args={[c.args[:5] for c in run.call_args_list]}"
+    )
+    assert counts.get("remote get-url", 0) == 0, counts
+    assert counts.get("branch --show-current", 0) == 0, counts
+    assert counts.get("rev-parse --show-toplevel", 0) <= 1, counts
 
 
 def _configure_web(repo: Path) -> None:
@@ -81,9 +113,7 @@ def test_log_call_budget_on_stack_repo(stack_repo: Path, monkeypatch: pytest.Mon
     assert not any(q.startswith("change:") for q in store.queries()), store.queries()
     assert store.calls_to("list_change_reviewers") == [], "reviewers already on ChangeInfo"
     assert store.calls_to("get_change") == []
-    assert run.call_count <= _LOG_GIT_BUDGET, (
-        f"git subprocesses={run.call_count} budget={_LOG_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
-    )
+    _assert_log_git_budget(run)
 
 
 def test_log_git_and_rest_do_not_scale_with_stack_size(
@@ -107,7 +137,7 @@ def test_log_git_and_rest_do_not_scale_with_stack_size(
     (_n_small, git_small, rest_small), (_n_large, git_large, rest_large) = counts
     assert git_large <= git_small + 2, f"git scaled with N: {counts}"
     assert rest_large == rest_small == 1, f"REST scaled with N: {counts}"
-    assert git_large <= _LOG_GIT_BUDGET
+    _assert_log_git_budget(run)
 
 
 def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

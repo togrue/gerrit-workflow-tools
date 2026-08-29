@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.git_state import Worktree
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     PatchsetStatus,
@@ -530,8 +531,6 @@ def _install_log_git_mocks(
     def fake_git_out(*args: str, cwd: Path | str | None = None) -> str:
         assert isinstance(cwd, Path)
         git_out_calls.append((args, cwd))
-        if args == ("rev-parse", "--abbrev-ref", "HEAD"):
-            return head_branch
         raise AssertionError(f"unexpected git_out call: {args}")
 
     def fake_git(
@@ -545,6 +544,13 @@ def _install_log_git_mocks(
         git_calls.append((args, cwd, check))
         return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
 
+    def fake_worktree_from_cwd(cwd: Path | str | None) -> Worktree:
+        base = cwd if isinstance(cwd, Path) else Path(str(cwd))
+        if head_branch == "HEAD":
+            return Worktree(toplevel=base, checked_out_branch=None, git_dir=base / ".git")
+        return Worktree(toplevel=base, checked_out_branch=head_branch, git_dir=base / ".git")
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.Worktree.from_cwd", fake_worktree_from_cwd)
     monkeypatch.setattr("gerrit_workflow_tools.core.git_state.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
     monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: None)
@@ -561,7 +567,7 @@ def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: py
     commit_data = commit_rows_in_range(cwd, rev_range)
     assert commit_data == []
 
-    assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
+    assert git_out_calls == []
     assert [args for args, _cwd, _check in git_calls] == [
         ("log", "--reverse", "--first-parent", "feat/x@{upstream}..feat/x", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
     ]
@@ -577,7 +583,7 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     commit_data = commit_rows_in_range(cwd, rev_range)
     assert commit_data == []
 
-    assert [args for args, _ in git_out_calls] == [("rev-parse", "--abbrev-ref", "HEAD")]
+    assert git_out_calls == []
     assert [args for args, _cwd, _check in git_calls] == [
         ("log", "--reverse", "--first-parent", "@{upstream}..HEAD", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
     ]

@@ -826,6 +826,7 @@ def _add_self_origin_and_fetch(repo: Path) -> None:
     if git("remote", "get-url", "origin", cwd=repo, check=False).returncode != 0:
         git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
     git("fetch", "origin", cwd=repo)
+    git("config", "gerrit.project", "testproj", cwd=repo, check=False)
 
 
 def _advance_main_with_commit(repo: Path) -> None:

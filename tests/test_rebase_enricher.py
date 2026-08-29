@@ -350,6 +350,7 @@ def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path
     # Mock _enrich_todo to avoid real Gerrit/git calls; only subprocess.run
     # (the editor launch) remains, which is the thing we want to test here.
     with (
+        patch("gerrit_workflow_tools.rebase_enricher.Settings.from_cwd", return_value=Settings.from_map({})),
         patch("gerrit_workflow_tools.rebase_enricher._enrich_todo", return_value=enriched_text),
         patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run),
     ):
@@ -380,6 +381,7 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
 
     with (
+        patch("gerrit_workflow_tools.rebase_enricher.Settings.from_cwd", return_value=Settings.from_map({})),
         patch(
             "gerrit_workflow_tools.rebase_enricher._enrich_todo",
             side_effect=GerritApiError("connection refused"),
@@ -469,9 +471,8 @@ def test_resolve_editor_vi_fallback(tmp_path: Path, monkeypatch):
 
     for var in ("GREBASE_EDITOR", "GIT_EDITOR", "VISUAL", "EDITOR"):
         monkeypatch.delenv(var, raising=False)
-    with patch("gerrit_workflow_tools.rebase_enricher.git") as mock_git:
-        mock_git.return_value = MagicMock(returncode=1, stdout="")
-        assert _resolve_editor(tmp_path) == "vi"
+    settings = Settings.from_map({})
+    assert _resolve_editor(tmp_path, settings=settings) == "vi"
 
 
 # ---------------------------------------------------------------------------

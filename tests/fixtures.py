@@ -153,6 +153,8 @@ def make_repo_with_merged_side_branch(path: Path) -> Path:
         env=env,
     )
     configure_gerrit_target(path, "main")
+    git("config", "gerrit.project", "testproj", cwd=path, check=False)
+    git("config", "gerrit.webUrl", "https://g.example", cwd=path, check=False)
     return path
 
 

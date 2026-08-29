@@ -26,6 +26,16 @@ _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)
 
 
 @pytest.fixture(autouse=True)
+def _clear_git_semantic_caches() -> Generator[None]:
+    """Process-lifetime Worktree / stack-context memos must not leak between tests."""
+    from gerrit_workflow_tools.core.git_run import clear_git_cache
+
+    clear_git_cache()
+    yield
+    clear_git_cache()
+
+
+@pytest.fixture(autouse=True)
 def _reset_hyperlink_mode() -> Generator[None]:
     """Keep OSC 8 mode off unless a test enables it; avoid leaks into later tests."""
     yield
