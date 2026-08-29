@@ -109,3 +109,25 @@ def test_reviewers_follow_up_runs_when_payload_omits_the_field() -> None:
 
     list_reviewers.assert_called_once()
     assert commits[0].reviewers == [ReviewerAccount(slug="alice", account_id=42)]
+
+
+def test_comments_follow_up_passes_change_updated_as_the_cache_key() -> None:
+    """`LogCommit.updated` reaches `load_comments`, so its validity rule can fire."""
+
+    detail = {**_DETAIL, "reviewers": {}, "updated": "2026-06-03 00:31:56.000000000"}
+    service = _make_service(detail)
+
+    with (
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            return_value=_STACK,
+        ),
+        patch.object(service.comments, "get_file_map", return_value={}) as get_file_map,
+    ):
+        commits = service.fetch_gerrit_data([_FakeRow()])
+
+    assert commits[0].updated == "2026-06-03 00:31:56.000000000"
+    get_file_map.assert_called_once_with(
+        "proj~main~Iabc123",
+        change_updated="2026-06-03 00:31:56.000000000",
+    )

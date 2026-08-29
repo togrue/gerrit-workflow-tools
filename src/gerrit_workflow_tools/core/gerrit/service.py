@@ -209,7 +209,9 @@ class GerritService:
                 detail_by_triplet[triplet] = payload
 
         result: list[Any] = []
-        pending: list[tuple[int, frozenset[str], str]] = []
+        # (row index, follow-up kinds, triplet, change.updated) — `updated` is the cache
+        # validity key for every follow-up, so it travels with the job.
+        pending: list[tuple[int, frozenset[str], str, str | None]] = []
 
         for row in commits:
             detail = None
@@ -223,17 +225,17 @@ class GerritService:
             if needed and detail is not None:
                 triplet = detail.get("id")
                 if isinstance(triplet, str) and triplet:
-                    pending.append((len(result) - 1, needed, triplet))
+                    pending.append((len(result) - 1, needed, triplet, lc.updated))
 
         if not pending:
             return result
 
-        def _follow_up(item: tuple[int, frozenset[str], str]) -> tuple[int, dict[str, Any]]:
-            idx, kinds, triplet = item
+        def _follow_up(item: tuple[int, frozenset[str], str, str | None]) -> tuple[int, dict[str, Any]]:
+            idx, kinds, triplet, change_updated = item
             updates: dict[str, Any] = {}
             if "comments" in kinds:
                 try:
-                    file_map = self.comments.get_file_map(triplet)
+                    file_map = self.comments.get_file_map(triplet, change_updated=change_updated)
                     updates["comments"] = count_unresolved_in_file_map(file_map)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("comments follow-up failed for %s: %s", triplet, exc)

@@ -380,7 +380,11 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             any_attention = True
 
         rest_key = _gerrit_rest_key(commit, resolved.resolution)
-        file_map = service.comments.get_file_map(rest_key) if (commit.pushed and rest_key) else {}
+        file_map = (
+            service.comments.get_file_map(rest_key, change_updated=commit.updated)
+            if (commit.pushed and rest_key)
+            else {}
+        )
         unresolved_chains = collect_unresolved_comment_chains(file_map)
 
         if out_fmt == "json":

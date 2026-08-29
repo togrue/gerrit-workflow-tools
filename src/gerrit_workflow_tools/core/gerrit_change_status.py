@@ -92,6 +92,10 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     change_status: str | None = None  # raw Gerrit ``status`` (e.g. NEW, MERGED)
     merged_equivalent: bool | None = None  # MERGED only: proved same / different / unknown
     reviewers: list[ReviewerAccount] = field(default_factory=list)
+    updated: str | None = None
+    """Gerrit ``ChangeInfo.updated``. The cache validity key for everything hanging off this
+    change (comments, checks, messages): while it is unchanged, cached follow-ups are current
+    however old they are. Carried here so callers need not re-plumb the raw payload."""
 
 
 def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
@@ -364,6 +368,7 @@ def build_log_commit(
             change_status=change_status_val,
             merged_equivalent=merged_eq,
             reviewers=reviewer_list,
+            updated=detail.get("updated") if isinstance(detail.get("updated"), str) else None,
         ),
         frozenset(needed),
     )

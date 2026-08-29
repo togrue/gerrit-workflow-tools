@@ -171,3 +171,40 @@ def test_find_payloads_by_footer_change_ids_dedupes_aliases(tmp_path: Path) -> N
     assert len(found[cid]) == 2
     numbers = {row["_number"] for row in found[cid]}
     assert numbers == {1, 2}
+
+
+def _comment_map(body: str) -> dict[str, list[dict[str, Any]]]:
+    return {"file.py": [{"id": "c1", "message": body, "unresolved": True}]}
+
+
+def test_load_comments_serves_cache_while_change_updated_is_unchanged(tmp_path: Path) -> None:
+    """Comments outlive the trust window as long as the change itself has not moved."""
+
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    calls: list[str] = []
+
+    def fetch(triplet: str) -> dict[str, list[dict[str, Any]]]:
+        calls.append(triplet)
+        return _comment_map("first")
+
+    common = {"fetch_comments": fetch, "change_updated": "u1", "trust_window_seconds": 0}
+    first = cache.load_comments("proj~main~I1", **common)
+    second = cache.load_comments("proj~main~I1", **common)
+
+    assert calls == ["proj~main~I1"], "second read must not hit the network"
+    assert first == second == _comment_map("first")
+
+
+def test_load_comments_refetches_when_change_updated_moves(tmp_path: Path) -> None:
+    """A bumped ``updated`` invalidates the cached comments even inside the trust window."""
+
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    bodies = iter(["first", "second"])
+
+    def fetch(triplet: str) -> dict[str, list[dict[str, Any]]]:
+        return _comment_map(next(bodies))
+
+    cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="u1", trust_window_seconds=0)
+    after = cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="u2", trust_window_seconds=0)
+
+    assert after == _comment_map("second")
