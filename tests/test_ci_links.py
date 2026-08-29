@@ -17,7 +17,7 @@ from gerrit_workflow_tools.core.ci_links import (
     failed_check_names,
     prefer_checks_links,
 )
-from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache
+from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, extract_ci_links_via_registry
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git
@@ -229,6 +229,77 @@ def test_service_skips_get_messages_when_builtin_checks_suffice(stack_repo: Path
         )
     ]
     assert not any(call.args[0] == triplet for call in store.calls_to("get_messages"))
+
+
+def test_extract_ci_links_via_registry_uses_builtin_without_local_registry(stack_repo: Path) -> None:
+    clear_ci_strategy_cache()
+    messages = [
+        {
+            "message": (
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
+                "https://ci.example.org/job/Widget/job/Widget/88/ : FAILURE"
+            ),
+            "_revision_number": 1,
+        }
+    ]
+    links = extract_ci_links_via_registry(
+        stack_repo,
+        project="testproj",
+        checks=[],
+        messages=messages,
+    )
+    assert links == [
+        CiLink(
+            label="jenkins",
+            url="https://ci.example.org/job/Widget/job/Widget/88/console",
+            source="message",
+        )
+    ]
+
+
+def test_service_uses_builtin_message_parser_without_registry(stack_repo: Path) -> None:
+    clear_ci_strategy_cache()
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows, per_index_overrides=[{"verified": -1}] * len(rows))
+    first_cid = rows[0].change_id
+    assert first_cid
+    triplet = f"testproj~main~{first_cid}"
+    store = ChangeStore(
+        details,
+        web_base="https://g.example",
+        checks={triplet: []},
+        messages={
+            triplet: [
+                {
+                    "message": (
+                        "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
+                        "https://ci.example.org/job/Widget/job/Widget/201/ : FAILURE"
+                    ),
+                    "_revision_number": 1,
+                }
+            ]
+        },
+    )
+    service = GerritService.from_cwd(stack_repo, rest=store)
+    inputs = [
+        CommitStatusInput(
+            sha=row.sha,
+            short_sha=row.short_sha,
+            summary=row.subject,
+            change_id=row.change_id,
+        )
+        for row in rows
+    ]
+    result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
+    matched = next(c for c in result if c.change_id == first_cid)
+    assert matched.ci_links == [
+        CiLink(
+            label="jenkins",
+            url="https://ci.example.org/job/Widget/job/Widget/201/console",
+            source="message",
+        )
+    ]
+    assert any(call.args[0] == triplet for call in store.calls_to("get_messages"))
 
 
 def test_service_falls_back_to_messages(stack_repo: Path) -> None:
