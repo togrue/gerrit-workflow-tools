@@ -26,10 +26,7 @@ def test_jenkins_job_url_to_console_idempotent() -> None:
 
 
 def test_jenkins_build_url_from_text_nested_job_path() -> None:
-    text = (
-        "Patch Set 2: Verified-1\n\nBuild Failed \n\n"
-        "https://ci.example.org/job/Widget/job/Widget/99/ : FAILURE"
-    )
+    text = "Patch Set 2: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/99/ : FAILURE"
     assert jenkins_build_url_from_text(text) == "https://ci.example.org/job/Widget/job/Widget/99"
 
 
@@ -60,8 +57,7 @@ def test_jenkins_build_url_from_text_build_started_inline() -> None:
             "https://ci.example.org/job/Widget/job/Widget/12",
         ),
         (
-            "Patch Set 2: Verified-1\n\nBuild Failed \n\n"
-            "https://ci.example.org/job/Widget/job/Widget/55/ : FAILURE",
+            "Patch Set 2: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/55/ : FAILURE",
             "build_failed",
             2,
             "https://ci.example.org/job/Widget/job/Widget/55",
@@ -101,8 +97,7 @@ def test_default_extract_ci_links_from_build_failed_message() -> None:
         },
         {
             "message": (
-                "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
-                "https://ci.example.org/job/Widget/job/Widget/12/ : FAILURE"
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/12/ : FAILURE"
             ),
             "_revision_number": 1,
             "date": "2026-01-01 10:01:00",
@@ -122,16 +117,14 @@ def test_default_extract_ci_links_prefers_latest_failed_patch_set() -> None:
     messages = [
         {
             "message": (
-                "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
-                "https://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
             ),
             "_revision_number": 1,
             "date": "2026-01-01 10:00:00",
         },
         {
             "message": (
-                "Patch Set 3: Verified-1\n\nBuild Failed \n\n"
-                "https://ci.example.org/job/Widget/job/Widget/30/ : FAILURE"
+                "Patch Set 3: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/30/ : FAILURE"
             ),
             "_revision_number": 3,
             "date": "2026-01-02 10:00:00",
@@ -152,8 +145,7 @@ def test_default_extract_ci_links_checks_before_messages() -> None:
     messages = [
         {
             "message": (
-                "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
-                "https://ci.example.org/job/Widget/job/Widget/12/ : FAILURE"
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/12/ : FAILURE"
             ),
             "_revision_number": 1,
         }

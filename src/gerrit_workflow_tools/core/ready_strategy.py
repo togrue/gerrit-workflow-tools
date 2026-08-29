@@ -95,7 +95,7 @@ def blocked_shas_for_stack(
     )
     if boundary.block_index is None:
         return frozenset()
-    return frozenset(row.sha for row in commits[boundary.block_index:])
+    return frozenset(row.sha for row in commits[boundary.block_index :])
 
 
 def clear_ready_strategy_cache() -> None:

@@ -110,9 +110,7 @@ def resolve_range_endpoint_sha(
     raw = arg.strip()
     if not raw:
         raise ChangeResolutionError("empty range endpoint")
-    resolution = resolve_changeish(
-        raw, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
-    )
+    resolution = resolve_changeish(raw, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True)
     if resolution.local_sha:
         return resolution.local_sha
 

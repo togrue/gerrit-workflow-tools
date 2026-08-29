@@ -163,9 +163,7 @@ def _pipelines_for_display(commit: LogCommit) -> list[CiPipeline]:
     if commit.ci_pipelines:
         return commit.ci_pipelines
     if commit.ci_links:
-        return [
-            CiPipeline(label=link.label, state="FAILED", url=link.url) for link in commit.ci_links
-        ]
+        return [CiPipeline(label=link.label, state="FAILED", url=link.url) for link in commit.ci_links]
     return [CiPipeline(label=name, state="FAILED", url=None) for name in commit.ci_failures]
 
 

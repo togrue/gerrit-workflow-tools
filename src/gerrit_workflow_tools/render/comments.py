@@ -75,9 +75,7 @@ def format_comment_chain_human(
     lines: list[str] = [top_line]
     content_width = max(1, inner_width - 1)
     for row in rows:
-        lines.append(
-            f"{_BOX_INDENT}{_box_border('│')} {_pad_inner(row, content_width)}{_box_border('│')}"
-        )
+        lines.append(f"{_BOX_INDENT}{_box_border('│')} {_pad_inner(row, content_width)}{_box_border('│')}")
     lines.append(bottom_line)
     return lines
 

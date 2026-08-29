@@ -38,6 +38,7 @@ def clear_stack_context_cache() -> None:
     """Drop memoized :func:`resolve_stack_context` results (tests and :func:`clear_git_cache`)."""
     _STACK_CONTEXT_CACHE.clear()
 
+
 # The changeish grammar lives in core.changeish; this module decides what a parsed changeish
 # *means*. ChangeishKind is re-exported because Resolution.kind is part of the JSON contract.
 __all__ = [

@@ -155,8 +155,7 @@ def _resolve_push_reviewers(
         _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
         rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=True)
         ready_rows = [
-            ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id)
-            for r in rows
+            ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
         ]
     except Exception:  # pylint: disable=broad-exception-caught
         ready_rows = []

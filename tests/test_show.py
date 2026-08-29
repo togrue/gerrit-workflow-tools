@@ -137,9 +137,7 @@ def test_gshow_multi_human_omits_clean_commits(stack_repo: Path, monkeypatch: py
     tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
     parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     tip_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", tip, cwd=stack_repo).strip()
-    parent_cid = git_out(
-        "log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", parent, cwd=stack_repo
-    ).strip()
+    parent_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", parent, cwd=stack_repo).strip()
     dirty = _detail_ok(change_id=tip_cid, sha=tip, number=201, cr_value=0, v_value=1)
     dirty["unresolved_comment_count"] = 1
     clean = _detail_ok(change_id=parent_cid, sha=parent, number=200, cr_value=2, v_value=1)
@@ -184,9 +182,7 @@ def test_gshow_multi_markdown_omits_clean_commits(stack_repo: Path, monkeypatch:
     tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
     parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     tip_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", tip, cwd=stack_repo).strip()
-    parent_cid = git_out(
-        "log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", parent, cwd=stack_repo
-    ).strip()
+    parent_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", parent, cwd=stack_repo).strip()
     dirty = _detail_ok(change_id=tip_cid, sha=tip, number=201, cr_value=0, v_value=1)
     dirty["unresolved_comment_count"] = 1
     clean = _detail_ok(change_id=parent_cid, sha=parent, number=200, cr_value=2, v_value=1)

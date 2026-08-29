@@ -269,8 +269,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         settings,
         cwd=cwd,
         commits=[
-            ReadyCommitRow(sha=c.sha, short_sha=c.short_sha, subject=c.summary, change_id=c.change_id)
-            for c in commits
+            ReadyCommitRow(sha=c.sha, short_sha=c.short_sha, subject=c.summary, change_id=c.change_id) for c in commits
         ],
         project=stack.project,
         web_base=settings.gerrit_web_url,
@@ -304,9 +303,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
                 "code_review": c.code_review,
                 "comments_unresolved": c.comments_unresolved,
                 "ci_failures": c.ci_failures,
-                "ci_links": [
-                    {"label": link.label, "url": link.url, "source": link.source} for link in c.ci_links
-                ],
+                "ci_links": [{"label": link.label, "url": link.url, "source": link.source} for link in c.ci_links],
                 "ci_pipelines": [
                     {
                         "label": pipe.label,

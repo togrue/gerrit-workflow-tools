@@ -172,9 +172,7 @@ STRATEGIES = {"testproj": _jenkins}
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
     assert matched.ci_failures == ["verify"]
-    assert matched.ci_links == [
-        CiLink(label="verify", url="https://jenkins.example/job/p/42/console", source="checks")
-    ]
+    assert matched.ci_links == [CiLink(label="verify", url="https://jenkins.example/job/p/42/console", source="checks")]
     assert not any(call.args[0] == triplet for call in store.calls_to("get_messages"))
 
 
@@ -236,8 +234,7 @@ def test_extract_ci_links_via_registry_uses_builtin_without_local_registry(stack
     messages = [
         {
             "message": (
-                "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
-                "https://ci.example.org/job/Widget/job/Widget/88/ : FAILURE"
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/88/ : FAILURE"
             ),
             "_revision_number": 1,
         }
@@ -459,9 +456,7 @@ STRATEGIES = {"testproj": _extract}
         details,
         checks={f"testproj~main~{first_cid}": [{"state": "FAILED", "checker_name": "build"}]},
     )
-    code, out, err = run_cli(
-        stack_repo, log_main, ["--json", "--color=never"], monkeypatch, gerrit=store
-    )
+    code, out, err = run_cli(stack_repo, log_main, ["--json", "--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     data = json.loads(out)
     linked = [c for c in data["commits"] if c.get("ci_links")]

@@ -106,12 +106,8 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
         checks={f"testproj~main~{first_cid}": [{"state": "FAILED", "checker_name": "verify"}]},
     )
     base_args = ["--color=never", "--hyperlinks", "always"]
-    code_plain, out_plain, err_plain = run_cli(
-        stack_repo, log_main, base_args, monkeypatch, gerrit=store
-    )
-    code, out, err = run_cli(
-        stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store
-    )
+    code_plain, out_plain, err_plain = run_cli(stack_repo, log_main, base_args, monkeypatch, gerrit=store)
+    code, out, err = run_cli(stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store)
     assert code == 1, err
     assert code_plain in (0, 1), err_plain
     assert _primary_log_lines(out_plain) == _primary_log_lines(out)
@@ -341,9 +337,7 @@ def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(
-        stack_repo, log_main, ["-vv", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
-    )
+    code, out, err = run_cli(stack_repo, log_main, ["-vv", "--color=never"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     cid = rows[0].change_id
     assert cid
