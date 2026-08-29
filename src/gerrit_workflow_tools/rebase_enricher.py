@@ -127,7 +127,7 @@ def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, tuple[s
 # ---------------------------------------------------------------------------
 
 
-def _resolve_editor(cwd: Path) -> str:
+def _resolve_editor(cwd: Path, *, settings: Settings | None = None) -> str:
     """Find the real editor, following git's lookup order (skipping ``sequence.editor``).
 
     Priority:
@@ -146,9 +146,10 @@ def _resolve_editor(cwd: Path) -> str:
         if val:
             return val
 
-    p = git("config", "core.editor", cwd=cwd, check=False)
-    if p.returncode == 0 and p.stdout.strip():
-        return p.stdout.strip()
+    snap = settings if settings is not None else Settings.from_cwd(cwd)
+    editor = snap.get("core.editor")
+    if editor:
+        return editor
 
     for env_var in ("VISUAL", "EDITOR"):
         val = os.environ.get(env_var)
@@ -168,6 +169,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
     cwd: Path,
     *,
     gerrit: GerritRest | None = None,
+    settings: Settings | None = None,
 ) -> str:
     """Rewrite rebase todo lines with Gerrit status annotations.
 
@@ -178,7 +180,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
     A supplied *gerrit* implementation makes the config check moot: it already knows its
     own web base, matching ``GerritService.from_cwd(rest=…)``.
     """
-    settings = Settings.from_cwd(cwd)
+    settings = settings if settings is not None else Settings.from_cwd(cwd)
     if gerrit is None and not settings.gerrit_web_url:
         return text  # Not a Gerrit repository — pass through silently.
 
@@ -271,6 +273,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 
     todo = Path(args[1])
     cwd = Path.cwd()
+    settings = Settings.from_cwd(cwd)
 
     try:
         original_text = todo.read_text(encoding="utf-8", errors="replace")
@@ -281,7 +284,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
     # Attempt enrichment; on failure fall back to original text with a diagnostic comment.
     error_header: str | None = None
     try:
-        final_text = _enrich_todo(original_text, cwd, gerrit=gerrit)
+        final_text = _enrich_todo(original_text, cwd, gerrit=gerrit, settings=settings)
         logger.debug("rebase_enricher: todo enriched successfully")
     except (GerritApiError, GitError, ValueError, OSError) as e:
         logger.debug("rebase_enricher: enrichment failed: %s", e)
@@ -302,7 +305,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         return 1
 
     # Launch the real editor.
-    editor = _resolve_editor(cwd)
+    editor = _resolve_editor(cwd, settings=settings)
     logger.debug("rebase_enricher: launching editor %r on %s", editor, todo)
     try:
         ed_cmd = [*shlex.split(editor), str(todo)]

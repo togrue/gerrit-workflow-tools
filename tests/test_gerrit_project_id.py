@@ -32,9 +32,6 @@ def test_resolve_gerrit_project_name_prefers_override(monkeypatch: pytest.Monkey
     assert resolve_gerrit_project_name(None, settings=settings) == "cfg/proj"
 
 
-def test_resolve_gerrit_project_name_from_remote_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "gerrit_workflow_tools.core.gerrit_project_id.git_out",
-        lambda *a, **k: "ssh://user@gerrit.example.com/a/team/my-project.git",
-    )
-    assert resolve_gerrit_project_name(None, settings=Settings.from_map({})) == "team/my-project"
+def test_resolve_gerrit_project_name_from_remote_url() -> None:
+    settings = Settings.from_map({"remote.origin.url": "ssh://user@gerrit.example.com/a/team/my-project.git"})
+    assert resolve_gerrit_project_name(None, settings=settings) == "team/my-project"

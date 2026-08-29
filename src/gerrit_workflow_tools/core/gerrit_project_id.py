@@ -45,6 +45,9 @@ def resolve_gerrit_project_name(cwd: Path | str | None, *, settings: Settings) -
     if override:
         return override
     remote = settings.gerrit_remote
+    url = settings.remote_url(remote)
+    if url:
+        return parse_project_name_from_remote_url(url)
     try:
         url = git_out("remote", "get-url", remote, cwd=cwd)
     except GitError:

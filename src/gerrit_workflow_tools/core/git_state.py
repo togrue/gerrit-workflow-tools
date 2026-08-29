@@ -142,8 +142,17 @@ def upstream_abbrev_sym(cwd: Path | str | None, branch: str | None = None) -> st
     return "@{upstream}"
 
 
-def resolve_upstream_abbrev_ref(cwd: Path | str | None, branch: str | None = None) -> str | None:
+def resolve_upstream_abbrev_ref(
+    cwd: Path | str | None,
+    branch: str | None = None,
+    *,
+    settings: Settings | None = None,
+) -> str | None:
     """Return ``git rev-parse --abbrev-ref`` of the upstream, or ``None``."""
+    if branch and settings is not None:
+        configured = settings.branch_upstream_abbrev(branch)
+        if configured:
+            return configured
     sym = upstream_abbrev_sym(cwd, branch)
     if sym is None:
         return None
@@ -154,13 +163,18 @@ def resolve_upstream_abbrev_ref(cwd: Path | str | None, branch: str | None = Non
     return upstream or None
 
 
-def resolve_upstream_parsed(cwd: Path | str | None, branch: str | None = None) -> tuple[str, str] | None:
+def resolve_upstream_parsed(
+    cwd: Path | str | None,
+    branch: str | None = None,
+    *,
+    settings: Settings | None = None,
+) -> tuple[str, str] | None:
     """Parse upstream into ``(remote_name, branch_after_first_slash)``.
 
     Uses *branch*'s upstream when given; otherwise ``@{upstream}`` for a checked-out branch.
     Returns ``None`` if there is no upstream or the abbrev-ref has no ``/``.
     """
-    upstream = resolve_upstream_abbrev_ref(cwd, branch)
+    upstream = resolve_upstream_abbrev_ref(cwd, branch, settings=settings)
     if not upstream or "/" not in upstream:
         return None
     remote_name, rest = upstream.split("/", 1)
@@ -186,13 +200,14 @@ def effective_gerrit_destination_branch(
     override = settings.branch_gerrit_target(resolve_branch_for_branch_config(cwd, branch, settings=settings))
     if override:
         return override
-    parsed = resolve_upstream_parsed(cwd, branch)
-    if not parsed:
+    branch_name = branch if branch is not None else resolve_branch_for_branch_config(cwd, branch, settings=settings)
+    upstream = resolve_upstream_abbrev_ref(cwd, branch_name, settings=settings)
+    if not upstream or "/" not in upstream:
         return None
-    remote_name, _rest = parsed
+    remote_name, _rest = upstream.split("/", 1)
     if remote_name != settings.gerrit_remote:
         return None
-    return resolve_upstream_abbrev_ref(cwd, branch)
+    return upstream
 
 
 def ger_push_mode(
@@ -203,7 +218,7 @@ def ger_push_mode(
     ``gerrit`` uses ``refs/for/…``, ``vanilla`` uses plain ``git push``.
     Returns ``None`` when destination cannot be determined.
     """
-    parsed = resolve_upstream_parsed(cwd, branch)
+    parsed = resolve_upstream_parsed(cwd, branch, settings=settings)
     if not parsed:
         return None
     remote_name, _rest = parsed

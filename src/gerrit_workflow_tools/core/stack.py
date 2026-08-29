@@ -39,16 +39,19 @@ def upstream_tracking_tip_and_display(
     The local stack is ``<sha>..HEAD`` (same *sha* as the first element here).
     """
     b = _resolve_stack_branch(cwd, branch, settings=settings)
-    upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
-    upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
-    if upstream_name.returncode != 0:
-        raise GitError(
-            f"No upstream configured for branch {b!r}.\n"
-            "Set an upstream, e.g.:\n"
-            "  git branch --set-upstream-to=<remote>/<branch>\n"
-            "Fetch from your Gerrit remote first if the tracking branch is missing."
-        )
-    display = upstream_name.stdout.strip()
+    snap = settings if settings is not None else Settings.from_cwd(cwd)
+    display = snap.branch_upstream_abbrev(b)
+    if not display:
+        upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
+        upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
+        if upstream_name.returncode != 0:
+            raise GitError(
+                f"No upstream configured for branch {b!r}.\n"
+                "Set an upstream, e.g.:\n"
+                "  git branch --set-upstream-to=<remote>/<branch>\n"
+                "Fetch from your Gerrit remote first if the tracking branch is missing."
+            )
+        display = upstream_name.stdout.strip()
     upstream_ref = git("rev-parse", "--verify", display, cwd=cwd, check=False)
     if upstream_ref.returncode != 0:
         raise GitError(
