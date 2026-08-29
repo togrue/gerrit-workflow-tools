@@ -197,7 +197,7 @@ class GerritService:
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
-        stack = resolve_stack_context(cwd, settings=self.settings) if cwd is not None else _service_stack_context(self)
+        stack = _service_stack_context(self)
 
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}

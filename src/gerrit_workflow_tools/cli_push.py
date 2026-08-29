@@ -544,7 +544,7 @@ def _summary_highlighter_for_push(
 ) -> SummaryHighlighter:
     """Highlighter aligned with the ready boundary for *branch*'s local stack."""
 
-    stack = resolve_stack_context(cwd, settings=settings)
+    stack = resolve_stack_context(cwd, branch=branch, settings=settings)
     _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
     rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=first_parent)
     ready_rows = [
@@ -848,7 +848,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) -> int:
+def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, settings: Settings) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
     if (
         args.until
@@ -864,7 +864,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str) ->
             "and --reviewer-strategy apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
-    parsed = resolve_upstream_parsed(cwd, branch)
+    parsed = resolve_upstream_parsed(cwd, branch, settings=settings)
     checked_out = checked_out_branch_name(cwd)
     if args.branch is not None and checked_out != branch:
         if parsed:
@@ -1276,7 +1276,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
             return 1
 
         if mode == "vanilla":
-            return _handle_vanilla_push(cwd, args, branch=b)
+            return _handle_vanilla_push(cwd, args, branch=b, settings=settings)
 
         ctx_or_rc = _build_gerrit_context(cwd, b, args, gdef, remote_policy, fp, settings)
         if isinstance(ctx_or_rc, int):

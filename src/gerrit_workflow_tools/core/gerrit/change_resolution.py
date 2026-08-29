@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,13 @@ from gerrit_workflow_tools.core.git_state import (
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
 
 _INACTIVE_STATUSES = frozenset({"ABANDONED", "MERGED"})
+
+_STACK_CONTEXT_CACHE: dict[tuple[str, str, int], StackContext] = {}
+
+
+def clear_stack_context_cache() -> None:
+    """Drop memoized :func:`resolve_stack_context` results (tests and :func:`clear_git_cache`)."""
+    _STACK_CONTEXT_CACHE.clear()
 
 # The changeish grammar lives in core.changeish; this module decides what a parsed changeish
 # *means*. ChangeishKind is re-exported because Resolution.kind is part of the JSON contract.
@@ -173,6 +181,21 @@ def _stack_branch_name(cwd: Path | str | None, branch: str | None, *, settings: 
 
 def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> StackContext:
     """Resolve project, target branch, and push branch for the current stack."""
+    cwd_abs = os.path.abspath(os.path.expanduser(str(cwd))) if cwd is not None else os.getcwd()
+    branch_key = branch if branch is not None else ""
+    cache_key = (cwd_abs, branch_key, id(settings))
+    cached = _STACK_CONTEXT_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    resolved = _resolve_stack_context_uncached(cwd, branch, settings=settings)
+    _STACK_CONTEXT_CACHE[cache_key] = resolved
+    return resolved
+
+
+def _resolve_stack_context_uncached(
+    cwd: Path | str | None, branch: str | None = None, *, settings: Settings
+) -> StackContext:
+    """Resolve stack context without memoization."""
     branch_name = _stack_branch_name(cwd, branch, settings=settings)
     project = resolve_gerrit_project_name(cwd, settings=settings)
     if not project:
