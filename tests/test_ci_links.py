@@ -17,7 +17,7 @@ from gerrit_workflow_tools.core.ci_links import (
     failed_check_names,
     prefer_checks_links,
 )
-from gerrit_workflow_tools.core.ci_strategy import clear_ci_strategy_cache, resolve_ci_strategy
+from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, resolve_ci_strategy
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git
@@ -63,6 +63,45 @@ def test_apply_ci_strategy_filters_checks_first() -> None:
 
     out = apply_ci_strategy(strategy, project="p", checks=[], messages=[])
     assert out == [CiLink(label="c", url="https://c", source="checks")]
+
+
+def test_lazy_rows_defers_fetch_until_read() -> None:
+    calls = 0
+
+    def fetch() -> list[dict[str, str]]:
+        nonlocal calls
+        calls += 1
+        return [{"message": "x"}]
+
+    lazy = LazyRows(fetch=fetch)
+    assert calls == 0
+    assert len(lazy) == 1
+    assert calls == 1
+    assert list(lazy)[0]["message"] == "x"
+    assert calls == 1
+
+
+def test_apply_ci_strategy_does_not_materialize_lazy_messages() -> None:
+    calls = 0
+
+    def fetch() -> list[dict[str, str]]:
+        nonlocal calls
+        calls += 1
+        return [{"message": "unused"}]
+
+    def strategy(*, project: str, checks: list, messages) -> list[CiLink]:
+        del project, messages
+        return [
+            CiLink(
+                label="verify",
+                url="https://ci.example/job/1/console",
+                source="checks",
+            )
+        ]
+
+    checks = [{"state": "FAILED", "checker_name": "verify", "url": "https://ci.example/job/1/"}]
+    apply_ci_strategy(strategy, project="p", checks=checks, messages=LazyRows(fetch=fetch))
+    assert calls == 0
 
 
 def _write_registry(repo: Path, body: str) -> None:
@@ -179,7 +218,60 @@ STRATEGIES = {"testproj": _jenkins}
     assert matched.ci_links == [
         CiLink(label="verify", url="https://jenkins.example/job/p/42/console", source="checks")
     ]
-    assert store.calls_to("get_messages")
+    assert not any(call.args[0] == triplet for call in store.calls_to("get_messages"))
+
+
+def test_service_skips_get_messages_when_builtin_checks_suffice(stack_repo: Path) -> None:
+    clear_ci_strategy_cache()
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows, per_index_overrides=[{"verified": -1}] * len(rows))
+    first_cid = rows[0].change_id
+    assert first_cid
+    triplet = f"testproj~main~{first_cid}"
+    store = ChangeStore(
+        details,
+        web_base="https://g.example",
+        checks={
+            triplet: [
+                {
+                    "state": "FAILED",
+                    "checker_name": "verify",
+                    "url": "https://ci.example.org/job/Widget/job/Widget/42/",
+                }
+            ]
+        },
+        messages={
+            triplet: [
+                {
+                    "message": (
+                        "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
+                        "https://ci.example.org/job/Widget/job/Widget/99/ : FAILURE"
+                    ),
+                    "_revision_number": 1,
+                }
+            ]
+        },
+    )
+    service = GerritService.from_cwd(stack_repo, rest=store)
+    inputs = [
+        CommitStatusInput(
+            sha=row.sha,
+            short_sha=row.short_sha,
+            summary=row.subject,
+            change_id=row.change_id,
+        )
+        for row in rows
+    ]
+    result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
+    matched = next(c for c in result if c.change_id == first_cid)
+    assert matched.ci_links == [
+        CiLink(
+            label="verify",
+            url="https://ci.example.org/job/Widget/job/Widget/42/console",
+            source="checks",
+        )
+    ]
+    assert not any(call.args[0] == triplet for call in store.calls_to("get_messages"))
 
 
 def test_service_falls_back_to_messages(stack_repo: Path) -> None:

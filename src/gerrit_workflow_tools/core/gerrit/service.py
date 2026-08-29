@@ -321,11 +321,17 @@ class GerritService:
             follow_up_unmatched=unmatched,
         )
 
+    def _get_messages_or_empty(self, change_id: str) -> list[dict[str, Any]]:
+        try:
+            return self.rest.get_messages(change_id)
+        except GerritApiError:
+            return []
+
     def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list, list]:
         """Return failed CI names, transformed links, and all Checks-plugin pipelines."""
 
         from gerrit_workflow_tools.core.ci_links import ci_pipelines_from_checks, failed_check_names
-        from gerrit_workflow_tools.core.ci_strategy import extract_ci_links_via_registry
+        from gerrit_workflow_tools.core.ci_strategy import LazyRows, extract_ci_links_via_registry
 
         try:
             check_rows = self.rest.get_checks(change_id)
@@ -339,24 +345,10 @@ class GerritService:
                 self.cwd,
                 project=project,
                 checks=check_rows,
-                messages=[],
+                messages=LazyRows(fetch=lambda: self._get_messages_or_empty(change_id)),
                 settings=self.settings,
                 web_base=self.web_base,
             )
-            if not links:
-                try:
-                    message_rows = self.rest.get_messages(change_id)
-                except GerritApiError:
-                    message_rows = []
-                else:
-                    links = extract_ci_links_via_registry(
-                        self.cwd,
-                        project=project,
-                        checks=check_rows,
-                        messages=message_rows,
-                        settings=self.settings,
-                        web_base=self.web_base,
-                    )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("CI strategy failed for %s (%s): %s", change_id, project, exc)
         pipelines = ci_pipelines_from_checks(check_rows, links)

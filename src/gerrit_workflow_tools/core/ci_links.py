@@ -97,5 +97,5 @@ def apply_ci_strategy(
 
     if strategy is None:
         return []
-    raw = strategy(project=project, checks=list(checks), messages=list(messages))
+    raw = strategy(project=project, checks=list(checks), messages=messages)
     return prefer_checks_links(raw)

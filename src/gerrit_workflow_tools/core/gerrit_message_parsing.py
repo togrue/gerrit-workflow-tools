@@ -168,6 +168,7 @@ def builtin_extract_ci_links(
     del project  # built-in applies to every project
     from_checks = ci_links_from_failed_checks(checks)
     if from_checks:
+        # LazyRows gate: do not iterate messages (and trigger get_messages) when checks answer.
         return from_checks
     return ci_links_from_build_failed_messages(messages)
 

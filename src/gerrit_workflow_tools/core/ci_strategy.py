@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,32 @@ from gerrit_workflow_tools.core.ger_registry import (
 
 _DOMAIN = "ci"
 _PACKAGE = "ger_ci"
+
+
+class LazyRows(Sequence[Mapping[str, Any]]):
+    """Row list that fetches on first use and caches the result.
+
+    Iterating, indexing, or ``len()`` triggers *fetch* at most once. A strategy
+    that never reads these rows never pays for the REST call.
+    """
+
+    def __init__(self, fetch: Callable[[], list[Mapping[str, Any]]]) -> None:
+        self._fetch = fetch
+        self._rows: list[Mapping[str, Any]] | None = None
+
+    def _materialized(self) -> list[Mapping[str, Any]]:
+        if self._rows is None:
+            self._rows = list(self._fetch())
+        return self._rows
+
+    def __iter__(self):
+        return iter(self._materialized())
+
+    def __len__(self) -> int:
+        return len(self._materialized())
+
+    def __getitem__(self, index: int | slice) -> Mapping[str, Any] | Sequence[Mapping[str, Any]]:
+        return self._materialized()[index]
 
 
 def ger_ci_dir(cwd: Path | str | None, *, settings: Settings | None = None) -> Path | None:
@@ -59,7 +86,7 @@ def extract_ci_links_via_registry(
     *,
     project: str,
     checks: list[dict[str, Any]],
-    messages: list[dict[str, Any]],
+    messages: Sequence[Mapping[str, Any]],
     settings: Settings | None = None,
     web_base: str | None = None,
 ) -> list[CiLink]:
@@ -97,6 +124,7 @@ def extract_ci_links_via_registry(
 
 
 __all__ = [
+    "LazyRows",
     "clear_ci_strategy_cache",
     "extract_ci_links_via_registry",
     "ger_ci_dir",
