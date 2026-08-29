@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
@@ -222,7 +223,7 @@ def _show_headline(commit: LogCommit) -> str:
     return base
 
 
-def _local_commit_meta(cwd: object, sha: str) -> tuple[str, str, str]:
+def _local_commit_meta(cwd: Path | str | None, sha: str) -> tuple[str, str, str]:
     """Return ``(author_line, date, message_body)`` from git for *sha*."""
     raw = git_out(
         "show",
@@ -239,15 +240,12 @@ def _local_commit_meta(cwd: object, sha: str) -> tuple[str, str, str]:
     email = lines[1] if len(lines) > 1 else ""
     date = lines[2] if len(lines) > 2 else ""
     body = "\n".join(lines[3:]).rstrip("\n") if len(lines) > 3 else ""
-    if email:
-        author_line = f"{author} <{email}>"
-    else:
-        author_line = author
+    author_line = f"{author} <{email}>" if email else author
     return author_line, date, body
 
 
 def _emit_human_commit(
-    cwd: object,
+    cwd: Path | str | None,
     commit: LogCommit,
     *,
     is_local: bool,

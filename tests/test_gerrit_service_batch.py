@@ -90,7 +90,7 @@ def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
     cid = _change_id(1)
     target = f"test-git-graph-repo~dev~{cid}"
     other = f"test-git-graph-repo~main~{cid}"
-    row_dev = {
+    row_dev: dict[str, Any] = {
         "id": "test-git-graph-repo~10",
         "change_id": cid,
         "project": "test-git-graph-repo",
@@ -98,7 +98,7 @@ def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
         "_number": 10,
         "updated": "2026-01-01 00:00:00.000000000",
     }
-    row_main = {
+    row_main: dict[str, Any] = {
         "id": "test-git-graph-repo~11",
         "change_id": cid,
         "project": "test-git-graph-repo",

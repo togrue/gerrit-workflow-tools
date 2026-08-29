@@ -7,6 +7,7 @@ here and pass it in. No module-path patching is involved.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -66,7 +67,7 @@ def stack_rows_mb_to_head(repo: Path) -> list[Commit]:
 
 
 def build_details_by_change_id(
-    rows: list[Commit] | list[tuple[str, str, str, str]],
+    rows: Sequence[Commit | tuple[str, str, str, str]],
     *,
     per_index_overrides: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:

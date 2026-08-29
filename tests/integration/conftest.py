@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -104,7 +105,7 @@ def _docker_ping_or_fail() -> None:
 
 
 @pytest.fixture(scope="session")
-def gerrit_docker_session() -> GerritDockerSession:
+def gerrit_docker_session() -> Iterator[GerritDockerSession]:
     """Start the Gerrit container and wait until HTTP serves ``/config/server/version``."""
     pytest.importorskip("docker")
     pytest.importorskip("requests")
@@ -271,7 +272,7 @@ def gerrit_dev_session(gerrit_integration_context: GerritIntegrationContext) -> 
 
 
 @pytest.fixture(autouse=True)
-def _profile_test_duration(request: pytest.FixtureRequest) -> None:
+def _profile_test_duration(request: pytest.FixtureRequest) -> Iterator[None]:
     """Record per-test body time when ``GERRIT_IT_PROFILE=1``."""
     if not profiling_enabled():
         yield

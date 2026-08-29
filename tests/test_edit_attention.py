@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -22,21 +24,22 @@ from tests.cli_gerrit_mocks import change_info_for_sha
 from tests.fixtures import make_repo_with_merged_side_branch
 
 
-def _commit(**kwargs) -> LogCommit:
-    defaults = {
-        "sha": "a" * 40,
-        "short_sha": "aaaaaaa",
-        "summary": "subj",
-        "change_id": "Iabc",
-        "pushed": True,
-        "abandoned": False,
-        "patchset_status": PatchsetStatus.ACTIVE,
-        "verified": 1,
-        "code_review": 2,
-        "comments_unresolved": 0,
-    }
-    defaults.update(kwargs)
-    return LogCommit(**defaults)
+_COMMIT = LogCommit(
+    sha="a" * 40,
+    short_sha="aaaaaaa",
+    summary="subj",
+    change_id="Iabc",
+    pushed=True,
+    abandoned=False,
+    patchset_status=PatchsetStatus.ACTIVE,
+    verified=1,
+    code_review=2,
+    comments_unresolved=0,
+)
+
+
+def _commit(**kwargs: Any) -> LogCommit:
+    return replace(_COMMIT, **kwargs)
 
 
 def test_commit_needs_edit_attention_filters_log_reasons() -> None:

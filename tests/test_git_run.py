@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ from gerrit_workflow_tools.core.git_run import GitError, _run_git, clear_git_cac
 
 
 @pytest.fixture(autouse=True)
-def _clear_git_cache() -> None:
+def _clear_git_cache() -> Iterator[None]:
     clear_git_cache()
     yield
     clear_git_cache()

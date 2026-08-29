@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from enum import Enum
 
 from gerrit_workflow_tools.core.config import Settings
@@ -22,7 +23,7 @@ def gerrit_credentials_configured(settings: Settings) -> bool:
     return bool(settings.gerrit_user and (settings.gerrit_token or settings.gerrit_password) is not None)
 
 
-def account_slug_from_gerrit(account: dict[str, object]) -> str | None:
+def account_slug_from_gerrit(account: Mapping[str, object]) -> str | None:
     """Best-effort Gerrit account slug normalization."""
 
     username = account.get("username")
@@ -37,7 +38,7 @@ def account_slug_from_gerrit(account: dict[str, object]) -> str | None:
     return None
 
 
-def format_gerrit_account_label(account: dict[str, object]) -> str | None:
+def format_gerrit_account_label(account: Mapping[str, object]) -> str | None:
     """Human label for Gerrit AccountInfo, e.g. ``grt (Tobias Grün)``."""
 
     slug = account_slug_from_gerrit(account)
@@ -52,7 +53,7 @@ def format_gerrit_account_label(account: dict[str, object]) -> str | None:
     return None
 
 
-def reviewer_accounts_from_reviewer_list(rows: list[dict[str, object]]) -> list[ReviewerAccount]:
+def reviewer_accounts_from_reviewer_list(rows: Sequence[Mapping[str, object]]) -> list[ReviewerAccount]:
     """Parse ``GET changes/<id>/reviewers/`` rows (flat accounts or ReviewerInfo)."""
 
     out: list[ReviewerAccount] = []
@@ -64,7 +65,7 @@ def reviewer_accounts_from_reviewer_list(rows: list[dict[str, object]]) -> list[
             continue
         account = row.get("account")
         if isinstance(account, dict):
-            payload: dict[str, object] = account
+            payload: Mapping[str, object] = account
         else:
             payload = row
         slug = account_slug_from_gerrit(payload)
@@ -75,7 +76,7 @@ def reviewer_accounts_from_reviewer_list(rows: list[dict[str, object]]) -> list[
     return out
 
 
-def reviewer_accounts_from_change_info(detail: dict[str, object]) -> list[ReviewerAccount]:
+def reviewer_accounts_from_change_info(detail: Mapping[str, object]) -> list[ReviewerAccount]:
     """Reviewer/CC account list in Gerrit API order."""
 
     out: list[ReviewerAccount] = []

@@ -18,8 +18,9 @@ from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import set_branch_config
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
+from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.stack import commits_in_range
-from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
+from gerrit_workflow_tools.push_input_line import PushLineState, parse as parse_push_options_line
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -643,7 +644,7 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
     refs: list[str] = []
     orig = cli_push_mod._refs_for_spec
 
-    def _capture(tip: str, push_branch: str, state: object, strategy: object) -> str:
+    def _capture(tip: str, push_branch: str, state: PushLineState, strategy: ReviewerStrategy) -> str:
         r = orig(tip, push_branch, state, strategy)
         refs.append(r)
         return r
@@ -664,7 +665,7 @@ def test_gpush_interactive_reviewers_lazy_omits_percent_r(stack_repo: Path, monk
     refs: list[str] = []
     orig = cli_push_mod._refs_for_spec
 
-    def _capture(tip: str, push_branch: str, state: object, strategy: object) -> str:
+    def _capture(tip: str, push_branch: str, state: PushLineState, strategy: ReviewerStrategy) -> str:
         r = orig(tip, push_branch, state, strategy)
         refs.append(r)
         return r
@@ -711,7 +712,7 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     refs: list[str] = []
     orig = cli_push_mod._refs_for_spec
 
-    def _capture(tip: str, push_branch: str, state: object, strategy: object) -> str:
+    def _capture(tip: str, push_branch: str, state: PushLineState, strategy: ReviewerStrategy) -> str:
         r = orig(tip, push_branch, state, strategy)
         refs.append(r)
         return r

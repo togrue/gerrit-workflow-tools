@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -20,6 +21,7 @@ from gerrit_workflow_tools.cli_log import main as ger_log_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_resolve import main as ger_resolve_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import (
     HttpGerritRest,
@@ -28,6 +30,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import head_change_id
 from tests.conftest import run_cli
+from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.gerrit_http import GerritHttpSession
 from tests.integration.integration_helpers import (
     open_changes_on_branch,
@@ -49,10 +52,10 @@ def _clear_gerrit_cache(repo) -> None:
 
 
 def _push_shared_change_to_main_and_dev(
-    ctx,
-    tmp_path,
+    ctx: GerritIntegrationContext,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> tuple[object, str, dict]:
+) -> tuple[Path, str, dict[str, Any]]:
     """Push one commit to ``main`` and cherry-pick it to ``dev`` (same Change-Id)."""
     repo = prepare_clone_at_branch(ctx, tmp_path, "main", "res_wk")
     _configure_gerrit_project(repo, ctx.project_verified)
@@ -104,8 +107,8 @@ def _change_on_branch(session: GerritHttpSession, project: str, branch: str, cha
 
 
 def test_cross_branch_change_id_log_show_resolve_agree(
-    tmp_path,
-    gerrit_integration_context,
+    tmp_path: Path,
+    gerrit_integration_context: GerritIntegrationContext,
     gerrit_admin_session: GerritHttpSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -118,7 +121,7 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     dev_change = _change_on_branch(gerrit_admin_session, proj, "dev", cid)
     assert main_change["_number"] != dev_change["_number"]
 
-    stack = resolve_stack_context(main_repo)
+    stack = resolve_stack_context(main_repo, settings=Settings.from_cwd(main_repo))
     assert stack.push_branch == "main"
 
     _clear_gerrit_cache(main_repo)

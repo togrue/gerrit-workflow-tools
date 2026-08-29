@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -399,7 +400,7 @@ def test_log_file_redirect_encodes_unicode(
 def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
-    overrides = [{}] * len(rows)
+    overrides: list[dict[str, Any]] = [{}] * len(rows)
     overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))

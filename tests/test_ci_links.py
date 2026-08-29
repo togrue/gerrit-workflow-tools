@@ -77,7 +77,7 @@ def test_lazy_rows_defers_fetch_until_read() -> None:
     assert calls == 0
     assert len(lazy) == 1
     assert calls == 1
-    assert list(lazy)[0]["message"] == "x"
+    assert next(iter(lazy))["message"] == "x"
     assert calls == 1
 
 

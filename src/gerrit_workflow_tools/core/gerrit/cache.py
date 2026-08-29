@@ -246,7 +246,7 @@ class GerritCache:
             return {}
         placeholders = ",".join("?" for _ in unique)
         out: dict[str, list[dict[str, Any]]] = {cid: [] for cid in unique}
-        seen: dict[str, set[tuple[Any, Any, Any]]] = {cid: set() for cid in unique}
+        seen: dict[str, set[tuple[Any, Any]]] = {cid: set() for cid in unique}
         with self._connect() as conn:
             rows = conn.execute(
                 f"""

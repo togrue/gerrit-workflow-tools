@@ -35,19 +35,19 @@ _DETAIL: dict[str, Any] = {
 _STACK = StackContext(project="proj", target_branch="origin/main", push_branch="main")
 
 
-def _make_service(detail: dict[str, Any] | None = None) -> GerritService:
+def _make_service(detail: dict[str, Any] | None = None) -> tuple[GerritService, MagicMock, MagicMock]:
     rest = MagicMock()
     rest.web_base = "https://gerrit.example.com"
     cache = MagicMock()
     cache.load_changes.return_value = {"Iabc123": detail} if detail is not None else {}
     cache.capability.return_value = None  # host capability not yet discovered
-    return GerritService(rest, cache)
+    return GerritService(rest, cache), rest, cache
 
 
 def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
     """A comments fetch failure must not prevent reviewers from being populated."""
 
-    service = _make_service(_DETAIL)
+    service, _rest, _cache = _make_service(_DETAIL)
     alice = ReviewerAccount(slug="alice", account_id=42)
 
     with (
@@ -76,7 +76,7 @@ def test_reviewers_follow_up_skipped_when_payload_carries_an_empty_reviewer_list
     """An empty ``reviewers`` map is an answer, not a hole — no /reviewers/ GET."""
 
     detail = {**_DETAIL, "reviewers": {}, "unresolved_comment_count": 0}
-    service = _make_service(detail)
+    service, rest, _cache = _make_service(detail)
 
     with patch(
         "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
@@ -84,7 +84,7 @@ def test_reviewers_follow_up_skipped_when_payload_carries_an_empty_reviewer_list
     ):
         commits = service.fetch_gerrit_data([_FakeRow()])
 
-    service.rest.list_change_reviewers.assert_not_called()
+    rest.list_change_reviewers.assert_not_called()
     assert commits[0].reviewers == []
 
 
@@ -93,7 +93,7 @@ def test_reviewers_follow_up_runs_when_payload_omits_the_field() -> None:
 
     detail = {**_DETAIL, "unresolved_comment_count": 0}
     assert "reviewers" not in detail
-    service = _make_service(detail)
+    service, _rest, _cache = _make_service(detail)
 
     with (
         patch(
@@ -116,7 +116,7 @@ def test_comments_follow_up_passes_change_updated_as_the_cache_key() -> None:
     """`LogCommit.updated` reaches `load_comments`, so its validity rule can fire."""
 
     detail = {**_DETAIL, "reviewers": {}, "updated": "2026-06-03 00:31:56.000000000"}
-    service = _make_service(detail)
+    service, _rest, _cache = _make_service(detail)
 
     with (
         patch(
@@ -139,14 +139,14 @@ def test_checks_endpoint_is_probed_once_per_host_not_once_per_change() -> None:
 
     from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
-    service = _make_service()
-    service.rest.get_checks.side_effect = GerritApiError("nope", status=404)
+    service, rest, _cache = _make_service()
+    rest.get_checks.side_effect = GerritApiError("nope", status=404)
 
     assert service._checks_or_empty("proj~main~I1") == []
     assert service._checks_or_empty("proj~main~I2") == []
     assert service._checks_or_empty("proj~main~I3") == []
 
-    service.rest.get_checks.assert_called_once()
+    rest.get_checks.assert_called_once()
 
 
 def test_a_later_run_skips_checks_entirely_once_the_host_said_404() -> None:
@@ -158,16 +158,16 @@ def test_a_later_run_skips_checks_entirely_once_the_host_said_404() -> None:
 
     from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
-    first = _make_service()
-    first.rest.get_checks.side_effect = GerritApiError("nope", status=404)
+    first, first_rest, first_cache = _make_service()
+    first_rest.get_checks.side_effect = GerritApiError("nope", status=404)
     first._checks_or_empty("proj~main~I1")
-    first.cache.set_capability.assert_called_once_with("checks", False)
+    first_cache.set_capability.assert_called_once_with("checks", False)
 
-    second = _make_service()
-    second.cache.capability.return_value = False  # what run 1 persisted
+    second, second_rest, second_cache = _make_service()
+    second_cache.capability.return_value = False  # what run 1 persisted
 
     assert second._checks_or_empty("proj~main~I1") == []
-    second.rest.get_checks.assert_not_called()
+    second_rest.get_checks.assert_not_called()
 
 
 def test_a_non_404_checks_error_stays_per_change() -> None:
@@ -175,8 +175,8 @@ def test_a_non_404_checks_error_stays_per_change() -> None:
 
     from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
-    service = _make_service()
-    service.rest.get_checks.side_effect = [GerritApiError("boom", status=500), [{"state": "FAILED"}]]
+    service, rest, _cache = _make_service()
+    rest.get_checks.side_effect = [GerritApiError("boom", status=500), [{"state": "FAILED"}]]
 
     assert service._checks_or_empty("proj~main~I1") == []
     assert service._checks_or_empty("proj~main~I2") == [{"state": "FAILED"}]

@@ -187,9 +187,18 @@ def test_load_comments_serves_cache_while_change_updated_is_unchanged(tmp_path: 
         calls.append(triplet)
         return _comment_map("first")
 
-    common = {"fetch_comments": fetch, "change_updated": "u1", "trust_window_seconds": 0}
-    first = cache.load_comments("proj~main~I1", **common)
-    second = cache.load_comments("proj~main~I1", **common)
+    first = cache.load_comments(
+        "proj~main~I1",
+        fetch_comments=fetch,
+        change_updated="u1",
+        trust_window_seconds=0,
+    )
+    second = cache.load_comments(
+        "proj~main~I1",
+        fetch_comments=fetch,
+        change_updated="u1",
+        trust_window_seconds=0,
+    )
 
     assert calls == ["proj~main~I1"], "second read must not hit the network"
     assert first == second == _comment_map("first")

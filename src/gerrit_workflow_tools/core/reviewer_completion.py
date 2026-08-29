@@ -3,13 +3,33 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
 
-from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit
 
 
 # Tokens accepted as bare reviewer login prefixes (aligned with push-input grammar).
 REVIEWER_LOGIN_TOKEN_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
+
+
+class ReviewerLookup(Protocol):
+    """Gerrit account/reviewer queries used by completion and validation."""
+
+    def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
+        """Return AccountInfo rows matching an account search query."""
+
+    def suggest_change_reviewers(
+        self,
+        change_id: str,
+        *,
+        query: str | None = None,
+        n: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Return suggested reviewer rows for one change."""
+
+    def get_plugin_project_reviewers(self, project: str) -> list[dict[str, Any]] | None:
+        """Return project-level reviewer defaults, or ``None`` when the plugin is absent."""
 
 
 def is_reviewer_login_token(s: str) -> bool:
@@ -31,7 +51,7 @@ def account_query_username_prefix(prefix: str) -> str:
     return f"username:{prefix}*"
 
 
-def slug_from_suggest_or_account_row(entry: dict[str, object]) -> str | None:
+def slug_from_suggest_or_account_row(entry: Mapping[str, object]) -> str | None:
     """Normalize a row from ``suggest_reviewers`` or ``accounts/`` to a login slug."""
     nested = entry.get("account")
     if isinstance(nested, dict):
@@ -42,7 +62,7 @@ def slug_from_suggest_or_account_row(entry: dict[str, object]) -> str | None:
 
 
 def sorted_slugs_from_account_rows(
-    rows: list[dict[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     must_start_with: str | None,
 ) -> list[str]:
@@ -66,7 +86,7 @@ def sorted_slugs_from_account_rows(
 
 
 def fetch_suggested_reviewer_slugs(
-    client: HttpGerritRest,
+    client: ReviewerLookup,
     change_id: str,
     *,
     n: int = 100,
@@ -77,7 +97,7 @@ def fetch_suggested_reviewer_slugs(
 
 
 def fetch_reviewer_slugs_for_prefix(
-    client: HttpGerritRest,
+    client: ReviewerLookup,
     *,
     change_id: str | None,
     token: str,

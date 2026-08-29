@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from gerrit_workflow_tools.push_input_line import PushLineState
 from gerrit_workflow_tools.push_input_prompt import _bottom_toolbar
 from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
@@ -10,7 +12,7 @@ class _FakeClient:
         self.account_queries: list[str] = []
         self.suggest_queries: list[str | None] = []
 
-    def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, object]]:
+    def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         self.account_queries.append(query)
         if query == "username:alice":
             return [{"username": "alice"}]
@@ -24,7 +26,7 @@ class _FakeClient:
 
     def suggest_change_reviewers(
         self, change_id: str, *, query: str | None = None, n: int = 20
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         del change_id, n
         self.suggest_queries.append(query)
         if query and query.lower() == "ben":
@@ -33,7 +35,7 @@ class _FakeClient:
             return [{"account": {"username": "seed-from-change"}}]
         return []
 
-    def get_plugin_project_reviewers(self, project: str) -> list[dict[str, object]] | None:
+    def get_plugin_project_reviewers(self, project: str) -> list[dict[str, Any]] | None:
         del project
         return [{"username": "seed-from-plugin"}]
 

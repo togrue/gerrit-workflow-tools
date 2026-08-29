@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.reviewer_completion import (
+    ReviewerLookup,
     account_query_exact_lookup,
     fetch_reviewer_slugs_for_prefix,
     fetch_suggested_reviewer_slugs,
@@ -44,7 +45,7 @@ class ReviewerCatalog:
     def __init__(
         self,
         *,
-        client: HttpGerritRest | None,
+        client: ReviewerLookup | None,
         status_note: str | None = None,
         candidates: list[str] | None = None,
         change_id_hint: str | None = None,

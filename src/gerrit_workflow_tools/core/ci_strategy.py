@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiStrategy
 from gerrit_workflow_tools.core.config import Settings
@@ -31,7 +31,7 @@ class LazyRows(Sequence[Mapping[str, Any]]):
     that never reads these rows never pays for the REST call.
     """
 
-    def __init__(self, fetch: Callable[[], list[Mapping[str, Any]]]) -> None:
+    def __init__(self, fetch: Callable[[], Sequence[Mapping[str, Any]]]) -> None:
         self._fetch = fetch
         self._rows: list[Mapping[str, Any]] | None = None
 
@@ -45,6 +45,12 @@ class LazyRows(Sequence[Mapping[str, Any]]):
 
     def __len__(self) -> int:
         return len(self._materialized())
+
+    @overload
+    def __getitem__(self, index: int) -> Mapping[str, Any]: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[Mapping[str, Any]]: ...
 
     def __getitem__(self, index: int | slice) -> Mapping[str, Any] | Sequence[Mapping[str, Any]]:
         return self._materialized()[index]

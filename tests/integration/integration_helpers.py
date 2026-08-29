@@ -169,6 +169,8 @@ def label_value(detail: dict[str, Any], name: str) -> int | None:
                 av = item.get("value")
                 if isinstance(av, int):
                     return av
+                if av is None:
+                    continue
                 try:
                     return int(av)
                 except (TypeError, ValueError):

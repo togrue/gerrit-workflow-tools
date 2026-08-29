@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,7 @@ from gerrit_workflow_tools.summary_highlight import build_summary_highlighter
 
 
 @pytest.fixture(autouse=True)
-def _clear_registries() -> None:
+def _clear_registries() -> Iterator[None]:
     clear_extension_registry_cache()
     yield
     clear_extension_registry_cache()

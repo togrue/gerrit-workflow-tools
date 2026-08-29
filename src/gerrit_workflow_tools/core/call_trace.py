@@ -62,10 +62,7 @@ def gerrit_request_label(
     base = f"{method} {path}"
     if not params:
         return base
-    if isinstance(params, dict):
-        items = list(params.items())
-    else:
-        items = list(params)
+    items = list(params.items()) if isinstance(params, dict) else list(params)
     q_vals = [value for key, value in items if key == "q"]
     if not q_vals:
         return base

@@ -600,7 +600,8 @@ def _format_boundary_commit_line(
     except GitError:
         return None
     sha_p = short_sha.ljust(8)
-    return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{summary_highlighter.highlight(subject, sha=boundary_sha)}"
+    highlighted = summary_highlighter.highlight(subject, sha=boundary_sha)
+    return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{highlighted}"
 
 
 def _print_gpush_preview(  # pylint: disable=too-many-arguments
@@ -968,10 +969,8 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
     )
 
     project = settings.gerrit_project or ""
-    try:
+    with contextlib.suppress(Exception):
         project = resolve_stack_context(cwd, settings=settings).project
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
     r = compute_ready(
         cwd,
         branch=branch,

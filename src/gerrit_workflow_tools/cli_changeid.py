@@ -301,10 +301,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
         new_head = new_sha
 
     assert new_head is not None
-    if head_ref == "HEAD":
-        ref = "HEAD"
-    else:
-        ref = f"refs/heads/{head_ref}"
+    ref = "HEAD" if head_ref == "HEAD" else f"refs/heads/{head_ref}"
     update = git("update-ref", ref, new_head, cwd=cwd, check=False)
     if update.returncode != 0:
         raise ChangeIdError(

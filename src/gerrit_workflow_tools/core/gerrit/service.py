@@ -116,6 +116,7 @@ class GerritService:
         # known. A property of the host, not of any change, so it is answered from the
         # cache and only rediscovered once that verdict expires.
         self._checks_endpoint_available: bool | None = None
+        self._stack_context: StackContext | None = None
         self.changes = ChangeApi(self)
         self.accounts = AccountApi(self)
         self.comments = CommentApi(self)

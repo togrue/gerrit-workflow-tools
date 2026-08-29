@@ -114,7 +114,7 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
 
     from prompt_toolkit import PromptSession
 
-    session = PromptSession()
+    session: PromptSession[str] = PromptSession()
     existing_web = _git_config_get(global_config=global_config, key="gerrit.webUrl", cwd=cwd)
     existing_user = _git_config_get(global_config=global_config, key="gerrit.user", cwd=cwd)
     existing_token = _git_config_get(global_config=global_config, key="gerrit.token", cwd=cwd)

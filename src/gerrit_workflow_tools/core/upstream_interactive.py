@@ -93,7 +93,7 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, s
     candidates, inferred_ref = _upstream_choice_candidates(cwd, settings=settings)
     default = inferred_ref or (candidates[0] if candidates else "")
     completer = WordCompleter(candidates, ignore_case=False, sentence=True)
-    session = PromptSession()
+    session: PromptSession[str] = PromptSession()
     print(
         f"No upstream configured for branch {branch!r}.",
         file=sys.stderr,

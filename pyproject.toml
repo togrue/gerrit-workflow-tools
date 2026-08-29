@@ -91,6 +91,10 @@ ignore_missing_imports = true
 module = "requests.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["docker", "docker.*"]
+ignore_missing_imports = true
+
 [tool.pylint."MAIN"]
 ignore-paths = [
     "^tests/.*$",
