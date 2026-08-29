@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock
+from urllib.parse import quote
 
 import pytest
 
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
+    _chunk_by_query_budget,
     _chunk_to_query,
     alias_batch_fetch_results,
     batch_load_change_details,
@@ -172,7 +174,7 @@ def test_chunk_to_query_dedupes_same_change_id_across_branches() -> None:
 
 
 def test_batch_load_uses_chunked_queries_not_per_change() -> None:
-    """A 30-change stack must issue two batch queries, not 30 individual ones."""
+    """A 30-change stack fits one batch query, and must never be 30 individual ones."""
     refs = [f"p~dev~I{format(i, '040x')}" for i in range(30)]
     row = _change_row(project="p", branch="dev", change_id=refs[0].split("~")[-1], number=1)
     client = MagicMock()
@@ -187,7 +189,7 @@ def test_batch_load_uses_chunked_queries_not_per_change() -> None:
 
     batch_load_change_details(client, refs)
 
-    assert client.query_changes.call_count == 2
+    assert client.query_changes.call_count == 1
     first_q = client.query_changes.call_args_list[0].args[0]
     assert first_q.startswith("project:p (change:")
     assert "branch:" not in first_q
@@ -241,3 +243,71 @@ def test_resolve_change_ref_drops_bare_digit_fast_path() -> None:
 def test_resolve_change_ref_passthrough_prefixes() -> None:
     assert resolve_change_ref("change:99") == "change:99"
     assert resolve_change_ref("q:status:open") == "status:open"
+
+
+def _refs(n: int, project: str = "p") -> list[str]:
+    return [f"{project}~dev~I{format(i, '040x')}" for i in range(n)]
+
+
+def test_chunking_is_bounded_by_url_bytes_not_by_a_ref_count() -> None:
+    """Chunks grow until the encoded query would exceed the budget."""
+    chunks = _chunk_by_query_budget(_refs(200), _chunk_to_query, budget_bytes=6000)
+
+    assert len(chunks) > 1, "200 refs must not fit one 6 KB query"
+    assert sum(len(c) for c in chunks) == 200
+    assert [r for c in chunks for r in c] == _refs(200), "order and membership preserved"
+    for chunk in chunks:
+        assert len(quote(_chunk_to_query(chunk))) <= 6000
+
+
+def test_a_stack_that_fits_is_one_chunk() -> None:
+    """The common case costs a single query build and a single request."""
+    assert _chunk_by_query_budget(_refs(100), _chunk_to_query, budget_bytes=6000) == [_refs(100)]
+
+
+def test_a_single_ref_is_never_split_even_when_over_budget() -> None:
+    """One ref is indivisible; whether it is too long is the server's call."""
+    assert _chunk_by_query_budget(_refs(1), _chunk_to_query, budget_bytes=1) == [_refs(1)]
+
+
+def test_oversized_batch_retries_in_halves_instead_of_per_change() -> None:
+    """A 414 means "too big", so halve — never fan out to one query per ref."""
+    refs = _refs(32)
+    accepted: list[str] = []
+
+    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
+        del n, options
+        if q.count(" OR ") + 1 > 8:
+            raise GerritApiError("URI too long", status=414)
+        accepted.append(q)
+        return []
+
+    client = MagicMock()
+    client.query_changes.side_effect = query_changes
+
+    batch_load_change_details(client, refs)
+
+    # 32 refused -> two 16s refused -> four 8s accepted: 1 + 2 + 4 = 7 requests.
+    # The old behaviour was 1 refused batch plus 32 sequential single-ref queries.
+    assert client.query_changes.call_count == 7
+    assert len(accepted) == 4
+    assert all(q.startswith("project:p (change:") for q in accepted), "leaves are still batches"
+
+
+def test_a_non_size_error_keeps_the_per_change_fallback() -> None:
+    """A 500 is a per-change problem; splitting cannot fix it, so do not double the work."""
+    refs = _refs(4)
+
+    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
+        del n, options
+        if " OR " in q:
+            raise GerritApiError("boom", status=500)
+        return []
+
+    client = MagicMock()
+    client.query_changes.side_effect = query_changes
+
+    batch_load_change_details(client, refs)
+
+    # One refused batch, then exactly one query per ref — no halving generations.
+    assert client.query_changes.call_count == 1 + len(refs)

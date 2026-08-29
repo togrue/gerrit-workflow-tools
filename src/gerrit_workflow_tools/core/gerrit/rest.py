@@ -38,7 +38,18 @@ class GerritApiError(RuntimeError):
         self.status = status
 
 
-_BATCH_OR_CHUNK = 25
+# Batch OR queries are bounded by what fits in a URL, not by a ref count. Servers commonly
+# cap the request line at 8 KB (Jetty's default), so a chunk is grown until its *encoded*
+# query would exceed this budget. Measured: latency is flat in chunk size — it is per-request
+# overhead, not payload — so bigger chunks are strictly better up to the limit.
+DEFAULT_BATCH_QUERY_BYTES = 6000
+
+# Backstop so one pathological stack cannot build an unbounded query even under the budget.
+_MAX_BATCH_OR_CHUNK = 300
+
+# HTTP statuses that mean "your request was too big", as opposed to "your request was wrong".
+# Only these justify retrying in halves; anything else keeps the per-ref fallback.
+_OVERSIZED_REQUEST_STATUSES = frozenset({400, 413, 414, 431})
 
 
 def norm_change_id(change_id: str) -> str:
@@ -656,28 +667,100 @@ def alias_batch_fetch_results(
     return out
 
 
-def _fallback_query_chunk(client: GerritRest, chunk: list[str]) -> list[dict[str, Any]]:
-    """Query each ref in *chunk* when a batched OR query fails (same session, sequential)."""
-    rows: list[dict[str, Any]] = []
-    for ref in chunk:
-        try:
-            one = query_single_change(client, ref)
-        except GerritApiError as e:
-            logger.warning("Gerrit query failed for %s: %s", ref, e)
-            continue
-        if one:
-            rows.append(one)
-    return rows
+def _commit_chunk_to_query(chunk: list[str]) -> str:
+    """Build one OR query over commit SHAs."""
+    return " OR ".join(f"commit:{sha}" for sha in chunk)
+
+
+def _encoded_query_len(query: str) -> int:
+    """Bytes *query* occupies in a URL, which is what a server's request-line limit counts."""
+    return len(quote(query))
+
+
+def _chunk_by_query_budget(
+    refs: list[str],
+    build_query: Callable[[list[str]], str],
+    *,
+    budget_bytes: int = DEFAULT_BATCH_QUERY_BYTES,
+    max_refs: int = _MAX_BATCH_OR_CHUNK,
+) -> list[list[str]]:
+    """Split *refs* into the fewest chunks whose built query fits the URL budget.
+
+    Bisects rather than growing one ref at a time: the common case (everything fits) costs
+    a single query build, and a stack that does not fit costs ``O(log n)`` builds instead of
+    ``O(n)``. A single ref is never split further — if one ref alone blows the budget, that
+    is the server's call to make, not ours.
+    """
+    if not refs:
+        return []
+    if len(refs) <= max_refs and _encoded_query_len(build_query(refs)) <= budget_bytes:
+        return [refs]
+    if len(refs) == 1:
+        return [refs]
+    mid = len(refs) // 2
+    return _chunk_by_query_budget(
+        refs[:mid], build_query, budget_bytes=budget_bytes, max_refs=max_refs
+    ) + _chunk_by_query_budget(refs[mid:], build_query, budget_bytes=budget_bytes, max_refs=max_refs)
+
+
+def _query_batch_with_halving(
+    client: GerritRest,
+    chunk: list[str],
+    *,
+    build_query: Callable[[list[str]], str],
+    leaf_rows: Callable[[str], list[dict[str, Any]]],
+    opts: list[str],
+) -> list[dict[str, Any]]:
+    """Run one batched OR query, halving the chunk when the server says it was too big.
+
+    The byte budget is an estimate of a limit only the server knows, so a chunk can still be
+    refused. Answering that by querying every ref individually — what this used to do —
+    turns one oversized request into ``N`` sequential ones, which is slower than the batching
+    it replaces. Halving finds the size the server accepts in ``O(log n)`` requests instead.
+
+    Errors that are not about size keep the per-ref fallback: they are per-change problems
+    (a deleted change, a permission gap) that splitting cannot fix.
+    """
+    try:
+        return client.query_changes(build_query(chunk), n=_batch_query_limit(chunk), options=opts)
+    except GerritApiError as error:
+        if len(chunk) > 1 and error.status in _OVERSIZED_REQUEST_STATUSES:
+            mid = len(chunk) // 2
+            logger.warning("Gerrit refused a %d-ref batch as oversized (%s); retrying in halves", len(chunk), error)
+            halves = (chunk[:mid], chunk[mid:])
+            return [
+                row
+                for half in halves
+                for row in _query_batch_with_halving(
+                    client, half, build_query=build_query, leaf_rows=leaf_rows, opts=opts
+                )
+            ]
+        logger.warning("batched Gerrit query failed (%s), falling back per change", error)
+        rows: list[dict[str, Any]] = []
+        for ref in chunk:
+            rows.extend(leaf_rows(ref))
+        return rows
+
+
+def _one_change_rows(client: GerritRest, ref: str) -> list[dict[str, Any]]:
+    """Rows for a single ref, for use as the leaf of a failed batch."""
+    try:
+        one = query_single_change(client, ref)
+    except GerritApiError as error:
+        logger.warning("Gerrit query failed for %s: %s", ref, error)
+        return []
+    return [one] if one else []
 
 
 def _query_change_chunk(client: GerritRest, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
     """Run one batched OR query. Empty means none exist — do not per-change fallback."""
-    q = _chunk_to_query(chunk)
-    try:
-        return client.query_changes(q, n=_batch_query_limit(chunk), options=opts)
-    except GerritApiError as e:
-        logger.warning("batched Gerrit query failed (%s), falling back per change", e)
-        return _fallback_query_chunk(client, chunk)
+    return _query_batch_with_halving(
+        client,
+        chunk,
+        build_query=_chunk_to_query,
+        leaf_rows=lambda ref: _one_change_rows(client, ref),
+        opts=opts,
+    )
 
 
 def query_single_change(client: GerritRest, ref: str) -> dict[str, Any] | None:
@@ -710,12 +793,11 @@ def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]
 
     def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
         def _job() -> list[dict[str, Any]]:
-            q = _chunk_to_query(chunk)
-            return client.query_changes(q, n=_batch_query_limit(chunk), options=["SKIP_DIFFSTAT"])
+            return _query_change_chunk(client, chunk, ["SKIP_DIFFSTAT"])
 
         return _job
 
-    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
+    chunks = _chunk_by_query_budget(unique, _chunk_to_query)
     rows_by_chunk = parallel_map(_probe_job(chunk) for chunk in chunks)
     fetched: dict[str, dict[str, Any]] = {}
     for rows in rows_by_chunk:
@@ -743,7 +825,7 @@ def batch_load_change_details(client: GerritRest, refs: list[str]) -> dict[str, 
             unique.append(ref)
 
     opts = list(LOG_QUERY_OPTIONS)
-    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
+    chunks = _chunk_by_query_budget(unique, _chunk_to_query)
 
     def _chunk_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
         def _job() -> list[dict[str, Any]]:
@@ -780,23 +862,25 @@ def batch_load_changes_by_commit(
         return {}
 
     opts = list(options) if options is not None else list(LOG_QUERY_OPTIONS)
-    chunks = [unique[i : i + _BATCH_OR_CHUNK] for i in range(0, len(unique), _BATCH_OR_CHUNK)]
+    chunks = _chunk_by_query_budget(unique, _commit_chunk_to_query)
     out: dict[str, dict[str, Any]] = {}
+
+    def _one_commit_rows(sha: str) -> list[dict[str, Any]]:
+        try:
+            return client.query_changes(f"commit:{sha}", n=5, options=opts)
+        except GerritApiError as error:
+            logger.warning("Gerrit query failed for commit:%s: %s", sha, error)
+            return []
 
     def _commit_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
         def _job() -> list[dict[str, Any]]:
-            query = " OR ".join(f"commit:{sha}" for sha in chunk)
-            try:
-                return client.query_changes(query, n=_batch_query_limit(chunk), options=opts)
-            except GerritApiError as error:
-                logger.warning("batched commit query failed (%s), falling back per sha", error)
-                rows: list[dict[str, Any]] = []
-                for sha in chunk:
-                    try:
-                        rows.extend(client.query_changes(f"commit:{sha}", n=5, options=opts))
-                    except GerritApiError as inner:
-                        logger.warning("Gerrit query failed for commit:%s: %s", sha, inner)
-                return rows
+            return _query_batch_with_halving(
+                client,
+                chunk,
+                build_query=_commit_chunk_to_query,
+                leaf_rows=_one_commit_rows,
+                opts=opts,
+            )
 
         return _job
 

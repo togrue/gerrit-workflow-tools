@@ -10,7 +10,6 @@ batch query call budgets (project-scoped Change-Id OR, not per-change).
 from __future__ import annotations
 
 import json
-import math
 import secrets
 from typing import Any
 from unittest.mock import patch
@@ -23,7 +22,6 @@ from gerrit_workflow_tools.cli_resolve import main as ger_resolve_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import (
-    _BATCH_OR_CHUNK,
     HttpGerritRest,
     resolve_gerrit_web_base,
 )
@@ -208,7 +206,8 @@ def test_ger_log_batch_query_budget_with_unpublished(
     repo = prepare_topic_repo(gerrit_integration_context, tmp_path, topic)
     _configure_gerrit_project(repo, gerrit_integration_context.project_verified)
 
-    n_pushed = _BATCH_OR_CHUNK + 5
+    # More than the old fixed chunk size of 25, so this used to need two requests.
+    n_pushed = 30
     messages = [f"batch commit {i}" for i in range(n_pushed)]
     build_linear_chain(repo, messages)
     code, _out, err = run_cli(
@@ -222,7 +221,6 @@ def test_ger_log_batch_query_budget_with_unpublished(
     # Local-only Change-Ids that Gerrit has never seen (empty batch must not N+1).
     build_linear_chain(repo, ["unpublished a", "unpublished b", "unpublished c"])
     total_with_ids = n_pushed + 3
-    expected_chunks = math.ceil(total_with_ids / _BATCH_OR_CHUNK)
 
     _clear_gerrit_cache(repo)
     queries: list[str] = []
@@ -245,11 +243,9 @@ def test_ger_log_batch_query_budget_with_unpublished(
     assert len([c for c in commits if c.get("change_id")]) >= total_with_ids
 
     batch_qs = [q for q in queries if "project:" in q and "change:" in q]
-    # Cold cache: one detail fetch pass (no probe). May be 1-2 chunks.
-    assert len(batch_qs) <= expected_chunks + 1, (
-        f"expected ~{expected_chunks} batch queries, got {len(batch_qs)}: {batch_qs!r}"
-    )
-    assert len(batch_qs) >= 1
+    # Cold cache: one detail fetch pass (no probe). Chunking is bounded by URL bytes, and
+    # 33 Change-Ids are well under the budget, so this is a single request.
+    assert len(batch_qs) == 1, f"expected one batch query, got {len(batch_qs)}: {batch_qs!r}"
     for q in batch_qs:
         assert "branch:" not in q, f"batch query must not scope by branch: {q!r}"
     # Empty unpublished must not fall back to per-ref triplet queries.
