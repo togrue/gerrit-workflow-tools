@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.core.ci_links import CiLink, apply_ci_strategy
-from gerrit_workflow_tools.core.ci_strategy import clear_ci_strategy_cache, extract_ci_links_via_registry
+from gerrit_workflow_tools.core.ci_strategy import (
+    clear_ci_strategy_cache,
+    default_extract_ci_links,
+    extract_ci_links_via_registry,
+)
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
 from gerrit_workflow_tools.core.gerrit_message_parsing import (
-    builtin_extract_ci_links,
     jenkins_build_url_from_text,
     jenkins_job_url_to_console,
     parse_change_message,
@@ -99,7 +102,7 @@ def test_parse_change_message_kinds(
     assert parsed.build_url == build_url
 
 
-def test_builtin_extract_ci_links_from_build_failed_message() -> None:
+def test_default_extract_ci_links_from_build_failed_message() -> None:
     messages = [
         {
             "message": "Patch Set 1:\n\nBuild Started https://ci.example.org/job/Widget/job/Widget/12/",
@@ -115,7 +118,7 @@ def test_builtin_extract_ci_links_from_build_failed_message() -> None:
             "date": "2026-01-01 10:01:00",
         },
     ]
-    links = builtin_extract_ci_links(project="acme/widget", checks=[], messages=messages)
+    links = default_extract_ci_links(project="acme/widget", checks=[], messages=messages)
     assert links == [
         CiLink(
             label="jenkins",
@@ -125,7 +128,7 @@ def test_builtin_extract_ci_links_from_build_failed_message() -> None:
     ]
 
 
-def test_builtin_extract_ci_links_prefers_latest_failed_patch_set() -> None:
+def test_default_extract_ci_links_prefers_latest_failed_patch_set() -> None:
     messages = [
         {
             "message": (
@@ -144,11 +147,11 @@ def test_builtin_extract_ci_links_prefers_latest_failed_patch_set() -> None:
             "date": "2026-01-02 10:00:00",
         },
     ]
-    links = builtin_extract_ci_links(project="acme/widget", checks=[], messages=messages)
+    links = default_extract_ci_links(project="acme/widget", checks=[], messages=messages)
     assert links[0].url == "https://ci.example.org/job/Widget/job/Widget/30/console"
 
 
-def test_builtin_extract_ci_links_checks_before_messages() -> None:
+def test_default_extract_ci_links_checks_before_messages() -> None:
     checks = [
         {
             "state": "FAILED",
@@ -166,7 +169,7 @@ def test_builtin_extract_ci_links_checks_before_messages() -> None:
         }
     ]
     links = apply_ci_strategy(
-        builtin_extract_ci_links,
+        default_extract_ci_links,
         project="acme/widget",
         checks=checks,
         messages=messages,

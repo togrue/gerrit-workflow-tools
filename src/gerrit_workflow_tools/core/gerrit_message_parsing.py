@@ -157,26 +157,9 @@ def ci_links_from_build_failed_messages(messages: Sequence[Mapping[str, Any]]) -
     return [candidates[-1][1]]
 
 
-def builtin_extract_ci_links(
-    *,
-    project: str,
-    checks: list[dict[str, Any]],
-    messages: list[dict[str, Any]],
-) -> list[CiLink]:
-    """Default CI strategy: Checks rows first, then Jenkins ``Build Failed`` messages."""
-
-    del project  # built-in applies to every project
-    from_checks = ci_links_from_failed_checks(checks)
-    if from_checks:
-        # LazyRows gate: do not iterate messages (and trigger get_messages) when checks answer.
-        return from_checks
-    return ci_links_from_build_failed_messages(messages)
-
-
 __all__ = [
     "GerritMessageKind",
     "GerritMessageParseResult",
-    "builtin_extract_ci_links",
     "ci_links_from_build_failed_messages",
     "ci_links_from_failed_checks",
     "jenkins_build_url_from_text",

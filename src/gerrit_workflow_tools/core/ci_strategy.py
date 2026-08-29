@@ -8,7 +8,10 @@ from typing import Any
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiStrategy
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit_message_parsing import builtin_extract_ci_links
+from gerrit_workflow_tools.core.gerrit_message_parsing import (
+    ci_links_from_build_failed_messages,
+    ci_links_from_failed_checks,
+)
 from gerrit_workflow_tools.core.ger_registry import (
     clear_extension_registry_cache,
     local_domain_dir,
@@ -59,26 +62,20 @@ def clear_ci_strategy_cache() -> None:
     clear_extension_registry_cache(package_prefix=_PACKAGE)
 
 
-def resolve_ci_strategy(
-    cwd: Path | str | None,
-    project: str,
+def default_extract_ci_links(
     *,
-    settings: Settings | None = None,
-    web_base: str | None = None,
-) -> CiStrategy | None:
-    """Return the first matching ``extract_ci_links`` callable, or ``None``."""
+    project: str,
+    checks: Sequence[Mapping[str, Any]],
+    messages: Sequence[Mapping[str, Any]],
+) -> list[CiLink]:
+    """Built-in CI strategy: failed Checks rows, then Jenkins ``Build Failed`` messages."""
 
-    local_callable, global_callable = resolve_tier_callables(
-        cwd,
-        project,
-        domain=_DOMAIN,
-        package_name=_PACKAGE,
-        settings=settings,
-        web_base=web_base,
-    )
-    if local_callable is not None:
-        return local_callable  # type: ignore[return-value]
-    return global_callable  # type: ignore[return-value]
+    del project  # built-in applies to every project
+    from_checks = ci_links_from_failed_checks(checks)
+    if from_checks:
+        # LazyRows gate: do not iterate messages (and trigger get_messages) when checks answer.
+        return from_checks
+    return ci_links_from_build_failed_messages(messages)
 
 
 def extract_ci_links_via_registry(
@@ -108,7 +105,7 @@ def extract_ci_links_via_registry(
 
     def _builtin() -> list[CiLink]:
         return apply_ci_strategy(
-            builtin_extract_ci_links,
+            default_extract_ci_links,
             project=project,
             checks=checks,
             messages=messages,
@@ -126,7 +123,7 @@ def extract_ci_links_via_registry(
 __all__ = [
     "LazyRows",
     "clear_ci_strategy_cache",
+    "default_extract_ci_links",
     "extract_ci_links_via_registry",
     "ger_ci_dir",
-    "resolve_ci_strategy",
 ]

@@ -17,7 +17,7 @@ from gerrit_workflow_tools.core.ci_links import (
     failed_check_names,
     prefer_checks_links,
 )
-from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, resolve_ci_strategy
+from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git
@@ -109,49 +109,6 @@ def _write_registry(repo: Path, body: str) -> None:
     ci_dir.mkdir(parents=True)
     (ci_dir / "registry.py").write_text(body, encoding="utf-8")
     clear_ci_strategy_cache()
-
-
-def test_resolve_ci_strategy_no_registry(stack_repo: Path) -> None:
-    clear_ci_strategy_cache()
-    assert resolve_ci_strategy(stack_repo, "testproj") is None
-
-
-def test_resolve_ci_strategy_from_strategies_dict(stack_repo: Path) -> None:
-    _write_registry(
-        stack_repo,
-        """
-from gerrit_workflow_tools.core.ci_links import CiLink
-
-def _extract(*, project, checks, messages):
-    return [CiLink(label="j", url="https://ci/console", source="checks")]
-
-STRATEGIES = {"testproj": _extract}
-""",
-    )
-    strat = resolve_ci_strategy(stack_repo, "testproj")
-    assert strat is not None
-    links = strat(project="testproj", checks=[], messages=[])
-    assert links[0].url == "https://ci/console"
-    assert resolve_ci_strategy(stack_repo, "other") is None
-
-
-def test_resolve_ci_strategy_get_strategy(stack_repo: Path) -> None:
-    _write_registry(
-        stack_repo,
-        """
-from gerrit_workflow_tools.core.ci_links import CiLink
-
-def get_strategy(project):
-    if project != "testproj":
-        return None
-    def extract(*, project, checks, messages):
-        return [CiLink(label="x", url="https://x", source="message")]
-    return extract
-""",
-    )
-    strat = resolve_ci_strategy(stack_repo, "testproj")
-    assert strat is not None
-    assert strat(project="testproj", checks=[], messages=[])[0].source == "message"
 
 
 def test_service_fetch_populates_ci_links(stack_repo: Path) -> None:

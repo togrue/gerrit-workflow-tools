@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.core.ci_strategy import clear_ci_strategy_cache, resolve_ci_strategy
+from gerrit_workflow_tools.core.ci_strategy import clear_ci_strategy_cache
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import (
     RegistryLoadError,
@@ -56,7 +56,13 @@ STRATEGIES = {"testproj": _extract}
 """,
     )
     clear_ci_strategy_cache()
-    strat = resolve_ci_strategy(stack_repo, "testproj", settings=Settings.from_cwd(stack_repo))
+    strat = resolve_registry_callable(
+        stack_repo,
+        "testproj",
+        domain="ci",
+        package_name="ger_ci",
+        settings=Settings.from_cwd(stack_repo),
+    )
     assert strat is not None
     assert strat(project="testproj", checks=[], messages=[])[0].url == "https://ci/console"
 
@@ -78,7 +84,14 @@ STRATEGIES = {"testproj": _extract}
     )
     clear_ci_strategy_cache()
     settings = Settings.from_cwd(stack_repo)
-    strat = resolve_ci_strategy(stack_repo, "testproj", settings=settings, web_base=web)
+    strat = resolve_registry_callable(
+        stack_repo,
+        "testproj",
+        domain="ci",
+        package_name="ger_ci",
+        settings=settings,
+        web_base=web,
+    )
     assert strat is not None
     assert strat(project="testproj", checks=[], messages=[])[0].url == "https://global/console"
 
@@ -110,7 +123,14 @@ STRATEGIES = {"testproj": _extract}
     )
     clear_ci_strategy_cache()
     settings = Settings.from_cwd(stack_repo)
-    strat = resolve_ci_strategy(stack_repo, "testproj", settings=settings, web_base=web)
+    strat = resolve_registry_callable(
+        stack_repo,
+        "testproj",
+        domain="ci",
+        package_name="ger_ci",
+        settings=settings,
+        web_base=web,
+    )
     assert strat is not None
     assert strat(project="testproj", checks=[], messages=[])[0].url == "https://local/console"
 
@@ -148,7 +168,17 @@ STRATEGIES = {"testproj": _extract}
     )
     assert local is None
     assert global_ is not None
-    assert resolve_ci_strategy(stack_repo, "testproj", settings=Settings.from_cwd(stack_repo), web_base=web) is global_
+    assert (
+        resolve_registry_callable(
+            stack_repo,
+            "testproj",
+            domain="ci",
+            package_name="ger_ci",
+            settings=Settings.from_cwd(stack_repo),
+            web_base=web,
+        )
+        is global_
+    )
 
 
 def test_broken_local_registry_fails(stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,7 +199,14 @@ STRATEGIES = {"testproj": _extract}
     )
     clear_ci_strategy_cache()
     with pytest.raises(RegistryLoadError):
-        resolve_ci_strategy(stack_repo, "testproj", settings=Settings.from_cwd(stack_repo), web_base=web)
+        resolve_registry_callable(
+            stack_repo,
+            "testproj",
+            domain="ci",
+            package_name="ger_ci",
+            settings=Settings.from_cwd(stack_repo),
+            web_base=web,
+        )
 
 
 def test_runtime_local_failure_falls_back_to_global(
