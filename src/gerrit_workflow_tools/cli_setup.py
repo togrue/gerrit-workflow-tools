@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.git_run import git
 
+
 _PROMPTS: tuple[tuple[str, str, str], ...] = (
     (
         "gerrit.webUrl",

@@ -27,6 +27,7 @@ from gerrit_workflow_tools.core.git_state import (
     resolve_working_branch,
 )
 
+
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
 
 _INACTIVE_STATUSES = frozenset({"ABANDONED", "MERGED"})

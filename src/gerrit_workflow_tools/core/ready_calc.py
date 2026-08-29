@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow, find_ready_boundary_via_registry
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 
+
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 

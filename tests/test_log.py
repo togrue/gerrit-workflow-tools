@@ -19,7 +19,6 @@ from gerrit_workflow_tools.core.annotated_stack import (
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.git_state import Worktree
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     PatchsetStatus,
@@ -27,6 +26,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     determine_attention,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_state import Worktree
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,

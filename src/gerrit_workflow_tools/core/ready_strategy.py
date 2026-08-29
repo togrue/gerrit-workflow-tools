@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.ger_registry import (
     run_registry_callables,
 )
 
+
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 

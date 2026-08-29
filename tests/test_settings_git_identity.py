@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit import change_resolution as cr
 from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git

@@ -13,6 +13,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+
 CiLinkSource = Literal["checks", "message"]
 
 CiStrategy = Callable[..., list["CiLink"]]

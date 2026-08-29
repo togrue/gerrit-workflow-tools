@@ -11,6 +11,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.call_trace import record_call
 
+
 logger = logging.getLogger(__name__)
 
 # Cap logged stdout/stderr so huge blobs (e.g. binary mis-invocation) do not flood the log.
@@ -35,10 +36,10 @@ class GitError(RuntimeError):
 def clear_git_cache() -> None:
     """Drop all cached ``rev-parse`` / ``log`` results and semantic git snapshots."""
     _git_cached.cache_clear()
-    from gerrit_workflow_tools.core.git_state import clear_worktree_cache  # noqa: PLC0415
+    from gerrit_workflow_tools.core.git_state import clear_worktree_cache
 
     clear_worktree_cache()
-    from gerrit_workflow_tools.core.gerrit.change_resolution import (  # noqa: PLC0415
+    from gerrit_workflow_tools.core.gerrit.change_resolution import (
         clear_stack_context_cache,
     )
 

@@ -46,6 +46,7 @@ from gerrit_workflow_tools.render.commit_row import (
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
+
 logger = logging.getLogger(__name__)
 
 

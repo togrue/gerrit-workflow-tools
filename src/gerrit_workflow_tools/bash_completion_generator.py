@@ -23,6 +23,7 @@ from gerrit_workflow_tools import (
 )
 from gerrit_workflow_tools.cli_ger import _ALIASES, _COMMANDS
 
+
 _NO_REF_FALLBACK_COMMANDS = {"bash-completion", "fetch-api", "inbox"}
 
 

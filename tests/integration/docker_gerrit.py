@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import requests
 
+
 if TYPE_CHECKING:
     from docker.models.containers import Container
 

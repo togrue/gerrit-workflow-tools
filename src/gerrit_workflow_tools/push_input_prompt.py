@@ -41,6 +41,7 @@ from gerrit_workflow_tools.push_input_line import (
 )
 from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
 
+
 _STYLE_BY_KIND: dict[SpanKind, str] = {
     "minus": "fg:ansiyellow",
     "keyword_r": "fg:ansigreen bold",

@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.review_chain import (
     parse_gerrit_time,
 )
 
+
 SELF = 1000
 NOW = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
 WEB = "https://gerrit.example.com"

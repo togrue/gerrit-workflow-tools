@@ -27,6 +27,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerri
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
+
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."

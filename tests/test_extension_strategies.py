@@ -10,8 +10,8 @@ from gerrit_workflow_tools.core.attention_strategy import (
     commit_blocks_chain_via_registry,
 )
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, annotate_attention
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, annotate_attention
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.reviewers_strategy import clear_reviewers_strategy_cache, default_reviewers_via_registry
 

@@ -36,6 +36,7 @@ from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
+
 logger = logging.getLogger(__name__)
 
 

@@ -23,6 +23,7 @@ from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
 
+
 # Calibrated on cold ``ger log`` / ``ger show`` / ``ger fix`` / ``ger resolve`` (Aug 2026).
 # Leave modest headroom for small refactors; fail hard on O(N) storms.
 _LOG_GIT_BUDGET = 6

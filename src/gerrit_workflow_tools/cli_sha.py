@@ -68,6 +68,7 @@ from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
+
 logger = logging.getLogger(__name__)
 
 _LOG_FMT = "%H%x1e%h%x1e%s%x1e%B%x1e"

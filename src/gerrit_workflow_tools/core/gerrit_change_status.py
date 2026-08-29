@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 
+
 logger = logging.getLogger(__name__)
 
 

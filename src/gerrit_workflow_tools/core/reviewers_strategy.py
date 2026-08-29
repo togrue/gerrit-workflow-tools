@@ -10,6 +10,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache, resolve_tier_callables
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 
+
 logger = logging.getLogger(__name__)
 
 _DOMAIN = "reviewers"

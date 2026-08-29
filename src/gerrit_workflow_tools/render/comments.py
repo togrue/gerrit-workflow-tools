@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, gerrit_inline_comment_url
 
+
 # Minimum inner width so short threads still look like a box.
 _MIN_BOX_INNER = 40
 _BOX_INDENT = "    "

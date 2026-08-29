@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 from urllib.parse import quote
 
+
 ReviewerStrategy = Literal["push", "lazy", "overwrite"]
 
 KW_R = "r"

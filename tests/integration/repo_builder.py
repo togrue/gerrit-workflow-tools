@@ -11,6 +11,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.integration.gerrit_seed import set_origin_url
 
+
 _commit_msg_hook_cache: dict[str, Path] = {}
 
 

@@ -58,6 +58,21 @@ target-version = "py310"
 line-length = 120
 src = ["src", "tests"]
 
+[tool.ruff.isort]
+# Enable Ruff's import sorting
+# Default sort order: "natural" aligns with PEP8
+known-first-party = ["gerrit_workflow_tools"]
+combine-as-imports = true
+force-single-line = false
+lines-after-imports = 2
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
 [tool.mypy]
 python_version = "3.10"
 explicit_package_bases = true

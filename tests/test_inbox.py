@@ -8,8 +8,7 @@ from typing import Any
 import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
-from gerrit_workflow_tools.cli_inbox import DEFAULT_TO_REVIEW_QUERY, build_to_review_query
-from gerrit_workflow_tools.cli_inbox import main as inbox_main
+from gerrit_workflow_tools.cli_inbox import DEFAULT_TO_REVIEW_QUERY, build_to_review_query, main as inbox_main
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,
@@ -26,6 +25,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from tests.change_store import ChangeStore
 from tests.conftest import json_stdout, run_cli
+
 
 SELF = 1000
 TO_REVIEW_QUERY = f"{DEFAULT_TO_REVIEW_QUERY} label:Verified+1"

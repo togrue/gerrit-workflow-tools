@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urlparse
 
+
 ChangeishKind = Literal[
     "git-rev",
     "change-id",

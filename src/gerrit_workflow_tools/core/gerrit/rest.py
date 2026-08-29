@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url,
 from gerrit_workflow_tools.core.changeish import Changeish, is_change_id, parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 
+
 logger = logging.getLogger(__name__)
 _LOG_RESPONSE_BODIES = False
 _T = TypeVar("_T")

@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 
+
 _EXIT_USAGE = 2
 
 

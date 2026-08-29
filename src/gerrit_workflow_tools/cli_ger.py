@@ -7,6 +7,7 @@ import os
 import sys
 from collections.abc import Callable
 
+
 _Handler = Callable[[list[str] | None], int]
 
 # Lazy import paths: only the invoked command module is loaded.

@@ -8,16 +8,17 @@ from typing import Any
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiStrategy
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit_message_parsing import (
-    ci_links_from_build_failed_messages,
-    ci_links_from_failed_checks,
-)
 from gerrit_workflow_tools.core.ger_registry import (
     clear_extension_registry_cache,
     local_domain_dir,
     resolve_tier_callables,
     run_registry_callables,
 )
+from gerrit_workflow_tools.core.gerrit_message_parsing import (
+    ci_links_from_build_failed_messages,
+    ci_links_from_failed_checks,
+)
+
 
 _DOMAIN = "ci"
 _PACKAGE = "ger_ci"

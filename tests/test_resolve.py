@@ -15,6 +15,7 @@ from tests.cli_gerrit_mocks import change_info_for_sha, head_change_id
 from tests.conftest import json_stdout, run_cli
 from tests.fixtures import _cid
 
+
 CID_UNIQUE = _cid("01")
 CID_NARROW = _cid("02")
 CID_TRIPLET = _cid("03")

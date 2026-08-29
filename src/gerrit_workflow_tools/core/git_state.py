@@ -18,6 +18,7 @@ from typing import Literal
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
+
 logger = logging.getLogger(__name__)
 
 _WORKTREE_LOCK = threading.Lock()

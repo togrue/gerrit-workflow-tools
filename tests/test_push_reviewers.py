@@ -9,6 +9,7 @@ from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_af
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 from tests.fixtures import _cid
 
+
 _PROJECT = "testproj"
 _BRANCH = "main"
 

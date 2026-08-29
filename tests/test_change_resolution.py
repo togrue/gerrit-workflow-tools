@@ -21,6 +21,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import effective_gerrit_destination_branch
 from tests.fixtures import _cid, configure_gerrit_target
 
+
 CHANGE_ID = _cid("a")
 CHANGE_ID_OTHER_CASE = "I" + ("b" * 40)
 

@@ -10,6 +10,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import infer_nearest_remote_tracking_branch, is_detached_head
 
+
 logger = logging.getLogger(__name__)
 
 _RECENT_UPSTREAM_KEY = "gerrit.recentUpstreamAbbrev"

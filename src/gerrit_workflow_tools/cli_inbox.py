@@ -31,6 +31,7 @@ from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, fo
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
+
 DEFAULT_TO_REVIEW_QUERY = "is:open -is:wip -is:private -owner:self reviewer:self"
 DEFAULT_TO_REVIEW_ALL_QUERY = "is:open -owner:self reviewer:self"
 

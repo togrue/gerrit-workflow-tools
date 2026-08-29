@@ -8,6 +8,7 @@ from pathlib import Path
 
 import gerrit_workflow_tools
 
+
 MARKER_START = "# >>> gerrit-workflow-tools bash completion (ger) >>>"
 MARKER_END = "# <<< gerrit-workflow-tools bash completion (ger) <<<"
 

@@ -13,6 +13,7 @@ from typing import Any
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results
 
+
 SCHEMA_VERSION = "2"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_ACCOUNT_TTL_SECONDS = 24 * 60 * 60

@@ -12,6 +12,7 @@ from urllib.parse import quote, urlparse
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 
+
 logger = logging.getLogger(__name__)
 
 

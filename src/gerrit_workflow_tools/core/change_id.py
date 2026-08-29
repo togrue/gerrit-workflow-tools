@@ -12,6 +12,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.changeish import CHANGE_ID_RE
 from gerrit_workflow_tools.core.git_run import GitError, git
 
+
 # Gerrit Change-Id line value: I + 40 hex digits, either case. The grammar itself lives in
 # core.changeish; this alias keeps footer validation reading naturally at its call sites.
 CHANGE_ID_VALUE_RE = CHANGE_ID_RE

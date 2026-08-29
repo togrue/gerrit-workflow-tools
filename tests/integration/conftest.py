@@ -31,6 +31,7 @@ from tests.integration.gerrit_seed import (
 from tests.integration.load_local_env import load_local_env_file
 from tests.integration.profile import format_report, phase, profiling_enabled, reset
 
+
 logger = logging.getLogger(__name__)
 
 

@@ -31,6 +31,7 @@ from typing import Any
 
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 
+
 DEFAULT_WEB_BASE = "https://gerrit.example"
 
 _CHANGE_ID_SUFFIX_RE = re.compile(r"~(I[a-fA-F0-9]{40})$")

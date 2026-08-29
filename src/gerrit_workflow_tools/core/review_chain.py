@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.gerrit_change_status import extract_label_value, gerrit_change_url
 
+
 # Query options that give parent SHAs, votes (with dates), and owner names.
 INBOX_QUERY_OPTIONS = (
     "DETAILED_LABELS",

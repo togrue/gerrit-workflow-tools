@@ -7,9 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.cli_edit import main as gedit_main
-from gerrit_workflow_tools.cli_edit import main_reword as greword_main
-from gerrit_workflow_tools.cli_edit import resolve_first_edit_attention_sha
+from gerrit_workflow_tools.cli_edit import (
+    main as gedit_main,
+    main_reword as greword_main,
+    resolve_first_edit_attention_sha,
+)
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from tests.change_store import ChangeStore

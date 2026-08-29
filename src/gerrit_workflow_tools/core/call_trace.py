@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 import sys
-import time
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlparse
+
 
 _ENABLED = False
 _records: list[tuple[str, str, float]] = []

@@ -11,8 +11,6 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_changeid import (
     CHANGE_ID_RE,
     _parse_sha_body_rs,
-)
-from gerrit_workflow_tools.cli_changeid import (
     main as gcid_main,
 )
 from gerrit_workflow_tools.cli_common import ExitCode
@@ -20,6 +18,7 @@ from gerrit_workflow_tools.core.change_id import extract_valid_change_id, parse_
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
 from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid
+
 
 # Tip / parent Change-Ids for :func:`tests.fixtures.make_gcid_cli_repo` (newest first in ``git log`` ranges).
 _HEAD_CID = GCID_CLI_CHANGE_IDS[2]

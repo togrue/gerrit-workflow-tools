@@ -8,6 +8,7 @@ import pytest
 from gerrit_workflow_tools.core.changeish import Changeish, is_change_id, parse
 from tests.fixtures import _cid
 
+
 CHANGE_ID = _cid("a")
 CHANGE_ID_UPPER = "I" + ("A" * 40)
 

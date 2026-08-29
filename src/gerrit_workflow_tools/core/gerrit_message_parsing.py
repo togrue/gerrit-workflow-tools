@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from gerrit_workflow_tools.core.ci_links import CiLink
 
+
 GerritMessageKind = Literal[
     "patch_set_upload",
     "build_started",

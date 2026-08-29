@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_in
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
 
+
 CID_A = "I" + "a" * 40
 CID_B = "I" + "b" * 40
 

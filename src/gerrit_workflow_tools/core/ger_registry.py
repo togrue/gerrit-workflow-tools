@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")

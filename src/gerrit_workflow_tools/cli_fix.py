@@ -20,6 +20,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import format_resolutio
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git
 
+
 logger = logging.getLogger(__name__)
 
 

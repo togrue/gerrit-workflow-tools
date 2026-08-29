@@ -17,6 +17,7 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 
+
 _HYPERLINK_ENV_KEYS = (
     "WT_SESSION",
     "TERM_PROGRAM",

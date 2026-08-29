@@ -28,6 +28,7 @@ from gerrit_workflow_tools.render.status_fmt import (
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
+
 # Fixed width for the abbreviated SHA so status columns line up across commits.
 _STATUS_SHA_COL_WIDTH = 8
 

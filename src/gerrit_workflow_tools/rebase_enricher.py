@@ -22,19 +22,12 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.render.status_fmt import (
     attention_text as _attention_text,
-)
-from gerrit_workflow_tools.render.status_fmt import (
     code_review_token as _fmt_cr,
-)
-from gerrit_workflow_tools.render.status_fmt import (
     comments_token as _fmt_comments,
-)
-from gerrit_workflow_tools.render.status_fmt import (
     patchset_token as _fmt_patchset,
-)
-from gerrit_workflow_tools.render.status_fmt import (
     verified_token as _fmt_verified,
 )
+
 
 logger = logging.getLogger(__name__)
 

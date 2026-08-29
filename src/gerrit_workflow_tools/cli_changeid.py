@@ -52,6 +52,7 @@ from gerrit_workflow_tools.core.stack import (
 )
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
+
 # Re-export for tests and backwards compatibility.
 
 CHANGE_ID_RE = CHANGE_ID_FOOTER_RE

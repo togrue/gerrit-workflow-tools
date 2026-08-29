@@ -20,6 +20,7 @@ from tests.fixtures import (
     make_stack_repo,
 )
 
+
 # Cumulative fixture setup seconds when GWT_TEST_PROFILE=1 (see pytest_fixture_setup).
 _FIXTURE_PROFILE_SECONDS: dict[str, float] = defaultdict(float)
 _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)

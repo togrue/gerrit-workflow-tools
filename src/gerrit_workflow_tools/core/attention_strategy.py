@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.ger_registry import (
 )
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, determine_attention
 
+
 logger = logging.getLogger(__name__)
 
 _DOMAIN = "attention"

@@ -18,6 +18,7 @@ from tests.integration.integration_helpers import (
 )
 from tests.integration.repo_builder import build_linear_chain
 
+
 CRS = (-2, -1, 0, 1, 2)
 VS = (-1, 0, 1)
 

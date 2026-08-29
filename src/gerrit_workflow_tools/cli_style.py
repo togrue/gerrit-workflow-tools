@@ -7,6 +7,7 @@ import re
 import sys
 from collections.abc import Mapping
 
+
 ANSI_RESET = "\033[0m"
 ANSI_DIM = "\033[2m"
 ANSI_STRIKE = "\033[9m"

@@ -9,6 +9,7 @@ from gerrit_workflow_tools.core.config import (
 )
 from gerrit_workflow_tools.core.git_run import git
 
+
 # Most of these need no repository: a Settings is just the key/value map git would have
 # produced, so the defaults and the parsing of each value can be stated directly.
 

@@ -21,6 +21,7 @@ from gerrit_workflow_tools.core.reviewer_completion import (
 )
 from gerrit_workflow_tools.push_input_line import PushLineState
 
+
 _DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite"
 _QUERY_DEBOUNCE_SECONDS = 0.35
 

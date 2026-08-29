@@ -52,6 +52,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     stack_change_refs_ordered,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
+from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
@@ -64,10 +65,8 @@ from gerrit_workflow_tools.push_input_line import (
     PushLineState,
     refspec_options,
 )
-from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+
 
 logger = logging.getLogger(__name__)
 

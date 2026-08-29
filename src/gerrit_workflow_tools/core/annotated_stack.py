@@ -41,6 +41,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
 from gerrit_workflow_tools.core.stack import commits_in_range
 
+
 _UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
 
 

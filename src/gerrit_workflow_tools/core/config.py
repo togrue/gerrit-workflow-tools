@@ -19,6 +19,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git
 
+
 logger = logging.getLogger(__name__)
 
 

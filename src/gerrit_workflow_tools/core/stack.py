@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
 
+
 logger = logging.getLogger(__name__)
 
 

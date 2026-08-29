@@ -37,6 +37,7 @@ from gerrit_workflow_tools.core.review_chain import (
     missing_parent_shas,
 )
 
+
 logger = logging.getLogger(__name__)
 
 # Host capability key: does this Gerrit serve the Checks plugin endpoint?

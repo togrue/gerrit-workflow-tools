@@ -10,6 +10,7 @@ import requests
 
 from tests.integration.gerrit_http import GerritHttpSession
 
+
 logger = logging.getLogger(__name__)
 
 

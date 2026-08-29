@@ -7,6 +7,7 @@ import re
 from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit
 
+
 # Tokens accepted as bare reviewer login prefixes (aligned with push-input grammar).
 REVIEWER_LOGIN_TOKEN_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 
