@@ -374,7 +374,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     any_attention = False
     json_payloads: list[dict[str, object]] = []
     multi = len(targets) > 1
-    human_shown = 0
+    detail_shown = 0
 
     for resolved, commit in zip(targets, commits, strict=True):
         attention = commit.attention_reasons
@@ -394,26 +394,31 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                     unresolved_chains=unresolved_chains,
                 )
             )
-        elif out_fmt == "markdown":
-            _emit_markdown_commit(commit, unresolved_chains=unresolved_chains)
-            print()
         else:
             # Multi-target: only expand commits that have unresolved comment chains.
             if multi and not unresolved_chains:
                 continue
-            if human_shown:
-                print(color_text(_COMMIT_SEPARATOR, ANSI_YELLOW))
-            _emit_human_commit(
-                cwd,
-                commit,
-                is_local=resolved.is_local_commit,
-                unresolved_chains=unresolved_chains,
-                summary_highlighter=summary_highlighter,
-            )
-            human_shown += 1
+            if out_fmt == "markdown":
+                _emit_markdown_commit(commit, unresolved_chains=unresolved_chains)
+                print()
+            else:
+                if detail_shown:
+                    print(color_text(_COMMIT_SEPARATOR, ANSI_YELLOW))
+                _emit_human_commit(
+                    cwd,
+                    commit,
+                    is_local=resolved.is_local_commit,
+                    unresolved_chains=unresolved_chains,
+                    summary_highlighter=summary_highlighter,
+                )
+            detail_shown += 1
 
-    if out_fmt == "human" and multi and human_shown == 0:
-        print(color_text("(no unresolved comments)", ANSI_DIM))
+    if out_fmt in ("human", "markdown") and multi and detail_shown == 0:
+        msg = "(no unresolved comments)"
+        if out_fmt == "human":
+            print(color_text(msg, ANSI_DIM))
+        else:
+            print(msg)
 
     if out_fmt == "json":
         if len(json_payloads) == 1:

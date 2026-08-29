@@ -178,6 +178,54 @@ def test_gshow_multi_human_omits_clean_commits(stack_repo: Path, monkeypatch: py
         assert parent_subj not in out
 
 
+def test_gshow_multi_markdown_omits_clean_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With --ai/--stack, commits without unresolved chains are not printed."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    tip_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", tip, cwd=stack_repo).strip()
+    parent_cid = git_out(
+        "log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", parent, cwd=stack_repo
+    ).strip()
+    dirty = _detail_ok(change_id=tip_cid, sha=tip, number=201, cr_value=0, v_value=1)
+    dirty["unresolved_comment_count"] = 1
+    clean = _detail_ok(change_id=parent_cid, sha=parent, number=200, cr_value=2, v_value=1)
+    store = ChangeStore({str(dirty["id"]): dirty, str(clean["id"]): clean}, web_base="https://g.example")
+    store.set_comments(
+        str(dirty["id"]),
+        {
+            "x.py": [
+                {
+                    "id": "c1",
+                    "line": 2,
+                    "message": "needs fix",
+                    "unresolved": True,
+                    "author": {"username": "alice", "name": "Alice"},
+                }
+            ]
+        },
+    )
+    parent_subj = git_out("log", "-1", "--format=%s", parent, cwd=stack_repo)
+    tip_subj = git_out("log", "-1", "--format=%s", tip, cwd=stack_repo)
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--ai", "--stack"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "> needs fix" in out
+    assert "### `x.py:2`" in out
+    assert tip_subj in out
+    assert sum(1 for line in out.splitlines() if line.startswith("## ")) == 1
+    assert git_out("rev-parse", "--short", tip, cwd=stack_repo) in out
+    assert git_out("rev-parse", "--short", parent, cwd=stack_repo) not in out
+    if parent_subj != tip_subj:
+        assert parent_subj not in out
+    assert "\033[" not in out
+
+
 def test_gshow_human_thread_gutter(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
