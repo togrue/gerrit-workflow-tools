@@ -325,7 +325,10 @@ def build_log_commit(
         needed.add("checks")
 
     reviewer_list = reviewer_accounts_from_change_info(detail)
-    if not reviewer_list:
+    # An empty list is an *answer* when the payload carried the field: `DETAILED_LABELS`
+    # puts `reviewers` on every ChangeInfo, so absence — not emptiness — is the miss.
+    # Payloads fetched without that option (e.g. `rest.get_change`) still follow up.
+    if not reviewer_list and "reviewers" not in detail:
         needed.add("reviewers")
 
     resolved_cwd = Path.cwd() if cwd is None else Path(cwd)

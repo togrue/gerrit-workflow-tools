@@ -69,3 +69,43 @@ def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
     assert lc.comments_unresolved == 0
     # Reviewers succeeded despite the comments failure.
     assert lc.reviewers == [alice]
+
+
+def test_reviewers_follow_up_skipped_when_payload_carries_an_empty_reviewer_list() -> None:
+    """An empty ``reviewers`` map is an answer, not a hole — no /reviewers/ GET."""
+
+    detail = {**_DETAIL, "reviewers": {}, "unresolved_comment_count": 0}
+    service = _make_service(detail)
+
+    with patch(
+        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        return_value=_STACK,
+    ):
+        commits = service.fetch_gerrit_data([_FakeRow()])
+
+    service.rest.list_change_reviewers.assert_not_called()
+    assert commits[0].reviewers == []
+
+
+def test_reviewers_follow_up_runs_when_payload_omits_the_field() -> None:
+    """Payloads fetched without DETAILED_LABELS carry no ``reviewers`` — still follow up."""
+
+    detail = {**_DETAIL, "unresolved_comment_count": 0}
+    assert "reviewers" not in detail
+    service = _make_service(detail)
+
+    with (
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            return_value=_STACK,
+        ),
+        patch.object(
+            service.rest,
+            "list_change_reviewers",
+            return_value=[{"account": {"_account_id": 42, "username": "alice"}, "state": "REVIEWER"}],
+        ) as list_reviewers,
+    ):
+        commits = service.fetch_gerrit_data([_FakeRow()])
+
+    list_reviewers.assert_called_once()
+    assert commits[0].reviewers == [ReviewerAccount(slug="alice", account_id=42)]
