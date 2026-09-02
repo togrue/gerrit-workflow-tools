@@ -13,7 +13,14 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.cli_style import ANSI_YELLOW, GERRIT_LINK_LABEL, strip_ansi
+from gerrit_workflow_tools.cli_style import (
+    ANSI_DIM_GRAY,
+    ANSI_GREEN,
+    ANSI_RED,
+    ANSI_YELLOW,
+    GERRIT_LINK_LABEL,
+    strip_ansi,
+)
 from gerrit_workflow_tools.core.annotated_stack import (
     branches_needing_upstream,
     commit_rows_in_range,
@@ -345,6 +352,95 @@ def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest
     assert f"Change-Id: {cid}" in out
     for line in _primary_log_lines(out):
         assert cid not in line
+
+
+def test_log_verbose_shows_only_failing_checks_at_v(
+    stack_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``-v`` shows failed CI only; ``-vv`` also shows passing pipelines in green."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {"verified": -1, "submittable": False}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    first_cid = rows[0].change_id
+    assert first_cid
+    triplet = f"testproj~main~{first_cid}"
+    store = ChangeStore(
+        details,
+        checks={
+            triplet: [
+                {"state": "FAILED", "checker_name": "verify", "url": "https://ci/verify"},
+                {"state": "SUCCESSFUL", "checker_name": "lint", "url": "https://ci/lint"},
+            ]
+        },
+    )
+    code_v, out_v, err_v = run_cli(
+        stack_repo,
+        log_main,
+        ["--verbose", "--color=always", "--hyperlinks=never"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code_v == 1, err_v
+    assert "verify" in out_v
+    assert "lint" not in out_v
+    assert ANSI_RED in out_v
+
+    code_vv, out_vv, err_vv = run_cli(
+        stack_repo,
+        log_main,
+        ["-vv", "--color=always", "--hyperlinks=never"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code_vv == 1, err_vv
+    assert "verify" in out_vv
+    assert "lint" in out_vv
+    assert ANSI_GREEN in out_vv
+
+
+def test_log_verbose_shows_outdated_message_ci_in_grey(
+    stack_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When current PS has no CI messages, ``-v`` shows older build links in grey."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {"verified": -1, "revision_number": 3, "submittable": False}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    first_cid = rows[0].change_id
+    assert first_cid
+    triplet = f"testproj~main~{first_cid}"
+    store = ChangeStore(
+        details,
+        checks={triplet: []},
+        messages={
+            triplet: [
+                {
+                    "message": (
+                        "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
+                        "https://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
+                    ),
+                    "_revision_number": 1,
+                    "date": "2026-01-01 10:00:00",
+                },
+            ]
+        },
+    )
+    code, out, err = run_cli(
+        stack_repo,
+        log_main,
+        ["--verbose", "--color=always", "--hyperlinks=never"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "jenkins" in out
+    assert ANSI_DIM_GRAY in out
+    assert "Widget/job/Widget/10" in out
 
 
 def _unicode_strikethrough(s: str) -> str:

@@ -7,6 +7,8 @@ import pytest
 from gerrit_workflow_tools.core.ci_links import CiLink, apply_ci_strategy
 from gerrit_workflow_tools.core.ci_strategy import default_extract_ci_links
 from gerrit_workflow_tools.core.gerrit_message_parsing import (
+    ci_links_from_build_failed_messages,
+    ci_pipelines_from_build_messages,
     jenkins_build_url_from_text,
     jenkins_job_url_to_console,
     parse_change_message,
@@ -130,8 +132,76 @@ def test_default_extract_ci_links_prefers_latest_failed_patch_set() -> None:
             "date": "2026-01-02 10:00:00",
         },
     ]
-    links = default_extract_ci_links(project="acme/widget", checks=[], messages=messages)
+    links = default_extract_ci_links(
+        project="acme/widget",
+        checks=[],
+        messages=messages,
+        current_revision_number=3,
+    )
     assert links[0].url == "https://ci.example.org/job/Widget/job/Widget/30/console"
+
+
+def test_ci_links_from_build_failed_messages_filters_to_current_revision() -> None:
+    messages = [
+        {
+            "message": (
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
+            ),
+            "_revision_number": 1,
+            "date": "2026-01-01 10:00:00",
+        },
+        {
+            "message": (
+                "Patch Set 3: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/30/ : FAILURE"
+            ),
+            "_revision_number": 3,
+            "date": "2026-01-02 10:00:00",
+        },
+    ]
+    links = ci_links_from_build_failed_messages(messages, current_revision_number=1)
+    assert len(links) == 1
+    assert links[0].url == "https://ci.example.org/job/Widget/job/Widget/10/console"
+
+
+def test_ci_pipelines_from_build_messages_current_revision_only() -> None:
+    messages = [
+        {
+            "message": "Patch Set 3:\n\nBuild Started https://ci.example.org/job/Widget/job/Widget/30/",
+            "_revision_number": 3,
+            "date": "2026-01-02 10:00:00",
+        },
+        {
+            "message": (
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
+            ),
+            "_revision_number": 1,
+            "date": "2026-01-01 10:00:00",
+        },
+    ]
+    pipelines = ci_pipelines_from_build_messages(messages, current_revision_number=3)
+    assert len(pipelines) == 1
+    assert pipelines[0].state == "IN_PROGRESS"
+    assert pipelines[0].outdated is False
+
+
+def test_ci_pipelines_from_build_messages_outdated_fallback() -> None:
+    messages = [
+        {
+            "message": (
+                "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
+            ),
+            "_revision_number": 1,
+            "date": "2026-01-01 10:00:00",
+        },
+    ]
+    pipelines = ci_pipelines_from_build_messages(
+        messages,
+        current_revision_number=3,
+        include_outdated_fallback=True,
+    )
+    assert len(pipelines) == 1
+    assert pipelines[0].state == "FAILED"
+    assert pipelines[0].outdated is True
 
 
 def test_default_extract_ci_links_checks_before_messages() -> None:

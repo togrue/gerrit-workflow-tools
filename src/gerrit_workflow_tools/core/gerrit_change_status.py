@@ -224,6 +224,17 @@ def norm_sha(sha: str) -> str:
     return sha.strip().lower()
 
 
+def current_revision_number(detail: dict[str, Any]) -> int | None:
+    """Return the patch-set number of Gerrit's ``current_revision``, if known."""
+
+    cur = detail.get("current_revision")
+    revs = detail.get("revisions") or {}
+    if isinstance(cur, str) and isinstance(revs.get(cur), dict):
+        n = revs[cur].get("_number")
+        return n if isinstance(n, int) else None
+    return None
+
+
 def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
     """Compare local commit SHA to Gerrit ``current_revision`` / ``revisions``."""
     ls = norm_sha(local_sha)

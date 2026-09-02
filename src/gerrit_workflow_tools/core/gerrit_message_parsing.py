@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from gerrit_workflow_tools.core.ci_links import CiLink
+from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 
 
 GerritMessageKind = Literal[
@@ -107,6 +107,10 @@ def _revision_number(msg: Mapping[str, Any]) -> int | None:
     return raw if isinstance(raw, int) else None
 
 
+def _message_revision(msg: Mapping[str, Any], parsed: GerritMessageParseResult) -> int | None:
+    return parsed.patch_set if parsed.patch_set is not None else _revision_number(msg)
+
+
 def _message_sort_key(msg: Mapping[str, Any]) -> tuple[int, str]:
     rev = _revision_number(msg)
     date = str(msg.get("date") or "")
@@ -134,13 +138,20 @@ def ci_links_from_failed_checks(checks: Sequence[Mapping[str, Any]]) -> list[CiL
     return out
 
 
-def ci_links_from_build_failed_messages(messages: Sequence[Mapping[str, Any]]) -> list[CiLink]:
+def ci_links_from_build_failed_messages(
+    messages: Sequence[Mapping[str, Any]],
+    *,
+    current_revision_number: int | None = None,
+) -> list[CiLink]:
     """Extract Jenkins console links from ``Build Failed`` change messages."""
 
     candidates: list[tuple[tuple[int, str], CiLink]] = []
     for msg in messages:
         parsed = parse_change_message(msg)
         if parsed.kind != "build_failed" or not parsed.build_url:
+            continue
+        rev = _message_revision(msg, parsed)
+        if current_revision_number is not None and rev != current_revision_number:
             continue
         candidates.append(
             (
@@ -158,11 +169,95 @@ def ci_links_from_build_failed_messages(messages: Sequence[Mapping[str, Any]]) -
     return [candidates[-1][1]]
 
 
+def _build_message_state(parsed: GerritMessageParseResult) -> str:
+    if parsed.kind == "build_failed":
+        return "FAILED"
+    if parsed.kind == "build_started":
+        vote = (parsed.label_vote or "").lower()
+        if vote == "verified+1":
+            return "SUCCESSFUL"
+        return "IN_PROGRESS"
+    return ""
+
+
+def _dedupe_pipelines_latest(items: list[tuple[tuple[int, str], CiPipeline]]) -> list[CiPipeline]:
+    """Keep the latest message per URL."""
+
+    by_url: dict[str | None, tuple[tuple[int, str], CiPipeline]] = {}
+    for sort_key, pipeline in items:
+        key = pipeline.url
+        if key not in by_url or sort_key > by_url[key][0]:
+            by_url[key] = (sort_key, pipeline)
+    ordered = sorted(by_url.values(), key=lambda item: item[0])
+    return [pipeline for _, pipeline in ordered]
+
+
+def ci_pipelines_from_build_messages(
+    messages: Sequence[Mapping[str, Any]],
+    *,
+    current_revision_number: int | None,
+    include_outdated_fallback: bool = False,
+) -> list[CiPipeline]:
+    """Build CI pipelines from Jenkins build messages, scoped to the current patch set."""
+
+    items: list[tuple[tuple[int, str], int | None, CiPipeline]] = []
+    for msg in messages:
+        parsed = parse_change_message(msg)
+        if parsed.kind not in ("build_failed", "build_started") or not parsed.build_url:
+            continue
+        rev = _message_revision(msg, parsed)
+        state = _build_message_state(parsed)
+        if not state:
+            continue
+        outdated = current_revision_number is not None and rev is not None and rev < current_revision_number
+        items.append(
+            (
+                _message_sort_key(msg),
+                rev,
+                CiPipeline(
+                    label="jenkins",
+                    state=state,
+                    url=jenkins_job_url_to_console(parsed.build_url),
+                    outdated=outdated,
+                ),
+            )
+        )
+    if not items:
+        return []
+
+    if current_revision_number is not None:
+        current_items = [(sort_key, pipeline) for sort_key, rev, pipeline in items if rev == current_revision_number]
+        if current_items:
+            return _dedupe_pipelines_latest(current_items)
+        if include_outdated_fallback:
+            revs = [rev for _, rev, _ in items if rev is not None]
+            if not revs:
+                return []
+            latest_rev = max(revs)
+            fallback_items = [
+                (
+                    sort_key,
+                    CiPipeline(
+                        label=pipeline.label,
+                        state=pipeline.state,
+                        url=pipeline.url,
+                        outdated=True,
+                    ),
+                )
+                for sort_key, rev, pipeline in items
+                if rev == latest_rev
+            ]
+            return _dedupe_pipelines_latest(fallback_items)
+
+    return _dedupe_pipelines_latest([(sort_key, pipeline) for sort_key, _, pipeline in items])
+
+
 __all__ = [
     "GerritMessageKind",
     "GerritMessageParseResult",
     "ci_links_from_build_failed_messages",
     "ci_links_from_failed_checks",
+    "ci_pipelines_from_build_messages",
     "jenkins_build_url_from_text",
     "jenkins_job_url_to_console",
     "parse_change_message",

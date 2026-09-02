@@ -35,6 +35,7 @@ class CiPipeline:
     label: str
     state: str
     url: str | None = None
+    outdated: bool = False
 
 
 def failed_check_names(checks: Sequence[Mapping[str, Any]]) -> list[str]:

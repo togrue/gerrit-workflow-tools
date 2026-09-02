@@ -136,7 +136,9 @@ def primary_line(
     return f"{primary_line_prefix(commit)}{summ}"
 
 
-def _ci_state_color(state: str) -> str:
+def _ci_state_color(state: str, *, outdated: bool = False) -> str:
+    if outdated:
+        return ANSI_DIM_GRAY
     if state == "FAILED":
         return ANSI_RED
     if state == "SUCCESSFUL":
@@ -152,7 +154,7 @@ def _format_ci_link_body(link: CiLink) -> str:
 
 
 def _format_ci_pipeline_item(pipeline: CiPipeline) -> str:
-    color = _ci_state_color(pipeline.state)
+    color = _ci_state_color(pipeline.state, outdated=pipeline.outdated)
     if pipeline.url and is_hyperlink_enabled():
         return color_text(format_link(pipeline.url, label=pipeline.label), color)
     if pipeline.url:
@@ -160,17 +162,22 @@ def _format_ci_pipeline_item(pipeline: CiPipeline) -> str:
     return color_text(pipeline.label, color)
 
 
-def _pipelines_for_display(commit: LogCommit) -> list[CiPipeline]:
+def _pipelines_for_display(commit: LogCommit, *, verbose_level: int = 1) -> list[CiPipeline]:
     if commit.ci_pipelines:
-        return commit.ci_pipelines
-    if commit.ci_links:
-        return [CiPipeline(label=link.label, state="FAILED", url=link.url) for link in commit.ci_links]
-    return [CiPipeline(label=name, state="FAILED", url=None) for name in commit.ci_failures]
+        pipelines = commit.ci_pipelines
+    elif commit.ci_links:
+        pipelines = [CiPipeline(label=link.label, state="FAILED", url=link.url) for link in commit.ci_links]
+    else:
+        pipelines = [CiPipeline(label=name, state="FAILED", url=None) for name in commit.ci_failures]
+
+    if verbose_level >= 2:
+        return pipelines
+    return [p for p in pipelines if p.state == "FAILED" or p.outdated]
 
 
-def format_ci_lines(commit: LogCommit) -> list[str]:
+def format_ci_lines(commit: LogCommit, *, verbose_level: int = 1) -> list[str]:
     """Indented CI continuation lines, or empty when there is no CI data."""
-    pipelines = _pipelines_for_display(commit)
+    pipelines = _pipelines_for_display(commit, verbose_level=verbose_level)
     if not pipelines:
         return []
 
@@ -201,7 +208,7 @@ def continuation_lines(
     """Continuation detail lines below the primary oneline row."""
     lines: list[str] = []
     if verbose_level >= 1:
-        lines.extend(format_ci_lines(commit))
+        lines.extend(format_ci_lines(commit, verbose_level=verbose_level))
     if show_change_id:
         change_line = format_change_id_line(commit.change_id)
         if change_line:
@@ -211,7 +218,7 @@ def continuation_lines(
 
 def extra_detail_lines(commit: LogCommit) -> list[str]:
     """CI continuation lines for ``ger show`` and other compact detail views."""
-    return format_ci_lines(commit)
+    return format_ci_lines(commit, verbose_level=1)
 
 
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:

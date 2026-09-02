@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.cli_style import init_hyperlink_mode, strip_ansi
+from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, init_color_mode, init_hyperlink_mode, strip_ansi
 from gerrit_workflow_tools.core.ci_links import (
     CiLink,
     CiPipeline,
@@ -375,11 +375,15 @@ def test_format_ci_lines_hyperlink_single_line() -> None:
             CiPipeline(label="lint", state="SUCCESSFUL", url="https://ci/lint"),
         ],
     )
-    lines = format_ci_lines(commit)
-    assert len(lines) == 1
-    assert strip_ansi(lines[0]).startswith("CI:")
-    assert "build" in strip_ansi(lines[0])
-    assert "lint" in strip_ansi(lines[0])
+    lines_v1 = format_ci_lines(commit, verbose_level=1)
+    assert len(lines_v1) == 1
+    assert strip_ansi(lines_v1[0]).startswith("CI:")
+    assert "build" in strip_ansi(lines_v1[0])
+    assert "lint" not in strip_ansi(lines_v1[0])
+    lines_v2 = format_ci_lines(commit, verbose_level=2)
+    assert len(lines_v2) == 1
+    assert "build" in strip_ansi(lines_v2[0])
+    assert "lint" in strip_ansi(lines_v2[0])
     init_hyperlink_mode(hyperlinks="never")
 
 
@@ -401,11 +405,35 @@ def test_format_ci_lines_plain_multi_line() -> None:
             CiPipeline(label="lint", state="SUCCESSFUL", url="https://ci/lint"),
         ],
     )
-    lines = format_ci_lines(commit)
-    assert len(lines) == 2
-    assert "CI:" in strip_ansi(lines[0])
-    assert "build https://ci/build" in strip_ansi(lines[0])
-    assert "lint https://ci/lint" in strip_ansi(lines[1])
+    lines_v1 = format_ci_lines(commit, verbose_level=1)
+    assert len(lines_v1) == 1
+    assert "CI:" in strip_ansi(lines_v1[0])
+    assert "build https://ci/build" in strip_ansi(lines_v1[0])
+    lines_v2 = format_ci_lines(commit, verbose_level=2)
+    assert len(lines_v2) == 2
+    assert "lint https://ci/lint" in strip_ansi(lines_v2[1])
+
+
+def test_format_ci_lines_outdated_uses_grey_at_verbose() -> None:
+    init_color_mode(color="always")
+    init_hyperlink_mode(hyperlinks="never")
+    commit = LogCommit(
+        sha="a" * 40,
+        short_sha="aaaaaaaa",
+        summary="x",
+        change_id=None,
+        pushed=True,
+        abandoned=False,
+        patchset_status=PatchsetStatus.ACTIVE,
+        verified=-1,
+        code_review=None,
+        comments_unresolved=0,
+        ci_pipelines=[
+            CiPipeline(label="jenkins", state="FAILED", url="https://ci/old", outdated=True),
+        ],
+    )
+    lines = format_ci_lines(commit, verbose_level=1)
+    assert ANSI_DIM_GRAY in lines[0]
 
 
 def test_extra_detail_lines_with_hyperlinks() -> None:
@@ -433,6 +461,50 @@ def test_extra_detail_lines_with_hyperlinks() -> None:
     init_hyperlink_mode(hyperlinks="never")
     lines_off = extra_detail_lines(commit)
     assert "https://ci/console" in strip_ansi(lines_off[0])
+
+
+def test_service_ci_links_filter_by_current_revision(stack_repo: Path) -> None:
+    clear_ci_strategy_cache()
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {"verified": -1, "revision_number": 3, "submittable": False}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    first_cid = rows[0].change_id
+    assert first_cid
+    triplet = f"testproj~main~{first_cid}"
+    store = ChangeStore(
+        details,
+        web_base="https://g.example",
+        checks={triplet: []},
+        messages={
+            triplet: [
+                {
+                    "message": (
+                        "Patch Set 1: Verified-1\n\nBuild Failed \n\n"
+                        "https://ci.example.org/job/Widget/job/Widget/10/ : FAILURE"
+                    ),
+                    "_revision_number": 1,
+                    "date": "2026-01-01 10:00:00",
+                },
+            ]
+        },
+    )
+    service = GerritService.from_cwd(stack_repo, rest=store)
+    inputs = [
+        CommitStatusInput(
+            sha=row.sha,
+            short_sha=row.short_sha,
+            summary=row.subject,
+            change_id=row.change_id,
+        )
+        for row in rows
+    ]
+    result = service.fetch_gerrit_data(inputs, cwd=stack_repo, fetch_ci_pipelines=True)
+    matched = next(c for c in result if c.change_id == first_cid)
+    assert matched.ci_links == []
+    assert len(matched.ci_pipelines) == 1
+    assert matched.ci_pipelines[0].outdated is True
+    assert matched.ci_pipelines[0].state == "FAILED"
 
 
 def test_log_json_includes_ci_links(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -74,6 +74,7 @@ def default_extract_ci_links(
     project: str,
     checks: Sequence[Mapping[str, Any]],
     messages: Sequence[Mapping[str, Any]],
+    current_revision_number: int | None = None,
 ) -> list[CiLink]:
     """Built-in CI strategy: failed Checks rows, then Jenkins ``Build Failed`` messages."""
 
@@ -82,7 +83,10 @@ def default_extract_ci_links(
     if from_checks:
         # LazyRows gate: do not iterate messages (and trigger get_messages) when checks answer.
         return from_checks
-    return ci_links_from_build_failed_messages(messages)
+    return ci_links_from_build_failed_messages(
+        messages,
+        current_revision_number=current_revision_number,
+    )
 
 
 def extract_ci_links_via_registry(
@@ -93,10 +97,11 @@ def extract_ci_links_via_registry(
     messages: Sequence[Mapping[str, Any]],
     settings: Settings | None = None,
     web_base: str | None = None,
+    current_revision_number: int | None = None,
 ) -> list[CiLink]:
     """Load tiered CI strategies and return filtered :class:`CiLink` rows."""
 
-    from gerrit_workflow_tools.core.ci_links import apply_ci_strategy
+    from gerrit_workflow_tools.core.ci_links import apply_ci_strategy, prefer_checks_links
 
     tiers = resolve_tier_callables(
         cwd,
@@ -111,12 +116,13 @@ def extract_ci_links_via_registry(
         return apply_ci_strategy(strategy, project=project, checks=checks, messages=messages)
 
     def _builtin() -> list[CiLink]:
-        return apply_ci_strategy(
-            default_extract_ci_links,
+        raw = default_extract_ci_links(
             project=project,
             checks=checks,
             messages=messages,
+            current_revision_number=current_revision_number,
         )
+        return prefer_checks_links(raw)
 
     return run_registry_callables(
         tiers,

@@ -203,7 +203,7 @@ class GerritService:
         """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
 
         from gerrit_workflow_tools.core.comment_chains import count_unresolved_in_file_map
-        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
+        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit, current_revision_number
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         stack = _service_stack_context(self)
@@ -220,7 +220,7 @@ class GerritService:
         result: list[Any] = []
         # (row index, follow-up kinds, triplet, change.updated) — `updated` is the cache
         # validity key for every follow-up, so it travels with the job.
-        pending: list[tuple[int, frozenset[str], str, str | None]] = []
+        pending: list[tuple[int, frozenset[str], str, str | None, int | None, bool]] = []
 
         for row in commits:
             detail = None
@@ -234,13 +234,16 @@ class GerritService:
             if needed and detail is not None:
                 triplet = detail.get("id")
                 if isinstance(triplet, str) and triplet:
-                    pending.append((len(result) - 1, needed, triplet, lc.updated))
+                    rev_num = current_revision_number(detail)
+                    pending.append((len(result) - 1, needed, triplet, lc.updated, rev_num, fetch_ci_pipelines))
 
         if not pending:
             return result
 
-        def _follow_up(item: tuple[int, frozenset[str], str, str | None]) -> tuple[int, dict[str, Any]]:
-            idx, kinds, triplet, change_updated = item
+        def _follow_up(
+            item: tuple[int, frozenset[str], str, str | None, int | None, bool],
+        ) -> tuple[int, dict[str, Any]]:
+            idx, kinds, triplet, change_updated, rev_num, want_pipelines = item
             updates: dict[str, Any] = {}
             if "comments" in kinds:
                 try:
@@ -250,7 +253,12 @@ class GerritService:
                     logger.debug("comments follow-up failed for %s: %s", triplet, exc)
             if "checks" in kinds:
                 try:
-                    names, links, pipelines = self._fetch_ci_result(triplet, project=stack.project)
+                    names, links, pipelines = self._fetch_ci_result(
+                        triplet,
+                        project=stack.project,
+                        current_revision_number=rev_num,
+                        fetch_pipelines=want_pipelines,
+                    )
                     updates["checks"] = names
                     updates["ci_links"] = links
                     updates["ci_pipelines"] = pipelines
@@ -368,11 +376,19 @@ class GerritService:
             self.cache.set_capability(_CHECKS_CAPABILITY, True)
         return rows
 
-    def _fetch_ci_result(self, change_id: str, *, project: str) -> tuple[list[str], list, list]:
-        """Return failed CI names, transformed links, and all Checks-plugin pipelines."""
+    def _fetch_ci_result(
+        self,
+        change_id: str,
+        *,
+        project: str,
+        current_revision_number: int | None = None,
+        fetch_pipelines: bool = False,
+    ) -> tuple[list[str], list, list]:
+        """Return failed CI names, transformed links, and Checks-plugin pipelines."""
 
         from gerrit_workflow_tools.core.ci_links import ci_pipelines_from_checks, failed_check_names
         from gerrit_workflow_tools.core.ci_strategy import LazyRows, extract_ci_links_via_registry
+        from gerrit_workflow_tools.core.gerrit_message_parsing import ci_pipelines_from_build_messages
 
         check_rows = self._checks_or_empty(change_id)
         names = failed_check_names(check_rows)
@@ -386,10 +402,23 @@ class GerritService:
                 messages=LazyRows(fetch=lambda: self._get_messages_or_empty(change_id)),
                 settings=self.settings,
                 web_base=self.web_base,
+                current_revision_number=current_revision_number,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("CI strategy failed for %s (%s): %s", change_id, project, exc)
-        pipelines = ci_pipelines_from_checks(check_rows, links)
+
+        if fetch_pipelines:
+            if check_rows:
+                pipelines = ci_pipelines_from_checks(check_rows, links)
+            else:
+                messages = self._get_messages_or_empty(change_id)
+                pipelines = ci_pipelines_from_build_messages(
+                    messages,
+                    current_revision_number=current_revision_number,
+                    include_outdated_fallback=True,
+                )
+        else:
+            pipelines = []
         return names, links, pipelines
 
     def _refresh_after_mutation(self, change_id: str) -> Change:

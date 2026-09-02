@@ -32,6 +32,7 @@ def change_info_for_sha(
     work_in_progress: bool = False,
     private: bool = False,
     status: str = "NEW",
+    revision_number: int = 1,
 ) -> dict[str, Any]:
     """Minimal ChangeInfo for :func:`batch_load_change_details` / ``query_changes``."""
     out: dict[str, Any] = {
@@ -45,7 +46,7 @@ def change_info_for_sha(
         "current_revision": sha,
         "submittable": submittable,
         "unresolved_comment_count": unresolved_comment_count,
-        "revisions": {sha: {"_number": 1}},
+        "revisions": {sha: {"_number": revision_number}},
         "work_in_progress": work_in_progress,
         "private": private,
         "labels": {
@@ -99,6 +100,7 @@ def build_details_by_change_id(
             work_in_progress=bool(ov.get("work_in_progress", False)),
             private=bool(ov.get("private", False)),
             status=str(ov.get("status", "NEW")),
+            revision_number=int(ov.get("revision_number", 1)),
         )
         out[str(detail["id"])] = detail
     return out
