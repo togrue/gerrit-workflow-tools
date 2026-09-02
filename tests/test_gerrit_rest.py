@@ -10,10 +10,12 @@ import pytest
 
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
+    HttpGerritRest,
     _chunk_by_query_budget,
     _chunk_to_query,
     alias_batch_fetch_results,
     batch_load_change_details,
+    encode_gerrit_path_segment,
     pick_change_from_query_result,
     query_single_change,
     resolve_change_ref,
@@ -35,6 +37,34 @@ def _change_row(
         "_number": number,
         "subject": "subj",
     }
+
+
+def test_encode_gerrit_path_segment_encodes_slashes_once() -> None:
+    assert encode_gerrit_path_segment("tools/SomeProject~59446") == "tools%2FSomeProject~59446"
+
+
+def test_encode_gerrit_path_segment_does_not_double_encode() -> None:
+    """Gerrit ChangeInfo.id values are already percent-encoded."""
+    assert encode_gerrit_path_segment("tools%2FSomeProject~59446") == "tools%2FSomeProject~59446"
+    assert "%252F" not in encode_gerrit_path_segment("tools%2FSomeProject~59446")
+
+
+def test_get_messages_uses_single_encoded_project_path() -> None:
+    """Follow-ups pass Gerrit's compact id; REST paths must not double-encode."""
+    from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    paths: list[str] = []
+
+    def _capture(path: str, *, method: str = "GET", params=None, json_body=None) -> list[dict[str, Any]]:
+        del method, params, json_body
+        paths.append(path)
+        return []
+
+    client._request_json = _capture  # type: ignore[method-assign]
+    client.get_messages("tools%2FSomeProject~59446")
+
+    assert paths == ["changes/tools%2FSomeProject~59446/messages"]
 
 
 def test_alias_batch_fetch_results_maps_compact_gerrit_id_to_requested_triplet() -> None:
