@@ -8,7 +8,7 @@
 
 If you use Gerrit with single-commit changes only, or you already have a workflow you like, you may not need this.
 
-![Example `ger log` output: stack commits with patchset, verification, code-review, comments, and attention hints](.screenshots\ger_log_output.png)
+![Example `ger log` output: stack commits with patchset, verification, code-review, comments, and attention hints](docu/screenshots/ger_log_output.png)
 
 ## You might want this if
 
