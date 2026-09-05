@@ -52,3 +52,16 @@ def gerrit_cache_db_path(web_base: str) -> Path:
     """Return the SQLite cache DB path for *web_base*."""
 
     return gerrit_cache_dir(web_base) / "cache.db"
+
+
+def gerrit_project_cache_key(project: str) -> str:
+    """Return a filesystem-safe key for a Gerrit project path."""
+
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", project.strip())
+    return safe or "unknown"
+
+
+def push_options_history_path(web_base: str, project: str) -> Path:
+    """Return the per-(host, project) push-options history file path."""
+
+    return gerrit_cache_dir(web_base) / "push_options_history" / f"{gerrit_project_cache_key(project)}.txt"

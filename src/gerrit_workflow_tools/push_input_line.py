@@ -380,12 +380,14 @@ def _quote(value: str) -> str:
     return f'"{escaped}"'
 
 
-def format_canonical(state: PushLineState) -> str:
+def format_canonical(state: PushLineState, *, include_strategy: bool = True) -> str:
     """Render ``state`` as a stable, ergonomic line.
 
     Reviewers come first as ``r=alice,bob``, then optional ``topic=…``, then
     flags (``wip private``), and finally a non-default strategy keyword
-    (``lazy``/``overwrite``).
+    (``lazy``/``overwrite``) when ``include_strategy`` is true.
+
+    Persisted push-options history omits strategy (``include_strategy=False``).
     """
     parts: list[str] = []
     if state.reviewers:
@@ -397,9 +399,27 @@ def format_canonical(state: PushLineState) -> str:
         parts.append("wip")
     if state.private:
         parts.append("private")
-    if state.strategy != "push":
+    if include_strategy and state.strategy != "push":
         parts.append(state.strategy)
     return " ".join(parts)
+
+
+def apply_session_strategy(line: str, strategy: str | None) -> str:
+    """Return ``line`` with *strategy* merged for display when it is non-default.
+
+    History lines never store strategy. When the CLI passes ``lazy`` /
+    ``overwrite``, merge that keyword into the visible buffer (and Up/Down
+    entries) for this session only.
+    """
+    if strategy == "lazy":
+        merged: ReviewerStrategy = "lazy"
+    elif strategy == "overwrite":
+        merged = "overwrite"
+    else:
+        return line
+    state = parse(line).state
+    state.strategy = merged
+    return format_canonical(state)
 
 
 def refspec_options(state: PushLineState, strategy: ReviewerStrategy) -> list[str]:

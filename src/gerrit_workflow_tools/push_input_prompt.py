@@ -26,6 +26,7 @@ from prompt_toolkit.validation import ValidationError, Validator
 
 from gerrit_workflow_tools.cli_style import is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.paths import push_options_history_path
 from gerrit_workflow_tools.push_input_line import (
     KW_LAZY,
     KW_OVERWRITE,
@@ -36,6 +37,7 @@ from gerrit_workflow_tools.push_input_line import (
     KW_WIP,
     ParseResult,
     SpanKind,
+    apply_session_strategy,
     format_canonical,
     parse,
 )
@@ -149,25 +151,42 @@ class PushOptionsCompleter(Completer):
 _HISTORY_LIMIT = 20
 
 
-def _history_file() -> Path:
-    return Path.home() / ".cache" / "ger" / "push_options_history.txt"
+def _history_file(web_base: str, project: str) -> Path:
+    return push_options_history_path(web_base, project)
 
 
-def load_push_options_history() -> list[str]:
-    """Return stored canonical lines, newest first."""
+def load_push_options_history(*, web_base: str | None, project: str | None) -> list[str]:
+    """Return stored history lines for *web_base*+*project*, newest first.
+
+    Returns an empty list when host/project identity is missing (no global
+    fallback). Lines never include strategy keywords.
+    """
+    if not web_base or not project:
+        return []
     try:
-        raw = _history_file().read_text(encoding="utf-8")
+        raw = _history_file(web_base, project).read_text(encoding="utf-8")
     except OSError:
         return []
     return [line for line in raw.splitlines() if line.strip()]
 
 
-def prepend_push_options_history(line: str) -> None:
-    """Prepend ``line`` to persisted history (dedupe, cap at :data:`_HISTORY_LIMIT`)."""
-    canonical = line.strip()
-    recent = [entry for entry in load_push_options_history() if entry != canonical]
+def prepend_push_options_history(
+    line: str,
+    *,
+    web_base: str | None,
+    project: str | None,
+) -> None:
+    """Prepend a history line (strategy stripped; dedupe; cap at :data:`_HISTORY_LIMIT`).
+
+    No-op when host/project identity is missing.
+    """
+    if not web_base or not project:
+        return
+    # Persist reviewers/topic/wip/private only — never strategy.
+    canonical = format_canonical(parse(line).state, include_strategy=False).strip()
+    recent = [entry for entry in load_push_options_history(web_base=web_base, project=project) if entry != canonical]
     updated = ([canonical, *recent] if canonical else recent)[:_HISTORY_LIMIT]
-    path = _history_file()
+    path = _history_file(web_base, project)
     path.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(OSError):
         path.write_text("\n".join(updated) + ("\n" if updated else ""), encoding="utf-8")
@@ -242,15 +261,22 @@ def prompt_push_options_line(
     cwd: Path | None = None,
     settings: Settings,
     change_id_hint: str | None = None,
+    web_base: str | None = None,
+    project: str | None = None,
+    session_strategy: str | None = None,
 ) -> ParseResult:
     """Show the prompt and return the parsed result for the accepted line.
 
-    ``default`` pre-fills the buffer; when omitted, the last persisted canonical
-    line is used. On accept, the canonical form of the parsed state is saved
-    back to disk so the next prompt opens with the same state.
+    History is keyed by ``(web_base, project)``. When identity is missing,
+    history is neither loaded nor saved. ``default`` prefills only when that
+    history is empty. When ``session_strategy`` is a non-default CLI strategy,
+    it is merged into the visible prefill and Up/Down entries for this session;
+    accepted lines are still saved without strategy.
     """
-    history = load_push_options_history()
-    initial = default if default is not None else (history[0] if history else "")
+    stored = load_push_options_history(web_base=web_base, project=project)
+    base = stored[0] if stored else (default if default is not None else "")
+    display_history = [apply_session_strategy(entry, session_strategy) for entry in stored]
+    initial = apply_session_strategy(base, session_strategy)
     seed_list = [s for s in reviewer_seeds if s]
     catalog = ReviewerCatalog.from_runtime(
         cwd=cwd, settings=settings, reviewer_seeds=seed_list, change_id_hint=change_id_hint
@@ -263,12 +289,16 @@ def prompt_push_options_line(
         validate_while_typing=False,
         completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
-        history=InMemoryHistory(_in_memory_history_entries(history, initial)),
+        history=InMemoryHistory(_in_memory_history_entries(display_history, initial)),
         key_bindings=_PUSH_OPTIONS_HISTORY_BINDINGS,
         bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
     raw = session.prompt(default=initial)
     res = parse(raw)
     if res.valid_for_apply:
-        prepend_push_options_history(format_canonical(res.state))
+        prepend_push_options_history(
+            format_canonical(res.state, include_strategy=False),
+            web_base=web_base,
+            project=project,
+        )
     return res

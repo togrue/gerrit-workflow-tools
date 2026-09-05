@@ -222,6 +222,36 @@ def _reviewer_seeds_for_prompt(branch: str, *, settings: Settings) -> list[str]:
     return seeds
 
 
+def _push_options_history_identity(
+    cwd: Path | None,
+    *,
+    settings: Settings,
+) -> tuple[str | None, str | None]:
+    """Return ``(web_base, project)`` for push-options history, or ``(None, None)``."""
+    web_base = settings.gerrit_web_url
+    project = settings.gerrit_project
+    if cwd is not None:
+        with contextlib.suppress(Exception):
+            project = resolve_stack_context(cwd, settings=settings).project
+    if not web_base or not project:
+        return None, None
+    return web_base, project
+
+
+def _synthesize_push_options_default(
+    cwd: Path,
+    branch: str,
+    reviewer_flag_segments: list[str],
+    *,
+    settings: Settings,
+) -> str:
+    """Build an empty-history prefill from ``--reviewers`` / registry / branch config."""
+    reviewers = _resolve_push_reviewers(cwd, branch, reviewer_flag_segments, settings=settings)
+    if not reviewers:
+        return ""
+    return f"r={','.join(reviewers)}"
+
+
 def _change_id_for_rev(cwd: Path, rev: str) -> str | None:
     try:
         msg = git_out("show", "-s", "--format=%B", rev, cwd=cwd)
@@ -236,17 +266,17 @@ def _prompt_interactive_reviewers(
     *,
     settings: Settings,
     change_id_hint: str | None = None,
+    reviewer_flag_segments: list[str] | None = None,
+    session_strategy: ReviewerStrategy | None = None,
 ) -> ParseResult:
     """Pre-push interactive prompt (``-i``); reuses the new push-options input line."""
-    from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
-
-    seeds = _reviewer_seeds_for_prompt(branch, settings=settings) if branch is not None else []
-    return prompt_push_options_line(
-        reviewer_seeds=seeds,
-        message="Push options: ",
-        cwd=cwd,
+    return _prompt_reviewers_line_ptk(
+        cwd,
+        branch,
         settings=settings,
         change_id_hint=change_id_hint,
+        reviewer_flag_segments=reviewer_flag_segments,
+        session_strategy=session_strategy,
     )
 
 
@@ -334,17 +364,27 @@ def _prompt_reviewers_line_ptk(
     *,
     settings: Settings,
     change_id_hint: str | None = None,
+    reviewer_flag_segments: list[str] | None = None,
+    session_strategy: ReviewerStrategy | None = None,
 ) -> ParseResult:
     """Confirm-loop ``r`` action: open the highlighted push-options input line."""
     from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
     seeds = _reviewer_seeds_for_prompt(branch, settings=settings) if branch is not None else []
+    web_base, project = _push_options_history_identity(cwd, settings=settings)
+    empty_default = ""
+    if cwd is not None and branch is not None:
+        empty_default = _synthesize_push_options_default(cwd, branch, reviewer_flag_segments or [], settings=settings)
     return prompt_push_options_line(
         reviewer_seeds=seeds,
         message="Push options: ",
         cwd=cwd,
         settings=settings,
         change_id_hint=change_id_hint,
+        web_base=web_base,
+        project=project,
+        default=empty_default,
+        session_strategy=session_strategy.value if session_strategy is not None else None,
     )
 
 
@@ -928,8 +968,14 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
 
     interactive_state: PushLineState | None = None
     if args.i:
+        cli_strategy = ReviewerStrategy(args.reviewer_strategy) if args.reviewer_strategy else None
         res = _prompt_interactive_reviewers(
-            cwd, branch, settings=settings, change_id_hint=_change_id_for_rev(cwd, branch)
+            cwd,
+            branch,
+            settings=settings,
+            change_id_hint=_change_id_for_rev(cwd, branch),
+            reviewer_flag_segments=list(args.reviewers),
+            session_strategy=cli_strategy,
         )
         if (
             res.state.reviewers
@@ -1137,8 +1183,14 @@ def _execute_gerrit_push(  # pylint: disable=too-many-branches,too-many-statemen
             print("Push cancelled.", file=sys.stderr)
             return 0
         if act == "reviewers":
+            cli_strategy = ReviewerStrategy(args.reviewer_strategy) if args.reviewer_strategy else None
             res = _prompt_reviewers_line_ptk(
-                cwd, ctx.branch, settings=settings, change_id_hint=_change_id_for_rev(cwd, tip)
+                cwd,
+                ctx.branch,
+                settings=settings,
+                change_id_hint=_change_id_for_rev(cwd, tip),
+                reviewer_flag_segments=list(args.reviewers),
+                session_strategy=cli_strategy,
             )
             if not res.valid_for_apply:
                 print("Invalid push options; nothing changed.", file=sys.stderr)

@@ -68,6 +68,23 @@ No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --se
 
 Interactive push line (`push_input_prompt`) can set strategy keywords; see module `push_input_line.py`.
 
+### Push-options history
+
+The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
+`$XDG_CACHE_HOME/ger/<host>/push_options_history/<project-safe>.txt`, keyed by
+`gerrit.webUrl` host and `gerrit.project` (see
+[ADR-0005](../../adr/0005-push-options-history-is-host-and-project-scoped.md)).
+
+- Cap: 20 entries per (host, project), newest first, exact-line dedupe.
+- Stored: reviewers, topic, `wip` / `private`. **Not** stored: strategy.
+- If `--reviewer-strategy` is set, that strategy is merged into the visible
+  prefill and Up/Down recall for the session; accept still strips strategy
+  before save.
+- Missing host/project identity: no read/write of history.
+- Empty history: prefill `r=…` from `--reviewers`, else `.ger/reviewers` /
+  host registry, else `branch.*.gerritReviewers`. Non-empty history always
+  wins over those sources for the initial buffer.
+
 ---
 
 ## Pre-push checks (Gerrit mode)
