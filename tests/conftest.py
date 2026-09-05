@@ -135,7 +135,9 @@ def _dup_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("tpl_dup")
     repo = make_repo_duplicate_change_id(root / "repo")
     configure_gerrit_target(repo, "main")
+    # A relative self-remote remains valid after the template is copied.
     git("remote", "set-url", "origin", ".", cwd=repo)
+    git("config", "gerrit.project", "testproj", cwd=repo)
     finalize_git_template(repo)
     return repo
 

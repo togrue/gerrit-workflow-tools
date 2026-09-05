@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -217,3 +217,27 @@ def classify_issues(
             exit_code = 1
     assert all(i.kind for i in issues), "each issue must set kind"
     return issues, exit_code
+
+
+def first_change_id_boundary(
+    items: Sequence[ChangeIdRow],
+    *,
+    strict: bool = True,
+) -> tuple[int | None, str]:
+    """Return ``(block_index, reason)`` for the first Change-Id ERROR, or ``(None, …)``.
+
+    Index is into *items* (oldest-first). Duplicate Change-Ids block at the second
+    commit that reuses an id already seen earlier in the list.
+    """
+    rows = list(items)
+    if not rows:
+        return None, "no Change-Id issues"
+    sha_to_idx = {row.sha: i for i, row in enumerate(rows)}
+    issues, _exit = classify_issues(rows, strict=strict)
+    for issue in issues:
+        if issue.severity != IssueSeverity.ERROR:
+            continue
+        idx = sha_to_idx.get(issue.sha)
+        if idx is not None:
+            return idx, issue.detail
+    return None, "no Change-Id issues"

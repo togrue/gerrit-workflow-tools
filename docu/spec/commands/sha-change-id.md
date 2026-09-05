@@ -84,6 +84,6 @@ Shared table: **[exit-codes.md](../exit-codes.md)**.
 
 ## See also
 
-- [`ger push`](push.md) (runs the same local Change-Id check in Gerrit mode)
+- [`ger push`](push.md) (Change-Id errors tighten the ready boundary in Gerrit mode)
 - [`ger log`](log.md) (surfaces missing Change-Id in attention hints)
 - [`ger show`](show.md)

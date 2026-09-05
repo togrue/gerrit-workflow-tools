@@ -169,8 +169,7 @@ flowchart LR
 |------|--------|--------|
 | Resolve upstream tip | `stack.upstream_tracking_tip_and_display` | `(sha, display_name)` |
 | List commits | `stack.commits_in_range` | `list[Commit]` (sha, subject, body, change_id) |
-| Ready boundary | `ready_calc.compute_ready` | push range excluding stop-pattern commits |
-| Change-Id validation | `change_id.classify_issues` | missing / duplicate / malformed |
+| Ready boundary | `ready_calc.compute_ready` | push range before stop pattern / first Change-Id error |
 
 ---
 
@@ -252,14 +251,12 @@ sequenceDiagram
   participant User
   participant Push as cli_push
   participant Ready as ready_calc
-  participant CID as change_id
   participant Git as git push
   participant Rev as push_reviewers
   participant Svc as GerritService
 
   User->>Push: ger push [options]
-  Push->>Ready: compute_ready → refspec range
-  Push->>CID: classify_issues (duplicate/missing Change-Id)
+  Push->>Ready: compute_ready (stop/strategy + Change-Id boundary)
   Push->>User: confirm / dry-run (push_input_prompt)
   Push->>Git: git push origin HEAD:refs/for/&lt;target&gt;[%opts]
   alt reviewer strategy lazy/overwrite

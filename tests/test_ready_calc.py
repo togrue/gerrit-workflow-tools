@@ -1,5 +1,6 @@
 # Spec: docu/spec/commands/push.md (ready boundary / stop patterns)
-# Covers: stop-pattern boundary, --all, merged side branch first-parent vs full DAG, empty range
+# Covers: stop-pattern boundary, --all, merged side branch first-parent vs full DAG, empty range,
+#         Change-Id ready-boundary composition
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
-from tests.fixtures import configure_gerrit_target, make_repo_with_merged_side_branch
+from tests.fixtures import _cid, configure_gerrit_target, make_repo_with_merged_side_branch
 
 
 def _merge_branch_repo(tmp_path: Path) -> Path:
@@ -96,3 +97,75 @@ def test_compute_ready_zero_pushable_when_first_commit_blocks(stack_repo: Path) 
     assert result.push_tip_sha is None
     assert result.push_range is None
     assert result.boundary_sha == rows[0].sha
+
+
+def _repo_with_missing_change_id_mid_stack(path: Path) -> Path:
+    """Three commits: good, missing Change-Id, good (above a main base)."""
+    path.mkdir(parents=True, exist_ok=True)
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    git("init", "-b", "main", cwd=path, env=env)
+    (path / "base.txt").write_text("base\n", encoding="utf-8")
+    git("add", "base.txt", cwd=path, env=env)
+    git("commit", "-m", "base\n\nChange-Id: " + _cid("0"), cwd=path, env=env)
+    git("checkout", "-b", "feature", cwd=path, env=env)
+    git("branch", "--set-upstream-to", "main", "feature", cwd=path, env=env, check=False)
+    for name, msg in [
+        ("a.txt", f"good one\n\nChange-Id: {_cid('1')}"),
+        ("b.txt", "missing cid"),
+        ("c.txt", f"good three\n\nChange-Id: {_cid('3')}"),
+    ]:
+        (path / name).write_text(f"{name}\n", encoding="utf-8")
+        git("add", name, cwd=path, env=env)
+        git("commit", "-m", msg, cwd=path, env=env)
+    configure_gerrit_target(path, "main")
+    return path
+
+
+def test_compute_ready_missing_change_id_mid_stack(tmp_path: Path) -> None:
+    """Missing Change-Id blocks at that commit; older prefix remains pushable."""
+    repo = _repo_with_missing_change_id_mid_stack(tmp_path / "missing_cid")
+    rows = commits_in_range(repo, "main..HEAD", first_parent=True)
+    assert len(rows) == 3
+    result = compute_ready(repo, stop_pattern="")
+    assert result.pushable_count == 1
+    assert result.push_tip_sha == rows[0].sha
+    assert result.boundary_sha == rows[1].sha
+    assert "no Change-Id" in result.boundary_reason
+
+
+def test_compute_ready_change_id_earlier_than_stop_pattern(tmp_path: Path) -> None:
+    """When Change-Id error is before the stop hit, Change-Id wins."""
+    repo = _repo_with_missing_change_id_mid_stack(tmp_path / "cid_vs_stop")
+    rows = commits_in_range(repo, "main..HEAD", first_parent=True)
+    # Stop would block at the third commit; missing Change-Id is the second.
+    result = compute_ready(repo, stop_pattern=r"^good three")
+    assert result.boundary_sha == rows[1].sha
+    assert result.pushable_count == 1
+    assert "no Change-Id" in result.boundary_reason
+
+
+def test_compute_ready_all_still_held_by_change_id(tmp_path: Path) -> None:
+    """``--all`` ignores stop pattern but Change-Id errors still tighten the tip."""
+    repo = _repo_with_missing_change_id_mid_stack(tmp_path / "all_cid")
+    rows = commits_in_range(repo, "main..HEAD", first_parent=True)
+    result = compute_ready(repo, all_commits=True, stop_pattern=r"^good")
+    assert result.pushable_count == 1
+    assert result.push_tip_sha == rows[0].sha
+    assert result.boundary_sha == rows[1].sha
+    assert "no Change-Id" in result.boundary_reason
+
+
+def test_compute_ready_duplicate_change_id_blocks_at_second(dup_repo: Path) -> None:
+    """Duplicate Change-Id blocks at the second commit; first remains pushable."""
+    rows = commits_in_range(dup_repo, "main..HEAD", first_parent=True)
+    assert len(rows) == 2
+    result = compute_ready(dup_repo, stop_pattern="")
+    assert result.pushable_count == 1
+    assert result.push_tip_sha == rows[0].sha
+    assert result.boundary_sha == rows[1].sha
+    assert "duplicate Change-Id" in result.boundary_reason

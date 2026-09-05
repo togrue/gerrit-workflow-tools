@@ -85,7 +85,10 @@ def blocked_shas_for_stack(
 ) -> frozenset[str]:
     """Return SHAs at or after the ready boundary (non-pushable stack tail)."""
 
-    boundary = find_ready_boundary_via_registry(
+    # Imported lazily to avoid a ready_strategy ↔ ready_calc import cycle at module load.
+    from gerrit_workflow_tools.core.ready_calc import compose_ready_boundary
+
+    strategy = find_ready_boundary_via_registry(
         cwd,
         project=project,
         commits=commits,
@@ -94,6 +97,7 @@ def blocked_shas_for_stack(
         settings=settings,
         web_base=web_base,
     )
+    boundary = compose_ready_boundary(strategy, commits)
     if boundary.block_index is None:
         return frozenset()
     return frozenset(row.sha for row in commits[boundary.block_index :])

@@ -30,7 +30,7 @@ from gerrit_workflow_tools.cli_style import (
     color_short_sha,
     color_text,
 )
-from gerrit_workflow_tools.core.change_id import classify_issues, extract_valid_change_id
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import ConfigError, Settings, set_branch_config
 from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
@@ -51,7 +51,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     apply_reviewer_strategy_after_push_service,
     stack_change_refs_ordered,
 )
-from gerrit_workflow_tools.core.ready_calc import ReadyResult, change_id_rows_for_range, compute_ready
+from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
@@ -582,7 +582,9 @@ def _summary_highlighter_for_push(
 ) -> SummaryHighlighter:
     """Highlighter aligned with the ready boundary for *branch*'s local stack."""
 
-    stack = resolve_stack_context(cwd, branch=branch, settings=settings)
+    project = settings.gerrit_project or ""
+    with contextlib.suppress(Exception):
+        project = resolve_stack_context(cwd, branch=branch, settings=settings).project
     _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
     rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=first_parent)
     ready_rows = [
@@ -592,7 +594,7 @@ def _summary_highlighter_for_push(
         settings,
         cwd=cwd,
         commits=ready_rows,
-        project=stack.project,
+        project=project,
         web_base=settings.gerrit_web_url,
     )
 
@@ -614,7 +616,7 @@ def _remaining_not_ready_count(cwd: Path, boundary_sha: str | None, *, head: str
 
 
 def _format_stop_pattern_notice(boundary_line: str, pat: str) -> str:
-    """Explain the ready boundary without wrapping highlighted commit text in warning color."""
+    """Explain a stop-pattern ready boundary without wrapping highlighted commit text."""
     return (
         "Stopped at commit "
         + color_text('"', ANSI_YELLOW)
@@ -622,6 +624,19 @@ def _format_stop_pattern_notice(boundary_line: str, pat: str) -> str:
         + color_text('"', ANSI_YELLOW)
         + ", because it matches the stop pattern "
         + color_text(pat, ANSI_DIM_GRAY)
+        + color_text(".", ANSI_YELLOW)
+    )
+
+
+def _format_boundary_reason_notice(boundary_line: str, reason: str) -> str:
+    """Explain a ready boundary using its human-readable reason string."""
+    return (
+        "Stopped at commit "
+        + color_text('"', ANSI_YELLOW)
+        + boundary_line
+        + color_text('"', ANSI_YELLOW)
+        + color_text(", because ", ANSI_YELLOW)
+        + color_text(reason, ANSI_DIM_GRAY)
         + color_text(".", ANSI_YELLOW)
     )
 
@@ -644,6 +659,34 @@ def _format_boundary_commit_line(
     return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{highlighted}"
 
 
+def _print_ready_boundary_notice(
+    cwd: Path,
+    r: ReadyResult,
+    *,
+    head: str = "HEAD",
+    summary_highlighter: SummaryHighlighter,
+) -> None:
+    """Print why the ready boundary stopped the stack (stop pattern or Change-Id, etc.)."""
+    if not r.boundary_sha:
+        return
+    boundary_line = _format_boundary_commit_line(
+        cwd,
+        r.boundary_sha,
+        summary_highlighter=summary_highlighter,
+    )
+    if not boundary_line:
+        return
+    print()
+    pat = _stop_pattern_from_reason(r.boundary_reason)
+    if pat:
+        print(_format_stop_pattern_notice(boundary_line, pat))
+    else:
+        print(_format_boundary_reason_notice(boundary_line, r.boundary_reason))
+    remain = _remaining_not_ready_count(cwd, r.boundary_sha, head=head)
+    if remain > 0:
+        print(color_text(f"... {remain} not-ready commit(s) remain unpushed", ANSI_YELLOW))
+
+
 def _print_gpush_preview(  # pylint: disable=too-many-arguments
     cwd: Path,
     r: ReadyResult,
@@ -655,19 +698,7 @@ def _print_gpush_preview(  # pylint: disable=too-many-arguments
     print(color_text("About to push commits:", f"{ANSI_BOLD}{ANSI_CYAN}"))
     for ln in commit_lines:
         print(ln)
-    if r.boundary_sha:
-        boundary_line = _format_boundary_commit_line(
-            cwd,
-            r.boundary_sha,
-            summary_highlighter=summary_highlighter,
-        )
-        pat = _stop_pattern_from_reason(r.boundary_reason)
-        if boundary_line and pat:
-            print()
-            print(_format_stop_pattern_notice(boundary_line, pat))
-            remain = _remaining_not_ready_count(cwd, r.boundary_sha, head=head)
-            if remain > 0:
-                print(color_text(f"... {remain} not-ready commit(s) remain unpushed", ANSI_YELLOW))
+    _print_ready_boundary_notice(cwd, r, head=head, summary_highlighter=summary_highlighter)
 
 
 def _parse_confirm_answer(raw: str) -> bool | None:
@@ -1036,21 +1067,15 @@ def _build_gerrit_context(  # pylint: disable=too-many-arguments
         r.boundary_reason,
     )
 
-    _fork, _, target_tip = merge_base_with_target(cwd, branch, head=branch)
-    rows = change_id_rows_for_range(cwd, target_tip, head=branch, first_parent=fp)
-    items = list(rows)
-    _, cid_exit = classify_issues(items, strict=True)
-    logger.debug("gpush change_id check exit=%d commits=%d", cid_exit, len(items))
-    if cid_exit >= 2:
-        print(
-            "error: Change-Id check failed; inspect with `ger change-id --check` "
-            "or auto-fix with `ger change-id --fix`",
-            file=sys.stderr,
-        )
-        return 2
-
     remote = settings.gerrit_remote
     if not r.push_tip_sha:
+        highlighter = _summary_highlighter_for_push(
+            cwd,
+            branch=branch,
+            first_parent=fp,
+            settings=settings,
+        )
+        _print_ready_boundary_notice(cwd, r, head=branch, summary_highlighter=highlighter)
         print("error: nothing to push (empty ready prefix)", file=sys.stderr)
         return 1
 
@@ -1275,7 +1300,7 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Setting
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
-    """CLI entry for ``ger push``: compute ready range, validate Change-Ids, and push to Gerrit."""
+    """CLI entry for ``ger push``: compute ready range and push to Gerrit."""
     args = _build_arg_parser().parse_args(argv)
     cwd, settings, summary_highlighter = init_cli_runtime(
         debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks

@@ -31,7 +31,7 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 | `--dry-run` | Print preview only |
 | `-y`, `--yes` | Skip confirmation (required when stdin is not a TTY) |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
-| `--all` | Push full stack (ignore stop pattern) |
+| `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip) |
 | `--reviewers ACCOUNTS` | Comma-separated reviewers (repeatable; merged, deduped) |
 | `--reviewer-strategy` | `push` \| `lazy` \| `overwrite` (see below) |
 | `--topic NAME` | Magic ref `%topic=…` |
@@ -49,7 +49,7 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 
 | Mode | When | Behavior |
 |------|------|----------|
-| **Gerrit** | `branch.*.gerritTarget` set, **or** upstream remote == `gerrit.remote` | Ready range → Change-Id check → `git push <tip>:refs/for/<target>[%options]` |
+| **Gerrit** | `branch.*.gerritTarget` set, **or** upstream remote == `gerrit.remote` | Ready range (stop pattern + Change-Id) → `git push <tip>:refs/for/<target>[%options]` |
 | **Vanilla** | Upstream on another remote | Plain `git push`; Gerrit-specific flags ignored (warning printed) |
 
 No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --set-upstream-to=<remote>/<branch>`) or `branch.<name>.gerritTarget`. On a TTY, several commands prompt interactively via `ensure_branch_upstream_interactive`.
@@ -90,15 +90,14 @@ The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
 ## Pre-push checks (Gerrit mode)
 
 1. Target ref resolves locally (fetch if needed).
-2. Ready boundary (unless `--all`).
-3. Change-Id validation (exit `2` on hard errors).
-4. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
+2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
+3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
 
 ---
 
 ## Confirmation output
 
-Prints: `git push …` line, `ready reason: …`, `Updated commits:` with optional attribute preview (`gerrit.pushShowAttributes`). Prompt: `Do you want to push these commits? [Y/n]:` unless `--dry-run` / `-y` / non-TTY without `-y`.
+Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt: `Do you want to push these commits? [Y/n]:` unless `--dry-run` / `-y` / non-TTY without `-y`.
 
 After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, default on).
 
@@ -110,7 +109,6 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
 | `1` | Nothing to push / config / non-interactive without `-y` |
-| `2` | Change-Id check failed |
 | other | `git push` exit code |
 
 ---

@@ -209,10 +209,18 @@ def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     assert "origin/main" not in refspec
 
 
-def test_gpush_fails_on_duplicate_change_ids(dup_repo, monkeypatch):
-    code, _out, err = run_cli(dup_repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 2
-    assert "Change-Id" in err
+def test_gpush_duplicate_change_id_stops_at_boundary(dup_repo, monkeypatch):
+    """Duplicate Change-Id soft-fails: push the good prefix, show boundary reason."""
+    code, out, err = run_cli(dup_repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == 0
+    assert "About to push commits:" in out
+    assert "Stopped at commit" in out
+    assert "duplicate Change-Id" in out
+    about, _stopped = out.split("Stopped at commit", 1)
+    assert "dup 0" in about
+    assert "dup 1" not in about
+    assert about.count(" # ") == 1
+    assert "[dry-run]" in err
 
 
 class _StdinNonTTY:
