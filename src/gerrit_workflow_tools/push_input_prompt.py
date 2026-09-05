@@ -134,9 +134,14 @@ class PushOptionsCompleter(Completer):
             (KW_LAZY, "reviewers via REST only when missing"),
             (KW_OVERWRITE, "reviewers via REST on all changes"),
         ]
-        candidates.extend((name, "reviewer") for name in self._reviewer_seeds)
+        seed_names = list(self._reviewer_seeds)
         if self._catalog is not None:
-            seen_lower = {n.lower() for n in self._reviewer_seeds}
+            for name in self._catalog.completion_candidates():
+                if name and name not in seed_names:
+                    seed_names.append(name)
+        candidates.extend((name, "reviewer") for name in seed_names)
+        if self._catalog is not None:
+            seen_lower = {n.lower() for n in seed_names}
             for name in self._catalog.complete_prefix(raw_word):
                 low = name.lower()
                 if low not in seen_lower:
@@ -240,8 +245,6 @@ def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> Format
             msg = validation.issues[0].message
             extra = f" (+{len(validation.issues) - 1} more)" if len(validation.issues) > 1 else ""
             return FormattedText([("fg:ansired", f"reviewer: {msg}{extra}")])
-        if validation.pending_checks and res.state.reviewers:
-            return FormattedText([("fg:#808080", "reviewer validation: checking Gerrit...")])
     if warnings:
         msg = warnings[0].message
         extra = f" (+{len(warnings) - 1} more)" if len(warnings) > 1 else ""
@@ -278,8 +281,17 @@ def prompt_push_options_line(
     display_history = [apply_session_strategy(entry, session_strategy) for entry in stored]
     initial = apply_session_strategy(base, session_strategy)
     seed_list = [s for s in reviewer_seeds if s]
+
+    def _invalidate_prompt() -> None:
+        with contextlib.suppress(RuntimeError, AttributeError):
+            get_app().invalidate()
+
     catalog = ReviewerCatalog.from_runtime(
-        cwd=cwd, settings=settings, reviewer_seeds=seed_list, change_id_hint=change_id_hint
+        cwd=cwd,
+        settings=settings,
+        reviewer_seeds=seed_list,
+        change_id_hint=change_id_hint,
+        on_update=_invalidate_prompt,
     )
     completion_candidates = catalog.completion_candidates()
     session: PromptSession[str] = PromptSession(
@@ -293,7 +305,10 @@ def prompt_push_options_line(
         key_bindings=_PUSH_OPTIONS_HISTORY_BINDINGS,
         bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
-    raw = session.prompt(default=initial)
+    try:
+        raw = session.prompt(default=initial)
+    finally:
+        catalog.close()
     res = parse(raw)
     if res.valid_for_apply:
         prepend_push_options_history(

@@ -444,7 +444,7 @@ Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd
 
 Cache-only / offline operation is a **trust window** policy on `GerritService`, not another `GerritRest` — the cache sits above the seam, so an implementation cannot express staleness ([ADR-0001](adr/0001-offline-is-a-trust-window-not-a-gerritrest.md)). The absence of a raw-path `get_json` on the seam is likewise deliberate ([ADR-0002](adr/0002-no-raw-path-escape-hatch-on-gerritrest.md)).
 
-Two deliberate exceptions: `cli_fetch_api` builds a concrete `HttpGerritRest` (its purpose is GETting a raw path from the real server), and `reviewer_catalog` builds one from inside the interactive push prompt, where threading an implementation through prompt-toolkit is not currently worth it.
+Two deliberate exceptions: `cli_fetch_api` builds a concrete `HttpGerritRest` (its purpose is GETting a raw path from the real server), and `reviewer_catalog` builds one from inside the interactive push prompt. Catalog REST runs on a background worker with prompt invalidate on completion ([ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
 
 ### 3. The annotated stack — resolved
 
