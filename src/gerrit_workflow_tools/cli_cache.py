@@ -51,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"changes: {info.changes}")
     print(f"accounts: {info.accounts}")
     print(f"comments: {info.comments}")
+    print(f"checks: {info.checks}")
     return 0
 
 

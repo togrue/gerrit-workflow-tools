@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     batch_load_change_details,
     batch_load_changes_by_commit,
     change_id_for_gerrit_rest_path,
+    delta_changes_since,
     parallel_map,
     probe_changes_updated,
     resolve_gerrit_web_base,
@@ -120,6 +121,7 @@ class GerritService:
         self.changes = ChangeApi(self)
         self.accounts = AccountApi(self)
         self.comments = CommentApi(self)
+        self.checks = ChecksApi(self)
 
     @classmethod
     def from_cwd(
@@ -176,6 +178,9 @@ class GerritService:
 
     def _probe_changes_updated(self, triplets: list[str]) -> dict[str, str]:
         return probe_changes_updated(self.rest, triplets)
+
+    def _fetch_delta(self, project: str, since: str) -> tuple[list[dict[str, Any]], bool]:
+        return delta_changes_since(self.rest, project, since)
 
     def _fetch_account_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
         def _one(account_id: int | str) -> tuple[int, dict[str, Any]]:
@@ -256,6 +261,7 @@ class GerritService:
                     names, links, pipelines = self._fetch_ci_result(
                         triplet,
                         project=stack.project,
+                        change_updated=change_updated,
                         current_revision_number=rev_num,
                         fetch_pipelines=want_pipelines,
                     )
@@ -381,6 +387,7 @@ class GerritService:
         change_id: str,
         *,
         project: str,
+        change_updated: str | None = None,
         current_revision_number: int | None = None,
         fetch_pipelines: bool = False,
     ) -> tuple[list[str], list, list]:
@@ -390,16 +397,32 @@ class GerritService:
         from gerrit_workflow_tools.core.ci_strategy import LazyRows, extract_ci_links_via_registry
         from gerrit_workflow_tools.core.gerrit_message_parsing import ci_pipelines_from_build_messages
 
-        check_rows = self._checks_or_empty(change_id)
+        def _fetch_checks_and_messages(triplet: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            check_rows = self._checks_or_empty(triplet)
+            if check_rows:
+                return check_rows, []
+            return [], self._get_messages_or_empty(triplet)
+
+        check_rows, message_rows = self.checks.get_rows(
+            change_id,
+            fetch_checks=_fetch_checks_and_messages,
+            change_updated=change_updated,
+        )
         names = failed_check_names(check_rows)
 
         links: list = []
         try:
+            if check_rows and not message_rows:
+                messages_arg: Sequence[Mapping[str, Any]] | LazyRows = LazyRows(
+                    fetch=lambda: self._get_messages_or_empty(change_id)
+                )
+            else:
+                messages_arg = message_rows
             links = extract_ci_links_via_registry(
                 self.cwd,
                 project=project,
                 checks=check_rows,
-                messages=LazyRows(fetch=lambda: self._get_messages_or_empty(change_id)),
+                messages=messages_arg,
                 settings=self.settings,
                 web_base=self.web_base,
                 current_revision_number=current_revision_number,
@@ -411,9 +434,8 @@ class GerritService:
             if check_rows:
                 pipelines = ci_pipelines_from_checks(check_rows, links)
             else:
-                messages = self._get_messages_or_empty(change_id)
                 pipelines = ci_pipelines_from_build_messages(
-                    messages,
+                    message_rows if message_rows else self._get_messages_or_empty(change_id),
                     current_revision_number=current_revision_number,
                     include_outdated_fallback=True,
                 )
@@ -473,10 +495,27 @@ class ChangeApi:
         """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
         triplets = _cache_triplets(self._service, change_ids)
+        scope_key: str | None = None
+        fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]] | None = None
+        try:
+            stack = _service_stack_context(self._service)
+            scope_key = f"{self._service.cache.host}~{stack.project}"
+            project = stack.project
+
+            def _fetch_delta(since: str) -> tuple[list[dict[str, Any]], bool]:
+                return self._service._fetch_delta(project, since)
+
+            fetch_delta = _fetch_delta
+        except Exception:  # pylint: disable=broad-exception-caught
+            scope_key = None
+            fetch_delta = None
+
         return self._service.cache.load_changes(
             triplets,
             probe_updated=self._service._probe_changes_updated,
             fetch_changes=self._service._fetch_change_payloads,
+            fetch_delta=fetch_delta,
+            scope_key=scope_key,
             trust_window_seconds=self._service.trust_window_seconds,
             refresh=self._service.refresh,
         )
@@ -607,3 +646,33 @@ class CommentApi:
 
         file_map = self.get_file_map(change_id, change_updated=change_updated)
         return [Comment(path=path, payload=payload) for path, rows in file_map.items() for payload in rows]
+
+
+class ChecksApi:
+    """Cache-aware CI checks and message operations."""
+
+    def __init__(self, service: GerritService) -> None:
+        self._service = service
+
+    def get_rows(
+        self,
+        change_id: str,
+        *,
+        fetch_checks: Callable[[str], tuple[list[dict[str, Any]], list[dict[str, Any]]]] | None = None,
+        change_updated: str | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Return Checks-plugin rows and change messages for one change."""
+
+        def _default_fetch(triplet: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            return (
+                self._service._checks_or_empty(triplet),
+                self._service._get_messages_or_empty(triplet),
+            )
+
+        return self._service.cache.load_checks(
+            change_id,
+            fetch_checks=fetch_checks or _default_fetch,
+            change_updated=change_updated,
+            trust_window_seconds=self._service.trust_window_seconds,
+            refresh=self._service.refresh,
+        )

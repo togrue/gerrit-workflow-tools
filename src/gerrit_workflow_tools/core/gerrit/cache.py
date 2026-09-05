@@ -14,10 +14,11 @@ from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit
 from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results
 
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_ACCOUNT_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
+DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
 
 _CAPABILITY_PREFIX = "capability:"
 
@@ -31,6 +32,7 @@ class CacheInfo:
     changes: int
     accounts: int
     comments: int
+    checks: int
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,13 @@ class _ChangeRow:
     payload: dict[str, Any]
     updated: str | None
     fetched_at: int
+    certified_gen: int | None
+
+
+@dataclass(frozen=True)
+class _ScopeState:
+    watermark: str
+    generation: int
 
 
 @dataclass(frozen=True)
@@ -53,12 +62,34 @@ class _CommentRow:
     change_updated: str | None
 
 
+@dataclass(frozen=True)
+class _ChecksRow:
+    checks: list[dict[str, Any]]
+    messages: list[dict[str, Any]]
+    fetched_at: int
+    change_updated: str | None
+
+
 def _now() -> int:
     return int(time.time())
 
 
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _strip_avatars(value: Any) -> Any:
+    """Drop avatar URL arrays from ChangeInfo payloads before persistence."""
+
+    if isinstance(value, dict):
+        return {key: _strip_avatars(item) for key, item in value.items() if key != "avatars"}
+    if isinstance(value, list):
+        return [_strip_avatars(item) for item in value]
+    return value
+
+
+def _footer_from_triplet(triplet: str) -> str:
+    return triplet.rsplit("~", 1)[-1]
 
 
 def _payload_triplet(payload: dict[str, Any]) -> str | None:
@@ -74,6 +105,15 @@ def _payload_updated(payload: dict[str, Any]) -> str | None:
 def _payload_number(payload: dict[str, Any]) -> int | None:
     raw = payload.get("_number")
     return raw if isinstance(raw, int) else None
+
+
+def _max_updated(payloads: list[dict[str, Any]], *, floor: str = "") -> str:
+    best = floor
+    for payload in payloads:
+        updated = _payload_updated(payload)
+        if updated and updated > best:
+            best = updated
+    return best
 
 
 class GerritCache:
@@ -114,6 +154,9 @@ class GerritCache:
 
     @staticmethod
     def _drop_tables(conn: sqlite3.Connection) -> None:
+        conn.execute("DROP TABLE IF EXISTS checks")
+        conn.execute("DROP TABLE IF EXISTS missing_changes")
+        conn.execute("DROP TABLE IF EXISTS scope_state")
         conn.execute("DROP TABLE IF EXISTS comments")
         conn.execute("DROP TABLE IF EXISTS accounts")
         conn.execute("DROP TABLE IF EXISTS changes")
@@ -125,15 +168,36 @@ class GerritCache:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS changes (
-              change_id  TEXT PRIMARY KEY,
-              number     INTEGER,
-              payload    TEXT NOT NULL,
-              updated    TEXT,
-              fetched_at INTEGER NOT NULL
+              change_id      TEXT PRIMARY KEY,
+              number         INTEGER,
+              payload        TEXT NOT NULL,
+              updated        TEXT,
+              fetched_at     INTEGER NOT NULL,
+              certified_gen  INTEGER
             )
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS changes_number ON changes(number)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS changes_footer_change_id ON changes(json_extract(payload, '$.change_id'))"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scope_state (
+              scope_key   TEXT PRIMARY KEY,
+              watermark   TEXT NOT NULL,
+              generation  INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS missing_changes (
+              change_id   TEXT PRIMARY KEY,
+              checked_at  INTEGER NOT NULL
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS accounts (
@@ -156,6 +220,16 @@ class GerritCache:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS checks (
+              change_id      TEXT PRIMARY KEY,
+              payload        TEXT NOT NULL,
+              fetched_at     INTEGER NOT NULL,
+              change_updated TEXT
+            )
+            """
+        )
 
     @staticmethod
     def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
@@ -170,21 +244,16 @@ class GerritCache:
         """Delete all cached API payloads while keeping schema metadata."""
 
         with self._connect() as conn:
+            conn.execute("DELETE FROM checks")
             conn.execute("DELETE FROM comments")
             conn.execute("DELETE FROM accounts")
             conn.execute("DELETE FROM changes")
-            # Capabilities are learned facts, not schema — `cache clear` must forget them
-            # too, so a host that gained a plugin is re-probed on the next run.
+            conn.execute("DELETE FROM missing_changes")
+            conn.execute("DELETE FROM scope_state")
             conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{_CAPABILITY_PREFIX}%",))
 
     def capability(self, name: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> bool | None:
-        """Whether this host supports *name*, or ``None`` when unknown or stale.
-
-        Host capabilities (does this Gerrit serve the Checks plugin?) are discovered by
-        being told "404" and cost one request per change to rediscover. They change only
-        when an admin installs or removes a plugin, so they are cached with a long TTL
-        rather than forever: a stale ``False`` would hide a newly installed plugin.
-        """
+        """Whether this host supports *name*, or ``None`` when unknown or stale."""
 
         with self._connect() as conn:
             raw = self._meta_get(conn, f"{_CAPABILITY_PREFIX}{name}")
@@ -213,7 +282,15 @@ class GerritCache:
             changes = int(conn.execute("SELECT COUNT(*) FROM changes").fetchone()[0])
             accounts = int(conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0])
             comments = int(conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0])
-        return CacheInfo(path=self.path, host=self.host, changes=changes, accounts=accounts, comments=comments)
+            checks = int(conn.execute("SELECT COUNT(*) FROM checks").fetchone()[0])
+        return CacheInfo(
+            path=self.path,
+            host=self.host,
+            changes=changes,
+            accounts=accounts,
+            comments=comments,
+            checks=checks,
+        )
 
     def _lookup_changes(self, triplets: list[str]) -> dict[str, _ChangeRow]:
         if not triplets:
@@ -222,25 +299,72 @@ class GerritCache:
         out: dict[str, _ChangeRow] = {}
         with self._connect() as conn:
             rows = conn.execute(
-                f"SELECT change_id, payload, updated, fetched_at FROM changes WHERE change_id IN ({placeholders})",
+                f"""
+                SELECT change_id, payload, updated, fetched_at, certified_gen
+                FROM changes WHERE change_id IN ({placeholders})
+                """,
                 triplets,
             ).fetchall()
         for row in rows:
             payload = json.loads(str(row["payload"]))
             if isinstance(payload, dict):
+                certified = row["certified_gen"]
                 out[str(row["change_id"])] = _ChangeRow(
                     payload=payload,
                     updated=row["updated"] if isinstance(row["updated"], str) else None,
                     fetched_at=int(row["fetched_at"]),
+                    certified_gen=int(certified) if certified is not None else None,
                 )
         return out
 
-    def find_payloads_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """Return cached ChangeInfo rows grouped by footer ``change_id`` (local only).
+    def _get_scope_state(self, conn: sqlite3.Connection, scope_key: str) -> _ScopeState | None:
+        row = conn.execute(
+            "SELECT watermark, generation FROM scope_state WHERE scope_key = ?",
+            (scope_key,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _ScopeState(watermark=str(row["watermark"]), generation=int(row["generation"]))
 
-        The same logical change may be stored under both a requested triplet key and
-        Gerrit's compact ``id``; duplicates are collapsed by ``(id, _number, branch)``.
-        """
+    def _set_scope_state(self, conn: sqlite3.Connection, scope_key: str, watermark: str, generation: int) -> None:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO scope_state(scope_key, watermark, generation)
+            VALUES (?, ?, ?)
+            """,
+            (scope_key, watermark, generation),
+        )
+
+    def _stamp_certified_gen(self, conn: sqlite3.Connection, triplets: list[str], generation: int) -> None:
+        if not triplets:
+            return
+        placeholders = ",".join("?" for _ in triplets)
+        conn.execute(
+            f"UPDATE changes SET certified_gen = ? WHERE change_id IN ({placeholders})",
+            [generation, *triplets],
+        )
+
+    def _missing_is_fresh(self, conn: sqlite3.Connection, footer_id: str, *, ttl_seconds: int) -> bool:
+        row = conn.execute(
+            "SELECT checked_at FROM missing_changes WHERE change_id = ?",
+            (footer_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        return _now() - int(row["checked_at"]) < ttl_seconds
+
+    def _mark_missing(self, conn: sqlite3.Connection, footer_id: str) -> None:
+        conn.execute(
+            "INSERT OR REPLACE INTO missing_changes(change_id, checked_at) VALUES (?, ?)",
+            (footer_id, _now()),
+        )
+
+    def _clear_missing(self, conn: sqlite3.Connection, footer_id: str) -> None:
+        conn.execute("DELETE FROM missing_changes WHERE change_id = ?", (footer_id,))
+
+    def find_payloads_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Return cached ChangeInfo rows grouped by footer ``change_id`` (local only)."""
+
         unique = list(dict.fromkeys(cid for cid in change_ids if cid))
         if not unique:
             return {}
@@ -275,10 +399,16 @@ class GerritCache:
         *,
         probe_updated: Callable[[list[str]], dict[str, str]],
         fetch_changes: Callable[[list[str]], dict[str, dict[str, Any]]],
+        fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]] | None = None,
+        scope_key: str | None = None,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
+        missing_ttl_seconds: int = DEFAULT_MISSING_CHANGE_TTL_SECONDS,
         refresh: bool = False,
     ) -> dict[str, dict[str, Any]]:
-        """Load ChangeInfo payloads keyed by Gerrit triplet ``id``."""
+        """Load ChangeInfo payloads keyed by Gerrit triplet ``id``.
+
+        Database connections are never held across Gerrit network calls.
+        """
 
         rows = self._lookup_changes(triplets)
         now = _now()
@@ -286,16 +416,33 @@ class GerritCache:
         probe_ids: list[str] = []
         fetch_ids: list[str] = []
 
-        for triplet in triplets:
-            row = rows.get(triplet)
-            if row is None:
-                fetch_ids.append(triplet)
-            elif not refresh and now - row.fetched_at < trust_window_seconds:
-                out[triplet] = row.payload
-            else:
-                probe_ids.append(triplet)
+        with self._connect() as conn:
+            for triplet in triplets:
+                row = rows.get(triplet)
+                if row is None:
+                    if not refresh and self._missing_is_fresh(
+                        conn, _footer_from_triplet(triplet), ttl_seconds=missing_ttl_seconds
+                    ):
+                        continue
+                    fetch_ids.append(triplet)
+                elif not refresh and now - row.fetched_at < trust_window_seconds:
+                    out[triplet] = row.payload
+                else:
+                    probe_ids.append(triplet)
 
+        if (
+            fetch_delta is not None
+            and scope_key is not None
+            and not refresh
+            and not fetch_ids
+            and probe_ids
+            and self._try_delta(triplets, rows, fetch_delta, scope_key, out)
+        ):
+            return out
+
+        did_network = False
         if probe_ids:
+            did_network = True
             updated_by_id = probe_updated(probe_ids)
             for triplet in probe_ids:
                 row = rows[triplet]
@@ -309,17 +456,97 @@ class GerritCache:
                 else:
                     fetch_ids.append(triplet)
 
+        aliased: dict[str, dict[str, Any]] = {}
         if fetch_ids:
+            did_network = True
             fetched = fetch_changes(fetch_ids)
             aliased = alias_batch_fetch_results(fetch_ids, fetched)
-            self.upsert_changes(aliased)
             for ref in fetch_ids:
                 if ref in aliased:
                     out[ref] = aliased[ref]
 
+        if fetch_ids or (scope_key and not refresh and out and did_network):
+            with self._connect() as conn:
+                if fetch_ids:
+                    self.upsert_changes(aliased, conn=conn)
+                    for ref in fetch_ids:
+                        footer = _footer_from_triplet(ref)
+                        if ref in aliased:
+                            self._clear_missing(conn, footer)
+                        else:
+                            self._mark_missing(conn, footer)
+                if scope_key and not refresh and out and did_network:
+                    self._maybe_certify_scope(conn, scope_key, triplets, out)
+
         return out
 
-    def upsert_changes(self, changes: dict[str, dict[str, Any]] | list[dict[str, Any]]) -> None:
+    def _try_delta(
+        self,
+        triplets: list[str],
+        rows: dict[str, _ChangeRow],
+        fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]],
+        scope_key: str,
+        out: dict[str, dict[str, Any]],
+    ) -> bool:
+        """Apply a ``since:`` delta when every requested row is certified under *scope_key*.
+
+        Returns ``True`` when the delta path fully answered the request (including an empty
+        result set). Network I/O runs with no open SQLite connection.
+        """
+
+        with self._connect() as conn:
+            state = self._get_scope_state(conn, scope_key)
+        if state is None or not state.watermark:
+            return False
+        for triplet in triplets:
+            row = rows.get(triplet)
+            if row is None or row.certified_gen != state.generation:
+                return False
+
+        delta_rows, complete = fetch_delta(state.watermark)
+        if not complete:
+            return False
+
+        new_watermark = _max_updated(delta_rows, floor=state.watermark)
+        new_gen = state.generation + 1
+        with self._connect() as conn:
+            if delta_rows:
+                self.upsert_changes(delta_rows, conn=conn)
+            self._set_scope_state(conn, scope_key, new_watermark, new_gen)
+            self._stamp_certified_gen(conn, triplets, new_gen)
+
+        fresh = self._lookup_changes(triplets)
+        for triplet in triplets:
+            row = fresh.get(triplet)
+            if row is not None:
+                out[triplet] = row.payload
+        return True
+
+    def _maybe_certify_scope(
+        self,
+        conn: sqlite3.Connection,
+        scope_key: str,
+        triplets: list[str],
+        out: dict[str, dict[str, Any]],
+    ) -> None:
+        present = [triplet for triplet in triplets if triplet in out]
+        if not present:
+            return
+        state = self._get_scope_state(conn, scope_key) or _ScopeState(watermark="", generation=0)
+        payloads = [out[triplet] for triplet in present]
+        new_watermark = _max_updated(payloads, floor=state.watermark)
+        if not new_watermark:
+            return
+        new_gen = state.generation + 1
+        self._set_scope_state(conn, scope_key, new_watermark, new_gen)
+        self._stamp_certified_gen(conn, present, new_gen)
+
+    def upsert_changes(
+        self,
+        changes: dict[str, dict[str, Any]] | list[dict[str, Any]],
+        *,
+        conn: sqlite3.Connection | None = None,
+    ) -> None:
         """Store ChangeInfo payloads under lookup keys and ``payload["id"]``."""
 
         keyed: dict[str, dict[str, Any]] = {}
@@ -340,18 +567,34 @@ class GerritCache:
                     keyed[triplet] = payload
 
         now = _now()
-        with self._connect() as conn:
+
+        def _write(connection: sqlite3.Connection) -> None:
             for cache_key, payload in keyed.items():
-                conn.execute(
+                stored = _strip_avatars(payload)
+                connection.execute(
                     """
-                    INSERT OR REPLACE INTO changes(change_id, number, payload, updated, fetched_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO changes(
+                      change_id, number, payload, updated, fetched_at, certified_gen
+                    )
+                    VALUES (?, ?, ?, ?, ?, NULL)
                     """,
-                    (cache_key, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now),
+                    (
+                        cache_key,
+                        _payload_number(stored),
+                        _json_dumps(stored),
+                        _payload_updated(stored),
+                        now,
+                    ),
                 )
 
+        if conn is not None:
+            _write(conn)
+        else:
+            with self._connect() as connection:
+                _write(connection)
+
     def invalidate_changes(self, triplets: list[str]) -> None:
-        """Drop cached change and comment rows for *triplets*."""
+        """Drop cached change, comment, and checks rows for *triplets*."""
 
         if not triplets:
             return
@@ -359,6 +602,7 @@ class GerritCache:
         with self._connect() as conn:
             conn.execute(f"DELETE FROM changes WHERE change_id IN ({placeholders})", triplets)
             conn.execute(f"DELETE FROM comments WHERE change_id IN ({placeholders})", triplets)
+            conn.execute(f"DELETE FROM checks WHERE change_id IN ({placeholders})", triplets)
 
     def load_comments(
         self,
@@ -412,6 +656,65 @@ class GerritCache:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO comments(change_id, payload, fetched_at, change_updated)
+                VALUES (?, ?, ?, ?)
+                """,
+                (triplet, _json_dumps(payload), _now(), change_updated),
+            )
+
+    def load_checks(
+        self,
+        triplet: str,
+        *,
+        fetch_checks: Callable[[str], tuple[list[dict[str, Any]], list[dict[str, Any]]]],
+        change_updated: str | None = None,
+        trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
+        refresh: bool = False,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Load Checks-plugin rows and messages with change-updated validation."""
+
+        now = _now()
+        row: _ChecksRow | None = None
+        with self._connect() as conn:
+            raw = conn.execute(
+                "SELECT payload, fetched_at, change_updated FROM checks WHERE change_id = ?",
+                (triplet,),
+            ).fetchone()
+        if raw:
+            payload = json.loads(str(raw["payload"]))
+            if isinstance(payload, dict):
+                checks = payload.get("checks")
+                messages = payload.get("messages")
+                row = _ChecksRow(
+                    checks=[x for x in checks if isinstance(x, dict)] if isinstance(checks, list) else [],
+                    messages=[x for x in messages if isinstance(x, dict)] if isinstance(messages, list) else [],
+                    fetched_at=int(raw["fetched_at"]),
+                    change_updated=raw["change_updated"] if isinstance(raw["change_updated"], str) else None,
+                )
+        if row and not refresh:
+            if now - row.fetched_at < trust_window_seconds:
+                return row.checks, row.messages
+            if change_updated is not None and row.change_updated == change_updated:
+                return row.checks, row.messages
+
+        check_rows, message_rows = fetch_checks(triplet)
+        self.upsert_checks(triplet, check_rows, message_rows, change_updated=change_updated)
+        return check_rows, message_rows
+
+    def upsert_checks(
+        self,
+        triplet: str,
+        checks: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        *,
+        change_updated: str | None = None,
+    ) -> None:
+        """Store checks and messages for one change."""
+
+        payload = {"checks": checks, "messages": messages}
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO checks(change_id, payload, fetched_at, change_updated)
                 VALUES (?, ?, ?, ?)
                 """,
                 (triplet, _json_dumps(payload), _now(), change_updated),

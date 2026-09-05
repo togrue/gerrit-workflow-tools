@@ -151,7 +151,7 @@ def test_schema_version_bump_clears_old_cache(tmp_path: Path) -> None:
     assert cache.info().changes == 1
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+        conn.execute("UPDATE meta SET value = '2' WHERE key = 'schema_version'")
 
     cleared = GerritCache(db_path, web_base="https://g.example")
     assert cleared.info().changes == 0
@@ -244,3 +244,131 @@ def test_cache_clear_forgets_capabilities_but_keeps_schema_metadata(tmp_path: Pa
 
     assert cache.capability("checks") is None
     assert cache.info().host == cache.host
+
+
+def test_upsert_changes_strips_avatars(tmp_path: Path) -> None:
+    triplet = "proj~main~I1111111111111111111111111111111111111111"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    payload = _change(triplet)
+    payload["owner"] = {"username": "alice", "avatars": [{"url": "http://x/a.png", "height": 1}]}
+    cache.upsert_changes([payload])
+    rows = cache._lookup_changes([triplet])
+    owner = rows[triplet].payload.get("owner")
+    assert isinstance(owner, dict)
+    assert "avatars" not in owner
+    assert owner.get("username") == "alice"
+
+
+def test_missing_change_negative_cache_skips_refetch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    triplet = "proj~main~Innnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+
+    def fetch(_ids: list[str]) -> dict[str, dict[str, Any]]:
+        return {}
+
+    cache.load_changes([triplet], probe_updated=lambda _ids: {}, fetch_changes=fetch, missing_ttl_seconds=60)
+    calls = {"n": 0}
+
+    def fetch_again(_ids: list[str]) -> dict[str, dict[str, Any]]:
+        calls["n"] += 1
+        return {}
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1030)
+    cache.load_changes([triplet], probe_updated=lambda _ids: {}, fetch_changes=fetch_again, missing_ttl_seconds=60)
+    assert calls["n"] == 0
+
+
+def test_load_checks_serves_cache_while_change_updated_is_unchanged(tmp_path: Path) -> None:
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    calls: list[str] = []
+
+    def fetch(triplet: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        calls.append(triplet)
+        return ([{"checker_name": "x", "status": "FAILED"}], [{"message": "fail"}])
+
+    first = cache.load_checks("proj~main~I1", fetch_checks=fetch, change_updated="u1", trust_window_seconds=0)
+    second = cache.load_checks("proj~main~I1", fetch_checks=fetch, change_updated="u1", trust_window_seconds=0)
+
+    assert calls == ["proj~main~I1"]
+    assert first == second
+
+
+def test_delta_query_refreshes_certified_stack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    triplet = "proj~main~Idddddddddddddddddddddddddddddddddddddddd"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    scope_key = "host~proj"
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+
+    def probe(_ids: list[str]) -> dict[str, str]:
+        return {triplet: "2024-01-01 10:00:00.000000000"}
+
+    def fetch(ids: list[str]) -> dict[str, dict[str, Any]]:
+        return {triplet: _change(triplet, updated="2024-01-01 10:00:00.000000000")}
+
+    cache.load_changes(
+        [triplet],
+        probe_updated=probe,
+        fetch_changes=fetch,
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 2000)
+    delta_calls: list[str] = []
+
+    def fetch_delta(since: str) -> tuple[list[dict[str, Any]], bool]:
+        delta_calls.append(since)
+        return [], True
+
+    rows = cache.load_changes(
+        [triplet],
+        probe_updated=lambda _ids: (_ for _ in ()).throw(AssertionError("probe")),
+        fetch_changes=lambda _ids: (_ for _ in ()).throw(AssertionError("fetch")),
+        fetch_delta=fetch_delta,
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+    assert delta_calls == ["2024-01-01 10:00:00.000000000"]
+    assert rows[triplet]["updated"] == "2024-01-01 10:00:00.000000000"
+
+
+def test_delta_not_used_when_certification_generation_mismatches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row cached under an older scope generation must not be served via delta alone."""
+
+    triplet_a = "proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    triplet_b = "proj~main~Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    scope_key = "host~proj"
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+
+    cache.upsert_changes([_change(triplet_a, updated="2024-01-01 09:00:00.000000000")])
+    cache.load_changes(
+        [triplet_b],
+        probe_updated=lambda _ids: {triplet_b: "2024-01-01 10:00:00.000000000"},
+        fetch_changes=lambda ids: {triplet_b: _change(triplet_b, updated="2024-01-01 10:00:00.000000000")},
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+
+    probed: list[list[str]] = []
+
+    def probe(ids: list[str]) -> dict[str, str]:
+        probed.append(ids)
+        return {
+            triplet_a: "2024-01-01 09:00:00.000000000",
+            triplet_b: "2024-01-01 10:00:00.000000000",
+        }
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 2000)
+    cache.load_changes(
+        [triplet_a, triplet_b],
+        probe_updated=probe,
+        fetch_changes=lambda _ids: {},
+        fetch_delta=lambda _since: (_ for _ in ()).throw(AssertionError("delta")),
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+    assert probed, "uncertified row must fall back to probe path"

@@ -143,10 +143,32 @@ class ChangeStore:
         """Evaluate the query shapes this project actually issues.
 
         Handles project-scoped ``Change-Id`` OR batches (the stack overlay), exact
-        ``project:P branch:B change:I`` triplet scoping, and bare ``change:`` lookups.
+        ``project:P branch:B change:I`` triplet scoping, bare ``change:`` lookups, and
+        ``since:`` delta freshness queries.
         """
-        result: list[dict[str, Any]] = []
-        seen: set[tuple[str, Any]] = set()
+        since_match = re.search(r'since:"([^"]+)"', query) or re.search(r"since:(\S+)", query)
+        if since_match:
+            since_val = since_match.group(1).rstrip(")")
+            project_match = re.search(r"project:(\S+)", query)
+            project = project_match.group(1) if project_match else None
+            result: list[dict[str, Any]] = []
+            seen: set[tuple[str, Any]] = set()
+            for row in self._changes.values():
+                if project is not None and row.get("project") != project:
+                    continue
+                updated = row.get("updated")
+                if not isinstance(updated, str) or updated < since_val:
+                    continue
+                key = (str(row.get("id") or ""), row.get("_number"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(row)
+            result.sort(key=lambda row: str(row.get("updated") or ""))
+            return result
+
+        result = []
+        seen = set()
 
         def _add(row: dict[str, Any] | None) -> None:
             if row is None:

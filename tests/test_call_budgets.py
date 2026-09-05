@@ -196,6 +196,75 @@ def test_fix_local_ref_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pyte
     assert git_out("log", "-1", "--format=%s", cwd=stack_repo).startswith("fixup! ")
 
 
+def test_log_warm_second_run_zero_rest_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Warm ``ger log`` inside the trust window makes no new Gerrit calls."""
+    _configure_web(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    with _count_git() as run:
+        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    after_first = len(store.calls)
+    assert after_first >= 1, "cold run should populate cache via REST"
+
+    with _count_git() as run:
+        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    assert len(store.calls) == after_first, (
+        f"warm run added REST calls: {[c.method for c in store.calls[after_first:]]}"
+    )
+    _assert_log_git_budget(run)
+
+
+def test_log_warm_second_run_no_reviewer_follow_ups(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Payloads with ``reviewers`` must not trigger ``list_change_reviewers`` on cold or warm run."""
+    _configure_web(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    assert store.calls_to("list_change_reviewers") == []
+
+    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    assert store.calls_to("list_change_reviewers") == []
+
+
+def test_log_warm_expired_trust_uses_delta_not_probe(
+    stack_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After trust window expires, a certified stack should use one ``since:`` delta query."""
+    import gerrit_workflow_tools.core.gerrit.cache as cache_mod
+
+    _configure_web(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    for idx, payload in enumerate(details.values()):
+        payload["updated"] = f"2024-01-01 10:00:{idx:02d}.000000000"
+    store = ChangeStore(details)
+
+    clock = {"t": 1000}
+    monkeypatch.setattr(cache_mod, "_now", lambda: clock["t"])
+
+    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    cold_queries = list(store.queries())
+    assert len(cold_queries) == 1
+
+    clock["t"] = 1020
+    after_cold = len(store.calls)
+    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    warm_queries = store.queries()[len(cold_queries) :]
+    assert len(warm_queries) == 1, warm_queries
+    assert 'since:"' in warm_queries[0], warm_queries[0]
+    assert store.calls_to("list_change_reviewers") == []
+    assert len(store.calls) - after_cold == 1
+
+
 def test_fix_change_id_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A bare Change-Id is matched on the local stack — zero REST (ADR-0003)."""
     rows = stack_rows_mb_to_head(stack_repo)
