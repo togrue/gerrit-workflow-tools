@@ -151,7 +151,7 @@ class ChangeStore:
             since_val = since_match.group(1).rstrip(")")
             project_match = re.search(r"project:(\S+)", query)
             project = project_match.group(1) if project_match else None
-            result: list[dict[str, Any]] = []
+            since_result: list[dict[str, Any]] = []
             seen: set[tuple[str, Any]] = set()
             for row in self._changes.values():
                 if project is not None and row.get("project") != project:
@@ -163,20 +163,20 @@ class ChangeStore:
                 if key in seen:
                     continue
                 seen.add(key)
-                result.append(row)
-            result.sort(key=lambda row: str(row.get("updated") or ""))
-            return result
+                since_result.append(row)
+            since_result.sort(key=lambda row: str(row.get("updated") or ""))
+            return since_result
 
-        result = []
-        seen = set()
+        result: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, Any]] = set()
 
         def _add(row: dict[str, Any] | None) -> None:
             if row is None:
                 return
             key = (str(row.get("id") or ""), row.get("_number"))
-            if key in seen:
+            if key in seen_keys:
                 return
-            seen.add(key)
+            seen_keys.add(key)
             result.append(row)
 
         for part in _PROJECT_SPLIT_RE.split(query):

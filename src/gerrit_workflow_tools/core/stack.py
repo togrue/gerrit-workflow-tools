@@ -39,8 +39,8 @@ def upstream_tracking_tip_and_display(
 
     The local stack is ``<sha>..HEAD`` (same *sha* as the first element here).
     """
-    b = _resolve_stack_branch(cwd, branch, settings=settings)
     snap = settings if settings is not None else Settings.from_cwd(cwd)
+    b = _resolve_stack_branch(cwd, branch, settings=snap)
     display = snap.branch_upstream_abbrev(b)
     if not display:
         upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
