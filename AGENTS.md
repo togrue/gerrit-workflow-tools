@@ -62,7 +62,11 @@ never add a cache that cannot say whether it is stale
 
 ```bash
 uv sync
-uv run pytest -q          # unit tests; integration tests are opt-in
+if [-f ./scripts/pytest-on-remote.sh]; then
+  ./scripts/pytest-on-remote.sh
+else
+  uv run pytest -q
+fi
 uv run ruff format . && uv run ruff check --fix .
 uv run mypy
 ```
