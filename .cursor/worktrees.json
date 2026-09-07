@@ -1,0 +1,6 @@
+{
+    "setup-worktree": [
+        "uv sync",
+        "cp $ROOT_WORKTREE_PATH/tests/integration/local.env tests/integration/local.env"
+    ]
+}
