@@ -54,7 +54,7 @@ source "$_pysite/completion/ger.bash"
 Regenerate it with:
 
 ```bash
-python -c "from pathlib import Path; from gerrit_workflow_tools.bash_completion_generator import render_bash_completion_script; Path('contrib/completion/ger.bash').write_text(render_bash_completion_script(), encoding='utf-8')"
+uv run python scripts/generate_bash_completion.py
 ```
 
 `tests/test_bash_completion.py` includes a drift test that regenerates and compares the result byte-for-byte with the checked-in file.
