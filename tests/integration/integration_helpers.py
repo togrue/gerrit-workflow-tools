@@ -97,6 +97,44 @@ def post_unresolved_inline_comment(
     )
 
 
+def resolve_unresolved_inline_comments(
+    session: GerritHttpSession,
+    change_id: str,
+    *,
+    message: str = "done",
+) -> int:
+    """Reply ``unresolved: false`` to every unresolved inline comment. Return how many."""
+
+    enc = quote_change_id(change_id)
+    file_map = session.get_json(f"changes/{enc}/comments")
+    if not isinstance(file_map, dict):
+        return 0
+    resolved = 0
+    for path, rows in file_map.items():
+        if not isinstance(rows, list):
+            continue
+        for comment in rows:
+            if not isinstance(comment, dict) or comment.get("unresolved") is not True:
+                continue
+            session.post_json(
+                f"changes/{enc}/revisions/current/review",
+                body={
+                    "comments": {
+                        path: [
+                            {
+                                "line": comment.get("line") or 1,
+                                "message": message,
+                                "in_reply_to": comment.get("id"),
+                                "unresolved": False,
+                            }
+                        ]
+                    }
+                },
+            )
+            resolved += 1
+    return resolved
+
+
 def parse_trailing_attention_labels(log_text: str, subject_tag: str) -> list[str] | None:
     """
     Parse trailing ``# …`` attention tokens from a ``ger log`` text line containing *subject_tag*.

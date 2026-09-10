@@ -112,10 +112,15 @@ def test_reviewers_follow_up_runs_when_payload_omits_the_field() -> None:
     assert commits[0].reviewers == [ReviewerAccount(slug="alice", account_id=42)]
 
 
-def test_comments_follow_up_passes_change_updated_as_the_cache_key() -> None:
-    """`LogCommit.updated` reaches `load_comments`, so its validity rule can fire."""
+def test_comments_follow_up_passes_freshness_as_the_cache_key() -> None:
+    """Follow-ups are keyed by ``meta_rev_id`` when Gerrit sends it, not ``updated``."""
 
-    detail = {**_DETAIL, "reviewers": {}, "updated": "2026-06-03 00:31:56.000000000"}
+    detail = {
+        **_DETAIL,
+        "reviewers": {},
+        "updated": "2026-06-03 00:31:56.000000000",
+        "meta_rev_id": "abcmeta",
+    }
     service, _rest, _cache = _make_service(detail)
 
     with (
@@ -128,6 +133,23 @@ def test_comments_follow_up_passes_change_updated_as_the_cache_key() -> None:
         commits = service.fetch_gerrit_data([_FakeRow()])
 
     assert commits[0].updated == "2026-06-03 00:31:56.000000000"
+    assert commits[0].freshness == "abcmeta"
+    get_file_map.assert_called_once_with("proj~main~Iabc123", change_updated="abcmeta")
+
+
+def test_comments_follow_up_falls_back_to_updated_when_meta_rev_id_is_absent() -> None:
+    detail = {**_DETAIL, "reviewers": {}, "updated": "2026-06-03 00:31:56.000000000"}
+    service, _rest, _cache = _make_service(detail)
+
+    with (
+        patch(
+            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            return_value=_STACK,
+        ),
+        patch.object(service.comments, "get_file_map", return_value={}) as get_file_map,
+    ):
+        service.fetch_gerrit_data([_FakeRow()])
+
     get_file_map.assert_called_once_with(
         "proj~main~Iabc123",
         change_updated="2026-06-03 00:31:56.000000000",
