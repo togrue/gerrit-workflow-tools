@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -29,11 +30,10 @@ def force_zero_change_trust_window(monkeypatch: pytest.MonkeyPatch) -> None:
 
     from gerrit_workflow_tools.core.gerrit.service import GerritService
 
-    orig = GerritService.from_cwd.__func__
+    orig_init = GerritService.__init__
 
-    @classmethod
-    def _from_cwd(cls, cwd, **kwargs):  # type: ignore[no-untyped-def]
+    def _init(self: Any, *args: Any, **kwargs: Any) -> None:
         kwargs["trust_window_seconds"] = 0
-        return orig(cls, cwd, **kwargs)
+        orig_init(self, *args, **kwargs)
 
-    monkeypatch.setattr(GerritService, "from_cwd", _from_cwd)
+    monkeypatch.setattr(GerritService, "__init__", _init)

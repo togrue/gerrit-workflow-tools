@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
 
 
 def _change(
@@ -234,6 +235,84 @@ def test_load_comments_refetches_on_token_change_inside_trust_window(
     assert after == _comment_map("second")
 
 
+def test_change_cache_refetches_when_meta_rev_id_moves_but_updated_does_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    triplet = "proj~main~Ieeeefeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    cache = GerritCache(tmp_path / "cache.db", web_base="https://g.example")
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+    v1 = _change(triplet, updated="t")
+    v1["meta_rev_id"] = "meta-a"
+    v2 = _change(triplet, updated="t")
+    v2["meta_rev_id"] = "meta-b"
+    fetched: list[list[str]] = []
+
+    def probe_updated(_ids: list[str]) -> dict[str, str]:
+        key = change_freshness_key(v2)
+        assert key is not None
+        return {triplet: key}
+
+    def fetch_changes(ids: list[str]) -> dict[str, dict[str, Any]]:
+        fetched.append(ids)
+        return {triplet: v2}
+
+    cache.load_changes(
+        [triplet],
+        probe_updated=lambda _ids: {triplet: change_freshness_key(v1) or ""},
+        fetch_changes=lambda _ids: {triplet: v1},
+        trust_window_seconds=0,
+    )
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1011)
+    rows = cache.load_changes(
+        [triplet],
+        probe_updated=probe_updated,
+        fetch_changes=fetch_changes,
+        trust_window_seconds=10,
+    )
+    assert fetched == [[triplet]]
+    assert rows[triplet]["meta_rev_id"] == "meta-b"
+
+
+def test_change_cache_refetches_when_comment_counts_move_but_updated_does_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gerrit hosts without ``meta_rev_id`` still see same-second comment resolves."""
+
+    triplet = "proj~main~Iffffffffffffffffffffffffffffffffffffffff"
+    cache = GerritCache(tmp_path / "cache.db", web_base="https://g.example")
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+    v1 = _change(triplet, updated="t")
+    v1["unresolved_comment_count"] = 1
+    v1["total_comment_count"] = 1
+    v2 = _change(triplet, updated="t")
+    v2["unresolved_comment_count"] = 0
+    v2["total_comment_count"] = 2
+
+    cache.load_changes(
+        [triplet],
+        probe_updated=lambda _ids: {triplet: change_freshness_key(v1) or ""},
+        fetch_changes=lambda _ids: {triplet: v1},
+        trust_window_seconds=0,
+    )
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1011)
+    rows = cache.load_changes(
+        [triplet],
+        probe_updated=lambda _ids: {triplet: change_freshness_key(v2) or ""},
+        fetch_changes=lambda _ids: {triplet: v2},
+        trust_window_seconds=10,
+    )
+    assert rows[triplet]["unresolved_comment_count"] == 0
+
+
+def test_change_freshness_key_prefers_meta_rev_id() -> None:
+    assert change_freshness_key({"updated": "t", "meta_rev_id": "abc"}) == "abc"
+    assert change_freshness_key({"updated": "t"}) == "t"
+    assert (
+        change_freshness_key({"updated": "t", "unresolved_comment_count": 1, "total_comment_count": 1})
+        == "t|unresolved_comment_count=1|total_comment_count=1"
+    )
+
+
 def test_capability_round_trips_and_starts_unknown(tmp_path: Path) -> None:
     cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
 
@@ -309,22 +388,18 @@ def test_load_checks_serves_cache_while_change_updated_is_unchanged(tmp_path: Pa
     assert first == second
 
 
-def test_delta_query_refreshes_certified_stack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_delta_query_applies_updated_rows_without_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     triplet = "proj~main~Idddddddddddddddddddddddddddddddddddddddd"
     cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
     scope_key = "host~proj"
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
-
-    def probe(_ids: list[str]) -> dict[str, str]:
-        return {triplet: "2024-01-01 10:00:00.000000000"}
-
-    def fetch(ids: list[str]) -> dict[str, dict[str, Any]]:
-        return {triplet: _change(triplet, updated="2024-01-01 10:00:00.000000000")}
+    v1 = _change(triplet, updated="2024-01-01 10:00:00.000000000")
+    v2 = _change(triplet, updated="2024-01-01 11:00:00.000000000")
 
     cache.load_changes(
         [triplet],
-        probe_updated=probe,
-        fetch_changes=fetch,
+        probe_updated=lambda _ids: {triplet: v1["updated"]},
+        fetch_changes=lambda _ids: {triplet: v1},
         scope_key=scope_key,
         trust_window_seconds=0,
     )
@@ -334,7 +409,7 @@ def test_delta_query_refreshes_certified_stack(tmp_path: Path, monkeypatch: pyte
 
     def fetch_delta(since: str) -> tuple[list[dict[str, Any]], bool]:
         delta_calls.append(since)
-        return [], True
+        return [v2], True
 
     rows = cache.load_changes(
         [triplet],
@@ -345,7 +420,91 @@ def test_delta_query_refreshes_certified_stack(tmp_path: Path, monkeypatch: pyte
         trust_window_seconds=0,
     )
     assert delta_calls == ["2024-01-01 10:00:00.000000000"]
-    assert rows[triplet]["updated"] == "2024-01-01 10:00:00.000000000"
+    assert rows[triplet]["updated"] == "2024-01-01 11:00:00.000000000"
+
+
+def test_empty_delta_still_probes_when_meta_rev_id_moved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``since:`` is keyed on ``updated``. Same-second NoteDb writes are invisible to it."""
+
+    triplet = "proj~main~Idddddddddddddddddddddddddddddddddddddddd"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    scope_key = "host~proj"
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+    v1 = _change(triplet, updated="2024-01-01 10:00:00.000000000")
+    v1["meta_rev_id"] = "meta-a"
+    v2 = _change(triplet, updated="2024-01-01 10:00:00.000000000")
+    v2["meta_rev_id"] = "meta-b"
+
+    cache.load_changes(
+        [triplet],
+        probe_updated=lambda _ids: {triplet: change_freshness_key(v1) or ""},
+        fetch_changes=lambda _ids: {triplet: v1},
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 2000)
+    fetched: list[list[str]] = []
+
+    def fetch_delta(_since: str) -> tuple[list[dict[str, Any]], bool]:
+        return [], True
+
+    def probe(_ids: list[str]) -> dict[str, str]:
+        return {triplet: change_freshness_key(v2) or ""}
+
+    def fetch(ids: list[str]) -> dict[str, dict[str, Any]]:
+        fetched.append(ids)
+        return {triplet: v2}
+
+    rows = cache.load_changes(
+        [triplet],
+        probe_updated=probe,
+        fetch_changes=fetch,
+        fetch_delta=fetch_delta,
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+    assert fetched == [[triplet]]
+    assert rows[triplet]["meta_rev_id"] == "meta-b"
+
+
+def test_delta_covering_other_changes_still_probes_requested(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ours = "proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    other = "proj~main~Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    scope_key = "host~proj"
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+    v1 = _change(ours, updated="2024-01-01 10:00:00.000000000")
+    v1["meta_rev_id"] = "meta-a"
+    v2 = _change(ours, updated="2024-01-01 10:00:00.000000000")
+    v2["meta_rev_id"] = "meta-b"
+    other_row = _change(other, updated="2024-01-01 11:00:00.000000000")
+
+    cache.load_changes(
+        [ours],
+        probe_updated=lambda _ids: {ours: change_freshness_key(v1) or ""},
+        fetch_changes=lambda _ids: {ours: v1},
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 2000)
+    fetched: list[list[str]] = []
+
+    def fetch(ids: list[str]) -> dict[str, dict[str, Any]]:
+        fetched.append(ids)
+        return {ours: v2}
+
+    rows = cache.load_changes(
+        [ours],
+        probe_updated=lambda _ids: {ours: change_freshness_key(v2) or ""},
+        fetch_changes=fetch,
+        fetch_delta=lambda _since: ([other_row], True),
+        scope_key=scope_key,
+        trust_window_seconds=0,
+    )
+    assert fetched == [[ours]]
+    assert rows[ours]["meta_rev_id"] == "meta-b"
 
 
 def test_delta_not_used_when_certification_generation_mismatches(

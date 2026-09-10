@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
-from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results
+from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results, change_freshness_key
 
 
 SCHEMA_VERSION = "3"
@@ -430,15 +430,15 @@ class GerritCache:
                 else:
                     probe_ids.append(triplet)
 
-        if (
-            fetch_delta is not None
-            and scope_key is not None
-            and not refresh
-            and not fetch_ids
-            and probe_ids
-            and self._try_delta(triplets, rows, fetch_delta, scope_key, out)
-        ):
-            return out
+        # ``since:`` only sees ``ChangeInfo.updated``. A comment resolve in the same
+        # second leaves that timestamp unchanged, so the delta is empty (or names
+        # some other change). Those requested ids still need the meta_rev_id probe.
+        if fetch_delta is not None and scope_key is not None and not refresh and not fetch_ids and probe_ids:
+            covered = self._try_delta(triplets, rows, fetch_delta, scope_key, out)
+            if covered is not None:
+                probe_ids = [triplet for triplet in probe_ids if triplet not in covered]
+                if not probe_ids:
+                    return out
 
         did_network = False
         if probe_ids:
@@ -446,12 +446,13 @@ class GerritCache:
             updated_by_id = probe_updated(probe_ids)
             for triplet in probe_ids:
                 row = rows[triplet]
-                remote_updated = updated_by_id.get(triplet)
-                if remote_updated is None:
+                remote_token = updated_by_id.get(triplet)
+                if remote_token is None:
                     payload_id = row.payload.get("id")
                     if isinstance(payload_id, str):
-                        remote_updated = updated_by_id.get(payload_id)
-                if row.updated and remote_updated == row.updated:
+                        remote_token = updated_by_id.get(payload_id)
+                cached_key = change_freshness_key(row.payload)
+                if cached_key and remote_token == cached_key:
                     out[triplet] = row.payload
                 else:
                     fetch_ids.append(triplet)
@@ -487,25 +488,27 @@ class GerritCache:
         fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]],
         scope_key: str,
         out: dict[str, dict[str, Any]],
-    ) -> bool:
+    ) -> set[str] | None:
         """Apply a ``since:`` delta when every requested row is certified under *scope_key*.
 
-        Returns ``True`` when the delta path fully answered the request (including an empty
-        result set). Network I/O runs with no open SQLite connection.
+        Returns the Gerrit ids the delta actually returned, or ``None`` when the
+        delta cannot answer (uncertified rows, incomplete page). An empty set means
+        the query succeeded but ``updated`` did not move — the caller must still probe
+        those ids. Network I/O runs with no open SQLite connection.
         """
 
         with self._connect() as conn:
             state = self._get_scope_state(conn, scope_key)
         if state is None or not state.watermark:
-            return False
+            return None
         for triplet in triplets:
             row = rows.get(triplet)
             if row is None or row.certified_gen != state.generation:
-                return False
+                return None
 
         delta_rows, complete = fetch_delta(state.watermark)
         if not complete:
-            return False
+            return None
 
         new_watermark = _max_updated(delta_rows, floor=state.watermark)
         new_gen = state.generation + 1
@@ -515,12 +518,17 @@ class GerritCache:
             self._set_scope_state(conn, scope_key, new_watermark, new_gen)
             self._stamp_certified_gen(conn, triplets, new_gen)
 
+        covered: set[str] = set()
+        for payload in delta_rows:
+            tid = _payload_triplet(payload)
+            if tid:
+                covered.add(tid)
         fresh = self._lookup_changes(triplets)
         for triplet in triplets:
             row = fresh.get(triplet)
             if row is not None:
                 out[triplet] = row.payload
-        return True
+        return covered
 
     def _maybe_certify_scope(
         self,
@@ -613,7 +621,12 @@ class GerritCache:
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
     ) -> dict[str, list[dict[str, Any]]]:
-        """Load comment payloads with trust-window and optional change-updated validation."""
+        """Load comment payloads keyed by the change freshness token.
+
+        When *change_updated* is supplied, it is the validity key (``meta_rev_id`` or
+        the ``updated``+counts fallback). A changed key refetches even inside the trust
+        window. Without a key, the trust window alone applies.
+        """
 
         now = _now()
         row: _CommentRow | None = None
@@ -634,9 +647,10 @@ class GerritCache:
                     change_updated=raw["change_updated"] if isinstance(raw["change_updated"], str) else None,
                 )
         if row and not refresh:
-            if now - row.fetched_at < trust_window_seconds:
-                return row.payload
-            if change_updated is not None and row.change_updated == change_updated:
+            if change_updated is not None:
+                if row.change_updated == change_updated:
+                    return row.payload
+            elif now - row.fetched_at < trust_window_seconds:
                 return row.payload
 
         payload = fetch_comments(triplet)
@@ -670,7 +684,7 @@ class GerritCache:
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Load Checks-plugin rows and messages with change-updated validation."""
+        """Load Checks-plugin rows and messages keyed by the change freshness token."""
 
         now = _now()
         row: _ChecksRow | None = None
@@ -691,9 +705,10 @@ class GerritCache:
                     change_updated=raw["change_updated"] if isinstance(raw["change_updated"], str) else None,
                 )
         if row and not refresh:
-            if now - row.fetched_at < trust_window_seconds:
-                return row.checks, row.messages
-            if change_updated is not None and row.change_updated == change_updated:
+            if change_updated is not None:
+                if row.change_updated == change_updated:
+                    return row.checks, row.messages
+            elif now - row.fetched_at < trust_window_seconds:
                 return row.checks, row.messages
 
         check_rows, message_rows = fetch_checks(triplet)

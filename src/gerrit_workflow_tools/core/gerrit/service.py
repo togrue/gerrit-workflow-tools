@@ -223,8 +223,8 @@ class GerritService:
                 detail_by_triplet[triplet] = payload
 
         result: list[Any] = []
-        # (row index, follow-up kinds, triplet, change.updated) — `updated` is the cache
-        # validity key for every follow-up, so it travels with the job.
+        # (row index, follow-up kinds, triplet, freshness, rev, pipelines) — freshness is the
+        # cache validity key for every follow-up, so it travels with the job.
         pending: list[tuple[int, frozenset[str], str, str | None, int | None, bool]] = []
 
         for row in commits:
@@ -240,7 +240,7 @@ class GerritService:
                 triplet = detail.get("id")
                 if isinstance(triplet, str) and triplet:
                     rev_num = current_revision_number(detail)
-                    pending.append((len(result) - 1, needed, triplet, lc.updated, rev_num, fetch_ci_pipelines))
+                    pending.append((len(result) - 1, needed, triplet, lc.freshness, rev_num, fetch_ci_pipelines))
 
         if not pending:
             return result
@@ -248,11 +248,11 @@ class GerritService:
         def _follow_up(
             item: tuple[int, frozenset[str], str, str | None, int | None, bool],
         ) -> tuple[int, dict[str, Any]]:
-            idx, kinds, triplet, change_updated, rev_num, want_pipelines = item
+            idx, kinds, triplet, freshness, rev_num, want_pipelines = item
             updates: dict[str, Any] = {}
             if "comments" in kinds:
                 try:
-                    file_map = self.comments.get_file_map(triplet, change_updated=change_updated)
+                    file_map = self.comments.get_file_map(triplet, change_updated=freshness)
                     updates["comments"] = count_unresolved_in_file_map(file_map)
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("comments follow-up failed for %s: %s", triplet, exc)
@@ -261,7 +261,7 @@ class GerritService:
                     names, links, pipelines = self._fetch_ci_result(
                         triplet,
                         project=stack.project,
-                        change_updated=change_updated,
+                        change_updated=freshness,
                         current_revision_number=rev_num,
                         fetch_pipelines=want_pipelines,
                     )
