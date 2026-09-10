@@ -36,6 +36,14 @@ DEFAULT_WEB_BASE = "https://gerrit.example"
 
 _CHANGE_ID_SUFFIX_RE = re.compile(r"~(I[a-fA-F0-9]{40})$")
 _PROJECT_SPLIT_RE = re.compile(r"(?=project:)")
+_CONTEXT_FIELDS = frozenset({"context_lines", "source_content_type"})
+
+
+def _without_comment_context(row: dict[str, Any]) -> dict[str, Any]:
+    """Drop Gerrit context fields so a no-context fetch matches production REST."""
+    if _CONTEXT_FIELDS.isdisjoint(row):
+        return row
+    return {key: value for key, value in row.items() if key not in _CONTEXT_FIELDS}
 
 
 @dataclass(frozen=True)
@@ -280,10 +288,20 @@ class ChangeStore:
             raise GerritApiError(f"no matching account {account_id}")
         return payload
 
-    def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+    def get_comments(
+        self,
+        change_id: str,
+        *,
+        enable_context: bool = False,
+        context_padding: int | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """Return inline comments grouped by file path."""
+        del context_padding
         self._record("get_comments", change_id)
-        return self._comments.get(self._payload_id(change_id), {})
+        payload = self._comments.get(self._payload_id(change_id), {})
+        if enable_context:
+            return payload
+        return {path: [_without_comment_context(row) for row in rows] for path, rows in payload.items()}
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""

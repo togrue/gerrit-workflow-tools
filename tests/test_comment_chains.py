@@ -132,3 +132,26 @@ def test_collect_comment_chains_all_puts_unresolved_first() -> None:
     resolved = collect_comment_chains(file_map, comments="resolved")
     assert [chain.root_id for chain in resolved] == ["closed"]
     assert collect_comment_chains(file_map, comments="unresolved") == collect_unresolved_comment_chains(file_map)
+
+
+def test_build_comment_chains_keeps_context_lines() -> None:
+    file_map = {
+        "a.py": [
+            {
+                "id": "root",
+                "message": "nit",
+                "unresolved": True,
+                "updated": "1",
+                "line": 2,
+                "context_lines": [
+                    {"line_number": 1, "context_line": "alpha()"},
+                    {"line_number": 2, "context_line": "beta()"},
+                ],
+            }
+        ]
+    }
+    chain = build_comment_chains(file_map)[0]
+    assert [(line.line_number, line.text) for line in chain.comments[0].context_lines] == [
+        (1, "alpha()"),
+        (2, "beta()"),
+    ]

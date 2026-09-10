@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
 
 
 CommentSelection = Literal["unresolved", "all", "resolved"]
@@ -47,6 +47,21 @@ def _chain_resolved_from_raw(comments: list[dict[str, Any]]) -> bool:
     return comments[-1].get("unresolved") is not True
 
 
+def _context_lines_from_raw(comment: dict[str, Any]) -> tuple[ContextLine, ...]:
+    raw = comment.get("context_lines")
+    if not isinstance(raw, list):
+        return ()
+    lines: list[ContextLine] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        number = item.get("line_number")
+        text = item.get("context_line")
+        if isinstance(number, int) and isinstance(text, str):
+            lines.append(ContextLine(line_number=number, text=text))
+    return tuple(lines)
+
+
 def _inline_comment_from_raw(path: str, comment: dict[str, Any]) -> InlineComment:
     from gerrit_workflow_tools.core.reviewer import format_gerrit_account_label
 
@@ -62,6 +77,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any]) -> InlineCommen
         message=raw_msg if isinstance(raw_msg, str) else "",
         comment_id=raw_id if isinstance(raw_id, str) else None,
         author=author_label,
+        context_lines=_context_lines_from_raw(comment),
     )
 
 

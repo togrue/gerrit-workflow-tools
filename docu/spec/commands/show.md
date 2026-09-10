@@ -36,6 +36,8 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 |--------|-------------|
 | `--stack` | Include the local stack (`upstream_tip..HEAD`) |
 | `--comments {unresolved,all,resolved}` | Which inline comment chains to print (default: `unresolved`) |
+| `--context` | Include source lines around each comment (`enable-context` on `GET …/comments`; padding 2) |
+| `--context-padding N` | Extra source lines before/after the comment (implies `--context`) |
 | `--json` | JSON payload |
 | `--format {human,markdown}` | Output format (default: human) |
 | `--ai` | Alias for `--format markdown` |
@@ -53,10 +55,10 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 2. Resolve targets (`resolve_show_targets`: changeishes, ranges, optional `--stack`).
 3. Fetch labels, patchset status, attention via `GerritService` / `gerrit_change_status`.
 4. **Human / Markdown, multi-target:** only commits with at least one matching comment chain (per `--comments`) are printed. If every target is empty under that filter, print a single dim empty line: `(no unresolved comments)`, `(no comments)`, or `(no resolved comments)`.
-5. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …` (full Gerrit URL, or a clickable `Open in gerrit` when `--hyperlinks` is on), indented commit message, then each matching chain in a rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Unresolved boxes are yellow; resolved boxes are grey with `(resolved)` in the header (so the state survives `--color=never`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line (same hyperlink shortening). `--comments all` prints unresolved chains first, then resolved.
-6. **Markdown / `--ai`:** headings per change; `### Unresolved comments` and/or `### Resolved comments` according to `--comments`. Resolved thread headings append `(resolved)`. Multi-target omits commits with no matching chains (same as human).
+5. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …` (full Gerrit URL, or a clickable `Open in gerrit` when `--hyperlinks` is on), indented commit message, then each matching chain in a rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Unresolved boxes are yellow; resolved boxes are grey with `(resolved)` in the header (so the state survives `--color=never`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line (same hyperlink shortening). `--comments all` prints unresolved chains first, then resolved. With `--context`, dimmed `line_number  text` rows from Gerrit `context_lines` sit at the top of the box (once per chain).
+6. **Markdown / `--ai`:** headings per change; `### Unresolved comments` and/or `### Resolved comments` according to `--comments`. Resolved thread headings append `(resolved)`. Multi-target omits commits with no matching chains (same as human). `--context` adds a fenced source block under the thread heading.
 
-**Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`. Default `--comments unresolved` lists only open chains. `--comments all` lists both (unresolved first). `--comments resolved` lists only closed chains. See `build_comment_chains()` / `collect_comment_chains()` in `comment_chains.py`. JSON `comment_chains[]` includes `"resolved": bool`.
+**Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`. Default `--comments unresolved` lists only open chains. `--comments all` lists both (unresolved first). `--comments resolved` lists only closed chains. See `build_comment_chains()` / `collect_comment_chains()` in `comment_chains.py`. JSON `comment_chains[]` includes `"resolved": bool`. `--context` fetches `GET …/comments?enable-context=true&context-padding=N` and caches that payload under a separate context key so it cannot be served as a no-context hit. JSON comments include `context_lines` (`line_number`, `context_line`) when present.
 
 **Change-Id-only:** When there is no local commit, the Author/date/message block is skipped.
 

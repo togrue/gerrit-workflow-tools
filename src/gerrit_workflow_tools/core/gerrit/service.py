@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.gerrit.cache import (
     DEFAULT_ACCOUNT_TTL_SECONDS,
     DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
     GerritCache,
+    comments_context_key,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.models import Account, Change, Comment
@@ -630,15 +631,28 @@ class CommentApi:
         change_id: str,
         *,
         change_updated: str | None = None,
+        context_padding: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Return raw Gerrit comments grouped by file path."""
 
+        padding = context_padding
+
+        def fetch(triplet: str) -> dict[str, list[dict[str, Any]]]:
+            if padding is None:
+                return self._service.rest.get_comments(triplet)
+            return self._service.rest.get_comments(
+                triplet,
+                enable_context=True,
+                context_padding=padding,
+            )
+
         return self._service.cache.load_comments(
             change_id,
-            fetch_comments=self._service.rest.get_comments,
+            fetch_comments=fetch,
             change_updated=change_updated,
             trust_window_seconds=self._service.trust_window_seconds,
             refresh=self._service.refresh,
+            context_key=comments_context_key(padding),
         )
 
     def get(self, change_id: str, *, change_updated: str | None = None) -> list[Comment]:

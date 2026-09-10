@@ -235,6 +235,58 @@ def test_load_comments_refetches_on_token_change_inside_trust_window(
     assert after == _comment_map("second")
 
 
+def test_load_comments_context_key_does_not_share_rows(tmp_path: Path) -> None:
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    calls: list[str] = []
+
+    def fetch_plain(triplet: str) -> dict[str, list[dict[str, Any]]]:
+        calls.append(f"plain:{triplet}")
+        return _comment_map("plain")
+
+    def fetch_ctx(triplet: str) -> dict[str, list[dict[str, Any]]]:
+        calls.append(f"ctx:{triplet}")
+        return {
+            "file.py": [
+                {
+                    "id": "c1",
+                    "message": "ctx",
+                    "unresolved": True,
+                    "context_lines": [{"line_number": 1, "context_line": "src"}],
+                }
+            ]
+        }
+
+    cache.load_comments(
+        "proj~main~I1",
+        fetch_comments=fetch_plain,
+        change_updated="u1",
+        trust_window_seconds=0,
+    )
+    cache.load_comments(
+        "proj~main~I1",
+        fetch_comments=fetch_ctx,
+        change_updated="u1",
+        trust_window_seconds=0,
+        context_key="p2",
+    )
+    plain = cache.load_comments(
+        "proj~main~I1",
+        fetch_comments=fetch_plain,
+        change_updated="u1",
+        trust_window_seconds=0,
+    )
+    ctx = cache.load_comments(
+        "proj~main~I1",
+        fetch_comments=fetch_ctx,
+        change_updated="u1",
+        trust_window_seconds=0,
+        context_key="p2",
+    )
+    assert calls == ["plain:proj~main~I1", "ctx:proj~main~I1"]
+    assert plain == _comment_map("plain")
+    assert ctx["file.py"][0]["context_lines"][0]["context_line"] == "src"
+
+
 def test_change_cache_refetches_when_meta_rev_id_moves_but_updated_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

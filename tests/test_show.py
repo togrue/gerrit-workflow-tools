@@ -694,6 +694,109 @@ def test_gshow_ai_comments_all_has_resolved_section(stack_repo: Path, monkeypatc
     assert "### Unresolved comments" not in out
 
 
+def _open_thread_with_context() -> dict[str, list[dict]]:
+    return {
+        "f.py": [
+            {
+                "id": "c1",
+                "line": 2,
+                "message": "please fix",
+                "unresolved": True,
+                "updated": "2024-01-01 10:00:00",
+                "author": {"username": "alice", "name": "Alice"},
+                "context_lines": [
+                    {"line_number": 1, "context_line": "alpha()"},
+                    {"line_number": 2, "context_line": "beta()"},
+                ],
+            }
+        ]
+    }
+
+
+def test_gshow_omits_context_lines_by_default(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
+    ch["unresolved_comment_count"] = 1
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _open_thread_with_context())
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "please fix" in out
+    assert "alpha()" not in out
+    assert "beta()" not in out
+
+
+def test_gshow_context_prints_source_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
+    ch["unresolved_comment_count"] = 1
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _open_thread_with_context())
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--context", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "please fix" in out
+    assert "   1  alpha()" in out
+    assert "   2  beta()" in out
+
+
+def test_gshow_context_padding_implies_context(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
+    ch["unresolved_comment_count"] = 1
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _open_thread_with_context())
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--context-padding", "0", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "   1  alpha()" in out
+
+
+def test_gshow_context_json_includes_context_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    ch["unresolved_comment_count"] = 1
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _open_thread_with_context())
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "--context", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1
+    data = json_stdout(out)
+    assert data["comments"][0]["context_lines"] == [
+        {"line_number": 1, "context_line": "alpha()"},
+        {"line_number": 2, "context_line": "beta()"},
+    ]
+
+
 def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -768,6 +871,8 @@ def test_gshow_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "REV" in out
     assert "--stack" in out
     assert "--comments" in out
+    assert "--context" in out
+    assert "--context-padding" in out
     assert "--hyperlinks" in out
     assert "--ai" in out or "markdown" in out
 
