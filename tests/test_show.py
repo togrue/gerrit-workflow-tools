@@ -310,6 +310,50 @@ def test_gshow_multi_markdown_omits_clean_commits(stack_repo: Path, monkeypatch:
     assert "\033[" not in out
 
 
+def test_gshow_multi_human_comments_all_includes_resolved_only_commits(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--comments all`` prints commits that only have resolved threads."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    tip_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", tip, cwd=stack_repo).strip()
+    parent_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", parent, cwd=stack_repo).strip()
+    dirty = _detail_ok(change_id=tip_cid, sha=tip, number=201, cr_value=0, v_value=1)
+    dirty["unresolved_comment_count"] = 1
+    closed = _detail_ok(change_id=parent_cid, sha=parent, number=200, cr_value=2, v_value=1)
+    store = ChangeStore({str(dirty["id"]): dirty, str(closed["id"]): closed}, web_base="https://g.example")
+    store.set_comments(
+        str(dirty["id"]),
+        {
+            "x.py": [
+                {
+                    "id": "c1",
+                    "line": 2,
+                    "message": "needs fix",
+                    "unresolved": True,
+                    "author": {"username": "alice", "name": "Alice"},
+                }
+            ]
+        },
+    )
+    store.set_comments(str(closed["id"]), _resolved_thread())
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--comments", "all", parent, tip],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "needs fix" in out
+    assert "please fix" in out
+    assert "╭─ f.py:1 (resolved)" in out
+    assert out.count("commit ") == 2
+    assert git_out("rev-parse", "--short", tip, cwd=stack_repo) in out
+    assert git_out("rev-parse", "--short", parent, cwd=stack_repo) in out
+
+
 def test_gshow_human_thread_gutter(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
@@ -479,6 +523,7 @@ def test_gshow_json_long_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     assert c0["message"] == long_msg
     assert "line0" in c0["message"] and "line14" in c0["message"]
     assert data["comments"][0]["url"] == "https://g.example/c/testproj/+/42/comment/TvcXrmjM/"
+    assert data["comment_chains"][0]["resolved"] is False
 
 
 def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -519,6 +564,134 @@ def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytes
     assert "please fix" not in out
     assert "done" not in out
     assert "╭" not in out
+
+
+def _resolved_thread() -> dict[str, list[dict]]:
+    return {
+        "f.py": [
+            {
+                "id": "root-id",
+                "line": 1,
+                "message": "please fix",
+                "unresolved": True,
+                "updated": "2024-01-01 10:00:00",
+                "author": {"username": "alice", "name": "Alice"},
+            },
+            {
+                "id": "reply-id",
+                "line": 1,
+                "message": "done",
+                "unresolved": False,
+                "in_reply_to": "root-id",
+                "updated": "2024-01-01 11:00:00",
+                "author": {"username": "bob", "name": "Bob"},
+            },
+        ]
+    }
+
+
+def test_gshow_comments_all_prints_resolved_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _resolved_thread())
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--comments", "all", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 0
+    assert "please fix" in out
+    assert "done" in out
+    assert "╭─ f.py:1 (resolved)" in out
+
+
+def test_gshow_comments_resolved_hides_open_threads(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    ch["unresolved_comment_count"] = 1
+    comments = {
+        "open.py": [
+            {
+                "id": "open-id",
+                "line": 2,
+                "message": "still broken",
+                "unresolved": True,
+                "updated": "2024-01-01 10:00:00",
+            }
+        ],
+        "done.py": [
+            {
+                "id": "done-id",
+                "line": 3,
+                "message": "nit: done",
+                "unresolved": False,
+                "updated": "2024-01-01 11:00:00",
+            }
+        ],
+    }
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), comments)
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--comments", "resolved", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 1, err
+    assert "nit: done" in out
+    assert "╭─ done.py:3 (resolved)" in out
+    assert "still broken" not in out
+
+
+def test_gshow_comments_all_json_marks_resolved(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _resolved_thread())
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--json", "--comments", "all", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 0
+    data = json_stdout(out)
+    assert data["comments_unresolved"] == 0
+    assert data["comment_chains"][0]["resolved"] is True
+    assert [c["message"] for c in data["comments"]] == ["please fix", "done"]
+
+
+def test_gshow_ai_comments_all_has_resolved_section(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    sha = "abc12345678901234567890123456789012345678"
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), _resolved_thread())
+    code, out, _err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--ai", "--comments", "all", "change:42"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == 0
+    assert "### Resolved comments" in out
+    assert "### `f.py:1` (resolved)" in out
+    assert "> please fix" in out
+    assert "> done" in out
+    assert "### Unresolved comments" not in out
 
 
 def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -594,6 +767,7 @@ def test_gshow_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "gshow" in out.lower() or "ger show" in out
     assert "REV" in out
     assert "--stack" in out
+    assert "--comments" in out
     assert "--hyperlinks" in out
     assert "--ai" in out or "markdown" in out
 

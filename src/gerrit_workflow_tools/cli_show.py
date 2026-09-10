@@ -1,4 +1,4 @@
-"""CLI for ``ger show``: commit(s) vs Gerrit (status + unresolved comments)."""
+"""CLI for ``ger show``: commit(s) vs Gerrit (status + inline comments)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,11 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_short_sha, color_text, format_link
 from gerrit_workflow_tools.core.annotated_stack import annotate
-from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
+from gerrit_workflow_tools.core.comment_chains import (
+    COMMENT_SELECTIONS,
+    CommentSelection,
+    collect_comment_chains,
+)
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
@@ -38,6 +42,7 @@ from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.comments import (
+    empty_comments_message,
     format_unresolved_section_human,
     format_unresolved_section_markdown,
 )
@@ -98,6 +103,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Use the specified local branch for stack/upstream context (default: working branch).",
     )
+    p.add_argument(
+        "--comments",
+        choices=COMMENT_SELECTIONS,
+        default="unresolved",
+        help="Which inline comment chains to show (default: unresolved).",
+    )
     fmt = p.add_mutually_exclusive_group()
     fmt.add_argument(
         "--json",
@@ -134,12 +145,12 @@ def _output_format(args: argparse.Namespace) -> str:
 
 
 def _comment_json_payload(
-    unresolved_chains: list[CommentChain],
+    chains: list[CommentChain],
     gerrit_url: str | None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     comment_payload: list[dict[str, object]] = []
     chain_payload: list[dict[str, object]] = []
-    for chain in unresolved_chains:
+    for chain in chains:
         chain_comments: list[dict[str, object]] = []
         for row_item in chain.comments:
             entry: dict[str, object] = {
@@ -159,6 +170,7 @@ def _comment_json_payload(
                 "path": chain.path,
                 "line": chain.line,
                 "url": gerrit_inline_comment_url(gerrit_url, chain.root_id),
+                "resolved": chain.resolved,
                 "comments": chain_comments,
             }
         )
@@ -170,9 +182,9 @@ def _commit_json_payload(
     *,
     is_local: bool,
     resolution: object,
-    unresolved_chains: list[CommentChain],
+    chains: list[CommentChain],
 ) -> dict[str, object]:
-    comment_payload, chain_payload = _comment_json_payload(unresolved_chains, commit.gerrit_url)
+    comment_payload, chain_payload = _comment_json_payload(chains, commit.gerrit_url)
     return {
         "sha": commit.sha if commit.sha else None,
         "change_id": commit.change_id,
@@ -249,7 +261,7 @@ def _emit_human_commit(
     commit: LogCommit,
     *,
     is_local: bool,
-    unresolved_chains: list[CommentChain],
+    chains: list[CommentChain],
     summary_highlighter: SummaryHighlighter,
 ) -> None:
     print(_show_headline(commit))
@@ -276,7 +288,7 @@ def _emit_human_commit(
             print(f"    {ln}")
 
     comment_lines = format_unresolved_section_human(
-        unresolved_chains,
+        chains,
         commit.gerrit_url,
         pushed=commit.pushed,
     )
@@ -297,7 +309,8 @@ def _attention_summary(commit: LogCommit) -> str:
 def _emit_markdown_commit(
     commit: LogCommit,
     *,
-    unresolved_chains: list[CommentChain],
+    chains: list[CommentChain],
+    comments: CommentSelection,
 ) -> None:
     short = commit.short_sha or (commit.sha[:8] if commit.sha else "????????")
     summary = commit.summary or ""
@@ -307,9 +320,10 @@ def _emit_markdown_commit(
         print(f"- Gerrit: {commit.gerrit_url}")
     print()
     for line in format_unresolved_section_markdown(
-        unresolved_chains,
+        chains,
         commit.gerrit_url,
         pushed=commit.pushed,
+        comments=comments,
     ):
         print(line)
 
@@ -392,7 +406,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             if (commit.pushed and rest_key)
             else {}
         )
-        unresolved_chains = collect_unresolved_comment_chains(file_map)
+        chains = collect_comment_chains(file_map, comments=args.comments)
 
         if out_fmt == "json":
             json_payloads.append(
@@ -400,15 +414,15 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                     commit,
                     is_local=resolved.is_local_commit,
                     resolution=resolved.resolution,
-                    unresolved_chains=unresolved_chains,
+                    chains=chains,
                 )
             )
         else:
-            # Multi-target: only expand commits that have unresolved comment chains.
-            if multi and not unresolved_chains:
+            # Multi-target: only expand commits that have matching comment chains.
+            if multi and not chains:
                 continue
             if out_fmt == "markdown":
-                _emit_markdown_commit(commit, unresolved_chains=unresolved_chains)
+                _emit_markdown_commit(commit, chains=chains, comments=args.comments)
                 print()
             else:
                 if detail_shown:
@@ -417,13 +431,13 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                     cwd,
                     commit,
                     is_local=resolved.is_local_commit,
-                    unresolved_chains=unresolved_chains,
+                    chains=chains,
                     summary_highlighter=summary_highlighter,
                 )
             detail_shown += 1
 
     if out_fmt in ("human", "markdown") and multi and detail_shown == 0:
-        msg = "(no unresolved comments)"
+        msg = empty_comments_message(args.comments)
         if out_fmt == "human":
             print(color_text(msg, ANSI_DIM))
         else:

@@ -1,4 +1,4 @@
-"""Human and Markdown rendering for Gerrit unresolved comment chains."""
+"""Human and Markdown rendering for Gerrit inline comment chains."""
 
 from __future__ import annotations
 
@@ -6,11 +6,13 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
+    ANSI_DIM_GRAY,
     ANSI_YELLOW,
     color_text,
     format_link,
     visible_len,
 )
+from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, gerrit_inline_comment_url
 
 
@@ -26,8 +28,16 @@ def chain_location(chain: CommentChain) -> str:
     return chain.path
 
 
-def _box_border(text: str) -> str:
-    return color_text(text, ANSI_YELLOW)
+def chain_heading(chain: CommentChain) -> str:
+    """Location plus a ``(resolved)`` marker when the chain is closed."""
+    loc = chain_location(chain)
+    if chain.resolved:
+        return f"{loc} (resolved)"
+    return loc
+
+
+def _box_border(text: str, *, resolved: bool) -> str:
+    return color_text(text, ANSI_DIM_GRAY if resolved else ANSI_YELLOW)
 
 
 def _pad_inner(text: str, inner_width: int) -> str:
@@ -56,27 +66,40 @@ def format_comment_chain_human(
     chain: CommentChain,
     gerrit_url: str | None,
 ) -> list[str]:
-    """Return human-readable lines for one unresolved comment chain in a yellow rounded box."""
-    loc = chain_location(chain)
-    loc_styled = color_text(loc, ANSI_BOLD + ANSI_CYAN)
-    rows = _box_content_rows(chain, gerrit_url)
+    """Return human-readable lines for one comment chain in a rounded box.
 
-    # Top mid is ``─ {loc} ─…`` (3 fixed chars around loc). Content lines use
-    # ``│ `` + row, so row width needs +1 vs the inner span between corners.
+    Unresolved chains use a yellow border; resolved chains use grey and a
+    ``(resolved)`` header so the state survives ``--color=never``.
+    """
+    heading = chain_heading(chain)
+    loc_styled = color_text(heading, ANSI_BOLD + ANSI_CYAN)
+    rows = _box_content_rows(chain, gerrit_url)
+    resolved = chain.resolved
+
+    # Top mid is ``─ {heading} ─…`` (3 fixed chars around heading). Content lines
+    # use ``│ `` + row, so row width needs +1 vs the inner span between corners.
     inner_width = max(
         _MIN_BOX_INNER,
-        3 + visible_len(loc) + 1,
+        3 + visible_len(heading) + 1,
         *(1 + visible_len(r) for r in rows),
     )
-    dashes = max(1, inner_width - 3 - visible_len(loc))
-    top_mid = f"{_box_border('─')} {loc_styled} {_box_border('─' * dashes)}"
-    top_line = f"{_BOX_INDENT}{_box_border('╭')}{top_mid}{_box_border('╮')}"
-    bottom_line = f"{_BOX_INDENT}{_box_border('╰')}{_box_border('─' * inner_width)}{_box_border('╯')}"
+    dashes = max(1, inner_width - 3 - visible_len(heading))
+    top_mid = f"{_box_border('─', resolved=resolved)} {loc_styled} {_box_border('─' * dashes, resolved=resolved)}"
+    top_line = f"{_BOX_INDENT}{_box_border('╭', resolved=resolved)}{top_mid}{_box_border('╮', resolved=resolved)}"
+    bottom_line = (
+        f"{_BOX_INDENT}{_box_border('╰', resolved=resolved)}"
+        f"{_box_border('─' * inner_width, resolved=resolved)}"
+        f"{_box_border('╯', resolved=resolved)}"
+    )
 
     lines: list[str] = [top_line]
     content_width = max(1, inner_width - 1)
     for row in rows:
-        lines.append(f"{_BOX_INDENT}{_box_border('│')} {_pad_inner(row, content_width)}{_box_border('│')}")
+        lines.append(
+            f"{_BOX_INDENT}{_box_border('│', resolved=resolved)} "
+            f"{_pad_inner(row, content_width)}"
+            f"{_box_border('│', resolved=resolved)}"
+        )
     lines.append(bottom_line)
     return lines
 
@@ -85,9 +108,12 @@ def format_comment_chain_markdown(
     chain: CommentChain,
     gerrit_url: str | None,
 ) -> list[str]:
-    """Return Markdown lines for one unresolved comment chain (full bodies, no ANSI)."""
+    """Return Markdown lines for one comment chain (full bodies, no ANSI)."""
     loc = chain_location(chain)
-    lines: list[str] = [f"### `{loc}`"]
+    heading = f"### `{loc}`"
+    if chain.resolved:
+        heading = f"{heading} (resolved)"
+    lines: list[str] = [heading]
     chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
     if chain_url:
         lines.append(chain_url)
@@ -115,7 +141,7 @@ def format_unresolved_section_human(
     *,
     pushed: bool,
 ) -> list[str]:
-    """Boxed unresolved chains for human output (empty list when there are none)."""
+    """Boxed comment chains for human output (empty list when there are none)."""
     if not pushed or not chains:
         return []
     out: list[str] = []
@@ -124,25 +150,48 @@ def format_unresolved_section_human(
     return out
 
 
+def empty_comments_message(comments: CommentSelection) -> str:
+    """One-line empty state matching the ``--comments`` selection."""
+    if comments == "resolved":
+        return "(no resolved comments)"
+    if comments == "all":
+        return "(no comments)"
+    return "(no unresolved comments)"
+
+
 def format_unresolved_section_markdown(
     chains: list[CommentChain],
     gerrit_url: str | None,
     *,
     pushed: bool,
+    comments: CommentSelection = "unresolved",
 ) -> list[str]:
-    """Markdown unresolved-comments block (full bodies)."""
-    out = ["### Unresolved comments"]
+    """Markdown comment blocks (full bodies), split by resolved state when needed."""
     if not pushed:
-        out.append("")
-        out.append("(not on Gerrit — no comments)")
-        return out
+        return ["### Unresolved comments", "", "(not on Gerrit — no comments)"]
     if not chains:
+        heading = "### Resolved comments" if comments == "resolved" else "### Unresolved comments"
+        if comments == "all":
+            heading = "### Comments"
+        return [heading, "", empty_comments_message(comments)]
+
+    unresolved = [chain for chain in chains if not chain.resolved]
+    resolved = [chain for chain in chains if chain.resolved]
+    out: list[str] = []
+    if unresolved:
+        out.append("### Unresolved comments")
         out.append("")
-        out.append("(no unresolved comments)")
-        return out
-    out.append("")
-    for i, chain in enumerate(chains):
-        out.extend(format_comment_chain_markdown(chain, gerrit_url))
-        if i < len(chains) - 1:
+        for i, chain in enumerate(unresolved):
+            out.extend(format_comment_chain_markdown(chain, gerrit_url))
+            if i < len(unresolved) - 1:
+                out.append("")
+    if resolved:
+        if out:
             out.append("")
+        out.append("### Resolved comments")
+        out.append("")
+        for i, chain in enumerate(resolved):
+            out.extend(format_comment_chain_markdown(chain, gerrit_url))
+            if i < len(resolved) - 1:
+                out.append("")
     return out

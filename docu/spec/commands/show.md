@@ -6,7 +6,7 @@
 | **Module** | `src/gerrit_workflow_tools/cli_show.py` |
 | **Requires** | `gerrit.webUrl`, credentials |
 
-One or more commits/changes: local commit message (when resolvable), Gerrit status line, unresolved inline comments.
+One or more commits/changes: local commit message (when resolvable), Gerrit status line, inline comments (unresolved by default).
 
 ---
 
@@ -35,6 +35,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | Option | Description |
 |--------|-------------|
 | `--stack` | Include the local stack (`upstream_tip..HEAD`) |
+| `--comments {unresolved,all,resolved}` | Which inline comment chains to print (default: `unresolved`) |
 | `--json` | JSON payload |
 | `--format {human,markdown}` | Output format (default: human) |
 | `--ai` | Alias for `--format markdown` |
@@ -51,15 +52,15 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 1. If `--stack`, ensure the stack branch has an upstream (TTY prompt when missing).
 2. Resolve targets (`resolve_show_targets`: changeishes, ranges, optional `--stack`).
 3. Fetch labels, patchset status, attention via `GerritService` / `gerrit_change_status`.
-4. **Human, multi-target:** only commits with unresolved comment chains are printed (clean commits are omitted). If every target is clean, print a single dim `(no unresolved comments)`.
-5. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …` (full Gerrit URL, or a clickable `Open in gerrit` when `--hyperlinks` is on), indented commit message, then each unresolved chain in a yellow rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line (same hyperlink shortening).
-6. **Markdown / `--ai`:** headings per change; unresolved section still lists all targets (including clean).
+4. **Human / Markdown, multi-target:** only commits with at least one matching comment chain (per `--comments`) are printed. If every target is empty under that filter, print a single dim empty line: `(no unresolved comments)`, `(no comments)`, or `(no resolved comments)`.
+5. **Human, per printed commit:** headline `commit <sha> <status cols>  # <attention>` (same tokens/colors as `ger log`), then `Author: … [date]`, `url: …` (full Gerrit URL, or a clickable `Open in gerrit` when `--hyperlinks` is on), indented commit message, then each matching chain in a rounded box (`╭─ path:line ─…╮` / `│` / `╰─…╯`). Unresolved boxes are yellow; resolved boxes are grey with `(resolved)` in the header (so the state survives `--color=never`). Authors are flat inside the box (no reply gutter); chain URL is the last inner line (same hyperlink shortening). `--comments all` prints unresolved chains first, then resolved.
+6. **Markdown / `--ai`:** headings per change; `### Unresolved comments` and/or `### Resolved comments` according to `--comments`. Resolved thread headings append `(resolved)`. Multi-target omits commits with no matching chains (same as human).
 
-**Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`; only unresolved chains are listed. See `build_comment_chains()` / `collect_unresolved_comment_chains()` in `comment_chains.py`.
+**Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`. Default `--comments unresolved` lists only open chains. `--comments all` lists both (unresolved first). `--comments resolved` lists only closed chains. See `build_comment_chains()` / `collect_comment_chains()` in `comment_chains.py`. JSON `comment_chains[]` includes `"resolved": bool`.
 
 **Change-Id-only:** When there is no local commit, the Author/date/message block is skipped.
 
-**Exit code:** attention (`1`) if **any** listed target has attention reasons (including omitted clean commits that still need attention), or if the user declines the `--stack` upstream prompt.
+**Exit code:** attention (`1`) if **any** listed target has attention reasons (including omitted clean commits that still need attention), or if the user declines the `--stack` upstream prompt. `--comments` does not change the exit code.
 
 ---
 
