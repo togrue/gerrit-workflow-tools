@@ -116,20 +116,23 @@ def resolve_unresolved_inline_comments(
         for comment in rows:
             if not isinstance(comment, dict) or comment.get("unresolved") is not True:
                 continue
+            reply: dict[str, Any] = {
+                "message": message,
+                "in_reply_to": comment.get("id"),
+                "unresolved": False,
+            }
+            line = comment.get("line")
+            if isinstance(line, int):
+                reply["line"] = line
+            rng = comment.get("range")
+            if isinstance(rng, dict):
+                reply["range"] = rng
+            side = comment.get("side")
+            if isinstance(side, str):
+                reply["side"] = side
             session.post_json(
                 f"changes/{enc}/revisions/current/review",
-                body={
-                    "comments": {
-                        path: [
-                            {
-                                "line": comment.get("line") or 1,
-                                "message": message,
-                                "in_reply_to": comment.get("id"),
-                                "unresolved": False,
-                            }
-                        ]
-                    }
-                },
+                body={"comments": {path: [reply]}},
             )
             resolved += 1
     return resolved

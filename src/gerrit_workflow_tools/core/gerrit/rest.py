@@ -787,9 +787,32 @@ def query_single_change(client: GerritRest, ref: str) -> dict[str, Any] | None:
     return pick_change_from_query_result(rows)
 
 
-def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]:
-    """Return Gerrit ``updated`` values keyed by requested refs (and payload ids).
+def change_freshness_key(payload: dict[str, Any]) -> str | None:
+    """Token that changes when NoteDb follow-ups (comments, checks) may have moved.
 
+    ``ChangeInfo.updated`` is often second-precision. A comment reply or resolve in the
+    same second leaves it unchanged, so it is not a complete validity key. Prefer
+    ``meta_rev_id`` (the NoteDb meta SHA). Fall back to ``updated`` plus comment counts
+    when the probe row has no meta SHA.
+    """
+    meta = payload.get("meta_rev_id")
+    if isinstance(meta, str) and meta:
+        return meta
+    updated = payload.get("updated")
+    if not isinstance(updated, str) or not updated:
+        return None
+    parts = [updated]
+    for field in ("unresolved_comment_count", "total_comment_count"):
+        raw = payload.get(field)
+        if isinstance(raw, int):
+            parts.append(f"{field}={raw}")
+    return "|".join(parts)
+
+
+def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]:
+    """Return freshness tokens keyed by requested refs (and payload ids).
+
+    Tokens come from :func:`change_freshness_key`, not raw ``updated`` timestamps.
     Composes round trips (chunk, parallelise, alias) over :class:`GerritRest`, so it lives
     above the seam rather than on it — every implementation would otherwise have to repeat
     this. Mirrors :func:`batch_load_change_details`.
@@ -816,9 +839,9 @@ def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]
         _ingest_change_rows(fetched, rows)
     aliased = alias_batch_fetch_results(unique, fetched)
     for key, payload in aliased.items():
-        updated = payload.get("updated")
-        if isinstance(updated, str):
-            out[key] = updated
+        token = change_freshness_key(payload)
+        if token:
+            out[key] = token
     return out
 
 

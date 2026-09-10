@@ -388,7 +388,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 
         rest_key = _gerrit_rest_key(commit, resolved.resolution)
         file_map = (
-            service.comments.get_file_map(rest_key, change_updated=commit.updated)
+            service.comments.get_file_map(rest_key, change_updated=commit.freshness)
             if (commit.pushed and rest_key)
             else {}
         )

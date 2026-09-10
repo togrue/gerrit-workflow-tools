@@ -16,9 +16,10 @@ import pytest
 from gerrit_workflow_tools.cli_log import main as ger_log_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
+from gerrit_workflow_tools.core.comment_chains import collect_unresolved_comment_chains
 from tests.conftest import run_cli
 from tests.helpers import force_zero_change_trust_window
-from tests.integration.gerrit_http import GerritHttpSession
+from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.integration_helpers import (
     open_changes_on_branch,
     post_unresolved_inline_comment,
@@ -71,6 +72,9 @@ def test_ger_show_and_log_refresh_after_comment_resolve(
 
     n = resolve_unresolved_inline_comments(gerrit_admin_session, change_id, message="fixed")
     assert n >= 1
+    live_map = gerrit_admin_session.get_json(f"changes/{quote_change_id(change_id)}/comments")
+    assert isinstance(live_map, dict), live_map
+    assert collect_unresolved_comment_chains(live_map) == [], live_map
 
     code_show2, out_show2, eshow2 = run_cli(repo, ger_show_main, ["--json", "--color", "never", "HEAD"], monkeypatch)
     assert code_show2 in (0, 1), eshow2

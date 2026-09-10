@@ -232,11 +232,15 @@ def test_log_warm_second_run_no_reviewer_follow_ups(stack_repo: Path, monkeypatc
     assert store.calls_to("list_change_reviewers") == []
 
 
-def test_log_warm_expired_trust_uses_delta_not_probe(
+def test_log_warm_expired_trust_uses_delta_then_probe(
     stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """After trust window expires, a certified stack should use one ``since:`` delta query."""
+    """After trust window expires, a certified stack deltas ``since:`` then probes the rest.
+
+    ``since:`` only sees ``updated``. Ids the delta did not return still need a
+    ``meta_rev_id`` probe so same-second comment resolves are not sticky.
+    """
     import gerrit_workflow_tools.core.gerrit.cache as cache_mod
 
     _configure_web(stack_repo)
@@ -259,10 +263,11 @@ def test_log_warm_expired_trust_uses_delta_not_probe(
     code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     warm_queries = store.queries()[len(cold_queries) :]
-    assert len(warm_queries) == 1, warm_queries
+    assert len(warm_queries) == 2, warm_queries
     assert 'since:"' in warm_queries[0], warm_queries[0]
+    assert "change:" in warm_queries[1], warm_queries[1]
     assert store.calls_to("list_change_reviewers") == []
-    assert len(store.calls) - after_cold == 1
+    assert len(store.calls) - after_cold == 2
 
 
 def test_fix_change_id_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

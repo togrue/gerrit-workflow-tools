@@ -94,9 +94,12 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     merged_equivalent: bool | None = None  # MERGED only: proved same / different / unknown
     reviewers: list[ReviewerAccount] = field(default_factory=list)
     updated: str | None = None
-    """Gerrit ``ChangeInfo.updated``. The cache validity key for everything hanging off this
-    change (comments, checks, messages): while it is unchanged, cached follow-ups are current
-    however old they are. Carried here so callers need not re-plumb the raw payload."""
+    """Gerrit ``ChangeInfo.updated`` timestamp (inbox wait-age, display). Not the follow-up
+    cache key — that is :attr:`freshness`."""
+    freshness: str | None = None
+    """Cache validity key for comments/checks hanging off this change. ``meta_rev_id`` when
+    Gerrit sends it, otherwise ``updated`` plus comment counts. Same-second comment
+    resolves leave ``updated`` unchanged."""
 
 
 def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
@@ -295,6 +298,7 @@ def build_log_commit(
     ``'checks'``, ``'reviewers'``.  An empty set means the commit is fully
     populated from *detail* alone.
     """
+    from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
     from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
     sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
@@ -381,6 +385,7 @@ def build_log_commit(
             merged_equivalent=merged_eq,
             reviewers=reviewer_list,
             updated=detail.get("updated") if isinstance(detail.get("updated"), str) else None,
+            freshness=change_freshness_key(detail),
         ),
         frozenset(needed),
     )
