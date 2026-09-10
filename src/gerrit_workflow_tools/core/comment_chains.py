@@ -6,9 +6,13 @@ resolving ``in_reply_to`` links to find thread roots.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
+
+
+CommentSelection = Literal["unresolved", "all", "resolved"]
+COMMENT_SELECTIONS: tuple[CommentSelection, ...] = ("unresolved", "all", "resolved")
 
 
 def count_unresolved_in_file_map(file_map: dict[str, list[dict[str, Any]]]) -> int:
@@ -112,7 +116,26 @@ def build_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[Comm
     return chains
 
 
+def collect_comment_chains(
+    file_map: dict[str, list[dict[str, Any]]],
+    *,
+    comments: CommentSelection = "unresolved",
+) -> list[CommentChain]:
+    """Return comment chains filtered by *comments*.
+
+    ``all`` lists unresolved chains first (path/line order within each group), then
+    resolved ones. That keeps the attention-bearing threads at the top.
+    """
+
+    chains = build_comment_chains(file_map)
+    if comments == "all":
+        return [chain for chain in chains if not chain.resolved] + [chain for chain in chains if chain.resolved]
+    if comments == "resolved":
+        return [chain for chain in chains if chain.resolved]
+    return [chain for chain in chains if not chain.resolved]
+
+
 def collect_unresolved_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[CommentChain]:
     """Return comment chains whose last reply is still unresolved."""
 
-    return [chain for chain in build_comment_chains(file_map) if not chain.resolved]
+    return collect_comment_chains(file_map, comments="unresolved")

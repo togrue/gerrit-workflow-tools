@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from gerrit_workflow_tools.cli_style import GERRIT_LINK_LABEL, set_hyperlink_mode, strip_ansi
+from gerrit_workflow_tools.cli_style import (
+    ANSI_DIM_GRAY,
+    ANSI_YELLOW,
+    GERRIT_LINK_LABEL,
+    set_color_mode,
+    set_hyperlink_mode,
+    strip_ansi,
+)
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
@@ -90,6 +97,42 @@ def test_format_comment_chain_human_box_border_is_yellow() -> None:
     assert "╭" in joined
 
 
+def test_format_comment_chain_human_resolved_grey_border() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(InlineComment(path="f.py", line=3, message="done", author="alice"),),
+        resolved=True,
+    )
+    set_color_mode(True)
+    try:
+        lines = format_comment_chain_human(chain, "https://g.example/c/1")
+    finally:
+        set_color_mode(False)
+    joined = "\n".join(lines)
+    visible = strip_ansi(joined)
+    assert "(resolved)" in visible
+    assert "╭─ f.py:3 (resolved)" in visible
+    assert lines[0].startswith(f"    {ANSI_DIM_GRAY}╭")
+
+
+def test_format_comment_chain_human_resolved_marker_without_color() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(InlineComment(path="f.py", line=3, message="done", author="alice"),),
+        resolved=True,
+    )
+    set_color_mode(False)
+    lines = format_comment_chain_human(chain, "https://g.example/c/1")
+    joined = "\n".join(lines)
+    assert "(resolved)" in joined
+    assert ANSI_DIM_GRAY not in joined
+    assert ANSI_YELLOW not in joined
+
+
 def test_format_comment_chain_markdown() -> None:
     chain = CommentChain(
         root_id="r1",
@@ -109,6 +152,19 @@ def test_format_comment_chain_markdown() -> None:
     assert "> line2" in joined
     assert "**bob**" in joined
     assert "> reply" in joined
+
+
+def test_format_comment_chain_markdown_resolved_marker() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(InlineComment(path="f.py", line=3, message="done", author="alice"),),
+        resolved=True,
+    )
+    joined = "\n".join(format_comment_chain_markdown(chain, "https://g.example/c/1"))
+    assert "### `f.py:3` (resolved)" in joined
+    assert "> done" in joined
 
 
 def test_format_comment_chain_markdown_ignores_hyperlinks() -> None:

@@ -339,7 +339,7 @@ Shared CLI infrastructure: `cli_common.py` (runtime init, shared argparse), `cli
 | `annotated_stack.py` | Annotated stack: rev-range resolution, Gerrit overlay, attention, multi-branch notes |
 | `gerrit_change_status.py` | `LogCommit` model, patchset status, attention, merged equivalence |
 | `review_chain.py` | Review-chain assembly from ChangeInfo, unreviewed age, wait age |
-| `comment_chains.py` | Unresolved inline comment threads |
+| `comment_chains.py` | Inline comment threads (resolved and unresolved) |
 | `gerrit_show.py` | `ger show`-specific commit row resolution |
 | `push_reviewers.py` | Post-push reviewer assignment strategies |
 | `reviewer.py` | Reviewer account normalization, credentials check |

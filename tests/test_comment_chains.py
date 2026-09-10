@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from gerrit_workflow_tools.core.comment_chains import (
     build_comment_chains,
+    collect_comment_chains,
     collect_unresolved_comment_chains,
     count_unresolved_in_file_map,
 )
@@ -114,3 +115,20 @@ def test_orphan_reply_becomes_own_chain() -> None:
     assert len(chains) == 1
     assert chains[0].root_id == "orphan"
     assert chains[0].resolved is False
+
+
+def test_collect_comment_chains_all_puts_unresolved_first() -> None:
+    file_map = {
+        "a.py": [
+            _comment("open", updated="1", unresolved=True),
+            _comment("closed", updated="2", unresolved=False),
+        ]
+    }
+    file_map["a.py"][0]["line"] = 10
+    file_map["a.py"][1]["line"] = 1
+    all_chains = collect_comment_chains(file_map, comments="all")
+    assert [chain.root_id for chain in all_chains] == ["open", "closed"]
+    assert [chain.resolved for chain in all_chains] == [False, True]
+    resolved = collect_comment_chains(file_map, comments="resolved")
+    assert [chain.root_id for chain in resolved] == ["closed"]
+    assert collect_comment_chains(file_map, comments="unresolved") == collect_unresolved_comment_chains(file_map)
