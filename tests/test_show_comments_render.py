@@ -13,7 +13,7 @@ from gerrit_workflow_tools.cli_style import (
     strip_ansi,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
 from gerrit_workflow_tools.render.comments import (
     format_comment_chain_human,
@@ -165,6 +165,54 @@ def test_format_comment_chain_markdown_resolved_marker() -> None:
     joined = "\n".join(format_comment_chain_markdown(chain, "https://g.example/c/1"))
     assert "### `f.py:3` (resolved)" in joined
     assert "> done" in joined
+
+
+def test_format_comment_chain_human_includes_context_lines() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=2,
+        comments=(
+            InlineComment(
+                path="f.py",
+                line=2,
+                message="nit",
+                author="alice",
+                context_lines=(
+                    ContextLine(1, "alpha()"),
+                    ContextLine(2, "beta()"),
+                ),
+            ),
+        ),
+        resolved=False,
+    )
+    joined = "\n".join(format_comment_chain_human(chain, None))
+    visible = strip_ansi(joined)
+    assert "   1  alpha()" in visible
+    assert "   2  beta()" in visible
+    assert "nit" in visible
+
+
+def test_format_comment_chain_markdown_includes_context_lines() -> None:
+    chain = CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=2,
+        comments=(
+            InlineComment(
+                path="f.py",
+                line=2,
+                message="nit",
+                author="alice",
+                context_lines=(ContextLine(2, "beta()"),),
+            ),
+        ),
+        resolved=False,
+    )
+    joined = "\n".join(format_comment_chain_markdown(chain, None))
+    assert "```" in joined
+    assert "   2  beta()" in joined
+    assert "> nit" in joined
 
 
 def test_format_comment_chain_markdown_ignores_hyperlinks() -> None:

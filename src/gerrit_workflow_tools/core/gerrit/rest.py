@@ -158,7 +158,13 @@ class GerritRest(Protocol):
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
 
-    def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+    def get_comments(
+        self,
+        change_id: str,
+        *,
+        enable_context: bool = False,
+        context_padding: int | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """Return inline comments grouped by file path."""
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
@@ -462,11 +468,22 @@ class HttpGerritRest:
             raise GerritApiError("unexpected set private response")
         return data
 
-    def get_comments(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+    def get_comments(
+        self,
+        change_id: str,
+        *,
+        enable_context: bool = False,
+        context_padding: int | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """GET inline comments grouped by file path (or special keys) for *change_id*."""
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = encode_gerrit_path_segment(cid)
-        data = self._request_json(f"changes/{enc}/comments")
+        params: dict[str, str] | None = None
+        if enable_context:
+            params = {"enable-context": "true"}
+            if context_padding is not None:
+                params["context-padding"] = str(context_padding)
+        data = self._request_json(f"changes/{enc}/comments", params=params)
         if not isinstance(data, dict):
             raise GerritApiError("unexpected comments response")
         out: dict[str, list[dict[str, Any]]] = {}

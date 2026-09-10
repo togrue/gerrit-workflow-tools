@@ -13,7 +13,7 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, gerrit_inline_comment_url
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, gerrit_inline_comment_url
 
 
 # Minimum inner width so short threads still look like a box.
@@ -45,12 +45,28 @@ def _pad_inner(text: str, inner_width: int) -> str:
     return f"{text}{' ' * pad}"
 
 
+def _format_context_line(line: ContextLine) -> str:
+    return f"{line.line_number:>4}  {line.text}"
+
+
+def _chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
+    for row_item in chain.comments:
+        if row_item.context_lines:
+            return row_item.context_lines
+    return ()
+
+
 def _box_content_rows(
     chain: CommentChain,
     gerrit_url: str | None,
 ) -> list[str]:
     """Inner lines of a comment box (no borders)."""
     rows: list[str] = []
+    context = _chain_context_lines(chain)
+    if context:
+        for line in context:
+            rows.append(color_text(_format_context_line(line), ANSI_DIM))
+        rows.append("")
     for row_item in chain.comments:
         if row_item.author:
             rows.append(color_text(row_item.author, ANSI_DIM))
@@ -117,6 +133,14 @@ def format_comment_chain_markdown(
     chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
     if chain_url:
         lines.append(chain_url)
+        lines.append("")
+
+    context = _chain_context_lines(chain)
+    if context:
+        lines.append("```")
+        for line in context:
+            lines.append(_format_context_line(line))
+        lines.append("```")
         lines.append("")
 
     for row_item in chain.comments:

@@ -14,13 +14,21 @@ from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit
 from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results, change_freshness_key
 
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_ACCOUNT_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
 
 _CAPABILITY_PREFIX = "capability:"
+
+
+def comments_context_key(context_padding: int | None) -> str:
+    """Cache discriminator for comment payloads with or without source context."""
+
+    if context_padding is None:
+        return ""
+    return f"p{context_padding}"
 
 
 @dataclass(frozen=True)
@@ -213,10 +221,12 @@ class GerritCache:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS comments (
-              change_id      TEXT PRIMARY KEY,
+              change_id      TEXT NOT NULL,
+              context_key    TEXT NOT NULL DEFAULT '',
               payload        TEXT NOT NULL,
               fetched_at     INTEGER NOT NULL,
-              change_updated TEXT
+              change_updated TEXT,
+              PRIMARY KEY (change_id, context_key)
             )
             """
         )
@@ -620,20 +630,24 @@ class GerritCache:
         change_updated: str | None = None,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
+        context_key: str = "",
     ) -> dict[str, list[dict[str, Any]]]:
-        """Load comment payloads keyed by the change freshness token.
+        """Load comment payloads keyed by the change freshness token and context variant.
 
         When *change_updated* is supplied, it is the validity key (``meta_rev_id`` or
         the ``updated``+counts fallback). A changed key refetches even inside the trust
         window. Without a key, the trust window alone applies.
+
+        *context_key* distinguishes ``GET …/comments`` from the same path with
+        ``enable-context`` / ``context-padding``. Those payloads must not share a row.
         """
 
         now = _now()
         row: _CommentRow | None = None
         with self._connect() as conn:
             raw = conn.execute(
-                "SELECT payload, fetched_at, change_updated FROM comments WHERE change_id = ?",
-                (triplet,),
+                "SELECT payload, fetched_at, change_updated FROM comments WHERE change_id = ? AND context_key = ?",
+                (triplet, context_key),
             ).fetchone()
         if raw:
             payload = json.loads(str(raw["payload"]))
@@ -654,7 +668,7 @@ class GerritCache:
                 return row.payload
 
         payload = fetch_comments(triplet)
-        self.upsert_comments(triplet, payload, change_updated=change_updated)
+        self.upsert_comments(triplet, payload, change_updated=change_updated, context_key=context_key)
         return payload
 
     def upsert_comments(
@@ -663,16 +677,17 @@ class GerritCache:
         payload: dict[str, list[dict[str, Any]]],
         *,
         change_updated: str | None = None,
+        context_key: str = "",
     ) -> None:
-        """Store comments for one change."""
+        """Store comments for one change and context variant."""
 
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO comments(change_id, payload, fetched_at, change_updated)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO comments(change_id, context_key, payload, fetched_at, change_updated)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (triplet, _json_dumps(payload), _now(), change_updated),
+                (triplet, context_key, _json_dumps(payload), _now(), change_updated),
             )
 
     def load_checks(

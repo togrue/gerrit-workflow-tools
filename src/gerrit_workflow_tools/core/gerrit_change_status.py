@@ -49,6 +49,14 @@ class ReviewerAccount:
 
 
 @dataclass(frozen=True)
+class ContextLine:
+    """One source line from Gerrit ``CommentInfo.context_lines``."""
+
+    line_number: int
+    text: str
+
+
+@dataclass(frozen=True)
 class InlineComment:
     """Normalized inline comment payload."""
 
@@ -57,6 +65,7 @@ class InlineComment:
     message: str
     comment_id: str | None = None
     author: str | None = None
+    context_lines: tuple[ContextLine, ...] = ()
 
 
 @dataclass(frozen=True)

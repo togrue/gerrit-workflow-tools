@@ -58,8 +58,27 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_su
 
 
 _COMMIT_SEPARATOR = "═" * 64
+DEFAULT_SHOW_CONTEXT_PADDING = 2
 
 logger = logging.getLogger(__name__)
+
+
+def _requested_context_padding(args: argparse.Namespace) -> int | None:
+    if args.context_padding is not None:
+        return args.context_padding
+    if args.context:
+        return DEFAULT_SHOW_CONTEXT_PADDING
+    return None
+
+
+def _context_padding_value(raw: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid context padding: {raw!r}") from exc
+    if value < 0:
+        raise argparse.ArgumentTypeError("context padding must be >= 0")
+    return value
 
 
 def _print_resolution_note(resolution_note: str | None, *, use_color: bool) -> None:
@@ -108,6 +127,18 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=COMMENT_SELECTIONS,
         default="unresolved",
         help="Which inline comment chains to show (default: unresolved).",
+    )
+    p.add_argument(
+        "--context",
+        action="store_true",
+        help="Include source lines around each comment (Gerrit enable-context; padding 2).",
+    )
+    p.add_argument(
+        "--context-padding",
+        type=_context_padding_value,
+        default=None,
+        metavar="N",
+        help="Extra source lines before/after the comment (implies --context; default 2).",
     )
     fmt = p.add_mutually_exclusive_group()
     fmt.add_argument(
@@ -163,6 +194,10 @@ def _comment_json_payload(
                 entry["author"] = row_item.author
             if row_item.comment_id:
                 entry["comment_id"] = row_item.comment_id
+            if row_item.context_lines:
+                entry["context_lines"] = [
+                    {"line_number": line.line_number, "context_line": line.text} for line in row_item.context_lines
+                ]
             chain_comments.append(entry)
             comment_payload.append(entry)
         chain_payload.append(
@@ -402,7 +437,11 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 
         rest_key = _gerrit_rest_key(commit, resolved.resolution)
         file_map = (
-            service.comments.get_file_map(rest_key, change_updated=commit.freshness)
+            service.comments.get_file_map(
+                rest_key,
+                change_updated=commit.freshness,
+                context_padding=_requested_context_padding(args),
+            )
             if (commit.pushed and rest_key)
             else {}
         )

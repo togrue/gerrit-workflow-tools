@@ -67,6 +67,28 @@ def test_get_messages_uses_single_encoded_project_path() -> None:
     assert paths == ["changes/tools%2FSomeProject~59446/messages"]
 
 
+def test_get_comments_enable_context_query_params() -> None:
+    from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    captured: list[tuple[str, object]] = []
+
+    def _capture(path: str, *, method: str = "GET", params=None, json_body=None) -> dict[str, Any]:
+        del method, json_body
+        captured.append((path, params))
+        return {}
+
+    client._request_json = _capture  # type: ignore[method-assign]
+    client.get_comments("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", enable_context=True, context_padding=2)
+    client.get_comments("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+    assert captured[0] == (
+        "changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments",
+        {"enable-context": "true", "context-padding": "2"},
+    )
+    assert captured[1] == ("changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments", None)
+
+
 def test_alias_batch_fetch_results_maps_compact_gerrit_id_to_requested_triplet() -> None:
     cid = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     requested = f"p~feature~{cid}"
