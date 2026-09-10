@@ -205,7 +205,7 @@ def test_load_comments_serves_cache_while_change_updated_is_unchanged(tmp_path: 
 
 
 def test_load_comments_refetches_when_change_updated_moves(tmp_path: Path) -> None:
-    """A bumped ``updated`` invalidates the cached comments even inside the trust window."""
+    """A bumped freshness token invalidates cached comments even inside the trust window."""
 
     cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
     bodies = iter(["first", "second"])
@@ -216,6 +216,21 @@ def test_load_comments_refetches_when_change_updated_moves(tmp_path: Path) -> No
     cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="u1", trust_window_seconds=0)
     after = cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="u2", trust_window_seconds=0)
 
+    assert after == _comment_map("second")
+
+
+def test_load_comments_refetches_on_token_change_inside_trust_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = GerritCache(tmp_path / "c.db", web_base="https://gerrit.example.com")
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+    bodies = iter(["first", "second"])
+
+    def fetch(_triplet: str) -> dict[str, list[dict[str, Any]]]:
+        return _comment_map(next(bodies))
+
+    cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="meta-a", trust_window_seconds=10)
+    after = cache.load_comments("proj~main~I1", fetch_comments=fetch, change_updated="meta-b", trust_window_seconds=10)
     assert after == _comment_map("second")
 
 

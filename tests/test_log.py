@@ -42,6 +42,7 @@ from tests.cli_gerrit_mocks import (
 )
 from tests.conftest import json_stdout, run_cli
 from tests.fixtures import make_repo_with_merged_side_branch
+from tests.helpers import force_zero_change_trust_window
 
 
 def _configure_repo(repo: Path) -> None:
@@ -853,3 +854,36 @@ def test_log_same_change_id_on_main_and_dev_shows_main_only(stack_repo: Path, mo
     assert matched[0]["pushed"] is True
     assert matched[0]["patchset_status"] != "absent"
     assert all(item.get("_number", item.get("gerrit_url", "")) != 101 for item in data["commits"])
+
+
+def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_repo(stack_repo)
+    force_zero_change_trust_window(monkeypatch)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    tip = rows[-1]
+    assert tip.change_id
+    payload = details[f"testproj~main~{tip.change_id}"]
+    payload["updated"] = "2026-09-10 19:18:28.000000000"
+    payload["meta_rev_id"] = "meta-open"
+    payload["unresolved_comment_count"] = 1
+    payload["submittable"] = False
+    store = ChangeStore(details)
+
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert code == 1, err
+    data = json_stdout(out)
+    tip_row = next(item for item in data["commits"] if item.get("change_id") == tip.change_id)
+    assert tip_row["comments_unresolved"] == 1
+
+    payload["meta_rev_id"] = "meta-resolved"
+    payload["unresolved_comment_count"] = 0
+    payload["submittable"] = True
+
+    code2, out2, err2 = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert code2 in (0, 1), err2
+    data2 = json_stdout(out2)
+    tip_row2 = next(item for item in data2["commits"] if item.get("change_id") == tip.change_id)
+    assert tip_row2["comments_unresolved"] == 0

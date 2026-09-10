@@ -19,7 +19,7 @@ from tests.cli_gerrit_mocks import (
     head_change_id,
 )
 from tests.conftest import json_stdout, run_cli
-from tests.helpers import write_rebase_head
+from tests.helpers import force_zero_change_trust_window, write_rebase_head
 
 
 class _StdinTTY:
@@ -858,3 +858,52 @@ def test_gshow_stack_during_rebase(stack_repo: Path, monkeypatch: pytest.MonkeyP
     assert code in (0, 1), err
     data = json_stdout(out)
     assert len(data["commits"]) >= 2
+
+
+def test_gshow_picks_up_resolved_comments_when_updated_is_unchanged(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same-second resolve: ``updated`` stays put, ``meta_rev_id`` moves, show must refresh."""
+
+    _configure_gshow_repo(stack_repo)
+    force_zero_change_trust_window(monkeypatch)
+    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    cid = head_change_id(stack_repo)
+    ch = _detail_ok(change_id=cid, sha=sha, cr_value=2, number=42)
+    ch["updated"] = "2026-09-10 19:18:28.000000000"
+    ch["meta_rev_id"] = "meta-open"
+    ch["unresolved_comment_count"] = 1
+    ch["total_comment_count"] = 1
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(
+        str(ch["id"]),
+        {
+            "file.txt": [
+                {"id": "c1", "line": 1, "message": "please fix", "unresolved": True},
+            ]
+        },
+    )
+
+    code, out, err = run_cli(stack_repo, gshow_main, ["--json", "HEAD"], monkeypatch, gerrit=store)
+    assert code == 1, err
+    data = json_stdout(out)
+    assert any(c.get("message") == "please fix" for c in data.get("comments") or [])
+
+    ch["meta_rev_id"] = "meta-resolved"
+    ch["unresolved_comment_count"] = 0
+    ch["total_comment_count"] = 2
+    store.set_comments(
+        str(ch["id"]),
+        {
+            "file.txt": [
+                {"id": "c1", "line": 1, "message": "please fix", "unresolved": True},
+                {"id": "c2", "line": 1, "message": "done", "unresolved": False, "in_reply_to": "c1"},
+            ]
+        },
+    )
+
+    code2, out2, err2 = run_cli(stack_repo, gshow_main, ["--json", "HEAD"], monkeypatch, gerrit=store)
+    assert code2 == 0, err2
+    data2 = json_stdout(out2)
+    assert data2.get("comments") == []
+    assert data2.get("comments_unresolved") == 0
