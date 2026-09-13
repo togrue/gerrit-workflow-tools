@@ -21,10 +21,23 @@ is how the same concept ends up implemented twice under two names.
 **Show what you can.** A command reports everything it can report and fails only on
 what it genuinely cannot do.
 
-**Reuse before writing.** Search for the *concept*, not for a name you guessed. If a
-helper you need is `_private`, promote it and move it down a layer. Never copy it. If
-you find yourself writing the same behaviour in a second command module, that behaviour
-belongs in `core/`.
+**Extend the owner.** Every concept has exactly one owning module, listed in the
+[module catalog](docu/architecture.md#module-catalog). Search for the *concept*, not for
+a name you guessed, and extend its owner. A `_private` helper you need gets promoted and
+moved down a layer. Behaviour a second command needs moves into `core/`. The best change
+leaves the codebase with fewer ways to do a thing than before.
+
+## Workflow
+
+1. **Locate.** Name the owning module for every concept the task touches. If the task
+   does not fit the model, say so and propose the extension before writing code.
+2. **Make room.** When the owner lacks the shape you need, or a file you must grow is
+   pinned in the size ratchet, land a behaviour-preserving refactor commit first:
+   extract, promote, merge copies. Tests stay green; no feature code in it.
+3. **Build** the change on top, in its own commit. Test through public entry points (a
+   command's `main`, a `core/` function), with `ChangeStore` standing in for Gerrit.
+4. **Finish** when ruff, mypy and the full test suite are green and the commit body
+   states the net line change in `src/` (from `git diff --stat`).
 
 ## Shape
 
@@ -50,6 +63,23 @@ Fixed obligations on every command:
 - Exit with the shared codes in `cli_common.ExitCode`
   ([spec/exit-codes.md](docu/spec/exit-codes.md)). One reason, one code, every command.
 
+Across the `core/` boundary, pass dataclasses and enums, not tuples or raw REST dicts.
+Normalise a REST payload once, in `core/`, and reuse the result everywhere.
+
+## Guardrails
+
+[`tests/test_architecture.py`](tests/test_architecture.py) pins the layer direction, one
+owner per concept, and the size ratchets. [`tests/test_docs.py`](tests/test_docs.py) keeps
+every link, code identifier and catalog in the docs true to the code. Both run in the
+pre-commit hook in about a second.
+
+A red guardrail is a design signal: its message names where the code belongs. Each rule
+lists today's debt as known exceptions, tied to an item in the
+[consolidation backlog](docu/architecture.md#consolidation-backlog). The lists only
+shrink: fixing debt means deleting its entry, and the test goes red on an entry that is
+no longer needed. Growing a list or raising a pin is a design decision for the human:
+propose it with the reason and wait.
+
 ## Cost and caching
 
 Subprocess calls and REST fetches are expensive. Batch them and cache them. A cached
@@ -62,7 +92,7 @@ never add a cache that cannot say whether it is stale
 
 ```bash
 uv sync
-if [-f ./scripts/pytest-on-remote.sh]; then
+if [ -f ./scripts/pytest-on-remote.sh ]; then
   ./scripts/pytest-on-remote.sh
 else
   uv run pytest -q
@@ -75,16 +105,21 @@ Prefer a test that pins agreement *between* commands over another per-module tes
 Copies drift silently when each is only tested against itself.
 `tests/test_change_resolution_consistency.py` is the pattern.
 
+## Docs
+
+Docs change in the same commit as the code they describe. When you rename or delete a
+symbol, search `docu/`, `CONTEXT.md` and this file for it. When code and spec disagree,
+one of them is wrong: fix it. Record a decision that would otherwise be re-litigated as
+an ADR.
+
 ## Where the answers are
 
 | Question | Read |
 |----------|------|
 | What does this term mean? | [CONTEXT.md](CONTEXT.md) |
+| Which module owns this concept? | [architecture.md § Module catalog](docu/architecture.md#module-catalog) |
+| What is still duplicated? | [architecture.md § Consolidation backlog](docu/architecture.md#consolidation-backlog) |
 | How should this command behave? | [docu/SPEC.md](docu/SPEC.md), [docu/spec/commands/](docu/spec/commands/) |
-| Where does this code belong? | [docu/architecture.md](docu/architecture.md) |
 | Why is it done this odd way? | [docu/adr/](docu/adr/). Read before "simplifying" |
 | What does Gerrit's API return? | [docu/gerrit/md/](docu/gerrit/md/) |
 | Which git config keys exist? | [docu/Configuration.md](docu/Configuration.md) |
-
-When code and spec disagree, one of them is wrong. Fix it. Do not work around it.
-Record a decision that would otherwise be re-litigated as an ADR.

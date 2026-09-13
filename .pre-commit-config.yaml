@@ -1,5 +1,14 @@
-# Tests are run manually (see README / `uv run pytest`).
+# The full test suite is run manually (see AGENTS.md). The guardrail tests below are
+# fast (no git, no network) and run on every commit.
 repos:
+  - repo: local
+    hooks:
+      - id: guardrails
+        name: architecture and doc guardrails
+        entry: uv run pytest -q -p no:cacheprovider tests/test_architecture.py tests/test_docs.py
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.10
     hooks:

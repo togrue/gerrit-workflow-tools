@@ -1,6 +1,6 @@
 # Integration tests (Docker + Gerrit)
 
-These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Phase 6 change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, live ``ger log --json`` overlay with compact ``project~number`` ids, batch query call budget, push→resolve/show JSON agreement).
+These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, live ``ger log --json`` overlay with compact ``project~number`` ids, batch query call budget, push→resolve/show JSON agreement).
 
 Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly.
 
@@ -14,7 +14,7 @@ Unit tests (`pytest` with default config) **ignore** this directory; run integra
 
 Copy [`local.env.example`](local.env.example) to **`tests/integration/local.env`** and edit it. That path is **gitignored**; use it for your own hostnames, ports, and `GERRIT_IT_DOCKER_HOST` (e.g. `ssh://lenovo` when your `~/.ssh/config` has `Host lenovo`).
 
-`scripts/run_integration.py` and `pytest tests/integration` both load `tests/integration/local.env` automatically when the file exists. Override the path with **`--env-file PATH`** on the runner.
+`pytest tests/integration` (and `scripts/run_integration_tests.sh`, which wraps it) loads `tests/integration/local.env` automatically when the file exists.
 
 **Important:** `GERRIT_IT_HOST_PORT_HTTP` / `GERRIT_IT_HOST_PORT_SSH` are the **host** ports for the **test** container. They must be **free** on the Docker machine. If you already run another Gerrit on **8081** and **29418**, pick unused ports for the test instance (e.g. **8082** and **29419**) in `local.env` and open those in the firewall from the PC that runs `git`/`ger`. Integration tests use **HTTP** for Git; the SSH mapping is still required so the container can start without a host port conflict.
 
@@ -86,6 +86,6 @@ Prints per-phase timings (Docker, session seed, each `prepare_topic_repo`, each 
 
 | Symptom | Things to check |
 |--------|------------------|
-| Port / bind errors when starting the container | Another process (including a non-test Gerrit) is using `GERRIT_IT_HOST_PORT_HTTP` or `_SSH` on the Docker host. Pick unused ports and update `local.env`. |
+| Port / bind errors when starting the container | Another process (including a non-test Gerrit) is using `GERRIT_IT_HOST_PORT_HTTP` or `GERRIT_IT_HOST_PORT_SSH` on the Docker host. Pick unused ports and update `local.env`. |
 | `docker ps` over SSH works; pytest still fails Docker on Windows | Use `GERRIT_IT_DOCKER_HOST=ssh://user@real-hostname`. Confirm firewall allows your PC → those TCP ports on the Docker host. |
 | HTTP / git clone timeouts from your PC | `GERRIT_IT_PUBLIC_HOST` must be reachable from the machine running pytest (not only `localhost` on the remote). |

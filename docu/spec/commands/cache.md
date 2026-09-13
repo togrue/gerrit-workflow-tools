@@ -27,5 +27,5 @@ ger cache <subcommand>
 
 ## See also
 
-- [architecture.md](../../architecture.md#gerrit-api-access)
+- [architecture.md](../../architecture.md#8-cache-and-refresh)
 - [`ger fetch-api`](fetch-api.md)

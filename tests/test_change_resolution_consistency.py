@@ -1,9 +1,8 @@
-"""Phase 6: cross-command resolution consistency (unit tests).
+"""Cross-command resolution consistency (unit tests).
 
-Default CI runs these without Docker. End-to-end coverage against a live Gerrit
+Pins agreement *between* commands: the same changeish must resolve the same way in
+``ger log``, ``ger show`` and ``ger resolve``. End-to-end coverage against a live Gerrit
 instance lives in ``tests/integration/test_09_change_resolution.py``.
-
-See ``docu/plans/gerrit-native-change-resolution.md`` Phase 6 for the full matrix.
 """
 
 from __future__ import annotations

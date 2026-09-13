@@ -1,4 +1,4 @@
-"""CLI for opening changed files from a selected commit."""
+"""CLI for ``ger edit`` / ``ger reword``: interactive rebase that edits, rewords, or drops one stack commit."""
 
 from __future__ import annotations
 
