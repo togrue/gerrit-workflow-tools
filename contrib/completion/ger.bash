@@ -251,12 +251,16 @@ _ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --stack --branch --json --format --ai --color --hyperlinks -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --stack --branch --comments --context --context-padding --json --format --ai --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --comments)
+            __gwt_flags "$cur" unresolved all resolved
             return
             ;;
         --format)
