@@ -37,6 +37,8 @@ Use a moderate threshold for edits:
 
 Run relevant checks when available. At minimum, inspect the resulting documentation diff and run `git diff --check` before finishing.
 
+`tests/test_docs.py` checks links, anchors, code identifiers named in docs, the module catalog in `docu/architecture.md` and the command registry in `docu/SPEC.md`. Run it with `uv run pytest tests/test_docs.py -q` when `uv` is available, and leave it green.
+
 ## Pull request expectations
 
 If obvious improvements are found, edit the documentation directly. The workflow will create the pull request from your file changes.

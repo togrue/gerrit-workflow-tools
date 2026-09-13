@@ -1,6 +1,6 @@
 # Gerrit Workflow Tools — Specification
 
-**Single source of truth** for CLI behavior and architecture. When docs and code disagree, **fix the code or update this spec** — not the other way around.
+**Single source of truth** for CLI behavior. When docs and code disagree, **fix the code or update this spec** — not the other way around.
 
 | Document | Role |
 |----------|------|
@@ -29,7 +29,7 @@ Each command spec lists its **implementation module** (e.g. `cli_log.py`) so rev
 
 ### Shared concepts
 
-Defined once in [architecture.md](architecture.md): **local stack**, **ready boundary**, **Gerrit target branch**, **Change-Id**, **attention**, **patchset status** (`p` / `n` / `o` / `-`).
+Defined once in [CONTEXT.md](../CONTEXT.md): **local stack**, **ready boundary**, **target branch**, **Change-Id**, **attention**, **patchset status**. The patchset tokens (`p` / `n` / `o` / `-` …) are listed in [Reading-ger-log.md](Reading-ger-log.md#status-columns).
 
 ---
 
@@ -54,8 +54,9 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger reword` | [spec/commands/edit.md](spec/commands/edit.md) |
 | `ger fix` | [spec/commands/fix.md](spec/commands/fix.md) |
 | `ger rebase` | [spec/commands/rebase.md](spec/commands/rebase.md) |
+| `ger resolve` | [spec/commands/resolve.md](spec/commands/resolve.md) |
 | `ger sha` | [spec/commands/sha-change-id.md](spec/commands/sha-change-id.md) |
-| `ger change-id` | [spec/commands/sha-change-id.md#ger-change-id) |
+| `ger change-id` | [spec/commands/sha-change-id.md](spec/commands/sha-change-id.md#ger-change-id) |
 
 ### Onboarding
 
