@@ -45,7 +45,7 @@ Default: one primary line per commit, optional `# …` detail lines, trailing **
 
 **User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md). With hyperlinks on, each line gets a clickable `Open in gerrit` instead of the raw address. `--url` forces the URL column even when hyperlinks are off.
 
-Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker, attention hints, subject. Patchset tokens: [architecture.md](../../architecture.md#patchset-status-log--show--rebase-annotations).
+Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker, attention hints, subject. Patchset tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns).
 
 **Summary example:** `summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4`
 

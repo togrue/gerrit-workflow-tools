@@ -54,7 +54,7 @@ Single letter: is this local commit aligned with Gerrit?
 
 When a commit is **not pushed** (`-` or `n` with no server state yet), Verified / Code-Review / comment columns are blank — there is nothing on Gerrit to show.
 
-Details: [architecture.md](architecture.md#patchset-status-log--show--rebase-annotations).
+Definitions: [CONTEXT.md § The Gerrit side](../CONTEXT.md#the-gerrit-side).
 
 ### Verified (`v+1`, `v-1`, `v0`, `v?`)
 
@@ -67,7 +67,7 @@ Aggregated **Verified** label vote on the current patch set.
 | `v0` | Verified 0 (neutral / no +1 yet) |
 | `v?` | Unknown or not applicable |
 
-With `-v` / `--verbose`, CI pipeline names appear on indented `CI:` lines below the commit. Failed pipelines are red, successful ones green. When the repo provides a **CI strategy** under `.ger/ci/` (see [Configuration.md](Configuration.md#ci-build-links-gerci)), pipeline names become clickable links on one line when hyperlinks are on; otherwise each pipeline is shown as `label url` on its own line.
+With `-v` / `--verbose`, CI pipeline names appear on indented `CI:` lines below the commit. Failed pipelines are red, successful ones green. When the repo provides a **CI strategy** under `.ger/ci/` (see [Configuration.md](Configuration.md#domains)), pipeline names become clickable links on one line when hyperlinks are on; otherwise each pipeline is shown as `label url` on its own line.
 
 ### Code-Review (`cr+2`, `cr+1`, `cr0`, `cr-1`, `cr-2`, `cr?`)
 

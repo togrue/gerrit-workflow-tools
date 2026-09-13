@@ -1,8 +1,8 @@
 """
-gsha — resolve a commit SHA from a Gerrit Change-Id in the current commit chain
+``ger sha`` — resolve a commit SHA from a Gerrit Change-Id in the current commit chain
 
 USAGE
-    gsha [--range REV_RANGE] [--all] [--short | --subject | --json] CHANGE_ID
+    ger sha [--range REV_RANGE] [--all] [--short | --subject | --json] CHANGE_ID
 
 DESCRIPTION
     Searches commits in the selected revision range for a commit message footer
@@ -32,7 +32,7 @@ OPTIONS
         Print a JSON object with keys: change_id, sha, subject.
 
 DEFAULT RANGE
-    If --range is omitted, gsha searches the current Gerrit stack using:
+    If --range is omitted, ger sha searches the current Gerrit stack using:
       1. configured Gerrit base range, if available
       2. branch upstream..HEAD, if available
       3. configured default target branch merge-base..HEAD

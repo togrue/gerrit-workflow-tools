@@ -2,9 +2,8 @@
 
 |  |  |
 |--|--|
-| **Status** | **Implemented** (Phases 0–6; see [plans/gerrit-native-change-resolution.md](../plans/gerrit-native-change-resolution.md)) |
+| **Status** | **Implemented** |
 | **Audience** | Users, contributors, and AI agents driving `ger` |
-| **Supersedes** | The "ambiguity → hard error, no heuristics" stance in [plans/gerrit-native-change-resolution.md](../plans/gerrit-native-change-resolution.md) — see [Relationship to the resolution plan](#relationship-to-the-resolution-plan) |
 
 This document describes how `ger` **should** behave when the user (or an agent)
 points a command at "a change" or "a commit". It is written from the user's
@@ -209,7 +208,7 @@ ger resolve <changeish> [--json]
 
 Text output: the resolved local SHA (if any), the selected Gerrit change
 (number + triplet + branch + status), and any ambiguity note. Exit codes match
-[§6](#6-exit-codes). With `--json`, prints the `resolution` block below and
+[§6](#6-exit-codes-resolution-related). With `--json`, prints the `resolution` block below and
 nothing else.
 
 ---
@@ -260,7 +259,7 @@ object so an agent never has to scrape human text:
 - **Exact round-trips:** any `triplet` or `number` printed in `alternatives` is a
   valid changeish that resolves back to exactly that change.
 - **Stable exit codes** distinguish *not found* from *ambiguous* from *API error*
-  ([§6](#6-exit-codes)), so an agent can branch on the failure mode.
+  ([§6](#6-exit-codes-resolution-related)), so an agent can branch on the failure mode.
 
 This is what lets an agent automate a rework loop safely: `ger log --json` to see
 the stack → for each commit needing work, `ger resolve --json` (or read the
@@ -294,22 +293,15 @@ Gerrit branch ambiguity).
 
 ---
 
-## 7. Relationship to the resolution plan
+## 7. Rejected alternatives
 
-[plans/gerrit-native-change-resolution.md](../plans/gerrit-native-change-resolution.md)
-lays out the *implementation* path to triplet-native identity (REST layer,
-service layer, cache v2). This document is the **behavior contract** those phases
-should satisfy, with two deliberate refinements:
+Read before "simplifying" the resolution rules.
 
-| Plan said | This spec refines to |
-|-----------|----------------------|
-| "Ambiguity → error, not silent pick." | Ambiguity → **prefer the target-branch change, transparently**, and only error when still ambiguous after narrowing. The plan's core insight (never *silently* collapse) is preserved; the UX is friendlier. |
-| "No SHA/heuristic disambiguation — out of scope." | Still no *SHA* heuristics. But **branch-aware** narrowing (target branch, prefer-open) is in scope and is the primary usability win. |
-| Bare Change-Id is a search term only. | Unchanged — but the search is scoped by stack context and its result is reported, not hidden. |
-
-Everything else in the plan (triplet as the canonical key, cache keyed on
-`ChangeInfo.id`, `branch.<name>.gerritTarget` finally read in code) is a
-prerequisite for the behavior described here.
+| Rejected | Chosen instead |
+|----------|----------------|
+| Ambiguity is always an error. | **Prefer the target-branch change, transparently**, and error only when still ambiguous after narrowing. Nothing is ever collapsed *silently*. |
+| No disambiguation beyond exact input. | Still no *SHA* heuristics, but **branch-aware** narrowing (target branch, prefer-open) is in scope — it is the main usability win. |
+| Resolve a bare Change-Id globally. | A bare Change-Id is a search term scoped by the **stack context**; the result is reported, never hidden. |
 
 ---
 
@@ -324,7 +316,7 @@ prerequisite for the behavior described here.
 
 ## See also
 
-- [plans/gerrit-native-change-resolution.md](../plans/gerrit-native-change-resolution.md) — implementation phases
-- [architecture.md](../architecture.md) — stack, target branch, patchset status, Change-Id
+- [CONTEXT.md](../../CONTEXT.md) — definitions: changeish, triplet, stack context, resolution note
+- [architecture.md](../architecture.md#5-changeish-resolution) — where resolution lives in the code
 - [spec/commands/](commands/) — per-command detail
 - [Configuration.md](../Configuration.md) — `gerrit.project`, `branch.*.gerritTarget`, `gerrit.remote`

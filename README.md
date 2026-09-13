@@ -51,6 +51,6 @@ Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are
 
 ### Integration tests (optional)
 
-End-to-end tests against a real Gerrit in Docker are under [tests/integration/README.md](tests/integration/README.md). Default `pytest` **skips** them (`--ignore=tests/integration` in `pyproject.toml`). Install deps with `uv sync --group integration` and run `python scripts/run_integration.py` or `pytest tests/integration`.
+End-to-end tests against a real Gerrit in Docker are under [tests/integration/README.md](tests/integration/README.md). Default `pytest` **skips** them (`--ignore=tests/integration` in `pyproject.toml`). Install deps with `uv sync --group integration` and run `uv run --group integration pytest tests/integration` (or `scripts/run_integration_tests.sh`).
 
 </details>
