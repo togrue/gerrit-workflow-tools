@@ -8,7 +8,11 @@ from unittest.mock import patch
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit import change_resolution as cr
 from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
-from gerrit_workflow_tools.core.git_state import repo_toplevel, resolve_upstream_abbrev_ref
+from gerrit_workflow_tools.core.git_state import (
+    checked_out_branch_name,
+    repo_toplevel,
+    resolve_upstream_abbrev_ref,
+)
 
 
 def test_branch_upstream_abbrev_from_refs_heads_merge() -> None:
@@ -72,6 +76,27 @@ def test_worktree_memo_survives_non_cacheable_git(tmp_path: Path) -> None:
     assert first == second == repo.resolve()
     combined = [c for c in run.call_args_list if c.args and c.args[0] == "rev-parse" and "--show-toplevel" in c.args]
     assert len(combined) == 1
+
+
+def test_checkout_invalidates_worktree_memo(tmp_path: Path) -> None:
+    """``git checkout`` in-process must drop the Worktree snapshot (second CLI command)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("x\n", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "init", cwd=repo)
+    git("checkout", "-b", "feature", cwd=repo)
+
+    clear_git_cache()
+    with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
+        assert checked_out_branch_name(repo) == "feature"
+        git("checkout", "main", cwd=repo)
+        assert checked_out_branch_name(repo) == "main"
+    toplevel_parses = [
+        c for c in run.call_args_list if c.args and c.args[0] == "rev-parse" and "--show-toplevel" in c.args
+    ]
+    assert len(toplevel_parses) == 2
 
 
 def test_resolve_stack_context_memoized(tmp_path: Path) -> None:
