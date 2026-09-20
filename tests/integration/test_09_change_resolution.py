@@ -44,10 +44,10 @@ def _configure_gerrit_project(repo, project: str) -> None:
     git("config", "gerrit.project", project, cwd=repo)
 
 
-def _clear_gerrit_cache(repo) -> None:
+def _clear_gerrit_cache(repo: Path) -> None:
     from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 
-    web = resolve_gerrit_web_base(repo)
+    web = resolve_gerrit_web_base(Settings.from_cwd(repo))
     GerritCache.for_web_base(web).clear()
 
 
