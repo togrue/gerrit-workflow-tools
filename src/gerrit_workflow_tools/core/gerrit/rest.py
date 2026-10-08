@@ -410,9 +410,9 @@ class HttpGerritRest:
     ) -> dict[str, Any]:
         """POST multiple reviewers/CCs onto *change_id* in one review request."""
 
-        reviewer_inputs: list[dict[str, str]] = []
-        reviewer_inputs.extend({"reviewer": reviewer} for reviewer in reviewers or [])
-        reviewer_inputs.extend({"reviewer": cc, "state": "CC"} for cc in ccs or [])
+        reviewer_inputs: list[dict[str, str | bool]] = []
+        reviewer_inputs.extend({"reviewer": reviewer, "confirmed": True} for reviewer in reviewers or [])
+        reviewer_inputs.extend({"reviewer": cc, "state": "CC", "confirmed": True} for cc in ccs or [])
         if not reviewer_inputs:
             return {}
         cid = change_id_for_gerrit_rest_path(change_id)

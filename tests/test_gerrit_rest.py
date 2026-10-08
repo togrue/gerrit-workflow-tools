@@ -89,6 +89,35 @@ def test_get_comments_enable_context_query_params() -> None:
     assert captured[1] == ("changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments", None)
 
 
+def test_set_reviewers_batch_confirms_reviewers_on_the_review_request() -> None:
+    """Set Review rejects the whole body with HTTP 400 unless large groups are confirmed."""
+
+    from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    calls: list[tuple[str, object]] = []
+
+    def _capture(path: str, *, method: str = "GET", params=None, json_body=None) -> dict[str, Any]:
+        del method, params
+        calls.append((path, json_body))
+        return {}
+
+    client._request_json = _capture  # type: ignore[method-assign]
+    cid = "I" + "b" * 40
+    client.set_reviewers_batch(f"proj~main~{cid}", reviewers=["alice"], ccs=["bob"])
+    assert calls == [
+        (
+            f"changes/proj~main~{cid}/revisions/current/review",
+            {
+                "reviewers": [
+                    {"reviewer": "alice", "confirmed": True},
+                    {"reviewer": "bob", "state": "CC", "confirmed": True},
+                ]
+            },
+        )
+    ]
+
+
 def test_alias_batch_fetch_results_maps_compact_gerrit_id_to_requested_triplet() -> None:
     cid = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     requested = f"p~feature~{cid}"
