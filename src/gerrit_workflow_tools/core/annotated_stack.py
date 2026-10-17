@@ -1,9 +1,7 @@
 """The annotated stack: local commits carrying Gerrit overlay state and attention.
 
 This is the shape `ger log`, `ger show`, `ger edit --first-attention-commit` and the rebase
-enricher all want. It used to live inside ``cli_log``, so the others either imported upward
-into a command module or re-derived it — the enricher had its own copy of the chain-blocking
-rule, and ``ger show`` derived attention a third way.
+enricher all want.
 
 Two entry points, because only some callers start from a revision range:
 
