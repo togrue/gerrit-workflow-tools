@@ -98,6 +98,22 @@ _Avoid_: inbox tab, queue (unqualified)
 How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace reviewers on every change; CC stays).
 _Avoid_: reviewer mode, assignment policy
 
+**Gerrit push**:
+A push of the commits the **ready boundary** allows to `refs/for/<push branch>`.
+_Avoid_: gpush
+
+**Vanilla push**:
+A plain `git push` to the branch upstream, used when that upstream is not the Gerrit remote. The **ready boundary** and **reviewer strategy** do not apply.
+_Avoid_: normal push, non-gerrit push
+
+**Push plan**:
+The destination and reviewer options for one push, plus the commits below the **ready boundary**. The commit that holds the rest of the **local stack** back is named beside that list, not included in it. When **Settings** ask for the preview, each listed commit carries its current reviewer and WIP marks beside the ones about to be sent. Replacing reviewers, topic, WIP, private, or the **reviewer strategy** leaves the list as it was.
+_Avoid_: push context, gerrit context
+
+**Push refusal**:
+The outcome when a push will not run: an empty ready range, a rebase check that refuses, or no destination. An empty ready range names the holding-back commit and whether `--all` would leave commits below the **ready boundary**.
+_Avoid_: push error, nothing to push
+
 **CI link**:
 A useful URL for a failed build (often a Jenkins console), after a project-specific transform. Shown by `ger log -v` and in JSON as `ci_links`. Distinct from raw Checks **names** (`ci_failures`).
 _Avoid_: build URL (unqualified), CI failure (the name alone)
