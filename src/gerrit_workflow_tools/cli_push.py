@@ -884,7 +884,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
-            "overwrite (REST: replace on each change). Requires credentials for lazy/overwrite. "
+            "overwrite (REST: replace reviewers on each change; CC stays). Requires credentials for lazy/overwrite. "
             "Topic/WIP/private always use magic ref options (see --topic / --wip / --private)."
         ),
     )

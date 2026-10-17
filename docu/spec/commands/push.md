@@ -62,7 +62,7 @@ No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --se
 |----------|----------|
 | `push` (default) | Reviewers on refspec `%r=…` |
 | `lazy` | REST: add reviewers only where none assigned |
-| `overwrite` | REST: replace reviewers per change |
+| `overwrite` | REST: replace reviewers per change; CC accounts stay |
 
 `lazy` / `overwrite` may run REST assignment after push when git reports no new changes. Topic/WIP/private use magic ref options for all strategies.
 

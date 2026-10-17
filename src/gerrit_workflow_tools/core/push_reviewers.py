@@ -107,7 +107,8 @@ def apply_reviewer_strategy_after_push_service(
 
         remove: list[int] = []
         if strategy == ReviewerStrategy.OVERWRITE:
-            remove = [account.account_id for account in existing if account.account_id is not None]
+            reviewers_only = reviewer_accounts_from_change_info(detail, roles=("REVIEWER",))
+            remove = [account.account_id for account in reviewers_only if account.account_id is not None]
         try:
             service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
         except GerritApiError as error:

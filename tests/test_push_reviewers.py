@@ -97,7 +97,7 @@ def test_apply_reviewer_strategy_lazy_skip_and_assign() -> None:
     service.changes.set_reviewers.assert_called_once_with(triplet_a, add=["alice", "ben"], remove=[])
 
 
-def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
+def test_apply_reviewer_strategy_overwrite_removes_reviewers_and_keeps_cc() -> None:
     cid = _cid("c")
     triplet = _triplet(cid)
     detail = _detail_payload(
@@ -105,6 +105,7 @@ def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
         reviewers=[
             {"account": {"username": "old", "_account_id": 5}, "state": "REVIEWER"},
             {"account": {"username": "gone", "_account_id": 7}, "state": "REVIEWER"},
+            {"account": {"username": "watcher", "_account_id": 9}, "state": "CC"},
         ],
     )
     service = MagicMock()
@@ -116,3 +117,25 @@ def test_apply_reviewer_strategy_overwrite_removes_and_adds() -> None:
     assert len(res.outcomes) == 1
     assert res.outcomes[0].reviewers_assigned == ("alice",)
     service.changes.set_reviewers.assert_has_calls([call(triplet, add=["alice"], remove=[5, 7])])
+
+
+def test_apply_reviewer_strategy_overwrite_keeps_cc_on_change_info_map() -> None:
+    """ChangeInfo stores reviewers as a ``REVIEWER`` / ``CC`` map."""
+
+    cid = _cid("d")
+    triplet = _triplet(cid)
+    detail: dict[str, object] = {
+        "id": triplet,
+        "change_id": cid,
+        "reviewers": {
+            "REVIEWER": [{"_account_id": 5, "username": "old"}],
+            "CC": [{"_account_id": 9, "username": "watcher"}],
+        },
+    }
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {triplet: detail}
+
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["alice"], [triplet])
+
+    assert res.ok
+    service.changes.set_reviewers.assert_has_calls([call(triplet, add=["alice"], remove=[5])])

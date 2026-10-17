@@ -95,7 +95,7 @@ One Gerrit query plus the **review chains** assembled from it. `ger inbox` curre
 _Avoid_: inbox tab, queue (unqualified)
 
 **Reviewer strategy**:
-How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace on every change).
+How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace reviewers on every change; CC stays).
 _Avoid_: reviewer mode, assignment policy
 
 **CI link**:

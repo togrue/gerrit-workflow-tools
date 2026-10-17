@@ -76,13 +76,23 @@ def reviewer_accounts_from_reviewer_list(rows: Sequence[Mapping[str, object]]) -
     return out
 
 
-def reviewer_accounts_from_change_info(detail: Mapping[str, object]) -> list[ReviewerAccount]:
-    """Reviewer/CC account list in Gerrit API order."""
+def reviewer_accounts_from_change_info(
+    detail: Mapping[str, object],
+    *,
+    roles: Sequence[str] = ("REVIEWER", "CC"),
+) -> list[ReviewerAccount]:
+    """Reviewer accounts in Gerrit API order, limited to *roles*.
 
+    ChangeInfo stores reviewers in a ``REVIEWER`` / ``CC`` map. The list shape
+    (``state`` on each row) is the same split. ``overwrite`` asks for
+    ``REVIEWER`` only so CC accounts are not removed.
+    """
+
+    wanted = tuple(roles)
     out: list[ReviewerAccount] = []
     reviewers = detail.get("reviewers")
     if isinstance(reviewers, dict):
-        for role in ("REVIEWER", "CC"):
+        for role in wanted:
             bucket = reviewers.get(role)
             if not isinstance(bucket, list):
                 continue
@@ -101,7 +111,7 @@ def reviewer_accounts_from_change_info(detail: Mapping[str, object]) -> list[Rev
         if not isinstance(entry, dict):
             continue
         state = entry.get("state")
-        if state not in ("REVIEWER", "CC"):
+        if state not in wanted:
             continue
         account = entry.get("account")
         if not isinstance(account, dict):
