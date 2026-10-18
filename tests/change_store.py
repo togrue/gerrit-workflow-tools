@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError
 
 
 DEFAULT_WEB_BASE = "https://gerrit.example"
@@ -44,6 +44,63 @@ def _without_comment_context(row: dict[str, Any]) -> dict[str, Any]:
     if _CONTEXT_FIELDS.isdisjoint(row):
         return row
     return {key: value for key, value in row.items() if key not in _CONTEXT_FIELDS}
+
+
+_ACCOUNT_DETAIL_FIELDS = ("name", "email", "username", "display_name", "avatars")
+
+
+def _brief_account(account: Any) -> Any:
+    """AccountInfo without ``DETAILED_ACCOUNTS``: just the id."""
+    if not isinstance(account, dict) or "_account_id" not in account:
+        return account
+    return {key: value for key, value in account.items() if key not in _ACCOUNT_DETAIL_FIELDS}
+
+
+def shape_change_info(row: dict[str, Any], options: list[str] | tuple[str, ...] | None) -> dict[str, Any]:
+    """Return *row* with only the fields Gerrit sends for *options*.
+
+    Seeded payloads carry every field; a real server sends optional ones only when asked
+    (``rest-api-changes`` § Query Changes). Without this, a caller that forgets an option
+    passes against the store and reads nothing from a real Gerrit.
+    """
+    opts = set(options or ())
+    out = dict(row)
+    labels_opt = opts & {"LABELS", "DETAILED_LABELS"}
+    if not labels_opt:
+        out.pop("labels", None)
+        out.pop("permitted_labels", None)
+    elif "DETAILED_LABELS" not in opts and isinstance(out.get("labels"), dict):
+        out["labels"] = {
+            name: {key: value for key, value in label.items() if key not in ("all", "values")}
+            if isinstance(label, dict)
+            else label
+            for name, label in out["labels"].items()
+        }
+    if "DETAILED_LABELS" not in opts:
+        out.pop("reviewers", None)
+    if "SUBMITTABLE" not in opts:
+        out.pop("submittable", None)
+    if "MESSAGES" not in opts:
+        out.pop("messages", None)
+    if not opts & {"CURRENT_REVISION", "ALL_REVISIONS"}:
+        out.pop("current_revision", None)
+        out.pop("revisions", None)
+    elif isinstance(out.get("revisions"), dict):
+        revisions = out["revisions"]
+        if "ALL_REVISIONS" not in opts:
+            current = out.get("current_revision")
+            revisions = {sha: rev for sha, rev in revisions.items() if sha == current}
+        if not opts & {"CURRENT_COMMIT", "ALL_COMMITS"}:
+            revisions = {
+                sha: {key: value for key, value in rev.items() if key != "commit"} if isinstance(rev, dict) else rev
+                for sha, rev in revisions.items()
+            }
+        out["revisions"] = revisions
+    if "DETAILED_ACCOUNTS" not in opts:
+        for key in ("owner", "submitter"):
+            if key in out:
+                out[key] = _brief_account(out[key])
+    return out
 
 
 @dataclass(frozen=True)
@@ -245,7 +302,7 @@ class ChangeStore:
         self._record("query_changes", query, n=n, options=options)
         if query in self._stubbed_queries:
             return list(self._stubbed_queries[query])[:n]
-        return self._query_rows(query)[:n]
+        return [shape_change_info(row, options) for row in self._query_rows(query)[:n]]
 
     def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         """Return AccountInfo rows whose username, email or name contains *query*."""
@@ -262,9 +319,9 @@ class ChangeStore:
         return out[:n]
 
     def get_change(self, change_id: str) -> dict[str, Any]:
-        """Return ChangeInfo detail for one change."""
+        """Return one ChangeInfo, shaped like :class:`HttpGerritRest`'s ``LOG_QUERY_OPTIONS`` fetch."""
         self._record("get_change", change_id)
-        return self._row_or_raise(change_id)
+        return shape_change_info(self._row_or_raise(change_id), LOG_QUERY_OPTIONS)
 
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""

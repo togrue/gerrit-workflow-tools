@@ -147,13 +147,13 @@ class GerritRest(Protocol):
     web_base: str
 
     def query_changes(self, query: str, *, n: int = 25, options: list[str] | None = None) -> list[dict[str, Any]]:
-        """Return ChangeInfo rows matching a Gerrit search query."""
+        """Return ChangeInfo rows; optional fields (labels, revisions, …) only as *options* ask."""
 
     def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         """Return AccountInfo rows matching an account search query."""
 
     def get_change(self, change_id: str) -> dict[str, Any]:
-        """Return ChangeInfo detail for one change."""
+        """Return one ChangeInfo, carrying the fields of a :data:`LOG_QUERY_OPTIONS` query row."""
 
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
@@ -370,10 +370,10 @@ class HttpGerritRest:
         return out
 
     def get_change(self, change_id: str) -> dict[str, Any]:
-        """GET change detail (labels, submittable, etc.) for *change_id*."""
+        """GET one ChangeInfo shaped like a batch row (not ``/detail``: no ``current_revision``)."""
         cid = change_id_for_gerrit_rest_path(change_id)
         enc = encode_gerrit_path_segment(cid)
-        data = self._request_json(f"changes/{enc}/detail")
+        data = self._request_json(f"changes/{enc}", params=[("o", opt) for opt in LOG_QUERY_OPTIONS])
         if not isinstance(data, dict):
             raise GerritApiError("unexpected change detail response")
         logger.info(

@@ -67,6 +67,31 @@ def test_commit_query_matches_current_revision() -> None:
     assert [row["_number"] for row in rows] == [1]
 
 
+def test_query_without_options_omits_optional_fields() -> None:
+    """Gerrit sends labels, revisions and submittable only when asked; so does the store."""
+    (row,) = _store().query_changes(f"project:testproj branch:main change:{CID_B}")
+    assert {"labels", "current_revision", "revisions", "submittable", "reviewers"}.isdisjoint(row)
+    assert row["_number"] == 3
+
+
+def test_query_with_options_keeps_what_they_ask_for() -> None:
+    (row,) = _store().query_changes(
+        f"project:testproj branch:main change:{CID_B}",
+        options=["LABELS", "CURRENT_REVISION", "SUBMITTABLE"],
+    )
+    assert row["current_revision"] == "sha_b_main"
+    assert row["submittable"] is True
+    assert "all" not in row["labels"]["Verified"]  # votes per account need DETAILED_LABELS
+    assert "reviewers" not in row
+
+
+def test_get_change_carries_the_batch_row_fields() -> None:
+    """``get_change`` is cached beside batch rows, so it must carry what they carry."""
+    change = _store().get_change(f"testproj~main~{CID_B}")
+    assert change["current_revision"] == "sha_b_main"
+    assert "submittable" in change and "labels" in change and "reviewers" in change
+
+
 # ---------------------------------------------------------------------------
 # Lookup by the several things Gerrit accepts as a change id
 # ---------------------------------------------------------------------------

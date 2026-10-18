@@ -67,6 +67,24 @@ def test_get_messages_uses_single_encoded_project_path() -> None:
     assert paths == ["changes/tools%2FSomeProject~59446/messages"]
 
 
+def test_get_change_requests_the_batch_row_options() -> None:
+    """``/detail`` has no ``current_revision``; ChangeStore.get_change assumes these options."""
+    from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    captured: list[tuple[str, object]] = []
+
+    def _capture(path: str, *, method: str = "GET", params=None, json_body=None) -> dict[str, Any]:
+        del method, json_body
+        captured.append((path, params))
+        return {"_number": 1}
+
+    client._request_json = _capture  # type: ignore[method-assign]
+    client.get_change("proj~main~I" + "a" * 40)
+
+    assert captured == [(f"changes/proj~main~I{'a' * 40}", [("o", opt) for opt in LOG_QUERY_OPTIONS])]
+
+
 def test_get_comments_enable_context_query_params() -> None:
     from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
 
