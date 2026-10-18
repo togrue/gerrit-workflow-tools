@@ -83,7 +83,7 @@ _ger_edit() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --first-attention-commit --reword --drop -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --first-attention-commit -n --next --cursor --cursor-history --set-cursor --reword --drop -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -217,7 +217,7 @@ _ger_reword() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --first-attention-commit --edit --drop -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --first-attention-commit -n --next --cursor --cursor-history --set-cursor --edit --drop -v --verbose --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then
@@ -229,7 +229,7 @@ _ger_sha() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --range --all --short --subject --json --color --hyperlinks -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --first-attention -n --next-attention --range --all --short --subject --json --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
@@ -251,7 +251,7 @@ _ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --stack --branch --comments --context --context-padding --json --format --ai --color --hyperlinks -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --stack --first-attention -n --next-attention --branch --comments --context --context-padding --json --format --ai --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in

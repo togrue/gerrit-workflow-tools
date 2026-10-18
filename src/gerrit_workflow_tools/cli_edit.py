@@ -183,6 +183,24 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
     return p
 
 
+def _build_parser_edit() -> argparse.ArgumentParser:
+    """Build parser for ``ger edit`` (bash completion and tests)."""
+    return _build_parser(
+        prog="ger edit",
+        description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
+        default_action="edit",
+    )
+
+
+def _build_parser_reword() -> argparse.ArgumentParser:
+    """Build parser for ``ger reword`` (bash completion and tests)."""
+    return _build_parser(
+        prog="ger reword",
+        description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
+        default_action="reword",
+    )
+
+
 def _validate_targeting_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     inspect = sum(bool(x) for x in (args.cursor, args.cursor_history, args.set_cursor))
     if inspect > 1:
