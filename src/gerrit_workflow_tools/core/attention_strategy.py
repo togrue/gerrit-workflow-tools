@@ -6,13 +6,14 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from gerrit_workflow_tools.core.attention import commit_blocks_chain_for_submittability, determine_attention
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import (
     clear_extension_registry_cache,
     resolve_tier_callables,
     run_registry_callables,
 )
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, determine_attention
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
 
 logger = logging.getLogger(__name__)
@@ -74,8 +75,6 @@ def commit_blocks_chain_via_registry(
     web_base: str | None = None,
 ) -> bool:
     """Apply optional chain-block override tiers, otherwise built-in submittability rules."""
-
-    from gerrit_workflow_tools.core.gerrit_change_status import commit_blocks_chain_for_submittability
 
     tiers = resolve_tier_callables(
         cwd,

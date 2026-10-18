@@ -82,6 +82,7 @@ def test_fmt_cr_all_variants():
 
 
 def test_attention_text_variants():
+    from gerrit_workflow_tools.core.attention import annotate_attention
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.render.status_fmt import attention_text
 
@@ -100,7 +101,9 @@ def test_attention_text_variants():
             "submittable": True,
         }
         defaults.update(kw)
-        return LogCommit(**defaults)
+        commit = LogCommit(**defaults)
+        annotate_attention([commit])  # render maps the verdict; production always annotates first
+        return commit
 
     assert attention_text(_commit(change_id=None, pushed=False, patchset_status="absent")) == "missing Change-Id"
     assert attention_text(_commit(abandoned=True)) == "abandoned"
@@ -165,6 +168,7 @@ def test_enriched_subject_truncates_long_summary():
 
 
 def test_enriched_subject_missing_change_id():
+    from gerrit_workflow_tools.core.attention import annotate_attention
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.rebase_enricher import _enriched_subject
 
@@ -180,12 +184,14 @@ def test_enriched_subject_missing_change_id():
         code_review=None,
         comments_unresolved=0,
     )
+    annotate_attention([commit])
     subj = _enriched_subject(commit)
     assert "-" in subj
     assert "missing Change-Id" in subj
 
 
 def test_enriched_subject_not_pushed_shows_dash():
+    from gerrit_workflow_tools.core.attention import annotate_attention
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.rebase_enricher import _enriched_subject
 
@@ -201,6 +207,7 @@ def test_enriched_subject_not_pushed_shows_dash():
         code_review=None,
         comments_unresolved=0,
     )
+    annotate_attention([commit])
     subj = _enriched_subject(commit)
     assert "-" in subj
     assert "not-pushed" in subj
@@ -689,7 +696,8 @@ def test_compute_merged_equivalent_sha_match(stack_repo: Path):
 
 
 def test_commit_blocks_chain_for_submittability_merged():
-    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, commit_blocks_chain_for_submittability
+    from gerrit_workflow_tools.core.attention import commit_blocks_chain_for_submittability
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
     def lc(**kw: object) -> LogCommit:
         base: dict = {

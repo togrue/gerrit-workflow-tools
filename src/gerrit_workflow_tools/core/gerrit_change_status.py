@@ -11,7 +11,6 @@ from typing import Any
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 
 
@@ -109,28 +108,6 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     """Cache validity key for comments/checks hanging off this change. ``meta_rev_id`` when
     Gerrit sends it, otherwise ``updated`` plus comment counts. Same-second comment
     resolves leave ``updated`` unchanged."""
-
-
-def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
-    """Return whether this commit should block later commits in a dependency chain.
-
-    Default rule: a pushed change that is not submittable on Gerrit blocks followers.
-
-    **MERGED** changes use local equivalence semantics (v1):
-
-    * ``merged-same`` — does **not** block (already integrated upstream).
-    * ``merged-drift`` — **blocks** (local patch provably differs from merged revision).
-    * ``merged-unknown`` — **blocks** (cannot prove equivalence; treat conservatively).
-
-    Open (non-MERGED) changes keep the usual ``not submittable`` rule.
-    """
-    if commit.patchset_status == PatchsetStatus.MERGED_SAME:
-        return False
-    if commit.patchset_status in (PatchsetStatus.MERGED_DRIFT, PatchsetStatus.MERGED_UNKNOWN):
-        return True
-    if not commit.pushed:
-        return False
-    return not commit.submittable
 
 
 def _is_merge_commit(cwd: Path | str | None, sha: str) -> bool:
@@ -307,6 +284,7 @@ def build_log_commit(
     ``'checks'``, ``'reviewers'``.  An empty set means the commit is fully
     populated from *detail* alone.
     """
+    from gerrit_workflow_tools.core.attention import ci_failed
     from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
     from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
@@ -350,7 +328,7 @@ def build_log_commit(
         unresolved = 0
         needed.add("comments")
 
-    if verified is not None and verified < 0:
+    if ci_failed(verified):
         needed.add("checks")
 
     reviewer_list = reviewer_accounts_from_change_info(detail)
@@ -398,106 +376,3 @@ def build_log_commit(
         ),
         frozenset(needed),
     )
-
-
-# Attention that warrants amending the commit (``ger edit --first-attention-commit``).
-EDIT_ATTENTION_REASONS = frozenset({"unresolved-comments", "ci-failed"})
-
-
-def annotate_attention(
-    commits: list[LogCommit],
-    *,
-    cwd: Path | str | None = None,
-    project: str = "",
-    settings: Settings | None = None,
-    web_base: str | None = None,
-) -> None:
-    """Populate ``attention_reasons`` on each commit, including chain-blocking.
-
-    Chain-blocking: an earlier pushed commit blocks later ones when the chain-block
-    strategy (or built-in :func:`commit_blocks_chain_for_submittability`) says so.
-    Same rules as ``ger log``.
-    """
-    from gerrit_workflow_tools.core.attention_strategy import (
-        attention_reasons_via_registry,
-        commit_blocks_chain_via_registry,
-    )
-
-    prefix_chain_blocks = False
-    for commit in commits:
-        chain_blocked = commit.pushed and prefix_chain_blocks
-        commit.attention_reasons = attention_reasons_via_registry(
-            cwd,
-            project=project,
-            commit=commit,
-            chain_blocked=chain_blocked,
-            settings=settings,
-            web_base=web_base,
-        )
-        if commit.pushed and commit_blocks_chain_via_registry(
-            cwd,
-            project=project,
-            commit=commit,
-            settings=settings,
-            web_base=web_base,
-        ):
-            prefix_chain_blocks = True
-
-
-def commit_needs_edit_attention(commit: LogCommit) -> bool:
-    """True when the commit has unresolved comments or a failed build (``ger log`` attention)."""
-    return bool(EDIT_ATTENTION_REASONS.intersection(commit.attention_reasons))
-
-
-def first_commit_needing_edit_attention(commits: list[LogCommit]) -> LogCommit | None:
-    """Oldest commit in *commits* that needs edit attention, or ``None``."""
-    for commit in commits:
-        if commit_needs_edit_attention(commit):
-            return commit
-    return None
-
-
-def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:  # pylint: disable=too-many-branches
-    """Return reasons why this commit needs attention (empty = stable)."""
-    reasons: list[str] = []
-    if not commit.change_id:
-        # Prefer missing-change-id over only not-pushed: overlay cannot match Gerrit without a footer.
-        reasons.append("missing-change-id")
-        return reasons
-    if commit.abandoned:
-        reasons.append("abandoned")
-        return reasons
-    if commit.patchset_status == PatchsetStatus.ABSENT:
-        reasons.append("not-pushed")
-        return reasons
-    if commit.patchset_status == PatchsetStatus.MERGED_SAME:
-        if chain_blocked:
-            reasons.append("chain-blocked")
-        return reasons
-    if commit.patchset_status == PatchsetStatus.MERGED_DRIFT:
-        reasons.append("merged-drift")
-        if chain_blocked:
-            reasons.append("chain-blocked")
-        return reasons
-    if commit.patchset_status == PatchsetStatus.MERGED_UNKNOWN:
-        reasons.append("merged-unknown")
-        if chain_blocked:
-            reasons.append("chain-blocked")
-        return reasons
-    if commit.patchset_status == PatchsetStatus.NEWER:
-        reasons.append("ahead-of-gerrit")
-    if commit.patchset_status == PatchsetStatus.OUTDATED:
-        reasons.append("outdated-patchset")
-    if commit.verified == -1:
-        reasons.append("ci-failed")
-    if len(commit.reviewers) == 0:
-        reasons.append("no-reviewers")
-    if commit.code_review is not None and commit.code_review < 0:
-        reasons.append("review-issues")
-    if commit.code_review != 2:
-        reasons.append("awaiting-review")
-    if commit.comments_unresolved > 0:
-        reasons.append("unresolved-comments")
-    if chain_blocked:
-        reasons.append("chain-blocked")
-    return reasons

@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     load_annotated_stack,
     resolve_rev_range,
 )
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
@@ -59,7 +60,7 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
     """Return (per-category counts, ready count, total commits) for summary printing."""
     counts: dict[str, int] = {
         "ci-failures": 0,
-        "unresolved-comments": 0,
+        Attention.UNRESOLVED_COMMENTS: 0,
         "on-gerrit": 0,
     }
     ready = 0
@@ -67,10 +68,10 @@ def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
     for c in commits:
         if c.patchset_status in ("absent", "newer", "merged-same"):
             ready += 1
-        if c.pushed and c.verified is not None and c.verified <= -1:
+        if c.pushed and Attention.CI_FAILED in c.attention_reasons:
             counts["ci-failures"] += 1
         if c.comments_unresolved > 0:
-            counts["unresolved-comments"] += 1
+            counts[Attention.UNRESOLVED_COMMENTS] += 1
         if c.pushed:
             counts["on-gerrit"] += 1
     return counts, ready, total
@@ -97,7 +98,7 @@ def _format_summary_dashboard_line(
         parts.append(color_text("CI ", ANSI_DIM))
         parts.append(color_text(str(ci), ANSI_RED))
 
-    unres = summary.get("unresolved-comments", 0)
+    unres = summary.get(Attention.UNRESOLVED_COMMENTS, 0)
     if unres:
         parts.append(color_text(sep, ANSI_DIM))
         parts.append(color_text("comments ", ANSI_DIM))

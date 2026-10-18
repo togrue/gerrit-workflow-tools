@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+from gerrit_workflow_tools.core.attention import Attention, ci_failed
 from gerrit_workflow_tools.core.gerrit_change_status import extract_label_value, gerrit_change_url
 
 
@@ -304,17 +305,16 @@ def _labels(payload: dict[str, Any]) -> dict[str, Any]:
 def member_attention_reasons(payload: dict[str, Any]) -> tuple[str, ...]:
     """Inbox member reasons — CI, comments, negative vote. No local patchset states."""
     labels = _labels(payload)
-    verified = extract_label_value(labels, "Verified")
     code_review = extract_label_value(labels, "Code-Review")
     raw_comments = payload.get("unresolved_comment_count")
     comments = raw_comments if isinstance(raw_comments, int) else 0
     reasons: list[str] = []
-    if verified is not None and verified <= -1:
-        reasons.append("ci-failed")
+    if ci_failed(extract_label_value(labels, "Verified")):
+        reasons.append(Attention.CI_FAILED)
     if comments > 0:
-        reasons.append("unresolved-comments")
+        reasons.append(Attention.UNRESOLVED_COMMENTS)
     if code_review is not None and code_review < 0:
-        reasons.append("review-issues")
+        reasons.append(Attention.REVIEW_ISSUES)
     return tuple(reasons)
 
 

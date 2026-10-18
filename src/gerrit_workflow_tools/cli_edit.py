@@ -23,6 +23,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
     load_annotated_stack,
     resolve_rev_range,
 )
+from gerrit_workflow_tools.core.attention import first_commit_needing_edit_attention
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
@@ -30,7 +31,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     resolve_stack_changeish,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
-from gerrit_workflow_tools.core.gerrit_change_status import first_commit_needing_edit_attention
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target

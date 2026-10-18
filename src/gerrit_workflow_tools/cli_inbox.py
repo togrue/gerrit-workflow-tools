@@ -24,6 +24,7 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
     format_link,
 )
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -184,13 +185,13 @@ def _hash_suffix(body: str) -> str:
 
 def _attention_note(reasons: tuple[str, ...], comments: int) -> str:
     """Colored attention text, matching ``ger log`` trailing hints."""
-    if "ci-failed" in reasons:
+    if Attention.CI_FAILED in reasons:
         return color_text("build failed", ANSI_RED)
-    if "unresolved-comments" in reasons:
+    if Attention.UNRESOLVED_COMMENTS in reasons:
         noun = "comment" if comments == 1 else "comments"
         text = f"{comments} unresolved {noun}" if comments else "unresolved comments"
         return color_text(text, ANSI_YELLOW)
-    if "review-issues" in reasons:
+    if Attention.REVIEW_ISSUES in reasons:
         return color_text("negative vote", ANSI_YELLOW)
     return ""
 
@@ -243,8 +244,8 @@ def _render_text(
         _render_chain_line(chain, highlighter=highlighter, show_url=show_url, verbose=verbose)
     changes = sum(chain.depth for chain in chains)
     oldest = max((chain.unreviewed_age_seconds for chain in chains), default=0)
-    ci = sum(1 for chain in chains if "ci-failed" in chain.attention_reasons)
-    comments = sum(1 for chain in chains if "unresolved-comments" in chain.attention_reasons)
+    ci = sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons)
+    comments = sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons)
     sep = color_text(" · ", ANSI_DIM)
     parts = [
         color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"),
@@ -304,8 +305,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
                 "changes": sum(chain.depth for chain in chains),
                 "oldest_unreviewed_seconds": max((chain.unreviewed_age_seconds for chain in chains), default=0),
                 "oldest_wait_seconds": max((chain.wait_age_seconds for chain in chains), default=0),
-                "ci_failures": sum(1 for chain in chains if "ci-failed" in chain.attention_reasons),
-                "comments": sum(1 for chain in chains if "unresolved-comments" in chain.attention_reasons),
+                "ci_failures": sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons),
+                "comments": sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons),
             },
         }
         print(json.dumps(payload, indent=2))

@@ -10,14 +10,13 @@ import pytest
 
 from gerrit_workflow_tools.cli_edit import resolve_first_edit_attention_sha
 from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    LogCommit,
-    PatchsetStatus,
+from gerrit_workflow_tools.core.attention import (
     annotate_attention,
     commit_needs_edit_attention,
     first_commit_needing_edit_attention,
 )
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError, git
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha

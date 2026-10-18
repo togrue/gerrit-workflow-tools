@@ -18,12 +18,14 @@ from gerrit_workflow_tools.cli_style import (
     is_hyperlink_enabled,
     visible_len,
 )
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
     code_review_token,
     comments_token,
     patchset_token,
+    unresolved_comments_text,
     verified_token,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
@@ -221,28 +223,32 @@ def extra_detail_lines(commit: LogCommit) -> list[str]:
     return format_ci_lines(commit, verbose_level=1)
 
 
+# Reasons that replace every other hint: the change cannot be reviewed as it stands.
+_TERMINAL_TOKENS = (
+    (Attention.MISSING_CHANGE_ID, "missing Change-Id", ANSI_YELLOW),
+    (Attention.ABANDONED, "abandoned", ANSI_RED),
+    (Attention.NOT_PUSHED, Attention.NOT_PUSHED, ANSI_YELLOW),
+    (Attention.MERGED_DRIFT, "merged drift", ANSI_RED),
+    (Attention.MERGED_UNKNOWN, "merged (equiv. unknown)", ANSI_YELLOW),
+)
+
+
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
-    """Attention (text, ANSI-color) pairs for the trailing annotation column."""
-    if "missing-change-id" in commit.attention_reasons or not commit.change_id:
-        return [("missing Change-Id", ANSI_YELLOW)]
-    if commit.abandoned:
-        return [("abandoned", ANSI_RED)]
-    if not commit.pushed:
-        return [("not-pushed", ANSI_YELLOW)]
-    if commit.patchset_status == "merged-drift":
-        return [("merged drift", ANSI_RED)]
-    if commit.patchset_status == "merged-unknown":
-        return [("merged (equiv. unknown)", ANSI_YELLOW)]
-    if commit.patchset_status == "merged-same":
-        return []
+    """Attention (text, ANSI-color) pairs for the trailing annotation column.
+
+    Maps ``commit.attention_reasons`` to text; the verdict itself is ``core.attention``'s.
+    """
+    reasons = set(commit.attention_reasons)
+    for reason, text, code in _TERMINAL_TOKENS:
+        if reason in reasons:
+            return [(text, code)]
 
     tokens: list[tuple[str, str]] = []
-    if commit.ci_failures or (commit.verified is not None and commit.verified <= -1):
+    if Attention.CI_FAILED in reasons:
         tokens.append(("build failed", ANSI_RED))
-    if commit.comments_unresolved > 0:
-        noun = "comment" if commit.comments_unresolved == 1 else "comments"
-        tokens.append((f"{commit.comments_unresolved} unresolved {noun}", ANSI_YELLOW))
-    if "no-reviewers" in commit.attention_reasons:
+    if Attention.UNRESOLVED_COMMENTS in reasons:
+        tokens.append((unresolved_comments_text(commit.comments_unresolved), ANSI_YELLOW))
+    if Attention.NO_REVIEWERS in reasons:
         tokens.append(("no reviewers", ANSI_DIM_GRAY))
     if commit.submittable and not tokens:
         tokens.append(("submittable", ANSI_GREEN))

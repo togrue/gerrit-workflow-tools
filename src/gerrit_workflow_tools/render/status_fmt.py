@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
 
@@ -56,29 +57,35 @@ def comments_token(count: int) -> str:
     return "com" if count > 0 else "   "
 
 
+_TERMINAL_TEXT = (
+    (Attention.MISSING_CHANGE_ID, "missing Change-Id"),
+    (Attention.ABANDONED, "abandoned"),
+    (Attention.NOT_PUSHED, Attention.NOT_PUSHED),
+    (Attention.MERGED_DRIFT, "merged drift"),
+    (Attention.MERGED_UNKNOWN, "merged (equiv. unknown)"),
+)
+
+
+def unresolved_comments_text(count: int) -> str:
+    """``1 unresolved comment`` / ``3 unresolved comments``."""
+    noun = "comment" if count == 1 else "comments"
+    return f"{count} unresolved {noun}"
+
+
 def attention_text(commit: LogCommit) -> str:
-    """Short plain-text annotation for a trailing ``# …`` column, or empty string."""
-    if "missing-change-id" in commit.attention_reasons or not commit.change_id:
-        return "missing Change-Id"
-    if commit.abandoned:
-        return "abandoned"
-    if not commit.pushed:
-        return "not-pushed"
-    if commit.patchset_status == "merged-same":
-        return ""
-    if commit.patchset_status == "merged-drift":
-        return "merged drift"
-    if commit.patchset_status == "merged-unknown":
-        return "merged (equiv. unknown)"
+    """Short plain-text annotation for a trailing ``# …`` column, or empty string.
+
+    Maps ``commit.attention_reasons`` to text; the verdict itself is ``core.attention``'s.
+    """
+    reasons = set(commit.attention_reasons)
+    for reason, text in _TERMINAL_TEXT:
+        if reason in reasons:
+            return text
     parts: list[str] = []
-    if commit.ci_failures:
-        parts.append(f"CI failed: {commit.ci_failures[0]}")
-    elif commit.verified is not None and commit.verified <= -1:
-        parts.append("build failed")
-    if commit.comments_unresolved > 0:
-        n = commit.comments_unresolved
-        noun = "comment" if n == 1 else "comments"
-        parts.append(f"{n} unresolved {noun}")
+    if Attention.CI_FAILED in reasons:
+        parts.append(f"CI failed: {commit.ci_failures[0]}" if commit.ci_failures else "build failed")
+    if Attention.UNRESOLVED_COMMENTS in reasons:
+        parts.append(unresolved_comments_text(commit.comments_unresolved))
     if not parts and commit.submittable:
         return "submittable"
     return ", ".join(parts)

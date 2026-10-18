@@ -46,7 +46,7 @@ flowchart TB
 
   subgraph core [Core domain — core/]
     stack[stack.py · ready_calc.py · change_id.py]
-    status[annotated_stack.py · gerrit_change_status.py · comment_chains.py]
+    status[annotated_stack.py · gerrit_change_status.py · attention.py · comment_chains.py]
     config[config.py · git_state.py · upstream_interactive.py]
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
@@ -200,6 +200,7 @@ sequenceDiagram
   participant REST as rest.py
   participant Cache as cache.py
   participant Status as gerrit_change_status
+  participant Attn as attention
   participant Render as render/
 
   CLI->>Stack: commits_in_range → CommitStatusInput rows
@@ -213,8 +214,8 @@ sequenceDiagram
   Svc->>Status: build_log_commit per row
   Svc->>Status: parallel follow-ups (comments, checks, reviewers)
   Svc-->>CLI: list[LogCommit]
-  CLI->>Status: annotate_attention
-  CLI->>Render: oneline_body, status tokens
+  CLI->>Attn: annotate_attention
+  CLI->>Render: oneline_body, status tokens (map attention_reasons to text)
 ```
 
 **Shared pipeline:** `GerritService.fetch_gerrit_data` is the local-stack enrichment entry point used by `ger log`, `ger show`, and the rebase enricher. `GerritService.fetch_review_chains` is the query-driven sibling used by `ger inbox` — it must not resolve stack context.
@@ -223,7 +224,7 @@ sequenceDiagram
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
-**Status model:** `gerrit_change_status.py` defines `LogCommit`, the patchset states, and `determine_attention()`.
+**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking); the exit code, `ger edit --first-attention-commit`, the trailing hints and the inbox all read `attention_reasons`, and render only maps reasons to text.
 
 **Rendering:** `render/commit_row.py` (full rows for log/show) and `render/status_fmt.py` (compact tokens for rebase todo lines) both consume `LogCommit`.
 
@@ -375,7 +376,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention |
-| `core/gerrit_change_status.py` | `LogCommit`, patchset status, `determine_attention()`, merged equivalence |
+| `core/gerrit_change_status.py` | `LogCommit`, patchset status, merged equivalence |
+| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `core/review_chain.py` | Review chains from ChangeInfo payloads; unreviewed age, wait age |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |

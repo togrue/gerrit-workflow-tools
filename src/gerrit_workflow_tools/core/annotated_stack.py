@@ -21,6 +21,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gerrit_workflow_tools.core.attention import annotate_attention
 from gerrit_workflow_tools.core.change_id import validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -31,11 +32,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    CommitStatusInput,
-    LogCommit,
-    annotate_attention,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit
 from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
 from gerrit_workflow_tools.core.stack import commits_in_range
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from gerrit_workflow_tools.core.attention import annotate_attention
 from gerrit_workflow_tools.core.attention_strategy import (
     attention_reasons_via_registry,
     clear_attention_strategy_cache,
@@ -11,7 +12,7 @@ from gerrit_workflow_tools.core.attention_strategy import (
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, annotate_attention
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.reviewers_strategy import clear_reviewers_strategy_cache, default_reviewers_via_registry
 
