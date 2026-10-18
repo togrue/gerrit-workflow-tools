@@ -21,6 +21,20 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 
 ---
 
+## Attention cursor (`ger.*` and branch-local)
+
+Walk state for iterative edit-attention rework (`ger edit`, and read-only queries on `ger show` / `ger sha`). Identity is a **Change-Id**, not a SHA. History is append-only under `.git/ger/attention-history.jsonl` (not git config).
+
+| Key | Effect |
+|-----|--------|
+| `branch.<name>.gerAttentionCursor` | Change-Id of the last attention-walk stop on that branch. |
+| `branch.<name>.gerAttentionCursorAt` | UTC timestamp (`…Z`) when the cursor was last written. |
+| `ger.lastAttentionChangeId` | Repo-level last walk Change-Id for **lazy adopt** when a new branch has no cursor but the Change-Id is in its stack (e.g. Gerrit download). |
+| `ger.lastAttentionChangeIdAt` | UTC timestamp for `ger.lastAttentionChangeId`. |
+| `ger.attentionCursorTtl` | Max age of a usable cursor (default `14d`; also accepts `7d`, `2w`, `48h`, …). On expiry the cursor is always cleared (no prompt); recover via `ger edit --cursor-history` and `--set-cursor`. |
+
+---
+
 ## Change identity (triplet resolution)
 
 Commands that talk to Gerrit resolve each footer **Change-Id** to Gerrit's canonical **triplet** (`project~branch~Change-Id`, the `ChangeInfo.id` string). Two git config keys supply the `project` and `branch` parts:
@@ -84,8 +98,9 @@ Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbo
 |-----|--------|
 | `branch.<name>.gerritTarget` | **Optional override** for the Gerrit **destination branch** (e.g. `main`, `dev`). When unset, `ger push`, `ger rebase`, and change resolution infer the destination from `@{upstream}` if its remote name matches `gerrit.remote` (default `origin`). When set, it wins for push, merge-base, `ger rebase --onto-remote`, and **triplet building** when resolving a bare Change-Id (see [Change identity](#change-identity-triplet-resolution)). The value must resolve to an existing ref—typically a local branch of that name or `refs/remotes/<remote>/<branch>` after `git fetch` on `gerrit.remote`. If the tool reports that the target is missing locally, fetch from the remote first; do not create a local branch literally named `origin/<branch>`—that is the remote-tracking name space, not a branch you should create by hand. |
 | `branch.<name>.gerritReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
+| `branch.<name>.gerAttentionCursor` / `…CursorAt` | See [Attention cursor](#attention-cursor-ger-and-branch-local). |
 
-Set via `git config` (or `set_branch_config` in code).
+Set via `git config` (or `set_branch_config` / attention-cursor helpers in code).
 
 ---
 

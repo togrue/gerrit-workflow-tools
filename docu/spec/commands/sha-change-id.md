@@ -4,34 +4,38 @@
 |--|--|
 | **Status** | Implemented |
 | **Modules** | `cli_sha.py`, `cli_changeid.py` |
-| **Requires** | Git only |
+| **Requires** | Git; `--first-attention` / `--next-attention` need `gerrit.webUrl` + credentials |
 
-Plumbing between Change-Ids and commit SHAs. No Gerrit HTTP.
+Plumbing between Change-Ids and commit SHAs. Plain Change-Id lookup is local only; attention targeting uses the annotated stack (Gerrit).
 
 ---
 
 ## `ger sha`
 
-Resolve Change-Id → SHA in local history.
+Resolve Change-Id → SHA in local history, or print the SHA of an edit-attention target.
 
 ### Usage
 
 ```
 ger sha [options] <change-id>
+ger sha --first-attention
+ger sha -n / --next-attention [CHANGEISH]
 ```
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `--range REV-RANGE` | Search range (mutually exclusive with `--all`) |
+| `--first-attention` | SHA of the oldest stack commit with edit attention (read-only; no cursor write) |
+| `-n` / `--next-attention` | SHA of the next edit-attention commit tip-ward of the cursor (or of CHANGEISH as AFTER) |
+| `--range REV-RANGE` | Search range (mutually exclusive with `--all`; incompatible with attention flags) |
 | `--all` | All refs in repository |
 | `--short` | Abbreviated SHA |
 | `--subject` | Short SHA + subject |
 | `--json` | `{"change_id", "sha", "subject"}` |
 | `--debug-log`, `-v` | Standard helpers |
 
-Default range: configured Gerrit stack window, else upstream..HEAD, else merge-base..HEAD.
+Default range (Change-Id lookup): configured Gerrit stack window, else upstream..HEAD, else merge-base..HEAD.
 
 ### Exit codes
 

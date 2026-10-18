@@ -35,6 +35,8 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | Option | Description |
 |--------|-------------|
 | `--stack` | Include the local stack (`upstream_tip..HEAD`) |
+| `--first-attention` | Show the oldest stack commit with **edit attention** (unresolved comments or CI failed). Does not move the attention cursor. Mutually exclusive with `--next-attention`; incompatible with `--stack` / REV |
+| `-n` / `--next-attention` | Show the next edit-attention commit tip-ward of the cursor (or of a single REV as AFTER). Read-only; does not move the cursor |
 | `--comments {unresolved,all,resolved}` | Which inline comment chains to print (default: `unresolved`) |
 | `--context` | Include source lines around each comment (`enable-context` on `GET …/comments`; padding 2) |
 | `--context-padding N` | Extra source lines before/after the comment (implies `--context`) |
