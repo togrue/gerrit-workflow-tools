@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit import change_resolution as cr
+from gerrit_workflow_tools.core.gerrit import stack_context as cr
 from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,

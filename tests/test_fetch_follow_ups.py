@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.core.stack import Commit
 

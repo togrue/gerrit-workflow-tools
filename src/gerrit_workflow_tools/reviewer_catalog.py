@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.reviewer_completion import (
     ReviewerLookup,

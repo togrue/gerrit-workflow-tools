@@ -7,9 +7,9 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.ready_calc import ReadyResult
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 from gerrit_workflow_tools.core.stack import commits_in_range

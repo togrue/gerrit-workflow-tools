@@ -32,9 +32,9 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import ConfigError, Settings, set_branch_config
-from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context, stack_project
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context, stack_project
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,

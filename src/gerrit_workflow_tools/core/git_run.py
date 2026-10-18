@@ -49,9 +49,7 @@ class GitError(RuntimeError):
 
 def _clear_semantic_snapshots() -> None:
     """Drop Worktree and stack-context memos (lazy imports: this module is substrate)."""
-    from gerrit_workflow_tools.core.gerrit.change_resolution import (
-        clear_stack_context_cache,
-    )
+    from gerrit_workflow_tools.core.gerrit.stack_context import clear_stack_context_cache
     from gerrit_workflow_tools.core.git_state import clear_worktree_cache
 
     clear_worktree_cache()

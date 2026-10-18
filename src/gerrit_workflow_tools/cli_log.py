@@ -33,8 +33,8 @@ from gerrit_workflow_tools.core.annotated_stack import (
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.commit_row import (

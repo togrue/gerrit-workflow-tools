@@ -15,7 +15,6 @@ from gerrit_workflow_tools.core.gerrit.cache import (
     GerritCache,
     comments_context_key,
 )
-from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
@@ -30,6 +29,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     probe_changes_updated,
     resolve_gerrit_web_base,
 )
+from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.review_chain import (
     INBOX_QUERY_OPTIONS,
     ReviewChain,

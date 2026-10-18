@@ -22,11 +22,11 @@ from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_resolve import main as ger_resolve_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import (
     HttpGerritRest,
     resolve_gerrit_web_base,
 )
+from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.cli_gerrit_mocks import head_change_id
 from tests.conftest import run_cli

@@ -54,7 +54,7 @@ flowchart TB
   end
 
   subgraph gerrit [Gerrit integration — core/gerrit/]
-    resolution[change_resolution.py]
+    resolution[change_resolution.py · stack_context.py]
     service[service.py]
     rest[rest.py]
     cache[cache.py · paths.py]
@@ -197,7 +197,7 @@ sequenceDiagram
   participant CLI as cli_log / cli_show / rebase_enricher
   participant Stack as stack.py
   participant Svc as GerritService
-  participant Res as change_resolution
+  participant Res as stack_context
   participant REST as rest.py
   participant Cache as cache.py
   participant Status as gerrit_change_status
@@ -239,7 +239,7 @@ Any input that might mean “a commit or Gerrit change” flows through one gram
 flowchart TB
   input[changeish: git ref · Change-Id · triplet · change:N · URL · q:query]
   classify[core/changeish.py · parse]
-  stack_ctx[change_resolution.resolve_stack_context]
+  stack_ctx[stack_context.resolve_stack_context]
   resolve[change_resolution.resolve_changeish]
   stack_resolve[change_resolution.resolve_stack_changeish]
   rest[GerritRest queries]
@@ -402,7 +402,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
-| `core/gerrit/change_resolution.py` | Changeish resolution, stack context, triplets, resolution notes |
+| `core/gerrit/change_resolution.py` | Changeish resolution, resolution notes |
+| `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), its memo, triplets |
 | `core/gerrit/paths.py` | Cache DB path and host key |
 
 ### Presentation (`render/` and package root)
@@ -436,7 +437,7 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 8. **One git runner.** `core/git_run.py` cannot run interactively, feed stdin or return bytes, so `cli_edit.py`, `cli_rebase.py`, `cli_push.py` and `core/gerrit_change_status.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
 9. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
 10. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
-11. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/change_resolution.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
+11. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
 12. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, with its own copy of `_local_sha_or_none`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
 
 ---

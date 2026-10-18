@@ -131,7 +131,7 @@ def test_substrate_stays_at_the_bottom() -> None:
         {
             # Backlog: "Cache-clear hub" — clear_git_cache reaches up to clear caches it does not own.
             "core/git_run.py -> core/git_state.py": "cache-clear hub",
-            "core/git_run.py -> core/gerrit/change_resolution.py": "cache-clear hub",
+            "core/git_run.py -> core/gerrit/stack_context.py": "cache-clear hub",
         },
         f"{', '.join(sorted(SUBSTRATE))} must not import anything above them.",
     )
@@ -362,9 +362,9 @@ MAX_LINES = 400
 SIZE_BASELINE = {
     "cli_changeid.py": 408,
     "cli_push.py": 1342,
-    "cli_show.py": 490,
+    "cli_show.py": 487,
     "core/gerrit/cache.py": 728,
-    "core/gerrit/change_resolution.py": 656,
+    "core/gerrit/change_resolution.py": 564,
     "core/gerrit/rest.py": 968,
     "core/gerrit/service.py": 512,
     "core/git_state.py": 454,

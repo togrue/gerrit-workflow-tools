@@ -11,12 +11,11 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
     ChangeResolutionError,
-    build_triplet,
     format_resolution_note,
     parse_changeish,
     resolve_changeish,
-    resolve_stack_context,
 )
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import effective_gerrit_destination_branch
 from tests.fixtures import _cid, configure_gerrit_target

@@ -121,7 +121,7 @@ comes from the **stack context** of the current (or `--branch`) branch:
 | `target branch` | `branch.<name>.gerritTarget` → upstream ref when its remote is `gerrit.remote` |
 | `push branch` | the branch Gerrit would receive `refs/for/<target>` |
 
-Resolved by `resolve_stack_context()` in `core/gerrit/change_resolution.py`
+Resolved by `resolve_stack_context()` in `core/gerrit/stack_context.py`
 (including `branch.<name>.gerritTarget` when set). See
 [Configuration.md](../Configuration.md#change-identity-triplet-resolution).
 
@@ -136,7 +136,7 @@ command that *needs* it fails with the same actionable error as `ger push`
 **Problem:** the same `Change-Id: I…` footer can appear on changes targeting
 different branches (e.g. a change cherry-picked from `main` to a release branch).
 A bare `Change-Id` therefore is **not** a unique Gerrit key. The shared resolver
-in `core/gerrit/change_resolution.py` selects among matches using stack context.
+in `core/gerrit/stack_context.py` selects among matches using stack context.
 Stack overlay **batch-fetches** by Change-Id (optionally project-scoped) and keys
 the disk cache by triplet / `ChangeInfo.id`, never collapsing multiple matches
 silently.
