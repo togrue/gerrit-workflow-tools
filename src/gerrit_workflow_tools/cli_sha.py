@@ -53,6 +53,7 @@ import logging
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.cli_attention import add_attention_query_args, resolve_attention_query_or_exit
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     ExitCode,
@@ -65,6 +66,7 @@ from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, in
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
@@ -84,9 +86,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "change_id",
+        nargs="?",
         metavar="CHANGE_ID",
-        help="Gerrit Change-Id to look up (I + 40 hex digits).",
+        help="Gerrit Change-Id to look up (I + 40 hex digits). Optional with --first-attention / --next-attention.",
     )
+    add_attention_query_args(ap)
 
     range_group = ap.add_mutually_exclusive_group()
     range_group.add_argument(
@@ -127,54 +131,84 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
     cwd = cwd_from_env()
     settings = Settings.from_cwd(cwd)
 
-    if not CHANGE_ID_VALUE_RE.match(args.change_id):
-        print(f"error: invalid Change-Id: {args.change_id!r}", file=sys.stderr)
-        return int(ExitCode.USAGE)
-
-    want = args.change_id.lower()
-
-    try:
-        if args.all_commits:
-            logger.debug("searching all commits")
-            commits = _commits_all(cwd)
-        elif args.rev_range:
-            logger.debug("searching range: %s", args.rev_range)
-            commits = commits_in_range(cwd, args.rev_range)
-        else:
-            head_ref = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
-            if head_ref.returncode == 0:
-                branch = head_ref.stdout.strip()
-                if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
-                    return 1
-            _fork, display, target_tip = merge_base_with_target(cwd)
-            rev_range = f"{target_tip}..HEAD"
-            logger.debug("default range: %s (base: %s)", rev_range[:20], display)
-            commits = commits_in_range(cwd, rev_range)
-    except GitError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return int(ExitCode.GIT)
+    if (args.first_attention or args.next_attention) and (args.rev_range or args.all_commits):
+        ap.error("cannot combine attention targeting with --range / --all")
+    if args.first_attention and args.change_id:
+        ap.error("cannot use CHANGE_ID with --first-attention")
+    if not args.first_attention and not args.next_attention and not args.change_id:
+        ap.error("CHANGE_ID is required (or use --first-attention / --next-attention)")
 
     matches: list[tuple[str, str, str]] = []
-    for c in commits:
-        cid = c.change_id
-        if cid and cid.lower() == want:
-            matches.append((c.sha, c.short_sha, c.subject))
+    printed_change_id = args.change_id or ""
 
-    if not matches:
-        print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)
-        return int(ExitCode.NOT_FOUND)
+    if args.first_attention or args.next_attention:
+        branch = resolve_working_branch(cwd, settings=settings)
+        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+            return int(ExitCode.ATTENTION)
+        try:
+            resolved = resolve_attention_query_or_exit(
+                cwd,
+                args,
+                settings=settings,
+                branch=branch,
+                after_changeish=args.change_id if args.next_attention else None,
+            )
+        except GitError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return int(ExitCode.GIT)
+        if isinstance(resolved, int):
+            return resolved
+        printed_change_id = resolved.change_id or ""
+        matches = [(resolved.sha, resolved.short_sha, resolved.summary)]
+    else:
+        assert args.change_id is not None
+        if not CHANGE_ID_VALUE_RE.match(args.change_id):
+            print(f"error: invalid Change-Id: {args.change_id!r}", file=sys.stderr)
+            return int(ExitCode.USAGE)
 
-    if len(matches) > 1 and not args.all_commits:
-        shorts = ", ".join(color_short_sha(m[1]) for m in matches)
-        print(
-            f"error: multiple commits with Change-Id {args.change_id}: {shorts}",
-            file=sys.stderr,
-        )
-        return int(ExitCode.DUPLICATE_CHANGE_ID)
+        want = args.change_id.lower()
+
+        try:
+            if args.all_commits:
+                logger.debug("searching all commits")
+                commits = _commits_all(cwd)
+            elif args.rev_range:
+                logger.debug("searching range: %s", args.rev_range)
+                commits = commits_in_range(cwd, args.rev_range)
+            else:
+                head_ref = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
+                if head_ref.returncode == 0:
+                    branch = head_ref.stdout.strip()
+                    if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
+                        return 1
+                _fork, display, target_tip = merge_base_with_target(cwd)
+                rev_range = f"{target_tip}..HEAD"
+                logger.debug("default range: %s (base: %s)", rev_range[:20], display)
+                commits = commits_in_range(cwd, rev_range)
+        except GitError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return int(ExitCode.GIT)
+
+        for c in commits:
+            cid = c.change_id
+            if cid and cid.lower() == want:
+                matches.append((c.sha, c.short_sha, c.subject))
+
+        if not matches:
+            print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)
+            return int(ExitCode.NOT_FOUND)
+
+        if len(matches) > 1 and not args.all_commits:
+            shorts = ", ".join(color_short_sha(m[1]) for m in matches)
+            print(
+                f"error: multiple commits with Change-Id {args.change_id}: {shorts}",
+                file=sys.stderr,
+            )
+            return int(ExitCode.DUPLICATE_CHANGE_ID)
 
     for sha, short_sha, subject in matches:
         if args.json_out:
-            print(json.dumps({"change_id": args.change_id, "sha": sha, "subject": subject}))
+            print(json.dumps({"change_id": printed_change_id, "sha": sha, "subject": subject}))
         elif args.subject:
             print(f"{color_short_sha(short_sha)} {subject}")
         elif args.short:

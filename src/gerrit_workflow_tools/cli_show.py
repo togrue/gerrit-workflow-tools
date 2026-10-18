@@ -8,6 +8,7 @@ import logging
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     ExitCode,
@@ -27,11 +28,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    CommentChain,
-    LogCommit,
-    gerrit_inline_comment_url,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
@@ -50,6 +47,7 @@ from gerrit_workflow_tools.render.commit_row import (
     fmt_patchset_column,
     fmt_verified,
 )
+from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -112,6 +110,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include all commits in the local stack (upstream_tip..HEAD).",
     )
+    add_attention_query_args(p)
     p.add_argument(
         "--branch",
         metavar="NAME",
@@ -169,82 +168,6 @@ def _output_format(args: argparse.Namespace) -> str:
     if args.ai or args.format_ == "markdown":
         return "markdown"
     return "human"
-
-
-def _comment_json_payload(
-    chains: list[CommentChain],
-    gerrit_url: str | None,
-) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    comment_payload: list[dict[str, object]] = []
-    chain_payload: list[dict[str, object]] = []
-    for chain in chains:
-        chain_comments: list[dict[str, object]] = []
-        for row_item in chain.comments:
-            entry: dict[str, object] = {
-                "path": row_item.path,
-                "line": row_item.line,
-                "message": row_item.message,
-                "url": gerrit_inline_comment_url(gerrit_url, row_item.comment_id),
-            }
-            if row_item.author:
-                entry["author"] = row_item.author
-            if row_item.comment_id:
-                entry["comment_id"] = row_item.comment_id
-            if row_item.context_lines:
-                entry["context_lines"] = [
-                    {"line_number": line.line_number, "context_line": line.text} for line in row_item.context_lines
-                ]
-            chain_comments.append(entry)
-            comment_payload.append(entry)
-        chain_payload.append(
-            {
-                "path": chain.path,
-                "line": chain.line,
-                "url": gerrit_inline_comment_url(gerrit_url, chain.root_id),
-                "resolved": chain.resolved,
-                "comments": chain_comments,
-            }
-        )
-    return comment_payload, chain_payload
-
-
-def _commit_json_payload(
-    commit: LogCommit,
-    *,
-    is_local: bool,
-    resolution: object,
-    chains: list[CommentChain],
-) -> dict[str, object]:
-    comment_payload, chain_payload = _comment_json_payload(chains, commit.gerrit_url)
-    return {
-        "sha": commit.sha if commit.sha else None,
-        "change_id": commit.change_id,
-        "summary": commit.summary,
-        "pushed": commit.pushed,
-        "patchset_status": commit.patchset_status,
-        "verified": commit.verified,
-        "code_review": commit.code_review,
-        "comments_unresolved": commit.comments_unresolved,
-        "ci_failures": commit.ci_failures,
-        "ci_links": [{"label": link.label, "url": link.url, "source": link.source} for link in commit.ci_links],
-        "ci_pipelines": [
-            {
-                "label": pipe.label,
-                "state": pipe.state,
-                **({"url": pipe.url} if pipe.url else {}),
-            }
-            for pipe in commit.ci_pipelines
-        ],
-        "gerrit_url": commit.gerrit_url,
-        "submittable": commit.submittable,
-        "attention_reasons": commit.attention_reasons,
-        "comments": comment_payload,
-        "comment_chains": chain_payload,
-        "local_commit": is_local,
-        "change_status": commit.change_status,
-        "merged_equivalent": commit.merged_equivalent,
-        "resolution": resolution.to_json_dict(),  # type: ignore[attr-defined]
-    }
 
 
 def _show_headline(commit: LogCommit) -> str:
@@ -379,13 +302,21 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     verbose_level = int(args.verbose)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
 
-    if args.stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+    if (
+        (args.stack or args.first_attention or args.next_attention)
+        and branch is not None
+        and not require_branch_upstream(cwd, branch, settings=settings)
+    ):
         return int(ExitCode.ATTENTION)
+
+    revs_or_code = show_revs_with_attention(p, args, cwd=cwd, settings=settings, branch=branch, gerrit=gerrit)
+    if isinstance(revs_or_code, int):
+        return revs_or_code
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     targets = resolve_show_targets(
         cwd,
-        list(args.revs),
+        revs_or_code,
         service.rest,
         settings=settings,
         stack=args.stack,
@@ -441,7 +372,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 
         if out_fmt == "json":
             json_payloads.append(
-                _commit_json_payload(
+                commit_json_payload(
                     commit,
                     is_local=resolved.is_local_commit,
                     resolution=resolved.resolution,

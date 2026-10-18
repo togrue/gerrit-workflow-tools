@@ -382,6 +382,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
+| `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
@@ -415,6 +416,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/commit_row.py` | Full commit line layout for log/show |
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts |
 | `render/comments.py` | Inline comment chains, human and Markdown |
+| `render/show_json.py` | JSON payloads for ``ger show`` |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |

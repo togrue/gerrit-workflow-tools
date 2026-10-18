@@ -22,6 +22,18 @@ from gerrit_workflow_tools.core.attention_cursor import (
     resolve_edit_attention_target,
     write_branch_cursor,
 )
+
+
+# Re-export for CLI callers.
+__all__ = [
+    "CursorStatus",
+    "change_id_for_stack_sha",
+    "describe_cursor_status",
+    "load_edit_attention_stack",
+    "resolve_attention_query",
+    "resolve_edit_attention_commit",
+    "resolve_first_edit_attention_sha",
+]
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
@@ -167,3 +179,46 @@ def change_id_for_stack_sha(
     stack_view = load_edit_attention_stack(cwd, settings=settings, gerrit=gerrit)
     matched = next((c for c in stack_view.commits if c.sha == sha), None)
     return matched.change_id if matched else None
+
+
+def resolve_attention_query(
+    cwd: Path | str | None,
+    *,
+    settings: Settings,
+    branch: str | None,
+    mode: EditAttentionMode,
+    after_changeish: str | None = None,
+    gerrit: object | None = None,
+) -> tuple[LogCommit, list[str]]:
+    """Resolve an edit-attention target for read-only queries (``ger show`` / ``ger sha``).
+
+    Does not update the attention cursor. *after_changeish* is optional for ``next``.
+    """
+    from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_changeish
+    from gerrit_workflow_tools.core.git_run import GitError
+
+    after_change_id: str | None = None
+    if after_changeish:
+        after = resolve_stack_changeish(
+            cwd,
+            after_changeish,
+            settings=settings,
+            gerrit=gerrit,  # type: ignore[arg-type]
+            branch=branch,
+            require_in_stack=True,
+        )
+        after_change_id = change_id_for_stack_sha(cwd, after.sha, settings=settings, gerrit=gerrit)
+        if not after_change_id:
+            raise ChangeResolutionError("REV has no Change-Id; cannot use --next-attention AFTER")
+    try:
+        return resolve_edit_attention_commit(
+            cwd,
+            settings=settings,
+            mode=mode,
+            branch=branch,
+            after_change_id=after_change_id,
+            gerrit=gerrit,
+            update_cursor=False,
+        )
+    except GitError:
+        raise

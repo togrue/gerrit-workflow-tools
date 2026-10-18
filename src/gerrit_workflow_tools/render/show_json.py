@@ -1,0 +1,87 @@
+"""JSON payloads for ``ger show``."""
+
+from __future__ import annotations
+
+from gerrit_workflow_tools.core.gerrit_change_status import (
+    CommentChain,
+    LogCommit,
+    gerrit_inline_comment_url,
+)
+
+
+def comment_json_payload(
+    chains: list[CommentChain],
+    gerrit_url: str | None,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Flatten comment chains into JSON comment and chain lists."""
+    comment_payload: list[dict[str, object]] = []
+    chain_payload: list[dict[str, object]] = []
+    for chain in chains:
+        chain_comments: list[dict[str, object]] = []
+        for row_item in chain.comments:
+            entry: dict[str, object] = {
+                "path": row_item.path,
+                "line": row_item.line,
+                "message": row_item.message,
+                "url": gerrit_inline_comment_url(gerrit_url, row_item.comment_id),
+            }
+            if row_item.author:
+                entry["author"] = row_item.author
+            if row_item.comment_id:
+                entry["comment_id"] = row_item.comment_id
+            if row_item.context_lines:
+                entry["context_lines"] = [
+                    {"line_number": line.line_number, "context_line": line.text} for line in row_item.context_lines
+                ]
+            chain_comments.append(entry)
+            comment_payload.append(entry)
+        chain_payload.append(
+            {
+                "path": chain.path,
+                "line": chain.line,
+                "url": gerrit_inline_comment_url(gerrit_url, chain.root_id),
+                "resolved": chain.resolved,
+                "comments": chain_comments,
+            }
+        )
+    return comment_payload, chain_payload
+
+
+def commit_json_payload(
+    commit: LogCommit,
+    *,
+    is_local: bool,
+    resolution: object,
+    chains: list[CommentChain],
+) -> dict[str, object]:
+    """Build the per-commit JSON object for ``ger show --json``."""
+    comment_payload, chain_payload = comment_json_payload(chains, commit.gerrit_url)
+    return {
+        "sha": commit.sha if commit.sha else None,
+        "change_id": commit.change_id,
+        "summary": commit.summary,
+        "pushed": commit.pushed,
+        "patchset_status": commit.patchset_status,
+        "verified": commit.verified,
+        "code_review": commit.code_review,
+        "comments_unresolved": commit.comments_unresolved,
+        "ci_failures": commit.ci_failures,
+        "ci_links": [{"label": link.label, "url": link.url, "source": link.source} for link in commit.ci_links],
+        "ci_pipelines": [
+            {
+                "label": pipe.label,
+                "state": pipe.state,
+                **({"url": pipe.url} if pipe.url else {}),
+            }
+            for pipe in commit.ci_pipelines
+        ],
+        "gerrit_url": commit.gerrit_url,
+        "submittable": commit.submittable,
+        "attention_reasons": commit.attention_reasons,
+        "comments": comment_payload,
+        "comment_chains": chain_payload,
+        "local_commit": is_local,
+        "change_status": commit.change_status,
+        "merged_equivalent": commit.merged_equivalent,
+        "resolution": resolution.to_json_dict(),  # type: ignore[attr-defined]
+    }
