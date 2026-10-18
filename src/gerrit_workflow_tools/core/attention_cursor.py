@@ -99,8 +99,13 @@ def _parse_iso_utc(raw: str | None) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
-def _format_iso_utc(when: datetime) -> str:
+def format_iso_utc(when: datetime) -> str:
+    """Format *when* as a UTC ISO-8601 string with a ``Z`` suffix."""
     return when.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _format_iso_utc(when: datetime) -> str:
+    return format_iso_utc(when)
 
 
 def _now_utc(now: datetime | None) -> datetime:

@@ -29,6 +29,8 @@ def test_gedit_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "[REV]" in out
     assert "reword" in out.lower()
     assert "--first-attention-commit" in out
+    assert "--next" in out
+    assert "--cursor" in out
 
 
 def test_greword_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,14 +67,8 @@ def test_resolve_first_edit_attention_none_when_green(stack_repo: Path, monkeypa
         )
 
 
-def test_gedit_first_attention_commit_starts_rebase(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    overrides: list[dict] = [{}] * len(rows)
-    overrides[0] = {"unresolved_comment_count": 2}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+def _fake_rebase_capture(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     captured: dict[str, str] = {}
-
     real_run = subprocess.run
 
     def fake_run(cmd, **kwargs):
@@ -82,11 +78,76 @@ def test_gedit_first_attention_commit_starts_rebase(stack_repo: Path, monkeypatc
         return real_run(cmd, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    return captured
+
+
+def test_gedit_first_attention_commit_starts_rebase(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    captured = _fake_rebase_capture(monkeypatch)
     code, _out, err = run_cli(
         stack_repo, gedit_main, ["--first-attention-commit"], monkeypatch, gerrit=ChangeStore(details)
     )
     assert code == 0, err
     assert captured["full_sha"] == rows[0].sha
+
+
+def test_gedit_bare_resume_starts_at_oldest(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    captured = _fake_rebase_capture(monkeypatch)
+    code, _out, err = run_cli(stack_repo, gedit_main, [], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0, err
+    assert captured["full_sha"] == rows[0].sha
+    from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
+    from gerrit_workflow_tools.core.git_state import resolve_working_branch
+
+    settings = Settings.from_cwd(stack_repo)
+    branch = resolve_working_branch(stack_repo, settings=settings)
+    assert branch is not None
+    cursor = load_branch_cursor(settings, branch)
+    assert cursor is not None
+    assert cursor.change_id == rows[0].change_id
+
+
+def test_gedit_next_skips_cursor_still_needing_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    assert len(rows) >= 2
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    overrides[1] = {"verified": -1}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    store = ChangeStore(details)
+    # Seed cursor on the oldest (still needs attention).
+    captured = _fake_rebase_capture(monkeypatch)
+    code, _out, err = run_cli(stack_repo, gedit_main, [], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert captured["full_sha"] == rows[0].sha
+    captured.clear()
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert captured["full_sha"] == rows[1].sha
+
+
+def test_gedit_cursor_flag_prints_status(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    _fake_rebase_capture(monkeypatch)
+    run_cli(stack_repo, gedit_main, ["--first-attention-commit"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(stack_repo, gedit_main, ["--cursor"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0, err
+    assert rows[0].change_id in out
+    assert "editAttention: True" in out
 
 
 # -- Semantic exit codes, shared with `ger fix` --------------------------------------

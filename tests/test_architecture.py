@@ -395,7 +395,6 @@ def test_module_size_ratchet() -> None:
 # ``# pylint: disable=too-many-*`` silences the signal that a function should be split.
 # Counts per file may only go down.
 TOO_MANY_BASELINE = {
-    "cli_edit.py": 1,
     "cli_log.py": 4,
     "cli_push.py": 5,
     "cli_sha.py": 2,

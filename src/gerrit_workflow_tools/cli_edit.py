@@ -18,19 +18,24 @@ from gerrit_workflow_tools.cli_common import (
     cwd_from_env,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.annotated_stack import (
-    branches_needing_upstream,
-    load_annotated_stack,
-    resolve_rev_range,
+from gerrit_workflow_tools.core.annotated_stack import branches_needing_upstream, resolve_rev_range
+from gerrit_workflow_tools.core.attention_cursor import (
+    EditAttentionMode,
+    read_cursor_history,
+    write_branch_cursor,
 )
-from gerrit_workflow_tools.core.attention import first_commit_needing_edit_attention
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.edit_attention_walk import (
+    change_id_for_stack_sha,
+    describe_cursor_status,
+    resolve_edit_attention_commit,
+    resolve_first_edit_attention_sha,
+)
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeResolutionError,
     format_resolution_note,
     resolve_stack_changeish,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target
@@ -39,23 +44,78 @@ from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstr
 
 logger = logging.getLogger(__name__)
 
+# Re-export for tests and callers that imported from this module.
+__all__ = [
+    "main",
+    "main_reword",
+    "resolve_first_edit_attention_sha",
+]
 
-def resolve_first_edit_attention_sha(cwd: Path, *, settings: Settings, gerrit: GerritRest | None = None) -> str:
-    """Return full SHA of the oldest commit with unresolved comments or a failed build."""
+
+def _require_stack_upstream(cwd: Path, settings: Settings) -> bool:
     rev_range = resolve_rev_range(cwd, None, settings=settings)
     for branch in branches_needing_upstream(cwd, rev_range, settings=settings):
         if not require_branch_upstream(cwd, branch, settings=settings):
-            raise GitError("upstream not configured")
-    try:
-        stack_view = load_annotated_stack(cwd, rev_range, settings=settings, gerrit=gerrit)
-    except (ValueError, ChangeResolutionError, GerritApiError) as e:
-        raise GitError(f"could not load stack commits: {e}") from e
-    if not stack_view.commits:
-        raise GitError("no commits in stack")
-    target = first_commit_needing_edit_attention(stack_view.commits)
-    if target is None:
-        raise GitError("no commit needs edit attention (unresolved comments or build failed)")
-    return target.sha
+            return False
+    return True
+
+
+def _print_cursor_status(cwd: Path, *, settings: Settings, branch: str | None, gerrit: GerritRest | None) -> int:
+    status = describe_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+    if status.change_id is None:
+        print(f"attention cursor: (none) on branch {status.branch}")
+        if status.last_attention_change_id:
+            print(f"repo lastAttentionChangeId: {status.last_attention_change_id}")
+        return 0
+    print(f"attention cursor: {status.change_id}")
+    print(f"  branch: {status.branch}")
+    print(f"  touchedAt: {status.touched_at}")
+    print(f"  inStack: {status.in_stack}")
+    print(f"  editAttention: {status.edit_attention}")
+    if status.short_sha:
+        print(f"  shortSha: {status.short_sha}")
+    return 0
+
+
+def _print_cursor_history(cwd: Path) -> int:
+    events = read_cursor_history(cwd, limit=50)
+    if not events:
+        print("attention cursor history: (empty)")
+        return 0
+    for event in events:
+        sha = f" {event.sha}" if event.sha else ""
+        print(f"{event.ts}  {event.branch}  {event.action}  {event.change_id}{sha}")
+    return 0
+
+
+def _set_cursor_from_changeish(
+    cwd: Path,
+    changeish: str,
+    *,
+    settings: Settings,
+    branch: str | None,
+    gerrit: GerritRest | None,
+) -> int:
+    if branch is None:
+        raise GitError("detached HEAD: cannot set attention cursor without a branch")
+    target = resolve_stack_changeish(
+        cwd,
+        changeish,
+        settings=settings,
+        gerrit=gerrit,
+        branch=branch,
+        require_in_stack=True,
+    )
+    if target.resolution is not None:
+        note = format_resolution_note(target.resolution)
+        if note:
+            print(note, file=sys.stderr)
+    change_id = change_id_for_stack_sha(cwd, target.sha, settings=settings, gerrit=gerrit)
+    if not change_id:
+        raise GitError("target commit has no Change-Id; cannot set attention cursor")
+    write_branch_cursor(cwd, branch, change_id, action="set", sha=target.sha)
+    print(f"attention cursor set to {change_id}")
+    return 0
 
 
 def _build_parser(*, prog: str, description: str, default_action: Literal["edit", "reword"]) -> argparse.ArgumentParser:
@@ -65,15 +125,40 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
         "rev",
         nargs="?",
         metavar="REV",
-        help="Git ref or Change-Id (I…); must be in the current stack.",
+        help="Git ref or Change-Id (I…); must be in the current stack. Optional with attention targeting.",
     )
     p.add_argument(
         "--first-attention-commit",
         action="store_true",
         help=(
-            "Edit the oldest commit that needs attention: unresolved Gerrit comments "
-            "or failed build (same detection as ``ger log``)."
+            "Reset the attention walk to the oldest commit that needs edit attention "
+            "(unresolved comments or failed build)."
         ),
+    )
+    p.add_argument(
+        "-n",
+        "--next",
+        action="store_true",
+        dest="next_attention",
+        help=(
+            "Edit the next edit-attention commit tip-ward of the attention cursor "
+            "(or of REV when given), even if the cursor still needs attention."
+        ),
+    )
+    p.add_argument(
+        "--cursor",
+        action="store_true",
+        help="Print the attention cursor for the working branch and exit.",
+    )
+    p.add_argument(
+        "--cursor-history",
+        action="store_true",
+        help="Print recent attention-cursor history and exit.",
+    )
+    p.add_argument(
+        "--set-cursor",
+        metavar="CHANGEISH",
+        help="Set the attention cursor to CHANGEISH without starting a rebase.",
     )
     g = p.add_mutually_exclusive_group()
     p.set_defaults(action_override=None)
@@ -98,25 +183,86 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
     return p
 
 
-def _build_parser_edit() -> argparse.ArgumentParser:
-    """Build parser for ``ger edit``."""
-    return _build_parser(
-        prog="ger edit",
-        description="Start an interactive rebase to edit, reword, or drop a commit in the current stack.",
-        default_action="edit",
+def _validate_targeting_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    inspect = sum(bool(x) for x in (args.cursor, args.cursor_history, args.set_cursor))
+    if inspect > 1:
+        p.error("use only one of --cursor, --cursor-history, --set-cursor")
+    if inspect and (args.first_attention_commit or args.next_attention or args.rev):
+        p.error("cannot combine cursor inspect/set with attention targeting or REV")
+    if args.first_attention_commit and args.next_attention:
+        p.error("cannot use --first-attention-commit with --next")
+    if args.first_attention_commit and args.rev:
+        p.error("cannot use REV with --first-attention-commit")
+
+
+def _resolve_target_sha(
+    cwd: Path,
+    args: argparse.Namespace,
+    *,
+    settings: Settings,
+    branch: str | None,
+    gerrit: GerritRest | None,
+) -> str:
+    """Resolve the SHA to stop on for an interactive rebase."""
+    rev_arg = args.rev
+    after_change_id: str | None = None
+
+    if args.next_attention and rev_arg is not None:
+        after_target = resolve_stack_changeish(
+            cwd,
+            rev_arg,
+            settings=settings,
+            gerrit=gerrit,
+            branch=branch,
+            require_in_stack=True,
+        )
+        if after_target.resolution is not None:
+            note = format_resolution_note(after_target.resolution)
+            if note:
+                print(note, file=sys.stderr)
+        after_change_id = change_id_for_stack_sha(cwd, after_target.sha, settings=settings, gerrit=gerrit)
+        if not after_change_id:
+            raise GitError("REV has no Change-Id; cannot use --next AFTER")
+        rev_arg = None
+
+    if args.first_attention_commit:
+        mode: EditAttentionMode = "first"
+    elif args.next_attention:
+        mode = "next"
+    elif rev_arg is None:
+        mode = "resume"
+    else:
+        target_res = resolve_stack_changeish(
+            cwd,
+            rev_arg,
+            settings=settings,
+            gerrit=gerrit,
+            branch=branch,
+            require_in_stack=True,
+        )
+        if target_res.resolution is not None:
+            note = format_resolution_note(target_res.resolution)
+            if note:
+                print(note, file=sys.stderr)
+        change_id = change_id_for_stack_sha(cwd, target_res.sha, settings=settings, gerrit=gerrit)
+        if change_id and branch is not None:
+            write_branch_cursor(cwd, branch, change_id, action="set", sha=target_res.sha)
+        return target_res.sha
+
+    target, notes = resolve_edit_attention_commit(
+        cwd,
+        settings=settings,
+        mode=mode,
+        branch=branch,
+        after_change_id=after_change_id,
+        gerrit=gerrit,
+        update_cursor=True,
     )
+    for note in notes:
+        print(note, file=sys.stderr)
+    return target.sha
 
 
-def _build_parser_reword() -> argparse.ArgumentParser:
-    """Build parser for ``ger reword``."""
-    return _build_parser(
-        prog="ger reword",
-        description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
-        default_action="reword",
-    )
-
-
-# pylint: disable=too-many-locals
 def _run_interactive_stack_rebase(
     argv: list[str] | None,
     *,
@@ -131,39 +277,41 @@ def _run_interactive_stack_rebase(
     configure_logging(args.debug_log)
     cwd = cwd_from_env()
     settings = Settings.from_cwd(cwd)
-
-    if args.first_attention_commit and args.rev:
-        p.error("cannot use REV with --first-attention-commit")
-    if not args.first_attention_commit and not args.rev:
-        p.error("the following arguments are required: REV (or use --first-attention-commit)")
-
-    action = args.action_override or default_action
-    rev_arg = args.rev
-    logger.debug(
-        "gedit cwd=%s rev_arg=%r first_attention=%s action=%s", cwd, rev_arg, args.first_attention_commit, action
-    )
+    _validate_targeting_args(p, args)
 
     branch = resolve_working_branch(cwd, settings=settings)
+
+    if args.cursor_history:
+        return _print_cursor_history(cwd)
+    if args.cursor:
+        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+            return int(ExitCode.ATTENTION)
+        if not _require_stack_upstream(cwd, settings):
+            return int(ExitCode.ATTENTION)
+        return _print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+    if args.set_cursor:
+        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+            return int(ExitCode.ATTENTION)
+        if not _require_stack_upstream(cwd, settings):
+            return int(ExitCode.ATTENTION)
+        return _set_cursor_from_changeish(cwd, args.set_cursor, settings=settings, branch=branch, gerrit=gerrit)
+
+    action = args.action_override or default_action
+    logger.debug(
+        "gedit cwd=%s rev_arg=%r first=%s next=%s action=%s",
+        cwd,
+        args.rev,
+        args.first_attention_commit,
+        args.next_attention,
+        action,
+    )
+
     if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
         return int(ExitCode.ATTENTION)
-    if args.first_attention_commit:
-        full = resolve_first_edit_attention_sha(cwd, settings=settings, gerrit=gerrit)
-        rev_arg = git_out("rev-parse", "--short", full, cwd=cwd)
-    else:
-        assert rev_arg is not None
-        target = resolve_stack_changeish(
-            cwd,
-            rev_arg,
-            settings=settings,
-            gerrit=gerrit,
-            branch=branch,
-            require_in_stack=True,
-        )
-        full = target.sha
-        if target.resolution is not None:
-            note = format_resolution_note(target.resolution)
-            if note:
-                print(note, file=sys.stderr)
+    if not _require_stack_upstream(cwd, settings):
+        return int(ExitCode.ATTENTION)
+
+    full = _resolve_target_sha(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
 
@@ -173,7 +321,6 @@ def _run_interactive_stack_rebase(
     env["GEDIT_ACTION"] = action
     if args.debug_log:
         env["GEDIT_DEBUG_LOG"] = "1"
-    # Quoted for paths with spaces (typical when Python is not from a venv).
     env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
 
     logger.debug(
