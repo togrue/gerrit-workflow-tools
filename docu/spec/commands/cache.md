@@ -20,7 +20,7 @@ ger cache <subcommand>
 
 | Subcommand | Action |
 |------------|--------|
-| `info` | Print host, path, row counts (changes, accounts, comments) |
+| `info` | Print host, path, row counts (changes, comments, checks) |
 | `clear` | Delete cached payloads for this Gerrit host |
 
 ---

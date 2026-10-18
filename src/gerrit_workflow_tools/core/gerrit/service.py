@@ -11,13 +11,11 @@ from typing import Any
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import (
-    DEFAULT_ACCOUNT_TTL_SECONDS,
     DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
     GerritCache,
     comments_context_key,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.gerrit.models import Account, Change, Comment
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
@@ -46,49 +44,6 @@ logger = logging.getLogger(__name__)
 _CHECKS_CAPABILITY = "checks"
 
 
-def _service_stack_context(service: GerritService) -> StackContext:
-    """Resolve stack context once per service instance (batch paths may call this many times)."""
-    cached = getattr(service, "_stack_context", None)
-    if cached is None:
-        cached = resolve_stack_context(service.cwd, settings=service.settings)
-        service._stack_context = cached
-    return cached
-
-
-def _batch_ref_for_change_key(
-    service: GerritService,
-    change_key: str,
-    *,
-    stack: StackContext | None = None,
-) -> str:
-    """Map a change ref to a triplet or numeric ref for cache and batch REST queries."""
-    if "~" in change_key:
-        return change_key
-    if change_key.isdigit():
-        return change_key
-    ctx = stack if stack is not None else _service_stack_context(service)
-    return build_triplet(ctx.project, ctx.push_branch, change_key)
-
-
-def _cache_triplets(service: GerritService, change_refs: list[str]) -> list[str]:
-    """Map change refs to cache keys, resolving stack context at most once."""
-    stack: StackContext | None = None
-    triplets: list[str] = []
-    for ref in change_refs:
-        if "~" in ref or ref.isdigit():
-            triplets.append(ref)
-            continue
-        if stack is None:
-            stack = _service_stack_context(service)
-        triplets.append(build_triplet(stack.project, stack.push_branch, ref))
-    return triplets
-
-
-def _cache_triplet(service: GerritService, change_ref: str) -> str:
-    """Return the verbatim cache key (triplet or numeric id) for *change_ref*."""
-    return _batch_ref_for_change_key(service, change_ref)
-
-
 class GerritService:
     """High-level object API layered on cached, parallel Gerrit REST access."""
 
@@ -98,7 +53,6 @@ class GerritService:
         cache: GerritCache,
         *,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-        account_ttl_seconds: int = DEFAULT_ACCOUNT_TTL_SECONDS,
         refresh: bool = False,
         cwd: Path | str | None = None,
         settings: Settings | None = None,
@@ -112,7 +66,6 @@ class GerritService:
         # scavenge it from; defaults to the process cwd for callers that don't care.
         self.cwd = str(cwd) if cwd is not None else os.getcwd()
         self.trust_window_seconds = trust_window_seconds
-        self.account_ttl_seconds = account_ttl_seconds
         self.refresh = refresh
         # Whether this host serves the Checks plugin: True / False / None when not yet
         # known. A property of the host, not of any change, so it is answered from the
@@ -120,9 +73,7 @@ class GerritService:
         self._checks_endpoint_available: bool | None = None
         self._stack_context: StackContext | None = None
         self.changes = ChangeApi(self)
-        self.accounts = AccountApi(self)
         self.comments = CommentApi(self)
-        self.checks = ChecksApi(self)
 
     @classmethod
     def from_cwd(
@@ -168,6 +119,19 @@ class GerritService:
 
         return self.rest.web_base
 
+    def stack_context(self) -> StackContext:
+        """Resolve the stack context once per service (batch paths ask many times)."""
+        if self._stack_context is None:
+            self._stack_context = resolve_stack_context(self.cwd, settings=self.settings)
+        return self._stack_context
+
+    def cache_key(self, change_ref: str) -> str:
+        """Map a change ref to its cache key: triplets and numbers verbatim, Change-Ids via the stack context."""
+        if "~" in change_ref or change_ref.isdigit():
+            return change_ref
+        ctx = self.stack_context()
+        return build_triplet(ctx.project, ctx.push_branch, change_ref)
+
     def _fetch_change_payloads(self, triplets: list[str]) -> dict[str, dict[str, Any]]:
         """Batch-fetch ChangeInfo for *triplets* via project-scoped Change-Id OR.
 
@@ -183,22 +147,6 @@ class GerritService:
     def _fetch_delta(self, project: str, since: str) -> tuple[list[dict[str, Any]], bool]:
         return delta_changes_since(self.rest, project, since)
 
-    def _fetch_account_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
-        def _one(account_id: int | str) -> tuple[int, dict[str, Any]]:
-            payload = self.rest.get_account(account_id)
-            raw = payload.get("_account_id")
-            resolved_id = raw if isinstance(raw, int) else int(account_id)
-            return resolved_id, payload
-
-        def _account_job(account_id: int | str) -> Callable[[], tuple[int, dict[str, Any]]]:
-            def _job() -> tuple[int, dict[str, Any]]:
-                return _one(account_id)
-
-            return _job
-
-        jobs = [_account_job(account_id) for account_id in account_ids]
-        return dict(parallel_map(jobs))
-
     def fetch_gerrit_data(
         self,
         commits: list[Any],
@@ -212,7 +160,7 @@ class GerritService:
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit, current_revision_number
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
-        stack = _service_stack_context(self)
+        stack = self.stack_context()
 
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
@@ -404,10 +352,12 @@ class GerritService:
                 return check_rows, []
             return [], self._get_messages_or_empty(triplet)
 
-        check_rows, message_rows = self.checks.get_rows(
+        check_rows, message_rows = self.cache.load_checks(
             change_id,
             fetch_checks=_fetch_checks_and_messages,
             change_updated=change_updated,
+            trust_window_seconds=self.trust_window_seconds,
+            refresh=self.refresh,
         )
         names = failed_check_names(check_rows)
 
@@ -444,40 +394,12 @@ class GerritService:
             pipelines = []
         return names, links, pipelines
 
-    def _refresh_after_mutation(self, change_id: str) -> Change:
-        rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = _cache_triplet(self, change_id)
-        try:
-            payload = self.rest.get_change(rest_ref)
-        except GerritApiError:
-            self.cache.invalidate_changes([cache_key])
-            raise
-        self.cache.invalidate_changes([cache_key])
-        self.cache.upsert_changes({cache_key: payload})
-        return Change(payload)
-
 
 class ChangeApi:
     """Cache-aware ChangeInfo operations."""
 
     def __init__(self, service: GerritService) -> None:
         self._service = service
-
-    def get(self, change_id: str) -> Change:
-        """Return one change or raise if Gerrit did not return it."""
-
-        triplet = _cache_triplet(self._service, change_id)
-        payloads = self._service.cache.load_changes(
-            [triplet],
-            probe_updated=self._service._probe_changes_updated,
-            fetch_changes=self._service._fetch_change_payloads,
-            trust_window_seconds=self._service.trust_window_seconds,
-            refresh=self._service.refresh,
-        )
-        payload = payloads.get(triplet)
-        if payload is None:
-            raise GerritApiError(f"no matching change {change_id}")
-        return Change(payload)
 
     def find_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Return already-known ChangeInfo rows grouped by footer Change-Id, across all branches.
@@ -495,11 +417,11 @@ class ChangeApi:
     def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
-        triplets = _cache_triplets(self._service, change_ids)
+        triplets = [self._service.cache_key(ref) for ref in change_ids]
         scope_key: str | None = None
         fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]] | None = None
         try:
-            stack = _service_stack_context(self._service)
+            stack = self._service.stack_context()
             scope_key = f"{self._service.cache.host}~{stack.project}"
             project = stack.project
 
@@ -521,42 +443,6 @@ class ChangeApi:
             refresh=self._service.refresh,
         )
 
-    def set_topic(self, change_id: str, topic: str | None) -> Change:
-        """Set or clear the change topic via REST and update cache."""
-
-        rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = _cache_triplet(self._service, change_id)
-        try:
-            self._service.rest.set_topic(rest_ref, topic)
-            return self._service._refresh_after_mutation(change_id)
-        except GerritApiError:
-            self._service.cache.invalidate_changes([cache_key])
-            raise
-
-    def set_wip(self, change_id: str, on: bool) -> Change:
-        """Set or clear work-in-progress state via REST and update cache."""
-
-        rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = _cache_triplet(self._service, change_id)
-        try:
-            self._service.rest.set_wip(rest_ref, on)
-            return self._service._refresh_after_mutation(change_id)
-        except GerritApiError:
-            self._service.cache.invalidate_changes([cache_key])
-            raise
-
-    def set_private(self, change_id: str, on: bool) -> Change:
-        """Set or clear private state via REST and update cache."""
-
-        rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = _cache_triplet(self._service, change_id)
-        try:
-            self._service.rest.set_private(rest_ref, on)
-            return self._service._refresh_after_mutation(change_id)
-        except GerritApiError:
-            self._service.cache.invalidate_changes([cache_key])
-            raise
-
     def set_reviewers(
         self,
         change_id: str,
@@ -564,22 +450,23 @@ class ChangeApi:
         add: list[str] | None = None,
         remove: list[int] | None = None,
         ccs: list[str] | None = None,
-    ) -> Change:
-        """Add and remove reviewers via REST, then cache fresh ChangeInfo."""
+    ) -> None:
+        """Add and remove reviewers via REST, then cache fresh ChangeInfo.
 
+        Any failure, in the writes or the re-read, drops the cached row instead.
+        """
+
+        service = self._service
         rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = _cache_triplet(self._service, change_id)
-        try:
-            calls: list[Callable[[], Any]] = []
-            if add or ccs:
-                calls.append(self._set_reviewers_job(rest_ref, add or [], ccs or []))
-            for account_id in remove or []:
-                calls.append(self._delete_reviewer_job(rest_ref, account_id))
-            parallel_map(calls)
-            return self._service._refresh_after_mutation(change_id)
-        except GerritApiError:
-            self._service.cache.invalidate_changes([cache_key])
-            raise
+        cache_key = service.cache_key(change_id)
+        calls: list[Callable[[], Any]] = []
+        if add or ccs:
+            calls.append(self._set_reviewers_job(rest_ref, add or [], ccs or []))
+        for account_id in remove or []:
+            calls.append(self._delete_reviewer_job(rest_ref, account_id))
+        service.cache.invalidate_changes([cache_key])
+        parallel_map(calls)
+        service.cache.upsert_changes({cache_key: service.rest.get_change(rest_ref)})
 
     def _set_reviewers_job(self, change_id: str, reviewers: list[str], ccs: list[str]) -> Callable[[], Any]:
         def _job() -> Any:
@@ -592,32 +479,6 @@ class ChangeApi:
             return self._service.rest.delete_reviewer(change_id, account_id)
 
         return _job
-
-
-class AccountApi:
-    """Cache-aware AccountInfo operations."""
-
-    def __init__(self, service: GerritService) -> None:
-        self._service = service
-
-    def get(self, account_id: int | str) -> Account:
-        """Return one account."""
-
-        payloads = self.get_payloads([account_id])
-        payload = payloads.get(int(account_id))
-        if payload is None:
-            raise GerritApiError(f"no matching account {account_id}")
-        return Account(payload)
-
-    def get_payloads(self, account_ids: list[int | str]) -> dict[int, dict[str, Any]]:
-        """Return raw AccountInfo payloads keyed by numeric account id."""
-
-        return self._service.cache.load_accounts(
-            account_ids,
-            fetch_accounts=self._service._fetch_account_payloads,
-            ttl_seconds=self._service.account_ttl_seconds,
-            refresh=self._service.refresh,
-        )
 
 
 class CommentApi:
@@ -653,40 +514,4 @@ class CommentApi:
             trust_window_seconds=self._service.trust_window_seconds,
             refresh=self._service.refresh,
             context_key=comments_context_key(padding),
-        )
-
-    def get(self, change_id: str, *, change_updated: str | None = None) -> list[Comment]:
-        """Return comments as object wrappers."""
-
-        file_map = self.get_file_map(change_id, change_updated=change_updated)
-        return [Comment(path=path, payload=payload) for path, rows in file_map.items() for payload in rows]
-
-
-class ChecksApi:
-    """Cache-aware CI checks and message operations."""
-
-    def __init__(self, service: GerritService) -> None:
-        self._service = service
-
-    def get_rows(
-        self,
-        change_id: str,
-        *,
-        fetch_checks: Callable[[str], tuple[list[dict[str, Any]], list[dict[str, Any]]]] | None = None,
-        change_updated: str | None = None,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Return Checks-plugin rows and change messages for one change."""
-
-        def _default_fetch(triplet: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-            return (
-                self._service._checks_or_empty(triplet),
-                self._service._get_messages_or_empty(triplet),
-            )
-
-        return self._service.cache.load_checks(
-            change_id,
-            fetch_checks=fetch_checks or _default_fetch,
-            change_updated=change_updated,
-            trust_window_seconds=self._service.trust_window_seconds,
-            refresh=self._service.refresh,
         )

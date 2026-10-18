@@ -16,7 +16,6 @@ from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results, ch
 
 SCHEMA_VERSION = "4"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
-DEFAULT_ACCOUNT_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
 
@@ -38,7 +37,6 @@ class CacheInfo:
     path: Path
     host: str
     changes: int
-    accounts: int
     comments: int
     checks: int
 
@@ -55,12 +53,6 @@ class _ChangeRow:
 class _ScopeState:
     watermark: str
     generation: int
-
-
-@dataclass(frozen=True)
-class _AccountRow:
-    payload: dict[str, Any]
-    fetched_at: int
 
 
 @dataclass(frozen=True)
@@ -166,7 +158,7 @@ class GerritCache:
         conn.execute("DROP TABLE IF EXISTS missing_changes")
         conn.execute("DROP TABLE IF EXISTS scope_state")
         conn.execute("DROP TABLE IF EXISTS comments")
-        conn.execute("DROP TABLE IF EXISTS accounts")
+        conn.execute("DROP TABLE IF EXISTS accounts")  # retired; dropped on schema reset
         conn.execute("DROP TABLE IF EXISTS changes")
         conn.execute("DROP TABLE IF EXISTS meta")
 
@@ -208,18 +200,6 @@ class GerritCache:
         )
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS accounts (
-              account_id INTEGER PRIMARY KEY,
-              username   TEXT,
-              email      TEXT,
-              name       TEXT,
-              payload    TEXT NOT NULL,
-              fetched_at INTEGER NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
             CREATE TABLE IF NOT EXISTS comments (
               change_id      TEXT NOT NULL,
               context_key    TEXT NOT NULL DEFAULT '',
@@ -256,7 +236,6 @@ class GerritCache:
         with self._connect() as conn:
             conn.execute("DELETE FROM checks")
             conn.execute("DELETE FROM comments")
-            conn.execute("DELETE FROM accounts")
             conn.execute("DELETE FROM changes")
             conn.execute("DELETE FROM missing_changes")
             conn.execute("DELETE FROM scope_state")
@@ -290,14 +269,12 @@ class GerritCache:
 
         with self._connect() as conn:
             changes = int(conn.execute("SELECT COUNT(*) FROM changes").fetchone()[0])
-            accounts = int(conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0])
             comments = int(conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0])
             checks = int(conn.execute("SELECT COUNT(*) FROM checks").fetchone()[0])
         return CacheInfo(
             path=self.path,
             host=self.host,
             changes=changes,
-            accounts=accounts,
             comments=comments,
             checks=checks,
         )
@@ -749,71 +726,3 @@ class GerritCache:
                 """,
                 (triplet, _json_dumps(payload), _now(), change_updated),
             )
-
-    def load_accounts(
-        self,
-        account_ids: list[int | str],
-        *,
-        fetch_accounts: Callable[[list[int | str]], dict[int, dict[str, Any]]],
-        ttl_seconds: int = DEFAULT_ACCOUNT_TTL_SECONDS,
-        refresh: bool = False,
-    ) -> dict[int, dict[str, Any]]:
-        """Load AccountInfo payloads with TTL-only freshness."""
-
-        numeric_ids = [int(account_id) for account_id in account_ids]
-        if not numeric_ids:
-            return {}
-        placeholders = ",".join("?" for _ in numeric_ids)
-        now = _now()
-        out: dict[int, dict[str, Any]] = {}
-        fetch_ids: list[int | str] = []
-        with self._connect() as conn:
-            rows = conn.execute(
-                f"SELECT account_id, payload, fetched_at FROM accounts WHERE account_id IN ({placeholders})",
-                numeric_ids,
-            ).fetchall()
-        by_id: dict[int, _AccountRow] = {}
-        for row in rows:
-            payload = json.loads(str(row["payload"]))
-            if isinstance(payload, dict):
-                by_id[int(row["account_id"])] = _AccountRow(payload=payload, fetched_at=int(row["fetched_at"]))
-        for account_id in numeric_ids:
-            row = by_id.get(account_id)
-            if row is not None and not refresh and now - row.fetched_at < ttl_seconds:
-                out[account_id] = row.payload
-            else:
-                fetch_ids.append(account_id)
-        if fetch_ids:
-            fetched = fetch_accounts(fetch_ids)
-            self.upsert_accounts(fetched)
-            out.update(fetched)
-        return out
-
-    def upsert_accounts(self, accounts: dict[int, dict[str, Any]] | list[dict[str, Any]]) -> None:
-        """Store AccountInfo payloads."""
-
-        if isinstance(accounts, dict):
-            rows = list(accounts.items())
-        else:
-            rows = []
-            for payload in accounts:
-                raw = payload.get("_account_id")
-                if isinstance(raw, int):
-                    rows.append((raw, payload))
-        now = _now()
-        with self._connect() as conn:
-            for account_id, payload in rows:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO accounts(account_id, username, email, name, payload, fetched_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        account_id,
-                        payload.get("username") if isinstance(payload.get("username"), str) else None,
-                        payload.get("email") if isinstance(payload.get("email"), str) else None,
-                        payload.get("name") if isinstance(payload.get("name"), str) else None,
-                        _json_dumps(payload),
-                        now,
-                    ),
-                )

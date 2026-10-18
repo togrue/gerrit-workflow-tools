@@ -58,7 +58,6 @@ flowchart TB
     service[service.py]
     rest[rest.py]
     cache[cache.py · paths.py]
-    models[models.py]
   end
 
   subgraph external [External systems]
@@ -400,7 +399,6 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
 | `core/gerrit/change_resolution.py` | Changeish resolution, stack context, triplets, resolution notes |
-| `core/gerrit/models.py` | Thin wrappers over REST payloads |
 | `core/gerrit/paths.py` | Cache DB path and host key |
 
 ### Presentation (`render/` and package root)
@@ -427,7 +425,7 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 1. **One commit reader.** `core/stack.py` reads commit rows (`_LOG_SHA_BODY_FMT`, `parse_git_log_sha_body_rs`, the inline format in `commits_in_range`). `cli_sha.py` re-types that format and imports the private `_parse_rs_metadata_records`; `cli_changeid.py` has its own 11-field format and split; `rebase_enricher.py` has its own `_RS` and a third walk. They disagree on the **footer value**: `stack` keeps it raw, `rebase_enricher` validates. *Tracked by:* the `%x1e` concept, the private-import rule.
 2. **One command entry point.** Seven commands skip `init_cli_runtime` and seven skip `run_cli_command`, so they differ in logging, color, `Settings` construction and exit-code mapping. *Tracked by:* `test_commands_use_shared_runtime`.
 3. **One resolution-note sink.** `_print_resolution_note` is copied in `cli_show.py` and `cli_resolve.py` (dimmed); `cli_edit.py`, `cli_fix.py` and `cli_rebase.py` each print `format_resolution_note` themselves (plain).
-4. **One REST call envelope.** Each `HttpGerritRest` method repeats encode-path → `_request_json` → type check → log; `ChangeApi` repeats invalidate-then-refresh.
+4. **One REST call envelope.** Each `HttpGerritRest` method repeats encode-path → `_request_json` → type check → log.
 5. **One reviewer normalizer.** `cli_push._reviewer_accounts_from_change_info` duplicates `reviewer_accounts_from_change_info` in `core/reviewer.py`. Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 6. **One Change-Id audit.** `change_id.classify_issues` and `cli_changeid.py`'s own loop classify the same footer problems independently.
 7. **One confirmation prompt.** y/n parsing lives in `cli_push.py` (`_prompt_save_reviewers`, `_parse_confirm_answer`, `_parse_gerrit_push_confirm`) and `cli_fix.py`. *Tracked by:* the y/n concept.
