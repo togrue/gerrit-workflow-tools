@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
@@ -14,8 +13,8 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
-from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot
+from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
 
 @dataclass(frozen=True)
@@ -41,10 +40,7 @@ def _row_from_gerrit_change(change: ChangeView) -> Commit:
 
 
 def _row_from_local_commit(cwd: Path | str, sha: str) -> Commit:
-    raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
-    summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
-    short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
-    return Commit(sha=sha, short_sha=short, subject=summary, body=raw.strip(), change_id=parse_change_id_footer(raw))
+    return read_commit_rows(cwd, "-1", sha)[0]
 
 
 def resolve_show_commit_row(

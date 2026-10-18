@@ -185,7 +185,6 @@ def test_no_private_names_imported_across_modules() -> None:
             "bash_completion_generator.py -> cli_ger.py:_ALIASES": "command registry",
             "bash_completion_generator.py -> cli_ger.py:_COMMANDS": "command registry",
             # Backlog: "One commit reader".
-            "cli_sha.py -> core/stack.py:_parse_rs_metadata_records": "one commit reader",
         },
         "Promote the helper to a public name in its owning module (move it down a layer if needed). Never copy it.",
     )
@@ -211,8 +210,6 @@ CONCEPTS = [
         owners={"core/stack.py": "reads commit rows"},
         debt={
             "cli_changeid.py": "one commit reader",
-            "cli_sha.py": "one commit reader",
-            "rebase_enricher.py": "one commit reader",
         },
         fix="Read commit rows through core/stack.py instead of formatting and splitting `git log` yourself.",
     ),

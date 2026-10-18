@@ -213,6 +213,22 @@ def _parse_rs_metadata_records(stdout: str) -> list[Commit]:
     ]
 
 
+# Git expands %x1e to ASCII RS; keeps argv free of NUL (required on Windows).
+_COMMIT_ROW_FMT = "%H%x1e%h%x1e%s%x1e%B%x1e"
+
+
+def read_commit_rows(cwd: Path | str | None, *log_args: str) -> list[Commit]:
+    """**Commit rows** for whatever *log_args* select (a range, ``--all``, ``--no-walk`` SHAs).
+
+    The one commit reader: a single ``git log`` in ``git log`` order. Raises :class:`GitError`
+    when git fails.
+    """
+    p = git("log", *log_args, f"--format={_COMMIT_ROW_FMT}", cwd=cwd, check=False)
+    if p.returncode != 0:
+        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
+    return _parse_rs_metadata_records(p.stdout)
+
+
 def commits_in_range(
     cwd: Path | str | None,
     rev_range: str,
@@ -225,18 +241,5 @@ def commits_in_range(
     One ``git log`` call.  Pass *first_parent=True* to restrict traversal to
     first-parent edges only (i.e. ignore commits reachable via merge parents).
     """
-    # Git expands %x1e to ASCII RS; keeps argv free of NUL (required on Windows).
-    fmt = "%H%x1e%h%x1e%s%x1e%B%x1e"
     extra: list[str] = ["--first-parent"] if first_parent else []
-    p = git(
-        "log",
-        "--reverse",
-        *extra,
-        rev_range,
-        f"--format={fmt}",
-        cwd=cwd,
-        check=False,
-    )
-    if p.returncode != 0:
-        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
-    return _parse_rs_metadata_records(p.stdout)
+    return read_commit_rows(cwd, "--reverse", *extra, rev_range)

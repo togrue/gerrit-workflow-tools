@@ -457,9 +457,7 @@ def test_resolve_editor_falls_back_to_git_editor(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("GIT_EDITOR", "nano")
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.delenv("EDITOR", raising=False)
-    with patch("gerrit_workflow_tools.rebase_enricher.git") as mock_git:
-        mock_git.return_value = MagicMock(returncode=1, stdout="")
-        assert _resolve_editor(tmp_path) == "nano"
+    assert _resolve_editor(tmp_path) == "nano"
 
 
 def test_resolve_editor_falls_back_to_editor_env(tmp_path: Path, monkeypatch):
@@ -469,9 +467,7 @@ def test_resolve_editor_falls_back_to_editor_env(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("GIT_EDITOR", raising=False)
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "emacs")
-    with patch("gerrit_workflow_tools.rebase_enricher.git") as mock_git:
-        mock_git.return_value = MagicMock(returncode=1, stdout="")
-        assert _resolve_editor(tmp_path) == "emacs"
+    assert _resolve_editor(tmp_path) == "emacs"
 
 
 def test_resolve_editor_vi_fallback(tmp_path: Path, monkeypatch):

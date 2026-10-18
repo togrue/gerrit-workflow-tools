@@ -7,19 +7,19 @@ import os
 import shlex
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
-from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
 )
-from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.stack import Commit, read_commit_rows
 from gerrit_workflow_tools.render.status_fmt import (
     attention_text as _attention_text,
     code_review_token as _fmt_cr,
@@ -37,9 +37,6 @@ _COMMIT_ACTIONS = frozenset({"pick", "p", "reword", "r", "edit", "e", "squash", 
 
 # Width reserved for the commit subject in enriched lines.
 _SUBJECT_WIDTH = 50
-
-# Record separator used in git --format strings (ASCII RS, same as stack.py).
-_RS = "\x1e"
 
 
 def _enriched_subject(commit: LogCommit) -> str:
@@ -79,39 +76,24 @@ def _enriched_subject(commit: LogCommit) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, tuple[str, str, str | None]]:
-    """Return ``{todo_short_sha: (full_sha, subject, change_id)}`` for each SHA in the list.
+def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, Commit]:
+    """Return ``{todo_short_sha: commit row}`` for each SHA in the list, in one ``git log``.
 
-    Uses a single ``git log --no-walk`` call with RS-separated fields, the same approach
-    as :func:`~gerrit_workflow_tools.stack.commits_in_range`.
+    Each row carries the todo's short SHA, so ``LogCommit.short_sha`` matches the keys the
+    todo is rewritten by.
     """
     if not short_shas:
         return {}
-    fmt = f"%H{_RS}%s{_RS}%B{_RS}"
-    p = git("log", "--no-walk", f"--format={fmt}", *short_shas, cwd=cwd, check=False)
-    if p.returncode != 0 or not p.stdout:
+    try:
+        rows = read_commit_rows(cwd, "--no-walk", *short_shas)
+    except GitError:
         return {}
-
-    parts = p.stdout.split(_RS)
-    while parts and not parts[-1].strip():
-        parts.pop()
-
-    result: dict[str, tuple[str, str, str | None]] = {}
-    i = 0
-    while i + 2 < len(parts):
-        full_sha = parts[i].strip()
-        subject = parts[i + 1].strip()
-        body = parts[i + 2]
-        i += 3
-        if not full_sha or len(full_sha) < 7:
-            continue
-        change_id = extract_valid_change_id(body)
-        # Match full_sha back to the short SHA that was passed in.
-        for s in short_shas:
-            if full_sha.startswith(s):
-                result[s] = (full_sha, subject, change_id)
+    result: dict[str, Commit] = {}
+    for row in rows:
+        for short in short_shas:
+            if row.sha.startswith(short):
+                result[short] = replace(row, short_sha=short)
                 break
-
     return result
 
 
@@ -197,16 +179,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
 
     # Build ordered input for fetch_gerrit_data.
     # We preserve the todo order (oldest-first) so chain-blocked detection is correct.
-    commit_inputs: list[Commit] = []
-    for short_sha in short_shas:
-        meta = meta_map.get(short_sha)
-        if meta:
-            full_sha, subject, change_id = meta
-            # Pass the todo's short SHA as the short field so LogCommit.short_sha
-            # matches the keys we use for lookup below.
-            commit_inputs.append(
-                Commit(sha=full_sha, short_sha=short_sha, subject=subject, body="", change_id=change_id)
-            )
+    commit_inputs = [meta_map[short_sha] for short_sha in short_shas if short_sha in meta_map]
 
     if not commit_inputs:
         return text

@@ -65,20 +65,15 @@ from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, in
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.stack import _parse_rs_metadata_records, commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 
 logger = logging.getLogger(__name__)
 
-_LOG_FMT = "%H%x1e%h%x1e%s%x1e%B%x1e"
 
-
-def _commits_all(cwd: Path):
-    p = git("log", "--all", "--reverse", f"--format={_LOG_FMT}", cwd=cwd, check=False)
-    if p.returncode != 0:
-        raise GitError("git log --all failed", stderr=p.stderr, returncode=p.returncode)
-    return _parse_rs_metadata_records(p.stdout)
+def _commits_all(cwd: Path) -> list[Commit]:
+    return read_commit_rows(cwd, "--all", "--reverse")
 
 
 def _build_parser() -> argparse.ArgumentParser:
