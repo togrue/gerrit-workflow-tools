@@ -28,7 +28,8 @@ class StackContext:
     push_branch: str
 
 
-_STACK_CONTEXT_CACHE: dict[tuple[str, str, int], StackContext] = {}
+# Keyed by the Settings *values*: id(settings) can be reused once a snapshot is freed.
+_STACK_CONTEXT_CACHE: dict[tuple[str, str, frozenset[tuple[str, str]]], StackContext] = {}
 
 
 def clear_stack_context_cache() -> None:
@@ -54,7 +55,7 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, 
     """Resolve project, target branch, and push branch for the current stack."""
     cwd_abs = os.path.abspath(os.path.expanduser(str(cwd))) if cwd is not None else os.getcwd()
     branch_key = branch if branch is not None else ""
-    cache_key = (cwd_abs, branch_key, id(settings))
+    cache_key = (cwd_abs, branch_key, frozenset(settings.values.items()))
     cached = _STACK_CONTEXT_CACHE.get(cache_key)
     if cached is not None:
         return cached

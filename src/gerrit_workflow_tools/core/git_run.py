@@ -34,6 +34,14 @@ _HEAD_IDENTITY_SUBCOMMANDS = frozenset(
     }
 )
 
+# `git branch` flags that rename a branch or change its upstream.
+_BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move", "-u", "--unset-upstream", "-t", "--track"})
+
+# `git config` flags that only read. Anything else may write, and upstream config is stack context.
+_CONFIG_READ_FLAGS = frozenset(
+    {"-l", "--list", "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--show-origin", "--show-scope"}
+)
+
 
 class GitError(RuntimeError):
     """Git command failed."""
@@ -62,7 +70,11 @@ def _invalidates_head_identity(args: tuple[str, ...]) -> bool:
         return False
     if args[0] in _HEAD_IDENTITY_SUBCOMMANDS:
         return True
-    return args[0] == "branch" and any(a in {"-m", "-M", "--move"} for a in args[1:])
+    if args[0] == "branch":
+        return any(a in _BRANCH_IDENTITY_FLAGS or a.startswith("--set-upstream-to") for a in args[1:])
+    if args[0] == "config":
+        return not any(a in _CONFIG_READ_FLAGS for a in args[1:])
+    return False
 
 
 def clear_git_cache() -> None:

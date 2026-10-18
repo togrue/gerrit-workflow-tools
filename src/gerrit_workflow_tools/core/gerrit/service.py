@@ -71,7 +71,6 @@ class GerritService:
         # known. A property of the host, not of any change, so it is answered from the
         # cache and only rediscovered once that verdict expires.
         self._checks_endpoint_available: bool | None = None
-        self._stack_context: StackContext | None = None
         self.changes = ChangeApi(self)
         self.comments = CommentApi(self)
 
@@ -120,16 +119,14 @@ class GerritService:
         return self.rest.web_base
 
     def stack_context(self) -> StackContext:
-        """Resolve the stack context once per service (batch paths ask many times)."""
-        if self._stack_context is None:
-            self._stack_context = resolve_stack_context(self.cwd, settings=self.settings)
-        return self._stack_context
+        """The stack context for this service (memoised by :func:`resolve_stack_context`)."""
+        return resolve_stack_context(self.cwd, settings=self.settings)
 
-    def cache_key(self, change_ref: str) -> str:
+    def cache_key(self, change_ref: str, ctx: StackContext | None = None) -> str:
         """Map a change ref to its cache key: triplets and numbers verbatim, Change-Ids via the stack context."""
         if "~" in change_ref or change_ref.isdigit():
             return change_ref
-        ctx = self.stack_context()
+        ctx = ctx or self.stack_context()
         return build_triplet(ctx.project, ctx.push_branch, change_ref)
 
     def _fetch_change_payloads(self, triplets: list[str]) -> dict[str, dict[str, Any]]:
@@ -412,9 +409,9 @@ class ChangeApi:
     def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
-        triplets = [self._service.cache_key(ref) for ref in change_ids]
         scope_key: str | None = None
         fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]] | None = None
+        stack: StackContext | None = None
         try:
             stack = self._service.stack_context()
             scope_key = f"{self._service.cache.host}~{stack.project}"
@@ -428,6 +425,7 @@ class ChangeApi:
             scope_key = None
             fetch_delta = None
 
+        triplets = [self._service.cache_key(ref, stack) for ref in change_ids]
         return self._service.cache.load_changes(
             triplets,
             probe_updated=self._service._probe_changes_updated,
