@@ -22,19 +22,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import annotate_attention
-from gerrit_workflow_tools.core.change_id import validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     format_resolution_note,
     resolution_from_change_rows,
     resolve_stack_context,
+    stack_project,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
-from gerrit_workflow_tools.core.stack import commits_in_range
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 
 
 _UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
@@ -45,6 +45,8 @@ class AnnotatedStack:
     """Commits in a revision range, overlaid with Gerrit state and annotated with attention."""
 
     commits: list[LogCommit] = field(default_factory=list)
+    rows: list[Commit] = field(default_factory=list)
+    """The **commit rows** the overlay started from, same order as :attr:`commits`."""
     notes_by_sha: dict[str, str] = field(default_factory=dict)
     """Multi-branch resolution notes, keyed by commit SHA. Only commits whose Change-Id
     matched on more than one branch appear here."""
@@ -89,27 +91,8 @@ def branches_needing_upstream(cwd: Path | str | None, rev_range: str, *, setting
     return required
 
 
-def commit_rows_in_range(
-    cwd: Path | str | None,
-    rev_range: str,
-    *,
-    first_parent: bool = True,
-) -> list[CommitStatusInput]:
-    """Return overlay input rows for the local commits in *rev_range* (oldest first)."""
-    return [
-        CommitStatusInput(
-            sha=c.sha,
-            short_sha=c.short_sha,
-            summary=c.subject,
-            # Validated here: a malformed footer must never become a Gerrit query.
-            change_id=c.change_id if validate_change_id_value(c.change_id)[0] else None,
-        )
-        for c in commits_in_range(cwd, rev_range, first_parent=first_parent)
-    ]
-
-
 def annotate(
-    rows: list[CommitStatusInput],
+    rows: list[Commit],
     *,
     service: GerritService,
     cwd: Path | str | None,
@@ -121,16 +104,10 @@ def annotate(
     an earlier commit to block the ones after it.
     """
     commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
-    project = ""
-    try:
-        stack = resolve_stack_context(cwd, settings=service.settings)
-        project = stack.project
-    except Exception:  # pylint: disable=broad-exception-caught
-        project = service.settings.gerrit_project or ""
     annotate_attention(
         commits,
         cwd=cwd,
-        project=project,
+        project=stack_project(cwd, settings=service.settings),
         settings=service.settings,
         web_base=service.web_base,
     )
@@ -139,26 +116,27 @@ def annotate(
 
 def _multi_branch_notes(
     service: GerritService,
-    rows: list[CommitStatusInput],
+    rows: list[Commit],
     cwd: Path | str | None,
 ) -> dict[str, str]:
     """Resolution notes for Change-Ids that exist on more than one branch.
 
     Derived from what the overlay already stored locally — never a per-Change-Id re-query.
     """
-    footer_ids = [row.change_id for row in rows if row.change_id]
+    footer_ids = [row.valid_change_id for row in rows if row.valid_change_id]
     if not footer_ids:
         return {}
     stack = resolve_stack_context(cwd, settings=service.settings)
     by_footer = service.changes.find_by_footer_change_ids(footer_ids)
     notes: dict[str, str] = {}
     for row in rows:
-        if not row.change_id:
+        change_id = row.valid_change_id
+        if not change_id:
             continue
         try:
             resolution = resolution_from_change_rows(
-                row.change_id,
-                by_footer.get(row.change_id, []),
+                change_id,
+                by_footer.get(change_id, []),
                 push_branch=stack.push_branch,
                 explicit_target=False,
             )
@@ -181,17 +159,17 @@ def load_annotated_stack(
 ) -> AnnotatedStack:
     """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
 
-    Defaults to first-parent traversal, matching Gerrit's relation-chain semantics and
-    :func:`commit_rows_in_range`. Pass ``first_parent=False`` for ``--follow-merges``.
+    Defaults to first-parent traversal, matching Gerrit's relation-chain semantics. Pass
+    ``first_parent=False`` for ``--follow-merges``.
 
     Returns an empty stack when the range holds no commits — deciding whether that is an
     error is the caller's business. Raises :class:`GitError` for git failures,
     :class:`ValueError` when ``gerrit.webUrl`` is unset, and
     :class:`ChangeResolutionError` / :class:`GerritApiError` for Gerrit failures.
     """
-    rows = commit_rows_in_range(cwd, rev_range, first_parent=first_parent)
+    rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
     if not rows:
         return AnnotatedStack()
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
-    return AnnotatedStack(commits=commits, notes_by_sha=_multi_branch_notes(service, rows, cwd))
+    return AnnotatedStack(commits=commits, rows=rows, notes_by_sha=_multi_branch_notes(service, rows, cwd))

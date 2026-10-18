@@ -2,28 +2,30 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
+from gerrit_workflow_tools.core.stack import Commit
 
 
-@dataclass
-class _FakeRow:
-    sha: str = "aabbcc"
-    short_sha: str = "aabbcc"
-    summary: str = "feat: thing"
-    change_id: str | None = "Iabc123"
+def _row() -> Commit:
+    return Commit(
+        sha="aabbcc",
+        short_sha="aabbcc",
+        subject="feat: thing",
+        body="",
+        change_id="Iabc1230000000000000000000000000000000000",
+    )
 
 
 # Detail missing ``unresolved_comment_count`` and ``reviewers`` — triggers
 # both follow-up kinds.  Verified=0 so no checks follow-up.
 _DETAIL: dict[str, Any] = {
-    "id": "proj~main~Iabc123",
-    "change_id": "Iabc123",
+    "id": "proj~main~Iabc1230000000000000000000000000000000000",
+    "change_id": "Iabc1230000000000000000000000000000000000",
     "status": "NEW",
     "subject": "feat: thing",
     "labels": {"Verified": {"value": 0}, "Code-Review": {"value": 0}},
@@ -39,7 +41,9 @@ def _make_service(detail: dict[str, Any] | None = None) -> tuple[GerritService, 
     rest = MagicMock()
     rest.web_base = "https://gerrit.example.com"
     cache = MagicMock()
-    cache.load_changes.return_value = {"Iabc123": detail} if detail is not None else {}
+    cache.load_changes.return_value = (
+        {"Iabc1230000000000000000000000000000000000": detail} if detail is not None else {}
+    )
     cache.capability.return_value = None  # host capability not yet discovered
     return GerritService(rest, cache), rest, cache
 
@@ -62,7 +66,7 @@ def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
             return_value=[{"account": {"_account_id": 42, "username": "alice"}, "state": "REVIEWER"}],
         ),
     ):
-        commits = service.fetch_gerrit_data([_FakeRow()])
+        commits = service.fetch_gerrit_data([_row()])
 
     assert len(commits) == 1
     lc = commits[0]
@@ -82,7 +86,7 @@ def test_reviewers_follow_up_skipped_when_payload_carries_an_empty_reviewer_list
         "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
         return_value=_STACK,
     ):
-        commits = service.fetch_gerrit_data([_FakeRow()])
+        commits = service.fetch_gerrit_data([_row()])
 
     rest.list_change_reviewers.assert_not_called()
     assert commits[0].reviewers == []
@@ -106,7 +110,7 @@ def test_reviewers_follow_up_runs_when_payload_omits_the_field() -> None:
             return_value=[{"account": {"_account_id": 42, "username": "alice"}, "state": "REVIEWER"}],
         ) as list_reviewers,
     ):
-        commits = service.fetch_gerrit_data([_FakeRow()])
+        commits = service.fetch_gerrit_data([_row()])
 
     list_reviewers.assert_called_once()
     assert commits[0].reviewers == [ReviewerAccount(slug="alice", account_id=42)]
@@ -130,11 +134,13 @@ def test_comments_follow_up_passes_freshness_as_the_cache_key() -> None:
         ),
         patch.object(service.comments, "get_file_map", return_value={}) as get_file_map,
     ):
-        commits = service.fetch_gerrit_data([_FakeRow()])
+        commits = service.fetch_gerrit_data([_row()])
 
     assert commits[0].updated == "2026-06-03 00:31:56.000000000"
     assert commits[0].freshness == "abcmeta"
-    get_file_map.assert_called_once_with("proj~main~Iabc123", change_updated="abcmeta")
+    get_file_map.assert_called_once_with(
+        "proj~main~Iabc1230000000000000000000000000000000000", change_updated="abcmeta"
+    )
 
 
 def test_comments_follow_up_falls_back_to_updated_when_meta_rev_id_is_absent() -> None:
@@ -148,10 +154,10 @@ def test_comments_follow_up_falls_back_to_updated_when_meta_rev_id_is_absent() -
         ),
         patch.object(service.comments, "get_file_map", return_value={}) as get_file_map,
     ):
-        service.fetch_gerrit_data([_FakeRow()])
+        service.fetch_gerrit_data([_row()])
 
     get_file_map.assert_called_once_with(
-        "proj~main~Iabc123",
+        "proj~main~Iabc1230000000000000000000000000000000000",
         change_updated="2026-06-03 00:31:56.000000000",
     )
 

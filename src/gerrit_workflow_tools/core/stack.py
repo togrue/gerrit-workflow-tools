@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.change_id import parse_change_id_footer
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
@@ -74,8 +74,12 @@ class Commit:
     """The footer value exactly as written — not necessarily a valid Gerrit id.
 
     Kept raw so Change-Id validation can report a malformed footer as malformed rather
-    than as missing. Anything about to send this to Gerrit should validate first (see
-    :func:`~gerrit_workflow_tools.core.change_id.extract_valid_change_id`)."""
+    than as missing. Anything about to send this to Gerrit reads :attr:`valid_change_id`."""
+
+    @property
+    def valid_change_id(self) -> str | None:
+        """The footer value when it is a well-formed **Change-Id**, else ``None``."""
+        return self.change_id if validate_change_id_value(self.change_id)[0] else None
 
 
 @dataclass(frozen=True)
@@ -90,11 +94,17 @@ def get_stack_snapshot(
     cwd: Path | str | None,
     branch: str | None = None,
     *,
+    head: str = "HEAD",
+    first_parent: bool = False,
     settings: Settings | None = None,
 ) -> StackSnapshot:
-    """Return the upstream tip SHA and oldest-first ``upstream_tip..HEAD`` commits."""
+    """The **local stack**: the upstream tip SHA and oldest-first ``upstream_tip..head`` commits.
+
+    The one way to load the stack. *first_parent* follows Gerrit's relation-chain
+    semantics (merged side branches are not stack members).
+    """
     upstream_tip, _display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
-    rows_list = commits_in_range(cwd, f"{upstream_tip}..HEAD")
+    rows_list = commits_in_range(cwd, f"{upstream_tip}..{head}", first_parent=first_parent)
     return StackSnapshot(
         upstream_tip=upstream_tip,
         commits=tuple(rows_list),

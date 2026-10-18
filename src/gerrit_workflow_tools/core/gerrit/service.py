@@ -162,7 +162,7 @@ class GerritService:
 
         stack = self.stack_context()
 
-        change_ids = [row.change_id for row in commits if row.change_id]
+        change_ids = [row.valid_change_id for row in commits if row.valid_change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
         by_triplet: dict[str, ChangeView] = {}
         for ref, payload in detail_map.items():
@@ -178,8 +178,8 @@ class GerritService:
 
         for row in commits:
             change: ChangeView | None = None
-            if row.change_id:
-                change = by_triplet.get(build_triplet(stack.project, stack.push_branch, row.change_id))
+            if row.valid_change_id:
+                change = by_triplet.get(build_triplet(stack.project, stack.push_branch, row.valid_change_id))
             lc, needed = build_log_commit(row, change, self.web_base, cwd)
             if fetch_ci_pipelines and lc.pushed:
                 needed = needed | frozenset({"checks"})

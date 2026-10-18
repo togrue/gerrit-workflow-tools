@@ -8,7 +8,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache, resolve_tier_callables
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
+from gerrit_workflow_tools.core.stack import Commit
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def default_reviewers_via_registry(
     *,
     project: str,
     branch: str,
-    commits: list[ReadyCommitRow],
+    commits: list[Commit],
     settings: Settings,
     web_base: str | None = None,
 ) -> list[str] | None:

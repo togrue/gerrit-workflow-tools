@@ -204,7 +204,7 @@ sequenceDiagram
   participant Attn as attention
   participant Render as render/
 
-  CLI->>Stack: commits_in_range → CommitStatusInput rows
+  CLI->>Stack: get_stack_snapshot / commits_in_range → Commit rows
   CLI->>Svc: from_cwd() / fetch_gerrit_data(commits)
   Svc->>Res: resolve_stack_context, build_triplet
   Svc->>Cache: get/put change payloads
@@ -373,7 +373,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `classify_issues`, generate and fix |
-| `core/stack.py` | Local stack: reading commit rows from `git log`, ranges, merge-base |
+| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention |

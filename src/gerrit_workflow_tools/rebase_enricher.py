@@ -16,10 +16,10 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
-    CommitStatusInput,
     LogCommit,
 )
 from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.stack import Commit
 from gerrit_workflow_tools.render.status_fmt import (
     attention_text as _attention_text,
     code_review_token as _fmt_cr,
@@ -197,7 +197,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
 
     # Build ordered input for fetch_gerrit_data.
     # We preserve the todo order (oldest-first) so chain-blocked detection is correct.
-    commit_inputs: list[CommitStatusInput] = []
+    commit_inputs: list[Commit] = []
     for short_sha in short_shas:
         meta = meta_map.get(short_sha)
         if meta:
@@ -205,7 +205,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
             # Pass the todo's short SHA as the short field so LogCommit.short_sha
             # matches the keys we use for lookup below.
             commit_inputs.append(
-                CommitStatusInput(sha=full_sha, short_sha=short_sha, summary=subject, change_id=change_id)
+                Commit(sha=full_sha, short_sha=short_sha, subject=subject, body="", change_id=change_id)
             )
 
     if not commit_inputs:

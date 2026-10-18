@@ -15,6 +15,7 @@ from gerrit_workflow_tools.core.ger_registry import (
     resolve_tier_callables,
     run_registry_callables,
 )
+from gerrit_workflow_tools.core.stack import Commit
 
 
 if TYPE_CHECKING:
@@ -24,16 +25,6 @@ logger = logging.getLogger(__name__)
 
 _DOMAIN = "ready"
 _PACKAGE = "ger_ready"
-
-
-@dataclass(frozen=True)
-class ReadyCommitRow:
-    """One local stack commit passed to a ready-boundary strategy."""
-
-    sha: str
-    short_sha: str
-    subject: str
-    change_id: str | None
 
 
 @dataclass(frozen=True)
@@ -52,7 +43,7 @@ ReadyBoundaryStrategy = Callable[..., BoundaryResult]
 
 def default_find_ready_boundary(
     *,
-    commits: list[ReadyCommitRow],
+    commits: list[Commit],
     stop_pattern: str,
     overlay: dict[str, LogCommit] | None = None,
 ) -> BoundaryResult:
@@ -77,7 +68,7 @@ def blocked_shas_for_stack(
     cwd: Path | str | None,
     *,
     project: str,
-    commits: list[ReadyCommitRow],
+    commits: list[Commit],
     stop_pattern: str,
     settings: Settings | None = None,
     web_base: str | None = None,
@@ -113,7 +104,7 @@ def find_ready_boundary_via_registry(
     cwd: Path | str | None,
     *,
     project: str,
-    commits: list[ReadyCommitRow],
+    commits: list[Commit],
     stop_pattern: str,
     overlay: dict[str, LogCommit] | None = None,
     settings: Settings | None = None,

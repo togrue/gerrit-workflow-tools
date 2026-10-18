@@ -8,7 +8,8 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow, blocked_shas_for_stack
+from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
+from gerrit_workflow_tools.core.stack import Commit
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ def build_summary_highlighter(
     settings: Settings,
     *,
     cwd: Path | str | None = None,
-    commits: list[ReadyCommitRow] | None = None,
+    commits: list[Commit] | None = None,
     project: str = "",
     web_base: str | None = None,
 ) -> SummaryHighlighter:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.change_id import extract_valid_change_id
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
@@ -14,7 +14,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
-from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot
 
@@ -23,12 +22,13 @@ from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack
 class ShowCommitResolution:
     """Resolved commit row for status lookup plus resolution metadata."""
 
-    row: CommitStatusInput
+    row: Commit
     is_local_commit: bool
     resolution: Resolution
 
 
-def _row_from_gerrit_change(change: ChangeView) -> CommitStatusInput:
+def _row_from_gerrit_change(change: ChangeView) -> Commit:
+    """A **commit row** for a change with no local commit: Gerrit's current revision."""
     sha = change.current_revision or ""
     change_id = change.change_id
     if not change_id:
@@ -37,24 +37,14 @@ def _row_from_gerrit_change(change: ChangeView) -> CommitStatusInput:
     short = sha[:8] if len(sha) >= 8 else "?" * min(8, max(1, len(sha) or 1))
     if not sha:
         short = "????????"
-    return CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
+    return Commit(sha=sha, short_sha=short, subject=summary, body="", change_id=change_id)
 
 
-def _row_from_local_commit(cwd: Path | str, sha: str) -> CommitStatusInput:
+def _row_from_local_commit(cwd: Path | str, sha: str) -> Commit:
     raw = git_out("log", "-1", "--format=%B", sha, cwd=cwd)
     summary = git_out("log", "-1", "--format=%s", sha, cwd=cwd)
     short = git_out("log", "-1", "--format=%h", sha, cwd=cwd)
-    change_id = extract_valid_change_id(raw)
-    return CommitStatusInput(sha=sha, short_sha=short, summary=summary, change_id=change_id)
-
-
-def _row_from_stack_commit(commit: Commit) -> CommitStatusInput:
-    return CommitStatusInput(
-        sha=commit.sha,
-        short_sha=commit.short_sha,
-        summary=commit.subject,
-        change_id=extract_valid_change_id(commit.body),
-    )
+    return Commit(sha=sha, short_sha=short, subject=summary, body=raw.strip(), change_id=parse_change_id_footer(raw))
 
 
 def resolve_show_commit_row(
@@ -126,7 +116,7 @@ def resolve_range_endpoint_sha(
         want = norm_change_id(change_id)
         snap = get_stack_snapshot(cwd, branch, settings=settings)
         for commit in snap.commits:
-            footer = extract_valid_change_id(commit.body)
+            footer = commit.valid_change_id
             if footer and norm_change_id(footer) == want:
                 return commit.sha
         if resolution.selected is not None:
@@ -184,7 +174,7 @@ def expand_show_range(
     rows = commits_in_range(cwd, rev_range)
     return [
         ShowCommitResolution(
-            row=_row_from_stack_commit(c),
+            row=c,
             is_local_commit=True,
             resolution=_resolution_for_local_sha(c.sha, input_arg=arg),
         )
@@ -202,7 +192,7 @@ def expand_stack_range(
     snap = get_stack_snapshot(cwd, branch, settings=settings)
     return [
         ShowCommitResolution(
-            row=_row_from_stack_commit(c),
+            row=c,
             is_local_commit=True,
             resolution=_resolution_for_local_sha(c.sha, input_arg="--stack"),
         )
@@ -211,8 +201,8 @@ def expand_stack_range(
 
 
 def _dedupe_key(resolved: ShowCommitResolution) -> str:
-    cid = resolved.row.change_id
-    if isinstance(cid, str) and cid:
+    cid = resolved.row.valid_change_id
+    if cid:
         return f"cid:{norm_change_id(cid)}"
     sha = resolved.row.sha
     if sha:

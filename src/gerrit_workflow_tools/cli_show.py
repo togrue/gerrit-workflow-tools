@@ -38,8 +38,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
@@ -412,15 +411,11 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         except ChangeResolutionError:
             pass
         else:
-            _fork, _display, target_tip = merge_base_with_target(cwd, branch, settings=settings)
-            stack_rows = commits_in_range(cwd, f"{target_tip}..HEAD", first_parent=True)
+            snap = get_stack_snapshot(cwd, branch, first_parent=True, settings=settings)
             summary_highlighter = build_summary_highlighter(
                 settings,
                 cwd=cwd,
-                commits=[
-                    ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id)
-                    for r in stack_rows
-                ],
+                commits=list(snap.commits),
                 project=stack.project,
                 web_base=settings.gerrit_web_url,
             )

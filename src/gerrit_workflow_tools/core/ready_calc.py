@@ -12,10 +12,9 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
-    ReadyCommitRow,
     find_ready_boundary_via_registry,
 )
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 
 
 if TYPE_CHECKING:
@@ -36,7 +35,7 @@ class ReadyResult:
     push_range: str | None  # "upstream_tip..tip" (target_tip field holds upstream tip SHA)
 
 
-def change_id_boundary_for_commits(commits: list[ReadyCommitRow]) -> BoundaryResult:
+def change_id_boundary_for_commits(commits: list[Commit]) -> BoundaryResult:
     """Ready boundary at the first missing/malformed/duplicate Change-Id, if any."""
     rows = [ChangeIdRow(sha=c.sha, short_sha=c.short_sha, change_id=c.change_id) for c in commits]
     block_index, reason = first_change_id_boundary(rows, strict=True)
@@ -56,7 +55,7 @@ def earlier_boundary(left: BoundaryResult, right: BoundaryResult) -> BoundaryRes
     return left
 
 
-def compose_ready_boundary(strategy: BoundaryResult, commits: list[ReadyCommitRow]) -> BoundaryResult:
+def compose_ready_boundary(strategy: BoundaryResult, commits: list[Commit]) -> BoundaryResult:
     """Tighten a strategy/stop boundary with the first Change-Id ERROR on *commits*."""
     return earlier_boundary(strategy, change_id_boundary_for_commits(commits))
 
@@ -144,12 +143,10 @@ def compute_ready(
     Change-Id errors always tighten the tip (including with ``--all``). Stop pattern / ready
     strategies are ignored when ``all_commits`` is true.
     """
-    _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=head)
-    rows = commits_in_range(cwd, f"{target_tip}..{head}", first_parent=first_parent)
-    shas = [r.sha for r in rows]
-    ready_rows = [
-        ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
-    ]
+    snap = get_stack_snapshot(cwd, branch, head=head, first_parent=first_parent, settings=settings)
+    target_tip = snap.upstream_tip
+    ready_rows = list(snap.commits)
+    shas = [r.sha for r in ready_rows]
     logger.debug(
         "compute_ready target_tip=%s commits=%d all_commits=%s stop_pattern=%r project=%r",
         target_tip[:8],

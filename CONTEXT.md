@@ -11,7 +11,7 @@ One commit as read by a single `git log` — sha, short sha, subject, body, and 
 _Avoid_: commit, log line, record
 
 **Local stack**:
-The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing.
+The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing. Loaded one way, `get_stack_snapshot`; the overlay, ready strategies and the highlighter all take the same `Commit` rows.
 _Avoid_: chain, series, branch commits
 
 **Ready boundary**:

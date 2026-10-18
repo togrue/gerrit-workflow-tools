@@ -194,6 +194,14 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, 
     return resolved
 
 
+def stack_project(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:
+    """The stack context's project, else ``gerrit.project`` (for work that needs no push destination)."""
+    try:
+        return resolve_stack_context(cwd, branch, settings=settings).project
+    except Exception:  # pylint: disable=broad-exception-caught
+        return settings.gerrit_project or ""
+
+
 def _resolve_stack_context_uncached(
     cwd: Path | str | None, branch: str | None = None, *, settings: Settings
 ) -> StackContext:

@@ -23,7 +23,6 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.annotated_stack import (
     branches_needing_upstream,
-    commit_rows_in_range,
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.attention import determine_attention
@@ -32,6 +31,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetS
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import Worktree
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
+from gerrit_workflow_tools.core.stack import commits_in_range
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
@@ -653,7 +653,7 @@ def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: py
     rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "feat/x@{upstream}..feat/x"
 
-    commit_data = commit_rows_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=True)
     assert commit_data == []
 
     assert git_out_calls == []
@@ -669,7 +669,7 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "@{upstream}..HEAD"
 
-    commit_data = commit_rows_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=True)
     assert commit_data == []
 
     assert git_out_calls == []
@@ -688,7 +688,7 @@ def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypa
     rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "feat/x@{upstream}..feat/x"
 
-    commit_data = commit_rows_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=True)
     assert commit_data == []
 
     assert git_out_calls == []
@@ -704,7 +704,7 @@ def test_log_rev_range_single_branch_expands_to_branch_upstream_range(monkeypatc
     rev_range = resolve_rev_range(cwd, "bak", settings=Settings.from_map({}))
     assert rev_range == "bak@{upstream}..bak"
 
-    commit_data = commit_rows_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=True)
     assert commit_data == []
 
     assert git_out_calls == []
@@ -724,7 +724,7 @@ def test_log_rev_range_explicit_ranges_are_forwarded_verbatim(
     rev_range = resolve_rev_range(cwd, arg_rev_range, settings=Settings.from_map({}))
     assert rev_range == arg_rev_range
 
-    commit_data = commit_rows_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=True)
     assert commit_data == []
 
     assert git_out_calls == []
@@ -741,7 +741,7 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     rev_range = resolve_rev_range(cwd, "a..b", settings=Settings.from_map({}))
     assert rev_range == "a..b"
 
-    commit_data = commit_rows_in_range(cwd, rev_range, first_parent=False)
+    commit_data = commits_in_range(cwd, rev_range)
     assert commit_data == []
 
     assert [args for args, _cwd, _check in git_calls] == [
@@ -777,7 +777,7 @@ def test_branches_needing_upstream(
 
 def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_path: Path) -> None:
     """
-    By default ``commit_rows_in_range`` uses ``first_parent=True``, matching
+    With ``first_parent=True`` the stack loader follows, matching
     Gerrit's relation-chain semantics.  Only the 2 first-parent commits are
     returned; the 2 side-branch commits are excluded.
     """
@@ -787,9 +787,9 @@ def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_pat
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data = commit_rows_in_range(repo, rev_range)
+    commit_data = commits_in_range(repo, rev_range, first_parent=True)
     assert commit_data is not None
-    subjects = [row.summary for row in commit_data]
+    subjects = [row.subject for row in commit_data]
     assert len(subjects) == 2, f"expected 2 first-parent commits, got {len(subjects)}: {subjects}"
     assert any("local work" in s for s in subjects)
     assert any("Merge side branch" in s for s in subjects)
@@ -807,9 +807,9 @@ def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data = commit_rows_in_range(repo, rev_range, first_parent=False)
+    commit_data = commits_in_range(repo, rev_range)
     assert commit_data is not None
-    subjects = [row.summary for row in commit_data]
+    subjects = [row.subject for row in commit_data]
     assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"
     assert sum(1 for s in subjects if "side commit" in s) == 2
 

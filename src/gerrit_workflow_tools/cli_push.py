@@ -32,7 +32,7 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import ConfigError, Settings, set_branch_config
-from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.change_resolution import build_triplet, resolve_stack_context, stack_project
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
@@ -52,13 +52,12 @@ from gerrit_workflow_tools.core.push_reviewers import (
     stack_change_refs_ordered,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
     reviewer_accounts_from_change_info,
 )
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import commits_in_range, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.push_input_line import (
     ParseResult,
@@ -141,28 +140,17 @@ def _resolve_push_reviewers(
     if reviewer_flag_segments:
         return _parse_reviewers_list(",".join(reviewer_flag_segments))
 
-    from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
     from gerrit_workflow_tools.core.reviewers_strategy import default_reviewers_via_registry
 
-    project = settings.gerrit_project or ""
     try:
-        stack = resolve_stack_context(cwd, settings=settings)
-        project = stack.project
+        rows = list(get_stack_snapshot(cwd, branch, head=branch, first_parent=True, settings=settings).commits)
     except Exception:  # pylint: disable=broad-exception-caught
-        pass
-    try:
-        _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
-        rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=True)
-        ready_rows = [
-            ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
-        ]
-    except Exception:  # pylint: disable=broad-exception-caught
-        ready_rows = []
+        rows = []
     scripted = default_reviewers_via_registry(
         cwd,
-        project=project,
+        project=stack_project(cwd, settings=settings),
         branch=branch,
-        commits=ready_rows,
+        commits=rows,
         settings=settings,
         web_base=settings.gerrit_web_url,
     )
@@ -229,10 +217,7 @@ def _push_options_history_identity(
 ) -> tuple[str | None, str | None]:
     """Return ``(web_base, project)`` for push-options history, or ``(None, None)``."""
     web_base = settings.gerrit_web_url
-    project = settings.gerrit_project
-    if cwd is not None:
-        with contextlib.suppress(Exception):
-            project = resolve_stack_context(cwd, settings=settings).project
+    project = stack_project(cwd, settings=settings) if cwd is not None else settings.gerrit_project
     if not web_base or not project:
         return None, None
     return web_base, project
@@ -582,19 +567,12 @@ def _summary_highlighter_for_push(
 ) -> SummaryHighlighter:
     """Highlighter aligned with the ready boundary for *branch*'s local stack."""
 
-    project = settings.gerrit_project or ""
-    with contextlib.suppress(Exception):
-        project = resolve_stack_context(cwd, branch=branch, settings=settings).project
-    _fork, _display, target_tip = merge_base_with_target(cwd, branch, head=branch)
-    rows = commits_in_range(cwd, f"{target_tip}..{branch}", first_parent=first_parent)
-    ready_rows = [
-        ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
-    ]
+    snap = get_stack_snapshot(cwd, branch, head=branch, first_parent=first_parent, settings=settings)
     return build_summary_highlighter(
         settings,
         cwd=cwd,
-        commits=ready_rows,
-        project=project,
+        commits=list(snap.commits),
+        project=stack_project(cwd, branch, settings=settings),
         web_base=settings.gerrit_web_url,
     )
 

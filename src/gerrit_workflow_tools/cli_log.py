@@ -36,7 +36,6 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -270,9 +269,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     summary_highlighter = build_summary_highlighter(
         settings,
         cwd=cwd,
-        commits=[
-            ReadyCommitRow(sha=c.sha, short_sha=c.short_sha, subject=c.summary, change_id=c.change_id) for c in commits
-        ],
+        commits=stack_view.rows,
         project=stack.project,
         web_base=settings.gerrit_web_url,
     )

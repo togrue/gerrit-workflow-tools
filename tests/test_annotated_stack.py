@@ -8,13 +8,13 @@ import pytest
 
 from gerrit_workflow_tools.core.annotated_stack import (
     annotate,
-    commit_rows_in_range,
     load_annotated_stack,
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.stack import commits_in_range
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, change_info_for_sha, stack_rows_mb_to_head
 
@@ -104,7 +104,9 @@ def test_an_unsubmittable_commit_blocks_the_ones_after_it(stack_repo: Path) -> N
     store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides), web_base="https://g.example")
 
     commits = annotate(
-        commit_rows_in_range(stack_repo, _range(stack_repo)), service=_service(stack_repo, store), cwd=stack_repo
+        commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
+        service=_service(stack_repo, store),
+        cwd=stack_repo,
     )
 
     assert "chain-blocked" not in commits[0].attention_reasons, "the blocker itself is not blocked"
@@ -119,7 +121,9 @@ def test_a_healthy_stack_blocks_nothing(stack_repo: Path) -> None:
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
     commits = annotate(
-        commit_rows_in_range(stack_repo, _range(stack_repo)), service=_service(stack_repo, store), cwd=stack_repo
+        commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
+        service=_service(stack_repo, store),
+        cwd=stack_repo,
     )
 
     assert all("chain-blocked" not in c.attention_reasons for c in commits)
@@ -133,7 +137,7 @@ def test_a_lone_commit_is_never_chain_blocked(stack_repo: Path) -> None:
         build_details_by_change_id(rows, per_index_overrides=[{"submittable": False, "cr": 0}] * len(rows)),
         web_base="https://g.example",
     )
-    single = commit_rows_in_range(stack_repo, _range(stack_repo))[-1:]
+    single = commits_in_range(stack_repo, _range(stack_repo), first_parent=True)[-1:]
 
     commits = annotate(single, service=_service(stack_repo, store), cwd=stack_repo)
 

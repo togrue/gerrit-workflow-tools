@@ -19,7 +19,7 @@ from gerrit_workflow_tools.core.ci_links import (
 )
 from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, extract_ci_links_via_registry
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput, LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_ci_lines
 from tests.change_store import ChangeStore
@@ -160,15 +160,7 @@ STRATEGIES = {"testproj": _jenkins}
         messages={triplet: [{"message": "Build failed: https://jenkins.example/job/p/99/"}]},
     )
     service = GerritService.from_cwd(stack_repo, rest=store)
-    inputs = [
-        CommitStatusInput(
-            sha=row.sha,
-            short_sha=row.short_sha,
-            summary=row.subject,
-            change_id=row.change_id,
-        )
-        for row in rows
-    ]
+    inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
     assert matched.ci_failures == ["verify"]
@@ -208,15 +200,7 @@ def test_service_skips_get_messages_when_builtin_checks_suffice(stack_repo: Path
         },
     )
     service = GerritService.from_cwd(stack_repo, rest=store)
-    inputs = [
-        CommitStatusInput(
-            sha=row.sha,
-            short_sha=row.short_sha,
-            summary=row.subject,
-            change_id=row.change_id,
-        )
-        for row in rows
-    ]
+    inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
     assert matched.ci_links == [
@@ -278,15 +262,7 @@ def test_service_uses_builtin_message_parser_without_registry(stack_repo: Path) 
         },
     )
     service = GerritService.from_cwd(stack_repo, rest=store)
-    inputs = [
-        CommitStatusInput(
-            sha=row.sha,
-            short_sha=row.short_sha,
-            summary=row.subject,
-            change_id=row.change_id,
-        )
-        for row in rows
-    ]
+    inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
     assert matched.ci_links == [
@@ -329,15 +305,7 @@ STRATEGIES = {"testproj": _msg_only}
         messages={triplet: [{"message": "failed https://jenkins.example/job/p/7/"}]},
     )
     service = GerritService.from_cwd(stack_repo, rest=store)
-    inputs = [
-        CommitStatusInput(
-            sha=r.sha,
-            short_sha=r.short_sha,
-            summary=r.subject,
-            change_id=r.change_id,
-        )
-        for r in rows
-    ]
+    inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
     assert matched.ci_links[0].url == "https://jenkins.example/job/p/7/console"
@@ -490,15 +458,7 @@ def test_service_ci_links_filter_by_current_revision(stack_repo: Path) -> None:
         },
     )
     service = GerritService.from_cwd(stack_repo, rest=store)
-    inputs = [
-        CommitStatusInput(
-            sha=row.sha,
-            short_sha=row.short_sha,
-            summary=row.subject,
-            change_id=row.change_id,
-        )
-        for row in rows
-    ]
+    inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo, fetch_ci_pipelines=True)
     matched = next(c for c in result if c.change_id == first_cid)
     assert matched.ci_links == []

@@ -13,8 +13,8 @@ from gerrit_workflow_tools.core.attention_strategy import (
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
-from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
 from gerrit_workflow_tools.core.reviewers_strategy import clear_reviewers_strategy_cache, default_reviewers_via_registry
+from gerrit_workflow_tools.core.stack import Commit
 
 
 def _write_registry(repo: Path, domain: str, body: str) -> None:
@@ -119,7 +119,7 @@ STRATEGIES = {"testproj": _revs}
         stack_repo,
         project="testproj",
         branch="feature",
-        commits=[ReadyCommitRow(sha="a" * 40, short_sha="aaaaaaaa", subject="x", change_id=None)],
+        commits=[Commit(sha="a" * 40, short_sha="aaaaaaaa", subject="x", body="", change_id=None)],
         settings=Settings.from_map({}),
     )
     assert out == ["alice", "bob"]

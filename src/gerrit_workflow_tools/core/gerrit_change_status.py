@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+    from gerrit_workflow_tools.core.stack import Commit
 
 
 logger = logging.getLogger(__name__)
@@ -32,16 +33,6 @@ class PatchsetStatus(str, Enum):
     MERGED_SAME = "merged-same"
     MERGED_DRIFT = "merged-drift"
     MERGED_UNKNOWN = "merged-unknown"
-
-
-@dataclass(frozen=True)
-class CommitStatusInput:
-    """Input row for Gerrit status enrichment."""
-
-    sha: str
-    short_sha: str
-    summary: str
-    change_id: str | None
 
 
 @dataclass(frozen=True)
@@ -200,7 +191,7 @@ def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | Non
 
 
 def build_log_commit(
-    row: CommitStatusInput,
+    row: Commit,
     change: ChangeView | None,
     web_base: str,
     cwd: Path | str | None,
@@ -214,7 +205,7 @@ def build_log_commit(
     """
     from gerrit_workflow_tools.core.attention import ci_failed
 
-    sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
+    sha, short, summary, change_id = row.sha, row.short_sha, row.subject, row.valid_change_id
 
     if not change_id or change is None:
         return (

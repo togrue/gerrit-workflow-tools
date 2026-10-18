@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.ger_registry import (
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.ready_strategy import clear_ready_strategy_cache
-from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from gerrit_workflow_tools.core.stack import commits_in_range, get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import build_summary_highlighter
 
 
@@ -288,13 +288,7 @@ STRATEGIES = {"testproj": _boundary}
     )
     clear_ready_strategy_cache()
     git("config", "gerrit.project", "testproj", cwd=stack_repo)
-    _fork, _display, target_tip = merge_base_with_target(stack_repo)
-    rows = commits_in_range(stack_repo, f"{target_tip}..HEAD", first_parent=True)
-    from gerrit_workflow_tools.core.ready_strategy import ReadyCommitRow
-
-    ready_rows = [
-        ReadyCommitRow(sha=r.sha, short_sha=r.short_sha, subject=r.subject, change_id=r.change_id) for r in rows
-    ]
+    rows = ready_rows = list(get_stack_snapshot(stack_repo, first_parent=True).commits)
     highlighter = build_summary_highlighter(
         Settings.from_cwd(stack_repo),
         cwd=stack_repo,
