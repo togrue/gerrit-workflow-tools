@@ -28,13 +28,10 @@ from gerrit_workflow_tools.core.annotated_stack import (
 )
 from gerrit_workflow_tools.core.attention import determine_attention
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    LogCommit,
-    PatchsetStatus,
-    ReviewerAccount,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import Worktree
+from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,

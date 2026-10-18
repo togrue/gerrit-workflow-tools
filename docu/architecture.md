@@ -58,6 +58,7 @@ flowchart TB
     service[service.py]
     rest[rest.py]
     cache[cache.py · paths.py]
+    view[change_view.py]
   end
 
   subgraph external [External systems]
@@ -379,7 +380,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status, merged equivalence |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
-| `core/review_chain.py` | Review chains from ChangeInfo payloads; unreviewed age, wait age |
+| `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |
@@ -388,7 +389,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/push_reviewers.py` | Post-push reviewer strategies |
-| `core/reviewer.py` | Reviewer account normalization from REST payloads |
+| `core/reviewer.py` | `ReviewerAccount`; reviewer account normalization from REST payloads |
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream_interactive.py` | Prompting for a missing upstream (core that prompts — see backlog) |
@@ -400,6 +401,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/rest.py` | The `GerritRest` seam and `HttpGerritRest` |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
+| `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
 | `core/gerrit/change_resolution.py` | Changeish resolution, stack context, triplets, resolution notes |
 | `core/gerrit/paths.py` | Cache DB path and host key |
 

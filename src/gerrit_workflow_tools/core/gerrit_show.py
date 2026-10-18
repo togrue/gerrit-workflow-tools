@@ -12,6 +12,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     Resolution,
     resolve_changeish,
 )
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
 from gerrit_workflow_tools.core.gerrit_change_status import CommitStatusInput
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -27,14 +28,12 @@ class ShowCommitResolution:
     resolution: Resolution
 
 
-def _row_from_gerrit_change(change: dict[str, object]) -> CommitStatusInput:
-    rev = change.get("current_revision")
-    sha = rev if isinstance(rev, str) else ""
-    change_id = change.get("change_id")
-    if not isinstance(change_id, str):
+def _row_from_gerrit_change(change: ChangeView) -> CommitStatusInput:
+    sha = change.current_revision or ""
+    change_id = change.change_id
+    if not change_id:
         raise ChangeResolutionError("Gerrit change has no change_id")
-    subject = change.get("subject")
-    summary = subject if isinstance(subject, str) else ""
+    summary = change.subject
     short = sha[:8] if len(sha) >= 8 else "?" * min(8, max(1, len(sha) or 1))
     if not sha:
         short = "????????"
@@ -86,7 +85,7 @@ def resolve_show_commit_row(
     if resolution.selected is None:
         raise ChangeResolutionError(f"no matching Gerrit change for {raw_arg!r}")
 
-    change = client.get_change(resolution.selected.triplet)
+    change = ChangeView.from_payload(client.get_change(resolution.selected.triplet))
     row = _row_from_gerrit_change(change)
     return ShowCommitResolution(row=row, is_local_commit=False, resolution=resolution)
 
@@ -131,9 +130,8 @@ def resolve_range_endpoint_sha(
             if footer and norm_change_id(footer) == want:
                 return commit.sha
         if resolution.selected is not None:
-            change = client.get_change(resolution.selected.triplet)
-            rev = change.get("current_revision")
-            if isinstance(rev, str):
+            rev = ChangeView.from_payload(client.get_change(resolution.selected.triplet)).current_revision
+            if rev is not None:
                 local = _local_sha_or_none(cwd, rev)
                 if local is not None:
                     return local

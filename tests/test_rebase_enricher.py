@@ -686,13 +686,14 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
 
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
+    from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
     from gerrit_workflow_tools.core.gerrit_change_status import compute_merged_equivalent
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     cid = "I" + "a" * 40
     d = change_info_for_sha(sha, cid, status="MERGED", submittable=False)
-    assert compute_merged_equivalent(sha, d, stack_repo) is True
+    assert compute_merged_equivalent(sha, ChangeView.from_payload(d), stack_repo) is True
 
 
 def test_commit_blocks_chain_for_submittability_merged():

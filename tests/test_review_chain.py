@@ -5,18 +5,27 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 from gerrit_workflow_tools.core.review_chain import (
+    ReviewChain,
     assemble_review_chains,
     format_age,
     member_unreviewed_since,
     missing_parent_shas,
-    parse_gerrit_time,
 )
 
 
 SELF = 1000
 NOW = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
 WEB = "https://gerrit.example.com"
+
+
+def _views(payloads: list[dict[str, Any]]) -> list[ChangeView]:
+    return [ChangeView.from_payload(payload) for payload in payloads]
+
+
+def _assemble(queried: list[dict[str, Any]], follow_up: list[dict[str, Any]], **kwargs: Any) -> list[ReviewChain]:
+    return assemble_review_chains(_views(queried), _views(follow_up), **kwargs)
 
 
 def _change(
@@ -114,7 +123,7 @@ def test_linear_chain_links_on_first_parent_and_picks_the_tip() -> None:
         updated="2026-08-18 08:00:00.000000000",
         attention_since="2026-08-15 12:00:00.000000000",
     )
-    chains = assemble_review_chains([base, mid, top], [], web_base=WEB, now=NOW, self_account_id=SELF)
+    chains = _assemble([base, mid, top], [], web_base=WEB, now=NOW, self_account_id=SELF)
     assert len(chains) == 1
     chain = chains[0]
     assert chain.top.number == 4321
@@ -134,7 +143,7 @@ def test_missing_parent_shas_are_the_ones_not_in_the_result() -> None:
         subject="child",
         updated="2026-08-18 08:00:00.000000000",
     )
-    assert missing_parent_shas([child]) == ["aaa"]
+    assert missing_parent_shas(_views([child])) == ["aaa"]
     parent = _change(
         number=1,
         sha="aaa",
@@ -142,7 +151,7 @@ def test_missing_parent_shas_are_the_ones_not_in_the_result() -> None:
         subject="parent",
         updated="2026-08-18 08:00:00.000000000",
     )
-    assert missing_parent_shas([parent, child]) == ["origin"]
+    assert missing_parent_shas(_views([parent, child])) == ["origin"]
 
 
 def test_follow_up_parent_joins_the_queried_members() -> None:
@@ -163,7 +172,7 @@ def test_follow_up_parent_joins_the_queried_members() -> None:
         updated="2026-08-18 08:00:00.000000000",
         attention_since="2026-08-17 12:00:00.000000000",
     )
-    chains = assemble_review_chains([child], [parent], web_base=WEB, now=NOW, self_account_id=SELF)
+    chains = _assemble([child], [parent], web_base=WEB, now=NOW, self_account_id=SELF)
     assert len(chains) == 1
     assert chains[0].depth == 2
     assert chains[0].top.number == 2
@@ -187,7 +196,7 @@ def test_merged_follow_up_parent_is_ground_not_a_member() -> None:
         updated="2026-08-18 08:00:00.000000000",
         attention_since="2026-08-17 12:00:00.000000000",
     )
-    chains = assemble_review_chains([child], [merged], web_base=WEB, now=NOW, self_account_id=SELF)
+    chains = _assemble([child], [merged], web_base=WEB, now=NOW, self_account_id=SELF)
     assert len(chains) == 1
     assert chains[0].depth == 1
     assert chains[0].partial_chain is False
@@ -202,7 +211,7 @@ def test_unmatched_parent_sha_flags_partial_chain() -> None:
         updated="2026-08-18 08:00:00.000000000",
         attention_since="2026-08-17 12:00:00.000000000",
     )
-    chains = assemble_review_chains(
+    chains = _assemble(
         [child],
         [],
         web_base=WEB,
@@ -232,7 +241,7 @@ def test_sorts_longest_unreviewed_first() -> None:
         updated="2026-08-10 12:00:00.000000000",
         attention_since="2026-08-17 12:00:00.000000000",
     )
-    chains = assemble_review_chains([fresh, stale], [], web_base=WEB, now=NOW, self_account_id=SELF)
+    chains = _assemble([fresh, stale], [], web_base=WEB, now=NOW, self_account_id=SELF)
     assert [chain.top.number for chain in chains] == [100, 200]
     assert chains[0].unreviewed_age_seconds == 6 * 86400
     assert chains[1].unreviewed_age_seconds == 86400
@@ -248,7 +257,7 @@ def test_unreviewed_falls_back_to_current_patchset_after_old_vote() -> None:
         created="2026-08-16 12:00:00.000000000",
         my_vote_date="2026-08-10 12:00:00.000000000",
     )
-    stamp = member_unreviewed_since(payload, SELF)
+    stamp = member_unreviewed_since(ChangeView.from_payload(payload), SELF)
     assert stamp == datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
 
 
@@ -262,8 +271,8 @@ def test_current_vote_means_not_waiting_on_me() -> None:
         created="2026-08-10 12:00:00.000000000",
         my_vote_date="2026-08-18 07:00:00.000000000",
     )
-    assert member_unreviewed_since(payload, SELF) is None
-    chains = assemble_review_chains([payload], [], web_base=WEB, now=NOW, self_account_id=SELF)
+    assert member_unreviewed_since(ChangeView.from_payload(payload), SELF) is None
+    chains = _assemble([payload], [], web_base=WEB, now=NOW, self_account_id=SELF)
     assert chains[0].unreviewed_age_seconds == 0
     assert chains[0].wait_age_seconds == 4 * 3600
 
@@ -279,7 +288,7 @@ def test_ci_failure_is_an_attention_reason() -> None:
         comments=2,
         attention_since="2026-08-17 12:00:00.000000000",
     )
-    chains = assemble_review_chains([payload], [], web_base=WEB, now=NOW, self_account_id=SELF)
+    chains = _assemble([payload], [], web_base=WEB, now=NOW, self_account_id=SELF)
     assert "ci-failed" in chains[0].attention_reasons
     assert "unresolved-comments" in chains[0].attention_reasons
     assert chains[0].comments_unresolved == 2

@@ -7,11 +7,16 @@ import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.reviewer import ReviewerAccount
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 
 
 logger = logging.getLogger(__name__)
@@ -37,14 +42,6 @@ class CommitStatusInput:
     short_sha: str
     summary: str
     change_id: str | None
-
-
-@dataclass(frozen=True)
-class ReviewerAccount:
-    """Normalized Gerrit reviewer account identity used by CLI and core."""
-
-    slug: str
-    account_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -142,15 +139,15 @@ def _patch_id_single_parent(cwd: Path | str | None, sha: str) -> str | None:
 
 def compute_merged_equivalent(
     local_sha: str,
-    detail: dict[str, Any],
+    change: ChangeView,
     cwd: Path | str | None,
 ) -> bool | None:
     """
     v1 conservative equivalence: SHA match, else patch-id match when both sides are single-parent
     and the Gerrit ``current_revision`` exists locally. Merge commits and missing objects → ``None``.
     """
-    cur = detail.get("current_revision")
-    if not isinstance(cur, str) or not cur.strip():
+    cur = change.current_revision
+    if cur is None:
         return None
     if norm_sha(local_sha) == norm_sha(cur):
         return True
@@ -166,75 +163,17 @@ def compute_merged_equivalent(
     return pl == pg
 
 
-def extract_label_value(labels: dict[str, Any], label_name: str) -> int | None:
-    """Return the effective vote value for a Gerrit label, or None if no vote."""
-    label = labels.get(label_name)
-    if not isinstance(label, dict):
-        return None
-
-    v = label.get("value")
-    if v is not None:
-        try:
-            iv = int(v)
-            if iv == 0:
-                all_vals = [
-                    int(vote.get("value", 0))
-                    for vote in label.get("all", [])
-                    if isinstance(vote, dict) and vote.get("value") is not None
-                ]
-                if not any(x != 0 for x in all_vals):
-                    return None
-            return iv
-        except (TypeError, ValueError):
-            pass
-
-    all_vals = [
-        int(vote.get("value", 0))
-        for vote in label.get("all", [])
-        if isinstance(vote, dict) and vote.get("value") is not None
-    ]
-    if all_vals:
-        min_val = min(all_vals)
-        if min_val < 0:
-            # Any negative vote (e.g. Code-Review -2) takes precedence over
-            # positive votes because blocking votes override approvals.
-            return min_val
-        max_val = max(all_vals)
-        if max_val == 0:
-            return None
-        return max_val
-
-    return None
-
-
 def norm_sha(sha: str) -> str:
     """Normalize commit SHA text for case-insensitive comparisons."""
 
     return sha.strip().lower()
 
 
-def current_revision_number(detail: dict[str, Any]) -> int | None:
-    """Return the patch-set number of Gerrit's ``current_revision``, if known."""
-
-    cur = detail.get("current_revision")
-    revs = detail.get("revisions") or {}
-    if isinstance(cur, str) and isinstance(revs.get(cur), dict):
-        n = revs[cur].get("_number")
-        return n if isinstance(n, int) else None
-    return None
-
-
-def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
+def patchset_status(local_sha: str, change: ChangeView) -> PatchsetStatus:
     """Compare local commit SHA to Gerrit ``current_revision`` / ``revisions``."""
     ls = norm_sha(local_sha)
-    cur = detail.get("current_revision")
-    cur_n = norm_sha(cur) if isinstance(cur, str) else None
-    revs = detail.get("revisions")
-    rev_keys: set[str] = set()
-    if isinstance(revs, dict):
-        for k in revs:
-            if isinstance(k, str):
-                rev_keys.add(norm_sha(k))
+    cur_n = change.current_revision
+    rev_keys = set(change.revisions)
     if cur_n is None and len(rev_keys) == 1:
         cur_n = next(iter(rev_keys))
     if cur_n and ls == cur_n:
@@ -244,17 +183,6 @@ def patchset_status(local_sha: str, detail: dict[str, Any]) -> PatchsetStatus:
     if cur_n or rev_keys:
         return PatchsetStatus.NEWER
     return PatchsetStatus.ABSENT
-
-
-def gerrit_change_url(web_base: str, change: dict[str, Any]) -> str | None:
-    """Build the Gerrit change page URL from a ``ChangeInfo`` object."""
-
-    proj = change.get("project")
-    num = change.get("_number")
-    if not proj or not isinstance(num, int):
-        return None
-    proj_enc = quote(str(proj), safe="")
-    return f"{web_base}/c/{proj_enc}/+/{num}"
 
 
 def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | None) -> str | None:
@@ -273,24 +201,22 @@ def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | Non
 
 def build_log_commit(
     row: CommitStatusInput,
-    detail: dict[str, Any] | None,
+    change: ChangeView | None,
     web_base: str,
     cwd: Path | str | None,
 ) -> tuple[LogCommit, frozenset[str]]:
-    """Build one ``LogCommit`` from a Gerrit ChangeInfo detail dict.
+    """Build one ``LogCommit`` from the Gerrit change matching *row*.
 
     Returns ``(commit, follow_up_kinds)`` where *follow_up_kinds* names REST
     calls the caller should make to fill absent data: ``'comments'``,
     ``'checks'``, ``'reviewers'``.  An empty set means the commit is fully
-    populated from *detail* alone.
+    populated from *change* alone.
     """
     from gerrit_workflow_tools.core.attention import ci_failed
-    from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
-    from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 
     sha, short, summary, change_id = row.sha, row.short_sha, row.summary, row.change_id
 
-    if not change_id or not detail:
+    if not change_id or change is None:
         return (
             LogCommit(
                 sha=sha,
@@ -309,39 +235,20 @@ def build_log_commit(
             frozenset(),
         )
 
-    labels = detail.get("labels") or {}
-    verified = extract_label_value(labels, "Verified")
-    code_review = extract_label_value(labels, "Code-Review")
-    submittable = bool(detail.get("submittable"))
-    raw_status = detail.get("status")
-    st = raw_status.upper() if isinstance(raw_status, str) else ""
-    change_status_val = raw_status if isinstance(raw_status, str) else None
-    abandoned = st == "ABANDONED"
-    url = gerrit_change_url(web_base, detail)
-
+    st = change.status.upper() if change.status else ""
     needed: set[str] = set()
-
-    raw_u = detail.get("unresolved_comment_count")
-    if isinstance(raw_u, int):
-        unresolved = raw_u
-    else:
-        unresolved = 0
+    if change.unresolved_comments is None:
         needed.add("comments")
-
-    if ci_failed(verified):
+    if ci_failed(change.verified):
         needed.add("checks")
-
-    reviewer_list = reviewer_accounts_from_change_info(detail)
     # An empty list is an *answer* when the payload carried the field: `DETAILED_LABELS`
     # puts `reviewers` on every ChangeInfo, so absence — not emptiness — is the miss.
-    # Payloads fetched without that option (e.g. `rest.get_change`) still follow up.
-    if not reviewer_list and "reviewers" not in detail:
+    if change.reviewers is None:
         needed.add("reviewers")
 
-    resolved_cwd = Path.cwd() if cwd is None else Path(cwd)
     merged_eq: bool | None = None
     if st == "MERGED":
-        merged_eq = compute_merged_equivalent(sha, detail, resolved_cwd)
+        merged_eq = compute_merged_equivalent(sha, change, Path.cwd() if cwd is None else Path(cwd))
         if merged_eq is True:
             ps = PatchsetStatus.MERGED_SAME
         elif merged_eq is False:
@@ -349,7 +256,7 @@ def build_log_commit(
         else:
             ps = PatchsetStatus.MERGED_UNKNOWN
     else:
-        ps = patchset_status(sha, detail)
+        ps = patchset_status(sha, change)
 
     return (
         LogCommit(
@@ -358,21 +265,21 @@ def build_log_commit(
             summary=summary,
             change_id=change_id,
             pushed=True,
-            abandoned=abandoned,
+            abandoned=st == "ABANDONED",
             patchset_status=ps,
-            verified=verified,
-            code_review=code_review,
-            comments_unresolved=unresolved,
+            verified=change.verified,
+            code_review=change.code_review,
+            comments_unresolved=change.unresolved_comments or 0,
             ci_failures=[],
             ci_links=[],
             ci_pipelines=[],
-            gerrit_url=url,
-            submittable=submittable,
-            change_status=change_status_val,
+            gerrit_url=change.url(web_base),
+            submittable=change.submittable,
+            change_status=change.status,
             merged_equivalent=merged_eq,
-            reviewers=reviewer_list,
-            updated=detail.get("updated") if isinstance(detail.get("updated"), str) else None,
-            freshness=change_freshness_key(detail),
+            reviewers=list(change.reviewers or ()),
+            updated=change.updated,
+            freshness=change.freshness,
         ),
         frozenset(needed),
     )

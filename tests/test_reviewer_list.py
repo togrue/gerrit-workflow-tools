@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.core.gerrit_change_status import ReviewerAccount
-from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
+from gerrit_workflow_tools.core.reviewer import ReviewerAccount, reviewer_accounts_from_reviewer_list
 
 
 def test_reviewer_accounts_from_flat_reviewer_list() -> None:

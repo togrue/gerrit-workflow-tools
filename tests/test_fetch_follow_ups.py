@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import ReviewerAccount
+from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 
 @dataclass

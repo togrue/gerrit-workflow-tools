@@ -17,8 +17,10 @@ from gerrit_workflow_tools.core.attention import Attention, annotate_attention, 
 from gerrit_workflow_tools.core.attention_strategy import clear_attention_strategy_cache
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, ReviewerAccount
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.review_chain import member_attention_reasons
+from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.render.commit_row import attention_tokens
 from gerrit_workflow_tools.render.status_fmt import attention_text
 
@@ -69,8 +71,8 @@ def test_a_failed_build_is_one_verdict_everywhere(kwargs: dict[str, Any]) -> Non
 
 
 def test_inbox_member_uses_the_same_ci_rule() -> None:
-    payload = {"labels": {"Verified": {"value": -2, "all": [{"value": -2}]}}}
-    assert Attention.CI_FAILED in member_attention_reasons(payload)
+    payload: dict[str, Any] = {"labels": {"Verified": {"value": -2, "all": [{"value": -2}]}}}
+    assert Attention.CI_FAILED in member_attention_reasons(ChangeView.from_payload(payload))
 
 
 def test_a_stable_commit_prints_no_hint_but_submittable() -> None:

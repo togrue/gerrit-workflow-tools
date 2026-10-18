@@ -136,6 +136,10 @@ _Avoid_: GerritClient, real client
 The **GerritRest** implementation backed by a dictionary of ChangeInfo payloads. Lives under `tests/` and is not shipped — no `ger` command constructs one. Stateful — writes update the payloads, so reads see them. Fed by authored payloads in unit tests and by recorded payloads when replaying integration fixtures.
 _Avoid_: mock, fake client, stub
 
+**ChangeView**:
+One ChangeInfo payload, parsed once in `core/gerrit/` — labels, revisions and parents, owner, votes, reviewers, freshness. The **Gerrit overlay**, **review chains** and `ger show` read it; nothing above `core/gerrit/` reaches into the raw dict.
+_Avoid_: detail, payload (for the parsed value), change dict
+
 **Trust window**:
 How long a cached ChangeInfo is served without re-checking Gerrit. Offline / cache-only operation is an unbounded trust window with the freshness probe skipped — it is a policy, not a separate **GerritRest**.
 _Avoid_: TTL, cache timeout, offline mode

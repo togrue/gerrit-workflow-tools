@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit_change_status import ReviewerAccount
+
+
+@dataclass(frozen=True)
+class ReviewerAccount:
+    """Normalized Gerrit reviewer account identity used by CLI and core."""
+
+    slug: str
+    account_id: int | None = None
 
 
 class ReviewerStrategy(str, Enum):

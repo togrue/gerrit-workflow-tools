@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.gerrit.cache import (
     comments_context_key,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackContext, build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
@@ -33,7 +34,6 @@ from gerrit_workflow_tools.core.review_chain import (
     INBOX_QUERY_OPTIONS,
     ReviewChain,
     assemble_review_chains,
-    current_revision_sha,
     missing_parent_shas,
 )
 
@@ -157,19 +157,19 @@ class GerritService:
         """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
 
         from gerrit_workflow_tools.core.comment_chains import count_unresolved_in_file_map
-        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit, current_revision_number
+        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         stack = self.stack_context()
 
         change_ids = [row.change_id for row in commits if row.change_id]
         detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
-        detail_by_triplet: dict[str, dict[str, Any]] = {}
+        by_triplet: dict[str, ChangeView] = {}
         for ref, payload in detail_map.items():
-            detail_by_triplet[ref] = payload
-            triplet = payload.get("id")
-            if isinstance(triplet, str) and triplet:
-                detail_by_triplet[triplet] = payload
+            view = ChangeView.from_payload(payload)
+            by_triplet[ref] = view
+            if view.key:
+                by_triplet[view.key] = view
 
         result: list[Any] = []
         # (row index, follow-up kinds, triplet, freshness, rev, pipelines) — freshness is the
@@ -177,19 +177,24 @@ class GerritService:
         pending: list[tuple[int, frozenset[str], str, str | None, int | None, bool]] = []
 
         for row in commits:
-            detail = None
+            change: ChangeView | None = None
             if row.change_id:
-                triplet = build_triplet(stack.project, stack.push_branch, row.change_id)
-                detail = detail_by_triplet.get(triplet)
-            lc, needed = build_log_commit(row, detail, self.web_base, cwd)
+                change = by_triplet.get(build_triplet(stack.project, stack.push_branch, row.change_id))
+            lc, needed = build_log_commit(row, change, self.web_base, cwd)
             if fetch_ci_pipelines and lc.pushed:
                 needed = needed | frozenset({"checks"})
             result.append(lc)
-            if needed and detail is not None:
-                triplet = detail.get("id")
-                if isinstance(triplet, str) and triplet:
-                    rev_num = current_revision_number(detail)
-                    pending.append((len(result) - 1, needed, triplet, lc.freshness, rev_num, fetch_ci_pipelines))
+            if needed and change is not None and change.key:
+                pending.append(
+                    (
+                        len(result) - 1,
+                        needed,
+                        change.key,
+                        lc.freshness,
+                        change.current_revision_number,
+                        fetch_ci_pipelines,
+                    )
+                )
 
         if not pending:
             return result
@@ -257,7 +262,7 @@ class GerritService:
         """
         moment = now if now is not None else datetime.now(timezone.utc)
         queried = self.rest.query_changes(query, n=500, options=list(INBOX_QUERY_OPTIONS))
-        rows = [row for row in queried if isinstance(row, dict)]
+        rows = [ChangeView.from_payload(row) for row in queried if isinstance(row, dict)]
         account_id = self_account_id
         if account_id is None:
             try:
@@ -266,26 +271,16 @@ class GerritService:
             except GerritApiError:
                 account_id = None
         parent_shas = missing_parent_shas(rows)
-        follow_up_rows: list[dict[str, Any]] = []
+        follow_up_rows: list[ChangeView] = []
         unmatched: set[str] = set()
         if parent_shas:
             fetched = batch_load_changes_by_commit(self.rest, parent_shas, options=list(INBOX_QUERY_OPTIONS))
-            by_current: dict[str, dict[str, Any]] = {}
-            for payload in fetched.values():
-                follow_up_rows.append(payload)
-                sha = current_revision_sha(payload)
-                if sha:
-                    by_current[sha] = payload
+            follow_up_rows = [ChangeView.from_payload(payload) for payload in fetched.values()]
+            current_shas = {change.current_revision for change in follow_up_rows if change.current_revision}
             for sha in parent_shas:
-                if sha in by_current:
-                    continue
-                for payload in fetched.values():
-                    revisions = payload.get("revisions")
-                    if isinstance(revisions, dict) and any(
-                        isinstance(key, str) and key.lower() == sha for key in revisions
-                    ):
-                        unmatched.add(sha)
-                        break
+                # A parent found only as an older patch set: the chain is partial.
+                if sha not in current_shas and any(sha in change.revisions for change in follow_up_rows):
+                    unmatched.add(sha)
         return assemble_review_chains(
             rows,
             follow_up_rows,

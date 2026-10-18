@@ -4,20 +4,19 @@ A **review chain** is a maximal set of open changes linked by current-revision
 parent/child SHAs. Distinct from the **local stack**: this is derived from a
 query result and never looks at local commits.
 
-Pure functions over payloads, so unit tests drive them through ``ChangeStore``
-rows without a host or a clone.
+Pure functions over :class:`ChangeView` values, so unit tests drive them from
+``ChangeStore`` rows without a host or a clone.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
 from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.attention import Attention, ci_failed
-from gerrit_workflow_tools.core.gerrit_change_status import extract_label_value, gerrit_change_url
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 
 
 # Query options that give parent SHAs, votes (with dates), and owner names.
@@ -74,36 +73,6 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     url: str | None
 
 
-def parse_gerrit_time(raw: str | None) -> datetime | None:
-    """Parse a Gerrit timestamp (``yyyy-mm-dd hh:mm:ss.fffffffff``) as UTC."""
-    if not raw or not isinstance(raw, str):
-        return None
-    text = raw.strip()
-    if not text:
-        return None
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    text = text.replace(" ", "T", 1)
-    if "." in text:
-        head, frac = text.split(".", 1)
-        digits = ""
-        rest = ""
-        for index, char in enumerate(frac):
-            if char.isdigit():
-                digits += char
-            else:
-                rest = frac[index:]
-                break
-        text = f"{head}.{digits[:6].ljust(6, '0')}{rest}"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
 def format_age(seconds: int) -> str:
     """Compact age for the inbox: ``12m``, ``4h``, ``3d``."""
     age = max(0, int(seconds))
@@ -123,197 +92,53 @@ def host_from_web_base(web_base: str) -> str:
     return host.split("@", 1)[-1].split(":", 1)[0] or "unknown"
 
 
-def current_revision_sha(payload: dict[str, Any]) -> str | None:
-    """Current revision SHA, lowercased, or ``None`` when Gerrit omitted it."""
-    raw = payload.get("current_revision")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip().lower()
-    return None
-
-
-def first_parent_sha(payload: dict[str, Any]) -> str | None:  # pylint: disable=too-many-return-statements
-    """First parent of the current commit (Gerrit relation-chain parent)."""
-    current = payload.get("current_revision")
-    revisions = payload.get("revisions")
-    if not isinstance(current, str) or not isinstance(revisions, dict):
-        return None
-    revision = revisions.get(current)
-    if not isinstance(revision, dict):
-        lowered = current.lower()
-        revision = next(
-            (row for key, row in revisions.items() if isinstance(key, str) and key.lower() == lowered),
-            None,
-        )
-    if not isinstance(revision, dict):
-        return None
-    commit = revision.get("commit")
-    if not isinstance(commit, dict):
-        return None
-    parents = commit.get("parents")
-    if not isinstance(parents, list) or not parents:
-        return None
-    first = parents[0]
-    if isinstance(first, str) and first.strip():
-        return first.strip().lower()
-    if isinstance(first, dict):
-        sha = first.get("commit")
-        if isinstance(sha, str) and sha.strip():
-            return sha.strip().lower()
-    return None
-
-
-def current_revision_created(payload: dict[str, Any]) -> datetime | None:
-    """When the current patch set was uploaded."""
-    current = payload.get("current_revision")
-    revisions = payload.get("revisions")
-    if not isinstance(current, str) or not isinstance(revisions, dict):
-        return parse_gerrit_time(payload.get("updated") if isinstance(payload.get("updated"), str) else None)
-    revision = revisions.get(current)
-    if not isinstance(revision, dict):
-        return parse_gerrit_time(payload.get("created") if isinstance(payload.get("created"), str) else None)
-    created = parse_gerrit_time(revision.get("created") if isinstance(revision.get("created"), str) else None)
-    if created is not None:
-        return created
-    commit = revision.get("commit")
-    if isinstance(commit, dict):
-        committer = commit.get("committer")
-        if isinstance(committer, dict):
-            return parse_gerrit_time(committer.get("date") if isinstance(committer.get("date"), str) else None)
-    return parse_gerrit_time(payload.get("created") if isinstance(payload.get("created"), str) else None)
-
-
-def is_open_change(payload: dict[str, Any]) -> bool:
-    """True when the change is still the kind inbox lists (open / NEW)."""
-    raw = payload.get("status")
-    if not isinstance(raw, str) or not raw.strip():
-        return True
-    return raw.strip().upper() in _OPEN_STATUSES
-
-
-def missing_parent_shas(payloads: list[dict[str, Any]]) -> list[str]:
-    """First-parent SHAs that are not another payload's current revision."""
-    known: set[str] = set()
-    for payload in payloads:
-        sha = current_revision_sha(payload)
-        if sha:
-            known.add(sha)
+def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
+    """First-parent SHAs that are not another change's current revision."""
+    known = {change.current_revision for change in changes if change.current_revision}
     missing: list[str] = []
     seen: set[str] = set()
-    for payload in payloads:
-        parent = first_parent_sha(payload)
+    for change in changes:
+        parent = change.first_parent
         if parent and parent not in known and parent not in seen:
             seen.add(parent)
             missing.append(parent)
     return missing
 
 
-def _payload_id(payload: dict[str, Any]) -> str:
-    raw = payload.get("id")
-    if isinstance(raw, str) and raw:
-        return raw
-    number = payload.get("_number")
-    return str(number) if isinstance(number, int) else ""
-
-
-def _owner_name(payload: dict[str, Any]) -> str:
-    owner = payload.get("owner")
-    if not isinstance(owner, dict):
-        return "?"
-    for key in ("name", "username", "email"):
-        value = owner.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return "?"
-
-
-def _owner_email(payload: dict[str, Any]) -> str | None:
-    owner = payload.get("owner")
-    if not isinstance(owner, dict):
-        return None
-    email = owner.get("email")
-    return email.strip() if isinstance(email, str) and email.strip() else None
-
-
-def _self_vote_date(payload: dict[str, Any], self_account_id: int | None) -> datetime | None:
+def _self_vote_date(change: ChangeView, self_account_id: int | None) -> datetime | None:
     if self_account_id is None:
         return None
-    labels = payload.get("labels")
-    if not isinstance(labels, dict):
-        return None
-    code_review = labels.get("Code-Review")
-    if not isinstance(code_review, dict):
-        return None
-    votes = code_review.get("all")
-    if not isinstance(votes, list):
-        return None
-    latest: datetime | None = None
-    for vote in votes:
-        if not isinstance(vote, dict) or vote.get("_account_id") != self_account_id:
-            continue
-        stamp = parse_gerrit_time(vote.get("date") if isinstance(vote.get("date"), str) else None)
-        if stamp is not None and (latest is None or stamp > latest):
-            latest = stamp
-    return latest
+    dates = [vote.date for vote in change.code_review_votes if vote.account_id == self_account_id and vote.date]
+    return max(dates, default=None)
 
 
-def _attention_last_update(payload: dict[str, Any], self_account_id: int | None) -> datetime | None:
-    if self_account_id is None:
-        return None
-    attention = payload.get("attention_set")
-    if not isinstance(attention, dict):
-        return None
-    entry = attention.get(str(self_account_id))
-    if not isinstance(entry, dict):
-        for value in attention.values():
-            if not isinstance(value, dict):
-                continue
-            account = value.get("account")
-            if isinstance(account, dict) and account.get("_account_id") == self_account_id:
-                entry = value
-                break
-        else:
-            return None
-    raw = entry.get("last_update")
-    return parse_gerrit_time(raw if isinstance(raw, str) else None)
-
-
-def member_unreviewed_since(payload: dict[str, Any], self_account_id: int | None) -> datetime | None:
+def member_unreviewed_since(change: ChangeView, self_account_id: int | None) -> datetime | None:
     """When this change last started waiting for *self*'s review, or ``None`` if current.
 
     Prefers the attention-set clock (Gerrit's "your turn"). Falls back to "current
     patch set uploaded after my last Code-Review vote", then to change creation
     when I have never voted.
     """
-    attention_at = _attention_last_update(payload, self_account_id)
+    attention_at = change.attention_set.get(self_account_id) if self_account_id is not None else None
     if attention_at is not None:
         return attention_at
-    last_vote = _self_vote_date(payload, self_account_id)
-    patch_created = current_revision_created(payload)
+    last_vote = _self_vote_date(change, self_account_id)
+    patch_created = change.current_revision_created()
     if last_vote is None:
-        created = parse_gerrit_time(payload.get("created") if isinstance(payload.get("created"), str) else None)
-        return patch_created or created
+        return patch_created or parse_gerrit_time(change.created)
     if patch_created is not None and last_vote < patch_created:
         return patch_created
     return None
 
 
-def _labels(payload: dict[str, Any]) -> dict[str, Any]:
-    raw = payload.get("labels")
-    return raw if isinstance(raw, dict) else {}
-
-
-def member_attention_reasons(payload: dict[str, Any]) -> tuple[str, ...]:
+def member_attention_reasons(change: ChangeView) -> tuple[str, ...]:
     """Inbox member reasons — CI, comments, negative vote. No local patchset states."""
-    labels = _labels(payload)
-    code_review = extract_label_value(labels, "Code-Review")
-    raw_comments = payload.get("unresolved_comment_count")
-    comments = raw_comments if isinstance(raw_comments, int) else 0
     reasons: list[str] = []
-    if ci_failed(extract_label_value(labels, "Verified")):
+    if ci_failed(change.verified):
         reasons.append(Attention.CI_FAILED)
-    if comments > 0:
+    if change.unresolved_comments:
         reasons.append(Attention.UNRESOLVED_COMMENTS)
-    if code_review is not None and code_review < 0:
+    if change.code_review is not None and change.code_review < 0:
         reasons.append(Attention.REVIEW_ISSUES)
     return tuple(reasons)
 
@@ -323,41 +148,29 @@ def _worst_label(values: list[int | None]) -> int | None:
     return min(known) if known else None
 
 
-def _to_member(payload: dict[str, Any], web_base: str) -> ChainMember | None:
-    number = payload.get("_number")
-    if not isinstance(number, int):
+def _to_member(change: ChangeView, web_base: str) -> ChainMember | None:
+    if change.number is None:
         return None
-    labels = _labels(payload)
-    raw_comments = payload.get("unresolved_comment_count")
-    subject = payload.get("subject")
-    change_id = payload.get("change_id")
-    project = payload.get("project")
-    branch = payload.get("branch")
     return ChainMember(
-        number=number,
-        change_id=change_id if isinstance(change_id, str) else "",
-        subject=subject if isinstance(subject, str) else "",
-        project=project if isinstance(project, str) else "",
-        branch=branch if isinstance(branch, str) else "",
-        owner_name=_owner_name(payload),
-        owner_email=_owner_email(payload),
-        verified=extract_label_value(labels, "Verified"),
-        code_review=extract_label_value(labels, "Code-Review"),
-        comments_unresolved=raw_comments if isinstance(raw_comments, int) else 0,
-        updated=parse_gerrit_time(payload.get("updated") if isinstance(payload.get("updated"), str) else None),
-        url=gerrit_change_url(web_base, payload),
-        attention_reasons=member_attention_reasons(payload),
+        number=change.number,
+        change_id=change.change_id,
+        subject=change.subject,
+        project=change.project,
+        branch=change.branch,
+        owner_name=change.owner_name,
+        owner_email=change.owner_email,
+        verified=change.verified,
+        code_review=change.code_review,
+        comments_unresolved=change.unresolved_comments or 0,
+        updated=parse_gerrit_time(change.updated),
+        url=change.url(web_base),
+        attention_reasons=member_attention_reasons(change),
     )
 
 
-def _index_payloads(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Key payloads by Gerrit ``id``; last write wins for a duplicate id."""
-    out: dict[str, dict[str, Any]] = {}
-    for payload in rows:
-        key = _payload_id(payload)
-        if key:
-            out[key] = payload
-    return out
+def _index_payloads(changes: list[ChangeView]) -> dict[str, ChangeView]:
+    """Key changes by Gerrit ``id``; last write wins for a duplicate id."""
+    return {change.key: change for change in changes if change.key}
 
 
 class _UnionFind:
@@ -387,22 +200,22 @@ class _UnionFind:
 
 def _order_members(
     component: set[str],
-    payloads: dict[str, dict[str, Any]],
+    payloads: dict[str, ChangeView],
     sha_to_id: dict[str, str],
 ) -> list[str]:
     """Base-to-top order along first-parent links; siblings by change number."""
     children: dict[str, list[str]] = defaultdict(list)
     bases: list[str] = []
     for member_id in component:
-        parent_sha = first_parent_sha(payloads[member_id])
+        parent_sha = payloads[member_id].first_parent
         parent_id = sha_to_id.get(parent_sha) if parent_sha else None
         if parent_id and parent_id in component:
             children[parent_id].append(member_id)
         else:
             bases.append(member_id)
     for child_ids in children.values():
-        child_ids.sort(key=lambda item: payloads[item].get("_number") or 0)
-    bases.sort(key=lambda item: payloads[item].get("_number") or 0)
+        child_ids.sort(key=lambda item: payloads[item].number or 0)
+    bases.sort(key=lambda item: payloads[item].number or 0)
     ordered: list[str] = []
     seen: set[str] = set()
 
@@ -416,7 +229,7 @@ def _order_members(
 
     for base_id in bases:
         _walk(base_id)
-    for member_id in sorted(component, key=lambda item: payloads[item].get("_number") or 0):
+    for member_id in sorted(component, key=lambda item: payloads[item].number or 0):
         _walk(member_id)
     return ordered
 
@@ -424,20 +237,20 @@ def _order_members(
 def _pick_top(
     ordered_ids: list[str],
     component: set[str],
-    payloads: dict[str, dict[str, Any]],
+    payloads: dict[str, ChangeView],
     sha_to_id: dict[str, str],
 ) -> str:
     """Member whose current revision is not the parent of any other member."""
     parent_ids: set[str] = set()
     for member_id in component:
-        parent_sha = first_parent_sha(payloads[member_id])
+        parent_sha = payloads[member_id].first_parent
         parent_id = sha_to_id.get(parent_sha) if parent_sha else None
         if parent_id and parent_id in component:
             parent_ids.add(parent_id)
     tips = [member_id for member_id in ordered_ids if member_id not in parent_ids]
     if not tips:
         return ordered_ids[-1]
-    return max(tips, key=lambda item: payloads[item].get("_number") or 0)
+    return max(tips, key=lambda item: payloads[item].number or 0)
 
 
 def _seconds_since(moment: datetime | None, now: datetime) -> int:
@@ -449,7 +262,7 @@ def _seconds_since(moment: datetime | None, now: datetime) -> int:
 
 def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     component: set[str],
-    payloads: dict[str, dict[str, Any]],
+    payloads: dict[str, ChangeView],
     sha_to_id: dict[str, str],
     *,
     web_base: str,
@@ -468,7 +281,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     if not members:
         return None
     top_id = _pick_top(ordered_ids, component, payloads, sha_to_id)
-    top_number = payloads[top_id].get("_number")
+    top_number = payloads[top_id].number
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
     unreviewed_at: datetime | None = None
@@ -485,7 +298,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
                 attention.append(reason)
     partial = False
     for member_id in component:
-        parent_sha = first_parent_sha(payloads[member_id])
+        parent_sha = payloads[member_id].first_parent
         if parent_sha and parent_sha in unmatched:
             partial = True
             break
@@ -512,8 +325,8 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
 
 
 def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-locals
-    queried: list[dict[str, Any]],
-    follow_up: list[dict[str, Any]],
+    queried: list[ChangeView],
+    follow_up: list[ChangeView],
     *,
     web_base: str,
     now: datetime,
@@ -528,23 +341,22 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     *follow_up_unmatched* are parent SHAs that a follow-up returned for a
     non-current revision: the chain is then flagged ``partial_chain``.
     """
-    queried_ids = {_payload_id(row) for row in queried if _payload_id(row)}
-    open_follow_up = [row for row in follow_up if is_open_change(row) and _payload_id(row) not in queried_ids]
+    queried_ids = {change.key for change in queried if change.key}
+    open_follow_up = [change for change in follow_up if change.is_open and change.key not in queried_ids]
     payloads = _index_payloads(list(queried) + open_follow_up)
     if not payloads:
         return []
 
     sha_to_id: dict[str, str] = {}
-    for member_id, payload in payloads.items():
-        sha = current_revision_sha(payload)
-        if sha:
-            sha_to_id[sha] = member_id
+    for member_id, change in payloads.items():
+        if change.current_revision:
+            sha_to_id[change.current_revision] = member_id
 
     union = _UnionFind()
     for member_id in payloads:
         union.add(member_id)
-    for member_id, payload in payloads.items():
-        parent_sha = first_parent_sha(payload)
+    for member_id, change in payloads.items():
+        parent_sha = change.first_parent
         parent_id = sha_to_id.get(parent_sha) if parent_sha else None
         if parent_id:
             union.union(member_id, parent_id)

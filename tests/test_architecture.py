@@ -244,6 +244,12 @@ CONCEPTS = [
         fix="Reach Gerrit through GerritService.from_cwd(...).",
     ),
     Concept(
+        name="ChangeInfo field read",
+        pattern=r"""(\.get\(|\[)["'](current_revision|revisions|labels|unresolved_comment_count)["']""",
+        owners={"core/gerrit/change_view.py": "parses a ChangeInfo once"},
+        fix="Read the field from ChangeView.from_payload(payload) instead of the raw dict.",
+    ),
+    Concept(
         name="attention reason literal",
         pattern=r"""["'](ci-failed|unresolved-comments|no-reviewers|missing-change-id|chain-blocked|review-issues|awaiting-review|not-pushed|ahead-of-gerrit|outdated-patchset)["']""",
         owners={"core/attention.py": "decides attention and names its reasons"},
@@ -363,9 +369,8 @@ SIZE_BASELINE = {
     "core/gerrit/cache.py": 728,
     "core/gerrit/change_resolution.py": 648,
     "core/gerrit/rest.py": 968,
-    "core/gerrit/service.py": 517,
+    "core/gerrit/service.py": 512,
     "core/git_state.py": 454,
-    "core/review_chain.py": 573,
     "push_input_line.py": 442,
     "reviewer_catalog.py": 478,
 }
@@ -398,11 +403,12 @@ TOO_MANY_BASELINE = {
     "cli_push.py": 5,
     "cli_sha.py": 2,
     "cli_show.py": 3,
+    "core/gerrit/change_view.py": 1,
     "core/gerrit/service.py": 1,
     "core/gerrit_change_status.py": 1,
     "core/git_state.py": 1,
     "core/ready_calc.py": 1,
-    "core/review_chain.py": 7,
+    "core/review_chain.py": 6,
     "push_input_line.py": 3,
     "rebase_enricher.py": 2,
 }
