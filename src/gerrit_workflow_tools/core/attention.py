@@ -165,3 +165,34 @@ def first_commit_needing_edit_attention(commits: list[LogCommit]) -> LogCommit |
         if commit_needs_edit_attention(commit):
             return commit
     return None
+
+
+def find_commit_by_change_id(commits: Sequence[LogCommit], change_id: str) -> LogCommit | None:
+    """Return the stack commit whose Change-Id matches *change_id* (case-insensitive).
+
+    When several commits share the Change-Id, return the oldest. Callers that need
+    ambiguity errors must check for duplicates themselves.
+    """
+    needle = change_id.casefold()
+    for commit in commits:
+        if commit.change_id and commit.change_id.casefold() == needle:
+            return commit
+    return None
+
+
+def next_commit_needing_edit_attention_after(commits: list[LogCommit], after_change_id: str) -> LogCommit | None:
+    """First edit-attention commit strictly tip-ward of *after_change_id*, or ``None``.
+
+    If *after_change_id* is not in *commits*, returns ``None`` (caller treats the cursor
+    as missing).
+    """
+    needle = after_change_id.casefold()
+    seen = False
+    for commit in commits:
+        if not seen:
+            if commit.change_id and commit.change_id.casefold() == needle:
+                seen = True
+            continue
+        if commit_needs_edit_attention(commit):
+            return commit
+    return None

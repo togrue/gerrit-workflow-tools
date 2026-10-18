@@ -160,6 +160,29 @@ class Settings:
         """``branch.<branch>.gerritTarget`` override for the Gerrit destination branch, if set."""
         return self.get(f"branch.{branch}.gerritTarget")
 
+    def branch_attention_cursor(self, branch: str) -> str | None:
+        """``branch.<branch>.gerAttentionCursor``: Change-Id walk position, if set."""
+        return self.get(f"branch.{branch}.gerAttentionCursor")
+
+    def branch_attention_cursor_at(self, branch: str) -> str | None:
+        """``branch.<branch>.gerAttentionCursorAt``: UTC timestamp for the cursor, if set."""
+        return self.get(f"branch.{branch}.gerAttentionCursorAt")
+
+    @property
+    def last_attention_change_id(self) -> str | None:
+        """``ger.lastAttentionChangeId``: repo-level last walk Change-Id (lazy adopt)."""
+        return self.get("ger.lastAttentionChangeId")
+
+    @property
+    def last_attention_change_id_at(self) -> str | None:
+        """``ger.lastAttentionChangeIdAt``: UTC timestamp for :attr:`last_attention_change_id`."""
+        return self.get("ger.lastAttentionChangeIdAt")
+
+    @property
+    def attention_cursor_ttl(self) -> str | None:
+        """``ger.attentionCursorTtl`` raw value (e.g. ``14d``), or ``None`` for the default."""
+        return self.get("ger.attentionCursorTtl")
+
     def remote_url(self, remote: str) -> str | None:
         """``remote.<remote>.url`` — the configured remote URL (not ``insteadOf``-rewritten)."""
         return self.get(f"remote.{remote}.url")
@@ -291,3 +314,38 @@ def set_branch_config(
     """
     if gerrit_reviewers is not None:
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
+
+
+def set_attention_cursor_config(
+    cwd: Path | str | None,
+    branch: str,
+    *,
+    change_id: str | None,
+    touched_at: str | None,
+) -> None:
+    """Write or clear ``branch.<branch>.gerAttentionCursor`` and ``…CursorAt``."""
+    cursor_key = f"branch.{branch}.gerAttentionCursor"
+    at_key = f"branch.{branch}.gerAttentionCursorAt"
+    if change_id is None:
+        git("config", "--unset-all", cursor_key, cwd=cwd, check=False)
+        git("config", "--unset-all", at_key, cwd=cwd, check=False)
+        return
+    git("config", cursor_key, change_id, cwd=cwd)
+    if touched_at is not None:
+        git("config", at_key, touched_at, cwd=cwd)
+
+
+def set_last_attention_change_id(
+    cwd: Path | str | None,
+    *,
+    change_id: str | None,
+    touched_at: str | None = None,
+) -> None:
+    """Write or clear repo-local ``ger.lastAttentionChangeId`` and ``…At`` for lazy adopt."""
+    if change_id is None:
+        git("config", "--unset-all", "ger.lastAttentionChangeId", cwd=cwd, check=False)
+        git("config", "--unset-all", "ger.lastAttentionChangeIdAt", cwd=cwd, check=False)
+        return
+    git("config", "ger.lastAttentionChangeId", change_id, cwd=cwd)
+    if touched_at is not None:
+        git("config", "ger.lastAttentionChangeIdAt", touched_at, cwd=cwd)

@@ -379,6 +379,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention |
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status, merged equivalence |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
+| `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history, resume/next/first selection |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
