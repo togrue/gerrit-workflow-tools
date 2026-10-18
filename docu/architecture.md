@@ -286,7 +286,7 @@ sequenceDiagram
   end
 ```
 
-Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`.
+Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The confirm loop stays in the command so core never prompts ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)).
 
 ---
 
