@@ -84,6 +84,17 @@ Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbo
 
 ---
 
+## ger edit
+
+| Key | Effect |
+|-----|--------|
+| `gerrit.editNextShow` | When `true`, `ger edit --next` runs `ger show` on the commit it moved to after that rebase exits 0. Unset is off: `--next` only moves. `ger reword --next` ignores this key. Show's attention exit does not replace a successful rebase; other show failures are returned as-is. |
+| `ger.attentionCursorTtl` | Max age of a usable attention cursor (default `14d`). See [Attention cursor](#attention-cursor-ger-and-branch-local). |
+
+`ger config` shows these keys, and the rest of this page, in one screen. See [spec/commands/config.md](spec/commands/config.md).
+
+---
+
 ## `ger rebase` — `gerrit.rebase*`
 
 | Key | Effect |

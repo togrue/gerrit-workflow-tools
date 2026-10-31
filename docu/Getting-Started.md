@@ -60,7 +60,7 @@ git config --global gerrit.token YOUR_HTTP_TOKEN
 
 Use repo-local config instead of `--global` when settings differ per project.
 
-Full key reference: [Configuration.md](Configuration.md).
+Full key reference: [Configuration.md](Configuration.md). `ger config` shows the same keys in one screen, grouped by command ([spec](spec/commands/config.md)).
 
 ---
 

@@ -63,6 +63,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | Command | Spec |
 |---------|------|
 | `ger setup` | [spec/commands/setup.md](spec/commands/setup.md) |
+| `ger config` | [spec/commands/config.md](spec/commands/config.md) |
 | `ger bash-completion` | [spec/commands/bash-completion.md](spec/commands/bash-completion.md) |
 
 ### Developer / debug

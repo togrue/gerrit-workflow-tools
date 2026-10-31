@@ -44,6 +44,7 @@ _TRUTHY = ("1", "true", "yes", "on")
 _REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
 _DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
 _DEFAULT_WRAP_WIDTH = 120
+EDIT_NEXT_SHOW_KEY = "gerrit.editNextShow"
 
 
 def _canonical_cfg_key(key: str) -> str:
@@ -240,6 +241,14 @@ class Settings:
             "onto_remote": self.flag("gerrit.rebaseOntoRemote"),
             "drop_merged_equivalent": self.flag("gerrit.rebaseDropMergedEquivalent"),
         }
+
+    @property
+    def edit_next_show(self) -> bool:
+        """``gerrit.editNextShow``: run ``ger show`` after a successful ``ger edit --next``.
+
+        Unset is off. ``ger edit --next`` only moves unless this flag is set.
+        """
+        return self.flag(EDIT_NEXT_SHOW_KEY)
 
     @property
     def inbox_require_verified(self) -> bool:

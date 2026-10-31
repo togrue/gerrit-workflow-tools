@@ -359,6 +359,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_sha.py` | `ger sha` |
 | `cli_changeid.py` | `ger change-id` |
 | `cli_setup.py` | `ger setup` |
+| `cli_config.py` | `ger config`: prompt_toolkit screen of editable settings, grouped by command |
 | `cli_cache.py` | `ger cache` |
 | `cli_fetch_api.py` | `ger fetch-api` (debug) |
 | `cli_bash_completion.py` | `ger bash-completion` |
@@ -369,6 +370,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list` snapshot of all `gerrit.*` and `branch.*` values |
+| `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, stored-vs-default resolution |
 | `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |

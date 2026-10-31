@@ -188,3 +188,67 @@ def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytes
     code, _out, err = run_cli(stack_repo, greword_main, ["I" + "f" * 40], monkeypatch)
     assert code == ExitCode.NOT_FOUND
     assert "no commit in current stack" in err
+
+
+def test_gedit_next_runs_show_only_when_edit_next_show_is_set(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    assert len(rows) >= 2
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    overrides[1] = {"verified": -1}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    store = ChangeStore(details)
+    calls: list[list[str]] = []
+
+    def _run_show(argv: list[str] | None = None, *, gerrit: object | None = None) -> int:
+        assert gerrit is store
+        calls.append(list(argv or []))
+        return 1
+
+    monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", _run_show)
+    _fake_rebase_capture(monkeypatch)
+
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert calls == []
+
+    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert calls == [[rows[1].sha]]
+
+
+def test_greword_next_ignores_edit_next_show(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.cli_ger.run_show",
+        lambda argv=None, **_kwargs: calls.append(list(argv or [])) or 0,
+    )
+    _fake_rebase_capture(monkeypatch)
+    code, _out, err = run_cli(stack_repo, greword_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0, err
+    assert calls == []
+
+
+def test_gedit_next_show_failure_is_returned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.cli_common import ExitCode
+
+    _configure_repo(stack_repo)
+    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", lambda *args, **kwargs: int(ExitCode.CONFIG))
+    _fake_rebase_capture(monkeypatch)
+    code, _out, _err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == int(ExitCode.CONFIG)

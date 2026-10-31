@@ -351,6 +351,13 @@ def _run_interactive_stack_rebase(
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
     r = subprocess.run(cmd, cwd=cwd, env=env, check=False)
     logger.debug("gedit rebase finished with return code %s", r.returncode)
+    moved = default_action == "edit" and args.next_attention and r.returncode == 0
+    if moved and settings.edit_next_show:
+        from gerrit_workflow_tools.cli_ger import run_show
+
+        show_code = run_show([full], gerrit=gerrit)
+        if show_code not in (int(ExitCode.OK), int(ExitCode.ATTENTION)):
+            return show_code
     return r.returncode
 
 

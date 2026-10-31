@@ -65,6 +65,7 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
 2. On a successful attention or explicit-stack target, update the attention cursor when a Change-Id is known.
 3. `git rebase -i <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`).
 4. For `edit`, user amends then `git rebase --continue`.
+5. When `gerrit.editNextShow` is true, this was `ger edit --next` (not `ger reword`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Unset, the flag is off and `--next` only moves.
 
 ---
 
@@ -91,4 +92,5 @@ codes [`ger fix`](fix.md) uses for the same failures.
 - [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger show`](show.md) / [`ger sha`](sha-change-id.md) — read-only `--first-attention` / `--next-attention`
+- [Configuration.md](../../Configuration.md#ger-edit) — `gerrit.editNextShow`
 - [`ger rebase`](rebase.md)

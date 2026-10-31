@@ -79,6 +79,25 @@ _ger_change_id() {
     fi
 }
 
+_ger_config() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
+    if [[ "$cur" == -* ]]; then
+        __gwt_flags "$cur" -h --help --color --hyperlinks -v --verbose --debug-log
+        return
+    fi
+    case "$prev" in
+        --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+    esac
+}
+
 _ger_edit() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -280,7 +299,7 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion cache change-id changeid edit fetch-api fix inbox log push rebase resolve restack reword setup sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid config edit fetch-api fix inbox log push rebase resolve restack reword setup sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -288,6 +307,7 @@ _ger() {
         bash-completion) _ger_bash_completion ;;
         cache) _ger_cache ;;
         change-id|changeid) _ger_change_id ;;
+        config) _ger_config ;;
         edit) _ger_edit ;;
         fetch-api) _ger_fetch_api ;;
         fix) _ger_fix ;;

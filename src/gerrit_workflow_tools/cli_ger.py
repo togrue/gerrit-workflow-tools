@@ -6,6 +6,11 @@ import importlib
 import os
 import sys
 from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 
 
 _Handler = Callable[[list[str] | None], int]
@@ -17,6 +22,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_bash_completion:main",
     ),
     "cache": ("Inspect or clear the local Gerrit API cache.", "gerrit_workflow_tools.cli_cache:main"),
+    "config": (
+        "Full-screen editor for ger settings, grouped by command.",
+        "gerrit_workflow_tools.cli_config:main",
+    ),
     "change-id": ("Print or validate Change-Ids for commits or ranges.", "gerrit_workflow_tools.cli_changeid:main"),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", "gerrit_workflow_tools.cli_edit:main"),
     "reword": (
@@ -55,6 +64,13 @@ _ALIASES: dict[str, str] = {
 }
 
 _HANDLER_CACHE: dict[str, _Handler] = {}
+
+
+def run_show(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
+    """Run ``ger show`` for another command, passing the same Gerrit seam through."""
+    from gerrit_workflow_tools.cli_show import main as show_main
+
+    return show_main(argv, gerrit=gerrit)
 
 
 def _load_handler(import_path: str) -> _Handler:
