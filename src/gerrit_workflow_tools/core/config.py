@@ -43,6 +43,7 @@ _DEFAULT_SCRIPTS_DIR = ".ger"
 _TRUTHY = ("1", "true", "yes", "on")
 _REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
 _DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
+_DEFAULT_WRAP_WIDTH = 120
 
 
 def _canonical_cfg_key(key: str) -> str:
@@ -299,6 +300,23 @@ class Settings:
     def warning_pattern(self) -> str:
         """``gerrit.warningPattern`` regex, or the built-in default when unset."""
         return self.get(_GERRIT_WARNING_PATTERN_KEY) or _DEFAULT_WARNING_PATTERN
+
+    @property
+    def wrap_width(self) -> int:
+        """``gerrit.wrapWidth``: max width of ``ger show`` prose. Default 120.
+
+        Unset, blank, non-numeric, or values below 1 use the default. The
+        chain URL is not wrapped; comment text, context lines, the path
+        header, and the commit message are.
+        """
+        raw = self.get("gerrit.wrapWidth")
+        if not raw:
+            return _DEFAULT_WRAP_WIDTH
+        try:
+            value = int(raw)
+        except ValueError:
+            return _DEFAULT_WRAP_WIDTH
+        return value if value >= 1 else _DEFAULT_WRAP_WIDTH
 
 
 def set_branch_config(

@@ -14,11 +14,17 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, gerrit_inline_comment_url
+from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
 # Minimum inner width so short threads still look like a box.
 _MIN_BOX_INNER = 40
 _BOX_INDENT = "    "
+_DEFAULT_WRAP_WIDTH = 120
+# ``│ `` before the row, so a row of `width` needs this many extra columns in the span.
+_ROW_TO_INNER = 1
+# Top border is ``─ {heading} ─`` plus one trailing dash: 4 characters around the heading.
+_HEADING_CHROME = 4
 
 
 def chain_location(chain: CommentChain) -> str:
@@ -56,22 +62,38 @@ def _chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
     return ()
 
 
+def _prefixed_wrap(text: str, width: int, *, prefix: str) -> list[str]:
+    """Wrap *text* so ``prefix + line`` stays within *width* when there is room."""
+    room = width - len(prefix)
+    if room < 1:
+        return wrap_lines(prefix + text, width)
+    return [f"{prefix}{part}" for part in wrap_lines(text, room)]
+
+
 def _box_content_rows(
     chain: CommentChain,
     gerrit_url: str | None,
+    *,
+    width: int,
 ) -> list[str]:
-    """Inner lines of a comment box (no borders)."""
+    """Inner lines of a comment box (no borders).
+
+    Comment text, authors, and context lines are wrapped to *width*. The chain
+    URL is left whole so it stays copyable, and may widen the box by itself.
+    """
     rows: list[str] = []
     context = _chain_context_lines(chain)
     if context:
         for line in context:
-            rows.append(color_text(_format_context_line(line), ANSI_DIM))
+            for part in wrap_lines(_format_context_line(line), width):
+                rows.append(color_text(part, ANSI_DIM))
         rows.append("")
     for row_item in chain.comments:
         if row_item.author:
-            rows.append(color_text(row_item.author, ANSI_DIM))
+            for part in wrap_lines(row_item.author, width):
+                rows.append(color_text(part, ANSI_DIM))
         for ln in row_item.message.splitlines() or [""]:
-            rows.append(f"  {ln}")
+            rows.extend(_prefixed_wrap(ln, width, prefix="  "))
     chain_url = gerrit_inline_comment_url(gerrit_url, chain.root_id) or gerrit_url
     if chain_url:
         rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")
@@ -81,23 +103,26 @@ def _box_content_rows(
 def format_comment_chain_human(
     chain: CommentChain,
     gerrit_url: str | None,
+    *,
+    width: int = _DEFAULT_WRAP_WIDTH,
 ) -> list[str]:
     """Return human-readable lines for one comment chain in a rounded box.
 
     Unresolved chains use a yellow border; resolved chains use grey and a
     ``(resolved)`` header so the state survives ``--color=never``.
     """
-    heading = chain_heading(chain)
+    heading = fit_header(chain_heading(chain), max(1, width - _HEADING_CHROME))
     loc_styled = color_text(heading, ANSI_BOLD + ANSI_CYAN)
-    rows = _box_content_rows(chain, gerrit_url)
+    rows = _box_content_rows(chain, gerrit_url, width=width)
     resolved = chain.resolved
 
     # Top mid is ``─ {heading} ─…`` (3 fixed chars around heading). Content lines
     # use ``│ `` + row, so row width needs +1 vs the inner span between corners.
+    # A long chain URL is the only row allowed to push the box past *width*.
     inner_width = max(
-        _MIN_BOX_INNER,
-        3 + visible_len(heading) + 1,
-        *(1 + visible_len(r) for r in rows),
+        min(_MIN_BOX_INNER, width),
+        _HEADING_CHROME + visible_len(heading),
+        *(_ROW_TO_INNER + visible_len(r) for r in rows),
     )
     dashes = max(1, inner_width - 3 - visible_len(heading))
     top_mid = f"{_box_border('─', resolved=resolved)} {loc_styled} {_box_border('─' * dashes, resolved=resolved)}"
@@ -164,13 +189,14 @@ def format_unresolved_section_human(
     gerrit_url: str | None,
     *,
     pushed: bool,
+    width: int = _DEFAULT_WRAP_WIDTH,
 ) -> list[str]:
     """Boxed comment chains for human output (empty list when there are none)."""
     if not pushed or not chains:
         return []
     out: list[str] = []
     for chain in chains:
-        out.extend(format_comment_chain_human(chain, gerrit_url))
+        out.extend(format_comment_chain_human(chain, gerrit_url, width=width))
     return out
 
 

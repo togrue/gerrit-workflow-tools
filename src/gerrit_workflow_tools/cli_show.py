@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_short_sha, color_text, format_link
+from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_chains import (
     COMMENT_SELECTIONS,
@@ -39,15 +39,9 @@ from gerrit_workflow_tools.render.comments import (
     format_unresolved_section_human,
     format_unresolved_section_markdown,
 )
-from gerrit_workflow_tools.render.commit_row import (
-    attention_suffix,
-    continuation_lines,
-    fmt_code_review,
-    fmt_comments,
-    fmt_patchset_column,
-    fmt_verified,
-)
+from gerrit_workflow_tools.render.commit_row import continuation_lines, show_headline
 from gerrit_workflow_tools.render.show_json import commit_json_payload
+from gerrit_workflow_tools.render.wrap import wrap_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -170,25 +164,6 @@ def _output_format(args: argparse.Namespace) -> str:
     return "human"
 
 
-def _show_headline(commit: LogCommit) -> str:
-    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
-    sha = color_short_sha(commit.short_sha)
-    push = fmt_patchset_column(commit)
-    if commit.pushed:
-        verified = fmt_verified(commit.verified)
-        cr = fmt_code_review(commit.code_review)
-        comments = fmt_comments(commit.comments_unresolved)
-    else:
-        verified = "   "
-        cr = "    "
-        comments = "   "
-    base = f"commit {sha} {push} {verified} {cr} {comments}"
-    suffix = attention_suffix(commit)
-    if suffix:
-        return f"{base}  {suffix}"
-    return base
-
-
 def _local_commit_meta(cwd: Path | str | None, sha: str) -> tuple[str, str, str]:
     """Return ``(author_line, date, message_body)`` from git for *sha*."""
     raw = git_out(
@@ -210,6 +185,26 @@ def _local_commit_meta(cwd: Path | str | None, sha: str) -> tuple[str, str, str]
     return author_line, date, body
 
 
+def _print_wrapped_body(
+    body: str,
+    *,
+    width: int,
+    sha: str | None,
+    summary_highlighter: SummaryHighlighter,
+) -> None:
+    """Print a commit message, wrapping each line and highlighting the subject."""
+    body_lines = body.splitlines()
+    if not body_lines:
+        return
+    print()
+    for index, line in enumerate(body_lines):
+        parts = wrap_lines(line, width)
+        if index == 0:
+            parts = [summary_highlighter.highlight(part, sha=sha) for part in parts]
+        for part in parts:
+            print(f"    {part}")
+
+
 def _emit_human_commit(
     cwd: Path | str | None,
     commit: LogCommit,
@@ -217,8 +212,9 @@ def _emit_human_commit(
     is_local: bool,
     chains: list[CommentChain],
     summary_highlighter: SummaryHighlighter,
+    wrap_width: int,
 ) -> None:
-    print(_show_headline(commit))
+    print(show_headline(commit))
 
     body = ""
     if is_local and commit.sha:
@@ -234,17 +230,18 @@ def _emit_human_commit(
         print(line)
 
     if body:
-        print()
-        body_lines = body.splitlines()
-        if body_lines and summary_highlighter is not None:
-            body_lines[0] = summary_highlighter.highlight(body_lines[0], sha=commit.sha)
-        for ln in body_lines:
-            print(f"    {ln}")
+        _print_wrapped_body(
+            body,
+            width=wrap_width,
+            sha=commit.sha,
+            summary_highlighter=summary_highlighter,
+        )
 
     comment_lines = format_unresolved_section_human(
         chains,
         commit.gerrit_url,
         pushed=commit.pushed,
+        width=wrap_width,
     )
     if comment_lines:
         print()
@@ -395,6 +392,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                     is_local=resolved.is_local_commit,
                     chains=chains,
                     summary_highlighter=summary_highlighter,
+                    wrap_width=settings.wrap_width,
                 )
             detail_shown += 1
 

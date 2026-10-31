@@ -305,6 +305,25 @@ def oneline_body(
     return base
 
 
+def show_headline(commit: LogCommit) -> str:
+    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
+    sha = color_short_sha(commit.short_sha)
+    push = fmt_patchset_column(commit)
+    if commit.pushed:
+        verified = fmt_verified(commit.verified)
+        cr = fmt_code_review(commit.code_review)
+        comments = fmt_comments(commit.comments_unresolved)
+    else:
+        verified = "   "
+        cr = "    "
+        comments = "   "
+    base = f"commit {sha} {push} {verified} {cr} {comments}"
+    suffix = attention_suffix(commit)
+    if suffix:
+        return f"{base}  {suffix}"
+    return base
+
+
 def oneline_line(
     commit: LogCommit,
     *,

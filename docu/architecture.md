@@ -416,6 +416,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/commit_row.py` | Full commit line layout for log/show |
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts |
 | `render/comments.py` | Inline comment chains, human and Markdown |
+| `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_json.py` | JSON payloads for ``ger show`` |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns |
 | `push_input_line.py` | Push options line: parsing and formatting |
