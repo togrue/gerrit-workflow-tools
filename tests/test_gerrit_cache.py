@@ -406,6 +406,7 @@ def test_upsert_changes_strips_avatars(tmp_path: Path) -> None:
 
 
 def test_missing_change_negative_cache_skips_refetch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pure-unknown batch: a recent miss stays absent without re-querying Gerrit."""
     triplet = "proj~main~Innnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
     cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
@@ -423,6 +424,46 @@ def test_missing_change_negative_cache_skips_refetch(tmp_path: Path, monkeypatch
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1030)
     cache.load_changes([triplet], probe_updated=lambda _ids: {}, fetch_changes=fetch_again, missing_ttl_seconds=60)
     assert calls["n"] == 0
+
+
+def test_missing_ttl_does_not_stick_beside_cached_siblings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mixed stack: a prior miss must not stay ``not-pushed`` next to a cached neighbor.
+
+    Repro shape: ``ger log`` before push marks I_new missing; I_old is already on
+    Gerrit and cached. After push, the same ``load_changes`` for both must refetch
+    I_new — otherwise the overlay shows one line pushed/active and one absent.
+    """
+    known = "proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    was_missing = "proj~main~Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+
+    cache.load_changes(
+        [was_missing],
+        probe_updated=lambda _ids: {},
+        fetch_changes=lambda _ids: {},
+        missing_ttl_seconds=60,
+    )
+    cache.upsert_changes([_change(known, number=1)])
+
+    fetched: list[list[str]] = []
+
+    def fetch(ids: list[str]) -> dict[str, dict[str, Any]]:
+        fetched.append(list(ids))
+        return {was_missing: _change(was_missing, number=2)}
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1005)
+    rows = cache.load_changes(
+        [known, was_missing],
+        probe_updated=lambda _ids: {},
+        fetch_changes=fetch,
+        missing_ttl_seconds=60,
+        trust_window_seconds=10,
+    )
+
+    assert fetched == [[was_missing]]
+    assert known in rows
+    assert was_missing in rows
 
 
 def test_load_checks_serves_cache_while_change_updated_is_unchanged(tmp_path: Path) -> None:

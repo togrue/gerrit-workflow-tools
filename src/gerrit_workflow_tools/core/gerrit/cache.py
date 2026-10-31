@@ -336,9 +336,7 @@ class GerritCache:
             "SELECT checked_at FROM missing_changes WHERE change_id = ?",
             (footer_id,),
         ).fetchone()
-        if row is None:
-            return False
-        return _now() - int(row["checked_at"]) < ttl_seconds
+        return row is not None and _now() - int(row["checked_at"]) < ttl_seconds
 
     def _mark_missing(self, conn: sqlite3.Connection, footer_id: str) -> None:
         conn.execute(
@@ -351,7 +349,6 @@ class GerritCache:
 
     def find_payloads_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Return cached ChangeInfo rows grouped by footer ``change_id`` (local only)."""
-
         unique = list(dict.fromkeys(cid for cid in change_ids if cid))
         if not unique:
             return {}
@@ -396,19 +393,21 @@ class GerritCache:
 
         Database connections are never held across Gerrit network calls.
         """
-
         rows = self._lookup_changes(triplets)
         now = _now()
         out: dict[str, dict[str, Any]] = {}
         probe_ids: list[str] = []
         fetch_ids: list[str] = []
+        any_cached = any(triplet in rows for triplet in triplets)
 
         with self._connect() as conn:
             for triplet in triplets:
                 row = rows.get(triplet)
                 if row is None:
-                    if not refresh and self._missing_is_fresh(
-                        conn, _footer_from_triplet(triplet), ttl_seconds=missing_ttl_seconds
+                    if (
+                        not refresh
+                        and not any_cached
+                        and self._missing_is_fresh(conn, _footer_from_triplet(triplet), ttl_seconds=missing_ttl_seconds)
                     ):
                         continue
                     fetch_ids.append(triplet)

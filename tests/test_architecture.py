@@ -363,7 +363,7 @@ SIZE_BASELINE = {
     "cli_changeid.py": 408,
     "cli_push.py": 1342,
     "cli_show.py": 418,
-    "core/gerrit/cache.py": 728,
+    "core/gerrit/cache.py": 727,
     "core/gerrit/change_resolution.py": 564,
     "core/gerrit/rest.py": 968,
     "core/gerrit/service.py": 510,
