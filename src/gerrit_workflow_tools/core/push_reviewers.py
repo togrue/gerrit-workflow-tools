@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import parse
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.ready_calc import ReadyResult
-from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
-from gerrit_workflow_tools.core.stack import commits_in_range
+from gerrit_workflow_tools.core.reviewer import (
+    ReviewerStrategy,
+    gerrit_credentials_configured,
+    reviewer_accounts_from_change_info,
+)
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 
 
 @dataclass(frozen=True)
@@ -40,16 +45,78 @@ class ReviewerApplyResult:
     outcomes: list[ReviewerApplyChangeOutcome] = field(default_factory=list)
 
 
-def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool, *, settings: Settings) -> list[str]:
-    """Unique Gerrit triplets in stack order for the current push range."""
+@dataclass(frozen=True)
+class PushMark:
+    """Current Gerrit reviewer and WIP marks for one commit."""
 
-    if not ready.push_range:
-        return []
+    has_remote: bool
+    reviewers: tuple[str, ...]
+    wip: bool
+    private: bool
+
+
+def needs_rest_assignment(strategy: ReviewerStrategy, reviewers: Sequence[str]) -> bool:
+    """True when lazy or overwrite must assign reviewers after the push."""
+    return strategy in (ReviewerStrategy.LAZY, ReviewerStrategy.OVERWRITE) and bool(reviewers)
+
+
+def credential_error(strategy: ReviewerStrategy, reviewers: Sequence[str], settings: Settings) -> str | None:
+    """Why lazy/overwrite cannot call REST, or ``None`` when they can or need not."""
+    if not needs_rest_assignment(strategy, reviewers):
+        return None
+    if not gerrit_credentials_configured(settings):
+        return (
+            "error: lazy/overwrite reviewer strategies need Gerrit REST; set gerrit.user and "
+            "gerrit.token (or gerrit.password)"
+        )
+    try:
+        resolve_gerrit_web_base(settings)
+    except ValueError as exc:
+        return f"error: {exc}"
+    return None
+
+
+def push_marks(
+    cwd: Path,
+    rows: Sequence[Commit],
+    *,
+    settings: Settings,
+    gerrit: GerritRest | None,
+) -> dict[str, PushMark]:
     stack = resolve_stack_context(cwd, settings=settings)
-    rows = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
+    triplets = {
+        row.change_id: build_triplet(stack.project, stack.push_branch, row.change_id) for row in rows if row.change_id
+    }
+    if not triplets:
+        return {}
+    resolve_gerrit_web_base(settings)
+    if not gerrit_credentials_configured(settings):
+        raise ConfigError(
+            "Gerrit credentials are not configured; set gerrit.user and "
+            "gerrit.token (or gerrit.password) for REST access."
+        )
+    raw = GerritService.from_cwd(cwd, settings=settings, rest=gerrit).changes.get_payloads(list(triplets.values()))
+    by_triplet = _payloads_by_triplet(raw)
+    marks: dict[str, PushMark] = {}
+    for change_id, triplet in triplets.items():
+        detail = by_triplet.get(triplet)
+        if detail is None:
+            marks[change_id] = PushMark(False, (), False, False)
+            continue
+        marks[change_id] = PushMark(
+            True,
+            tuple(account.slug for account in reviewer_accounts_from_change_info(detail)),
+            bool(detail.get("work_in_progress")),
+            bool(detail.get("private")),
+        )
+    return marks
+
+
+def change_refs_for_commits(cwd: Path, commits: Sequence[Commit], *, settings: Settings) -> list[str]:
+    stack = resolve_stack_context(cwd, settings=settings)
     out: list[str] = []
     seen: set[str] = set()
-    for commit in rows:
+    for commit in commits:
         if not commit.change_id:
             continue
         triplet = build_triplet(stack.project, stack.push_branch, commit.change_id)
@@ -57,6 +124,14 @@ def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool,
             seen.add(triplet)
             out.append(triplet)
     return out
+
+
+def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool, *, settings: Settings) -> list[str]:
+    """Unique Gerrit triplets in stack order for the current push range."""
+    if not ready.push_range:
+        return []
+    rows = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
+    return change_refs_for_commits(cwd, rows, settings=settings)
 
 
 def _payloads_by_triplet(payloads: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:

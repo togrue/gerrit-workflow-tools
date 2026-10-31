@@ -11,16 +11,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import gerrit_workflow_tools.cli_push as cli_push_mod
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import set_branch_config
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
-from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.stack import commits_in_range
-from gerrit_workflow_tools.push_input_line import PushLineState, parse as parse_push_options_line
+from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -124,7 +122,7 @@ def test_gpush_vanilla_upstream_runs_plain_git_push(
     git("fetch", "fork", cwd=repo)
     git("branch", "--set-upstream-to=fork/main", "feature", cwd=repo)
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, _out, _err = run_cli(repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 0
@@ -200,7 +198,7 @@ def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
     _add_self_origin_and_fetch(repo)
     git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, _out, _err = run_cli(repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 0
@@ -236,7 +234,7 @@ class _StdinTTY:
 def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock()
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 1
     assert "non-interactive" in err.lower() or "--yes" in err
@@ -246,7 +244,7 @@ def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: 
 def test_gpush_noninteractive_yes_runs_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 0
     mock_run.assert_called_once()
@@ -263,7 +261,7 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr("builtins.input", _input)
     mock_run = MagicMock()
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
@@ -292,7 +290,7 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
 
 def test_gpush_reviewers_append_to_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, _out, _err = run_cli(
         stack_repo,
@@ -377,15 +375,11 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
 
 
 def test_git_push_rejected_no_new_changes_detects_gerrit_message() -> None:
-    proc = subprocess.CompletedProcess(
-        ["git", "push"],
-        1,
-        stdout=b"",
-        stderr=b"! [remote rejected] deadbeef -> refs/for/main (no new changes)\n",
-    )
-    assert cli_push_mod._git_push_rejected_no_new_changes(proc)
-    ok = subprocess.CompletedProcess(["git", "push"], 0, stdout=b"SUCCESS\n", stderr=b"")
-    assert not cli_push_mod._git_push_rejected_no_new_changes(ok)
+    from gerrit_workflow_tools.core.push import push_rejected_no_new_changes
+
+    rejected = "! [remote rejected] deadbeef -> refs/for/main (no new changes)\n"
+    assert push_rejected_no_new_changes("", rejected)
+    assert not push_rejected_no_new_changes("SUCCESS\n", "")
 
 
 def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -404,7 +398,7 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
             stderr=b"! [remote rejected] tip -> refs/for/main (no new changes)\n",
         )
     )
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, out, _err = run_cli(
         stack_repo,
@@ -431,7 +425,7 @@ def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
     }
     details = build_details_by_change_id(rows, per_index_overrides=[reviewer_existing] * len(rows))
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, out, _err = run_cli(
         stack_repo,
@@ -453,7 +447,7 @@ def test_gpush_reviewers_cli_overwrites_branch_and_dedupes(stack_repo: Path, mon
     b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
     set_branch_config(stack_repo, b, gerrit_reviewers="carol")
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, _out, _err = run_cli(
         stack_repo,
@@ -649,46 +643,29 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
 
 
 def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    refs: list[str] = []
-    orig = cli_push_mod._refs_for_spec
-
-    def _capture(tip: str, push_branch: str, state: PushLineState, strategy: ReviewerStrategy) -> str:
-        r = orig(tip, push_branch, state, strategy)
-        refs.append(r)
-        return r
-
-    monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
-    code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
-    assert refs and "%r=bob" in refs[-1]
+    assert "%r=bob" in out
 
 
 def test_gpush_interactive_reviewers_lazy_omits_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    refs: list[str] = []
-    orig = cli_push_mod._refs_for_spec
-
-    def _capture(tip: str, push_branch: str, state: PushLineState, strategy: ReviewerStrategy) -> str:
-        r = orig(tip, push_branch, state, strategy)
-        refs.append(r)
-        return r
-
-    monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
         lambda *_a, **_k: parse_push_options_line("bob lazy"),
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
-    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
     assert "lazy" in err
-    assert refs and "%r=bob" not in refs[-1]
+    line = next(ln for ln in out.splitlines() if "git push" in ln)
+    assert "%r=" not in line
 
 
 def test_gpush_confirm_reviewers_then_push_includes_percent_r(
@@ -707,7 +684,7 @@ def test_gpush_confirm_reviewers_then_push_includes_percent_r(
         lambda *_a, **_k: parse_push_options_line("alice"),
     )
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 0
     refspec = _mock_gerrit_push_refspec(mock_run)
@@ -717,31 +694,22 @@ def test_gpush_confirm_reviewers_then_push_includes_percent_r(
 def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    refs: list[str] = []
-    orig = cli_push_mod._refs_for_spec
-
-    def _capture(tip: str, push_branch: str, state: PushLineState, strategy: ReviewerStrategy) -> str:
-        r = orig(tip, push_branch, state, strategy)
-        refs.append(r)
-        return r
-
-    b = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
-    set_branch_config(stack_repo, b, gerrit_reviewers="carol")
-    monkeypatch.setattr(cli_push_mod, "_refs_for_spec", _capture)
+    branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=stack_repo)
+    set_branch_config(stack_repo, branch, gerrit_reviewers="carol")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
-    code, _out, _err = run_cli(
+    code, out, _err = run_cli(
         stack_repo,
         gpush_main,
         ["--dry-run", "-i", "--reviewers", "alice"],
         monkeypatch,
     )
     assert code == 0
-    refspec = refs[-1]
+    refspec = next(ln for ln in out.splitlines() if "git push" in ln)
     assert "carol" not in refspec
     assert "alice" not in refspec
     assert "%r=bob" in refspec
@@ -767,7 +735,7 @@ def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: p
     assert expected_tip
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 0
     assert git_out("rev-parse", "lastPush/feature", cwd=stack_repo) == expected_tip
@@ -777,7 +745,7 @@ def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: 
     git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 0
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
@@ -794,7 +762,7 @@ def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypat
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=1))
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push._run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
     assert code == 1
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
@@ -899,7 +867,7 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
             raise GitError("git fetch origin failed: simulated fetch failure")
         return git(*args, **kwargs)
 
-    monkeypatch.setattr(cli_push_mod, "git", git_fetch_fail)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.git", git_fetch_fail)
     git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0, err

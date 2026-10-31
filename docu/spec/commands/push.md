@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | Implemented |
-| **Module** | `src/gerrit_workflow_tools/cli_push.py` |
+| **Module** | `cli_push.py` prompts and prints; `core/push.py` prepares, revises, and executes |
 | **Requires** | Gerrit mode: target resolution, Change-Ids; attribute preview / REST strategies need `gerrit.webUrl` + credentials |
 
 Push the **ready prefix** of the local stack to Gerrit (`refs/for/<target>`), or run plain **`git push`** in **vanilla** mode when upstream is not on `gerrit.remote`.
@@ -88,6 +88,8 @@ The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
 ---
 
 ## Pre-push checks (Gerrit mode)
+
+`prepare` runs before `-i`. A push refusal (empty ready range, or a rebase check that refuses) is printed without asking for reviewers. `execute` is the only call that runs `git push`.
 
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).

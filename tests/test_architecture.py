@@ -223,7 +223,6 @@ CONCEPTS = [
         debt={
             "cli_edit.py": "one git runner: interactive `git rebase -i`",
             "cli_rebase.py": "one git runner: interactive `git rebase -i`",
-            "cli_push.py": "one git runner: `git push` bytes output",
             "core/gerrit_change_status.py": "one git runner: `git patch-id` needs stdin",
         },
         fix="Run git through core/git_run.py; extend git_run if it lacks what you need.",
@@ -361,14 +360,14 @@ MAX_LINES = 400
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
     "cli_changeid.py": 408,
-    "cli_push.py": 1342,
+    "cli_push.py": 837,
     "cli_show.py": 416,
     "core/gerrit/cache.py": 727,
     "core/gerrit/change_resolution.py": 564,
     "core/gerrit/rest.py": 968,
     "core/gerrit/service.py": 510,
     "core/git_state.py": 454,
-    "push_input_line.py": 442,
+    "push_input_line.py": 441,
     "reviewer_catalog.py": 478,
 }
 
@@ -396,7 +395,6 @@ def test_module_size_ratchet() -> None:
 # Counts per file may only go down.
 TOO_MANY_BASELINE = {
     "cli_log.py": 4,
-    "cli_push.py": 5,
     "cli_sha.py": 2,
     "cli_show.py": 3,
     "core/gerrit/change_view.py": 1,

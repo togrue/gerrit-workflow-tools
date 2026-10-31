@@ -23,7 +23,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Literal
-from urllib.parse import quote
+
+from gerrit_workflow_tools.core.push import refspec_option_segments
+from gerrit_workflow_tools.core.reviewer import ReviewerStrategy as ReviewerStrategyEnum
 
 
 ReviewerStrategy = Literal["push", "lazy", "overwrite"]
@@ -430,13 +432,10 @@ def refspec_options(state: PushLineState, strategy: ReviewerStrategy) -> list[st
     ``private`` and ``topic`` are always emitted because Gerrit only honors
     them as magic ref options.
     """
-    parts: list[str] = []
-    if strategy == "push":
-        parts.extend(f"r={r}" for r in state.reviewers)
-    if state.wip:
-        parts.append("wip")
-    if state.private:
-        parts.append("private")
-    if state.topic:
-        parts.append(f"topic={quote(state.topic, safe='')}")
-    return parts
+    return refspec_option_segments(
+        reviewers=state.reviewers,
+        strategy=ReviewerStrategyEnum(strategy),
+        wip=state.wip,
+        private=state.private,
+        topic=state.topic,
+    )

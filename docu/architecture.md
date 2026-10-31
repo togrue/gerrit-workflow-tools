@@ -50,7 +50,7 @@ flowchart TB
     config[config.py · git_state.py · upstream_interactive.py]
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
-    push_core[push_reviewers.py · gerrit_show.py]
+    push_core[push.py · push_reviewers.py · gerrit_show.py]
   end
 
   subgraph gerrit [Gerrit integration — core/gerrit/]
@@ -260,7 +260,7 @@ flowchart TB
 | `ger show` | `core/gerrit_show.py` → `resolve_show_commit_row` | Pick one commit row, then enrich |
 | `ger fix`, `ger edit`, `ger reword`, `ger rebase` | `resolve_stack_changeish` | Map a changeish to a commit in the local stack. `require_in_stack` is the one axis on which they differ ([ADR-0003](adr/0003-ger-fix-targets-the-local-stack.md)) |
 | `ger log` | `core/annotated_stack.py` | Resolution notes per Change-Id |
-| `ger push` | `cli_push.py`, `core/push_reviewers.py` | Triplet building for REST |
+| `ger push` | `cli_push.py`, `core/push.py` | Push plan, then triplets for REST via `core/push_reviewers.py` |
 
 Stack context (`project`, `target_branch`, `push_branch`) comes from `git_state.py` + `gerrit_project_id.py`, over a `Settings`. Contract: [spec/change-and-commit-identifiers.md](spec/change-and-commit-identifiers.md).
 
@@ -271,23 +271,34 @@ Stack context (`project`, `target_branch`, `push_branch`) comes from `git_state.
 ```mermaid
 sequenceDiagram
   participant User
-  participant Push as cli_push
+  participant Cmd as cli_push
+  participant Push as core/push
   participant Ready as ready_calc
   participant Git as git push
   participant Rev as push_reviewers
-  participant Svc as GerritService
 
-  User->>Push: ger push [options]
-  Push->>Ready: compute_ready (stop/strategy + Change-Id boundary)
-  Push->>User: confirm / dry-run (push_input_prompt)
-  Push->>Git: git push origin HEAD:refs/for/&lt;target&gt;[%opts]
-  alt reviewer strategy lazy/overwrite
-    Push->>Rev: apply reviewers per change
-    Rev->>Svc: REST POST reviewers
+  User->>Cmd: ger push
+  Cmd->>Push: prepare
+  Push->>Ready: compute_ready
+  alt push refusal
+    Push-->>Cmd: refusal
+    Cmd->>User: print refusal
+  else push plan
+    Push-->>Cmd: plan
+    opt reviewers edited
+      Cmd->>User: prompt
+      Cmd->>Push: revise
+    end
+    Cmd->>User: preview once, then status line
+    Cmd->>Push: execute
+    Push->>Git: git push
+    opt lazy or overwrite
+      Push->>Rev: apply reviewers
+    end
   end
 ```
 
-Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The confirm loop stays in the command so core never prompts ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)).
+`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop, the `-i` prompt, the upstream prompt, and the save-reviewers question stay in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)). Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push.py`.
 
 ---
 
@@ -393,8 +404,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
-| `core/push_reviewers.py` | Post-push reviewer strategies |
-| `core/reviewer.py` | `ReviewerAccount`; reviewer account normalization from REST payloads |
+| `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
+| `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
+| `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream_interactive.py` | Prompting for a missing upstream (core that prompts — see backlog) |
@@ -438,10 +450,10 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 2. **One command entry point.** Eight commands skip `init_cli_runtime` and seven skip `run_cli_command`, so they differ in logging, color, `Settings` construction and exit-code mapping. *Tracked by:* `test_commands_use_shared_runtime`.
 3. **One resolution-note sink.** `_print_resolution_note` is copied in `cli_show.py` and `cli_resolve.py` (dimmed); `cli_log.py` dims the overlay's multi-branch notes inline; `cli_edit.py`, `cli_fix.py` and `cli_rebase.py` each print `format_resolution_note` themselves (plain).
 4. **One REST call envelope.** Each `HttpGerritRest` method repeats encode-path → `_request_json` → type check → log.
-5. **One reviewer normalizer.** `cli_push._reviewer_accounts_from_change_info` and `_gerrit_credentials_configured` are now pass-throughs to `core/reviewer.py`; delete them. Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
+5. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 6. **One Change-Id audit.** `change_id.classify_issues` and `cli_changeid.py`'s own loop classify the same footer problems independently.
 7. **One confirmation prompt.** y/n parsing lives in `cli_push.py` (`_prompt_save_reviewers`, `_parse_confirm_answer`, `_parse_gerrit_push_confirm`) and `cli_fix.py`. *Tracked by:* the y/n concept.
-8. **One git runner.** `core/git_run.py` cannot run interactively, feed stdin or return bytes, so `cli_edit.py`, `cli_rebase.py`, `cli_push.py` and `core/gerrit_change_status.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
+8. **One git runner.** `core/git_run.py` cannot run interactively or feed stdin, so `cli_edit.py`, `cli_rebase.py` and `core/gerrit_change_status.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
 9. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
 10. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
 11. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.

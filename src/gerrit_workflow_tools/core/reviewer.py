@@ -5,8 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
+from gerrit_workflow_tools.core.reviewers_strategy import default_reviewers_via_registry
+from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
 
 @dataclass(frozen=True)
@@ -130,3 +134,43 @@ def reviewer_accounts_from_change_info(
         account_id = account.get("_account_id")
         out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
     return out
+
+
+def parse_reviewer_names(raw: str) -> list[str]:
+    """Split a comma- or space-separated reviewer list, dropping blanks and duplicates."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in raw.replace(",", " ").split():
+        name = part.strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def resolve_push_reviewers(
+    cwd: Path,
+    branch: str,
+    reviewer_flag_segments: Sequence[str],
+    *,
+    settings: Settings,
+) -> list[str]:
+    """Reviewers for a push: flags, else the reviewer registry, else branch config."""
+    if reviewer_flag_segments:
+        return parse_reviewer_names(",".join(reviewer_flag_segments))
+    try:
+        rows = list(get_stack_snapshot(cwd, branch, head=branch, first_parent=True, settings=settings).commits)
+    except Exception:  # pylint: disable=broad-exception-caught
+        rows = []
+    scripted = default_reviewers_via_registry(
+        cwd,
+        project=stack_project(cwd, settings=settings),
+        branch=branch,
+        commits=rows,
+        settings=settings,
+        web_base=settings.gerrit_web_url,
+    )
+    if scripted is not None:
+        return scripted
+    cfg = settings.branch_gerrit_reviewers(branch)
+    return parse_reviewer_names(cfg) if cfg else []
