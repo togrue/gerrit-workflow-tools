@@ -15,9 +15,10 @@ import argparse
 import contextlib
 import logging
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import IntEnum
 from pathlib import Path
+from typing import TypeVar
 
 from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text, init_color_mode, init_hyperlink_mode
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
@@ -32,6 +33,8 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerri
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
+
+_T = TypeVar("_T")
 
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_COLOR = "Colorize output: always, auto, or never."
@@ -119,6 +122,22 @@ def print_resolution_note(resolution: Resolution | None) -> None:
     """Print how *resolution* narrowed, when Gerrit was consulted and it did."""
     if resolution is not None:
         print_note(format_resolution_note(resolution))
+
+
+def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = None) -> _T:
+    """Ask until the lower-cased reply is a key of *answers*; return what it maps to."""
+    while True:
+        reply = input(prompt).strip().lower()
+        if reply in answers:
+            return answers[reply]
+        if hint:
+            print(hint, file=sys.stderr)
+
+
+def confirm(question: str, *, default: bool) -> bool:
+    """Ask a yes/no *question*. Enter takes *default*; anything else unknown asks again."""
+    suffix = "[Y/n]" if default else "[y/N]"
+    return ask_choice(f"{question} {suffix}: ", {"y": True, "yes": True, "n": False, "no": False, "": default})
 
 
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:

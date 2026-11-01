@@ -253,12 +253,8 @@ CONCEPTS = [
     Concept(
         name="y/n confirmation parsing",
         pattern=r"""in \(\s*["']y["']|== ["']y["']|\[[yY]/[nN]\]""",
-        owners={},
-        debt={
-            "cli_fix.py": "one confirmation prompt",
-            "cli_push.py": "one confirmation prompt",
-        },
-        fix="Retire the existing copies into one shared prompt first; see the backlog item.",
+        owners={"cli_common.py": "ask_choice and confirm parse every prompt's reply"},
+        fix="Ask through cli_common.confirm, or ask_choice when the answers are not yes and no.",
     ),
 ]
 
@@ -359,7 +355,7 @@ MAX_LINES = 400
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
     "cli_changeid.py": 408,
-    "cli_push.py": 837,
+    "cli_push.py": 813,
     "cli_show.py": 408,
     "core/gerrit/cache.py": 684,
     "core/gerrit/change_resolution.py": 462,

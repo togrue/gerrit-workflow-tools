@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import sys
@@ -11,6 +12,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     add_verbose_and_debug_log_args,
+    ask_choice,
     configure_logging,
     cwd_from_env,
     print_resolution_note,
@@ -66,22 +68,20 @@ def _prompt_stage_modified_changes(cwd: Path) -> bool:
         "No staged changes. Stage all modifications to tracked files for this fixup?",
         file=sys.stderr,
     )
+    answers = {"y": "stage", "yes": "stage", "n": "skip", "no": "skip", "": "skip", "d": "diff", "diff": "diff"}
     while True:
         try:
-            print("[y/n/d] (d = show diff): ", end="", file=sys.stderr, flush=True)
-            raw = input().strip().lower()
+            with contextlib.redirect_stdout(sys.stderr):
+                choice = ask_choice("[y/n/d] (d = show diff): ", answers, hint="Please answer y, n, or d.")
         except (EOFError, KeyboardInterrupt):
             print("", file=sys.stderr)
             return False
-        if raw in ("y", "yes"):
-            _stage_tracked_modifications(cwd)
-            return True
-        if raw in ("n", "no", ""):
-            return False
-        if raw in ("d", "diff"):
-            _print_unstaged_diff(cwd)
-            continue
-        print("Please answer y, n, or d.", file=sys.stderr)
+        if choice != "diff":
+            break
+        _print_unstaged_diff(cwd)
+    if choice == "stage":
+        _stage_tracked_modifications(cwd)
+    return choice == "stage"
 
 
 def _build_parser() -> argparse.ArgumentParser:

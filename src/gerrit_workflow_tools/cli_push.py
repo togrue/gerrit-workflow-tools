@@ -12,6 +12,8 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
+    ask_choice,
+    confirm,
     handle_git_error,
     init_cli_runtime,
 )
@@ -121,8 +123,7 @@ def _prompt_interactive_reviewers(
 
 
 def _prompt_save_reviewers() -> bool:
-    ans = input("Save reviewers to branch config? [y/N]: ").strip().lower()
-    return ans in ("y", "yes")
+    return confirm("Save reviewers to branch config?", default=False)
 
 
 def _prompt_reviewers_line_ptk(
@@ -163,28 +164,21 @@ def _strategy_status_label(strategy: ReviewerStrategy) -> str:
     }[strategy]
 
 
-def _parse_gerrit_push_confirm(raw: str) -> str:
-    s = raw.strip().lower()
-    if s in ("n", "no"):
-        return "cancel"
-    if s in ("", "y", "yes"):
-        return "push"
-    if s in ("r", "reviewer", "reviewers"):
-        return "reviewers"
-    return "invalid"
-
-
 def _prompt_gerrit_push_confirm_action() -> str:
-    while True:
-        raw = input("Do you want to push these commits? [Y/n/r]: ")
-        act = _parse_gerrit_push_confirm(raw)
-        if act == "invalid":
-            print(
-                "  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
-                file=sys.stderr,
-            )
-            continue
-        return act
+    return ask_choice(
+        "Do you want to push these commits? [Y/n/r]: ",
+        {
+            "": "push",
+            "y": "push",
+            "yes": "push",
+            "n": "cancel",
+            "no": "cancel",
+            "r": "reviewers",
+            "reviewer": "reviewers",
+            "reviewers": "reviewers",
+        },
+        hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
+    )
 
 
 def _escape_topic_for_assignment_report(topic: str) -> str:
@@ -332,16 +326,6 @@ def _print_gpush_preview(plan: PushPlan, commit_lines: list[str], *, summary_hig
     _print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
 
 
-def _parse_confirm_answer(raw: str) -> bool | None:
-    """Return True to push, False to cancel, None if the user should be asked again."""
-    s = raw.strip().lower()
-    if s in ("n", "no"):
-        return False
-    if s in ("", "y", "yes"):
-        return True
-    return None
-
-
 def _print_gpush_confirm_status_line(
     local_branch: str,
     gerrit_target: str,
@@ -389,14 +373,6 @@ def _print_plan_status(plan: PushPlan) -> None:
         private=plan.options.private,
         strategy=plan.options.strategy,
     )
-
-
-def _confirm_push_interactive(*, vanilla: bool = False) -> bool:
-    prompt = "Do you want to run `git push`? [Y/n]: " if vanilla else "Do you want to push these commits? [Y/n]: "
-    while True:
-        parsed = _parse_confirm_answer(input(prompt))
-        if parsed is not None:
-            return parsed
 
 
 def _line_sets_options(state: PushLineState) -> bool:
@@ -663,7 +639,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
     if not args.yes:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
-        if not _confirm_push_interactive(vanilla=True):
+        if not confirm("Do you want to run `git push`?", default=True):
             print("Push cancelled.", file=sys.stderr)
             return 1
     logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
