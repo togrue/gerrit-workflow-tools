@@ -173,6 +173,22 @@ def test_resolve_refuses_an_address_that_cannot_be_right(
     assert message in err
 
 
+def test_resolve_reports_the_real_triplet_when_gerrit_sends_a_compact_id(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_resolve_repo(stack_repo)
+    ch = _detail(change_id=CID_URL, sha=git_out("rev-parse", "HEAD~1", cwd=stack_repo), number=120005)
+    triplet = str(ch["id"])
+    ch["id"] = "testproj~120005"
+
+    code, out, err = run_cli(
+        stack_repo, resolve_main, ["change:120005", "--json"], monkeypatch, gerrit=ChangeStore({triplet: ch})
+    )
+
+    assert code == 0, err
+    assert json_stdout(out)["resolution"]["selected"]["triplet"] == f"testproj~main~{CID_URL}"
+
+
 def test_resolve_query(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_resolve_repo(stack_repo)
     cid = CID_QUERY

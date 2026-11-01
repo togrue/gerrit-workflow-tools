@@ -19,7 +19,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     pick_change_from_query_result,
     resolve_gerrit_web_base,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git_out
 
 
@@ -69,6 +69,7 @@ class SelectedChange:
         branch = row.get("branch")
         change_id = row.get("change_id")
         status = row.get("status")
+        project = row.get("project")
         if not isinstance(number, int):
             raise ChangeResolutionError("Gerrit change row missing _number")
         if not isinstance(triplet, str) or not triplet:
@@ -77,14 +78,13 @@ class SelectedChange:
             raise ChangeResolutionError("Gerrit change row missing branch")
         if not isinstance(change_id, str) or not change_id:
             raise ChangeResolutionError("Gerrit change row missing change_id")
-        if not isinstance(status, str):
-            status = "UNKNOWN"
         return cls(
             number=number,
-            triplet=triplet,
+            # Gerrit's `id` may be the compact project~number; a triplet is always the full form.
+            triplet=build_triplet(project, branch, change_id) if isinstance(project, str) and project else triplet,
             branch=branch,
             change_id=change_id,
-            status=status,
+            status=status if isinstance(status, str) else "UNKNOWN",
         )
 
     def to_json_dict(self) -> dict[str, Any]:
