@@ -410,3 +410,11 @@ def test_a_non_size_error_keeps_the_per_change_fallback() -> None:
 
     # One refused batch, then exactly one query per ref — no halving generations.
     assert client.query_changes.call_count == 1 + len(refs)
+
+
+def test_ambiguous_query_says_when_the_list_is_cut_short() -> None:
+    rows: list[dict[str, Any]] = [{"_number": n} for n in range(1, 26)]
+    rows[-1]["_more_changes"] = True
+    with pytest.raises(GerritApiError) as raised:
+        pick_change_from_query_result(rows)
+    assert "(25+ matches): 1, 2, 3, 4, 5, ..." in str(raised.value)

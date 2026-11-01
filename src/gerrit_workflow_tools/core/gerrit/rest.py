@@ -377,7 +377,6 @@ class HttpGerritRest:
         ccs: list[str] | None = None,
     ) -> dict[str, Any]:
         """POST multiple reviewers/CCs onto *change_id* in one review request."""
-
         reviewer_inputs: list[dict[str, str | bool]] = []
         reviewer_inputs.extend({"reviewer": reviewer, "confirmed": True} for reviewer in reviewers or [])
         reviewer_inputs.extend({"reviewer": cc, "state": "CC", "confirmed": True} for cc in ccs or [])
@@ -468,8 +467,9 @@ def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         raise GerritApiError("no matching change")
     if len(rows) > 1:
-        nums = [str(r.get("_number", "?")) for r in rows[:5]]
-        raise GerritApiError(f"ambiguous change query ({len(rows)} matches): {', '.join(nums)}")
+        shown = ", ".join(str(r.get("_number", "?")) for r in rows[:5]) + (", ..." if len(rows) > 5 else "")
+        more = "+" if rows[-1].get("_more_changes") else ""
+        raise GerritApiError(f"ambiguous change query ({len(rows)}{more} matches): {shown}")
     return rows[0]
 
 
