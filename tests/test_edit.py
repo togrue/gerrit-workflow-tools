@@ -174,6 +174,24 @@ def test_rebase_in_progress_is_refused_before_anything_moves(
     assert git("config", "branch.feature.gerAttentionCursor", cwd=stack_repo, check=False).returncode != 0
 
 
+def test_cursor_stays_put_when_the_rebase_never_starts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"verified": -1} for _ in rows]))
+    real_run = subprocess.run
+
+    def failing_rebase(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            return subprocess.CompletedProcess(cmd, 128)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", failing_rebase)
+    code, _out, _err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+
+    assert code == 128
+    assert git("config", "branch.feature.gerAttentionCursor", cwd=stack_repo, check=False).returncode != 0
+
+
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
     from gerrit_workflow_tools.cli_common import ExitCode

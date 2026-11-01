@@ -19,6 +19,7 @@ from gerrit_workflow_tools.cli_common import (
     run_interactive_rebase,
 )
 from gerrit_workflow_tools.core.attention_cursor import (
+    CursorAction,
     EditAttentionMode,
     read_cursor_history,
     write_branch_cursor,
@@ -33,7 +34,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
@@ -209,15 +210,15 @@ def _validate_targeting_args(p: argparse.ArgumentParser, args: argparse.Namespac
         p.error("cannot use REV with --first-attention-commit")
 
 
-def _resolve_target_sha(
+def _resolve_target(
     cwd: Path,
     args: argparse.Namespace,
     *,
     settings: Settings,
     branch: str | None,
     gerrit: GerritRest | None,
-) -> str:
-    """Resolve the SHA to stop on for an interactive rebase."""
+) -> tuple[str, str | None, CursorAction]:
+    """Resolve the SHA to stop on, plus the Change-Id and action for the cursor move it earns."""
     rev_arg = args.rev
     after_change_id: str | None = None
 
@@ -236,10 +237,7 @@ def _resolve_target_sha(
         mode = "resume"
     else:
         target_res = _resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
-        change_id = change_id_for_stack_sha(cwd, target_res.sha, settings=settings, gerrit=gerrit)
-        if change_id and branch is not None:
-            write_branch_cursor(cwd, branch, change_id, action="set", sha=target_res.sha)
-        return target_res.sha
+        return target_res.sha, change_id_for_stack_sha(cwd, target_res.sha, settings=settings, gerrit=gerrit), "set"
 
     target, notes = resolve_edit_attention_commit(
         cwd,
@@ -248,11 +246,11 @@ def _resolve_target_sha(
         branch=branch,
         after_change_id=after_change_id,
         gerrit=gerrit,
-        update_cursor=True,
+        update_cursor=False,
     )
     for note in notes:
         print(note, file=sys.stderr)
-    return target.sha
+    return target.sha, target.change_id, mode
 
 
 def _run_interactive_stack_rebase(
@@ -291,7 +289,7 @@ def _run_interactive_stack_rebase(
     )
 
     require_no_rebase_in_progress(cwd)
-    full = _resolve_target_sha(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
+    full, cursor_change_id, cursor_action = _resolve_target(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
 
@@ -300,6 +298,9 @@ def _run_interactive_stack_rebase(
         env["GEDIT_DEBUG_LOG"] = "1"
     logger.debug("gedit rebasing onto %s to stop at %s", rebase_fork[:8], short)
     returncode = run_interactive_rebase(cwd, rebase_fork, sequence_editor="rebase_sequence_editor", env=env)
+    # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
+    if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
+        write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
     moved = default_action == "edit" and args.next_attention and returncode == 0
     if moved and settings.edit_next_show:
         from gerrit_workflow_tools.cli_ger import run_show
