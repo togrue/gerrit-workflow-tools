@@ -72,7 +72,7 @@ def change_id_for_gerrit_rest_path(change_id: str) -> str:
     return s
 
 
-def encode_gerrit_path_segment(segment: str) -> str:
+def encode_gerrit_path_segment(segment: str | int) -> str:
     """URL-encode one Gerrit REST path segment (project, change id, account, …).
 
     ``ChangeInfo.id`` values are already percent-encoded (``tools%2Frepo~123``).
@@ -81,6 +81,11 @@ def encode_gerrit_path_segment(segment: str) -> str:
     """
 
     return quote(unquote(str(segment)), safe="")
+
+
+def _change_path(change_id: str, suffix: str = "") -> str:
+    """``changes/<id><suffix>``, with the id in the form and encoding Gerrit expects."""
+    return f"changes/{encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))}{suffix}"
 
 
 def _strip_magic_json_prefix(raw: str) -> str:
@@ -295,6 +300,22 @@ class HttpGerritRest:
         """GET any path under ``/a/`` and return parsed JSON (same credentials as other methods)."""
         return self._request_json(path, params=params)
 
+    def _request_dict(self, what: str, path: str, **request: Any) -> dict[str, Any]:
+        """One request whose answer must be a JSON object; *what* names it in the error."""
+        data = self._request_json(path, **request)
+        if not isinstance(data, dict):
+            raise GerritApiError(f"unexpected {what} response")
+        return data
+
+    def _request_rows(self, what: str, path: str, **request: Any) -> list[dict[str, Any]]:
+        """One request whose answer must be a JSON list; returns its object rows."""
+        data = self._request_json(path, **request)
+        if not isinstance(data, list):
+            raise GerritApiError(f"unexpected {what} response")
+        rows = [row for row in data if isinstance(row, dict)]
+        logger.info("%s -> %d row(s)", what, len(rows))
+        return rows
+
     def query_changes(
         self,
         query: str,
@@ -306,33 +327,16 @@ class HttpGerritRest:
 
         *options* are passed as repeated ``o=`` query parameters (e.g. ``DETAILED_LABELS``).
         """
-        parts: list[tuple[str, str]] = [("q", query), ("n", str(n))]
-        if options:
-            for opt in options:
-                parts.append(("o", opt))
-        data = self._request_json("changes/", params=parts)
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected changes query response")
-        logger.info("query_changes %r -> %d result(s)", query, len(data))
-        return data
+        params = [("q", query), ("n", str(n)), *(("o", opt) for opt in options or ())]
+        return self._request_rows("changes query", "changes/", params=params)
 
     def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         """GET ``accounts/?q=...`` and return account rows."""
-        data = self._request_json("accounts/", params=[("q", query), ("n", str(n))])
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected accounts query response")
-        out = [row for row in data if isinstance(row, dict)]
-        logger.info("query_accounts %r -> %d result(s)", query, len(out))
-        return out
+        return self._request_rows("accounts query", "accounts/", params=[("q", query), ("n", str(n))])
 
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """GET account detail by Gerrit account id, username, email, or ``self``."""
-        enc = encode_gerrit_path_segment(str(account_id))
-        data = self._request_json(f"accounts/{enc}/detail")
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected account detail response")
-        logger.info("get_account %r -> %s", account_id, data.get("_account_id"))
-        return data
+        return self._request_dict("account detail", f"accounts/{encode_gerrit_path_segment(account_id)}/detail")
 
     def suggest_change_reviewers(
         self,
@@ -342,58 +346,27 @@ class HttpGerritRest:
         n: int = 20,
     ) -> list[dict[str, Any]]:
         """GET suggested reviewers for ``change_id`` via ``changes/<id>/suggest_reviewers``."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        params: list[tuple[str, str]] = [("n", str(n))]
-        if query:
-            params.insert(0, ("q", query))
-        data = self._request_json(f"changes/{enc}/suggest_reviewers", params=params)
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected suggest reviewers response")
-        out = [row for row in data if isinstance(row, dict)]
-        logger.info("suggest_change_reviewers %r -> %d result(s)", cid, len(out))
-        return out
+        params = [*((("q", query),) if query else ()), ("n", str(n))]
+        return self._request_rows("suggest reviewers", _change_path(change_id, "/suggest_reviewers"), params=params)
 
     def get_plugin_project_reviewers(self, project: str) -> list[dict[str, Any]] | None:
         """GET project-level reviewer defaults from reviewers plugin (if installed)."""
-        enc = encode_gerrit_path_segment(project)
         try:
-            data = self._request_json(f"projects/{enc}/reviewers")
+            return self._request_rows("project reviewers", f"projects/{encode_gerrit_path_segment(project)}/reviewers")
         except GerritApiError as e:
             if e.status == 404:
                 return None
             raise
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected project reviewers response")
-        out = [row for row in data if isinstance(row, dict)]
-        logger.info("get_plugin_project_reviewers %r -> %d result(s)", project, len(out))
-        return out
 
     def get_change(self, change_id: str) -> dict[str, Any]:
         """GET one ChangeInfo shaped like a batch row (not ``/detail``: no ``current_revision``)."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        data = self._request_json(f"changes/{enc}", params=[("o", opt) for opt in LOG_QUERY_OPTIONS])
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected change detail response")
-        logger.info(
-            "get_change %r -> #%s %r",
-            cid,
-            data.get("_number"),
-            data.get("subject"),
+        return self._request_dict(
+            "change detail", _change_path(change_id), params=[("o", o) for o in LOG_QUERY_OPTIONS]
         )
-        return data
 
     def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/reviewers/`` (lighter than full ``/detail``)."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        data = self._request_json(f"changes/{enc}/reviewers/")
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected list reviewers response")
-        out = [row for row in data if isinstance(row, dict)]
-        logger.info("list_change_reviewers %r -> %d reviewer(s)", cid, len(out))
-        return out
+        return self._request_rows("list reviewers", _change_path(change_id, "/reviewers/"))
 
     def set_reviewers_batch(
         self,
@@ -409,24 +382,17 @@ class HttpGerritRest:
         reviewer_inputs.extend({"reviewer": cc, "state": "CC", "confirmed": True} for cc in ccs or [])
         if not reviewer_inputs:
             return {}
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        data = self._request_json(
-            f"changes/{enc}/revisions/current/review",
+        return self._request_dict(
+            "set reviewers",
+            _change_path(change_id, "/revisions/current/review"),
             method="POST",
             json_body={"reviewers": reviewer_inputs},
         )
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected set reviewers response")
-        logger.info("set_reviewers_batch %r -> %d reviewer input(s)", cid, len(reviewer_inputs))
-        return data
 
     def delete_reviewer(self, change_id: str, account_id: int) -> Any:
         """Remove *account_id* from *change_id* (REVIEWER or CC)."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        aid_enc = encode_gerrit_path_segment(str(account_id))
-        return self._request_json(f"changes/{enc}/reviewers/{aid_enc}", method="DELETE")
+        path = _change_path(change_id, f"/reviewers/{encode_gerrit_path_segment(account_id)}")
+        return self._request_json(path, method="DELETE")
 
     def set_topic(self, change_id: str, topic: str | None) -> None:
         """Set or clear the topic on *change_id*.
@@ -436,31 +402,19 @@ class HttpGerritRest:
         yields ``204 No Content`` (mapped to ``{}`` by ``_request_json``).
         Both are valid; neither needs further validation.
         """
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        self._request_json(f"changes/{enc}/topic", method="PUT", json_body={"topic": topic or ""})
+        self._request_json(_change_path(change_id, "/topic"), method="PUT", json_body={"topic": topic or ""})
 
     def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
         """Mark *change_id* work-in-progress when *on*, otherwise ready for review."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
-        path = f"changes/{enc}/wip" if on else f"changes/{enc}/ready"
-        data = self._request_json(path, method="POST", json_body={})
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected set WIP response")
-        return data
+        path = _change_path(change_id, "/wip" if on else "/ready")
+        return self._request_dict("set WIP", path, method="POST", json_body={})
 
     def set_private(self, change_id: str, on: bool) -> dict[str, Any]:
         """Mark *change_id* private when *on*, otherwise remove the private flag."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
+        path = _change_path(change_id, "/private")
         if on:
-            data = self._request_json(f"changes/{enc}/private", method="POST", json_body={})
-        else:
-            data = self._request_json(f"changes/{enc}/private", method="DELETE")
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected set private response")
-        return data
+            return self._request_dict("set private", path, method="POST", json_body={})
+        return self._request_dict("set private", path, method="DELETE")
 
     def get_comments(
         self,
@@ -470,28 +424,13 @@ class HttpGerritRest:
         context_padding: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """GET inline comments grouped by file path (or special keys) for *change_id*."""
-        cid = change_id_for_gerrit_rest_path(change_id)
-        enc = encode_gerrit_path_segment(cid)
         params: dict[str, str] | None = None
         if enable_context:
             params = {"enable-context": "true"}
             if context_padding is not None:
                 params["context-padding"] = str(context_padding)
-        data = self._request_json(f"changes/{enc}/comments", params=params)
-        if not isinstance(data, dict):
-            raise GerritApiError("unexpected comments response")
-        out: dict[str, list[dict[str, Any]]] = {}
-        for k, v in data.items():
-            if isinstance(v, list):
-                out[k] = [x for x in v if isinstance(x, dict)]
-        total = sum(len(v) for v in out.values())
-        logger.info(
-            "get_comments %r -> %d file(s), %d comment(s)",
-            cid,
-            len(out),
-            total,
-        )
-        return out
+        data = self._request_dict("comments", _change_path(change_id, "/comments"), params=params)
+        return {path: [c for c in rows if isinstance(c, dict)] for path, rows in data.items() if isinstance(rows, list)}
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.
@@ -499,19 +438,11 @@ class HttpGerritRest:
         Rows are returned verbatim; deciding which states count as a failure is the
         caller's job (see ``GerritService._fetch_ci_result``).
         """
-        enc = encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))
-        data = self._request_json(f"changes/{enc}/revisions/current/checks")
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected checks response")
-        return [row for row in data if isinstance(row, dict)]
+        return self._request_rows("checks", _change_path(change_id, "/revisions/current/checks"))
 
     def get_messages(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/messages`` and return raw ChangeMessageInfo rows."""
-        enc = encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))
-        data = self._request_json(f"changes/{enc}/messages")
-        if not isinstance(data, list):
-            raise GerritApiError("unexpected messages response")
-        return [row for row in data if isinstance(row, dict)]
+        return self._request_rows("messages", _change_path(change_id, "/messages"))
 
 
 def resolve_change_ref(arg: str) -> str:
