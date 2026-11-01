@@ -35,12 +35,13 @@ def add_attention_query_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def require_attention_stack_upstream(cwd: Path, settings: Settings) -> bool:
-    """Prompt for upstream on stack branches; return False if the user declines."""
-    for branch in branches_needing_upstream(cwd, resolve_rev_range(cwd, None, settings=settings), settings=settings):
-        if not require_branch_upstream(cwd, branch, settings=settings):
-            return False
-    return True
+def require_stack_upstream(cwd: Path, settings: Settings, rev_range: str | None = None) -> bool:
+    """Prompt for upstream on *rev_range*'s branches (default: the stack); False if declined."""
+    rev_range = rev_range or resolve_rev_range(cwd, None, settings=settings)
+    return all(
+        require_branch_upstream(cwd, branch, settings=settings)
+        for branch in branches_needing_upstream(cwd, rev_range, settings=settings)
+    )
 
 
 def resolve_attention_query_or_exit(
@@ -53,7 +54,7 @@ def resolve_attention_query_or_exit(
     gerrit: GerritRest | None = None,
 ) -> LogCommit | int:
     """Resolve an attention query, or return an :class:`ExitCode` int on upstream decline."""
-    if not require_attention_stack_upstream(cwd, settings):
+    if not require_stack_upstream(cwd, settings):
         return int(ExitCode.ATTENTION)
     mode: EditAttentionMode = "first" if args.first_attention else "next"
     target, notes = resolve_attention_query(

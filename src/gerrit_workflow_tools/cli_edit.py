@@ -11,14 +11,15 @@ import sys
 from pathlib import Path
 from typing import Literal
 
+from gerrit_workflow_tools.cli_attention import require_stack_upstream
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
+    print_resolution_note,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.annotated_stack import branches_needing_upstream, resolve_rev_range
 from gerrit_workflow_tools.core.attention_cursor import (
     EditAttentionMode,
     read_cursor_history,
@@ -31,10 +32,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
     resolve_edit_attention_commit,
     resolve_first_edit_attention_sha,
 )
-from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    format_resolution_note,
-    resolve_stack_changeish,
-)
+from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
@@ -52,12 +50,23 @@ __all__ = [
 ]
 
 
-def _require_stack_upstream(cwd: Path, settings: Settings) -> bool:
-    rev_range = resolve_rev_range(cwd, None, settings=settings)
-    for branch in branches_needing_upstream(cwd, rev_range, settings=settings):
-        if not require_branch_upstream(cwd, branch, settings=settings):
-            return False
-    return True
+def _has_upstreams(cwd: Path, settings: Settings, branch: str | None) -> bool:
+    if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+        return False
+    return require_stack_upstream(cwd, settings)
+
+
+def _resolve_in_stack(
+    cwd: Path,
+    rev: str,
+    *,
+    settings: Settings,
+    branch: str | None,
+    gerrit: GerritRest | None,
+) -> StackCommit:
+    target = resolve_stack_changeish(cwd, rev, settings=settings, gerrit=gerrit, branch=branch, require_in_stack=True)
+    print_resolution_note(target.resolution)
+    return target
 
 
 def _print_cursor_status(cwd: Path, *, settings: Settings, branch: str | None, gerrit: GerritRest | None) -> int:
@@ -98,18 +107,7 @@ def _set_cursor_from_changeish(
 ) -> int:
     if branch is None:
         raise GitError("detached HEAD: cannot set attention cursor without a branch")
-    target = resolve_stack_changeish(
-        cwd,
-        changeish,
-        settings=settings,
-        gerrit=gerrit,
-        branch=branch,
-        require_in_stack=True,
-    )
-    if target.resolution is not None:
-        note = format_resolution_note(target.resolution)
-        if note:
-            print(note, file=sys.stderr)
+    target = _resolve_in_stack(cwd, changeish, settings=settings, branch=branch, gerrit=gerrit)
     change_id = change_id_for_stack_sha(cwd, target.sha, settings=settings, gerrit=gerrit)
     if not change_id:
         raise GitError("target commit has no Change-Id; cannot set attention cursor")
@@ -226,18 +224,7 @@ def _resolve_target_sha(
     after_change_id: str | None = None
 
     if args.next_attention and rev_arg is not None:
-        after_target = resolve_stack_changeish(
-            cwd,
-            rev_arg,
-            settings=settings,
-            gerrit=gerrit,
-            branch=branch,
-            require_in_stack=True,
-        )
-        if after_target.resolution is not None:
-            note = format_resolution_note(after_target.resolution)
-            if note:
-                print(note, file=sys.stderr)
+        after_target = _resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
         after_change_id = change_id_for_stack_sha(cwd, after_target.sha, settings=settings, gerrit=gerrit)
         if not after_change_id:
             raise GitError("REV has no Change-Id; cannot use --next AFTER")
@@ -250,18 +237,7 @@ def _resolve_target_sha(
     elif rev_arg is None:
         mode = "resume"
     else:
-        target_res = resolve_stack_changeish(
-            cwd,
-            rev_arg,
-            settings=settings,
-            gerrit=gerrit,
-            branch=branch,
-            require_in_stack=True,
-        )
-        if target_res.resolution is not None:
-            note = format_resolution_note(target_res.resolution)
-            if note:
-                print(note, file=sys.stderr)
+        target_res = _resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
         change_id = change_id_for_stack_sha(cwd, target_res.sha, settings=settings, gerrit=gerrit)
         if change_id and branch is not None:
             write_branch_cursor(cwd, branch, change_id, action="set", sha=target_res.sha)
@@ -301,17 +277,11 @@ def _run_interactive_stack_rebase(
 
     if args.cursor_history:
         return _print_cursor_history(cwd)
+    if not _has_upstreams(cwd, settings, branch):
+        return int(ExitCode.ATTENTION)
     if args.cursor:
-        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-            return int(ExitCode.ATTENTION)
-        if not _require_stack_upstream(cwd, settings):
-            return int(ExitCode.ATTENTION)
         return _print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
     if args.set_cursor:
-        if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-            return int(ExitCode.ATTENTION)
-        if not _require_stack_upstream(cwd, settings):
-            return int(ExitCode.ATTENTION)
         return _set_cursor_from_changeish(cwd, args.set_cursor, settings=settings, branch=branch, gerrit=gerrit)
 
     action = args.action_override or default_action
@@ -323,11 +293,6 @@ def _run_interactive_stack_rebase(
         args.next_attention,
         action,
     )
-
-    if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-        return int(ExitCode.ATTENTION)
-    if not _require_stack_upstream(cwd, settings):
-        return int(ExitCode.ATTENTION)
 
     full = _resolve_target_sha(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)

@@ -19,10 +19,15 @@ from collections.abc import Callable
 from enum import IntEnum
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_style import init_color_mode, init_hyperlink_mode
+from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text, init_color_mode, init_hyperlink_mode
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.change_resolution import (
+    ChangeAmbiguousError,
+    ChangeResolutionError,
+    Resolution,
+    format_resolution_note,
+)
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
@@ -102,6 +107,18 @@ def run_cli_command(body: Callable[[], int]) -> int:
         raise
     finally:
         print_call_trace_summary()
+
+
+def print_note(note: str | None) -> None:
+    """Print a transparency note, dimmed, on stderr so stdout stays machine-readable."""
+    if note:
+        print(color_text(note, ANSI_DIM), file=sys.stderr)
+
+
+def print_resolution_note(resolution: Resolution | None) -> None:
+    """Print how *resolution* narrowed, when Gerrit was consulted and it did."""
+    if resolution is not None:
+        print_note(format_resolution_note(resolution))
 
 
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:

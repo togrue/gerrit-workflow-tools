@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
@@ -15,6 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    print_resolution_note,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.comment_chains import (
     CommentSelection,
     collect_comment_chains,
 )
-from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, format_resolution_note
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
@@ -67,13 +67,6 @@ def _context_padding_value(raw: str) -> int:
     if value < 0:
         raise argparse.ArgumentTypeError("context padding must be >= 0")
     return value
-
-
-def _print_resolution_note(resolution_note: str | None, *, use_color: bool) -> None:
-    if not resolution_note:
-        return
-    text = color_text(resolution_note, ANSI_DIM) if use_color else resolution_note
-    print(text, file=sys.stderr)
 
 
 def _gerrit_rest_key(commit: LogCommit, resolution: object) -> str | None:
@@ -294,7 +287,6 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     cwd, settings, summary_highlighter = init_cli_runtime(
         debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
     )
-    use_color = args.color != "never"
     out_fmt = _output_format(args)
     verbose_level = int(args.verbose)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
@@ -323,7 +315,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         raise ChangeResolutionError("no commits to show")
 
     for resolved in targets:
-        _print_resolution_note(format_resolution_note(resolved.resolution), use_color=use_color)
+        print_resolution_note(resolved.resolution)
 
     rows = [t.row for t in targets]
     commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=verbose_level >= 1)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
@@ -12,13 +11,12 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    print_resolution_note,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
-    format_resolution_note,
     resolve_changeish,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -56,13 +54,6 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _print_resolution_note(resolution_note: str | None, *, use_color: bool) -> None:
-    if not resolution_note:
-        return
-    text = color_text(resolution_note, ANSI_DIM) if use_color else resolution_note
-    print(text, file=sys.stderr)
-
-
 def _print_text_resolution(resolution: Resolution) -> None:
     if resolution.local_sha:
         print(f"local SHA: {resolution.local_sha}")
@@ -84,7 +75,6 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     cwd, settings, _summary_highlighter = init_cli_runtime(
         debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
     )
-    use_color = args.color != "never"
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     resolution = resolve_changeish(
@@ -97,7 +87,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if resolution.selected is None and resolution.kind == "change-id":
         raise ChangeResolutionError(f"Gerrit change not found for {args.changeish!r}")
 
-    _print_resolution_note(format_resolution_note(resolution), use_color=use_color)
+    print_resolution_note(resolution)
 
     if args.json_:
         print(json.dumps({"resolution": resolution.to_json_dict()}, indent=2))

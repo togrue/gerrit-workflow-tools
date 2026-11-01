@@ -13,10 +13,11 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
+    print_resolution_note,
     run_cli_command,
 )
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import format_resolution_note, resolve_stack_changeish
+from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git
 
@@ -138,10 +139,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     fixup_sha = target.sha
     logger.info("fixup target commit: %s", fixup_sha)
 
-    if target.resolution is not None:
-        note = format_resolution_note(target.resolution)
-        if note:
-            print(note, file=sys.stderr)
+    print_resolution_note(target.resolution)
 
     if (
         not args.commit_all

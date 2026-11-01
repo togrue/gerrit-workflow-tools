@@ -14,10 +14,11 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     configure_logging,
     cwd_from_env,
+    print_resolution_note,
     run_cli_command,
 )
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import format_resolution_note, resolve_stack_changeish
+from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target
@@ -118,10 +119,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         # this argument is the commit to rebase *from*, which normally sits below the stack.
         target = resolve_stack_changeish(cwd, args.rev, settings=settings, gerrit=gerrit, branch=branch)
         base = target.sha
-        if target.resolution is not None:
-            note = format_resolution_note(target.resolution)
-            if note:
-                print(note, file=sys.stderr)
+        print_resolution_note(target.resolution)
     else:
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
             return int(ExitCode.ATTENTION)

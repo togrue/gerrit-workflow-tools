@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 
+from gerrit_workflow_tools.cli_attention import require_stack_upstream
 from gerrit_workflow_tools.cli_common import (
     HELP_JSON,
     ExitCode,
@@ -14,6 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    print_note,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
@@ -27,16 +28,11 @@ from gerrit_workflow_tools.cli_style import (
     is_hyperlink_enabled,
     visible_len,
 )
-from gerrit_workflow_tools.core.annotated_stack import (
-    branches_needing_upstream,
-    load_annotated_stack,
-    resolve_rev_range,
-)
+from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
@@ -247,9 +243,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
 
     rev_range = resolve_rev_range(cwd, settings=settings, arg_rev_range=args.rev_range)
-    for branch in branches_needing_upstream(cwd, rev_range, settings=settings):
-        if not require_branch_upstream(cwd, branch, settings=settings):
-            return int(ExitCode.ATTENTION)
+    if not require_stack_upstream(cwd, settings, rev_range):
+        return int(ExitCode.ATTENTION)
 
     stack_view = load_annotated_stack(
         cwd,
@@ -273,12 +268,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         project=stack.project,
         web_base=settings.gerrit_web_url,
     )
-    use_color = args.color != "never"
     for commit in commits:
-        note = notes_by_sha.get(commit.sha)
-        if note:
-            text = color_text(note, ANSI_DIM) if use_color else note
-            print(text, file=sys.stderr)
+        print_note(notes_by_sha.get(commit.sha))
 
     visible = commits
     has_attention = any(c.attention_reasons for c in commits)

@@ -360,7 +360,7 @@ MAX_LINES = 400
 SIZE_BASELINE = {
     "cli_changeid.py": 408,
     "cli_push.py": 837,
-    "cli_show.py": 416,
+    "cli_show.py": 408,
     "core/gerrit/cache.py": 684,
     "core/gerrit/change_resolution.py": 462,
     "core/gerrit/rest.py": 824,
