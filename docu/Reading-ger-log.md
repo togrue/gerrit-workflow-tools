@@ -134,7 +134,7 @@ summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4
 
 | Part | Meaning |
 |------|---------|
-| `ready N/M` | **N** commits are push-ready or cleanly merged; **M** is total commits in range |
+| `ready N/M` | **N** commits sit below the ready boundary, the ones `ger push` would send; **M** is total commits in range |
 | `CI` | Count of commits with failed Verified / CI |
 | `comments` | Count of commits with unresolved comments |
 | `on-gerrit` | Count of commits that exist on Gerrit |

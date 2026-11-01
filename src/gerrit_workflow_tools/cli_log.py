@@ -34,6 +34,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
@@ -52,25 +53,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _build_summary(commits: list[LogCommit]) -> tuple[dict[str, int], int, int]:
-    """Return (per-category counts, ready count, total commits) for summary printing."""
+def _build_summary(commits: list[LogCommit]) -> dict[str, int]:
+    """Return per-category counts for summary printing."""
     counts: dict[str, int] = {
         "ci-failures": 0,
         Attention.UNRESOLVED_COMMENTS: 0,
         "on-gerrit": 0,
     }
-    ready = 0
-    total = len(commits)
     for c in commits:
-        if c.patchset_status in ("absent", "newer", "merged-same"):
-            ready += 1
         if c.pushed and Attention.CI_FAILED in c.attention_reasons:
             counts["ci-failures"] += 1
         if c.comments_unresolved > 0:
             counts[Attention.UNRESOLVED_COMMENTS] += 1
         if c.pushed:
             counts["on-gerrit"] += 1
-    return counts, ready, total
+    return counts
 
 
 def _format_summary_dashboard_line(
@@ -305,9 +302,17 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         summary_highlighter=summary_highlighter,
     )
 
-    summary, ready_n, total_n = _build_summary(commits)
+    # The same boundary `ger push` stops at, so the two commands cannot disagree.
+    blocked = blocked_shas_for_stack(
+        cwd,
+        project=stack.project,
+        commits=stack_view.rows,
+        stop_pattern=settings.stop_pattern,
+        settings=settings,
+        web_base=settings.gerrit_web_url,
+    )
     print()
-    print(_format_summary_dashboard_line(summary, ready_n, total_n))
+    print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
     return int(exit_code)
 
 

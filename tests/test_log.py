@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import Worktree
+from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.core.stack import commits_in_range
 from tests.change_store import ChangeStore
@@ -906,3 +907,17 @@ def test_log_and_show_report_wip_and_private(stack_repo: Path, monkeypatch: pyte
 
     _code, out, _err = run_cli(stack_repo, show_main, [rows[0].sha, "--json"], monkeypatch, gerrit=store)
     assert json.loads(out)["work_in_progress"] is True
+
+
+def test_log_ready_count_agrees_with_the_push_boundary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("commit", "--allow-empty", "-m", "no change id", cwd=stack_repo)
+    git("commit", "--allow-empty", "-m", "no change id either", cwd=stack_repo)
+    git("config", "gerrit.stopPattern", "^nothing-matches$", cwd=stack_repo)
+    rows = commits_in_range(stack_repo, "main..feature")
+    ready = compute_ready(stack_repo, stop_pattern="^nothing-matches$")
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
+
+    assert f"ready {ready.pushable_count}/{len(rows)}" in strip_ansi(out)
+    assert ready.pushable_count == len(rows) - 2
