@@ -251,9 +251,9 @@ def execute(
         return captured
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
-    if error or (reviewers is not None and not reviewers.ok):
-        return replace(captured, returncode=1, error_message=error, reviewers=reviewers)
-    return replace(captured, returncode=0, reviewers=reviewers, last_push_warning=_update_last_pushed(cwd, plan))
+    note = _update_last_pushed(cwd, plan)
+    failed = bool(error) or (reviewers is not None and not reviewers.ok)
+    return replace(captured, returncode=int(failed), error_message=error, reviewers=reviewers, last_push_warning=note)
 
 
 def _forget_pushed_changes(cwd: Path, plan: PushPlan, *, settings: Settings, gerrit: GerritRest | None) -> None:

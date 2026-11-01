@@ -16,6 +16,7 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import set_branch_config
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range
@@ -442,6 +443,35 @@ def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, mon
 
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=pushed)
     assert out.count("not-pushed") == 2 and "on-gerrit 2" in out
+
+
+def test_gpush_reviewer_failure_is_a_warning_and_still_records_the_push(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _RejectsAdds(ChangeStore):
+        def set_reviewers_batch(self, change_id: str, **_kw: object) -> dict[str, object]:
+            raise GerritApiError("Gerrit HTTP 400")
+
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []} for _ in rows])
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+
+    code, _out, err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["-y", "--reviewers", "nosuchuser", "--reviewer-strategy", "overwrite"],
+        monkeypatch,
+        gerrit=_RejectsAdds(details),
+    )
+
+    assert code == ExitCode.ATTENTION
+    assert "warning: pushed, but could not update reviewers" in err
+    assert "error:" not in err
+    assert ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
 def test_gpush_lazy_reaches_freshly_pushed_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

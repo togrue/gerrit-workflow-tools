@@ -117,8 +117,13 @@ def change_refs_for_commits(cwd: Path, commits: Sequence[Commit], *, settings: S
     return list(dict.fromkeys(triplets))
 
 
+def _not_applied(message: str) -> ReviewerApplyIssue:
+    """A warning, not an error: reviewers are applied after the push, which already succeeded."""
+    return ReviewerApplyIssue(level="warning", message=f"pushed, but {message}")
+
+
 def _apply_failed(message: str) -> ReviewerApplyResult:
-    return ReviewerApplyResult(ok=False, issues=[ReviewerApplyIssue(level="error", message=message)])
+    return ReviewerApplyResult(ok=False, issues=[_not_applied(message)])
 
 
 def apply_reviewer_strategy_after_push_service(
@@ -145,12 +150,12 @@ def apply_reviewer_strategy_after_push_service(
     for triplet in change_refs:
         detail = details_by_triplet.get(triplet)
         if detail is None:
-            issues.append(ReviewerApplyIssue(level="error", message=f"could not load change {triplet}"))
+            issues.append(_not_applied(f"could not load change {triplet}"))
             continue
 
         footer_change_id = parse(triplet).change_id
         if footer_change_id is None:
-            issues.append(ReviewerApplyIssue(level="error", message=f"not a Gerrit triplet: {triplet}"))
+            issues.append(_not_applied(f"not a Gerrit triplet: {triplet}"))
             continue
         existing = reviewer_accounts_from_change_info(detail)
         if strategy == ReviewerStrategy.LAZY and existing:
@@ -168,9 +173,7 @@ def apply_reviewer_strategy_after_push_service(
         try:
             service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
         except GerritApiError as error:
-            issues.append(
-                ReviewerApplyIssue(level="error", message=f"could not update reviewers on {triplet}: {error}")
-            )
+            issues.append(_not_applied(f"could not update reviewers on {triplet}: {error}"))
             continue
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 

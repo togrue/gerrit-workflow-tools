@@ -110,6 +110,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | Code | Meaning |
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
+| `1` | Push succeeded, but `lazy` / `overwrite` could not apply reviewers (printed as a warning) |
 | `1` | Nothing to push / config / non-interactive without `-y` |
 | other | `git push` exit code |
 

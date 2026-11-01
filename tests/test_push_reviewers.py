@@ -156,7 +156,8 @@ def test_rejected_reviewer_is_reported_per_change_and_every_change_is_tried() ->
     res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["x"], [triplet_a, triplet_b])
 
     assert res.ok is False
-    assert [issue.message.split(":")[0] for issue in res.issues] == [f"could not update reviewers on {triplet_a}"]
+    assert [issue.level for issue in res.issues] == ["warning"]
+    assert res.issues[0].message.startswith(f"pushed, but could not update reviewers on {triplet_a}")
     assert [outcome.change_id for outcome in res.outcomes] == [_cid("b")]
 
 
