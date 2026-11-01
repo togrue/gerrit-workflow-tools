@@ -9,6 +9,7 @@ import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Protocol, TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlencode
@@ -516,13 +517,13 @@ def _batch_ref_query(parsed: Changeish) -> str:
     return f"change:{batch_ref}" if batch_ref else resolve_change_ref(parsed.raw)
 
 
-def _ref_to_query(ref: str) -> str:
-    return _batch_ref_query(parse(ref))
-
-
 def _batch_query_limit(chunk: list[str]) -> int:
     """Allow room for the same Change-Id on multiple branches in one response."""
     return max(len(chunk) * 3 + 10, 25)
+
+
+def _any_change_query(change_ids: Iterable[str]) -> str:
+    return " OR ".join(f"change:{change_id}" for change_id in change_ids)
 
 
 def _chunk_to_query(chunk: list[str]) -> str:
@@ -531,44 +532,30 @@ def _chunk_to_query(chunk: list[str]) -> str:
     Branch disambiguation is client-side via :func:`alias_batch_fetch_results`.
     When project is unknown (non-triplet refs), fall back to bare ``change:I… OR …``.
     """
-    by_project: dict[str, list[str]] = {}
-    seen_per_project: dict[str, set[str]] = {}
-    bare_ids: list[str] = []
-    seen_bare: set[str] = set()
+    # Dicts rather than lists: one query names each change once, in first-seen order.
+    by_project: dict[str, dict[str, None]] = {}
+    bare_ids: dict[str, None] = {}
     other_exprs: list[str] = []
 
     for ref in chunk:
         parsed = parse(ref)
         if parsed.kind == "triplet":
-            project, change_id = parsed.project or "", parsed.change_id or ""
-            seen = seen_per_project.setdefault(project, set())
-            if change_id in seen:
-                continue
-            seen.add(change_id)
-            by_project.setdefault(project, []).append(change_id)
+            by_project.setdefault(parsed.project or "", {})[parsed.change_id or ""] = None
             continue
         num = parsed.as_batch_ref()
         if num is None:
             # Not a batch ref at all. Previously this raised GerritApiError, which the caller
             # caught only to degrade the whole chunk to per-change queries.
             other_exprs.append(_batch_ref_query(parsed))
-        elif num not in seen_bare:
-            seen_bare.add(num)
-            bare_ids.append(num)
+        else:
+            bare_ids[num] = None
 
     group_exprs: list[str] = []
     for project, change_ids in by_project.items():
-        if len(change_ids) == 1:
-            group_exprs.append(f"project:{project} change:{change_ids[0]}")
-        else:
-            inner = " OR ".join(f"change:{cid}" for cid in change_ids)
-            group_exprs.append(f"project:{project} ({inner})")
-
+        inner = _any_change_query(change_ids)
+        group_exprs.append(f"project:{project} ({inner})" if len(change_ids) > 1 else f"project:{project} {inner}")
     if bare_ids:
-        if len(bare_ids) == 1:
-            group_exprs.append(f"change:{bare_ids[0]}")
-        else:
-            group_exprs.append(" OR ".join(f"change:{cid}" for cid in bare_ids))
+        group_exprs.append(_any_change_query(bare_ids))
 
     return " OR ".join(group_exprs + other_exprs)
 
@@ -690,10 +677,7 @@ def _query_batch_with_halving(
                 )
             ]
         logger.warning("batched Gerrit query failed (%s), falling back per change", error)
-        rows: list[dict[str, Any]] = []
-        for ref in chunk:
-            rows.extend(leaf_rows(ref))
-        return rows
+        return [row for ref in chunk for row in leaf_rows(ref)]
 
 
 def _one_change_rows(client: GerritRest, ref: str) -> list[dict[str, Any]]:
@@ -706,21 +690,39 @@ def _one_change_rows(client: GerritRest, ref: str) -> list[dict[str, Any]]:
     return [one] if one else []
 
 
-def _query_change_chunk(client: GerritRest, chunk: list[str], opts: list[str]) -> list[dict[str, Any]]:
-    """Run one batched OR query. Empty means none exist — do not per-change fallback."""
-    return _query_batch_with_halving(
-        client,
-        chunk,
-        build_query=_chunk_to_query,
-        leaf_rows=lambda ref: _one_change_rows(client, ref),
-        opts=opts,
+def _query_in_chunks(
+    client: GerritRest,
+    refs: Iterable[str],
+    *,
+    build_query: Callable[[list[str]], str],
+    leaf_rows: Callable[[str], list[dict[str, Any]]],
+    opts: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Map Gerrit ``id`` to ChangeInfo for *refs*, batched in parallel under the URL budget.
+
+    An empty chunk result means none of its refs exist, so it takes no per-ref fallback.
+    """
+    chunks = _chunk_by_query_budget(list(dict.fromkeys(refs)), build_query)
+    out: dict[str, dict[str, Any]] = {}
+    jobs = [
+        partial(_query_batch_with_halving, client, chunk, build_query=build_query, leaf_rows=leaf_rows, opts=opts)
+        for chunk in chunks
+    ]
+    for rows in parallel_map(jobs):
+        _ingest_change_rows(out, rows)
+    return out
+
+
+def _query_change_refs(client: GerritRest, refs: list[str], opts: list[str]) -> dict[str, dict[str, Any]]:
+    return _query_in_chunks(
+        client, refs, build_query=_chunk_to_query, leaf_rows=partial(_one_change_rows, client), opts=opts
     )
 
 
 def query_single_change(client: GerritRest, ref: str) -> dict[str, Any] | None:
     """Query one Gerrit change by triplet or numeric id; raise on ambiguous multi-match."""
     try:
-        rows = client.query_changes(_ref_to_query(ref), n=5, options=list(LOG_QUERY_OPTIONS))
+        rows = client.query_changes(_batch_ref_query(parse(ref)), n=5, options=list(LOG_QUERY_OPTIONS))
     except GerritApiError as e:
         logger.warning("Gerrit query failed for %s: %s", ref, e)
         return None
@@ -759,32 +761,8 @@ def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]
     above the seam rather than on it — every implementation would otherwise have to repeat
     this. Mirrors :func:`batch_load_change_details`.
     """
-    out: dict[str, str] = {}
-    unique: list[str] = []
-    seen: set[str] = set()
-    for raw in refs:
-        if raw in seen:
-            continue
-        seen.add(raw)
-        unique.append(raw)
-
-    def _probe_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
-        def _job() -> list[dict[str, Any]]:
-            return _query_change_chunk(client, chunk, ["SKIP_DIFFSTAT"])
-
-        return _job
-
-    chunks = _chunk_by_query_budget(unique, _chunk_to_query)
-    rows_by_chunk = parallel_map(_probe_job(chunk) for chunk in chunks)
-    fetched: dict[str, dict[str, Any]] = {}
-    for rows in rows_by_chunk:
-        _ingest_change_rows(fetched, rows)
-    aliased = alias_batch_fetch_results(unique, fetched)
-    for key, payload in aliased.items():
-        token = change_freshness_key(payload)
-        if token:
-            out[key] = token
-    return out
+    aliased = alias_batch_fetch_results(refs, _query_change_refs(client, refs, ["SKIP_DIFFSTAT"]))
+    return {key: token for key, payload in aliased.items() if (token := change_freshness_key(payload))}
 
 
 def delta_changes_since(
@@ -807,11 +785,7 @@ def delta_changes_since(
     except GerritApiError as error:
         logger.warning("delta query failed for project:%s since:%s: %s", project, since, error)
         return [], False
-    if not rows:
-        return [], True
-    if rows[-1].get("_more_changes"):
-        return rows, False
-    return rows, True
+    return rows, not (rows and rows[-1].get("_more_changes"))
 
 
 def batch_load_change_details(client: GerritRest, refs: list[str]) -> dict[str, dict[str, Any]]:
@@ -820,26 +794,7 @@ def batch_load_change_details(client: GerritRest, refs: list[str]) -> dict[str, 
     Branch filtering is not applied in the query; callers use
     :func:`alias_batch_fetch_results` to bind requested target-branch triplets.
     """
-    out: dict[str, dict[str, Any]] = {}
-    seen: set[str] = set()
-    unique: list[str] = []
-    for ref in refs:
-        if ref not in seen:
-            seen.add(ref)
-            unique.append(ref)
-
-    opts = list(LOG_QUERY_OPTIONS)
-    chunks = _chunk_by_query_budget(unique, _chunk_to_query)
-
-    def _chunk_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
-        def _job() -> list[dict[str, Any]]:
-            return _query_change_chunk(client, chunk, opts)
-
-        return _job
-
-    for rows in parallel_map(_chunk_job(chunk) for chunk in chunks):
-        _ingest_change_rows(out, rows)
-    return out
+    return _query_change_refs(client, refs, list(LOG_QUERY_OPTIONS))
 
 
 def batch_load_changes_by_commit(
@@ -854,20 +809,7 @@ def batch_load_changes_by_commit(
     original query result. Two round trips for the whole inbox: the section
     query, then this follow-up — never a per-chain relation call.
     """
-    unique: list[str] = []
-    seen: set[str] = set()
-    for raw in shas:
-        key = raw.strip().lower()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        unique.append(key)
-    if not unique:
-        return {}
-
     opts = list(options) if options is not None else list(LOG_QUERY_OPTIONS)
-    chunks = _chunk_by_query_budget(unique, _commit_chunk_to_query)
-    out: dict[str, dict[str, Any]] = {}
 
     def _one_commit_rows(sha: str) -> list[dict[str, Any]]:
         try:
@@ -876,18 +818,7 @@ def batch_load_changes_by_commit(
             logger.warning("Gerrit query failed for commit:%s: %s", sha, error)
             return []
 
-    def _commit_job(chunk: list[str]) -> Callable[[], list[dict[str, Any]]]:
-        def _job() -> list[dict[str, Any]]:
-            return _query_batch_with_halving(
-                client,
-                chunk,
-                build_query=_commit_chunk_to_query,
-                leaf_rows=_one_commit_rows,
-                opts=opts,
-            )
-
-        return _job
-
-    for rows in parallel_map(_commit_job(chunk) for chunk in chunks):
-        _ingest_change_rows(out, rows)
-    return out
+    keys = (raw.strip().lower() for raw in shas)
+    return _query_in_chunks(
+        client, filter(None, keys), build_query=_commit_chunk_to_query, leaf_rows=_one_commit_rows, opts=opts
+    )

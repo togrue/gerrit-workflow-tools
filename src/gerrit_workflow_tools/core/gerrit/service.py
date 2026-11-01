@@ -6,6 +6,7 @@ import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,6 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
     HttpGerritRest,
-    alias_batch_fetch_results,
     batch_load_change_details,
     batch_load_changes_by_commit,
     change_id_for_gerrit_rest_path,
@@ -128,21 +128,6 @@ class GerritService:
             return change_ref
         ctx = ctx or self.stack_context()
         return build_triplet(ctx.project, ctx.push_branch, change_ref)
-
-    def _fetch_change_payloads(self, triplets: list[str]) -> dict[str, dict[str, Any]]:
-        """Batch-fetch ChangeInfo for *triplets* via project-scoped Change-Id OR.
-
-        Gerrit may return extra rows (same Change-Id on other branches); those are
-        kept under their ``id`` and aliased onto the requested target-branch keys.
-        """
-        fetched = batch_load_change_details(self.rest, triplets)
-        return alias_batch_fetch_results(triplets, fetched)
-
-    def _probe_changes_updated(self, triplets: list[str]) -> dict[str, str]:
-        return probe_changes_updated(self.rest, triplets)
-
-    def _fetch_delta(self, project: str, since: str) -> tuple[list[dict[str, Any]], bool]:
-        return delta_changes_since(self.rest, project, since)
 
     def fetch_gerrit_data(
         self,
@@ -409,31 +394,21 @@ class ChangeApi:
     def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
 
-        scope_key: str | None = None
-        fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]] | None = None
-        stack: StackContext | None = None
+        service = self._service
+        stack: StackContext | None
         try:
-            stack = self._service.stack_context()
-            scope_key = f"{self._service.cache.host}~{stack.project}"
-            project = stack.project
-
-            def _fetch_delta(since: str) -> tuple[list[dict[str, Any]], bool]:
-                return self._service._fetch_delta(project, since)
-
-            fetch_delta = _fetch_delta
+            stack = service.stack_context()
         except Exception:  # pylint: disable=broad-exception-caught
-            scope_key = None
-            fetch_delta = None
+            stack = None
 
-        triplets = [self._service.cache_key(ref, stack) for ref in change_ids]
-        return self._service.cache.load_changes(
-            triplets,
-            probe_updated=self._service._probe_changes_updated,
-            fetch_changes=self._service._fetch_change_payloads,
-            fetch_delta=fetch_delta,
-            scope_key=scope_key,
-            trust_window_seconds=self._service.trust_window_seconds,
-            refresh=self._service.refresh,
+        return service.cache.load_changes(
+            [service.cache_key(ref, stack) for ref in change_ids],
+            probe_updated=partial(probe_changes_updated, service.rest),
+            fetch_changes=partial(batch_load_change_details, service.rest),
+            fetch_delta=partial(delta_changes_since, service.rest, stack.project) if stack else None,
+            scope_key=f"{service.cache.host}~{stack.project}" if stack else None,
+            trust_window_seconds=service.trust_window_seconds,
+            refresh=service.refresh,
         )
 
     def set_reviewers(
@@ -454,24 +429,11 @@ class ChangeApi:
         cache_key = service.cache_key(change_id)
         calls: list[Callable[[], Any]] = []
         if add or ccs:
-            calls.append(self._set_reviewers_job(rest_ref, add or [], ccs or []))
-        for account_id in remove or []:
-            calls.append(self._delete_reviewer_job(rest_ref, account_id))
+            calls.append(partial(service.rest.set_reviewers_batch, rest_ref, reviewers=add or [], ccs=ccs or []))
+        calls.extend(partial(service.rest.delete_reviewer, rest_ref, account_id) for account_id in remove or [])
         service.cache.invalidate_changes([cache_key])
         parallel_map(calls)
         service.cache.upsert_changes({cache_key: service.rest.get_change(rest_ref)})
-
-    def _set_reviewers_job(self, change_id: str, reviewers: list[str], ccs: list[str]) -> Callable[[], Any]:
-        def _job() -> Any:
-            return self._service.rest.set_reviewers_batch(change_id, reviewers=reviewers, ccs=ccs)
-
-        return _job
-
-    def _delete_reviewer_job(self, change_id: str, account_id: int) -> Callable[[], Any]:
-        def _job() -> Any:
-            return self._service.rest.delete_reviewer(change_id, account_id)
-
-        return _job
 
 
 class CommentApi:
