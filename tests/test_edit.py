@@ -221,6 +221,14 @@ def test_gedit_cursor_needs_no_upstream_when_there_is_no_cursor(
     assert "attention cursor: (none)" in out
 
 
+def test_attention_walk_end_has_its_own_exit_code(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(stack_repo)))
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    assert code == ExitCode.NO_EDIT_ATTENTION
+    assert "no commit needs edit attention" in err
+
+
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
     from gerrit_workflow_tools.cli_common import ExitCode

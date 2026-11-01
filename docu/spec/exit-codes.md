@@ -16,6 +16,7 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | `7` | `GIT` | A git command failed |
 | `8` | `DUPLICATE_CHANGE_ID` | The same Change-Id appears on more than one local commit |
 | `9` | `MISSING_CHANGE_ID` | A local commit has no Change-Id footer |
+| `10` | `NO_EDIT_ATTENTION` | An attention walk (`ger edit`, `show` or `sha` with `-n` or first-attention targeting) has nothing left to visit |
 
 ## What is not remapped
 

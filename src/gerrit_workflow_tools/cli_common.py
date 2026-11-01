@@ -27,6 +27,7 @@ from gerrit_workflow_tools.cli_style import (
     init_color_mode,
     init_hyperlink_mode,
 )
+from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -82,6 +83,8 @@ class ExitCode(IntEnum):
     """The same Change-Id appears on more than one local commit."""
     MISSING_CHANGE_ID = 9
     """A local commit has no Change-Id footer."""
+    NO_EDIT_ATTENTION = 10
+    """An attention walk has nothing left to visit. Scripts loop until they see this."""
 
 
 # Ordered longest-subclass-first: ChangeAmbiguousError derives from ChangeResolutionError,
@@ -92,6 +95,7 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),
     (UnknownRevisionError, ExitCode.NOT_FOUND, "error"),
+    (NoEditAttentionError, ExitCode.NO_EDIT_ATTENTION, "error"),
     (GitError, ExitCode.GIT, "error"),
 )
 

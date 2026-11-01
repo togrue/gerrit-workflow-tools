@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import (
+    NoEditAttentionError,
     commit_needs_edit_attention,
     find_commit_by_change_id,
     first_commit_needing_edit_attention,
@@ -70,12 +71,10 @@ def resolve_first_edit_attention_sha(
     cwd: Path | str | None, *, settings: Settings, gerrit: object | None = None
 ) -> str:
     """Return full SHA of the oldest commit with unresolved comments or a failed build."""
-    from gerrit_workflow_tools.core.git_run import GitError
-
     stack_view = load_edit_attention_stack(cwd, settings=settings, gerrit=gerrit)
     target = first_commit_needing_edit_attention(stack_view.commits)
     if target is None:
-        raise GitError(_NO_EDIT_ATTENTION)
+        raise NoEditAttentionError(_NO_EDIT_ATTENTION)
     return target.sha
 
 
@@ -90,8 +89,6 @@ def resolve_edit_attention_commit(
     update_cursor: bool = True,
 ) -> tuple[LogCommit, list[str]]:
     """Resolve an edit-attention target and optionally advance the attention cursor."""
-    from gerrit_workflow_tools.core.git_run import GitError
-
     stack_view = load_edit_attention_stack(cwd, settings=settings, gerrit=gerrit)
     notes: list[str] = []
     cursor_change_id: str | None = None
@@ -114,7 +111,7 @@ def resolve_edit_attention_commit(
         after_change_id=after_change_id,
     )
     if target is None:
-        raise GitError(_NO_EDIT_ATTENTION)
+        raise NoEditAttentionError(_NO_EDIT_ATTENTION)
 
     if update_cursor and target.change_id and branch is not None:
         write_branch_cursor(cwd, branch, target.change_id, action=mode, sha=target.sha)

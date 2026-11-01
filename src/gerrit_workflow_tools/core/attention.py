@@ -13,6 +13,11 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.git_run import GitError
+
+
+class NoEditAttentionError(GitError):
+    """An attention walk found nothing to do: the normal end of a walk, not a git failure."""
 
 
 class Attention:  # pylint: disable=too-few-public-methods
