@@ -238,7 +238,6 @@ class GerritCache:
 
     def clear(self) -> None:
         """Delete all cached API payloads while keeping schema metadata."""
-
         with self._connect() as conn:
             for table in _DATA_TABLES:
                 conn.execute(f"DELETE FROM {table}")
@@ -559,13 +558,14 @@ class GerritCache:
                 connection.executemany(insert, rows)
 
     def invalidate_changes(self, triplets: list[str]) -> None:
-        """Drop cached change, comment, and checks rows for *triplets*."""
-
+        """Drop cached change, comment, checks and "no such change" rows for *triplets*."""
         if not triplets:
             return
         with self._connect() as conn:
             for table in ("changes", *_FOLLOW_UP_KEYS):
                 conn.execute(f"DELETE FROM {table} WHERE change_id IN ({_placeholders(triplets)})", triplets)
+            for triplet in triplets:
+                self._clear_missing(conn, _footer_from_triplet(triplet))
 
     def _load_follow_up(
         self,

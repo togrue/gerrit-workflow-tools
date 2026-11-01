@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config import set_branch_config
@@ -425,6 +426,43 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     )
     assert code == 0
     assert any(" assigned " in ln and "r=alice" in ln for ln in out.splitlines())
+
+
+def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
+    commits = commits_in_range(stack_repo, "main..feature")[:2]
+    code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
+    assert "not-pushed" in out
+
+    pushed = ChangeStore(build_details_by_change_id(commits))
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=pushed)
+    assert code == 0
+
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=pushed)
+    assert out.count("not-pushed") == 2 and "on-gerrit 2" in out
+
+
+def test_gpush_lazy_reaches_freshly_pushed_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The post-push reviewer pass must not read the pre-push "no such change" verdict."""
+    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "gerrit.user", "testuser", cwd=stack_repo)
+    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    commits = commits_in_range(stack_repo, "main..feature")[:2]
+    run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
+    details = build_details_by_change_id(commits, per_index_overrides=[{"reviewers": []}, {"reviewers": []}])
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, _out, err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["-y", "--reviewers", "alice", "--reviewer-strategy", "lazy"],
+        monkeypatch,
+        gerrit=ChangeStore(details),
+    )
+    assert code == 0, err
+    assert "could not load change" not in err
 
 
 def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(

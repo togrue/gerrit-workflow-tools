@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -10,9 +11,10 @@ from typing import Any
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
@@ -247,10 +249,22 @@ def execute(
     )
     if not push_ok:
         return captured
+    _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
     if error or (reviewers is not None and not reviewers.ok):
         return replace(captured, returncode=1, error_message=error, reviewers=reviewers)
     return replace(captured, returncode=0, reviewers=reviewers, last_push_warning=_update_last_pushed(cwd, plan))
+
+
+def _forget_pushed_changes(cwd: Path, plan: PushPlan, *, settings: Settings, gerrit: GerritRest | None) -> None:
+    """Drop what the cache knows about the pushed changes, "no such change" verdicts included.
+
+    A failure here must not turn a successful push into a failed one.
+    """
+    with contextlib.suppress(ValueError, OSError, sqlite3.Error, ChangeResolutionError):
+        web_base = gerrit.web_base if gerrit is not None else resolve_gerrit_web_base(settings)
+        refs = change_refs_for_commits(cwd, plan.commits, settings=settings)
+        GerritCache.for_web_base(web_base).invalidate_changes(refs)
 
 
 def _ready(
