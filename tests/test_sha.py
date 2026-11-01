@@ -19,13 +19,13 @@ def test_gsha_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "REV_RANGE" in out
 
 
-def test_gsha_invalid_rev_range_returns_git_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gsha_invalid_rev_range_returns_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, err = run_cli(
         stack_repo,
         gsha_main,
         ["--range", "not-a-real-revision", _cid("1")],
         monkeypatch,
     )
-    assert code == ExitCode.GIT
+    assert code == ExitCode.NOT_FOUND
     assert out == ""
     assert "error:" in err.lower()

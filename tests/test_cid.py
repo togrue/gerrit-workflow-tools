@@ -214,7 +214,7 @@ def test_gcid_invalid_ref(gcid_cli_repo, monkeypatch):
         ["not-a-valid-ref-99999999"],
         monkeypatch,
     )
-    assert code == ExitCode.GIT
+    assert code == ExitCode.NOT_FOUND
     assert out == ""
     assert "git" in err.lower() or "unknown" in err.lower() or err.strip()
 
@@ -349,7 +349,7 @@ def test_gcid_string_that_is_not_change_id_tries_git(gcid_cli_repo, monkeypatch)
     """Too-short I… is not passthrough; git log fails for unknown object."""
     bad = "I" + "a" * 39
     code, out, _err = run_cli(gcid_cli_repo, gcid_main, [bad], monkeypatch)
-    assert code == ExitCode.GIT
+    assert code == ExitCode.NOT_FOUND
     assert out == ""
 
 

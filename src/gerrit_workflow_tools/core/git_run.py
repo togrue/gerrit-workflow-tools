@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import time
 from functools import lru_cache
@@ -37,6 +38,8 @@ _HEAD_IDENTITY_SUBCOMMANDS = frozenset(
 # `git branch` flags that rename a branch or change its upstream.
 _BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move", "-u", "--unset-upstream", "-t", "--track"})
 
+_UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
+
 # `git config` flags that only read. Anything else may write, and upstream config is stack context.
 _CONFIG_READ_FLAGS = frozenset(
     {"-l", "--list", "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--show-origin", "--show-scope"}
@@ -54,6 +57,15 @@ class GitError(RuntimeError):
     def __str__(self) -> str:
         detail = self.stderr.strip()
         return f"{self.args[0]}\n{detail}" if detail else str(self.args[0])
+
+
+class UnknownRevisionError(GitError):
+    """Git could not resolve a revision the user named."""
+
+
+def is_unknown_revision(stderr: str) -> bool:
+    """Whether *stderr* from a revision-reading git command says the revision does not exist."""
+    return isinstance(stderr, str) and _UNKNOWN_REVISION_RE.search(stderr) is not None
 
 
 def _clear_semantic_snapshots() -> None:
@@ -138,7 +150,8 @@ def _raise_if_failed(
     check: bool,
 ) -> None:
     if check and p.returncode != 0:
-        raise GitError(
+        unknown = args[0] in ("rev-parse", "log") and is_unknown_revision(p.stderr)
+        raise (UnknownRevisionError if unknown else GitError)(
             f"git {' '.join(args)} failed: {p.stderr.strip() or p.stdout.strip()}",
             stderr=p.stderr,
             returncode=p.returncode,

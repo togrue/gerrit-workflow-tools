@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.config import Settings, set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
     ger_push_mode,
@@ -336,7 +336,7 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Setting
         try:
             git_out("rev-parse", "--verify", branch_arg, cwd=cwd)
         except GitError as exc:
-            raise GitError(f"branch {branch_arg!r} not found") from exc
+            raise UnknownRevisionError(f"branch {branch_arg!r} not found") from exc
         return branch_arg
     branch = resolve_working_branch(cwd, settings=settings)
     if branch is None:
@@ -565,7 +565,8 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 
 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
-    args = _build_arg_parser().parse_args(argv)
+    parser = _build_arg_parser()
+    args = parser.parse_args(argv)
     cwd, settings, _summary_highlighter = init_cli_runtime(args)
     logger.debug(
         "gpush cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
@@ -583,8 +584,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         args.reviewer_strategy,
     )
     if args.i and args.yes:
-        print("error: -i cannot be used with --yes (-y)", file=sys.stderr)
-        return 1
+        parser.error("-i cannot be used with --yes (-y)")
     if args.i and not stdin_is_terminal():
         print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
         return 1

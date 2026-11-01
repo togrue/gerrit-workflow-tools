@@ -9,7 +9,7 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | `0` | `OK` | Success |
 | `1` | `ATTENTION` | Ran fine, but something wants you: unresolved comments, failed CI, or you declined a prompt. **Not a failure.** |
 | `2` | `USAGE` | Bad arguments or invalid input format. Also what argparse itself exits with. |
-| `3` | `NOT_FOUND` | A changeish or Change-Id resolved to nothing |
+| `3` | `NOT_FOUND` | A changeish, Change-Id or git revision resolved to nothing |
 | `4` | `AMBIGUOUS` | Several candidates survived narrowing; `--json` lists them under `alternatives` |
 | `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable |
 | `6` | `CONFIG` | Required git configuration is missing (`gerrit.webUrl`, credentials) |

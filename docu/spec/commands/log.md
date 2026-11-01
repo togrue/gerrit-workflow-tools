@@ -59,8 +59,9 @@ Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when co
 |------|---------|
 | `0` | No commit requires attention |
 | `1` | At least one commit requires attention |
-| `2` | Invalid usage / range error |
-| `3` | Gerrit API error |
+| `2` | Invalid usage |
+| `3` | A revision in the range does not exist |
+| `5` | Gerrit API error |
 
 Attention rules: shared `determine_attention()` in `core/attention.py` (same family as `ger edit --first-attention-commit`). The trailing hints are a rendering of `attention_reasons`, so a project attention strategy changes both. `ci-failed` means a failed Checks run or `Verified <= -1`.
 

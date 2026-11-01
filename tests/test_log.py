@@ -301,7 +301,7 @@ def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     code, out, err = run_cli(stack_repo, log_main, ["not-a-real-revision"], monkeypatch)
-    assert code == ExitCode.GIT
+    assert code == ExitCode.NOT_FOUND
     assert out == ""
     assert "error:" in err.lower()
 

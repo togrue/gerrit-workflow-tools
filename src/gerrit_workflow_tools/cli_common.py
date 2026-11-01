@@ -36,7 +36,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_resolution_note,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
-from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -69,7 +69,7 @@ class ExitCode(IntEnum):
     user declining a prompt. Not a failure."""
     USAGE = 2
     NOT_FOUND = 3
-    """A changeish or Change-Id resolved to nothing."""
+    """A changeish, Change-Id or git revision resolved to nothing."""
     AMBIGUOUS = 4
     """Several candidates survived narrowing."""
     GERRIT = 5
@@ -91,6 +91,7 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),
+    (UnknownRevisionError, ExitCode.NOT_FOUND, "error"),
     (GitError, ExitCode.GIT, "error"),
 )
 

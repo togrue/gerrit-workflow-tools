@@ -205,7 +205,7 @@ def test_gpush_branch_flag_pushes_specified_branch(stack_repo: Path, monkeypatch
 
 def test_gpush_branch_flag_unknown_branch_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, gpush_main, ["--branch", "no-such-branch", "--dry-run"], monkeypatch)
-    assert code == ExitCode.GIT
+    assert code == ExitCode.NOT_FOUND
     assert "no-such-branch" in err
 
 
@@ -914,8 +914,8 @@ def test_gpush_interactive_requires_tty(stack_repo: Path, monkeypatch: pytest.Mo
 
 def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i", "--yes"], monkeypatch)
-    assert code == 1
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i", "--yes"], monkeypatch, catch_sys_exit=True)
+    assert code == ExitCode.USAGE
     assert "-i" in err
 
 

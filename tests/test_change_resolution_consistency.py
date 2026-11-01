@@ -7,11 +7,15 @@ instance lives in ``tests/integration/test_09_change_resolution.py``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_changeid import main as change_id_main
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
+from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
@@ -23,6 +27,25 @@ from tests.cli_gerrit_mocks import (
 )
 from tests.conftest import json_stdout, run_cli
 from tests.fixtures import _cid
+
+
+@pytest.mark.parametrize(
+    ("main_fn", "argv"),
+    [
+        (log_main, ["nosuch..HEAD"]),
+        (change_id_main, ["nosuch"]),
+        (push_main, ["--dry-run", "nosuch"]),
+        (push_main, ["--dry-run", "--branch", "nosuch"]),
+        (gshow_main, ["nosuch"]),
+        (resolve_main, ["nosuch"]),
+    ],
+)
+def test_every_command_exits_the_same_way_on_an_unknown_revision(
+    main_fn: Callable[..., int], argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    code, _out, _err = run_cli(stack_repo, main_fn, argv, monkeypatch)
+    assert code == ExitCode.NOT_FOUND
 
 
 def _configure_web(repo: Path) -> None:
