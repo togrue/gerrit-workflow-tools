@@ -586,7 +586,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.i and args.yes:
         print("error: -i cannot be used with --yes (-y)", file=sys.stderr)
         return 1
-    if args.i and not sys.stdin.isatty():
+    if args.i and not stdin_is_terminal():
         print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
         return 1
 
