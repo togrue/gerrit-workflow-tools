@@ -52,7 +52,7 @@ _MERGED_REASON = {
 
 def _settled_reasons(commit: LogCommit, *, chain_blocked: bool) -> list[str] | None:
     """Reasons for a commit with no open review to judge, or ``None`` when it has one."""
-    if not commit.change_id:
+    if not commit.change_id and commit.patchset_status != PatchsetStatus.MERGED_SAME:
         # Prefer missing-change-id over only not-pushed: overlay cannot match Gerrit without a footer.
         return [Attention.MISSING_CHANGE_ID]
     if commit.abandoned:

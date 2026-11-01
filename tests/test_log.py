@@ -935,3 +935,18 @@ def test_log_does_not_show_old_votes_on_a_rewritten_commit(stack_repo: Path, mon
     tip = json.loads(out)["commits"][-1]
     assert tip["patchset_status"] == "newer"
     assert (tip["verified"], tip["code_review"], tip["submittable"]) == (None, None, False)
+
+
+def test_log_range_on_the_target_branch_is_not_reported_as_unpushed(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("update-ref", "refs/remotes/origin/main", "feature~1", cwd=stack_repo)
+
+    _code, out, _err = run_cli(
+        stack_repo, log_main, ["feature~3..feature~1", "--json"], monkeypatch, gerrit=ChangeStore({})
+    )
+
+    commits = json.loads(out)["commits"]
+    assert len(commits) == 2
+    assert {c["patchset_status"] for c in commits} == {"merged-same"}
+    assert not any("not-pushed" in c["attention_reasons"] for c in commits)

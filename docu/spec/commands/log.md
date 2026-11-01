@@ -16,7 +16,7 @@ Compact overview of the local commit chain vs Gerrit (CI, votes, unresolved comm
 ger log [options] [REV_RANGE]
 ```
 
-`REV_RANGE` — optional (e.g. `origin/main..HEAD`). Default: `branch@{upstream}..branch` when upstream exists; otherwise error with hint to set upstream (`git branch --set-upstream-to=…`). On a TTY, `ger log` may prompt via `ensure_branch_upstream_interactive`.
+`REV_RANGE` — optional (e.g. `origin/main..HEAD`). Commits the upstream already contains and Gerrit has no change for count as merged (`m`), not as `not-pushed`. Default: `branch@{upstream}..branch` when upstream exists; otherwise error with hint to set upstream (`git branch --set-upstream-to=…`). On a TTY, `ger log` may prompt via `ensure_branch_upstream_interactive`.
 
 ### Change resolution
 
