@@ -146,6 +146,7 @@ def _prompt_gerrit_push_confirm_action() -> str:
             "reviewers": "reviewers",
         },
         hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
+        on_eof="cancel",
     )
 
 
@@ -347,9 +348,7 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Setting
 
 
 def _session_strategy(args: argparse.Namespace) -> ReviewerStrategy | None:
-    if args.reviewer_strategy:
-        return ReviewerStrategy(args.reviewer_strategy)
-    return None
+    return ReviewerStrategy(args.reviewer_strategy) if args.reviewer_strategy else None
 
 
 def _apply_interactive_line(

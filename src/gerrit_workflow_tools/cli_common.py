@@ -131,10 +131,19 @@ def print_resolution_note(resolution: Resolution | None) -> None:
         print_note(format_resolution_note(resolution))
 
 
-def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = None) -> _T:
-    """Ask until the lower-cased reply is a key of *answers*; return what it maps to."""
+def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = None, on_eof: _T | None = None) -> _T:
+    """Ask until the lower-cased reply is a key of *answers*; return what it maps to.
+
+    End of input or Ctrl-C returns *on_eof* when one is given, and otherwise propagates.
+    """
     while True:
-        reply = input(prompt).strip().lower()
+        try:
+            reply = input(prompt).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            if on_eof is None:
+                raise
+            print()
+            return on_eof
         if reply in answers:
             return answers[reply]
         if hint:
@@ -144,7 +153,8 @@ def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = Non
 def confirm(question: str, *, default: bool) -> bool:
     """Ask a yes/no *question*. Enter takes *default*; anything else unknown asks again."""
     suffix = "[Y/n]" if default else "[y/N]"
-    return ask_choice(f"{question} {suffix}: ", {"y": True, "yes": True, "n": False, "no": False, "": default})
+    answers = {"y": True, "yes": True, "n": False, "no": False, "": default}
+    return ask_choice(f"{question} {suffix}: ", answers, on_eof=False)
 
 
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:

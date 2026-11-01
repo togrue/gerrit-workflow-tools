@@ -274,6 +274,25 @@ def test_gpush_i_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeyp
     assert "-i requires an interactive terminal" in err
 
 
+@pytest.mark.parametrize("interrupt", [EOFError, KeyboardInterrupt])
+def test_gpush_end_of_input_at_the_prompt_cancels(
+    interrupt: type[BaseException], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _input(_prompt: str = "") -> str:
+        raise interrupt
+
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr("builtins.input", _input)
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+
+    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+
+    assert code == 0
+    assert "Push cancelled." in err
+    mock_run.assert_not_called()
+
+
 def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock()
