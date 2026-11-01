@@ -149,6 +149,30 @@ def test_resolve_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Gerrit change: #120005" in out
 
 
+@pytest.mark.parametrize(
+    ("changeish", "message"),
+    [
+        ("http://evil.example/c/testproj/+/120005", "not on the configured Gerrit host"),
+        ("https://g.example/c/otherproj/+/120005", "names project 'otherproj'"),
+        ("refs/changes/99/120005/1", "lives under refs/changes/05/"),
+        ("refs/changes/05/120005/99", "has no patch set 99"),
+        ("change: 120005", "invalid change number"),
+        ("change:0", "invalid change number"),
+        ("change:-1", "invalid change number"),
+    ],
+)
+def test_resolve_refuses_an_address_that_cannot_be_right(
+    changeish: str, message: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_resolve_repo(stack_repo)
+    ch = _detail(change_id=CID_URL, sha=git_out("rev-parse", "HEAD~1", cwd=stack_repo), number=120005)
+    code, _out, err = run_cli(
+        stack_repo, resolve_main, [changeish], monkeypatch, gerrit=ChangeStore({str(ch["id"]): ch})
+    )
+    assert code == ExitCode.NOT_FOUND
+    assert message in err
+
+
 def test_resolve_query(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_resolve_repo(stack_repo)
     cid = CID_QUERY

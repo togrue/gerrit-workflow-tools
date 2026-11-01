@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 ChangeishKind = Literal[
@@ -39,8 +39,8 @@ ChangeishKind = Literal[
 # uppercase hex and so called a Change-Id valid for `ger push` invalid for `ger change-id`.
 CHANGE_ID_RE = re.compile(r"^[iI][0-9a-fA-F]{40}$")
 
-_CHANGE_REF_RE = re.compile(r"^refs/changes/\d+/\d+/\d+$")
-_GERRIT_URL_CHANGE_RE = re.compile(r"/c/(?:[^/]+/)?\+/(\d+)")
+_CHANGE_REF_RE = re.compile(r"^refs/changes/\d+/(\d+)/(\d+)$")
+_GERRIT_URL_CHANGE_RE = re.compile(r"/c/(?:(?P<project>.+)/)?\+/(?P<number>\d+)")
 _DIGITS_RE = re.compile(r"^\d+$")
 
 _GIT_REV_PREFIXES = ("rev:", "git:")
@@ -87,14 +87,15 @@ def _split_triplet(s: str) -> tuple[str, str, str] | None:
     return project, branch, change_id
 
 
-def _change_number_from_url(url: str) -> str | None:
-    """Extract the change number from a Gerrit change URL, or ``None`` when it has none."""
+def _url_target(url: str) -> tuple[str | None, str | None]:
+    """``(number, project)`` from a Gerrit change URL; either is ``None`` when it has none."""
     match = _GERRIT_URL_CHANGE_RE.search(url)
     if match:
-        return match.group(1)
+        project = match.group("project")
+        return match.group("number"), unquote(project) if project else None
     path = urlparse(url).path or ""
     tail = path.rstrip("/").split("/")[-1]
-    return tail if tail.isdigit() else None
+    return (tail if tail.isdigit() else None), None
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,8 @@ class Changeish:
     the prefix, digits or not — validating it is the caller's job, as it always was."""
     query: str | None = None
     rev: str | None = None
+    patchset: int | None = None
+    """The patch set a ``change-ref`` names."""
 
     @property
     def triplet(self) -> str | None:
@@ -140,6 +143,19 @@ class Changeish:
         return None
 
 
+def address_problem(parsed: Changeish, *, web_base: str | None) -> str | None:
+    """Why *parsed* cannot be the address it looks like, or ``None`` when it can be."""
+    if parsed.kind == "change-ref" and parsed.number is not None:
+        shard = parsed.number[-2:].zfill(2)
+        if parsed.raw.split("/")[2] != shard:
+            return f"invalid change ref {parsed.raw!r}: change {parsed.number} lives under refs/changes/{shard}/"
+    if parsed.kind == "url" and web_base:
+        host, own_host = urlparse(parsed.raw).hostname, urlparse(web_base).hostname
+        if host and own_host and host.lower() != own_host.lower():
+            return f"{parsed.raw!r} is not on the configured Gerrit host {own_host}"
+    return None
+
+
 def parse(s: str) -> Changeish:
     """Parse *s* into a :class:`Changeish`. Total — anything unrecognized is a ``git-rev``.
 
@@ -153,17 +169,18 @@ def parse(s: str) -> Changeish:
         return Changeish(raw=raw, kind="git-rev", rev=_strip_prefix(raw, _GIT_REV_PREFIXES))
 
     if lower.startswith(_CHANGE_NUMBER_PREFIXES):
-        return Changeish(raw=raw, kind="change-number", number=_strip_prefix(raw, _CHANGE_NUMBER_PREFIXES))
+        return Changeish(raw=raw, kind="change-number", number=raw.split(":", 1)[1])
 
     if lower.startswith(_QUERY_PREFIX):
         return Changeish(raw=raw, kind="query", query=_strip_prefix(raw, _QUERY_PREFIX))
 
     if raw.startswith(("http://", "https://")):
-        return Changeish(raw=raw, kind="url", number=_change_number_from_url(raw))
+        number, project = _url_target(raw)
+        return Changeish(raw=raw, kind="url", number=number, project=project)
 
-    if _CHANGE_REF_RE.fullmatch(raw):
-        # The pattern already guarantees the shape, so the number is always present.
-        return Changeish(raw=raw, kind="change-ref", number=raw.split("/")[3])
+    change_ref = _CHANGE_REF_RE.fullmatch(raw)
+    if change_ref:
+        return Changeish(raw=raw, kind="change-ref", number=change_ref[1], patchset=int(change_ref[2]))
 
     triplet = _split_triplet(raw)
     if triplet is not None:

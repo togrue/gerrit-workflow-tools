@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
+from gerrit_workflow_tools.core.changeish import Changeish
 from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount, reviewer_accounts_from_change_info
 
@@ -213,6 +214,15 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     freshness: str | None = None
     work_in_progress: bool = False
     private: bool = False
+
+    def contradicts(self, parsed: Changeish) -> str | None:
+        """Why this change is not the one *parsed* addressed, or ``None`` when it is."""
+        if parsed.kind == "url" and parsed.project and self.project and parsed.project != self.project:
+            return f"{parsed.raw!r} names project {parsed.project!r}, but change {self.number} is in {self.project!r}"
+        patchsets = [revision.number for revision in self.revisions.values() if revision.number is not None]
+        if parsed.patchset and patchsets and parsed.patchset > max(patchsets):
+            return f"change {self.number} has no patch set {parsed.patchset}"
+        return None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> ChangeView:

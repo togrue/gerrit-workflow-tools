@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
-from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, Changeish, ChangeishKind, parse
+from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, Changeish, ChangeishKind, address_problem, parse
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
@@ -119,11 +120,7 @@ class Resolution:
 
 
 def parse_changeish(s: str) -> Changeish:
-    """Parse *s*, rejecting blank input.
-
-    The grammar itself is total (see :func:`gerrit_workflow_tools.core.changeish.parse`);
-    refusing an empty changeish is a resolution decision, so it lives here.
-    """
+    """Parse *s*, rejecting blank input: the grammar itself is total."""
     parsed = parse(s)
     if not parsed.raw:
         raise ChangeResolutionError("empty changeish")
@@ -229,12 +226,14 @@ def resolution_from_change_rows(
     )
 
 
-def _fetch_unique_row(parsed: Changeish, client: GerritRest) -> dict[str, Any]:
+def _fetch_unique_row(parsed: Changeish, client: GerritRest, *, web_base: str | None) -> dict[str, Any]:
     """Fetch the one ChangeInfo a directly-addressed changeish names.
 
     Triplet, change number, ``refs/changes/…`` ref, URL and query all name exactly one change
     and differ only in how the address is spelled — which the grammar has already worked out.
     """
+    if problem := address_problem(parsed, web_base=web_base):
+        raise ChangeResolutionError(problem)
     if parsed.kind == "triplet":
         return _fetch_change_row(client, parsed.raw)
 
@@ -244,11 +243,14 @@ def _fetch_unique_row(parsed: Changeish, client: GerritRest) -> dict[str, Any]:
         return _fetch_single_from_query(client, parsed.query)
 
     number = parsed.number
-    if parsed.kind == "change-number" and not (number and number.isdigit()):
+    if parsed.kind == "change-number" and not (number and number.isdigit() and int(number) > 0):
         raise ChangeResolutionError(f"invalid change number: {parsed.raw!r}")
     if number is None:
         raise ChangeResolutionError(f"cannot parse Gerrit change number from URL: {parsed.raw!r}")
-    return _fetch_change_row(client, number)
+    row = _fetch_change_row(client, number)
+    if problem := ChangeView.from_payload(row).contradicts(parsed):
+        raise ChangeResolutionError(problem)
+    return row
 
 
 def resolve_changeish(
@@ -286,7 +288,8 @@ def resolve_changeish(
             raise
         return _narrow_matches(resolution, rows, push_branch=stack.push_branch, explicit_target=explicit_target)
 
-    resolution.selected = SelectedChange.from_change_row(_fetch_unique_row(parsed, client))
+    row = _fetch_unique_row(parsed, client, web_base=settings.gerrit_web_url or client.web_base)
+    resolution.selected = SelectedChange.from_change_row(row)
     resolution.selected_reason = "unique"
     return resolution
 
@@ -404,9 +407,6 @@ def resolve_stack_changeish(
     """Resolve *ref* to a stack commit the way every stack-rewriting command should.
 
     The single entry point for ``ger fix``, ``ger edit``, ``ger reword`` and ``ger rebase``.
-    They used to differ in how they built the Gerrit implementation, which kinds they thought
-    needed one, whether a failure was a resolution error or a git error, and whether the
-    **resolution note** was printed at all.
 
     Pass *gerrit* to supply an implementation; otherwise one is built from *settings* — but
     only on the paths that need it, so ``gerrit.webUrl`` stays irrelevant to a purely local

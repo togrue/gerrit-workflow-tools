@@ -118,11 +118,9 @@ def test_url_change_number(url: str, expected: str | None) -> None:
     assert parse(url).number == expected
 
 
-def test_nested_project_url_misparses() -> None:
-    """Known wrong, and preserved deliberately: the pattern allows only one path segment
-    before ``/+/``, so a nested project falls through to the URL tail. Pre-existing — this
-    module moved the rule without changing it. Fixing it is a behaviour change of its own."""
-    assert parse("https://gerrit.example.com/c/group/sub/+/120045/2").number == "2"
+def test_nested_project_url() -> None:
+    parsed = parse("https://gerrit.example.com/c/group/sub/+/120045/2")
+    assert (parsed.number, parsed.project) == ("120045", "group/sub")
 
 
 def test_explicit_prefix_beats_shape() -> None:

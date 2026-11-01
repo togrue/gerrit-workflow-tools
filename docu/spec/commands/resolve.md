@@ -18,6 +18,8 @@ ger resolve <CHANGEISH> [--json]
 
 `CHANGEISH` — same shared grammar as every other resolving command (git ref, Change-Id, triplet, `change:<n>`, `refs/changes/…`, URL, `q:…`). Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
+An address that cannot be right exits `3`: a URL for another host or project, a `refs/changes/…` ref with the wrong shard or a patch set the change does not have, or a `change:` value that is not a positive number with no space after the colon.
+
 ---
 
 ## Output
