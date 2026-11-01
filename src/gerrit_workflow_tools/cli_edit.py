@@ -115,6 +115,10 @@ def _set_cursor_from_changeish(
     change_id = change_id_for_stack_sha(cwd, target.sha, settings=settings, gerrit=gerrit)
     if not change_id:
         raise GitError("target commit has no Change-Id; cannot set attention cursor")
+    current = load_branch_cursor(settings, branch)
+    if current is not None and current.change_id == change_id:
+        print(f"attention cursor already at {change_id}")
+        return 0
     write_branch_cursor(cwd, branch, change_id, action="set", sha=target.sha)
     print(f"attention cursor set to {change_id}")
     return 0

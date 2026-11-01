@@ -229,6 +229,19 @@ def test_attention_walk_end_has_its_own_exit_code(stack_repo: Path, monkeypatch:
     assert "no commit needs edit attention" in err
 
 
+def test_set_cursor_twice_records_one_history_entry(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    run_cli(stack_repo, gedit_main, ["--set-cursor", rows[0].sha], monkeypatch, gerrit=store)
+    _code, out, _err = run_cli(stack_repo, gedit_main, ["--set-cursor", rows[0].sha], monkeypatch, gerrit=store)
+
+    assert "already at" in out
+    _code, out, _err = run_cli(stack_repo, gedit_main, ["--cursor-history"], monkeypatch, gerrit=store)
+    assert len(out.splitlines()) == 1
+
+
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
     from gerrit_workflow_tools.cli_common import ExitCode
