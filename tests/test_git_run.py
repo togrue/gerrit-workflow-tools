@@ -37,6 +37,15 @@ def test_git_output_is_decoded_as_utf8_whatever_the_locale(tmp_path: Path) -> No
         assert git("log", "-1", "--format=%s", cwd=repo, check=False).stdout.strip() == "feat: ünï ✓ 日本"
 
 
+def test_git_error_prints_git_stderr_once_without_its_hint(tmp_path: Path) -> None:
+    git("init", "-b", "main", cwd=tmp_path)
+    with pytest.raises(GitError) as raised:
+        git("rev-parse", "nosuch", cwd=tmp_path)
+    text = str(raised.value)
+    assert text.count("ambiguous argument") == 1
+    assert "Use '--'" not in text
+
+
 def test_rev_parse_cached(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

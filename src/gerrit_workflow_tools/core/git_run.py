@@ -56,7 +56,9 @@ class GitError(RuntimeError):
 
     def __str__(self) -> str:
         detail = self.stderr.strip()
-        return f"{self.args[0]}\n{detail}" if detail else str(self.args[0])
+        if not detail or detail.splitlines()[0] in str(self.args[0]):
+            return str(self.args[0])
+        return f"{self.args[0]}\n{detail}"
 
 
 class UnknownRevisionError(GitError):
@@ -152,7 +154,7 @@ def _raise_if_failed(
     if check and p.returncode != 0:
         unknown = args[0] in ("rev-parse", "log") and is_unknown_revision(p.stderr)
         raise (UnknownRevisionError if unknown else GitError)(
-            f"git {' '.join(args)} failed: {p.stderr.strip() or p.stdout.strip()}",
+            f"git {' '.join(args)} failed: {(p.stderr.strip() or p.stdout.strip()).partition(chr(10))[0]}",
             stderr=p.stderr,
             returncode=p.returncode,
         )

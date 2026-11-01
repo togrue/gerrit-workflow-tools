@@ -139,7 +139,7 @@ def _resolve_local_sha(cwd: Path | str | None, rev: str) -> str:
     try:
         return git_out("rev-parse", rev, cwd=cwd)
     except GitError as e:
-        raise ChangeResolutionError(f"cannot resolve git revision {rev!r}: {e}") from e
+        raise ChangeResolutionError(f"cannot resolve git revision {rev!r}") from e
 
 
 def _fetch_change_row(client: GerritRest, change_key: str) -> dict[str, Any]:
