@@ -177,4 +177,10 @@ def apply_reviewer_strategy_after_push_service(
             continue
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
-    return ReviewerApplyResult(ok=not issues, issues=issues, outcomes=outcomes)
+    ok = not issues
+    if strategy == ReviewerStrategy.LAZY and ok and not any(outcome.reviewers_assigned for outcome in outcomes):
+        names = ", ".join(reviewers)
+        issues.append(
+            ReviewerApplyIssue("warning", f"every change already has reviewers; {names} not added or checked")
+        )
+    return ReviewerApplyResult(ok=ok, issues=issues, outcomes=outcomes)

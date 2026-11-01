@@ -189,3 +189,15 @@ def test_overwrite_does_not_remove_a_reviewer_it_was_asked_to_keep() -> None:
 
     assert res.ok is True
     service.changes.set_reviewers.assert_called_once_with(triplet, add=["admin"], remove=[7])
+
+
+def test_lazy_says_so_when_it_skipped_every_change() -> None:
+    triplet = _triplet(_cid("a"))
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {triplet: {"reviewers": {"REVIEWER": [{"username": "admin"}]}}}
+
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.LAZY, ["nosuchuser"], [triplet])
+
+    assert res.ok is True
+    assert [issue.level for issue in res.issues] == ["warning"]
+    assert "nosuchuser not added or checked" in res.issues[0].message
