@@ -2,27 +2,20 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache, resolve_tier_callables
+from gerrit_workflow_tools.core.ger_registry import ExtensionRegistry
 from gerrit_workflow_tools.core.stack import Commit
 
 
-logger = logging.getLogger(__name__)
-
-_DOMAIN = "reviewers"
-_PACKAGE = "ger_reviewers"
+_REGISTRY = ExtensionRegistry("reviewers", "ger_reviewers", label="reviewer defaults")
 
 ReviewerDefaultsStrategy = Callable[..., list[str]]
 
 
-def clear_reviewers_strategy_cache() -> None:
-    """Drop loaded reviewers registry modules (tests)."""
-
-    clear_extension_registry_cache(package_prefix=_PACKAGE)
+clear_reviewers_strategy_cache = _REGISTRY.clear_cache
 
 
 def default_reviewers_via_registry(
@@ -36,28 +29,8 @@ def default_reviewers_via_registry(
 ) -> list[str] | None:
     """Return registry-provided reviewers, or ``None`` to fall back to branch config."""
 
-    tiers = resolve_tier_callables(
-        cwd,
-        project,
-        domain=_DOMAIN,
-        package_name=_PACKAGE,
-        settings=settings,
-        web_base=web_base,
-    )
-    if tiers[0] is None and tiers[1] is None:
-        return None
+    def _invoke(strategy: ReviewerDefaultsStrategy) -> list[str] | None:
+        raw = strategy(branch=branch, commits=commits, settings=settings)
+        return [str(name).strip() for name in raw if str(name).strip()]
 
-    for tier, strategy in (("local", tiers[0]), ("global", tiers[1])):
-        if strategy is None:
-            continue
-        try:
-            raw = strategy(branch=branch, commits=commits, settings=settings)
-            return [str(name).strip() for name in raw if str(name).strip()]
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.warning(
-                "reviewer defaults %s strategy for %r failed: %s; trying next tier",
-                tier,
-                project,
-                exc,
-            )
-    return None
+    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=lambda: None, settings=settings, web_base=web_base)

@@ -9,11 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.ger_registry import (
-    clear_extension_registry_cache,
-    resolve_tier_callables,
-    run_registry_callables,
-)
+from gerrit_workflow_tools.core.ger_registry import ExtensionRegistry
 from gerrit_workflow_tools.core.stack import Commit
 
 
@@ -21,8 +17,9 @@ if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
 
-_DOMAIN = "ready"
-_PACKAGE = "ger_ready"
+_REGISTRY = ExtensionRegistry("ready", "ger_ready", label="ready boundary")
+
+clear_ready_strategy_cache = _REGISTRY.clear_cache
 
 
 @dataclass(frozen=True)
@@ -92,12 +89,6 @@ def blocked_shas_for_stack(
     return frozenset(row.sha for row in commits[boundary.block_index :])
 
 
-def clear_ready_strategy_cache() -> None:
-    """Drop loaded ready registry modules (tests)."""
-
-    clear_extension_registry_cache(package_prefix=_PACKAGE)
-
-
 def find_ready_boundary_via_registry(
     cwd: Path | str | None,
     *,
@@ -110,25 +101,10 @@ def find_ready_boundary_via_registry(
 ) -> BoundaryResult:
     """Apply local, then global, then built-in ready-boundary rules."""
 
-    tiers = resolve_tier_callables(
-        cwd,
-        project,
-        domain=_DOMAIN,
-        package_name=_PACKAGE,
-        settings=settings,
-        web_base=web_base,
-    )
-
     def _invoke(strategy: ReadyBoundaryStrategy) -> BoundaryResult:
         return strategy(commits=commits, stop_pattern=stop_pattern, overlay=overlay)
 
     def _builtin() -> BoundaryResult:
         return default_find_ready_boundary(commits=commits, stop_pattern=stop_pattern, overlay=overlay)
 
-    return run_registry_callables(
-        tiers,
-        invoke=_invoke,
-        builtin=_builtin,
-        label="ready boundary",
-        project=project,
-    )
+    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)

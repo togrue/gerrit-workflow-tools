@@ -8,20 +8,16 @@ from typing import Any, overload
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiStrategy
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.ger_registry import (
-    clear_extension_registry_cache,
-    local_domain_dir,
-    resolve_tier_callables,
-    run_registry_callables,
-)
+from gerrit_workflow_tools.core.ger_registry import ExtensionRegistry
 from gerrit_workflow_tools.core.gerrit_message_parsing import (
     ci_links_from_build_failed_messages,
     ci_links_from_failed_checks,
 )
 
 
-_DOMAIN = "ci"
-_PACKAGE = "ger_ci"
+_REGISTRY = ExtensionRegistry("ci", "ger_ci", label="CI links")
+
+clear_ci_strategy_cache = _REGISTRY.clear_cache
 
 
 class LazyRows(Sequence[Mapping[str, Any]]):
@@ -54,19 +50,6 @@ class LazyRows(Sequence[Mapping[str, Any]]):
 
     def __getitem__(self, index: int | slice) -> Mapping[str, Any] | Sequence[Mapping[str, Any]]:
         return self._materialized()[index]
-
-
-def ger_ci_dir(cwd: Path | str | None, *, settings: Settings | None = None) -> Path | None:
-    """Return ``<scriptsDir>/ci`` when ``registry.py`` exists there (default scriptsDir: ``.ger``)."""
-
-    snap = settings if settings is not None else Settings.from_cwd(cwd)
-    return local_domain_dir(cwd, snap.scripts_dir, _DOMAIN)
-
-
-def clear_ci_strategy_cache() -> None:
-    """Drop loaded CI registry modules (tests)."""
-
-    clear_extension_registry_cache(package_prefix=_PACKAGE)
 
 
 def default_extract_ci_links(
@@ -103,15 +86,6 @@ def extract_ci_links_via_registry(
 
     from gerrit_workflow_tools.core.ci_links import apply_ci_strategy, prefer_checks_links
 
-    tiers = resolve_tier_callables(
-        cwd,
-        project,
-        domain=_DOMAIN,
-        package_name=_PACKAGE,
-        settings=settings,
-        web_base=web_base,
-    )
-
     def _invoke(strategy: CiStrategy) -> list[CiLink]:
         return apply_ci_strategy(strategy, project=project, checks=checks, messages=messages)
 
@@ -124,13 +98,7 @@ def extract_ci_links_via_registry(
         )
         return prefer_checks_links(raw)
 
-    return run_registry_callables(
-        tiers,
-        invoke=_invoke,
-        builtin=_builtin,
-        label="CI links",
-        project=project,
-    )
+    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
 
 
 __all__ = [
@@ -138,5 +106,4 @@ __all__ = [
     "clear_ci_strategy_cache",
     "default_extract_ci_links",
     "extract_ci_links_via_registry",
-    "ger_ci_dir",
 ]

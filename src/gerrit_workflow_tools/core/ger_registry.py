@@ -17,6 +17,7 @@ import importlib.util
 import logging
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any, TypeVar
@@ -95,7 +96,7 @@ def clear_extension_registry_cache(*, package_prefix: str | None = None) -> None
             del sys.modules[key]
 
 
-def _load_registry_module(domain_dir: Path, package_name: str, *, strict: bool) -> ModuleType | None:
+def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | None:
     """Import ``registry.py`` from *domain_dir* once per absolute path."""
 
     registry = domain_dir / "registry.py"
@@ -105,20 +106,15 @@ def _load_registry_module(domain_dir: Path, package_name: str, *, strict: bool) 
         cache_key = f"{package_name}:{registry}"
     if cache_key in _MODULE_CACHE:
         cached = _MODULE_CACHE[cache_key]
-        if cached is None and strict:
+        if cached is None:
             raise RegistryLoadError(f"failed to load strategy registry {registry}")
         return cached
     if not registry.is_file():
         _MODULE_CACHE[cache_key] = None
         return None
 
-    if package_name not in sys.modules:
-        pkg = ModuleType(package_name)
-        pkg.__path__ = [str(domain_dir)]  # type: ignore[attr-defined]
-        sys.modules[package_name] = pkg
-    else:
-        pkg = sys.modules[package_name]
-        pkg.__path__ = [str(domain_dir)]  # type: ignore[attr-defined]
+    pkg = sys.modules.setdefault(package_name, ModuleType(package_name))
+    pkg.__path__ = [str(domain_dir)]  # type: ignore[attr-defined]
 
     module_name = f"{package_name}.registry"
     if module_name in sys.modules:
@@ -127,9 +123,7 @@ def _load_registry_module(domain_dir: Path, package_name: str, *, strict: bool) 
     spec = importlib.util.spec_from_file_location(module_name, registry)
     if spec is None or spec.loader is None:
         _MODULE_CACHE[cache_key] = None
-        if strict:
-            raise RegistryLoadError(f"failed to load strategy registry {registry}")
-        return None
+        raise RegistryLoadError(f"failed to load strategy registry {registry}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     try:
@@ -137,18 +131,13 @@ def _load_registry_module(domain_dir: Path, package_name: str, *, strict: bool) 
     except Exception as exc:
         sys.modules.pop(module_name, None)
         _MODULE_CACHE[cache_key] = None
-        if strict:
-            raise RegistryLoadError(f"failed to load strategy registry {registry}: {exc}") from exc
-        logger.warning("failed to load strategy registry %s: %s", registry, exc)
-        return None
+        raise RegistryLoadError(f"failed to load strategy registry {registry}: {exc}") from exc
     _MODULE_CACHE[cache_key] = module
     return module
 
 
 def _as_callable(value: Any) -> Callable[..., Any] | None:
-    if callable(value):
-        return value
-    return None
+    return value if callable(value) else None
 
 
 def _callable_from_module(
@@ -189,31 +178,16 @@ def resolve_tier_callables(
     snap = settings if settings is not None else Settings.from_cwd(cwd)
     host_base = web_base if web_base is not None else snap.gerrit_web_url
 
-    local_callable: Callable[..., Any] | None = None
-    local_dir = local_domain_dir(cwd, snap.scripts_dir, domain)
-    if local_dir is not None:
-        module = _load_registry_module(local_dir, package_name, strict=True)
-        if module is not None:
-            local_callable = _callable_from_module(
-                module,
-                project,
-                strategies_attr=strategies_attr,
-                getter_attr=getter_attr,
-            )
+    def _tier_callable(domain_dir: Path | None) -> Callable[..., Any] | None:
+        module = _load_registry_module(domain_dir, package_name) if domain_dir is not None else None
+        if module is None:
+            return None
+        return _callable_from_module(module, project, strategies_attr=strategies_attr, getter_attr=getter_attr)
 
-    global_callable: Callable[..., Any] | None = None
-    global_dir = global_domain_dir(host_base, domain)
-    if global_dir is not None:
-        module = _load_registry_module(global_dir, package_name, strict=True)
-        if module is not None:
-            global_callable = _callable_from_module(
-                module,
-                project,
-                strategies_attr=strategies_attr,
-                getter_attr=getter_attr,
-            )
-
-    return local_callable, global_callable
+    return (
+        _tier_callable(local_domain_dir(cwd, snap.scripts_dir, domain)),
+        _tier_callable(global_domain_dir(host_base, domain)),
+    )
 
 
 def resolve_registry_callable(
@@ -239,9 +213,7 @@ def resolve_registry_callable(
         strategies_attr=strategies_attr,
         getter_attr=getter_attr,
     )
-    if local_callable is not None:
-        return local_callable
-    return global_callable
+    return local_callable if local_callable is not None else global_callable
 
 
 def run_registry_callables(
@@ -268,3 +240,41 @@ def run_registry_callables(
                 exc,
             )
     return builtin()
+
+
+@dataclass(frozen=True)
+class ExtensionRegistry:
+    """One ``.ger/<domain>/`` registry: where its strategies load from and how they run."""
+
+    domain: str
+    package_name: str
+    label: str
+    strategies_attr: str = "STRATEGIES"
+    getter_attr: str = "get_strategy"
+
+    def run(
+        self,
+        cwd: Path | str | None,
+        project: str,
+        *,
+        invoke: Callable[[Callable[..., Any]], T],
+        builtin: Callable[[], T],
+        settings: Settings | None = None,
+        web_base: str | None = None,
+    ) -> T:
+        """*invoke* the local, then the global strategy for *project*, else *builtin*."""
+        tiers = resolve_tier_callables(
+            cwd,
+            project,
+            domain=self.domain,
+            package_name=self.package_name,
+            settings=settings,
+            web_base=web_base,
+            strategies_attr=self.strategies_attr,
+            getter_attr=self.getter_attr,
+        )
+        return run_registry_callables(tiers, invoke=invoke, builtin=builtin, label=self.label, project=project)
+
+    def clear_cache(self) -> None:
+        """Drop this registry's loaded modules (tests)."""
+        clear_extension_registry_cache(package_prefix=self.package_name)
