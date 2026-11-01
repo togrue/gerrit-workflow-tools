@@ -1,27 +1,8 @@
 """CLI for inspecting and validating commit Change-Ids."""
 
-# gerrit change-id command (gcid)
-# Return a Change-Id for a commit or range of commits.
-# The Change-Id is taken from the last non-empty line when it matches "Change-Id: I…".
-
-# Implementation
-# Identify if the supplied argument is a valid Change-Id.
-# If it is, output the Change-Id.
-# Else normalize the revision with ``git rev-parse --verify`` (each side of ``..`` / ``...``), then run one
-# ``git log`` over the revision or range (RS-delimited %H / %B: :func:`stack.git_log_sha_body`).
-# Parse each commit message (last non-empty line must be the Change-Id footer; see
-# :func:`change_id.parse_change_id_footer` for extraction and `validate_change_id_value` for the verdict).
-# If the Change-Id is not found, output an error message.
-# If the Change-Id is found, output the Change-Id.
-# With ``--start-at-remote``, log ``upstream_tip..END``
-# (same stack base as ``ger log`` default: :func:`stack.rev_spec_stack_base_to_end`).
-# ``--check`` always scans the full current stack (``upstream_tip..HEAD``): exits 0 if all footers
-# are valid and unique, ``MISSING_CHANGE_ID`` if a footer is missing/invalid, ``DUPLICATE_CHANGE_ID``
-# on duplicates. A ``REV_OR_RANGE`` with ``--check`` is a usage error.
-
 import argparse
 import sys
-from dataclasses import dataclass
+from collections.abc import Iterable
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -34,54 +15,25 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, init_hyperlink_mode
 from gerrit_workflow_tools.core.change_id import (
-    CHANGE_ID_FOOTER_RE,
+    ChangeIdIssueKind,
+    ChangeIdRow,
     append_change_id_footer,
+    classify_issues,
     extract_valid_change_id,
     generate_change_id_from_idents,
-    parse_change_id_footer,
     strip_change_id_lines,
-    validate_change_id_value,
 )
 from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git
+from gerrit_workflow_tools.core.git_state import current_branch, git_dir
 from gerrit_workflow_tools.core.stack import (
-    git_log_sha_body,
-    parse_git_log_sha_body_rs,
+    Commit,
+    read_commit_rows,
+    read_rewrite_rows,
     rev_spec_stack_base_to_end,
 )
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
-
-
-# Re-export for tests and backwards compatibility.
-
-CHANGE_ID_RE = CHANGE_ID_FOOTER_RE
-
-_parse_sha_body_rs = parse_git_log_sha_body_rs
-
-
-def resolve_gcid_user_arg(cwd: Path | str, arg: str) -> str:
-    """Return *arg* as a ``git log`` revision/range with minimal normalization.
-
-    We intentionally avoid pre-parsing revsets here and defer interpretation to
-    ``git log`` itself so behavior matches normal Git as closely as possible.
-    """
-    del cwd  # kept for API compatibility
-    s = arg.strip()
-    if not s:
-        raise GitError(
-            "git log failed: empty revision",
-            stderr="",
-            returncode=-1,
-        )
-    return s
-
-
-def _gcid_log_single_commit(rev_spec: str) -> bool:
-    """True if *rev_spec* is a single revision (one ``git log -1``), not a range."""
-    if "..." in rev_spec:
-        return False
-    return ".." not in rev_spec
 
 
 class ChangeIdError(Exception):
@@ -92,145 +44,57 @@ class ChangeIdError(Exception):
         self.code = code
 
 
+def _audit_change_ids(commits: Iterable[Commit]) -> None:
+    """Raise :class:`ChangeIdError` for the first missing, malformed or duplicate Change-Id."""
+    issues, _exit = classify_issues(ChangeIdRow(c.sha, c.short_sha, c.change_id) for c in commits)
+    if issues:
+        issue = issues[0]
+        duplicate = issue.kind == ChangeIdIssueKind.DUPLICATE
+        raise ChangeIdError(
+            f"error: commit {color_short_sha(issue.short_sha)}: {issue.detail}",
+            code=int(ExitCode.DUPLICATE_CHANGE_ID if duplicate else ExitCode.MISSING_CHANGE_ID),
+        )
+
+
 def check_stack_change_ids(cwd) -> None:
     """Raise :class:`ChangeIdError` when the current stack has missing/invalid/duplicate Change-Ids.
 
     Always scans ``upstream_tip..HEAD`` (the full local stack).
     """
-    rev_spec = rev_spec_stack_base_to_end(cwd, "HEAD")
-    raw = git_log_sha_body(cwd, rev_spec, single=False)
+    _audit_change_ids(read_commit_rows(cwd, rev_spec_stack_base_to_end(cwd, "HEAD")))
 
-    pairs = parse_git_log_sha_body_rs(raw)
-    seen: dict[str, str] = {}
-    for sha, msg in pairs:
-        cid = _require_change_id(sha, msg)
-        if cid in seen:
-            short = sha[:8]
-            first = seen[cid][:8]
-            raise ChangeIdError(
-                f"error: duplicate Change-Id {cid} (commit {color_short_sha(short)}, also on {color_short_sha(first)})",
-                code=int(ExitCode.DUPLICATE_CHANGE_ID),
-            )
-        seen[cid] = sha
+
+def _rev_arg(arg: str) -> str:
+    """*arg* as a ``git log`` revision or range, left for git itself to interpret."""
+    rev = arg.strip()
+    if not rev:
+        raise GitError("git log failed: empty revision", stderr="", returncode=-1)
+    return rev
 
 
 def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
     """Print Change-Ids for one commit or a revision range resolved from user input."""
-
-    resolved = resolve_gcid_user_arg(cwd, input_arg)
+    rev = _rev_arg(input_arg)
     if use_remote:
-        rev_spec = rev_spec_stack_base_to_end(cwd, resolved)
-        raw = git_log_sha_body(cwd, rev_spec, single=False)
+        rows = read_commit_rows(cwd, rev_spec_stack_base_to_end(cwd, rev))
+    elif ".." in rev:
+        rows = read_commit_rows(cwd, rev)
     else:
-        raw = git_log_sha_body(cwd, resolved, single=_gcid_log_single_commit(resolved))
-
-    pairs = parse_git_log_sha_body_rs(raw)
-    for sha, msg in pairs:
-        print(_require_change_id(sha, msg))
-
-
-def _require_change_id(sha: str, msg: str) -> str:
-    """Return the commit's Change-Id, distinguishing a malformed footer from a missing one."""
-    raw = parse_change_id_footer(msg)
-    valid, malformed = validate_change_id_value(raw)
-    if valid:
-        assert raw is not None
-        return raw
-    if malformed:
-        # Same reason as missing -- no usable Change-Id -- but say which, since a garbage
-        # footer needs a different fix from an absent one.
-        raise ChangeIdError(
-            f"error: invalid Change-Id {raw!r} in commit {color_short_sha(sha)}",
-            code=int(ExitCode.MISSING_CHANGE_ID),
-        )
-    raise ChangeIdError(
-        f"error: no Change-Id found in commit {color_short_sha(sha)}",
-        code=int(ExitCode.MISSING_CHANGE_ID),
-    )
+        rows = read_commit_rows(cwd, "-1", rev)
+    for row in rows:
+        _audit_change_ids([row])
+        print(row.change_id)
 
 
 def _ensure_safe_for_fix(cwd: Path) -> None:
     """Block --fix during merge/rebase; uncommitted changes are fine (message-only rewrite)."""
-    merge_head = git("rev-parse", "--verify", "MERGE_HEAD", cwd=cwd, check=False)
-    if merge_head.returncode == 0:
+    if commit_sha_or_none(cwd, "MERGE_HEAD"):
         raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=int(ExitCode.USAGE))
-
-    git_dir = git("rev-parse", "--git-dir", cwd=cwd, check=False)
-    if git_dir.returncode != 0:
-        raise GitError("git rev-parse --git-dir failed", stderr=git_dir.stderr, returncode=git_dir.returncode)
-    git_dir_path = Path(git_dir.stdout.strip())
-    if not git_dir_path.is_absolute():
-        git_dir_path = cwd / git_dir_path
-    if (git_dir_path / "rebase-merge").exists() or (git_dir_path / "rebase-apply").exists():
+    repo_dir = git_dir(cwd)
+    if repo_dir is None:
+        raise GitError("git rev-parse --git-dir failed")
+    if (repo_dir / "rebase-merge").exists() or (repo_dir / "rebase-apply").exists():
         raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
-
-
-@dataclass(frozen=True)
-class _RewriteCommit:
-    """One stack commit with everything needed for a message-only ``commit-tree`` rewrite."""
-
-    sha: str
-    tree: str
-    parents: tuple[str, ...]
-    subject: str
-    body: str
-    ident_env: dict[str, str]
-    committer_ident: str
-
-
-def _load_rewrite_commits(cwd: Path, rev_spec: str) -> list[_RewriteCommit]:
-    """Oldest-first commits in *rev_spec* with tree/parents/idents in one ``git log``."""
-    # %ad/%cd are raw "unix_ts tz" when --date=raw (matches commit object / Change-Id hook).
-    fmt = "%H%x1e%T%x1e%P%x1e%an%x1e%ae%x1e%ad%x1e%cn%x1e%ce%x1e%cd%x1e%s%x1e%B%x1e"
-    p = git(
-        "log",
-        "--reverse",
-        "--date=raw",
-        rev_spec,
-        f"--format={fmt}",
-        cwd=cwd,
-        check=False,
-    )
-    if p.returncode != 0:
-        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
-
-    # %B may contain newlines but not RS; each record ends with RS so split gives
-    # [H, T, P, an, ae, ad, cn, ce, cd, s, B, H, T, ...]. Git also inserts a newline
-    # between commits, so the field after RS may start with \\n (and a trailing \\n
-    # after the final RS yields an empty last field). Keep empty mid-record fields
-    # (root commits have empty %P).
-    fields = [f.lstrip("\n") for f in p.stdout.split("\x1e")]
-    while fields and fields[-1] == "":
-        fields.pop()
-    if len(fields) % 11 != 0:
-        raise GitError(
-            f"git log returned unexpected field count {len(fields)} (not divisible by 11)",
-            stderr=p.stdout[:200],
-            returncode=1,
-        )
-    rows: list[_RewriteCommit] = []
-    for i in range(0, len(fields), 11):
-        sha, tree, parents_s, an, ae, ad, cn, ce, cd, subject, body = fields[i : i + 11]
-        parents = tuple(parents_s.split()) if parents_s.strip() else ()
-        rows.append(
-            _RewriteCommit(
-                sha=sha,
-                tree=tree,
-                parents=parents,
-                subject=subject,
-                body=body,
-                ident_env={
-                    "GIT_AUTHOR_NAME": an,
-                    "GIT_AUTHOR_EMAIL": ae,
-                    "GIT_AUTHOR_DATE": ad,
-                    "GIT_COMMITTER_NAME": cn,
-                    "GIT_COMMITTER_EMAIL": ce,
-                    "GIT_COMMITTER_DATE": cd,
-                },
-                committer_ident=f"{cn} <{ce}> {cd}",
-            )
-        )
-    return rows
 
 
 def _commit_tree(cwd: Path, tree: str, parents: list[str], message: str, ident_env: dict[str, str]) -> str:
@@ -254,12 +118,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
         raise ChangeIdError("error: --fix needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE))
 
     _ensure_safe_for_fix(cwd)
-    resolved = resolve_gcid_user_arg(cwd, input_arg)
-    rev_spec = rev_spec_stack_base_to_end(cwd, resolved)
-    rows = _load_rewrite_commits(cwd, rev_spec)
-    if not rows:
-        return
-
+    rows = read_rewrite_rows(cwd, rev_spec_stack_base_to_end(cwd, _rev_arg(input_arg)))
     needs_fix = [c for c in rows if not extract_valid_change_id(c.body)]
     if not needs_fix:
         return
@@ -272,15 +131,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     total = len(needs_fix)
     fix_progress = {c.sha: (i, c.subject) for i, c in enumerate(needs_fix, start=1)}
 
-    head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
-    if head_ref_proc.returncode != 0:
-        raise GitError(
-            "git rev-parse --abbrev-ref HEAD failed",
-            stderr=head_ref_proc.stderr,
-            returncode=head_ref_proc.returncode,
-        )
-    head_ref = head_ref_proc.stdout.strip()
-
+    head_ref = current_branch(cwd)
     sha_map: dict[str, str] = {}
     new_head: str | None = None
     for commit in to_rewrite:
@@ -328,11 +179,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         needs_stack_upstream = bool(args.start_at_remote or args.check or args.fix)
         if needs_stack_upstream:
-            head_ref_proc = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
-            if head_ref_proc.returncode == 0:
-                branch = head_ref_proc.stdout.strip()
-                if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
-                    return 1
+            branch = current_branch(cwd)
+            if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
+                return 1
 
         if args.fix and args.check:
             raise ChangeIdError("error: --fix cannot be combined with --check", code=int(ExitCode.USAGE))

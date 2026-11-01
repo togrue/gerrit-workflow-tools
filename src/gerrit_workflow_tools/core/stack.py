@@ -161,55 +161,29 @@ def rev_spec_stack_base_to_end(
 # Field separator in `git log --format` (ASCII RS). Avoids NUL in argv (Windows
 # subprocess rejects embedded nulls); %x1e is expanded by git, not by the shell.
 _RS = "\x1e"
-# Git expands %x1e in --format; same RS style as :func:`commits_in_range`.
-_LOG_SHA_BODY_FMT = "%H%x1e%B%x1e"
-
-
-def parse_git_log_sha_body_rs(raw: str) -> list[tuple[str, str]]:
-    """Parse RS-delimited ``git log`` output with format ``%H%x1e%B%x1e`` (see :func:`git_log_sha_body`)."""
-    parts = raw.split(_RS)
-    while parts and parts[-1] == "":
-        parts.pop()
-    it = iter(parts)
-    return [(sha.strip(), msg) for sha, msg in zip(it, it, strict=False)]
-
-
-def git_log_sha_body(
-    cwd: Path | str | None,
-    rev_spec: str,
-    *,
-    single: bool,
-) -> str:
-    """One ``git log``; stdout is RS-delimited full SHA and raw body per commit."""
-    args: list[str] = ["log", f"--format={_LOG_SHA_BODY_FMT}"]
-    if single:
-        args.extend(["-1", rev_spec])
-    else:
-        args.append(rev_spec)
-    logger.debug("git_log_sha_body rev_spec=%r single=%s", rev_spec, single)
-    return git_out(*args, cwd=cwd)
-
-
-def _parse_rs_metadata_records(stdout: str) -> list[Commit]:
-    """Parse git log output from :func:`commits_in_range` format into :class:`Commit` rows."""
-    parts = stdout.split(_RS)
-    while parts and parts[-1] == "":
-        parts.pop()
-    it = iter(parts)
-    return [
-        Commit(
-            sha=sha.strip(),
-            short_sha=short_s.strip(),
-            subject=subj.strip(),
-            body=body.strip(),
-            change_id=parse_change_id_footer(body.strip()),
-        )
-        for sha, short_s, subj, body in zip(it, it, it, it, strict=False)
-    ]
-
-
-# Git expands %x1e to ASCII RS; keeps argv free of NUL (required on Windows).
 _COMMIT_ROW_FMT = "%H%x1e%h%x1e%s%x1e%B%x1e"
+# %ad/%cd are raw "unix_ts tz" under --date=raw (matches commit object / Change-Id hook).
+_REWRITE_ROW_FMT = "%H%x1e%T%x1e%P%x1e%an%x1e%ae%x1e%ad%x1e%cn%x1e%ce%x1e%cd%x1e%s%x1e%B%x1e"
+
+
+def _log_records(cwd: Path | str | None, fmt: str, width: int, *log_args: str) -> list[tuple[str, ...]]:
+    """One ``git log`` split into records of *width* fields each.
+
+    %B may contain newlines but not RS, and every record ends with RS, so the text after the
+    last RS is the only field to discard. Git puts a newline between commits, so a field after
+    RS may start with one. Empty mid-record fields stay: a root commit has an empty %P.
+    """
+    p = git("log", *log_args, f"--format={fmt}", cwd=cwd, check=False)
+    if p.returncode != 0:
+        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
+    fields = [part.lstrip("\n") for part in p.stdout.split(_RS)][:-1]
+    if len(fields) % width != 0:
+        raise GitError(
+            f"git log returned unexpected field count {len(fields)} (not divisible by {width})",
+            stderr=p.stdout[:200],
+            returncode=1,
+        )
+    return list(zip(*[iter(fields)] * width, strict=True))
 
 
 def read_commit_rows(cwd: Path | str | None, *log_args: str) -> list[Commit]:
@@ -218,10 +192,56 @@ def read_commit_rows(cwd: Path | str | None, *log_args: str) -> list[Commit]:
     The one commit reader: a single ``git log`` in ``git log`` order. Raises :class:`GitError`
     when git fails.
     """
-    p = git("log", *log_args, f"--format={_COMMIT_ROW_FMT}", cwd=cwd, check=False)
-    if p.returncode != 0:
-        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
-    return _parse_rs_metadata_records(p.stdout)
+    return [
+        Commit(
+            sha=sha.strip(),
+            short_sha=short_sha.strip(),
+            subject=subject.strip(),
+            body=body.strip(),
+            change_id=parse_change_id_footer(body.strip()),
+        )
+        for sha, short_sha, subject, body in _log_records(cwd, _COMMIT_ROW_FMT, 4, *log_args)
+    ]
+
+
+@dataclass(frozen=True)
+class RewriteCommit:
+    """One commit with everything a message-only ``commit-tree`` rewrite needs."""
+
+    sha: str
+    tree: str
+    parents: tuple[str, ...]
+    subject: str
+    body: str
+    ident_env: dict[str, str]
+    committer_ident: str
+
+
+def read_rewrite_rows(cwd: Path | str | None, rev_spec: str) -> list[RewriteCommit]:
+    """Oldest-first commits in *rev_spec* with tree, parents and idents, from one ``git log``."""
+    rows: list[RewriteCommit] = []
+    for sha, tree, parents, an, ae, ad, cn, ce, cd, subject, body in _log_records(
+        cwd, _REWRITE_ROW_FMT, 11, "--reverse", "--date=raw", rev_spec
+    ):
+        rows.append(
+            RewriteCommit(
+                sha=sha,
+                tree=tree,
+                parents=tuple(parents.split()),
+                subject=subject,
+                body=body,
+                ident_env={
+                    "GIT_AUTHOR_NAME": an,
+                    "GIT_AUTHOR_EMAIL": ae,
+                    "GIT_AUTHOR_DATE": ad,
+                    "GIT_COMMITTER_NAME": cn,
+                    "GIT_COMMITTER_EMAIL": ce,
+                    "GIT_COMMITTER_DATE": cd,
+                },
+                committer_ident=f"{cn} <{ce}> {cd}",
+            )
+        )
+    return rows
 
 
 def commits_in_range(

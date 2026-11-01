@@ -184,7 +184,6 @@ def test_no_private_names_imported_across_modules() -> None:
             # By design until cli_ger exposes a public registry accessor.
             "bash_completion_generator.py -> cli_ger.py:_ALIASES": "command registry",
             "bash_completion_generator.py -> cli_ger.py:_COMMANDS": "command registry",
-            # Backlog: "One commit reader".
         },
         "Promote the helper to a public name in its owning module (move it down a layer if needed). Never copy it.",
     )
@@ -208,9 +207,6 @@ CONCEPTS = [
         name="git log record separator (%x1e)",
         pattern=r"x1e",
         owners={"core/stack.py": "reads commit rows"},
-        debt={
-            "cli_changeid.py": "one commit reader",
-        },
         fix="Read commit rows through core/stack.py instead of formatting and splitting `git log` yourself.",
     ),
     Concept(
@@ -354,7 +350,6 @@ MAX_LINES = 400
 # Files already over MAX_LINES, pinned at their size. They may only shrink; lower the
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
-    "cli_changeid.py": 408,
     "cli_push.py": 813,
     "cli_show.py": 408,
     "core/gerrit/cache.py": 684,

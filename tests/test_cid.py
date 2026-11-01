@@ -8,14 +8,15 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_changeid import (
-    CHANGE_ID_RE,
-    _parse_sha_body_rs,
-    main as gcid_main,
-)
+from gerrit_workflow_tools.cli_changeid import main as gcid_main
 from gerrit_workflow_tools.cli_common import ExitCode
-from gerrit_workflow_tools.core.change_id import extract_valid_change_id, parse_change_id_footer
+from gerrit_workflow_tools.core.change_id import (
+    CHANGE_ID_FOOTER_RE,
+    extract_valid_change_id,
+    parse_change_id_footer,
+)
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.stack import read_commit_rows
 from tests.conftest import run_cli
 from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid
 
@@ -144,14 +145,8 @@ def test_extract_valid_change_id_missing():
     assert extract_valid_change_id("only a subject") is None
 
 
-def test_parse_sha_body_rs_trailing_rs_stripped():
-    raw = "aaa\x1ebody1\x1ebbb\x1ebody2\x1e\x1e"
-    pairs = _parse_sha_body_rs(raw)
-    assert pairs == [("aaa", "body1"), ("bbb", "body2")]
-
-
 def test_change_id_regex_full_line():
-    m = CHANGE_ID_RE.match("Change-Id: I" + "d" * 40)
+    m = CHANGE_ID_FOOTER_RE.match("Change-Id: I" + "d" * 40)
     assert m is not None
     assert m.group(1) == "I" + "d" * 40
 
@@ -437,3 +432,9 @@ def test_malformed_footer_is_extracted_raw_but_not_valid() -> None:
     assert parse_change_id_footer(msg) == "garbage"
     assert extract_valid_change_id(msg) is None
     assert parse_change_id_footer("title only") is None
+
+
+def test_read_commit_rows_keeps_a_last_commit_with_an_empty_message(gcid_cli_repo):
+    git("commit", "--allow-empty", "--allow-empty-message", "-m", "", cwd=gcid_cli_repo)
+    rows = read_commit_rows(gcid_cli_repo, "-1", "HEAD")
+    assert [row.subject for row in rows] == [""]
