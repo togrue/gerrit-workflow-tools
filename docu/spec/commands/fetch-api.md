@@ -20,6 +20,10 @@ ger fetch-api [options] PATH
 
 ---
 
+A space or other character a URL cannot carry is percent-encoded. A full URL or a `..` segment is refused with exit `2` rather than sent to the server.
+
+---
+
 ## Options
 
 | Option | Description |

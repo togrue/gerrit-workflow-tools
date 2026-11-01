@@ -66,3 +66,28 @@ def test_fetch_api_gerrit_error(
     code, _out, err = run_cli(stack_repo, fetch_api_main, ["changes/nope"], monkeypatch)
     assert code == ExitCode.GERRIT
     assert "404" in err
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["http://evil.example/x", "//evil.example/x", "changes/../../x", "C:/Program Files/Git/changes/104/detail"],
+)
+def test_fetch_api_refuses_a_path_that_leaves_the_api(
+    path: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_gerrit_http(stack_repo)
+    code, _out, err = run_cli(stack_repo, fetch_api_main, [path], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert "invalid path" in err
+
+
+def test_fetch_api_percent_encodes_spaces(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_gerrit_http(stack_repo)
+    mock_client = MagicMock()
+    mock_client.get_json.return_value = []
+    monkeypatch.setattr("gerrit_workflow_tools.cli_fetch_api.HttpGerritRest", gerrit_client_class_stub(mock_client))
+
+    code, _out, _err = run_cli(stack_repo, fetch_api_main, ["/changes/?q=status:open status:merged"], monkeypatch)
+
+    assert code == 0
+    mock_client.get_json.assert_called_once_with("changes/?q=status:open%20status:merged")

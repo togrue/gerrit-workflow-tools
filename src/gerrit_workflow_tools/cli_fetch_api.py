@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from urllib.parse import quote, urlsplit
 
-from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.cli_common import ExitCode, add_verbose_and_debug_log_args, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest, resolve_gerrit_web_base
 
 
@@ -32,6 +34,17 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _api_path(raw: str) -> str | None:
+    """*raw* made safe to append to ``/a/``, or ``None`` when it would leave the API."""
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return None
+    if parts.scheme or parts.netloc or ".." in parts.path.split("/"):
+        return None
+    return quote(raw.lstrip("/"), safe="/?&=:+~%,@!$'()*;")
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger fetch-api``: GET a path under ``/a/`` and print JSON."""
     return run_cli_command(lambda: _run(argv))
@@ -40,8 +53,16 @@ def main(argv: list[str] | None = None) -> int:
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
     _cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    path = _api_path(args.path)
+    if path is None:
+        print(
+            f"error: invalid path {args.path!r}: expected a path under /a/, such as changes/104. "
+            "Git Bash rewrites a leading /, so leave it off.",
+            file=sys.stderr,
+        )
+        return int(ExitCode.USAGE)
     client = HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
-    data = client.get_json(args.path)
+    data = client.get_json(path)
     indent = None if args.compact else 2
     print(json.dumps(data, indent=indent, sort_keys=True))
     return 0
