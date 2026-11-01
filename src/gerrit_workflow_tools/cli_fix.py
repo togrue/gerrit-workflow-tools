@@ -19,7 +19,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 
@@ -168,6 +168,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         if target.resolution is not None:
             payload["resolution"] = target.resolution.to_json_dict()
         print(json.dumps(payload, indent=2))
+    else:
+        print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
     return 0
 
 

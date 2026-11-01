@@ -214,3 +214,11 @@ def test_fix_of_a_fixup_targets_the_original_commit(stack_repo: Path, monkeypatc
         assert code == 0, err
 
     assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == f"fixup! {original}"
+
+
+def test_fix_prints_the_new_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (stack_repo / "fixup.txt").write_text("x", encoding="utf-8")
+    git("add", "fixup.txt", cwd=stack_repo)
+    code, out, _err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
+    assert code == 0
+    assert out.strip() == git_out("log", "-1", "--format=%h %s", cwd=stack_repo)
