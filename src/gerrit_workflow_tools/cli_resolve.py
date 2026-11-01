@@ -6,9 +6,9 @@ import argparse
 import json
 
 from gerrit_workflow_tools.cli_common import (
-    HELP_JSON,
     ExitCode,
     add_color_args,
+    add_json_arg,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     print_resolution_note,
@@ -40,12 +40,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "refs/changes/… ref, Gerrit URL, or q: search query."
         ),
     )
-    p.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_",
-        help=HELP_JSON,
-    )
+    add_json_arg(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,

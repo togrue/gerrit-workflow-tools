@@ -8,10 +8,10 @@ import logging
 
 from gerrit_workflow_tools.cli_attention import require_stack_upstream
 from gerrit_workflow_tools.cli_common import (
-    HELP_JSON,
     ExitCode,
     add_color_args,
     add_follow_merges_args,
+    add_json_arg,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     print_note,
@@ -24,6 +24,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_GREEN,
     ANSI_RED,
     ANSI_YELLOW,
+    color_stat,
     color_text,
     is_hyperlink_enabled,
     visible_len,
@@ -78,34 +79,15 @@ def _format_summary_dashboard_line(
     total_n: int,
 ) -> str:
     """Single-line summary: ``summary: ready N/M · …`` with optional ANSI styling."""
-    sep = " · "
-    parts: list[str] = []
-
-    label = "summary:"
-    parts.append(color_text(label, f"{ANSI_BOLD}{ANSI_CYAN}"))
-    parts.append(" ")
-    parts.append(color_text("ready ", ANSI_DIM))
-    parts.append(color_text(f"{ready_n}/{total_n}", ANSI_GREEN))
-
-    ci = summary.get("ci-failures", 0)
-    if ci:
-        parts.append(color_text(sep, ANSI_DIM))
-        parts.append(color_text("CI ", ANSI_DIM))
-        parts.append(color_text(str(ci), ANSI_RED))
-
-    unres = summary.get(Attention.UNRESOLVED_COMMENTS, 0)
-    if unres:
-        parts.append(color_text(sep, ANSI_DIM))
-        parts.append(color_text("comments ", ANSI_DIM))
-        parts.append(color_text(str(unres), ANSI_YELLOW))
-
-    on_gerrit = summary.get("on-gerrit", 0)
-    if on_gerrit:
-        parts.append(color_text(sep, ANSI_DIM))
-        parts.append(color_text("on-gerrit ", ANSI_DIM))
-        parts.append(color_text(str(on_gerrit), ANSI_CYAN))
-
-    return "".join(parts)
+    stats = [color_stat("ready ", f"{ready_n}/{total_n}", ANSI_GREEN)]
+    for label, count, color in (
+        ("CI ", summary.get("ci-failures", 0), ANSI_RED),
+        ("comments ", summary.get(Attention.UNRESOLVED_COMMENTS, 0), ANSI_YELLOW),
+        ("on-gerrit ", summary.get("on-gerrit", 0), ANSI_CYAN),
+    ):
+        if count:
+            stats.append(color_stat(label, count, color))
+    return f"{color_text('summary:', f'{ANSI_BOLD}{ANSI_CYAN}')} {color_text(' · ', ANSI_DIM).join(stats)}"
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +101,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger log",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
-    parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+    add_json_arg(parser)
     add_color_args(parser)
     parser.add_argument(
         "--url",
@@ -269,12 +251,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     for commit in commits:
         print_note(notes_by_sha.get(commit.sha))
 
-    visible = commits
-    has_attention = any(c.attention_reasons for c in commits)
+    exit_code = ExitCode.ATTENTION if any(c.attention_reasons for c in commits) else ExitCode.OK
 
     # JSON output
     if args.json_:
-        stack = resolve_stack_context(cwd, settings=settings)
         stack_payload = {
             "project": stack.project,
             "target_branch": stack.target_branch,
@@ -309,14 +289,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
                 "merged_equivalent": c.merged_equivalent,
                 **({"resolution_note": notes_by_sha[c.sha]} if c.sha in notes_by_sha else {}),
             }
-            for c in visible
+            for c in commits
         ]
         payload = {"stack": stack_payload, "commits": commit_payload}
         print(json.dumps(payload, indent=2))
-        return int(ExitCode.ATTENTION) if has_attention else int(ExitCode.OK)
+        return int(exit_code)
 
     _render_text_output(
-        visible=visible,
+        visible=commits,
         verbose_level=verbose_level,
         show_url=show_url,
         show_change_id=show_change_id,
@@ -325,15 +305,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     summary, ready_n, total_n = _build_summary(commits)
     print()
-    print(
-        _format_summary_dashboard_line(
-            summary,
-            ready_n,
-            total_n,
-        )
-    )
-
-    return int(ExitCode.ATTENTION) if has_attention else int(ExitCode.OK)
+    print(_format_summary_dashboard_line(summary, ready_n, total_n))
+    return int(exit_code)
 
 
 if __name__ == "__main__":

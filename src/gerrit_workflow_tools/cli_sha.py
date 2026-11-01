@@ -55,9 +55,9 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, resolve_attention_query_or_exit
 from gerrit_workflow_tools.cli_common import (
-    HELP_JSON,
     ExitCode,
     add_color_args,
+    add_json_arg,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     run_cli_command,
@@ -111,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print abbreviated SHA and commit subject.",
     )
-    out_group.add_argument("--json", action="store_true", dest="json_out", help=HELP_JSON)
+    add_json_arg(out_group)
 
     add_color_args(ap)
     add_verbose_and_debug_log_args(ap)
@@ -194,7 +194,7 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
             return int(ExitCode.DUPLICATE_CHANGE_ID)
 
     for sha, short_sha, subject in matches:
-        if args.json_out:
+        if args.json_:
             print(json.dumps({"change_id": printed_change_id, "sha": sha, "subject": subject}))
         elif args.subject:
             print(f"{color_short_sha(short_sha)} {subject}")

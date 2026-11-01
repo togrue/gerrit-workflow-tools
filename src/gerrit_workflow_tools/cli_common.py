@@ -155,6 +155,11 @@ def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_json_arg(parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGroup) -> None:
+    """Register ``--json``, read back as ``args.json_``."""
+    parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+
+
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Register shared color-output and hyperlink flags."""
     parser.add_argument(

@@ -9,9 +9,9 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
 from gerrit_workflow_tools.cli_common import (
-    HELP_JSON,
     ExitCode,
     add_color_args,
+    add_json_arg,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     print_resolution_note,
@@ -123,12 +123,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Extra source lines before/after the comment (implies --context; default 2).",
     )
     fmt = p.add_mutually_exclusive_group()
-    fmt.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_",
-        help=HELP_JSON,
-    )
+    add_json_arg(fmt)
     fmt.add_argument(
         "--format",
         choices=("human", "markdown"),

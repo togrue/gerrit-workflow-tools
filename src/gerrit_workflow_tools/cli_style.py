@@ -166,3 +166,8 @@ def strip_ansi(text: str) -> str:
 def visible_len(text: str) -> int:
     """Length of terminal-visible characters (ANSI and strike combining chars ignored)."""
     return len(strip_ansi(text).replace("\u0336", ""))
+
+
+def color_stat(label: str, value: object, color: str) -> str:
+    """A dim *label* followed by a highlighted *value*, as summary lines show them."""
+    return color_text(label, ANSI_DIM) + color_text(str(value), color)

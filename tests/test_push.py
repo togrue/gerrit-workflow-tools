@@ -645,7 +645,7 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
 def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
+        "gerrit_workflow_tools.cli_push._prompt_reviewers_line_ptk",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
@@ -657,7 +657,7 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
 def test_gpush_interactive_reviewers_lazy_omits_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
+        "gerrit_workflow_tools.cli_push._prompt_reviewers_line_ptk",
         lambda *_a, **_k: parse_push_options_line("bob lazy"),
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)
@@ -698,7 +698,7 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     set_branch_config(stack_repo, branch, gerrit_reviewers="carol")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.cli_push._prompt_interactive_reviewers",
+        "gerrit_workflow_tools.cli_push._prompt_reviewers_line_ptk",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
     monkeypatch.setattr("gerrit_workflow_tools.cli_push._prompt_save_reviewers", lambda: False)

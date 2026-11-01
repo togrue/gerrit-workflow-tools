@@ -102,26 +102,6 @@ def _change_id_for_rev(cwd: Path, rev: str) -> str | None:
     return extract_valid_change_id(msg)
 
 
-def _prompt_interactive_reviewers(
-    cwd: Path | None = None,
-    branch: str | None = None,
-    *,
-    settings: Settings,
-    change_id_hint: str | None = None,
-    reviewer_flag_segments: list[str] | None = None,
-    session_strategy: ReviewerStrategy | None = None,
-) -> ParseResult:
-    """Pre-push interactive prompt (``-i``); reuses the push-options input line."""
-    return _prompt_reviewers_line_ptk(
-        cwd,
-        branch,
-        settings=settings,
-        change_id_hint=change_id_hint,
-        reviewer_flag_segments=reviewer_flag_segments,
-        session_strategy=session_strategy,
-    )
-
-
 def _prompt_save_reviewers() -> bool:
     return confirm("Save reviewers to branch config?", default=False)
 
@@ -257,29 +237,12 @@ def _stop_pattern_from_reason(boundary_reason: str) -> str | None:
     return match.group(1).strip()
 
 
-def _format_stop_pattern_notice(boundary_line: str, pat: str) -> str:
-    """Explain a stop-pattern ready boundary without wrapping highlighted commit text."""
+def _boundary_notice(boundary_line: str, because: str, detail: str) -> str:
+    """Explain a ready boundary without wrapping highlighted commit text."""
+    quote = color_text('"', ANSI_YELLOW)
     return (
-        "Stopped at commit "
-        + color_text('"', ANSI_YELLOW)
-        + boundary_line
-        + color_text('"', ANSI_YELLOW)
-        + ", because it matches the stop pattern "
-        + color_text(pat, ANSI_DIM_GRAY)
-        + color_text(".", ANSI_YELLOW)
-    )
-
-
-def _format_boundary_reason_notice(boundary_line: str, reason: str) -> str:
-    """Explain a ready boundary using its human-readable reason string."""
-    return (
-        "Stopped at commit "
-        + color_text('"', ANSI_YELLOW)
-        + boundary_line
-        + color_text('"', ANSI_YELLOW)
-        + color_text(", because ", ANSI_YELLOW)
-        + color_text(reason, ANSI_DIM_GRAY)
-        + color_text(".", ANSI_YELLOW)
+        f"Stopped at commit {quote}{boundary_line}{quote}{because}"
+        f"{color_text(detail, ANSI_DIM_GRAY)}{color_text('.', ANSI_YELLOW)}"
     )
 
 
@@ -299,9 +262,9 @@ def _print_ready_boundary_notice(boundary: PushBoundary, *, summary_highlighter:
     print()
     pat = _stop_pattern_from_reason(boundary.reason)
     if pat:
-        print(_format_stop_pattern_notice(boundary_line, pat))
+        print(_boundary_notice(boundary_line, ", because it matches the stop pattern ", pat))
     else:
-        print(_format_boundary_reason_notice(boundary_line, boundary.reason))
+        print(_boundary_notice(boundary_line, color_text(", because ", ANSI_YELLOW), boundary.reason))
     if boundary.remaining_unpushed > 0:
         print(color_text(f"... {boundary.remaining_unpushed} not-ready commit(s) remain unpushed", ANSI_YELLOW))
 
@@ -326,53 +289,25 @@ def _print_gpush_preview(plan: PushPlan, commit_lines: list[str], *, summary_hig
     _print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
 
 
-def _print_gpush_confirm_status_line(
-    local_branch: str,
-    gerrit_target: str,
-    reviewers: list[str],
-    *,
-    topic: str | None = None,
-    wip: bool = False,
-    private: bool = False,
-    strategy: ReviewerStrategy | None = None,
-) -> None:
-    """One-line summary before the push confirmation prompt."""
-    branch_v = color_text(local_branch, f"{ANSI_BOLD}{ANSI_CYAN}")
-    target_v = color_text(f"refs/for/{gerrit_target}", ANSI_GREEN)
-    rev_v = color_text(", ".join(reviewers), ANSI_LIGHT_GREEN) if reviewers else color_text("(none)", ANSI_DIM)
-    topic_v = color_text(topic, ANSI_CYAN) if topic else color_text("(none)", ANSI_DIM)
-    wip_v = color_text("yes", ANSI_GREEN) if wip else color_text("no", ANSI_DIM)
-    private_v = color_text("yes", ANSI_GREEN) if private else color_text("no", ANSI_DIM)
-    sep = color_text("  ·  ", ANSI_DIM)
-    line = (
-        f"{color_text('Branch', ANSI_DIM)} {branch_v}"
-        f"{sep}"
-        f"{color_text('Target', ANSI_DIM)} {target_v}"
-        f"{sep}"
-        f"{color_text('Reviewers', ANSI_DIM)} {rev_v}"
-        f"{sep}"
-        f"{color_text('Topic', ANSI_DIM)} {topic_v}"
-        f"{sep}"
-        f"{color_text('WIP', ANSI_DIM)} {wip_v}"
-        f"{sep}"
-        f"{color_text('Private', ANSI_DIM)} {private_v}"
-    )
-    if strategy is not None and strategy != ReviewerStrategy.PUSH:
-        strat_v = color_text(_strategy_status_label(strategy), ANSI_DIM)
-        line += f"{sep}{color_text('Strategy', ANSI_DIM)} {strat_v}"
-    print(line)
-
-
 def _print_plan_status(plan: PushPlan) -> None:
-    _print_gpush_confirm_status_line(
-        plan.branch,
-        plan.push_branch,
-        list(plan.options.reviewers),
-        topic=plan.options.topic,
-        wip=plan.options.wip,
-        private=plan.options.private,
-        strategy=plan.options.strategy,
-    )
+    """One-line summary before the push confirmation prompt."""
+    options = plan.options
+    none = color_text("(none)", ANSI_DIM)
+
+    def _yes_no(on: bool) -> str:
+        return color_text("yes", ANSI_GREEN) if on else color_text("no", ANSI_DIM)
+
+    fields = [
+        ("Branch", color_text(plan.branch, f"{ANSI_BOLD}{ANSI_CYAN}")),
+        ("Target", color_text(f"refs/for/{plan.push_branch}", ANSI_GREEN)),
+        ("Reviewers", color_text(", ".join(options.reviewers), ANSI_LIGHT_GREEN) if options.reviewers else none),
+        ("Topic", color_text(options.topic, ANSI_CYAN) if options.topic else none),
+        ("WIP", _yes_no(options.wip)),
+        ("Private", _yes_no(options.private)),
+    ]
+    if options.strategy != ReviewerStrategy.PUSH:
+        fields.append(("Strategy", color_text(_strategy_status_label(options.strategy), ANSI_DIM)))
+    print(color_text("  ·  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
 
 
 def _line_sets_options(state: PushLineState) -> bool:
@@ -440,7 +375,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--reviewer-strategy",
-        choices=[ReviewerStrategy.PUSH.value, ReviewerStrategy.LAZY.value, ReviewerStrategy.OVERWRITE.value],
+        choices=[strategy.value for strategy in ReviewerStrategy],
         default=None,
         help=(
             "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
@@ -530,6 +465,13 @@ def _print_refusal(
     print(refusal.message, file=sys.stderr)
 
 
+def _refuses_non_interactive(args: argparse.Namespace) -> bool:
+    if sys.stdin.isatty() or args.yes:
+        return False
+    print("error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt", file=sys.stderr)
+    return True
+
+
 def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Settings) -> str:
     """Return the local branch ``ger push`` operates on."""
     if branch_arg:
@@ -589,7 +531,7 @@ def _maybe_prompt_initial_options(
     *,
     settings: Settings,
 ) -> PushPlan:
-    res = _prompt_interactive_reviewers(
+    res = _prompt_reviewers_line_ptk(
         cwd,
         plan.branch,
         settings=settings,
@@ -630,11 +572,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
         return 0
-    if not sys.stdin.isatty() and not args.yes:
-        print(
-            "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
-            file=sys.stderr,
-        )
+    if _refuses_non_interactive(args):
         return 1
     if not args.yes:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
@@ -687,11 +625,7 @@ def _confirm_gerrit_push(
             stack_printed = True
         if args.dry_run:
             return _print_dry_run(plan)
-        if not sys.stdin.isatty() and not args.yes:
-            print(
-                "error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt",
-                file=sys.stderr,
-            )
+        if _refuses_non_interactive(args):
             return 1
         if args.yes:
             if plan.credential_error:

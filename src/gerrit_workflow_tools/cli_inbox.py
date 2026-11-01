@@ -7,9 +7,9 @@ import json
 from datetime import datetime, timezone
 
 from gerrit_workflow_tools.cli_common import (
-    HELP_JSON,
     ExitCode,
     add_color_args,
+    add_json_arg,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     run_cli_command,
@@ -21,6 +21,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_RED,
     ANSI_YELLOW,
     color_short_sha,
+    color_stat,
     color_text,
     format_link,
 )
@@ -92,12 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="At most N chains.",
     )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        dest="json_",
-        help=HELP_JSON,
-    )
+    add_json_arg(parser)
     parser.add_argument(
         "--url",
         "--show-url",
@@ -228,6 +224,17 @@ def _render_chain_line(
         )
 
 
+def _summary(chains: list[ReviewChain]) -> dict[str, int]:
+    return {
+        "chains": len(chains),
+        "changes": sum(chain.depth for chain in chains),
+        "oldest_unreviewed_seconds": max((chain.unreviewed_age_seconds for chain in chains), default=0),
+        "oldest_wait_seconds": max((chain.wait_age_seconds for chain in chains), default=0),
+        "ci_failures": sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons),
+        "comments": sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons),
+    }
+
+
 def _render_text(
     chains: list[ReviewChain],
     *,
@@ -242,27 +249,23 @@ def _render_text(
         return
     for chain in chains:
         _render_chain_line(chain, highlighter=highlighter, show_url=show_url, verbose=verbose)
-    changes = sum(chain.depth for chain in chains)
-    oldest = max((chain.unreviewed_age_seconds for chain in chains), default=0)
-    ci = sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons)
-    comments = sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons)
+    summary = _summary(chains)
     sep = color_text(" · ", ANSI_DIM)
     parts = [
         color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"),
         " ",
-        color_text(str(len(chains)), ANSI_CYAN),
+        color_text(str(summary["chains"]), ANSI_CYAN),
         color_text(" chains", ANSI_DIM),
         sep,
-        color_text(str(changes), ANSI_CYAN),
+        color_text(str(summary["changes"]), ANSI_CYAN),
         color_text(" changes", ANSI_DIM),
         sep,
-        color_text("oldest unrevi ", ANSI_DIM),
-        color_text(format_age(oldest), ANSI_YELLOW),
+        color_stat("oldest unrevi ", format_age(summary["oldest_unreviewed_seconds"]), ANSI_YELLOW),
     ]
-    if ci:
-        parts.extend([sep, color_text("CI ", ANSI_DIM), color_text(str(ci), ANSI_RED)])
-    if comments:
-        parts.extend([sep, color_text("comments ", ANSI_DIM), color_text(str(comments), ANSI_YELLOW)])
+    if summary["ci_failures"]:
+        parts.extend([sep, color_stat("CI ", summary["ci_failures"], ANSI_RED)])
+    if summary["comments"]:
+        parts.extend([sep, color_stat("comments ", summary["comments"], ANSI_YELLOW)])
     print()
     print("".join(parts))
 
@@ -298,23 +301,11 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
                     "chains": [_chain_json(chain) for chain in chains],
                 }
             ],
-            "summary": {
-                "chains": len(chains),
-                "changes": sum(chain.depth for chain in chains),
-                "oldest_unreviewed_seconds": max((chain.unreviewed_age_seconds for chain in chains), default=0),
-                "oldest_wait_seconds": max((chain.wait_age_seconds for chain in chains), default=0),
-                "ci_failures": sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons),
-                "comments": sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons),
-            },
+            "summary": _summary(chains),
         }
         print(json.dumps(payload, indent=2))
-        return int(ExitCode.ATTENTION) if chains else int(ExitCode.OK)
-    _render_text(
-        chains,
-        highlighter=highlighter,
-        show_url=bool(args.url),
-        verbose=bool(args.verbose),
-    )
+    else:
+        _render_text(chains, highlighter=highlighter, show_url=bool(args.url), verbose=bool(args.verbose))
     return int(ExitCode.ATTENTION) if chains else int(ExitCode.OK)
 
 
