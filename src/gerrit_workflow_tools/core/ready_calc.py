@@ -39,6 +39,8 @@ def change_id_boundary_for_commits(commits: list[Commit]) -> BoundaryResult:
     """Ready boundary at the first missing/malformed/duplicate Change-Id, if any."""
     rows = [ChangeIdRow(sha=c.sha, short_sha=c.short_sha, change_id=c.change_id) for c in commits]
     block_index, reason = first_change_id_boundary(rows, strict=True)
+    if block_index is not None and commits[block_index].subject.startswith(("fixup! ", "squash! ")):
+        reason = "it is an unsquashed fixup commit; squash it with `git rebase -i --autosquash`"
     return BoundaryResult(block_index=block_index, reason=reason)
 
 

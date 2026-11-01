@@ -449,6 +449,14 @@ def test_gpush_warns_about_a_commit_on_an_abandoned_change(stack_repo: Path, mon
     assert f"warning: {rows[0].short_sha} targets abandoned change 100" in err
 
 
+def test_gpush_names_a_fixup_commit_as_the_boundary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("commit", "--allow-empty", "--fixup", "HEAD~1", cwd=stack_repo)
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
+    assert code == 0
+    assert "git rebase -i --autosquash" in out
+    assert "no Change-Id" not in out
+
+
 def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
     commits = commits_in_range(stack_repo, "main..feature")[:2]
