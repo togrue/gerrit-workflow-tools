@@ -101,8 +101,7 @@ def checked_out_branch_name(cwd: Path | str | None) -> str | None:
         p = git("branch", "--show-current", cwd=cwd, check=False)
         if p.returncode != 0:
             return None
-        name = (p.stdout or "").strip()
-        return name or None
+        return (p.stdout or "").strip() or None
     return wt.checked_out_branch
 
 
@@ -114,6 +113,12 @@ def git_dir(cwd: Path | str | None) -> Path | None:
     p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
     raw = (p.stdout or "").strip()
     return Path(abs_cwd(cwd)) / raw if p.returncode == 0 and raw else None
+
+
+def rebase_in_progress(cwd: Path | str | None) -> bool:
+    """True while git has a rebase underway, including one stopped at a commit."""
+    repo_dir = git_dir(cwd)
+    return repo_dir is not None and any((repo_dir / d).exists() for d in ("rebase-merge", "rebase-apply"))
 
 
 def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
@@ -152,11 +157,7 @@ def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: 
 
     mode = ger_push_mode(cwd, branch, settings=settings)
     mode_rank = 0 if mode == "gerrit" else (1 if mode == "vanilla" else 2)
-    return (
-        mode_rank,
-        0 if branch_has_upstream(cwd, branch) else 1,
-        branch,
-    )
+    return (mode_rank, 0 if branch_has_upstream(cwd, branch) else 1, branch)
 
 
 def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
@@ -214,8 +215,7 @@ def resolve_upstream_abbrev_ref(
     p = git("rev-parse", "--abbrev-ref", sym, cwd=cwd, check=False)
     if p.returncode != 0:
         return None
-    upstream = p.stdout.strip()
-    return upstream or None
+    return p.stdout.strip() or None
 
 
 def resolve_upstream_parsed(
@@ -325,8 +325,6 @@ def infer_nearest_remote_tracking_branch(
         if best_key is None or key < best_key:
             best_key = key
             best_value = (abbrev, sym, ahead, behind)
-    if best_value is None:
-        return None
     return best_value
 
 

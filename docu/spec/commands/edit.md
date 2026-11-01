@@ -63,9 +63,10 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
 
 1. Resolve target commit in stack (explicit `REV`, or attention walk).
 2. On a successful attention or explicit-stack target, update the attention cursor when a Change-Id is known.
-3. `git rebase -i <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`).
-4. For `edit`, user amends then `git rebase --continue`.
-5. When `gerrit.editNextShow` is true, this was `ger edit --next` (not `ger reword`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Unset, the flag is off and `--next` only moves.
+3. Refuse with exit `7` while a rebase is already in progress, before the cursor moves. `ger rebase` makes the same check.
+4. `git rebase -i <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`).
+5. For `edit`, user amends then `git rebase --continue`.
+6. When `gerrit.editNextShow` is true, this was `ger edit --next` (not `ger reword`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Unset, the flag is off and `--next` only moves.
 
 ---
 

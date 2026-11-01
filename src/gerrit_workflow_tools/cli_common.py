@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -265,6 +266,12 @@ def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryH
     init_hyperlink_mode(hyperlinks=getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
     return cwd, settings, build_summary_highlighter(settings)
+
+
+def require_no_rebase_in_progress(cwd: Path) -> None:
+    """Raise :class:`GitError` when a rebase is underway, so a new one could not start."""
+    if rebase_in_progress(cwd):
+        raise GitError("a rebase is already in progress; run `git rebase --continue` or `git rebase --abort` first")
 
 
 def run_interactive_rebase(cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str]) -> int:

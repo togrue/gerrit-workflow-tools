@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_edit import (
     main as gedit_main,
     main_reword as greword_main,
     resolve_first_edit_attention_sha,
 )
+from gerrit_workflow_tools.cli_rebase import main as grebase_main
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
+from tests.helpers import write_rebase_head
 
 
 def _configure_repo(repo: Path) -> None:
@@ -151,6 +155,23 @@ def test_gedit_cursor_flag_prints_status(stack_repo: Path, monkeypatch: pytest.M
 
 
 # -- Semantic exit codes, shared with `ger fix` --------------------------------------
+
+
+@pytest.mark.parametrize("main_fn", [gedit_main, grebase_main])
+def test_rebase_in_progress_is_refused_before_anything_moves(
+    main_fn: Callable[..., int], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_repo(stack_repo)
+    write_rebase_head(stack_repo, "feature")
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"verified": -1} for _ in rows]))
+    argv = ["-n"] if main_fn is gedit_main else []
+
+    code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=store)
+
+    assert code == ExitCode.GIT
+    assert "git rebase --continue" in err
+    assert git("config", "branch.feature.gerAttentionCursor", cwd=stack_repo, check=False).returncode != 0
 
 
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

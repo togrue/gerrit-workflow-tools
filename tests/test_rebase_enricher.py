@@ -530,24 +530,19 @@ def test_cli_rebase_passes_merge_base_to_git(stack_repo: Path, monkeypatch):
     assert captured["cmd"] == ["git", "rebase", "-i", expected_base]
 
 
-def test_cli_rebase_uses_rebase_branch_while_detached(stack_repo: Path, monkeypatch):
+def test_cli_rebase_refuses_while_a_rebase_is_stopped(stack_repo: Path, monkeypatch):
     from gerrit_workflow_tools.cli_rebase import main as rebase_main
-    from gerrit_workflow_tools.core.stack import merge_base_with_target
 
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
-    (stack_repo / "rebased.txt").write_text("x\n", encoding="utf-8")
-    git("add", "rebased.txt", cwd=stack_repo)
-    git("commit", "-m", "rebased detached commit", cwd=stack_repo)
     write_rebase_head(stack_repo, "feature")
-    expected_base, _, _ = merge_base_with_target(stack_repo, "feature")
 
     captured: dict = {}
     monkeypatch.chdir(stack_repo)
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
         code = rebase_main([])
 
-    assert code == 0
-    assert captured["cmd"] == ["git", "rebase", "-i", expected_base]
+    assert code == 7
+    assert "cmd" not in captured
 
 
 def test_cli_rebase_uses_given_rev(stack_repo: Path, monkeypatch):

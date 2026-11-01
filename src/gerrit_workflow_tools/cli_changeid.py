@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.change_id import (
 )
 from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git
-from gerrit_workflow_tools.core.git_state import current_branch, git_dir
+from gerrit_workflow_tools.core.git_state import current_branch, rebase_in_progress
 from gerrit_workflow_tools.core.stack import (
     Commit,
     read_commit_rows,
@@ -88,10 +88,7 @@ def _ensure_safe_for_fix(cwd: Path) -> None:
     """Block --fix during merge/rebase; uncommitted changes are fine (message-only rewrite)."""
     if commit_sha_or_none(cwd, "MERGE_HEAD"):
         raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=int(ExitCode.USAGE))
-    repo_dir = git_dir(cwd)
-    if repo_dir is None:
-        raise GitError("git rev-parse --git-dir failed")
-    if (repo_dir / "rebase-merge").exists() or (repo_dir / "rebase-apply").exists():
+    if rebase_in_progress(cwd):
         raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
 
 

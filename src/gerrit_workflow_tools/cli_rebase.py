@@ -10,6 +10,7 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     print_resolution_note,
+    require_no_rebase_in_progress,
     run_cli_command,
     run_interactive_rebase,
 )
@@ -92,6 +93,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 
+    require_no_rebase_in_progress(cwd)
     rdef = settings.rebase_defaults
     if args.no_onto_remote:
         use_onto_remote = False

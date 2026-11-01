@@ -14,6 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     print_resolution_note,
+    require_no_rebase_in_progress,
     run_cli_command,
     run_interactive_rebase,
 )
@@ -289,6 +290,7 @@ def _run_interactive_stack_rebase(
         action,
     )
 
+    require_no_rebase_in_progress(cwd)
     full = _resolve_target_sha(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
