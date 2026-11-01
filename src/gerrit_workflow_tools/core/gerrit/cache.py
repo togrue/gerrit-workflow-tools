@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results, change_freshness_key
@@ -20,6 +20,12 @@ DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
 
 _CAPABILITY_PREFIX = "capability:"
+
+_DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "scope_state")
+# Follow-up tables and the columns that key one row.
+_FOLLOW_UP_KEYS = {"comments": ("change_id", "context_key"), "checks": ("change_id",)}
+
+_T = TypeVar("_T")
 
 
 def comments_context_key(context_padding: int | None) -> str:
@@ -55,23 +61,12 @@ class _ScopeState:
     generation: int
 
 
-@dataclass(frozen=True)
-class _CommentRow:
-    payload: dict[str, list[dict[str, Any]]]
-    fetched_at: int
-    change_updated: str | None
-
-
-@dataclass(frozen=True)
-class _ChecksRow:
-    checks: list[dict[str, Any]]
-    messages: list[dict[str, Any]]
-    fetched_at: int
-    change_updated: str | None
-
-
 def _now() -> int:
     return int(time.time())
+
+
+def _placeholders(values: Sized) -> str:
+    return ",".join("?" * len(values))
 
 
 def _json_dumps(value: Any) -> str:
@@ -105,6 +100,22 @@ def _payload_updated(payload: dict[str, Any]) -> str | None:
 def _payload_number(payload: dict[str, Any]) -> int | None:
     raw = payload.get("_number")
     return raw if isinstance(raw, int) else None
+
+
+def _dict_rows(raw: Any) -> list[dict[str, Any]]:
+    return [row for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+
+
+def _decode_comments(payload: Any) -> dict[str, list[dict[str, Any]]] | None:
+    if not isinstance(payload, dict):
+        return None
+    return {str(path): _dict_rows(rows) for path, rows in payload.items() if isinstance(rows, list)}
+
+
+def _decode_checks(payload: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
+    if not isinstance(payload, dict):
+        return None
+    return _dict_rows(payload.get("checks")), _dict_rows(payload.get("messages"))
 
 
 def _max_updated(payloads: list[dict[str, Any]], *, floor: str = "") -> str:
@@ -154,13 +165,8 @@ class GerritCache:
 
     @staticmethod
     def _drop_tables(conn: sqlite3.Connection) -> None:
-        conn.execute("DROP TABLE IF EXISTS checks")
-        conn.execute("DROP TABLE IF EXISTS missing_changes")
-        conn.execute("DROP TABLE IF EXISTS scope_state")
-        conn.execute("DROP TABLE IF EXISTS comments")
-        conn.execute("DROP TABLE IF EXISTS accounts")  # retired; dropped on schema reset
-        conn.execute("DROP TABLE IF EXISTS changes")
-        conn.execute("DROP TABLE IF EXISTS meta")
+        for table in (*_DATA_TABLES, "meta", "accounts"):  # accounts is retired; dropped on schema reset
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
 
     @staticmethod
     def _create_tables(conn: sqlite3.Connection) -> None:
@@ -234,11 +240,8 @@ class GerritCache:
         """Delete all cached API payloads while keeping schema metadata."""
 
         with self._connect() as conn:
-            conn.execute("DELETE FROM checks")
-            conn.execute("DELETE FROM comments")
-            conn.execute("DELETE FROM changes")
-            conn.execute("DELETE FROM missing_changes")
-            conn.execute("DELETE FROM scope_state")
+            for table in _DATA_TABLES:
+                conn.execute(f"DELETE FROM {table}")
             conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{_CAPABILITY_PREFIX}%",))
 
     def capability(self, name: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> bool | None:
@@ -268,27 +271,21 @@ class GerritCache:
         """Return row counts for cache administration."""
 
         with self._connect() as conn:
-            changes = int(conn.execute("SELECT COUNT(*) FROM changes").fetchone()[0])
-            comments = int(conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0])
-            checks = int(conn.execute("SELECT COUNT(*) FROM checks").fetchone()[0])
-        return CacheInfo(
-            path=self.path,
-            host=self.host,
-            changes=changes,
-            comments=comments,
-            checks=checks,
-        )
+            counts = {
+                table: int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                for table in ("changes", "comments", "checks")
+            }
+        return CacheInfo(path=self.path, host=self.host, **counts)
 
     def _lookup_changes(self, triplets: list[str]) -> dict[str, _ChangeRow]:
         if not triplets:
             return {}
-        placeholders = ",".join("?" for _ in triplets)
         out: dict[str, _ChangeRow] = {}
         with self._connect() as conn:
             rows = conn.execute(
                 f"""
                 SELECT change_id, payload, updated, fetched_at, certified_gen
-                FROM changes WHERE change_id IN ({placeholders})
+                FROM changes WHERE change_id IN ({_placeholders(triplets)})
                 """,
                 triplets,
             ).fetchall()
@@ -325,9 +322,8 @@ class GerritCache:
     def _stamp_certified_gen(self, conn: sqlite3.Connection, triplets: list[str], generation: int) -> None:
         if not triplets:
             return
-        placeholders = ",".join("?" for _ in triplets)
         conn.execute(
-            f"UPDATE changes SET certified_gen = ? WHERE change_id IN ({placeholders})",
+            f"UPDATE changes SET certified_gen = ? WHERE change_id IN ({_placeholders(triplets)})",
             [generation, *triplets],
         )
 
@@ -352,14 +348,13 @@ class GerritCache:
         unique = list(dict.fromkeys(cid for cid in change_ids if cid))
         if not unique:
             return {}
-        placeholders = ",".join("?" for _ in unique)
         out: dict[str, list[dict[str, Any]]] = {cid: [] for cid in unique}
         seen: dict[str, set[tuple[Any, Any]]] = {cid: set() for cid in unique}
         with self._connect() as conn:
             rows = conn.execute(
                 f"""
                 SELECT payload FROM changes
-                WHERE json_extract(payload, '$.change_id') IN ({placeholders})
+                WHERE json_extract(payload, '$.change_id') IN ({_placeholders(unique)})
                 """,
                 unique,
             ).fetchall()
@@ -504,11 +499,7 @@ class GerritCache:
             self._set_scope_state(conn, scope_key, new_watermark, new_gen)
             self._stamp_certified_gen(conn, triplets, new_gen)
 
-        covered: set[str] = set()
-        for payload in delta_rows:
-            tid = _payload_triplet(payload)
-            if tid:
-                covered.add(tid)
+        covered = {tid for payload in delta_rows if (tid := _payload_triplet(payload))}
         fresh = self._lookup_changes(triplets)
         for triplet in triplets:
             row = fresh.get(triplet)
@@ -543,60 +534,75 @@ class GerritCache:
     ) -> None:
         """Store ChangeInfo payloads under lookup keys and ``payload["id"]``."""
 
-        keyed: dict[str, dict[str, Any]] = {}
-        if isinstance(changes, dict):
-            for cache_key, payload in changes.items():
-                if not isinstance(payload, dict):
-                    continue
+        keyed: dict[str | None, dict[str, Any]] = {}
+        pairs = changes.items() if isinstance(changes, dict) else ((None, payload) for payload in changes)
+        for cache_key, payload in pairs:
+            if isinstance(payload, dict):
                 keyed[cache_key] = payload
-                triplet = _payload_triplet(payload)
-                if triplet:
-                    keyed[triplet] = payload
-        else:
-            for payload in changes:
-                if not isinstance(payload, dict):
-                    continue
-                triplet = _payload_triplet(payload)
-                if triplet:
-                    keyed[triplet] = payload
+                keyed[_payload_triplet(payload)] = payload
+        keyed.pop(None, None)
 
         now = _now()
-
-        def _write(connection: sqlite3.Connection) -> None:
-            for cache_key, payload in keyed.items():
-                stored = _strip_avatars(payload)
-                connection.execute(
-                    """
-                    INSERT OR REPLACE INTO changes(
-                      change_id, number, payload, updated, fetched_at, certified_gen
-                    )
-                    VALUES (?, ?, ?, ?, ?, NULL)
-                    """,
-                    (
-                        cache_key,
-                        _payload_number(stored),
-                        _json_dumps(stored),
-                        _payload_updated(stored),
-                        now,
-                    ),
-                )
-
+        stored = [(key, _strip_avatars(payload)) for key, payload in keyed.items()]
+        rows = [
+            (key, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now)
+            for key, payload in stored
+        ]
+        insert = """
+            INSERT OR REPLACE INTO changes(change_id, number, payload, updated, fetched_at, certified_gen)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        """
         if conn is not None:
-            _write(conn)
+            conn.executemany(insert, rows)
         else:
             with self._connect() as connection:
-                _write(connection)
+                connection.executemany(insert, rows)
 
     def invalidate_changes(self, triplets: list[str]) -> None:
         """Drop cached change, comment, and checks rows for *triplets*."""
 
         if not triplets:
             return
-        placeholders = ",".join("?" for _ in triplets)
         with self._connect() as conn:
-            conn.execute(f"DELETE FROM changes WHERE change_id IN ({placeholders})", triplets)
-            conn.execute(f"DELETE FROM comments WHERE change_id IN ({placeholders})", triplets)
-            conn.execute(f"DELETE FROM checks WHERE change_id IN ({placeholders})", triplets)
+            for table in ("changes", *_FOLLOW_UP_KEYS):
+                conn.execute(f"DELETE FROM {table} WHERE change_id IN ({_placeholders(triplets)})", triplets)
+
+    def _load_follow_up(
+        self,
+        table: str,
+        key: tuple[str, ...],
+        *,
+        decode: Callable[[Any], _T | None],
+        fetch: Callable[[], _T],
+        store: Callable[[_T], None],
+        change_updated: str | None,
+        trust_window_seconds: int,
+        refresh: bool,
+    ) -> _T:
+        """Serve one follow-up row only while it is provably current, else fetch and store it."""
+        where = " AND ".join(f"{column} = ?" for column in _FOLLOW_UP_KEYS[table])
+        with self._connect() as conn:
+            raw = conn.execute(f"SELECT payload, fetched_at, change_updated FROM {table} WHERE {where}", key).fetchone()
+        if raw and not refresh:
+            cached = decode(json.loads(str(raw["payload"])))
+            # The freshness token decides when there is one; otherwise only the trust window can.
+            if change_updated is not None:
+                current = raw["change_updated"] == change_updated
+            else:
+                current = _now() - int(raw["fetched_at"]) < trust_window_seconds
+            if cached is not None and current:
+                return cached
+        fresh = fetch()
+        store(fresh)
+        return fresh
+
+    def _store_follow_up(self, table: str, key: tuple[str, ...], payload: Any, change_updated: str | None) -> None:
+        columns = (*_FOLLOW_UP_KEYS[table], "payload", "fetched_at", "change_updated")
+        with self._connect() as conn:
+            conn.execute(
+                f"INSERT OR REPLACE INTO {table}({','.join(columns)}) VALUES ({_placeholders(columns)})",
+                (*key, _json_dumps(payload), _now(), change_updated),
+            )
 
     def load_comments(
         self,
@@ -618,34 +624,18 @@ class GerritCache:
         ``enable-context`` / ``context-padding``. Those payloads must not share a row.
         """
 
-        now = _now()
-        row: _CommentRow | None = None
-        with self._connect() as conn:
-            raw = conn.execute(
-                "SELECT payload, fetched_at, change_updated FROM comments WHERE change_id = ? AND context_key = ?",
-                (triplet, context_key),
-            ).fetchone()
-        if raw:
-            payload = json.loads(str(raw["payload"]))
-            if isinstance(payload, dict):
-                file_map = {
-                    str(k): [x for x in v if isinstance(x, dict)] for k, v in payload.items() if isinstance(v, list)
-                }
-                row = _CommentRow(
-                    payload=file_map,
-                    fetched_at=int(raw["fetched_at"]),
-                    change_updated=raw["change_updated"] if isinstance(raw["change_updated"], str) else None,
-                )
-        if row and not refresh:
-            if change_updated is not None:
-                if row.change_updated == change_updated:
-                    return row.payload
-            elif now - row.fetched_at < trust_window_seconds:
-                return row.payload
-
-        payload = fetch_comments(triplet)
-        self.upsert_comments(triplet, payload, change_updated=change_updated, context_key=context_key)
-        return payload
+        return self._load_follow_up(
+            "comments",
+            (triplet, context_key),
+            decode=_decode_comments,
+            fetch=lambda: fetch_comments(triplet),
+            store=lambda payload: self.upsert_comments(
+                triplet, payload, change_updated=change_updated, context_key=context_key
+            ),
+            change_updated=change_updated,
+            trust_window_seconds=trust_window_seconds,
+            refresh=refresh,
+        )
 
     def upsert_comments(
         self,
@@ -657,14 +647,7 @@ class GerritCache:
     ) -> None:
         """Store comments for one change and context variant."""
 
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO comments(change_id, context_key, payload, fetched_at, change_updated)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (triplet, context_key, _json_dumps(payload), _now(), change_updated),
-            )
+        self._store_follow_up("comments", (triplet, context_key), payload, change_updated)
 
     def load_checks(
         self,
@@ -677,34 +660,16 @@ class GerritCache:
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Load Checks-plugin rows and messages keyed by the change freshness token."""
 
-        now = _now()
-        row: _ChecksRow | None = None
-        with self._connect() as conn:
-            raw = conn.execute(
-                "SELECT payload, fetched_at, change_updated FROM checks WHERE change_id = ?",
-                (triplet,),
-            ).fetchone()
-        if raw:
-            payload = json.loads(str(raw["payload"]))
-            if isinstance(payload, dict):
-                checks = payload.get("checks")
-                messages = payload.get("messages")
-                row = _ChecksRow(
-                    checks=[x for x in checks if isinstance(x, dict)] if isinstance(checks, list) else [],
-                    messages=[x for x in messages if isinstance(x, dict)] if isinstance(messages, list) else [],
-                    fetched_at=int(raw["fetched_at"]),
-                    change_updated=raw["change_updated"] if isinstance(raw["change_updated"], str) else None,
-                )
-        if row and not refresh:
-            if change_updated is not None:
-                if row.change_updated == change_updated:
-                    return row.checks, row.messages
-            elif now - row.fetched_at < trust_window_seconds:
-                return row.checks, row.messages
-
-        check_rows, message_rows = fetch_checks(triplet)
-        self.upsert_checks(triplet, check_rows, message_rows, change_updated=change_updated)
-        return check_rows, message_rows
+        return self._load_follow_up(
+            "checks",
+            (triplet,),
+            decode=_decode_checks,
+            fetch=lambda: fetch_checks(triplet),
+            store=lambda rows: self.upsert_checks(triplet, *rows, change_updated=change_updated),
+            change_updated=change_updated,
+            trust_window_seconds=trust_window_seconds,
+            refresh=refresh,
+        )
 
     def upsert_checks(
         self,
@@ -716,12 +681,4 @@ class GerritCache:
     ) -> None:
         """Store checks and messages for one change."""
 
-        payload = {"checks": checks, "messages": messages}
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO checks(change_id, payload, fetched_at, change_updated)
-                VALUES (?, ?, ?, ?)
-                """,
-                (triplet, _json_dumps(payload), _now(), change_updated),
-            )
+        self._store_follow_up("checks", (triplet,), {"checks": checks, "messages": messages}, change_updated)
