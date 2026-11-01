@@ -305,10 +305,8 @@ def _boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     short_sha = _git(cwd, "rev-parse", "--short", sha) if sha else None
     subject = _git(cwd, "show", "-s", "--format=%s", sha) if sha else None
     count = _git(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
-    try:
-        remaining = int(count) if count is not None else 0
-    except ValueError:
-        remaining = 0
+    # The boundary commit itself stays unpushed, and `sha..head` leaves it out.
+    remaining = int(count) + 1 if count and count.isdigit() else 0
     return PushBoundary(sha, ready.boundary_reason, short_sha, subject, remaining)
 
 

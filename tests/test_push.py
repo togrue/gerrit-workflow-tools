@@ -286,7 +286,7 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "git push" not in out
     i_push = out.index("About to push commits:")
     i_stop = out.index("Stopped at commit")
-    i_remain = out.index("not-ready commit(s) remain unpushed")
+    i_remain = out.index("2 not-ready commit(s) remain unpushed")
     i_status = out.index("Branch", i_remain)
     assert i_push < i_stop < i_remain < i_status
     assert "Target" in out[i_status:]
