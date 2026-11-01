@@ -329,8 +329,8 @@ def _finish_push(result: PushResult, plan: PushPlan | None) -> int:
             print(f"{issue.level}: {issue.message}", file=sys.stderr)
         if result.reviewers.outcomes:
             _print_post_push_assignment_report(plan, result.reviewers.outcomes)
-    if result.last_push_warning:
-        print(result.last_push_warning, file=sys.stderr)
+    if result.warning:
+        print(result.warning, file=sys.stderr)
     return result.returncode
 
 

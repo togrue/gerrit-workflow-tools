@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
@@ -75,27 +76,36 @@ def _rebase_detail(cwd: Path, head: str, onto: str) -> str:
     return f"tip of `{short_onto}` is not an ancestor of HEAD"
 
 
-def abandoned_change_warnings(
+class ExistingChanges(NamedTuple):
+    """What Gerrit already holds for the commits about to be pushed."""
+
+    warnings: tuple[str, ...] = ()
+    unchanged: tuple[str, ...] = ()
+    """Short SHAs that already are their change's current patchset."""
+
+
+def check_existing_changes(
     cwd: Path,
     commits: Sequence[Commit],
     *,
     settings: Settings,
     gerrit: GerritRest | None,
-) -> tuple[str, ...]:
-    """One warning per commit whose change is abandoned on Gerrit.
+) -> ExistingChanges:
+    """Warn about abandoned changes and list the commits Gerrit will not see as new.
 
-    Best effort: a push works without REST, so no credentials or a failed lookup means no warning.
+    Best effort: a push works without REST, so no credentials or a failed lookup finds nothing.
     """
     if gerrit is None and not gerrit_credentials_configured(settings):
-        return ()
+        return ExistingChanges()
     try:
         stack = resolve_stack_context(cwd, settings=settings)
         triplets = {c.sha: build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id}
         service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
         payloads = service.changes.get_payloads(list(triplets.values()))
     except (ValueError, GerritApiError, ChangeResolutionError):
-        return ()
+        return ExistingChanges()
     warnings: list[str] = []
+    unchanged: list[str] = []
     for commit in commits:
         payload = payloads.get(triplets.get(commit.sha, ""))
         view = ChangeView.from_payload(payload) if payload else None
@@ -104,4 +114,6 @@ def abandoned_change_warnings(
                 f"warning: {commit.short_sha} targets abandoned change {view.number}; "
                 "restore it on Gerrit or drop the commit"
             )
-    return tuple(warnings)
+        elif view is not None and view.current_revision == commit.sha.lower():
+            unchanged.append(commit.short_sha)
+    return ExistingChanges(tuple(warnings), tuple(unchanged))

@@ -457,6 +457,18 @@ def test_gpush_names_a_fixup_commit_as_the_boundary(stack_repo: Path, monkeypatc
     assert "no Change-Id" not in out
 
 
+def test_gpush_says_which_commits_missed_the_push_options(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = build_details_by_change_id(rows[:1])
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--topic", "t"], monkeypatch, gerrit=ChangeStore(details))
+
+    assert code == 0
+    assert f"warning: topic not applied to unchanged commits: {rows[0].short_sha}" in err
+
+
 def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
     commits = commits_in_range(stack_repo, "main..feature")[:2]

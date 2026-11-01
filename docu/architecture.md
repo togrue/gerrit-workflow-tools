@@ -405,7 +405,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
-| `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, abandoned changes |
+| `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |

@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.git_state import (
     refs_for_push_branch_name,
     resolve_upstream_parsed,
 )
-from gerrit_workflow_tools.core.push_checks import abandoned_change_warnings, git_or_none, rebase_check
+from gerrit_workflow_tools.core.push_checks import check_existing_changes, git_or_none, rebase_check
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
@@ -67,6 +67,8 @@ class PushPlan:
     credential_error: str | None
     warnings: tuple[str, ...]
     update_last_pushed: bool
+    unchanged: tuple[str, ...] = ()
+    """Short SHAs Gerrit already has as current patchsets: push options do not reach them."""
 
 
 @dataclass(frozen=True)
@@ -83,7 +85,7 @@ class PushResult:
     stderr: str = ""
     error_message: str | None = None
     reviewers: ReviewerApplyResult | None = None
-    last_push_warning: str | None = None
+    warning: str | None = None
 
 
 def refspec_option_segments(
@@ -212,7 +214,7 @@ def prepare(
     try:
         commits = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
         marks = push_marks(cwd, commits, settings=settings, gerrit=gerrit) if show_attributes else None
-        warnings = (*warnings, *abandoned_change_warnings(cwd, commits, settings=settings, gerrit=gerrit))
+        existing = check_existing_changes(cwd, commits, settings=settings, gerrit=gerrit)
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
     return PushPlan(
@@ -225,8 +227,9 @@ def prepare(
         boundary=boundary,
         options=options,
         credential_error=credential_error(options.strategy, options.reviewers, settings),
-        warnings=warnings,
+        warnings=(*warnings, *existing.warnings),
         update_last_pushed=update_last_pushed,
+        unchanged=existing.unchanged,
     )
 
 
@@ -248,9 +251,24 @@ def execute(
         captured = PushResult(returncode=0, stdout="nothing to push: Gerrit already has these commits")
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
-    note = _update_last_pushed(cwd, plan)
+    note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), _skipped_options_warning(plan)))) or None
     failed = bool(error) or (reviewers is not None and not reviewers.ok)
-    return replace(captured, returncode=int(failed), error_message=error, reviewers=reviewers, last_push_warning=note)
+    return replace(captured, returncode=int(failed), error_message=error, reviewers=reviewers, warning=note)
+
+
+def _skipped_options_warning(plan: PushPlan) -> str | None:
+    """Gerrit applies push options only to new patchsets, so say which commits missed them."""
+    options = plan.options
+    sent = {
+        "topic": options.topic,
+        "WIP": options.wip,
+        "private": options.private,
+        "reviewers": options.reviewers and options.strategy == ReviewerStrategy.PUSH,
+    }
+    names = [name for name, on in sent.items() if on]
+    if not plan.unchanged or not names:
+        return None
+    return f"warning: {', '.join(names)} not applied to unchanged commits: {', '.join(plan.unchanged)}"
 
 
 def _forget_pushed_changes(cwd: Path, plan: PushPlan, *, settings: Settings, gerrit: GerritRest | None) -> None:
