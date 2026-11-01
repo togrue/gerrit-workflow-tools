@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import sys
@@ -42,6 +43,21 @@ _FALSY = frozenset({"0", "false", "no", "off"})
 
 _COLOR_ENABLED = False
 _HYPERLINK_ENABLED = False
+
+
+def ensure_utf8_stdio() -> None:
+    """Force stdout/stderr to UTF-8 so redirected output can emit Unicode.
+
+    On Windows (and some other locales), ``ger log > file`` attaches a legacy
+    encoding such as cp1252. Combining strikethrough and other CLI glyphs then
+    raise ``UnicodeEncodeError``. Reconfigure when the stream supports it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        with contextlib.suppress(OSError, ValueError, AttributeError):
+            reconfigure(encoding="utf-8")
 
 
 def set_color_mode(enabled: bool) -> None:

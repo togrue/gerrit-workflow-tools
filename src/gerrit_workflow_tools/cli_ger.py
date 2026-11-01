@@ -8,6 +8,8 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from gerrit_workflow_tools.cli_style import ensure_utf8_stdio
+
 
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -106,6 +108,8 @@ def _usage() -> str:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger``: dispatch ``ger <command>`` to the matching tool."""
     try:
+        # Before any command's argparse: `--help` prints before init_cli_runtime runs.
+        ensure_utf8_stdio()
         argv = list(sys.argv[1:] if argv is None else argv)
         refresh = False
         while "--refresh" in argv:

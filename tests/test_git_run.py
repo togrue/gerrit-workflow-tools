@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +18,23 @@ def _clear_git_cache() -> Iterator[None]:
     clear_git_cache()
     yield
     clear_git_cache()
+
+
+def test_git_output_is_decoded_as_utf8_whatever_the_locale(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("x", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "feat: ünï ✓ 日本", cwd=repo)
+
+    real_run = subprocess.run
+
+    def as_cp1252_locale(*args: Any, **kwargs: Any) -> Any:
+        return real_run(*args, **{"encoding": "cp1252", **kwargs})
+
+    with patch("subprocess.run", as_cp1252_locale):
+        assert git("log", "-1", "--format=%s", cwd=repo, check=False).stdout.strip() == "feat: ünï ✓ 日本"
 
 
 def test_rev_parse_cached(tmp_path: Path) -> None:

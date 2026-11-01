@@ -108,7 +108,9 @@ def _run_git(
         cwd=cwd,
         env=merged,
         input=input_text,
-        text=True,
+        # Git writes UTF-8 whatever the console code page says; text=True alone uses the locale.
+        encoding="utf-8",
+        errors="replace",
         capture_output=capture,
         check=False,
     )

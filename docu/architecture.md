@@ -358,7 +358,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
 | `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, shared argparse groups, `print_resolution_note`, `confirm`, `run_interactive_rebase` |
-| `cli_style.py` | ANSI color and hyperlink helpers |
+| `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
 | `cli_show.py` | `ger show` |

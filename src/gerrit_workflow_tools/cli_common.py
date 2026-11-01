@@ -12,7 +12,6 @@ Help text style (``help=`` on parsers and arguments):
 from __future__ import annotations
 
 import argparse
-import contextlib
 import logging
 import shlex
 import sys
@@ -21,7 +20,13 @@ from enum import IntEnum
 from pathlib import Path
 from typing import TypeVar
 
-from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text, init_color_mode, init_hyperlink_mode
+from gerrit_workflow_tools.cli_style import (
+    ANSI_DIM,
+    color_text,
+    ensure_utf8_stdio,
+    init_color_mode,
+    init_hyperlink_mode,
+)
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -232,21 +237,6 @@ def configure_logging(verbosity: int | bool) -> None:
         _LOG.addHandler(h)
         _LOG.propagate = False
         _CONFIGURED = True
-
-
-def ensure_utf8_stdio() -> None:
-    """Force stdout/stderr to UTF-8 so redirected output can emit Unicode.
-
-    On Windows (and some other locales), ``ger log > file`` attaches a legacy
-    encoding such as cp1252. Combining strikethrough and other CLI glyphs then
-    raise ``UnicodeEncodeError``. Reconfigure when the stream supports it.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if not callable(reconfigure):
-            continue
-        with contextlib.suppress(OSError, ValueError, AttributeError):
-            reconfigure(encoding="utf-8")
 
 
 def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryHighlighter]:
