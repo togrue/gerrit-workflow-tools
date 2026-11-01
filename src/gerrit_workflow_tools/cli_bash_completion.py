@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import gerrit_workflow_tools
+from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
 
 
 MARKER_START = "# >>> gerrit-workflow-tools bash completion (ger) >>>"
@@ -143,9 +144,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Print, install, or uninstall shell completion bootstrap lines for ``ger``."""
+    return run_cli_command(lambda: _run(argv))
 
+
+def _run(argv: list[str] | None) -> int:
     parser = _build_parser()
     ns = parser.parse_args(argv)
+    init_cli_runtime(ns)
 
     if ns.install and ns.uninstall:
         parser.error("cannot combine --install and --uninstall")

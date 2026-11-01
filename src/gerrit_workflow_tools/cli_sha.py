@@ -59,14 +59,12 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
+    init_cli_runtime,
+    run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, init_hyperlink_mode
+from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
@@ -120,16 +118,15 @@ def _build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-branches,too-many-locals
+def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger sha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
-    ap = _build_parser()
+    return run_cli_command(lambda: _run(argv))
 
+
+def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,too-many-locals
+    ap = _build_parser()
     args = ap.parse_args(argv)
-    configure_logging(args.debug_log)
-    init_color_mode(color=args.color)
-    init_hyperlink_mode(hyperlinks=args.hyperlinks)
-    cwd = cwd_from_env()
-    settings = Settings.from_cwd(cwd)
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
 
     if (args.first_attention or args.next_attention) and (args.rev_range or args.all_commits):
         ap.error("cannot combine attention targeting with --range / --all")
@@ -145,17 +142,13 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
         branch = resolve_working_branch(cwd, settings=settings)
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
             return int(ExitCode.ATTENTION)
-        try:
-            resolved = resolve_attention_query_or_exit(
-                cwd,
-                args,
-                settings=settings,
-                branch=branch,
-                after_changeish=args.change_id if args.next_attention else None,
-            )
-        except GitError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return int(ExitCode.GIT)
+        resolved = resolve_attention_query_or_exit(
+            cwd,
+            args,
+            settings=settings,
+            branch=branch,
+            after_changeish=args.change_id if args.next_attention else None,
+        )
         if isinstance(resolved, int):
             return resolved
         printed_change_id = resolved.change_id or ""
@@ -168,26 +161,20 @@ def main(argv: list[str] | None = None) -> int:  # pylint: disable=too-many-bran
 
         want = args.change_id.lower()
 
-        try:
-            if args.all_commits:
-                logger.debug("searching all commits")
-                commits = _commits_all(cwd)
-            elif args.rev_range:
-                logger.debug("searching range: %s", args.rev_range)
-                commits = commits_in_range(cwd, args.rev_range)
-            else:
-                head_ref = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd, check=False)
-                if head_ref.returncode == 0:
-                    branch = head_ref.stdout.strip()
-                    if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
-                        return 1
-                _fork, display, target_tip = merge_base_with_target(cwd)
-                rev_range = f"{target_tip}..HEAD"
-                logger.debug("default range: %s (base: %s)", rev_range[:20], display)
-                commits = commits_in_range(cwd, rev_range)
-        except GitError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return int(ExitCode.GIT)
+        if args.all_commits:
+            logger.debug("searching all commits")
+            commits = _commits_all(cwd)
+        elif args.rev_range:
+            logger.debug("searching range: %s", args.rev_range)
+            commits = commits_in_range(cwd, args.rev_range)
+        else:
+            branch = current_branch(cwd)
+            if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
+                return 1
+            _fork, display, target_tip = merge_base_with_target(cwd)
+            rev_range = f"{target_tip}..HEAD"
+            logger.debug("default range: %s (base: %s)", rev_range[:20], display)
+            commits = commits_in_range(cwd, rev_range)
 
         for c in commits:
             cid = c.change_id

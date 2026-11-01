@@ -52,7 +52,8 @@ class GitError(RuntimeError):
         self.returncode = returncode
 
     def __str__(self) -> str:
-        return f"{self.args[0]}\n{self.stderr.strip()}"
+        detail = self.stderr.strip()
+        return f"{self.args[0]}\n{detail}" if detail else str(self.args[0])
 
 
 def _clear_semantic_snapshots() -> None:

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 
-from gerrit_workflow_tools.cli_common import ExitCode, add_verbose_and_debug_log_args, configure_logging, cwd_from_env
-from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.cli_common import add_verbose_and_debug_log_args, init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest, resolve_gerrit_web_base
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -36,25 +34,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger fetch-api``: GET a path under ``/a/`` and print JSON."""
-    p = _build_parser()
-    args = p.parse_args(argv)
-    configure_logging(args.debug_log)
-    cwd = cwd_from_env()
-    settings = Settings.from_cwd(cwd)
+    return run_cli_command(lambda: _run(argv))
 
-    try:
-        web_base = resolve_gerrit_web_base(settings)
-    except ConfigError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return int(ExitCode.CONFIG)
 
-    client = HttpGerritRest.from_settings(web_base, settings)
-    try:
-        data = client.get_json(args.path)
-    except GerritApiError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return int(ExitCode.GERRIT)
-
+def _run(argv: list[str] | None) -> int:
+    args = _build_parser().parse_args(argv)
+    _cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    client = HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
+    data = client.get_json(args.path)
     indent = None if args.compact else 2
     print(json.dumps(data, indent=indent, sort_keys=True))
     return 0

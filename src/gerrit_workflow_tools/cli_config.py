@@ -185,11 +185,7 @@ def _stream_is_tty(stream: object) -> bool:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(
-        debug_log=args.debug_log,
-        color=args.color,
-        hyperlinks=args.hyperlinks,
-    )
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
     if not _stream_is_tty(sys.stdin) or not _stream_is_tty(sys.stdout):
         print("error: ger config requires an interactive terminal.", file=sys.stderr)
         return int(ExitCode.ATTENTION)

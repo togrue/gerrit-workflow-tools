@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
-from gerrit_workflow_tools.cli_common import ExitCode, add_color_args, add_verbose_and_debug_log_args, init_cli_runtime
-from gerrit_workflow_tools.core.config import ConfigError
+from gerrit_workflow_tools.cli_common import (
+    add_color_args,
+    add_verbose_and_debug_log_args,
+    init_cli_runtime,
+    run_cli_command,
+)
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base
 
@@ -24,18 +27,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run ``ger cache`` administration commands."""
+    return run_cli_command(lambda: _run(argv))
 
+
+def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    _cwd, settings, _summary_highlighter = init_cli_runtime(
-        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
-    )
+    _cwd, settings, _summary_highlighter = init_cli_runtime(args)
 
-    try:
-        web_base = resolve_gerrit_web_base(settings)
-    except ConfigError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return int(ExitCode.CONFIG)
-
+    web_base = resolve_gerrit_web_base(settings)
     cache = GerritCache.for_web_base(web_base)
     if args.cmd == "clear":
         cache.clear()

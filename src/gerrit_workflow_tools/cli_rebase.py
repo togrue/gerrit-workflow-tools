@@ -12,12 +12,10 @@ import sys
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
+    init_cli_runtime,
     print_resolution_note,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
@@ -92,13 +90,11 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    configure_logging(args.debug_log)
-    cwd = cwd_from_env()
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
 
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 
-    settings = Settings.from_cwd(cwd)
     rdef = settings.rebase_defaults
     if args.no_onto_remote:
         use_onto_remote = False

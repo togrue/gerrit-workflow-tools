@@ -446,13 +446,12 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 Concepts that still exist more than once, ranked by how far the copies have **drifted** — divergence is the cost, not line count. Each item names the exceptions that track it in [`tests/test_architecture.py`](../tests/test_architecture.py); fixing the item means deleting them. Resolve each drift to *one* stated behaviour, and record a choice that would otherwise be re-suggested as an ADR.
 
-1. **One command entry point.** Eight commands skip `init_cli_runtime` and seven skip `run_cli_command`, so they differ in logging, color, `Settings` construction and exit-code mapping. *Tracked by:* `test_commands_use_shared_runtime`.
-2. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
-3. **One git runner.** `core/git_run.py` cannot run interactively, so `cli_edit.py` and `cli_rebase.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
-4. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
-5. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
-6. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
-7. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
+2. **One git runner.** `core/git_run.py` cannot run interactively, so `cli_edit.py` and `cli_rebase.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
+3. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
+4. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
+5. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
+6. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
 
 ---
 

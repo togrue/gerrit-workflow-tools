@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.git_run import git
 
 
@@ -188,6 +189,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger setup``: prompt for Gerrit web URL, user, and HTTP token."""
-    parser = _build_parser()
-    ns = parser.parse_args(argv)
-    return _run_interactive_setup(global_config=not ns.local, cwd=Path.cwd())
+    return run_cli_command(lambda: _run(argv))
+
+
+def _run(argv: list[str] | None) -> int:
+    args = _build_parser().parse_args(argv)
+    cwd, _settings, _summary_highlighter = init_cli_runtime(args)
+    return _run_interactive_setup(global_config=not args.local, cwd=cwd)

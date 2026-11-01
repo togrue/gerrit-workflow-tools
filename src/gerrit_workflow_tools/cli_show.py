@@ -284,9 +284,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 ) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, summary_highlighter = init_cli_runtime(
-        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
-    )
+    cwd, settings, summary_highlighter = init_cli_runtime(args)
     out_fmt = _output_format(args)
     verbose_level = int(args.verbose)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)

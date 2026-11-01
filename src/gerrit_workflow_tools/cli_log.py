@@ -233,9 +233,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint: disable=too-many-locals
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, settings, summary_highlighter = init_cli_runtime(
-        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
-    )
+    cwd, settings, summary_highlighter = init_cli_runtime(args)
 
     gdef = settings.log_defaults
     verbose_level = int(args.verbose)

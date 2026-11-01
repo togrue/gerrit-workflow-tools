@@ -72,9 +72,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(
-        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
-    )
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     resolution = resolve_changeish(

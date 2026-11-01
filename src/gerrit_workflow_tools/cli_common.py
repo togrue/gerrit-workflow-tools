@@ -227,11 +227,6 @@ def configure_logging(verbosity: int | bool) -> None:
         _CONFIGURED = True
 
 
-def cwd_from_env() -> Path:
-    """Return the current working directory (repository root for CLI commands)."""
-    return Path.cwd()
-
-
 def ensure_utf8_stdio() -> None:
     """Force stdout/stderr to UTF-8 so redirected output can emit Unicode.
 
@@ -247,13 +242,10 @@ def ensure_utf8_stdio() -> None:
             reconfigure(encoding="utf-8")
 
 
-def init_cli_runtime(
-    *,
-    debug_log: int | bool,
-    color: str,
-    hyperlinks: str = "auto",
-) -> tuple[Path, Settings, SummaryHighlighter]:
-    """Configure logging/color and return ``(cwd, settings, summary_highlighter)`` for CLI commands.
+def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryHighlighter]:
+    """Configure logging/color from parsed *args*; return ``(cwd, settings, summary_highlighter)``.
+
+    Commands without ``--debug-log`` or ``--color`` get logging off and color on ``auto``.
 
     This is where a command's :class:`Settings` snapshot is taken: once, at the entry
     point, from a single ``git config --list``. Everything below receives it as an
@@ -261,21 +253,9 @@ def init_cli_runtime(
     """
 
     ensure_utf8_stdio()
-    configure_logging(debug_log)
-    cwd = cwd_from_env()
-    init_color_mode(color=color)
-    init_hyperlink_mode(hyperlinks=hyperlinks)
+    configure_logging(getattr(args, "debug_log", False))
+    cwd = Path.cwd()
+    init_color_mode(color=getattr(args, "color", "auto"))
+    init_hyperlink_mode(hyperlinks=getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
     return cwd, settings, build_summary_highlighter(settings)
-
-
-def handle_git_error(e: Exception) -> int:
-    """Print a :class:`~gerrit_workflow_tools.git_run.GitError` and return :attr:`ExitCode.GIT`.
-
-    Retained for commands not yet routed through :func:`run_cli_command`; it now uses the
-    same exit code and message prefix, so the two agree.
-    """
-    if isinstance(e, GitError):
-        print(f"error: {e.args[0]}", file=sys.stderr)
-        return int(ExitCode.GIT)
-    raise e

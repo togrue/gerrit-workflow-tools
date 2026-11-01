@@ -9,11 +9,10 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
-    handle_git_error,
+    init_cli_runtime,
+    run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import color_short_sha, init_color_mode, init_hyperlink_mode
+from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.change_id import (
     ChangeIdIssueKind,
     ChangeIdRow,
@@ -24,7 +23,6 @@ from gerrit_workflow_tools.core.change_id import (
     strip_change_id_lines,
 )
 from gerrit_workflow_tools.core.changeish import is_change_id
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import current_branch, git_dir
 from gerrit_workflow_tools.core.stack import (
@@ -166,13 +164,12 @@ def main(argv: list[str] | None = None) -> int:
 
     Prints or validates Change-Ids for commits or ranges, with optional stack checking.
     """
-    p = _build_parser()
-    args = p.parse_args(argv)
-    configure_logging(args.debug_log)
-    init_color_mode(color=args.color)
-    init_hyperlink_mode(hyperlinks=args.hyperlinks)
-    cwd = cwd_from_env()
-    settings = Settings.from_cwd(cwd)
+    return run_cli_command(lambda: _run(argv))
+
+
+def _run(argv: list[str] | None) -> int:
+    args = _build_parser().parse_args(argv)
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
 
     input_arg = args.rev_or_range or "HEAD"
 
@@ -208,9 +205,7 @@ def main(argv: list[str] | None = None) -> int:
 
     except ChangeIdError as err:
         print(str(err), file=sys.stderr)
-        return getattr(err, "code", 1)
-    except GitError as e:
-        return handle_git_error(e)
+        return err.code
 
 
 def _build_parser() -> argparse.ArgumentParser:

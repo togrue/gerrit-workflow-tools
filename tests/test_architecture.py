@@ -314,31 +314,10 @@ def test_commands_use_shared_runtime() -> None:
         for helper in ("init_cli_runtime(", "run_cli_command("):
             if helper not in SOURCES[rel]:
                 found.add(f"{rel} lacks {helper[:-1]}")
-    # Backlog: "One command entry point".
-    debt = dict.fromkeys(
-        [
-            "cli_bash_completion.py lacks init_cli_runtime",
-            "cli_bash_completion.py lacks run_cli_command",
-            "cli_cache.py lacks run_cli_command",
-            "cli_changeid.py lacks init_cli_runtime",
-            "cli_changeid.py lacks run_cli_command",
-            "cli_edit.py lacks init_cli_runtime",
-            "cli_fetch_api.py lacks init_cli_runtime",
-            "cli_fetch_api.py lacks run_cli_command",
-            "cli_fix.py lacks init_cli_runtime",
-            "cli_push.py lacks run_cli_command",
-            "cli_rebase.py lacks init_cli_runtime",
-            "cli_setup.py lacks init_cli_runtime",
-            "cli_setup.py lacks run_cli_command",
-            "cli_sha.py lacks init_cli_runtime",
-            "cli_sha.py lacks run_cli_command",
-        ],
-        "one command entry point",
-    )
     _check(
         "command bypasses the shared runtime",
         found,
-        debt,
+        {},
         "Call cli_common.init_cli_runtime and wrap the body in cli_common.run_cli_command.",
     )
 
@@ -350,8 +329,8 @@ MAX_LINES = 400
 # Files already over MAX_LINES, pinned at their size. They may only shrink; lower the
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
-    "cli_push.py": 813,
-    "cli_show.py": 408,
+    "cli_push.py": 812,
+    "cli_show.py": 406,
     "core/gerrit/cache.py": 684,
     "core/gerrit/change_resolution.py": 462,
     "core/gerrit/rest.py": 824,

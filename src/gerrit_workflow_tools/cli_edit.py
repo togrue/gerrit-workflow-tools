@@ -15,8 +15,7 @@ from gerrit_workflow_tools.cli_attention import require_stack_upstream
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
-    configure_logging,
-    cwd_from_env,
+    init_cli_runtime,
     print_resolution_note,
     run_cli_command,
 )
@@ -268,9 +267,7 @@ def _run_interactive_stack_rebase(
     """Shared implementation for ``ger edit`` and ``ger reword``."""
     p = _build_parser(prog=prog, description=description, default_action=default_action)
     args = p.parse_args(argv)
-    configure_logging(args.debug_log)
-    cwd = cwd_from_env()
-    settings = Settings.from_cwd(cwd)
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
     _validate_targeting_args(p, args)
 
     branch = resolve_working_branch(cwd, settings=settings)

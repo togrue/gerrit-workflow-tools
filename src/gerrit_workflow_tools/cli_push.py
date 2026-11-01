@@ -14,8 +14,8 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     ask_choice,
     confirm,
-    handle_git_error,
     init_cli_runtime,
+    run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
@@ -760,10 +760,12 @@ def _push_gerrit(
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger push``: compute ready range and push to Gerrit."""
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+
+
+def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     args = _build_arg_parser().parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(
-        debug_log=args.debug_log, color=args.color, hyperlinks=args.hyperlinks
-    )
+    cwd, settings, _summary_highlighter = init_cli_runtime(args)
     logger.debug(
         "gpush cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
         "no_rebase_check=%s follow_merges=%s reviewer_strategy=%s",
@@ -786,27 +788,24 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
         return 1
 
-    try:
-        detached = is_detached_head(cwd)
-        branch = _resolve_push_branch(cwd, args.branch, settings=settings)
-        mode = ger_push_mode(cwd, branch, settings=settings)
-        if not args.yes and mode in ("gerrit", None) and (args.branch or not detached):
-            if not require_branch_upstream(cwd, branch, settings=settings):
-                return 1
-            mode = ger_push_mode(cwd, branch, settings=settings)
-        if mode is None:
-            raise GitError(
-                "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
-                "run `git fetch` first if the tracking branch is missing)."
-            )
-        if args.i and mode == "vanilla":
-            print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)
+    detached = is_detached_head(cwd)
+    branch = _resolve_push_branch(cwd, args.branch, settings=settings)
+    mode = ger_push_mode(cwd, branch, settings=settings)
+    if not args.yes and mode in ("gerrit", None) and (args.branch or not detached):
+        if not require_branch_upstream(cwd, branch, settings=settings):
             return 1
-        if mode == "vanilla":
-            return _handle_vanilla_push(cwd, args, branch=branch, settings=settings)
-        return _push_gerrit(cwd, args, branch=branch, settings=settings, gerrit=gerrit)
-    except GitError as exc:
-        return handle_git_error(exc)
+        mode = ger_push_mode(cwd, branch, settings=settings)
+    if mode is None:
+        raise GitError(
+            "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
+            "run `git fetch` first if the tracking branch is missing)."
+        )
+    if args.i and mode == "vanilla":
+        print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)
+        return 1
+    if mode == "vanilla":
+        return _handle_vanilla_push(cwd, args, branch=branch, settings=settings)
+    return _push_gerrit(cwd, args, branch=branch, settings=settings, gerrit=gerrit)
 
 
 if __name__ == "__main__":
