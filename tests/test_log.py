@@ -642,7 +642,7 @@ def _install_log_git_mocks(
     monkeypatch.setattr("gerrit_workflow_tools.core.git_state.Worktree.from_cwd", fake_worktree_from_cwd)
     monkeypatch.setattr("gerrit_workflow_tools.core.git_state.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
-    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: None)
+    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.resolve_working_branch", lambda _cwd, **_kw: None)
     return git_out_calls, git_calls
 
 
@@ -681,9 +681,7 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
 def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
-    monkeypatch.setattr(
-        "gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: "feat/x"
-    )
+    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.resolve_working_branch", lambda _cwd, **_kw: "feat/x")
 
     rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
     assert rev_range == "feat/x@{upstream}..feat/x"
@@ -764,8 +762,8 @@ def test_branches_needing_upstream(
     head_branch: str,
     want: list[str],
 ) -> None:
-    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.current_branch", lambda _cwd: head_branch)
-    monkeypatch.setattr("gerrit_workflow_tools.core.annotated_stack.resolve_working_branch", lambda _cwd, **_kw: None)
+    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.current_branch", lambda _cwd: head_branch)
+    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.resolve_working_branch", lambda _cwd, **_kw: None)
     got = branches_needing_upstream(Path("mock-repo"), rev_range, settings=Settings.from_map({}))
     assert got == want
 

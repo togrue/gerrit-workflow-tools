@@ -9,26 +9,19 @@ answer (e.g. whether the upstream's remote is ``gerrit.remote``). The dependency
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.git_run import GitError, abs_cwd, git, git_out
 
 
 logger = logging.getLogger(__name__)
 
 _WORKTREE_LOCK = threading.Lock()
 _WORKTREE_BY_CWD: dict[str, Worktree] = {}
-
-
-def _cwd_abs(cwd: Path | str | None) -> str:
-    if cwd is not None:
-        return os.path.abspath(os.path.expanduser(str(cwd)))
-    return os.getcwd()
 
 
 @dataclass(frozen=True)
@@ -42,7 +35,7 @@ class Worktree:
 
     @classmethod
     def from_cwd(cls, cwd: Path | str | None) -> Worktree:
-        cwd_abs = _cwd_abs(cwd)
+        cwd_abs = abs_cwd(cwd)
         with _WORKTREE_LOCK:
             cached = _WORKTREE_BY_CWD.get(cwd_abs)
             if cached is not None:
@@ -70,7 +63,7 @@ class Worktree:
         git_dir_raw = lines[2] if len(lines) > 2 else ""
         toplevel = Path(top_raw) if top_raw else None
         checked = abbrev if abbrev and abbrev != "HEAD" else None
-        git_dir = _resolve_git_dir_path(git_dir_raw, cwd=cwd, cwd_abs=cwd_abs) if git_dir_raw else None
+        git_dir = Path(cwd_abs) / git_dir_raw if git_dir_raw else None
         return cls(toplevel=toplevel, checked_out_branch=checked, git_dir=git_dir)
 
 
@@ -78,15 +71,6 @@ def clear_worktree_cache() -> None:
     """Drop memoized :class:`Worktree` snapshots (tests and :func:`clear_git_cache`)."""
     with _WORKTREE_LOCK:
         _WORKTREE_BY_CWD.clear()
-
-
-def _resolve_git_dir_path(raw: str, *, cwd: Path | str | None, cwd_abs: str) -> Path | None:
-    if not raw:
-        return None
-    git_dir = Path(raw)
-    if git_dir.is_absolute():
-        return git_dir
-    return Path(cwd_abs) / git_dir
 
 
 def repo_toplevel(cwd: Path | str | None) -> Path | None:
@@ -122,35 +106,30 @@ def checked_out_branch_name(cwd: Path | str | None) -> str | None:
     return wt.checked_out_branch
 
 
-def _git_dir(cwd: Path | str | None) -> Path | None:
+def git_dir(cwd: Path | str | None) -> Path | None:
+    """The repository's git dir, also when HEAD is unborn; ``None`` outside a repository."""
     wt = Worktree.from_cwd(cwd)
     if wt.toplevel is not None:
         return wt.git_dir
     p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
     raw = (p.stdout or "").strip()
-    if not raw:
-        return None
-    return _resolve_git_dir_path(raw, cwd=cwd, cwd_abs=_cwd_abs(cwd))
+    return Path(abs_cwd(cwd)) / raw if p.returncode == 0 and raw else None
 
 
 def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
     """Branch currently being rebased, if Git has an in-progress rebase state."""
-    git_dir = _git_dir(cwd)
-    if git_dir is None:
+    repo_dir = git_dir(cwd)
+    if repo_dir is None:
         return None
     for state_dir in ("rebase-merge", "rebase-apply"):
-        head_name = git_dir / state_dir / "head-name"
+        head_name = repo_dir / state_dir / "head-name"
         if not head_name.exists():
             continue
         try:
             branch = head_name.read_text(encoding="utf-8").strip()
         except OSError:
             continue
-        if branch.startswith("refs/heads/"):
-            branch = branch[len("refs/heads/") :]
-        return branch or None
+        return branch.removeprefix("refs/heads/") or None
     return None
 
 
@@ -206,10 +185,7 @@ def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:
     returns *branch* only (e.g. ``origin/dev`` → ``dev``). Otherwise returns *target*
     unchanged (e.g. ``main``, ``release/1.0``).
     """
-    prefix = f"{settings.gerrit_remote}/"
-    if target.startswith(prefix):
-        return target[len(prefix) :]
-    return target
+    return target.removeprefix(f"{settings.gerrit_remote}/")
 
 
 def upstream_abbrev_sym(cwd: Path | str | None, branch: str | None = None) -> str | None:
@@ -276,17 +252,14 @@ def effective_gerrit_destination_branch(
     when its remote matches ``gerrit.remote`` (e.g. ``origin/main``), suitable
     for :func:`refs_for_push_branch_name`. Returns ``None`` when neither is available.
     """
-    override = settings.branch_gerrit_target(resolve_branch_for_branch_config(cwd, branch, settings=settings))
+    branch_name = resolve_branch_for_branch_config(cwd, branch, settings=settings)
+    override = settings.branch_gerrit_target(branch_name)
     if override:
         return override
-    branch_name = branch if branch is not None else resolve_branch_for_branch_config(cwd, branch, settings=settings)
-    upstream = resolve_upstream_abbrev_ref(cwd, branch_name, settings=settings)
-    if not upstream or "/" not in upstream:
+    parsed = resolve_upstream_parsed(cwd, branch_name, settings=settings)
+    if parsed is None or parsed[0] != settings.gerrit_remote:
         return None
-    remote_name, _rest = upstream.split("/", 1)
-    if remote_name != settings.gerrit_remote:
-        return None
-    return upstream
+    return "/".join(parsed)
 
 
 def ger_push_mode(
@@ -300,10 +273,7 @@ def ger_push_mode(
     parsed = resolve_upstream_parsed(cwd, branch, settings=settings)
     if not parsed:
         return None
-    remote_name, _rest = parsed
-    if remote_name == settings.gerrit_remote:
-        return "gerrit"
-    return "vanilla"
+    return "gerrit" if parsed[0] == settings.gerrit_remote else "vanilla"
 
 
 # pylint: disable=too-many-locals
@@ -386,21 +356,15 @@ def head_is_linear_on_remote_gerrit_target(
     return (ok, onto)
 
 
-def _remote_tracking_ref_candidates_from_target(remote_name: str, target: str) -> list[str]:
-    """Build refs to try for ``ger rebase --onto-remote`` from the upstream target.
+def _remote_tracking_ref(remote_name: str, target: str) -> str:
+    """The ref ``ger rebase --onto-remote`` tries for the upstream *target*.
 
     Accepts a bare branch name (``dev`` → ``<remote>/dev``) or an existing remote-tracking
     form (``origin/dev``) without doubling the remote (``origin/origin/dev``).
     ``refs/remotes/origin/dev`` is normalized to ``origin/dev``.
     """
-    t = target.strip()
-    if not t:
-        return []
-    if t.startswith("refs/remotes/"):
-        t = t[len("refs/remotes/") :]
-    if "/" in t:
-        return [t]
-    return [f"{remote_name}/{t}"]
+    ref = target.strip().removeprefix("refs/remotes/")
+    return ref if "/" in ref else f"{remote_name}/{ref}"
 
 
 def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:
@@ -423,27 +387,13 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
             f"Fetch so `refs/remotes/{remote_name}/<branch>` exists."
         )
 
-    candidates = _remote_tracking_ref_candidates_from_target(remote_name, eff)
-    logger.debug(
-        "resolve_rebase_onto_remote_ref: branch=%r remote=%r effective=%r candidates=%s",
-        b,
-        remote_name,
-        eff,
-        candidates,
-    )
-    seen: set[str] = set()
-    for cand in candidates:
-        if not cand or cand in seen:
-            continue
-        seen.add(cand)
-        p = git("rev-parse", "--verify", cand, cwd=cwd, check=False)
-        if p.returncode == 0:
-            logger.debug("resolve_rebase_onto_remote_ref: using %r", cand)
-            return cand
+    ref = _remote_tracking_ref(remote_name, eff)
+    logger.debug("resolve_rebase_onto_remote_ref: branch=%r remote=%r effective=%r ref=%s", b, remote_name, eff, ref)
+    if git("rev-parse", "--verify", ref, cwd=cwd, check=False).returncode == 0:
+        return ref
 
-    tried = ", ".join(candidates) or f"{remote_name}/{eff}"
     hint = (
         f"Fetch from your Gerrit remote (`gerrit.remote`, often `{remote_name}`), e.g. "
         f"`git fetch {remote_name}` so `refs/remotes/{remote_name}/<branch>` exists."
     )
-    raise GitError(f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {tried}). {hint}")
+    raise GitError(f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {ref}). {hint}")

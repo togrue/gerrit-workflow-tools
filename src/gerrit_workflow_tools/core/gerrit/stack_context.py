@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
+from gerrit_workflow_tools.core.git_run import abs_cwd
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
     refs_for_push_branch_name,
@@ -53,9 +53,7 @@ def _stack_branch_name(cwd: Path | str | None, branch: str | None, *, settings: 
 
 def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> StackContext:
     """Resolve project, target branch, and push branch for the current stack."""
-    cwd_abs = os.path.abspath(os.path.expanduser(str(cwd))) if cwd is not None else os.getcwd()
-    branch_key = branch if branch is not None else ""
-    cache_key = (cwd_abs, branch_key, frozenset(settings.values.items()))
+    cache_key = (abs_cwd(cwd), branch or "", frozenset(settings.values.items()))
     cached = _STACK_CONTEXT_CACHE.get(cache_key)
     if cached is not None:
         return cached

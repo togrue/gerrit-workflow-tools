@@ -32,7 +32,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context, stack_project
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
+from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 
 
@@ -65,7 +65,7 @@ def resolve_rev_range(cwd: Path | str | None, arg_rev_range: str | None, *, sett
         if ".." in arg_rev_range:
             return arg_rev_range
         return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}"
-    branch = resolve_working_branch(cwd, settings=settings) or current_branch(cwd)
+    branch = resolve_branch_for_branch_config(cwd, settings=settings)
     if branch == "HEAD":
         return "@{upstream}..HEAD"
     return f"{branch}@{{upstream}}..{branch}"
@@ -76,7 +76,7 @@ def branches_needing_upstream(cwd: Path | str | None, rev_range: str, *, setting
 
     Reports only; resolving an upstream is interactive and stays with the caller.
     """
-    current = resolve_working_branch(cwd, settings=settings) or current_branch(cwd)
+    current = resolve_branch_for_branch_config(cwd, settings=settings)
     required: list[str] = []
     seen: set[str] = set()
     for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):

@@ -9,7 +9,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
-from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
+from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def _resolve_stack_branch(
     if branch is not None:
         return branch
     snap = settings if settings is not None else Settings.from_cwd(cwd)
-    return resolve_working_branch(cwd, settings=snap) or current_branch(cwd)
+    return resolve_branch_for_branch_config(cwd, settings=snap)
 
 
 def upstream_tracking_tip_and_display(

@@ -23,8 +23,7 @@ from gerrit_workflow_tools.core.attention import (
 )
 from gerrit_workflow_tools.core.config import Settings, set_attention_cursor_config, set_last_attention_change_id
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.git_state import Worktree
+from gerrit_workflow_tools.core.git_state import git_dir
 
 
 EditAttentionMode = Literal["resume", "next", "first"]
@@ -108,30 +107,12 @@ def _now_utc(now: datetime | None) -> datetime:
     return (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
 
 
-def _git_dir(cwd: Path | str | None) -> Path | None:
-    """Resolve ``.git`` even when HEAD is unborn (empty repo)."""
-    wt = Worktree.from_cwd(cwd)
-    if wt.git_dir is not None:
-        return wt.git_dir
-    p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    raw = (p.stdout or "").strip()
-    if not raw:
-        return None
-    path = Path(raw)
-    if path.is_absolute():
-        return path
-    base = Path(cwd) if cwd is not None else Path.cwd()
-    return base / path
-
-
 def history_path(cwd: Path | str | None) -> Path | None:
     """Path to ``.git/ger/attention-history.jsonl``, or ``None`` outside a git repo."""
-    git_dir = _git_dir(cwd)
-    if git_dir is None:
+    repo_dir = git_dir(cwd)
+    if repo_dir is None:
         return None
-    return git_dir / "ger" / _HISTORY_NAME
+    return repo_dir / "ger" / _HISTORY_NAME
 
 
 def append_cursor_history(

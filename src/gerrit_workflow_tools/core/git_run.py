@@ -83,7 +83,8 @@ def clear_git_cache() -> None:
     _clear_semantic_snapshots()
 
 
-def _resolve_cwd(cwd: Path | str | None) -> str:
+def abs_cwd(cwd: Path | str | None) -> str:
+    """Absolute form of *cwd*, the process cwd when ``None``."""
     if cwd is not None:
         return os.path.abspath(os.path.expanduser(str(cwd)))
     return os.getcwd()
@@ -158,7 +159,7 @@ def git(
         p = _run_git(*args, cwd=cwd, env=env, input_text=input)
     else:
         env_key = tuple(sorted(env.items())) if env else None
-        p = _git_cached(args, _resolve_cwd(cwd), env_key)
+        p = _git_cached(args, abs_cwd(cwd), env_key)
     _raise_if_failed(args, p, check=check)
     return p
 

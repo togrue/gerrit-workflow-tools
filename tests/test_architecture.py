@@ -366,7 +366,6 @@ SIZE_BASELINE = {
     "core/gerrit/change_resolution.py": 549,
     "core/gerrit/rest.py": 824,
     "core/gerrit/service.py": 472,
-    "core/git_state.py": 449,
     "push_input_line.py": 441,
     "reviewer_catalog.py": 478,
 }
