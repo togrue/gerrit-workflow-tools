@@ -216,10 +216,6 @@ CONCEPTS = [
             "core/git_run.py": "runs git",
             "rebase_enricher.py": "opens the user's editor (not git)",
         },
-        debt={
-            "cli_edit.py": "one git runner: interactive `git rebase -i`",
-            "cli_rebase.py": "one git runner: interactive `git rebase -i`",
-        },
         fix="Run git through core/git_run.py; extend git_run if it lacks what you need.",
     ),
     Concept(

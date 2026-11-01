@@ -96,8 +96,9 @@ def _run_git(
     cwd: Path | str | None = None,
     env: dict[str, str] | None = None,
     input_text: str | None = None,
+    capture: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    cmd = ("git", *args)
+    cmd = ["git", *args]
     cwd_str = str(cwd) if cwd is not None else None
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd_str or ".")
     merged = {**os.environ, **env} if env else None
@@ -108,7 +109,7 @@ def _run_git(
         env=merged,
         input=input_text,
         text=True,
-        capture_output=True,
+        capture_output=capture,
         check=False,
     )
     record_call("git", " ".join(cmd), time.perf_counter() - t0)
@@ -148,16 +149,18 @@ def git(
     env: dict[str, str] | None = None,
     check: bool = True,
     input: str | None = None,
+    capture: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run git with given args; cwd defaults to current directory.
 
-    Pass *input* to feed stdin (disables the rev-parse/log cache for that call).
+    Pass *input* to feed stdin (disables the rev-parse/log cache for that call). Pass
+    ``capture=False`` for a git that talks to the terminal itself, such as ``rebase -i``.
     """
     if input is not None or not args or args[0] not in _CACHEABLE_SUBCOMMANDS:
         _git_cached.cache_clear()
         if _invalidates_head_identity(args):
             _clear_semantic_snapshots()
-        p = _run_git(*args, cwd=cwd, env=env, input_text=input)
+        p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
     else:
         env_key = tuple(sorted(env.items())) if env else None
         p = _git_cached(args, abs_cwd(cwd), env_key)

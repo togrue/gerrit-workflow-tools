@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
-import shlex
-import subprocess
-import sys
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -15,6 +11,7 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     print_resolution_note,
     run_cli_command,
+    run_interactive_rebase,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -121,21 +118,15 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
             return int(ExitCode.ATTENTION)
         base, _, _ = merge_base_with_target(cwd, branch)
 
-    env = os.environ.copy()
-    # Point GIT_SEQUENCE_EDITOR at the enricher.  The enricher reads GIT_EDITOR /
-    # core.editor / EDITOR from the environment to find the actual editor to open.
-    env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_enricher"
+    # The enricher reads GIT_EDITOR / core.editor / EDITOR to find the actual editor to open.
+    env: dict[str, str] = {}
     if args.debug_log:
         env["GREBASE_DEBUG_LOG"] = "1"
     if drop_merged:
         env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
 
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
-    cmd = ["git", "rebase", "-i", base]
-    logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
-    r = subprocess.run(cmd, cwd=cwd, env=env, check=False)
-    logger.debug("ger rebase: git rebase finished rc=%s", r.returncode)
-    return r.returncode
+    return run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env)
 
 
 if __name__ == "__main__":

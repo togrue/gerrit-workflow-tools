@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
-import shlex
-import subprocess
 import sys
 from pathlib import Path
 from typing import Literal
@@ -18,6 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     print_resolution_note,
     run_cli_command,
+    run_interactive_rebase,
 )
 from gerrit_workflow_tools.core.attention_cursor import (
     EditAttentionMode,
@@ -295,32 +293,19 @@ def _run_interactive_stack_rebase(
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
 
-    env = os.environ.copy()
-    env["GEDIT_FULL_SHA"] = full
-    env["GEDIT_SHORT_SHA"] = short
-    env["GEDIT_ACTION"] = action
+    env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
     if args.debug_log:
         env["GEDIT_DEBUG_LOG"] = "1"
-    env["GIT_SEQUENCE_EDITOR"] = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.rebase_sequence_editor"
-
-    logger.debug(
-        "gedit starting interactive rebase onto rebase_fork=%s full=%s short=%s",
-        rebase_fork[:8],
-        full[:8],
-        short,
-    )
-    cmd = ["git", "rebase", "-i", rebase_fork]
-    logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd)
-    r = subprocess.run(cmd, cwd=cwd, env=env, check=False)
-    logger.debug("gedit rebase finished with return code %s", r.returncode)
-    moved = default_action == "edit" and args.next_attention and r.returncode == 0
+    logger.debug("gedit rebasing onto %s to stop at %s", rebase_fork[:8], short)
+    returncode = run_interactive_rebase(cwd, rebase_fork, sequence_editor="rebase_sequence_editor", env=env)
+    moved = default_action == "edit" and args.next_attention and returncode == 0
     if moved and settings.edit_next_show:
         from gerrit_workflow_tools.cli_ger import run_show
 
         show_code = run_show([full], gerrit=gerrit)
         if show_code not in (int(ExitCode.OK), int(ExitCode.ATTENTION)):
             return show_code
-    return r.returncode
+    return returncode
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:

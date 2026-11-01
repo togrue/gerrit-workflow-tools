@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import logging
+import shlex
 import sys
 from collections.abc import Callable, Mapping
 from enum import IntEnum
@@ -30,7 +31,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_resolution_note,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
-from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -259,3 +260,10 @@ def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryH
     init_hyperlink_mode(hyperlinks=getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
     return cwd, settings, build_summary_highlighter(settings)
+
+
+def run_interactive_rebase(cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str]) -> int:
+    """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code."""
+    editor = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.{sequence_editor}"
+    env = {**env, "GIT_SEQUENCE_EDITOR": editor}
+    return git("rebase", "-i", base, cwd=cwd, env=env, check=False, capture=False).returncode
