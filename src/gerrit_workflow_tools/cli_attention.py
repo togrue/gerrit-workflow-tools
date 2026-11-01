@@ -22,7 +22,8 @@ def add_attention_query_args(parser: argparse.ArgumentParser) -> None:
     attn.add_argument(
         "--first-attention",
         action="store_true",
-        help="Target the oldest stack commit with edit attention (unresolved comments or CI failed).",
+        help="Target the oldest stack commit with edit attention (unresolved comments or CI failed; a vote alone "
+        "does not count).",
     )
     attn.add_argument(
         "-n",
