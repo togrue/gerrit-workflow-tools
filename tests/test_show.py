@@ -222,8 +222,8 @@ def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     assert "\033[" not in out
 
 
-def test_gshow_multi_human_omits_clean_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With multiple targets, commits without unresolved chains are not printed."""
+def test_gshow_multi_human_lists_clean_commits_briefly(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With multiple targets, a commit without unresolved chains gets a headline and its subject."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
     parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
@@ -260,15 +260,15 @@ def test_gshow_multi_human_omits_clean_commits(stack_repo: Path, monkeypatch: py
     assert "needs fix" in out
     assert "╭─ x.py:2" in out
     assert tip_subj in out
-    assert out.count("commit ") == 1
+    assert out.count("commit ") == 2
     assert git_out("rev-parse", "--short", tip, cwd=stack_repo) in out
-    assert git_out("rev-parse", "--short", parent, cwd=stack_repo) not in out
-    if parent_subj != tip_subj:
-        assert parent_subj not in out
+    assert git_out("rev-parse", "--short", parent, cwd=stack_repo) in out
+    assert parent_subj in out
+    assert "(no unresolved comments)" in out
 
 
-def test_gshow_multi_markdown_omits_clean_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With --ai/--stack, commits without unresolved chains are not printed."""
+def test_gshow_multi_markdown_lists_clean_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With --ai/--stack, a commit without unresolved chains still gets its heading."""
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
     parent = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
@@ -305,11 +305,10 @@ def test_gshow_multi_markdown_omits_clean_commits(stack_repo: Path, monkeypatch:
     assert "> needs fix" in out
     assert "### `x.py:2`" in out
     assert tip_subj in out
-    assert sum(1 for line in out.splitlines() if line.startswith("## ")) == 1
+    assert sum(1 for line in out.splitlines() if line.startswith("## ")) == 4
     assert git_out("rev-parse", "--short", tip, cwd=stack_repo) in out
-    assert git_out("rev-parse", "--short", parent, cwd=stack_repo) not in out
-    if parent_subj != tip_subj:
-        assert parent_subj not in out
+    assert git_out("rev-parse", "--short", parent, cwd=stack_repo) in out
+    assert parent_subj in out
     assert "\033[" not in out
 
 

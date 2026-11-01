@@ -237,6 +237,13 @@ def _emit_human_commit(
             print(line)
 
 
+def _emit_brief_commit(commit: LogCommit, *, comments: CommentSelection) -> None:
+    """One commit of a multi-commit view that has no comments to expand."""
+    print(show_headline(commit))
+    print(f"    {commit.summary}")
+    print(color_text(empty_comments_message(comments), ANSI_DIM))
+
+
 def _attention_summary(commit: LogCommit) -> str:
     if commit.attention_reasons:
         return "attention: " + ", ".join(commit.attention_reasons)
@@ -333,7 +340,6 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     any_attention = False
     json_payloads: list[dict[str, object]] = []
     multi = len(targets) > 1
-    detail_shown = 0
 
     for resolved, commit in zip(targets, commits, strict=True):
         attention = commit.attention_reasons
@@ -362,31 +368,23 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                 )
             )
         else:
-            # Multi-target: only expand commits that have matching comment chains.
-            if multi and not chains:
-                continue
             if out_fmt == "markdown":
                 _emit_markdown_commit(commit, chains=chains, comments=args.comments)
                 print()
-            else:
-                if detail_shown:
-                    print(color_text(_COMMIT_SEPARATOR, ANSI_YELLOW))
-                _emit_human_commit(
-                    cwd,
-                    commit,
-                    is_local=resolved.is_local_commit,
-                    chains=chains,
-                    summary_highlighter=summary_highlighter,
-                    wrap_width=settings.wrap_width,
-                )
-            detail_shown += 1
-
-    if out_fmt in ("human", "markdown") and multi and detail_shown == 0:
-        msg = empty_comments_message(args.comments)
-        if out_fmt == "human":
-            print(color_text(msg, ANSI_DIM))
-        else:
-            print(msg)
+                continue
+            if resolved is not targets[0]:
+                print(color_text(_COMMIT_SEPARATOR, ANSI_YELLOW))
+            if multi and not chains:
+                _emit_brief_commit(commit, comments=args.comments)
+                continue
+            _emit_human_commit(
+                cwd,
+                commit,
+                is_local=resolved.is_local_commit,
+                chains=chains,
+                summary_highlighter=summary_highlighter,
+                wrap_width=settings.wrap_width,
+            )
 
     if out_fmt == "json":
         if len(json_payloads) == 1:

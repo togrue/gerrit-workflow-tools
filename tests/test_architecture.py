@@ -330,7 +330,6 @@ MAX_LINES = 400
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
     "cli_push.py": 613,
-    "cli_show.py": 401,
     "core/gerrit/cache.py": 684,
     "core/gerrit/change_resolution.py": 462,
     "core/gerrit/rest.py": 824,
