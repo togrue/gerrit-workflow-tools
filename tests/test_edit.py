@@ -192,6 +192,26 @@ def test_cursor_stays_put_when_the_rebase_never_starts(stack_repo: Path, monkeyp
     assert git("config", "branch.feature.gerAttentionCursor", cwd=stack_repo, check=False).returncode != 0
 
 
+def test_greword_warns_when_the_change_id_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    tip = rows[-1]
+    real_run = subprocess.run
+
+    def rewording_rebase(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            git("commit", "--amend", "--allow-empty", "-m", "no change id here", cwd=stack_repo)
+            return subprocess.CompletedProcess(cmd, 0)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", rewording_rebase)
+    store = ChangeStore(build_details_by_change_id(rows))
+    code, _out, err = run_cli(stack_repo, greword_main, [tip.sha], monkeypatch, gerrit=store)
+
+    assert code == 0
+    assert f"warning: Change-Id {tip.change_id} left the stack" in err
+
+
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
     from gerrit_workflow_tools.cli_common import ExitCode

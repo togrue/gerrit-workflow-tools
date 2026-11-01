@@ -35,7 +35,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, res
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch
-from gerrit_workflow_tools.core.stack import merge_base_with_target
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 
@@ -47,6 +47,10 @@ __all__ = [
     "main_reword",
     "resolve_first_edit_attention_sha",
 ]
+
+
+def _stack_change_ids(cwd: Path, branch: str | None) -> set[str]:
+    return {commit.change_id for commit in get_stack_snapshot(cwd, branch).commits if commit.change_id}
 
 
 def _has_upstreams(cwd: Path, settings: Settings, branch: str | None) -> bool:
@@ -293,6 +297,7 @@ def _run_interactive_stack_rebase(
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
 
+    change_ids_before = _stack_change_ids(cwd, branch) if action == "reword" else set()
     env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
     if args.debug_log:
         env["GEDIT_DEBUG_LOG"] = "1"
@@ -301,6 +306,9 @@ def _run_interactive_stack_rebase(
     # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
         write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
+    if returncode == 0 and not rebase_in_progress(cwd):
+        for lost in sorted(change_ids_before - _stack_change_ids(cwd, branch)):
+            print(f"warning: Change-Id {lost} left the stack; the next push creates a new change", file=sys.stderr)
     moved = default_action == "edit" and args.next_attention and returncode == 0
     if moved and settings.edit_next_show:
         from gerrit_workflow_tools.cli_ger import run_show
