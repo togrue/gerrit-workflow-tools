@@ -410,7 +410,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
-| `core/upstream_interactive.py` | Prompting for a missing upstream (core that prompts — see backlog) |
+| `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)
 

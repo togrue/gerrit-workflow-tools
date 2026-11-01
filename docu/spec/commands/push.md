@@ -34,7 +34,7 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 | `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip) |
 | `--reviewers ACCOUNTS` | Comma-separated reviewers (repeatable; merged, deduped) |
 | `--reviewer-strategy` | `push` \| `lazy` \| `overwrite` (see below) |
-| `--topic NAME` | Magic ref `%topic=…` |
+| `--topic NAME` | Magic ref `%topic=…`. A comma is refused: it separates push options |
 | `--wip` | Magic ref `%wip` |
 | `--private` | Magic ref `%private` |
 | `--branch NAME` | Push a different local branch than current |

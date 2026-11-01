@@ -96,7 +96,7 @@ Within the section, chains sort by **unreviewed age**, oldest first (longest wai
 | `--to-review` | Only the *to review* section (currently the default and the only implemented section) |
 | `--project P` | Restrict to a Gerrit project; repeatable. Default: all projects on the host (or `inbox.projects`) |
 | `--all` | Include chains filtered out as not ready (WIP, private, CI red) |
-| `--limit N` | At most N chains |
+| `--limit N` | At most N chains. N must be positive |
 | `--json` | Machine-readable output (see [JSON](#json)) |
 | `--url`, `--show-url` | Chain-top URL per entry (default: **on**) |
 | `--no-url` | Omit URLs from text output |

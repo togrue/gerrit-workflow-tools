@@ -61,7 +61,7 @@ Print or validate Change-Ids.
 ger change-id [options] [REV_OR_RANGE]
 ```
 
-Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged.
+Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range prints oldest first, like `ger log`. An empty range prints `(no commits in range)` on stderr and exits `0`.
 
 ### Options
 
