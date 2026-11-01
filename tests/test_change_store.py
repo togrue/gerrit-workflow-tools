@@ -174,7 +174,7 @@ def test_topic_wip_and_private_are_observable() -> None:
     change = store.get_change(triplet)
     assert change["topic"] == "my-topic"
     assert change["work_in_progress"] is True
-    assert change["private"] is True
+    assert change["is_private"] is True
 
     store.set_topic(triplet, None)
     assert store.get_change(triplet)["topic"] is None

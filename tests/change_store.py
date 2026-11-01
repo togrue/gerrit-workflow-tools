@@ -445,5 +445,5 @@ class ChangeStore:
         """Set or clear the private flag on a change."""
         self._record("set_private", change_id, on)
         payload = self._row_or_raise(change_id)
-        payload["private"] = on
+        payload["is_private"] = on
         return payload

@@ -95,6 +95,8 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     """Cache validity key for comments/checks hanging off this change. ``meta_rev_id`` when
     Gerrit sends it, otherwise ``updated`` plus comment counts. Same-second comment
     resolves leave ``updated`` unchanged."""
+    wip: bool = False
+    private: bool = False
 
 
 def _is_merge_commit(cwd: Path | str | None, sha: str) -> bool:
@@ -257,6 +259,8 @@ def build_log_commit(
             reviewers=list(change.reviewers or ()),
             updated=change.updated,
             freshness=change.freshness,
+            wip=change.work_in_progress,
+            private=change.private,
         ),
         frozenset(needed),
     )

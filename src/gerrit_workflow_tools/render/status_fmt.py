@@ -81,7 +81,9 @@ def attention_text(commit: LogCommit) -> str:
     for reason, text in _TERMINAL_TEXT:
         if reason in reasons:
             return text
-    parts: list[str] = []
+    parts: list[str] = ["WIP"] if Attention.WIP in reasons else []
+    if commit.private:
+        parts.append("private")
     if Attention.CI_FAILED in reasons:
         parts.append(f"CI failed: {commit.ci_failures[0]}" if commit.ci_failures else "build failed")
     if Attention.UNRESOLVED_COMMENTS in reasons:

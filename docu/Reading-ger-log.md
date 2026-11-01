@@ -103,6 +103,8 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comment(s)` | Open review threads |
 | `no reviewers` | Change has no reviewers assigned |
+| `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review` |
+| `private` | Change is private on Gerrit. Information only, not an attention reason |
 | `submittable` | Gerrit reports submittable and no blocking issues above |
 | `abandoned` | Change abandoned on Gerrit |
 | `merged drift` / `merged (equiv. unknown)` | Merged-state mismatch (see patchset tokens) |

@@ -244,6 +244,10 @@ def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
             return [(text, code)]
 
     tokens: list[tuple[str, str]] = []
+    if Attention.WIP in reasons:
+        tokens.append(("WIP", ANSI_YELLOW))
+    if commit.private:
+        tokens.append(("private", ANSI_DIM_GRAY))
     if Attention.CI_FAILED in reasons:
         tokens.append(("build failed", ANSI_RED))
     if Attention.UNRESOLVED_COMMENTS in reasons:

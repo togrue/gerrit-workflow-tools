@@ -211,6 +211,8 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     """Gerrit sent ``current_revision`` and a ``revisions`` map (``CURRENT_REVISION`` asked)."""
     attention_set: Mapping[int, datetime | None] = field(default_factory=dict)
     freshness: str | None = None
+    work_in_progress: bool = False
+    private: bool = False
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> ChangeView:
@@ -253,6 +255,8 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             revision_info=isinstance(payload.get("current_revision"), str) and isinstance(raw_revisions, dict),
             attention_set=_attention_set(payload.get("attention_set")),
             freshness=change_freshness_key(payload),
+            work_in_progress=payload.get("work_in_progress") is True,
+            private=payload.get("is_private") is True,
         )
 
     @property

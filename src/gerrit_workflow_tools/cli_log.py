@@ -282,6 +282,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
                 ],
                 "gerrit_url": c.gerrit_url,
                 "submittable": c.submittable,
+                "work_in_progress": c.wip,
+                "private": c.private,
                 "change_id": c.change_id,
                 "abandoned": c.abandoned,
                 "attention_reasons": c.attention_reasons,

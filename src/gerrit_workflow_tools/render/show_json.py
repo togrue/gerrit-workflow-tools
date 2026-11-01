@@ -77,6 +77,8 @@ def commit_json_payload(
         ],
         "gerrit_url": commit.gerrit_url,
         "submittable": commit.submittable,
+        "work_in_progress": commit.wip,
+        "private": commit.private,
         "attention_reasons": commit.attention_reasons,
         "comments": comment_payload,
         "comment_chains": chain_payload,

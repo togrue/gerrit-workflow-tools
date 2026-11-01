@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
+from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.cli_style import (
     ANSI_DIM_GRAY,
     ANSI_GREEN,
@@ -882,3 +884,25 @@ def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
     data2 = json_stdout(out2)
     tip_row2 = next(item for item in data2["commits"] if item.get("change_id") == tip.change_id)
     assert tip_row2["comments_unresolved"] == 0
+
+
+def test_log_and_show_report_wip_and_private(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {"work_in_progress": True, "reviewers": [], "cr": 0}
+    overrides[1] = {"private": True}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    commits = json.loads(out)["commits"]
+    assert (commits[0]["work_in_progress"], commits[1]["private"]) == (True, True)
+    assert "wip" in commits[0]["attention_reasons"]
+    assert not {"no-reviewers", "awaiting-review"} & set(commits[0]["attention_reasons"])
+
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
+    first, second = out.splitlines()[:2]
+    assert "# WIP" in first
+    assert "private" in second
+
+    _code, out, _err = run_cli(stack_repo, show_main, [rows[0].sha, "--json"], monkeypatch, gerrit=store)
+    assert json.loads(out)["work_in_progress"] is True

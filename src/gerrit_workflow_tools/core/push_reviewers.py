@@ -106,7 +106,7 @@ def push_marks(
             True,
             tuple(account.slug for account in reviewer_accounts_from_change_info(detail)),
             bool(detail.get("work_in_progress")),
-            bool(detail.get("private")),
+            bool(detail.get("is_private")),
         )
     return marks
 

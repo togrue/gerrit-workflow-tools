@@ -48,7 +48,7 @@ def change_info_for_sha(
         "unresolved_comment_count": unresolved_comment_count,
         "revisions": {sha: {"_number": revision_number}},
         "work_in_progress": work_in_progress,
-        "private": private,
+        "is_private": private,
         "labels": {
             "Verified": {"value": verified, "all": [{"value": verified}]},
             "Code-Review": {"value": cr, "all": [{"value": cr}]},

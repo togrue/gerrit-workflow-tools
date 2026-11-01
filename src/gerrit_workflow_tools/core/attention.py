@@ -31,6 +31,7 @@ class Attention:  # pylint: disable=too-few-public-methods
     REVIEW_ISSUES = "review-issues"
     AWAITING_REVIEW = "awaiting-review"
     UNRESOLVED_COMMENTS = "unresolved-comments"
+    WIP = "wip"
 
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``).
@@ -72,18 +73,19 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
     settled = _settled_reasons(commit, chain_blocked=chain_blocked)
     if settled is not None:
         return settled
-    reasons: list[str] = []
+    reasons: list[str] = [Attention.WIP] if commit.wip else []
     if commit.patchset_status == PatchsetStatus.NEWER:
         reasons.append(Attention.AHEAD_OF_GERRIT)
     if commit.patchset_status == PatchsetStatus.OUTDATED:
         reasons.append(Attention.OUTDATED_PATCHSET)
     if ci_failed(commit.verified, commit.ci_failures):
         reasons.append(Attention.CI_FAILED)
-    if len(commit.reviewers) == 0:
+    # A WIP change is not asking for review yet, so missing reviewers and votes say nothing.
+    if len(commit.reviewers) == 0 and not commit.wip:
         reasons.append(Attention.NO_REVIEWERS)
     if commit.code_review is not None and commit.code_review < 0:
         reasons.append(Attention.REVIEW_ISSUES)
-    if commit.code_review != 2:
+    if commit.code_review != 2 and not commit.wip:
         reasons.append(Attention.AWAITING_REVIEW)
     if commit.comments_unresolved > 0:
         reasons.append(Attention.UNRESOLVED_COMMENTS)
