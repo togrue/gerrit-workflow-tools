@@ -35,6 +35,11 @@ def stdin_is_terminal() -> bool:
     return sys.stdin.isatty() and (sys.platform != "win32" or _is_windows_console(sys.stdin))
 
 
+def prompt_toolkit_can_run() -> bool:
+    """True when a prompt_toolkit prompt can start: on Windows it also needs stdout to be a console."""
+    return stdin_is_terminal() and (sys.platform != "win32" or _is_windows_console(sys.stdout))
+
+
 def _dedupe_preserve_order(values: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []

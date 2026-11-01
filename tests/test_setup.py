@@ -39,6 +39,17 @@ def test_ger_setup_non_tty_reports_error(stack_repo: Path, monkeypatch: pytest.M
     assert "gerrit.webUrl" in err
 
 
+def test_ger_setup_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
+
+    code, _out, err = run_cli(stack_repo, ger_main, ["setup"], monkeypatch)
+
+    assert code == 1
+    assert "interactive terminal" in err.lower()
+
+
 def test_ger_setup_writes_global_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     inputs = iter(
         [

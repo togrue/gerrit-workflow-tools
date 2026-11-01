@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 
 
 _PROMPTS: tuple[tuple[str, str, str], ...] = (
@@ -95,9 +96,9 @@ def _prompt_value(
 
 
 def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
-    if not sys.stdin.isatty():
+    if not prompt_toolkit_can_run():
         print(
-            "error: ger setup requires an interactive terminal (stdin is not a TTY).",
+            "error: ger setup requires an interactive terminal.",
             file=sys.stderr,
         )
         print(
