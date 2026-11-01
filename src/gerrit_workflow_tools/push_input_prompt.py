@@ -273,8 +273,8 @@ def prompt_push_options_line(
     History is keyed by ``(web_base, project)``. When identity is missing,
     history is neither loaded nor saved. ``default`` prefills only when that
     history is empty. When ``session_strategy`` is a non-default CLI strategy,
-    it is merged into the visible prefill and Up/Down entries for this session;
-    accepted lines are still saved without strategy.
+    it is merged into the visible prefill and Up/Down entries for this session.
+    The prompt saves nothing: ``ger push`` records a line once the push has succeeded.
     """
     stored = load_push_options_history(web_base=web_base, project=project)
     base = stored[0] if stored else (default if default is not None else "")
@@ -309,11 +309,4 @@ def prompt_push_options_line(
         raw = session.prompt(default=initial)
     finally:
         catalog.close()
-    res = parse(raw)
-    if res.valid_for_apply:
-        prepend_push_options_history(
-            format_canonical(res.state, include_strategy=False),
-            web_base=web_base,
-            project=project,
-        )
-    return res
+    return parse(raw)

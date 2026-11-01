@@ -39,13 +39,14 @@ from gerrit_workflow_tools.core.push import (
     push_argv,
     revise,
 )
-from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome, needs_rest_assignment
+from gerrit_workflow_tools.core.push_reviewers import needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, parse_reviewer_names, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
-from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
+from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
     commit_lines,
+    print_assignment_report,
     print_gpush_preview,
     print_plan_status,
     print_ready_boundary_notice,
@@ -146,35 +147,6 @@ def _prompt_gerrit_push_confirm_action() -> str:
         },
         hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
     )
-
-
-def _escape_topic_for_assignment_report(topic: str) -> str:
-    return topic.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def _assignment_attributes_fragment(plan: PushPlan, reviewers_assigned: tuple[str, ...]) -> str:
-    parts: list[str] = []
-    if plan.options.topic:
-        parts.append(f'topic="{_escape_topic_for_assignment_report(plan.options.topic)}"')
-    parts.extend(f"r={name}" for name in reviewers_assigned)
-    if plan.options.wip:
-        parts.append("wip")
-    if plan.options.private:
-        parts.append("private")
-    return ",".join(parts)
-
-
-def _print_post_push_assignment_report(plan: PushPlan, outcomes: list[ReviewerApplyChangeOutcome]) -> None:
-    by_cid = {commit.change_id: (commit.sha, commit.subject) for commit in plan.commits if commit.change_id}
-    for outcome in outcomes:
-        row = by_cid.get(outcome.change_id)
-        if row is None:
-            continue
-        sha, subject = row
-        frag = _assignment_attributes_fragment(plan, outcome.reviewers_assigned)
-        if not frag:
-            continue
-        print(f"{sha} {subject} assigned {frag}")
 
 
 def _summary_highlighter_for_push(
@@ -328,7 +300,7 @@ def _finish_push(result: PushResult, plan: PushPlan | None) -> int:
         for issue in result.reviewers.issues:
             print(f"{issue.level}: {issue.message}", file=sys.stderr)
         if result.reviewers.outcomes:
-            _print_post_push_assignment_report(plan, result.reviewers.outcomes)
+            print_assignment_report(plan, result.reviewers.outcomes)
     if result.warning:
         print(result.warning, file=sys.stderr)
     return result.returncode
@@ -533,6 +505,16 @@ def _confirm_gerrit_push(
         return plan
 
 
+def _remember_push_options(cwd: Path, plan: PushPlan, *, settings: Settings) -> None:
+    """Save options the user typed, now that a push has shown they work."""
+    from gerrit_workflow_tools.push_input_prompt import prepend_push_options_history
+
+    options = plan.options
+    state = PushLineState(list(options.reviewers), options.topic, options.wip, options.private)
+    web_base, project = _push_options_history_identity(cwd, settings=settings)
+    prepend_push_options_history(format_canonical(state, include_strategy=False), web_base=web_base, project=project)
+
+
 def _push_gerrit(
     cwd: Path,
     args: argparse.Namespace,
@@ -572,7 +554,10 @@ def _push_gerrit(
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed
-    return _finish_push(execute(cwd, confirmed, settings=settings, gerrit=gerrit), confirmed)
+    code = _finish_push(execute(cwd, confirmed, settings=settings, gerrit=gerrit), confirmed)
+    if code == 0 and confirmed.options != prepared.options:
+        _remember_push_options(cwd, confirmed, settings=settings)
+    return code
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:

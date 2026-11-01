@@ -1,4 +1,4 @@
-"""What ``ger push`` shows before it pushes: the commit list, boundary notice and status line."""
+"""What ``ger push`` shows: commit list, boundary notice, status line, and what it assigned."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from gerrit_workflow_tools.cli_style import (
     color_text,
 )
 from gerrit_workflow_tools.core.push import PushBoundary, PushPlan
-from gerrit_workflow_tools.core.push_reviewers import PushMark
+from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
@@ -129,3 +129,32 @@ def print_plan_status(plan: PushPlan) -> None:
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
     print(color_text("  ·  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
+
+
+def _escape_topic_for_assignment_report(topic: str) -> str:
+    return topic.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _assignment_attributes_fragment(plan: PushPlan, reviewers_assigned: tuple[str, ...]) -> str:
+    parts: list[str] = []
+    if plan.options.topic:
+        parts.append(f'topic="{_escape_topic_for_assignment_report(plan.options.topic)}"')
+    parts.extend(f"r={name}" for name in reviewers_assigned)
+    if plan.options.wip:
+        parts.append("wip")
+    if plan.options.private:
+        parts.append("private")
+    return ",".join(parts)
+
+
+def print_assignment_report(plan: PushPlan, outcomes: list[ReviewerApplyChangeOutcome]) -> None:
+    by_cid = {commit.change_id: (commit.sha, commit.subject) for commit in plan.commits if commit.change_id}
+    for outcome in outcomes:
+        row = by_cid.get(outcome.change_id)
+        if row is None:
+            continue
+        sha, subject = row
+        frag = _assignment_attributes_fragment(plan, outcome.reviewers_assigned)
+        if not frag:
+            continue
+        print(f"{sha} {subject} assigned {frag}")

@@ -80,6 +80,7 @@ The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
 - If `--reviewer-strategy` is set, that strategy is merged into the visible
   prefill and Up/Down recall for the session; accept still strips strategy
   before save.
+- A line is saved after the push succeeds, never at the prompt, so a cancelled push or a rejected line leaves no entry.
 - Missing host/project identity: no read/write of history.
 - Empty history: prefill `r=…` from `--reviewers`, else `.ger/reviewers` /
   host registry, else `branch.*.gerritReviewers`. Non-empty history always
