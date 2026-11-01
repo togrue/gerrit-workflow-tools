@@ -63,6 +63,12 @@ def build_to_review_query(
     return f"{base} ({inner})"
 
 
+def _limit_value(raw: str) -> int:
+    if not raw.isdigit() or int(raw) < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive number: {raw!r}")
+    return int(raw)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger inbox",
@@ -88,7 +94,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=_limit_value,
         default=None,
         metavar="N",
         help="At most N chains.",

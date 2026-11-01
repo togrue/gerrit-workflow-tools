@@ -414,3 +414,10 @@ def test_inbox_json_keeps_raw_url_with_hyperlinks(
     assert data["sections"][0]["chains"][0]["top"]["url"] == ("https://gerrit.example.com/c/myproject/+/4321")
     assert GERRIT_LINK_LABEL not in out
     assert "\x1b]8;" not in out
+
+
+@pytest.mark.parametrize("limit", ["0", "-2", "x"])
+def test_inbox_rejects_a_non_positive_limit(limit: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, err = run_cli(stack_repo, inbox_main, ["--limit", limit], monkeypatch, catch_sys_exit=True)
+    assert code == ExitCode.USAGE
+    assert "--limit" in err
