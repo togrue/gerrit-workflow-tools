@@ -52,7 +52,7 @@ Single letter: is this local commit aligned with Gerrit?
 | `!` | **Merged drift** — merged on server but local content diverged | Investigate; may need manual fix |
 | `?` | **Merged (equivalence unknown)** | Check Gerrit; rebase if unsure |
 
-When a commit is **not pushed** (`-` or `n` with no server state yet), Verified / Code-Review / comment columns are blank — there is nothing on Gerrit to show.
+When a commit is **not pushed** (`-`), Verified / Code-Review / comment columns are blank — there is nothing on Gerrit to show. A commit marked `n` shows `v?` and `cr?`: the votes on Gerrit belong to the previous patch set, so they say nothing about this commit yet.
 
 Definitions: [CONTEXT.md § The Gerrit side](../CONTEXT.md#the-gerrit-side).
 

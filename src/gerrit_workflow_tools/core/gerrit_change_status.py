@@ -240,6 +240,11 @@ def build_log_commit(
     else:
         ps = patchset_status(sha, change)
 
+    # Votes and submittability belong to the patch set on Gerrit, not to a commit it has not seen.
+    newer = ps == PatchsetStatus.NEWER
+    if newer:
+        needed.discard("checks")
+
     return (
         LogCommit(
             sha=sha,
@@ -249,11 +254,11 @@ def build_log_commit(
             pushed=True,
             abandoned=st == "ABANDONED",
             patchset_status=ps,
-            verified=change.verified,
-            code_review=change.code_review,
+            verified=None if newer else change.verified,
+            code_review=None if newer else change.code_review,
             comments_unresolved=change.unresolved_comments or 0,
             gerrit_url=change.url(web_base),
-            submittable=change.submittable,
+            submittable=change.submittable and not newer,
             change_status=change.status,
             merged_equivalent=merged_eq,
             reviewers=list(change.reviewers or ()),

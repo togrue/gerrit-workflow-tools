@@ -921,3 +921,17 @@ def test_log_ready_count_agrees_with_the_push_boundary(stack_repo: Path, monkeyp
 
     assert f"ready {ready.pushable_count}/{len(rows)}" in strip_ansi(out)
     assert ready.pushable_count == len(rows) - 2
+
+
+def test_log_does_not_show_old_votes_on_a_rewritten_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")
+    store = ChangeStore(build_details_by_change_id(rows))
+    (stack_repo / "amended.txt").write_text("new content", encoding="utf-8")
+    git("add", "amended.txt", cwd=stack_repo)
+    git("commit", "--amend", "--no-edit", cwd=stack_repo)
+
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+
+    tip = json.loads(out)["commits"][-1]
+    assert tip["patchset_status"] == "newer"
+    assert (tip["verified"], tip["code_review"], tip["submittable"]) == (None, None, False)
