@@ -176,11 +176,6 @@ class Settings:
         return self.get("ger.lastAttentionChangeId")
 
     @property
-    def last_attention_change_id_at(self) -> str | None:
-        """``ger.lastAttentionChangeIdAt``: UTC timestamp for :attr:`last_attention_change_id`."""
-        return self.get("ger.lastAttentionChangeIdAt")
-
-    @property
     def attention_cursor_ttl(self) -> str | None:
         """``ger.attentionCursorTtl`` raw value (e.g. ``14d``), or ``None`` for the default."""
         return self.get("ger.attentionCursorTtl")

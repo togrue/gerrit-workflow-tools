@@ -104,10 +104,6 @@ def format_iso_utc(when: datetime) -> str:
     return when.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _format_iso_utc(when: datetime) -> str:
-    return format_iso_utc(when)
-
-
 def _now_utc(now: datetime | None) -> datetime:
     return (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
 
@@ -153,7 +149,7 @@ def append_cursor_history(
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     event = {
-        "ts": _format_iso_utc(_now_utc(now)),
+        "ts": format_iso_utc(_now_utc(now)),
         "branch": branch,
         "change_id": change_id,
         "action": action,
@@ -234,7 +230,7 @@ def write_branch_cursor(
 ) -> None:
     """Persist branch cursor, repo last Change-Id, and a history line."""
     when = _now_utc(now)
-    stamp = _format_iso_utc(when)
+    stamp = format_iso_utc(when)
     set_attention_cursor_config(cwd, branch, change_id=change_id, touched_at=stamp)
     set_last_attention_change_id(cwd, change_id=change_id, touched_at=stamp)
     append_cursor_history(cwd, branch=branch, change_id=change_id, action=action, sha=sha, now=when)

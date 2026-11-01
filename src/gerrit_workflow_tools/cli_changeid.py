@@ -48,7 +48,7 @@ from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.stack import (
     git_log_sha_body,
     parse_git_log_sha_body_rs,
-    rev_spec_target_tip_to_end,
+    rev_spec_stack_base_to_end,
 )
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
@@ -97,7 +97,7 @@ def check_stack_change_ids(cwd) -> None:
 
     Always scans ``upstream_tip..HEAD`` (the full local stack).
     """
-    rev_spec = rev_spec_target_tip_to_end(cwd, "HEAD")
+    rev_spec = rev_spec_stack_base_to_end(cwd, "HEAD")
     raw = git_log_sha_body(cwd, rev_spec, single=False)
 
     pairs = parse_git_log_sha_body_rs(raw)
@@ -119,7 +119,7 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
 
     resolved = resolve_gcid_user_arg(cwd, input_arg)
     if use_remote:
-        rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
+        rev_spec = rev_spec_stack_base_to_end(cwd, resolved)
         raw = git_log_sha_body(cwd, rev_spec, single=False)
     else:
         raw = git_log_sha_body(cwd, resolved, single=_gcid_log_single_commit(resolved))
@@ -255,7 +255,7 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
 
     _ensure_safe_for_fix(cwd)
     resolved = resolve_gcid_user_arg(cwd, input_arg)
-    rev_spec = rev_spec_target_tip_to_end(cwd, resolved)
+    rev_spec = rev_spec_stack_base_to_end(cwd, resolved)
     rows = _load_rewrite_commits(cwd, rev_spec)
     if not rows:
         return

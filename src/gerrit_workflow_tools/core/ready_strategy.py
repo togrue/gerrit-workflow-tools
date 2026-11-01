@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,7 +20,6 @@ from gerrit_workflow_tools.core.stack import Commit
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
-logger = logging.getLogger(__name__)
 
 _DOMAIN = "ready"
 _PACKAGE = "ger_ready"

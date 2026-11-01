@@ -15,7 +15,6 @@ from gerrit_workflow_tools.core.attention import (
     first_commit_needing_edit_attention,
 )
 from gerrit_workflow_tools.core.attention_cursor import (
-    CursorAction,
     EditAttentionMode,
     load_branch_cursor,
     prepare_usable_cursor,
@@ -118,8 +117,7 @@ def resolve_edit_attention_commit(
         raise GitError(_NO_EDIT_ATTENTION)
 
     if update_cursor and target.change_id and branch is not None:
-        action: CursorAction = "first" if mode == "first" else ("next" if mode == "next" else "resume")
-        write_branch_cursor(cwd, branch, target.change_id, action=action, sha=target.sha)
+        write_branch_cursor(cwd, branch, target.change_id, action=mode, sha=target.sha)
 
     return target, notes
 
@@ -195,7 +193,6 @@ def resolve_attention_query(
     Does not update the attention cursor. *after_changeish* is optional for ``next``.
     """
     from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_changeish
-    from gerrit_workflow_tools.core.git_run import GitError
 
     after_change_id: str | None = None
     if after_changeish:
@@ -210,15 +207,12 @@ def resolve_attention_query(
         after_change_id = change_id_for_stack_sha(cwd, after.sha, settings=settings, gerrit=gerrit)
         if not after_change_id:
             raise ChangeResolutionError("REV has no Change-Id; cannot use --next-attention AFTER")
-    try:
-        return resolve_edit_attention_commit(
-            cwd,
-            settings=settings,
-            mode=mode,
-            branch=branch,
-            after_change_id=after_change_id,
-            gerrit=gerrit,
-            update_cursor=False,
-        )
-    except GitError:
-        raise
+    return resolve_edit_attention_commit(
+        cwd,
+        settings=settings,
+        mode=mode,
+        branch=branch,
+        after_change_id=after_change_id,
+        gerrit=gerrit,
+        update_cursor=False,
+    )

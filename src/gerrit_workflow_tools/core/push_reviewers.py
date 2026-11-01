@@ -11,13 +11,12 @@ from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.ready_calc import ReadyResult
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
     reviewer_accounts_from_change_info,
 )
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range
+from gerrit_workflow_tools.core.stack import Commit
 
 
 @dataclass(frozen=True)
@@ -124,14 +123,6 @@ def change_refs_for_commits(cwd: Path, commits: Sequence[Commit], *, settings: S
             seen.add(triplet)
             out.append(triplet)
     return out
-
-
-def stack_change_refs_ordered(cwd: Path, ready: ReadyResult, first_parent: bool, *, settings: Settings) -> list[str]:
-    """Unique Gerrit triplets in stack order for the current push range."""
-    if not ready.push_range:
-        return []
-    rows = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
-    return change_refs_for_commits(cwd, rows, settings=settings)
 
 
 def _payloads_by_triplet(payloads: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:

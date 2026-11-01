@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,8 +14,6 @@ from gerrit_workflow_tools.core.ger_registry import (
 )
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
-
-logger = logging.getLogger(__name__)
 
 _DOMAIN = "attention"
 _PACKAGE = "ger_attention"

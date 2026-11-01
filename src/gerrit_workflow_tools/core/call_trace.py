@@ -31,12 +31,6 @@ def set_call_trace_enabled(enabled: bool) -> None:
         reset_call_trace()
 
 
-def call_trace_enabled() -> bool:
-    """Return whether tracing is active."""
-
-    return _ENABLED
-
-
 def reset_call_trace() -> None:
     """Drop collected records (mainly for tests)."""
 

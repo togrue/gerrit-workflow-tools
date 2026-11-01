@@ -395,12 +395,6 @@ class HttpGerritRest:
         logger.info("list_change_reviewers %r -> %d reviewer(s)", cid, len(out))
         return out
 
-    def add_reviewer(self, change_id: str, reviewer: str) -> dict[str, Any]:
-        """POST a reviewer (username or email) onto *change_id*."""
-        data = self.set_reviewers_batch(change_id, reviewers=[reviewer])
-        logger.info("add_reviewer %r -> %s", change_id_for_gerrit_rest_path(change_id), data.get("_account_id"))
-        return data
-
     def set_reviewers_batch(
         self,
         change_id: str,

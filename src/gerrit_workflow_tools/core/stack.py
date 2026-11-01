@@ -158,11 +158,6 @@ def rev_spec_stack_base_to_end(
     return f"{upstream_tip}..{end}"
 
 
-def rev_spec_target_tip_to_end(cwd: Path | str | None, input_arg: str) -> str:
-    """Backward-compatible alias for :func:`rev_spec_stack_base_to_end` (upstream-based stack base)."""
-    return rev_spec_stack_base_to_end(cwd, input_arg)
-
-
 # Field separator in `git log --format` (ASCII RS). Avoids NUL in argv (Windows
 # subprocess rejects embedded nulls); %x1e is expanded by git, not by the shell.
 _RS = "\x1e"

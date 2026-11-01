@@ -181,7 +181,12 @@ def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: 
 
 
 def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
-    """Best branch for commands that need branch config while HEAD may be detached."""
+    """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
+
+    Uses the checked-out branch when present. During rebase, uses Git's recorded rebased
+    branch. Otherwise on detached HEAD, picks a local branch that points at ``HEAD``
+    (preferring Gerrit upstream, then any upstream).
+    """
     checked = checked_out_branch_name(cwd)
     if checked:
         return checked
@@ -192,16 +197,6 @@ def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str
     if not candidates:
         return None
     return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b, settings=settings))
-
-
-def resolve_push_context_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
-    """Branch name for ``ger push`` mode and ``branch.<name>.*`` config.
-
-    Uses the checked-out branch when present. During rebase, uses Git's recorded
-    rebased branch. Otherwise on detached HEAD, picks a local branch that points at
-    ``HEAD`` (preferring Gerrit upstream, then any upstream).
-    """
-    return resolve_working_branch(cwd, settings=settings)
 
 
 def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:

@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     pick_change_from_query_result,
     resolve_gerrit_web_base,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, StackContext, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 
@@ -243,21 +243,6 @@ def _narrow_change_id_matches(
     raise ChangeAmbiguousError(
         f"ambiguous Change-Id: matches changes on other branches (not {push_branch!r})",
         alternatives=candidates,
-    )
-
-
-def _resolve_change_id(
-    change_id: str,
-    *,
-    client: GerritRest,
-    stack: StackContext,
-    explicit_target: bool,
-) -> tuple[SelectedChange | None, SelectedReason | None, bool, list[SelectedChange]]:
-    rows = _query_changes(client, f"change:{change_id}")
-    return resolution_fields_from_change_rows(
-        rows,
-        push_branch=stack.push_branch,
-        explicit_target=explicit_target,
     )
 
 

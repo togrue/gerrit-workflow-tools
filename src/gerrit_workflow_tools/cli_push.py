@@ -35,7 +35,7 @@ from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
     ger_push_mode,
     is_detached_head,
-    resolve_push_context_branch,
+    resolve_working_branch,
 )
 from gerrit_workflow_tools.core.push import (
     PushBoundary,
@@ -562,7 +562,7 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Setting
         except GitError as exc:
             raise GitError(f"branch {branch_arg!r} not found") from exc
         return branch_arg
-    branch = resolve_push_context_branch(cwd, settings=settings)
+    branch = resolve_working_branch(cwd, settings=settings)
     if branch is None:
         raise GitError(
             "ger push requires a branch (detached HEAD with no local branch at this commit). "
