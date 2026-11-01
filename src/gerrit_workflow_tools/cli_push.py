@@ -284,6 +284,7 @@ def _gerrit_flags_set(args: argparse.Namespace) -> bool:
 
 
 def _emit_push_output(result: PushResult) -> None:
+    sys.stdout.flush()  # Git's stderr goes out unbuffered, so the preview has to land first.
     for stream, text in ((sys.stdout, result.stdout), (sys.stderr, result.stderr)):
         if not text:
             continue
@@ -395,12 +396,10 @@ def _maybe_prompt_initial_options(
         reviewer_flag_segments=list(args.reviewers),
         session_strategy=_session_strategy(args),
     )
-    reviewers = list(plan.options.reviewers)
     if _line_sets_options(res.state):
         plan = revise(plan, _options_from_line(res.state), settings=settings)
-        reviewers = list(plan.options.reviewers)
     if _prompt_save_reviewers():
-        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(reviewers))
+        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(plan.options.reviewers))
     return plan
 
 
