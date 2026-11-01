@@ -429,6 +429,18 @@ def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monk
     assert any(" assigned " in ln and "r=alice" in ln for ln in out.splitlines())
 
 
+def test_gpush_with_nothing_new_says_so_and_succeeds(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rejected = "! [remote rejected] tip -> refs/for/main (no new changes)\nerror: failed to push some refs\n"
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=rejected))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch)
+
+    assert code == 0
+    assert "nothing to push" in out
+    assert "remote rejected" not in err
+
+
 def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
     commits = commits_in_range(stack_repo, "main..feature")[:2]

@@ -241,11 +241,10 @@ def execute(
     argv = push_argv(plan)
     captured = _captured(run_git_push(argv, cwd))
     rejected = push_rejected_no_new_changes(captured.stdout, captured.stderr)
-    push_ok = captured.returncode == 0 or (
-        needs_rest_assignment(plan.options.strategy, plan.options.reviewers) and rejected
-    )
-    if not push_ok:
+    if captured.returncode != 0 and not rejected:
         return captured
+    if rejected:
+        captured = PushResult(returncode=0, stdout="nothing to push: Gerrit already has these commits")
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
     note = _update_last_pushed(cwd, plan)
