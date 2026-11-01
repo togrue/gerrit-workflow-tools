@@ -392,20 +392,19 @@ class ChangeApi:
         remove: list[int] | None = None,
         ccs: list[str] | None = None,
     ) -> None:
-        """Add and remove reviewers via REST, then cache fresh ChangeInfo.
+        """Add reviewers, then remove reviewers, via REST, and cache fresh ChangeInfo.
 
-        Any failure, in the writes or the re-read, drops the cached row instead.
+        Adds run first because Gerrit rejects an unknown reviewer: a failed add must leave the
+        existing reviewers in place. Any failure, in the writes or the re-read, drops the
+        cached row instead.
         """
-
         service = self._service
         rest_ref = change_id_for_gerrit_rest_path(change_id)
         cache_key = service.cache_key(change_id)
-        calls: list[Callable[[], Any]] = []
-        if add or ccs:
-            calls.append(partial(service.rest.set_reviewers_batch, rest_ref, reviewers=add or [], ccs=ccs or []))
-        calls.extend(partial(service.rest.delete_reviewer, rest_ref, account_id) for account_id in remove or [])
         service.cache.invalidate_changes([cache_key])
-        parallel_map(calls)
+        if add or ccs:
+            service.rest.set_reviewers_batch(rest_ref, reviewers=add or [], ccs=ccs or [])
+        parallel_map([partial(service.rest.delete_reviewer, rest_ref, account_id) for account_id in remove or []])
         service.cache.upsert_changes({cache_key: service.rest.get_change(rest_ref)})
 
 

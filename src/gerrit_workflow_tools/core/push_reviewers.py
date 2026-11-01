@@ -133,19 +133,25 @@ def apply_reviewer_strategy_after_push_service(
         return ReviewerApplyResult(ok=True)
 
     outcomes: list[ReviewerApplyChangeOutcome] = []
+    issues: list[ReviewerApplyIssue] = []
     try:
         details_by_triplet = service.changes.get_payloads(change_refs)
     except GerritApiError as error:
         return _apply_failed(f"could not load changes: {error}")
 
+    # Named reviewers stay: Gerrit reports nothing for one already on the change, so removing
+    # them after the add would take them off again.
+    wanted = {name.casefold() for name in reviewers}
     for triplet in change_refs:
         detail = details_by_triplet.get(triplet)
         if detail is None:
-            return _apply_failed(f"could not load change {triplet}")
+            issues.append(ReviewerApplyIssue(level="error", message=f"could not load change {triplet}"))
+            continue
 
         footer_change_id = parse(triplet).change_id
         if footer_change_id is None:
-            return _apply_failed(f"not a Gerrit triplet: {triplet}")
+            issues.append(ReviewerApplyIssue(level="error", message=f"not a Gerrit triplet: {triplet}"))
+            continue
         existing = reviewer_accounts_from_change_info(detail)
         if strategy == ReviewerStrategy.LAZY and existing:
             outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=()))
@@ -154,11 +160,18 @@ def apply_reviewer_strategy_after_push_service(
         remove: list[int] = []
         if strategy == ReviewerStrategy.OVERWRITE:
             reviewers_only = reviewer_accounts_from_change_info(detail, roles=("REVIEWER",))
-            remove = [account.account_id for account in reviewers_only if account.account_id is not None]
+            remove = [
+                account.account_id
+                for account in reviewers_only
+                if account.account_id is not None and account.slug.casefold() not in wanted
+            ]
         try:
             service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
         except GerritApiError as error:
-            return _apply_failed(f"could not update reviewers on {triplet}: {error}")
+            issues.append(
+                ReviewerApplyIssue(level="error", message=f"could not update reviewers on {triplet}: {error}")
+            )
+            continue
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
-    return ReviewerApplyResult(ok=True, outcomes=outcomes)
+    return ReviewerApplyResult(ok=not issues, issues=issues, outcomes=outcomes)

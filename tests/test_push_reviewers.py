@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, call
 
-from gerrit_workflow_tools.core.gerrit.rest import change_id_for_gerrit_rest_path
+import pytest
+
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, change_id_for_gerrit_rest_path
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
+from tests.change_store import ChangeStore
 from tests.fixtures import _cid
 
 
@@ -139,3 +145,46 @@ def test_apply_reviewer_strategy_overwrite_keeps_cc_on_change_info_map() -> None
 
     assert res.ok
     service.changes.set_reviewers.assert_has_calls([call(triplet, add=["alice"], remove=[5])])
+
+
+def test_rejected_reviewer_is_reported_per_change_and_every_change_is_tried() -> None:
+    triplet_a, triplet_b = _triplet(_cid("a")), _triplet(_cid("b"))
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {triplet_a: {"reviewers": []}, triplet_b: {"reviewers": []}}
+    service.changes.set_reviewers.side_effect = [GerritApiError("Gerrit HTTP 400"), None]
+
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["x"], [triplet_a, triplet_b])
+
+    assert res.ok is False
+    assert [issue.message.split(":")[0] for issue in res.issues] == [f"could not update reviewers on {triplet_a}"]
+    assert [outcome.change_id for outcome in res.outcomes] == [_cid("b")]
+
+
+def test_set_reviewers_keeps_existing_reviewers_when_the_add_is_rejected(tmp_path: Path) -> None:
+    class _RejectsAdds(ChangeStore):
+        def set_reviewers_batch(self, change_id: str, **_kw: object) -> dict[str, object]:
+            raise GerritApiError("Gerrit HTTP 400")
+
+    triplet = _triplet(_cid("a"))
+    store = _RejectsAdds({triplet: _detail_payload(_cid("a"), reviewers=[_reviewer_entry("admin")])})
+    service = GerritService.from_cwd(tmp_path, settings=Settings.from_map({}), rest=store)
+
+    with pytest.raises(GerritApiError):
+        service.changes.set_reviewers(triplet, add=["nosuchuser"], remove=[5])
+
+    assert store.calls_to("delete_reviewer") == []
+
+
+def test_overwrite_does_not_remove_a_reviewer_it_was_asked_to_keep() -> None:
+    triplet = _triplet(_cid("a"))
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {
+        triplet: {
+            "reviewers": {"REVIEWER": [{"_account_id": 5, "username": "Admin"}, {"_account_id": 7, "username": "bob"}]}
+        }
+    }
+
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["admin"], [triplet])
+
+    assert res.ok is True
+    service.changes.set_reviewers.assert_called_once_with(triplet, add=["admin"], remove=[7])

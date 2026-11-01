@@ -442,7 +442,7 @@ def _finish_push(result: PushResult, plan: PushPlan | None) -> int:
     if result.reviewers is not None and plan is not None:
         for issue in result.reviewers.issues:
             print(f"{issue.level}: {issue.message}", file=sys.stderr)
-        if result.reviewers.ok and result.reviewers.outcomes:
+        if result.reviewers.outcomes:
             _print_post_push_assignment_report(plan, result.reviewers.outcomes)
     if result.last_push_warning:
         print(result.last_push_warning, file=sys.stderr)
