@@ -185,7 +185,7 @@ def test_gcid_range_two_commits_order(gcid_cli_repo, monkeypatch):
     assert code == 0
     assert err == ""
     lines = [ln for ln in out.splitlines() if ln.strip()]
-    assert lines == [_HEAD_CID, _PARENT_CID]
+    assert lines == [_PARENT_CID, _HEAD_CID]
 
 
 def test_gcid_single_commit_range_syntax(gcid_cli_repo, monkeypatch):
@@ -249,12 +249,12 @@ def test_gcid_vv_logs_git_subprocess(gcid_cli_repo, monkeypatch):
 # --- CLI: --start-at-remote (stack_repo: main + feature with 4 commits) ---
 
 
-def test_gcid_start_at_remote_lists_stack_newest_first(stack_repo, monkeypatch):
+def test_gcid_start_at_remote_lists_stack_oldest_first(stack_repo, monkeypatch):
     code, out, err = run_cli(stack_repo, gcid_main, ["--start-at-remote"], monkeypatch)
     assert code == 0
     assert err == ""
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
-    assert lines == [_cid("4"), _cid("3"), _cid("2"), _cid("1")]
+    assert lines == [_cid("1"), _cid("2"), _cid("3"), _cid("4")]
 
 
 def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
@@ -262,7 +262,7 @@ def test_gcid_start_at_remote_end_ref(stack_repo, monkeypatch):
     assert code == 0
     assert err == ""
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
-    assert lines == [_cid("2"), _cid("1")]
+    assert lines == [_cid("1"), _cid("2")]
 
 
 def test_gcid_start_at_remote_range_ignores_left_endpoint(stack_repo, monkeypatch):

@@ -74,9 +74,9 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
     """Print Change-Ids for one commit or a revision range resolved from user input."""
     rev = _rev_arg(input_arg)
     if use_remote:
-        rows = read_commit_rows(cwd, rev_spec_stack_base_to_end(cwd, rev))
+        rows = read_commit_rows(cwd, "--reverse", rev_spec_stack_base_to_end(cwd, rev))
     elif ".." in rev:
-        rows = read_commit_rows(cwd, rev)
+        rows = read_commit_rows(cwd, "--reverse", rev)
     else:
         rows = read_commit_rows(cwd, "-1", rev)
     for row in rows:
