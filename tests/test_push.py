@@ -441,6 +441,14 @@ def test_gpush_with_nothing_new_says_so_and_succeeds(stack_repo: Path, monkeypat
     assert "remote rejected" not in err
 
 
+def test_gpush_warns_about_a_commit_on_an_abandoned_change(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")
+    details = build_details_by_change_id(rows, per_index_overrides=[{"status": "ABANDONED"}])
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0
+    assert f"warning: {rows[0].short_sha} targets abandoned change 100" in err
+
+
 def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
     commits = commits_in_range(stack_repo, "main..feature")[:2]

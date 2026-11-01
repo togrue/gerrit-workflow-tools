@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.git_state import (
     refs_for_push_branch_name,
     resolve_upstream_parsed,
 )
-from gerrit_workflow_tools.core.push_checks import git_or_none, rebase_check
+from gerrit_workflow_tools.core.push_checks import abandoned_change_warnings, git_or_none, rebase_check
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
@@ -212,6 +212,7 @@ def prepare(
     try:
         commits = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
         marks = push_marks(cwd, commits, settings=settings, gerrit=gerrit) if show_attributes else None
+        warnings = (*warnings, *abandoned_change_warnings(cwd, commits, settings=settings, gerrit=gerrit))
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
     return PushPlan(

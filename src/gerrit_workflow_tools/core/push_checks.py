@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.stack_context import (
+    ChangeResolutionError,
+    build_triplet,
+    resolve_stack_context,
+)
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
+from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
+from gerrit_workflow_tools.core.stack import Commit
 
 
 _REBASE_HINT = "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."
@@ -62,3 +73,35 @@ def _rebase_detail(cwd: Path, head: str, onto: str) -> str:
             f"(fork at {fork_s}; rebase onto the fetched target to linearize)"
         )
     return f"tip of `{short_onto}` is not an ancestor of HEAD"
+
+
+def abandoned_change_warnings(
+    cwd: Path,
+    commits: Sequence[Commit],
+    *,
+    settings: Settings,
+    gerrit: GerritRest | None,
+) -> tuple[str, ...]:
+    """One warning per commit whose change is abandoned on Gerrit.
+
+    Best effort: a push works without REST, so no credentials or a failed lookup means no warning.
+    """
+    if gerrit is None and not gerrit_credentials_configured(settings):
+        return ()
+    try:
+        stack = resolve_stack_context(cwd, settings=settings)
+        triplets = {c.sha: build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id}
+        service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+        payloads = service.changes.get_payloads(list(triplets.values()))
+    except (ValueError, GerritApiError, ChangeResolutionError):
+        return ()
+    warnings: list[str] = []
+    for commit in commits:
+        payload = payloads.get(triplets.get(commit.sha, ""))
+        view = ChangeView.from_payload(payload) if payload else None
+        if view is not None and (view.status or "").upper() == "ABANDONED":
+            warnings.append(
+                f"warning: {commit.short_sha} targets abandoned change {view.number}; "
+                "restore it on Gerrit or drop the commit"
+            )
+    return tuple(warnings)
