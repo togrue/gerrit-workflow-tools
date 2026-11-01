@@ -951,7 +951,7 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
             raise GitError("git fetch origin failed: simulated fetch failure")
         return git(*args, **kwargs)
 
-    monkeypatch.setattr("gerrit_workflow_tools.core.push.git", git_fetch_fail)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push_checks.git", git_fetch_fail)
     git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0, err
