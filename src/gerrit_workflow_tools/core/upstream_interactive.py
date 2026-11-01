@@ -113,9 +113,9 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, s
     if not chosen:
         print("Aborted.", file=sys.stderr)
         return None
-    p = git("rev-parse", "--verify", chosen, cwd=cwd, check=False)
+    p = git("rev-parse", "--verify", "--quiet", f"refs/remotes/{chosen}", cwd=cwd, check=False)
     if p.returncode != 0:
-        print(f"error: {chosen!r} is not a known local ref. Run `git fetch` and try again.", file=sys.stderr)
+        print(f"error: {chosen!r} is not a remote-tracking branch. Run `git fetch` and try again.", file=sys.stderr)
         return None
     return chosen
 

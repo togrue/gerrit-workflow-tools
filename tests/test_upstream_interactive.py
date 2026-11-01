@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream_interactive import (
     branch_has_upstream,
     ensure_branch_upstream_interactive,
+    prompt_upstream_abbrev_interactive,
     read_recent_upstream_abbrevs,
     require_branch_upstream,
 )
@@ -105,3 +106,19 @@ def test_require_branch_upstream_non_tty_prints_hint(
     err = capsys.readouterr().err
     assert "No upstream configured for branch 'feature'" in err
     assert "git branch --set-upstream-to=" in err
+
+
+def test_upstream_prompt_refuses_a_local_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _make_repo_with_origin(tmp_path)
+    monkeypatch.setattr("prompt_toolkit.PromptSession.prompt", lambda *_a, **_k: "main")
+    monkeypatch.setattr("prompt_toolkit.PromptSession.__init__", lambda *_a, **_k: None)
+
+    assert prompt_upstream_abbrev_interactive(repo, "feature", settings=Settings.from_cwd(repo)) is None
+
+
+def test_upstream_prompt_accepts_a_remote_tracking_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _make_repo_with_origin(tmp_path)
+    monkeypatch.setattr("prompt_toolkit.PromptSession.prompt", lambda *_a, **_k: "origin/main")
+    monkeypatch.setattr("prompt_toolkit.PromptSession.__init__", lambda *_a, **_k: None)
+
+    assert prompt_upstream_abbrev_interactive(repo, "feature", settings=Settings.from_cwd(repo)) == "origin/main"
