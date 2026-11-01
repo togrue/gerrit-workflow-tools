@@ -71,10 +71,7 @@ def _context_padding_value(raw: str) -> int:
 
 def _gerrit_rest_key(commit: LogCommit, resolution: object) -> str | None:
     selected = getattr(resolution, "selected", None)
-    if selected is not None:
-        return selected.triplet
-    change_id = getattr(commit, "change_id", None)
-    return change_id if isinstance(change_id, str) and change_id else None
+    return selected.triplet if selected is not None else commit.change_id
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -203,6 +200,8 @@ def _emit_human_commit(
     wrap_width: int,
 ) -> None:
     print(show_headline(commit))
+    if commit.attention_reasons:
+        print(color_text(_attention_summary(commit), ANSI_DIM))
 
     body = ""
     if is_local and commit.sha:
@@ -224,6 +223,8 @@ def _emit_human_commit(
             sha=commit.sha,
             summary_highlighter=summary_highlighter,
         )
+    elif commit.summary:
+        print(f"\n    {commit.summary}")
 
     comment_lines = format_unresolved_section_human(
         chains,

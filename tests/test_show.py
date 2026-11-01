@@ -1203,3 +1203,19 @@ def test_show_change_number_renders_the_local_commit(stack_repo: Path, monkeypat
 
     _code, out, _err = run_cli(stack_repo, gshow_main, ["--color=never", "change:100"], monkeypatch, gerrit=store)
     assert "Author:" in out
+
+
+def test_show_text_has_subject_and_every_attention_reason_without_a_local_commit(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    change = change_info_for_sha("a" * 40, "I" + "c" * 40, number=42, cr=0, reviewers=[])
+    change["subject"] = "remote only subject"
+    store = ChangeStore({str(change["id"]): change})
+
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--color=never", "change:42"], monkeypatch, gerrit=store)
+
+    assert "remote only subject" in out
+    assert "attention: " in out
+    assert "no-reviewers" in out
+    assert "awaiting-review" in out
