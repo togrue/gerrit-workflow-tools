@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.stack import fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 
 
@@ -133,7 +134,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
     # `git rebase --autosquash` can actually place (ADR-0003).
     target = resolve_stack_changeish(cwd, args.target, settings=settings, gerrit=gerrit, require_in_stack=True)
-    fixup_sha = target.sha
+    fixup_sha = fixup_target_sha(get_stack_snapshot(cwd, settings=settings).commits, target.sha)
     logger.info("fixup target commit: %s", fixup_sha)
 
     print_resolution_note(target.resolution)

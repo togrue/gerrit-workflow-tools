@@ -202,3 +202,15 @@ def test_ger_fix_ambiguous_change_id_exits_4(stack_repo: Path, monkeypatch: pyte
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
     assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()
+
+
+def test_fix_of_a_fixup_targets_the_original_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    original = git_out("log", "-1", "--format=%s", "HEAD~1", cwd=stack_repo)
+    for content in ("one", "two"):
+        (stack_repo / "fixup.txt").write_text(content, encoding="utf-8")
+        git("add", "fixup.txt", cwd=stack_repo)
+        target = "HEAD" if content == "two" else "HEAD~1"
+        code, _out, err = run_cli(stack_repo, ger_fix_main, [target], monkeypatch)
+        assert code == 0, err
+
+    assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == f"fixup! {original}"

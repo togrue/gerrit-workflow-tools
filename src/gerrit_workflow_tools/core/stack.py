@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_confi
 
 
 logger = logging.getLogger(__name__)
+
+_FIXUP_PREFIX = "fixup! "
 
 
 def _resolve_stack_branch(
@@ -258,3 +261,17 @@ def commits_in_range(
     """
     extra: list[str] = ["--first-parent"] if first_parent else []
     return read_commit_rows(cwd, "--reverse", *extra, rev_range)
+
+
+def fixup_target_sha(commits: Sequence[Commit], sha: str) -> str:
+    """The commit a new fixup of *sha* should name: the original when *sha* is itself a fixup.
+
+    *commits* is oldest first. Returns *sha* when it is not a fixup or its original is not there.
+    """
+    index = next((i for i, commit in enumerate(commits) if commit.sha == sha), None)
+    if index is None or not commits[index].subject.startswith(_FIXUP_PREFIX):
+        return sha
+    subject = commits[index].subject
+    while subject.startswith(_FIXUP_PREFIX):
+        subject = subject.removeprefix(_FIXUP_PREFIX)
+    return next((commit.sha for commit in reversed(commits[:index]) if commit.subject == subject), sha)
