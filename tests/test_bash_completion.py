@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,13 @@ def test_main_prints_source_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert code == 0
     assert out.strip().startswith("source ")
     assert err == ""
+
+
+def test_printed_line_is_valid_bash_that_runs_nothing_but_echo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _code, out, _err = run_cli(tmp_path, bc.main, [], monkeypatch)
+    assert "`" not in out
+    assert subprocess.run(["bash", "-n", "-c", out], check=False).returncode == 0
 
 
 def test_install_and_uninstall_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
