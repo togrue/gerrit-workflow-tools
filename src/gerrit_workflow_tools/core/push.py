@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionErro
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
+    rebase_in_progress,
     refs_for_push_branch_name,
     resolve_upstream_parsed,
 )
@@ -191,6 +192,8 @@ def prepare(
     )
     if error:
         return PushRefusal(error)
+    if rebase_in_progress(cwd):
+        warnings = (*warnings, "warning: a rebase is in progress; these commits may still be rewritten")
 
     reviewers = resolve_push_reviewers(cwd, branch, reviewer_flags, settings=settings)
     options = PushOptions(

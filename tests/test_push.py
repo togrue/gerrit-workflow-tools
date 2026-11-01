@@ -176,6 +176,7 @@ def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: p
 
     assert code == 0, err
     assert ":refs/for/main" in out
+    assert "warning: a rebase is in progress" in err
 
 
 def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

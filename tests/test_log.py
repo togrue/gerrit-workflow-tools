@@ -42,7 +42,7 @@ from tests.cli_gerrit_mocks import (
 )
 from tests.conftest import json_stdout, run_cli
 from tests.fixtures import make_repo_with_merged_side_branch
-from tests.helpers import force_zero_change_trust_window
+from tests.helpers import force_zero_change_trust_window, write_rebase_head
 
 
 def _configure_repo(repo: Path) -> None:
@@ -950,3 +950,12 @@ def test_log_range_on_the_target_branch_is_not_reported_as_unpushed(
     assert len(commits) == 2
     assert {c["patchset_status"] for c in commits} == {"merged-same"}
     assert not any("not-pushed" in c["attention_reasons"] for c in commits)
+
+
+def test_log_says_when_a_rebase_is_stopped(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("checkout", "--detach", "HEAD~1", cwd=stack_repo)
+    write_rebase_head(stack_repo, "feature")
+
+    _code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
+
+    assert "note: a rebase is in progress" in err
