@@ -725,7 +725,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     detached = is_detached_head(cwd)
     branch = _resolve_push_branch(cwd, args.branch, settings=settings)
     mode = ger_push_mode(cwd, branch, settings=settings)
-    if not args.yes and mode in ("gerrit", None) and (args.branch or not detached):
+    if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):
             return 1
         mode = ger_push_mode(cwd, branch, settings=settings)

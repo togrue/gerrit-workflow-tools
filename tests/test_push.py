@@ -89,7 +89,7 @@ def test_gpush_prompts_for_missing_upstream_and_aborts(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: None,
     )
-    code, _out, _err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    code, _out, _err = run_cli(repo, gpush_main, [], monkeypatch)
     assert code == 1
     p = git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo, check=False)
     assert p.returncode != 0
@@ -106,10 +106,26 @@ def test_gpush_sets_missing_upstream_then_continues(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",
     )
-    code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    code, _out, err = run_cli(repo, gpush_main, [], monkeypatch)
     assert code == 0
     assert "Upstream for 'feature' set to origin/main." in err
     assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo) == "origin/main"
+
+
+def test_gpush_dry_run_never_writes_upstream(stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = stack_repo_unconfigured
+    _add_self_origin_and_fetch(repo)
+    git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("--dry-run must not prompt for an upstream")),
+    )
+    code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
+    assert code == ExitCode.GIT
+    assert "push destination" in err.lower()
+    assert git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo, check=False).returncode != 0
 
 
 def test_gpush_vanilla_upstream_runs_plain_git_push(

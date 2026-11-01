@@ -28,7 +28,7 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 
 | Option | Description |
 |--------|-------------|
-| `--dry-run` | Print preview only |
+| `--dry-run` | Print preview only. Writes nothing, so a missing upstream is an error instead of a prompt |
 | `-y`, `--yes` | Skip confirmation (required when stdin is not a TTY) |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
 | `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip) |
