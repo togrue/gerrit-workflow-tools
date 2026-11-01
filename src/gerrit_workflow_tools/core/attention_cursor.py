@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.attention import (
     next_commit_needing_edit_attention_after,
 )
 from gerrit_workflow_tools.core.config import Settings, set_attention_cursor_config, set_last_attention_change_id
+from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_state import git_dir
 
@@ -81,21 +82,6 @@ def parse_attention_cursor_ttl(raw: str | None) -> timedelta:
     minutes = int(m.group("minutes") or 0)
     delta = timedelta(weeks=weeks, days=days, hours=hours, minutes=minutes)
     return delta if delta.total_seconds() > 0 else _DEFAULT_TTL
-
-
-def _parse_iso_utc(raw: str | None) -> datetime | None:
-    if not raw:
-        return None
-    text = raw.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        dt = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def format_iso_utc(when: datetime) -> str:
@@ -194,7 +180,7 @@ def load_branch_cursor(settings: Settings, branch: str) -> AttentionCursor | Non
     change_id = settings.branch_attention_cursor(branch)
     if not change_id:
         return None
-    touched = _parse_iso_utc(settings.branch_attention_cursor_at(branch))
+    touched = parse_gerrit_time(settings.branch_attention_cursor_at(branch))
     if touched is None:
         return None
     return AttentionCursor(change_id=change_id, touched_at=touched)

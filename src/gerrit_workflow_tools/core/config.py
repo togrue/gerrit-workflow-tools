@@ -108,6 +108,14 @@ class Settings:
             return default
         return v.lower() in _TRUTHY
 
+    def _positive_int(self, key: str) -> int | None:
+        """The value of *key* when it is a whole number of at least 1, else ``None``."""
+        try:
+            value = int(self.get(key) or "")
+        except ValueError:
+            return None
+        return value if value >= 1 else None
+
     # -- Gerrit host and identity ------------------------------------------------
 
     @property
@@ -271,14 +279,7 @@ class Settings:
     @property
     def inbox_limit(self) -> int | None:
         """``inbox.limit``: default ``--limit``, or ``None`` when unset/invalid."""
-        raw = self.get("inbox.limit")
-        if not raw:
-            return None
-        try:
-            value = int(raw)
-        except ValueError:
-            return None
-        return value if value >= 1 else None
+        return self._positive_int("inbox.limit")
 
     @property
     def push_remote_policy(self) -> str:
@@ -313,14 +314,7 @@ class Settings:
         chain URL is not wrapped; comment text, context lines, the path
         header, and the commit message are.
         """
-        raw = self.get("gerrit.wrapWidth")
-        if not raw:
-            return _DEFAULT_WRAP_WIDTH
-        try:
-            value = int(raw)
-        except ValueError:
-            return _DEFAULT_WRAP_WIDTH
-        return value if value >= 1 else _DEFAULT_WRAP_WIDTH
+        return self._positive_int("gerrit.wrapWidth") or _DEFAULT_WRAP_WIDTH
 
 
 def set_branch_config(
@@ -338,6 +332,17 @@ def set_branch_config(
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
 
 
+def _write_stamped(cwd: Path | str | None, key: str, value: str | None, touched_at: str | None) -> None:
+    """Write *key* and its ``…At`` timestamp, or clear both when *value* is ``None``."""
+    if value is None:
+        git("config", "--unset-all", key, cwd=cwd, check=False)
+        git("config", "--unset-all", f"{key}At", cwd=cwd, check=False)
+        return
+    git("config", key, value, cwd=cwd)
+    if touched_at is not None:
+        git("config", f"{key}At", touched_at, cwd=cwd)
+
+
 def set_attention_cursor_config(
     cwd: Path | str | None,
     branch: str,
@@ -346,15 +351,7 @@ def set_attention_cursor_config(
     touched_at: str | None,
 ) -> None:
     """Write or clear ``branch.<branch>.gerAttentionCursor`` and ``…CursorAt``."""
-    cursor_key = f"branch.{branch}.gerAttentionCursor"
-    at_key = f"branch.{branch}.gerAttentionCursorAt"
-    if change_id is None:
-        git("config", "--unset-all", cursor_key, cwd=cwd, check=False)
-        git("config", "--unset-all", at_key, cwd=cwd, check=False)
-        return
-    git("config", cursor_key, change_id, cwd=cwd)
-    if touched_at is not None:
-        git("config", at_key, touched_at, cwd=cwd)
+    _write_stamped(cwd, f"branch.{branch}.gerAttentionCursor", change_id, touched_at)
 
 
 def set_last_attention_change_id(
@@ -364,10 +361,4 @@ def set_last_attention_change_id(
     touched_at: str | None = None,
 ) -> None:
     """Write or clear repo-local ``ger.lastAttentionChangeId`` and ``…At`` for lazy adopt."""
-    if change_id is None:
-        git("config", "--unset-all", "ger.lastAttentionChangeId", cwd=cwd, check=False)
-        git("config", "--unset-all", "ger.lastAttentionChangeIdAt", cwd=cwd, check=False)
-        return
-    git("config", "ger.lastAttentionChangeId", change_id, cwd=cwd)
-    if touched_at is not None:
-        git("config", "ger.lastAttentionChangeIdAt", touched_at, cwd=cwd)
+    _write_stamped(cwd, "ger.lastAttentionChangeId", change_id, touched_at)
