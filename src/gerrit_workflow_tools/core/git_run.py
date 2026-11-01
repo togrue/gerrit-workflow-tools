@@ -40,6 +40,8 @@ _BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move", "-u", "--unset-upstrea
 
 _UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
 
+_NAMED_REVISION_RE = re.compile(r"(?:ambiguous argument|bad revision|no such branch:) '([^']+)'")
+
 # `git config` flags that only read. Anything else may write, and upstream config is stack context.
 _CONFIG_READ_FLAGS = frozenset(
     {"-l", "--list", "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--show-origin", "--show-scope"}
@@ -68,6 +70,14 @@ class UnknownRevisionError(GitError):
 def is_unknown_revision(stderr: str) -> bool:
     """Whether *stderr* from a revision-reading git command says the revision does not exist."""
     return isinstance(stderr, str) and _UNKNOWN_REVISION_RE.search(stderr) is not None
+
+
+def unknown_revision_error(cwd: Path | str | None, stderr: str, returncode: int) -> UnknownRevisionError:
+    """An error naming the side of a range git could not resolve, without git's ``--`` hint."""
+    match = _NAMED_REVISION_RE.search(stderr)
+    name = match.group(1) if match else ""
+    missing = [part for part in re.split(r"\.{2,3}", name) if part and commit_sha_or_none(cwd, part) is None]
+    return UnknownRevisionError(f"unknown revision {missing[0] if missing else name!r}", returncode=returncode)
 
 
 def _clear_semantic_snapshots() -> None:

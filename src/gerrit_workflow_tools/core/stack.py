@@ -9,7 +9,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out, is_unknown_revision
+from gerrit_workflow_tools.core.git_run import GitError, git, git_out, is_unknown_revision, unknown_revision_error
 from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
 
 
@@ -178,8 +178,9 @@ def _log_records(cwd: Path | str | None, fmt: str, width: int, *log_args: str) -
     """
     p = git("log", *log_args, f"--format={fmt}", cwd=cwd, check=False)
     if p.returncode != 0:
-        failure = UnknownRevisionError if is_unknown_revision(p.stderr) else GitError
-        raise failure("git log failed", stderr=p.stderr, returncode=p.returncode)
+        if is_unknown_revision(p.stderr):
+            raise unknown_revision_error(cwd, p.stderr, p.returncode)
+        raise GitError("git log failed", stderr=p.stderr, returncode=p.returncode)
     fields = [part.lstrip("\n") for part in p.stdout.split(_RS)][:-1]
     if len(fields) % width != 0:
         raise GitError(
