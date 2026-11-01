@@ -100,7 +100,7 @@ Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
 - One owner per concept: git runs through `core/git_run.py`, commit rows are read by `core/stack.py`, and `HttpGerritRest` is built by `GerritService.from_cwd` plus the few owners the test names.
-- Every command builds its runtime with `init_cli_runtime` and wraps its body in `run_cli_command`.
+- Every command builds its runtime with `init_cli_runtime` and wraps its body in `run_cli_command`. `cli_bash_completion.py` is exempt: it runs from shell startup and must not load `core/`.
 - Modules stay at or under 400 lines. Larger ones are pinned at their size and only shrink; so do counts of `# pylint: disable=too-many-*`.
 
 Each rule's known exceptions are listed in the test and tied to an item in the [consolidation backlog](#consolidation-backlog).

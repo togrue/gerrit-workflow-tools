@@ -57,7 +57,8 @@ into `core/` belongs there.
 
 Fixed obligations on every command:
 
-- Build the runtime with `cli_common.init_cli_runtime`. Do not re-inline it.
+- Build the runtime with `cli_common.init_cli_runtime`. Do not re-inline it. `ger bash-completion`
+  alone is exempt, to stay fast at shell startup.
 - Wrap the body in `cli_common.run_cli_command`. That is the only place errors map to codes.
 - Reach Gerrit through `GerritService.from_cwd(...)`. Never construct HTTP yourself.
 - Exit with the shared codes in `cli_common.ExitCode`

@@ -313,7 +313,11 @@ def test_commands_use_shared_runtime() -> None:
     _check(
         "command bypasses the shared runtime",
         found,
-        {},
+        {
+            # By design: runs from shell startup files, reads no config, and must not load core/.
+            "cli_bash_completion.py lacks init_cli_runtime": "import-light",
+            "cli_bash_completion.py lacks run_cli_command": "import-light",
+        },
         "Call cli_common.init_cli_runtime and wrap the body in cli_common.run_cli_command.",
     )
 
