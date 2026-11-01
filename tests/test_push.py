@@ -250,6 +250,19 @@ class _StdinTTY:
         return True
 
 
+def test_gpush_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """On Windows ``isatty()`` is true for ``NUL``, which is what ``</dev/null`` opens."""
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": pytest.fail("must not prompt"))
+
+    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+
+    assert code == 1
+    assert "--yes" in err
+
+
 def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock()

@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def _prompt_stage_modified_changes(cwd: Path) -> bool:
     Returns True if the user accepted and files were staged. Only runs when
     stdin is a TTY and there are unstaged tracked changes.
     """
-    if not sys.stdin.isatty():
+    if not stdin_is_terminal():
         return False
     if not _worktree_has_unstaged_tracked_changes(cwd):
         return False

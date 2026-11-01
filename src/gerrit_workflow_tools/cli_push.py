@@ -42,7 +42,7 @@ from gerrit_workflow_tools.core.push import (
 from gerrit_workflow_tools.core.push_reviewers import needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, parse_reviewer_names, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
     commit_lines,
@@ -323,7 +323,7 @@ def _print_refusal(
 
 
 def _refuses_non_interactive(args: argparse.Namespace) -> bool:
-    if sys.stdin.isatty() or args.yes:
+    if stdin_is_terminal() or args.yes:
         return False
     print("error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt", file=sys.stderr)
     return True

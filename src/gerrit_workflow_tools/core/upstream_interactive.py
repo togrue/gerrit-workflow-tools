@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import TextIO
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
@@ -15,6 +16,23 @@ logger = logging.getLogger(__name__)
 
 _RECENT_UPSTREAM_KEY = "gerrit.recentUpstreamAbbrev"
 _RECENT_UPSTREAM_LIMIT = 20
+
+
+def _is_windows_console(stream: TextIO) -> bool:
+    """Ask Windows itself: ``isatty`` is also true for ``NUL``, which ``/dev/null`` maps to."""
+    import ctypes
+    import msvcrt
+
+    try:
+        handle = msvcrt.get_osfhandle(stream.fileno())
+    except (OSError, ValueError, AttributeError):
+        return True
+    return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(ctypes.c_ulong())))
+
+
+def stdin_is_terminal() -> bool:
+    """True when a prompt on stdin can be answered."""
+    return sys.stdin.isatty() and (sys.platform != "win32" or _is_windows_console(sys.stdin))
 
 
 def _dedupe_preserve_order(values: list[str]) -> list[str]:
