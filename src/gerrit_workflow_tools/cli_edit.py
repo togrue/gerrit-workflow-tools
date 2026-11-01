@@ -313,7 +313,11 @@ def _run_interactive_stack_rebase(
     # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
         write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
-    if returncode == 0 and not rebase_in_progress(cwd):
+    if returncode == 0 and rebase_in_progress(cwd):
+        subject = git_out("log", "-1", "--format=%s", full, cwd=cwd)
+        print(f"stopped at {short} {subject}", file=sys.stderr)
+        print("next: amend it, `git rebase --continue`, then `ger edit -n`", file=sys.stderr)
+    elif returncode == 0:
         for lost in sorted(change_ids_before - _stack_change_ids(cwd, branch)):
             print(f"warning: Change-Id {lost} left the stack; the next push creates a new change", file=sys.stderr)
     moved = default_action == "edit" and args.next_attention and returncode == 0

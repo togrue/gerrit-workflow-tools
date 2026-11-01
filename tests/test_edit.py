@@ -242,6 +242,26 @@ def test_set_cursor_twice_records_one_history_entry(stack_repo: Path, monkeypatc
     assert len(out.splitlines()) == 1
 
 
+def test_gedit_says_where_it_stopped_and_what_comes_next(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    real_run = subprocess.run
+
+    def stopping_rebase(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            write_rebase_head(stack_repo, "feature")
+            return subprocess.CompletedProcess(cmd, 0)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", stopping_rebase)
+    store = ChangeStore(build_details_by_change_id(rows))
+    code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+
+    assert code == 0
+    assert f"stopped at {rows[0].short_sha} {rows[0].subject}" in err
+    assert "`git rebase --continue`" in err
+
+
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
     from gerrit_workflow_tools.cli_common import ExitCode
