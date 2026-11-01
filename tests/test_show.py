@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -15,8 +16,10 @@ from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
+    build_details_by_change_id,
     change_info_for_sha,
     head_change_id,
+    stack_rows_mb_to_head,
 )
 from tests.conftest import json_stdout, run_cli
 from tests.helpers import force_zero_change_trust_window, write_rebase_head
@@ -1186,3 +1189,18 @@ def test_gshow_picks_up_resolved_comments_when_updated_is_unchanged(
     data2 = json_stdout(out2)
     assert data2.get("comments") == []
     assert data2.get("comments_unresolved") == 0
+
+
+def test_show_change_number_renders_the_local_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    code, out, err = run_cli(stack_repo, gshow_main, ["--json", "change:100"], monkeypatch, gerrit=store)
+
+    assert code in (0, 1), err
+    assert json.loads(out)["local_commit"] is True
+    assert json.loads(out)["sha"] == rows[0].sha
+
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--color=never", "change:100"], monkeypatch, gerrit=store)
+    assert "Author:" in out

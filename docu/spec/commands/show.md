@@ -62,7 +62,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 **Comment resolution:** Comments are grouped into chains via Gerrit `in_reply_to` (thread root = chain id). A chain is **resolved** when the **last** comment in the chain has `unresolved: false`. Default `--comments unresolved` lists only open chains. `--comments all` lists both (unresolved first). `--comments resolved` lists only closed chains. See `build_comment_chains()` / `collect_comment_chains()` in `comment_chains.py`. JSON `comment_chains[]` includes `"resolved": bool`. `--context` fetches `GET …/comments?enable-context=true&context-padding=N` and caches that payload under a separate context key so it cannot be served as a no-context hit. JSON comments include `context_lines` (`line_number`, `context_line`) when present.
 
-**Change-Id-only:** When there is no local commit, the Author/date/message block is skipped.
+**Change-Id-only:** A change that matches a commit in the local stack renders as that commit, however it was addressed. When there is no local commit, the Author/date/message block is skipped.
 
 **Exit code:** attention (`1`) if **any** listed target has attention reasons (including omitted clean commits that still need attention), or if the user declines the `--stack` upstream prompt. `--comments` does not change the exit code.
 

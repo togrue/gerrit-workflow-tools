@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
@@ -14,7 +14,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
 
@@ -44,6 +44,16 @@ def _row_from_local_commit(cwd: Path | str, sha: str) -> Commit:
     return read_commit_rows(cwd, "-1", sha)[0]
 
 
+def _stack_commit_for(cwd: Path | str, change_id: str, *, branch: str | None, settings: Settings) -> Commit | None:
+    """The **local stack** commit carrying *change_id*, so a change renders like its commit."""
+    try:
+        snap = get_stack_snapshot(cwd, branch, settings=settings)
+    except GitError:
+        return None
+    want = norm_change_id(change_id)
+    return next((c for c in snap.commits if c.valid_change_id and norm_change_id(c.valid_change_id) == want), None)
+
+
 def resolve_show_commit_row(
     cwd: Path | str,
     arg: str | None,
@@ -71,6 +81,12 @@ def resolve_show_commit_row(
 
     if resolution.selected is None:
         raise ChangeResolutionError(f"no matching Gerrit change for {raw_arg!r}")
+
+    local = _stack_commit_for(cwd, resolution.selected.change_id, branch=branch, settings=settings)
+    if local is not None:
+        return ShowCommitResolution(
+            row=local, is_local_commit=True, resolution=replace(resolution, local_sha=local.sha)
+        )
 
     change = ChangeView.from_payload(client.get_change(resolution.selected.triplet))
     row = _row_from_gerrit_change(change)
