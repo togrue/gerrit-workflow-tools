@@ -95,14 +95,8 @@ def host_from_web_base(web_base: str) -> str:
 def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
     """First-parent SHAs that are not another change's current revision."""
     known = {change.current_revision for change in changes if change.current_revision}
-    missing: list[str] = []
-    seen: set[str] = set()
-    for change in changes:
-        parent = change.first_parent
-        if parent and parent not in known and parent not in seen:
-            seen.add(parent)
-            missing.append(parent)
-    return missing
+    parents = (change.first_parent for change in changes if change.first_parent)
+    return list(dict.fromkeys(parent for parent in parents if parent not in known))
 
 
 def _self_vote_date(change: ChangeView, self_account_id: int | None) -> datetime | None:
@@ -198,6 +192,10 @@ class _UnionFind:
             self._parent[root_right] = root_left
 
 
+def _parent_id(change: ChangeView, sha_to_id: dict[str, str]) -> str | None:
+    return sha_to_id.get(change.first_parent) if change.first_parent else None
+
+
 def _order_members(
     component: set[str],
     payloads: dict[str, ChangeView],
@@ -207,8 +205,7 @@ def _order_members(
     children: dict[str, list[str]] = defaultdict(list)
     bases: list[str] = []
     for member_id in component:
-        parent_sha = payloads[member_id].first_parent
-        parent_id = sha_to_id.get(parent_sha) if parent_sha else None
+        parent_id = _parent_id(payloads[member_id], sha_to_id)
         if parent_id and parent_id in component:
             children[parent_id].append(member_id)
         else:
@@ -241,12 +238,7 @@ def _pick_top(
     sha_to_id: dict[str, str],
 ) -> str:
     """Member whose current revision is not the parent of any other member."""
-    parent_ids: set[str] = set()
-    for member_id in component:
-        parent_sha = payloads[member_id].first_parent
-        parent_id = sha_to_id.get(parent_sha) if parent_sha else None
-        if parent_id and parent_id in component:
-            parent_ids.add(parent_id)
+    parent_ids = {_parent_id(payloads[member_id], sha_to_id) for member_id in component}
     tips = [member_id for member_id in ordered_ids if member_id not in parent_ids]
     if not tips:
         return ordered_ids[-1]
@@ -273,35 +265,15 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> ReviewChain | None:
     """Build one ReviewChain from a connected component, or None if it has no numbers."""
     ordered_ids = _order_members(component, payloads, sha_to_id)
-    members: list[ChainMember] = []
-    for member_id in ordered_ids:
-        member = _to_member(payloads[member_id], web_base)
-        if member is not None:
-            members.append(member)
+    members = [member for member_id in ordered_ids if (member := _to_member(payloads[member_id], web_base))]
     if not members:
         return None
     top_id = _pick_top(ordered_ids, component, payloads, sha_to_id)
     top_number = payloads[top_id].number
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
-    unreviewed_at: datetime | None = None
-    for member_id in ordered_ids:
-        stamp = member_unreviewed_since(payloads[member_id], self_account_id)
-        if stamp is not None and (unreviewed_at is None or stamp < unreviewed_at):
-            unreviewed_at = stamp
-    attention: list[str] = []
-    seen_reasons: set[str] = set()
-    for member in members:
-        for reason in member.attention_reasons:
-            if reason not in seen_reasons:
-                seen_reasons.add(reason)
-                attention.append(reason)
-    partial = False
-    for member_id in component:
-        parent_sha = payloads[member_id].first_parent
-        if parent_sha and parent_sha in unmatched:
-            partial = True
-            break
+    stamps = (member_unreviewed_since(payloads[member_id], self_account_id) for member_id in ordered_ids)
+    unreviewed_at = min((stamp for stamp in stamps if stamp is not None), default=None)
     project = top_member.project
     return ReviewChain(
         key=f"{host}~{project}~{top_member.number}",
@@ -313,13 +285,13 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         project=project,
         branch=top_member.branch,
         wait_age_seconds=_seconds_since(last_activity, now),
-        unreviewed_age_seconds=_seconds_since(unreviewed_at, now) if unreviewed_at is not None else 0,
+        unreviewed_age_seconds=_seconds_since(unreviewed_at, now),
         last_activity=last_activity,
         verified=_worst_label([member.verified for member in members]),
         code_review=_worst_label([member.code_review for member in members]),
         comments_unresolved=sum(member.comments_unresolved for member in members),
-        attention_reasons=tuple(attention),
-        partial_chain=partial,
+        attention_reasons=tuple(dict.fromkeys(reason for member in members for reason in member.attention_reasons)),
+        partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in component),
         url=top_member.url,
     )
 
@@ -347,17 +319,13 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     if not payloads:
         return []
 
-    sha_to_id: dict[str, str] = {}
-    for member_id, change in payloads.items():
-        if change.current_revision:
-            sha_to_id[change.current_revision] = member_id
+    sha_to_id = {change.current_revision: key for key, change in payloads.items() if change.current_revision}
 
     union = _UnionFind()
     for member_id in payloads:
         union.add(member_id)
     for member_id, change in payloads.items():
-        parent_sha = change.first_parent
-        parent_id = sha_to_id.get(parent_sha) if parent_sha else None
+        parent_id = _parent_id(change, sha_to_id)
         if parent_id:
             union.union(member_id, parent_id)
 

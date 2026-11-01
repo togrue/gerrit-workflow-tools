@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
@@ -234,20 +234,9 @@ def ci_pipelines_from_build_messages(
             if not revs:
                 return []
             latest_rev = max(revs)
-            fallback_items = [
-                (
-                    sort_key,
-                    CiPipeline(
-                        label=pipeline.label,
-                        state=pipeline.state,
-                        url=pipeline.url,
-                        outdated=True,
-                    ),
-                )
-                for sort_key, rev, pipeline in items
-                if rev == latest_rev
-            ]
-            return _dedupe_pipelines_latest(fallback_items)
+            return _dedupe_pipelines_latest(
+                [(key, replace(pipeline, outdated=True)) for key, rev, pipeline in items if rev == latest_rev]
+            )
 
     return _dedupe_pipelines_latest([(sort_key, pipeline) for sort_key, _, pipeline in items])
 
