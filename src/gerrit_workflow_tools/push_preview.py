@@ -128,7 +128,7 @@ def print_plan_status(plan: PushPlan) -> None:
     ]
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
-    print(color_text("  ·  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
+    print(color_text("  |  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
 
 
 def _escape_topic_for_assignment_report(topic: str) -> str:
