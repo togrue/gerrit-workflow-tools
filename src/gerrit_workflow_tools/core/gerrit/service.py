@@ -89,8 +89,8 @@ class GerritService:
 
         Pass *rest* to supply the Gerrit implementation instead of building an
         :class:`HttpGerritRest`. Doing so also skips ``gerrit.webUrl`` resolution — the web
-        base comes from the implementation — so callers that inject need no Gerrit config,
-        so callers that inject need no Gerrit config. *settings* defaults to one read from
+        base comes from the implementation — so callers that inject need no Gerrit config.
+        *settings* defaults to one read from
         *cwd*; pass it when the caller has already taken a snapshot, so the whole command
         works from a single ``git config --list``.
         """
@@ -138,9 +138,7 @@ class GerritService:
     ) -> list[Any]:
         """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
 
-        from gerrit_workflow_tools.core.comment_chains import count_unresolved_in_file_map
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
-        from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         stack = self.stack_context()
 
@@ -154,10 +152,7 @@ class GerritService:
                 by_triplet[view.key] = view
 
         result: list[Any] = []
-        # (row index, follow-up kinds, triplet, freshness, rev, pipelines) — freshness is the
-        # cache validity key for every follow-up, so it travels with the job.
-        pending: list[tuple[int, frozenset[str], str, str | None, int | None, bool]] = []
-
+        follow_ups: list[Callable[[], None]] = []
         for row in commits:
             change: ChangeView | None = None
             if row.valid_change_id:
@@ -167,67 +162,45 @@ class GerritService:
                 needed = needed | frozenset({"checks"})
             result.append(lc)
             if needed and change is not None and change.key:
-                pending.append(
-                    (
-                        len(result) - 1,
-                        needed,
-                        change.key,
-                        lc.freshness,
-                        change.current_revision_number,
-                        fetch_ci_pipelines,
-                    )
-                )
+                follow_ups.append(partial(self._fill_follow_ups, lc, change, needed, stack.project, fetch_ci_pipelines))
 
-        if not pending:
-            return result
-
-        def _follow_up(
-            item: tuple[int, frozenset[str], str, str | None, int | None, bool],
-        ) -> tuple[int, dict[str, Any]]:
-            idx, kinds, triplet, freshness, rev_num, want_pipelines = item
-            updates: dict[str, Any] = {}
-            if "comments" in kinds:
-                try:
-                    file_map = self.comments.get_file_map(triplet, change_updated=freshness)
-                    updates["comments"] = count_unresolved_in_file_map(file_map)
-                except Exception as exc:  # pylint: disable=broad-exception-caught
-                    logger.debug("comments follow-up failed for %s: %s", triplet, exc)
-            if "checks" in kinds:
-                try:
-                    names, links, pipelines = self._fetch_ci_result(
-                        triplet,
-                        project=stack.project,
-                        change_updated=freshness,
-                        current_revision_number=rev_num,
-                        fetch_pipelines=want_pipelines,
-                    )
-                    updates["checks"] = names
-                    updates["ci_links"] = links
-                    updates["ci_pipelines"] = pipelines
-                except Exception as exc:  # pylint: disable=broad-exception-caught
-                    logger.debug("checks follow-up failed for %s: %s", triplet, exc)
-            if "reviewers" in kinds:
-                try:
-                    rows = self.rest.list_change_reviewers(triplet)
-                    updates["reviewers"] = reviewer_accounts_from_reviewer_list(rows)
-                except Exception as exc:  # pylint: disable=broad-exception-caught
-                    logger.debug("reviewers follow-up failed for %s: %s", triplet, exc)
-            return idx, updates
-
-        jobs = [lambda item=item: _follow_up(item) for item in pending]
-        for idx, updates in parallel_map(jobs):
-            if "comments" in updates:
-                result[idx].comments_unresolved = updates["comments"]
-            if "checks" in updates:
-                result[idx].ci_failures = updates["checks"]
-            if "ci_links" in updates:
-                result[idx].ci_links = updates["ci_links"]
-            if "ci_pipelines" in updates:
-                result[idx].ci_pipelines = updates["ci_pipelines"]
-            if "reviewers" in updates:
-                result[idx].reviewers = updates["reviewers"]
-
+        parallel_map(follow_ups)
         return result
+
+    def _fill_follow_ups(
+        self,
+        commit: Any,
+        change: ChangeView,
+        kinds: frozenset[str],
+        project: str,
+        fetch_pipelines: bool,
+    ) -> None:
+        """Fill what *change*'s payload lacked. A failed follow-up leaves its fields as they were."""
+        from gerrit_workflow_tools.core.comment_chains import count_unresolved_in_file_map
+        from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
+
+        def _comments() -> None:
+            file_map = self.comments.get_file_map(change.key, change_updated=change.freshness)
+            commit.comments_unresolved = count_unresolved_in_file_map(file_map)
+
+        def _checks() -> None:
+            commit.ci_failures, commit.ci_links, commit.ci_pipelines = self._fetch_ci_result(
+                change.key,
+                project=project,
+                change_updated=change.freshness,
+                current_revision_number=change.current_revision_number,
+                fetch_pipelines=fetch_pipelines,
+            )
+
+        def _reviewers() -> None:
+            commit.reviewers = reviewer_accounts_from_reviewer_list(self.rest.list_change_reviewers(change.key))
+
+        for kind, fill in (("comments", _comments), ("checks", _checks), ("reviewers", _reviewers)):
+            if kind in kinds:
+                try:
+                    fill()
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    logger.debug("%s follow-up failed for %s: %s", kind, change.key, exc)
 
     def fetch_review_chains(  # pylint: disable=too-many-locals
         self,
@@ -451,16 +424,10 @@ class CommentApi:
     ) -> dict[str, list[dict[str, Any]]]:
         """Return raw Gerrit comments grouped by file path."""
 
-        padding = context_padding
-
-        def fetch(triplet: str) -> dict[str, list[dict[str, Any]]]:
-            if padding is None:
-                return self._service.rest.get_comments(triplet)
-            return self._service.rest.get_comments(
-                triplet,
-                enable_context=True,
-                context_padding=padding,
-            )
+        rest = self._service.rest
+        fetch = rest.get_comments
+        if context_padding is not None:
+            fetch = partial(rest.get_comments, enable_context=True, context_padding=context_padding)
 
         return self._service.cache.load_comments(
             change_id,
@@ -468,5 +435,5 @@ class CommentApi:
             change_updated=change_updated,
             trust_window_seconds=self._service.trust_window_seconds,
             refresh=self._service.refresh,
-            context_key=comments_context_key(padding),
+            context_key=comments_context_key(context_padding),
         )
