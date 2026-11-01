@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.rest import gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.reviewers_strategy import default_reviewers_via_registry
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
@@ -32,7 +33,7 @@ class ReviewerStrategy(str, Enum):
 def gerrit_credentials_configured(settings: Settings) -> bool:
     """Whether Gerrit REST credentials are configured in git config."""
 
-    return bool(settings.gerrit_user and (settings.gerrit_token or settings.gerrit_password) is not None)
+    return gerrit_auth_from_settings(settings) is not None
 
 
 def account_slug_from_gerrit(account: Mapping[str, object]) -> str | None:
@@ -65,27 +66,31 @@ def format_gerrit_account_label(account: Mapping[str, object]) -> str | None:
     return None
 
 
+def _reviewer_accounts(accounts: Iterable[object]) -> list[ReviewerAccount]:
+    """AccountInfo rows that name someone, in order; anything else is skipped."""
+    out: list[ReviewerAccount] = []
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+        slug = account_slug_from_gerrit(account)
+        if slug:
+            account_id = account.get("_account_id")
+            out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
+    return out
+
+
 def reviewer_accounts_from_reviewer_list(rows: Sequence[Mapping[str, object]]) -> list[ReviewerAccount]:
     """Parse ``GET changes/<id>/reviewers/`` rows (flat accounts or ReviewerInfo)."""
 
-    out: list[ReviewerAccount] = []
-    for row in rows:
+    def _keeps(row: Mapping[str, object]) -> bool:
         if not isinstance(row, dict):
-            continue
+            return False
         state = row.get("state")
-        if isinstance(state, str) and state not in ("REVIEWER", "CC"):
-            continue
-        account = row.get("account")
-        if isinstance(account, dict):
-            payload: Mapping[str, object] = account
-        else:
-            payload = row
-        slug = account_slug_from_gerrit(payload)
-        if not slug:
-            continue
-        account_id = payload.get("_account_id")
-        out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
-    return out
+        return not isinstance(state, str) or state in ("REVIEWER", "CC")
+
+    return _reviewer_accounts(
+        row["account"] if isinstance(row.get("account"), dict) else row for row in rows if _keeps(row)
+    )
 
 
 def reviewer_accounts_from_change_info(
@@ -100,52 +105,20 @@ def reviewer_accounts_from_change_info(
     ``REVIEWER`` only so CC accounts are not removed.
     """
 
-    wanted = tuple(roles)
-    out: list[ReviewerAccount] = []
     reviewers = detail.get("reviewers")
     if isinstance(reviewers, dict):
-        for role in wanted:
-            bucket = reviewers.get(role)
-            if not isinstance(bucket, list):
-                continue
-            for account in bucket:
-                if not isinstance(account, dict):
-                    continue
-                slug = account_slug_from_gerrit(account)
-                if not slug:
-                    continue
-                account_id = account.get("_account_id")
-                out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
-        return out
-    if not isinstance(reviewers, list):
-        return out
-    for entry in reviewers:
-        if not isinstance(entry, dict):
-            continue
-        state = entry.get("state")
-        if state not in wanted:
-            continue
-        account = entry.get("account")
-        if not isinstance(account, dict):
-            continue
-        slug = account_slug_from_gerrit(account)
-        if not slug:
-            continue
-        account_id = account.get("_account_id")
-        out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
-    return out
+        buckets = (reviewers.get(role) for role in roles)
+        return _reviewer_accounts(account for bucket in buckets if isinstance(bucket, list) for account in bucket)
+    if isinstance(reviewers, list):
+        return _reviewer_accounts(
+            entry.get("account") for entry in reviewers if isinstance(entry, dict) and entry.get("state") in roles
+        )
+    return []
 
 
 def parse_reviewer_names(raw: str) -> list[str]:
     """Split a comma- or space-separated reviewer list, dropping blanks and duplicates."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for part in raw.replace(",", " ").split():
-        name = part.strip()
-        if name and name not in seen:
-            seen.add(name)
-            out.append(name)
-    return out
+    return list(dict.fromkeys(raw.replace(",", " ").split()))
 
 
 def resolve_push_reviewers(

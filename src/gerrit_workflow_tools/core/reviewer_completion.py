@@ -67,22 +67,13 @@ def sorted_slugs_from_account_rows(
     must_start_with: str | None,
 ) -> list[str]:
     """Deduplicate rows into sorted slug strings; optionally filter by lowercase prefix."""
-    seen: set[str] = set()
-    out: list[str] = []
     key = must_start_with.lower() if must_start_with else None
+    by_lower: dict[str, str] = {}
     for row in rows:
         slug = slug_from_suggest_or_account_row(row)
-        if not slug:
-            continue
-        low = slug.lower()
-        if key is not None and not low.startswith(key):
-            continue
-        if low in seen:
-            continue
-        seen.add(low)
-        out.append(slug)
-    out.sort(key=lambda s: s.lower())
-    return out
+        if slug and (key is None or slug.lower().startswith(key)):
+            by_lower.setdefault(slug.lower(), slug)
+    return sorted(by_lower.values(), key=str.lower)
 
 
 def fetch_suggested_reviewer_slugs(

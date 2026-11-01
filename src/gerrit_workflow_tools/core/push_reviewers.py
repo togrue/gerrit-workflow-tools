@@ -94,8 +94,8 @@ def push_marks(
             "Gerrit credentials are not configured; set gerrit.user and "
             "gerrit.token (or gerrit.password) for REST access."
         )
-    raw = GerritService.from_cwd(cwd, settings=settings, rest=gerrit).changes.get_payloads(list(triplets.values()))
-    by_triplet = _payloads_by_triplet(raw)
+    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    by_triplet = service.changes.get_payloads(list(triplets.values()))
     marks: dict[str, PushMark] = {}
     for change_id, triplet in triplets.items():
         detail = by_triplet.get(triplet)
@@ -113,26 +113,12 @@ def push_marks(
 
 def change_refs_for_commits(cwd: Path, commits: Sequence[Commit], *, settings: Settings) -> list[str]:
     stack = resolve_stack_context(cwd, settings=settings)
-    out: list[str] = []
-    seen: set[str] = set()
-    for commit in commits:
-        if not commit.change_id:
-            continue
-        triplet = build_triplet(stack.project, stack.push_branch, commit.change_id)
-        if triplet not in seen:
-            seen.add(triplet)
-            out.append(triplet)
-    return out
+    triplets = (build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id)
+    return list(dict.fromkeys(triplets))
 
 
-def _payloads_by_triplet(payloads: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
-    out: dict[str, dict[str, object]] = {}
-    for ref, payload in payloads.items():
-        out[ref] = payload
-        triplet = payload.get("id")
-        if isinstance(triplet, str) and triplet:
-            out[triplet] = payload
-    return out
+def _apply_failed(message: str) -> ReviewerApplyResult:
+    return ReviewerApplyResult(ok=False, issues=[ReviewerApplyIssue(level="error", message=message)])
 
 
 def apply_reviewer_strategy_after_push_service(
@@ -146,26 +132,20 @@ def apply_reviewer_strategy_after_push_service(
     if strategy == ReviewerStrategy.PUSH or not reviewers:
         return ReviewerApplyResult(ok=True)
 
-    issues: list[ReviewerApplyIssue] = []
     outcomes: list[ReviewerApplyChangeOutcome] = []
     try:
-        raw_payloads = service.changes.get_payloads(change_refs)
+        details_by_triplet = service.changes.get_payloads(change_refs)
     except GerritApiError as error:
-        issues.append(ReviewerApplyIssue(level="error", message=f"could not load changes: {error}"))
-        return ReviewerApplyResult(ok=False, issues=issues)
-
-    details_by_triplet = _payloads_by_triplet(raw_payloads)
+        return _apply_failed(f"could not load changes: {error}")
 
     for triplet in change_refs:
         detail = details_by_triplet.get(triplet)
         if detail is None:
-            issues.append(ReviewerApplyIssue(level="error", message=f"could not load change {triplet}"))
-            return ReviewerApplyResult(ok=False, issues=issues)
+            return _apply_failed(f"could not load change {triplet}")
 
         footer_change_id = parse(triplet).change_id
         if footer_change_id is None:
-            issues.append(ReviewerApplyIssue(level="error", message=f"not a Gerrit triplet: {triplet}"))
-            return ReviewerApplyResult(ok=False, issues=issues)
+            return _apply_failed(f"not a Gerrit triplet: {triplet}")
         existing = reviewer_accounts_from_change_info(detail)
         if strategy == ReviewerStrategy.LAZY and existing:
             outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=()))
@@ -178,13 +158,7 @@ def apply_reviewer_strategy_after_push_service(
         try:
             service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
         except GerritApiError as error:
-            issues.append(
-                ReviewerApplyIssue(
-                    level="error",
-                    message=f"could not update reviewers on {triplet}: {error}",
-                )
-            )
-            return ReviewerApplyResult(ok=False, issues=issues)
+            return _apply_failed(f"could not update reviewers on {triplet}: {error}")
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
-    return ReviewerApplyResult(ok=True, issues=issues, outcomes=outcomes)
+    return ReviewerApplyResult(ok=True, outcomes=outcomes)

@@ -26,3 +26,13 @@ def test_reviewer_accounts_from_reviewer_info_list() -> None:
     assert len(out) == 2
     assert out[0].slug == "carol"
     assert out[1].slug == "Dave"
+
+
+def test_reviewer_accounts_skip_rows_that_name_nobody() -> None:
+    rows = [
+        "not-a-row",
+        {"state": "REMOVED", "account": {"_account_id": 5, "username": "erin"}},
+        {"_account_id": 6},
+        {"state": "CC", "username": "frank"},
+    ]
+    assert reviewer_accounts_from_reviewer_list(rows) == [ReviewerAccount(slug="frank")]  # type: ignore[arg-type]
