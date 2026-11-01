@@ -514,6 +514,12 @@ def test_gpush_says_which_commits_missed_the_push_options(stack_repo: Path, monk
     assert f"warning: topic not applied to unchanged commits: {rows[0].short_sha}" in err
 
 
+def test_gpush_refuses_a_comma_in_the_topic(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--topic", "x,y"], monkeypatch)
+    assert code == 1
+    assert "invalid topic 'x,y'" in err
+
+
 def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
     commits = commits_in_range(stack_repo, "main..feature")[:2]

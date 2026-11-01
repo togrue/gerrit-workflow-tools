@@ -180,6 +180,8 @@ def prepare(
     show_attributes: bool = False,
     update_last_pushed: bool = True,
 ) -> PushPlan | PushRefusal:
+    if topic and "," in topic:
+        return PushRefusal(f"error: invalid topic {topic!r}: a comma separates push options")
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     if not destination:
         raise GitError("Internal error: Gerrit push mode without effective destination.")
