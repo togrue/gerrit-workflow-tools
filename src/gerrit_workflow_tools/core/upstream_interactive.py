@@ -157,7 +157,7 @@ def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str, *, s
         return False
     if branch_has_upstream(cwd, branch):
         return True
-    if not sys.stdin.isatty():
+    if not prompt_toolkit_can_run():
         return False
     choice = prompt_upstream_abbrev_interactive(cwd, branch, settings=settings)
     if not choice:
@@ -181,6 +181,6 @@ def require_branch_upstream(cwd: Path | str | None, branch: str, *, settings: Se
         return True
     if ensure_branch_upstream_interactive(cwd, branch, settings=settings):
         return True
-    if not sys.stdin.isatty():
+    if not prompt_toolkit_can_run():
         print(f"error: {missing_upstream_error_message(branch)}", file=sys.stderr)
     return False

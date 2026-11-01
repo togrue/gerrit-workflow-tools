@@ -21,6 +21,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.attention_cursor import (
     CursorAction,
     EditAttentionMode,
+    load_branch_cursor,
     read_cursor_history,
     write_branch_cursor,
 )
@@ -275,6 +276,8 @@ def _run_interactive_stack_rebase(
 
     if args.cursor_history:
         return _print_cursor_history(cwd)
+    if args.cursor and load_branch_cursor(settings, branch or "HEAD") is None:
+        return _print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
     if not _has_upstreams(cwd, settings, branch):
         return int(ExitCode.ATTENTION)
     if args.cursor:

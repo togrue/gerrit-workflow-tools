@@ -122,3 +122,15 @@ def test_upstream_prompt_accepts_a_remote_tracking_branch(tmp_path: Path, monkey
     monkeypatch.setattr("prompt_toolkit.PromptSession.__init__", lambda *_a, **_k: None)
 
     assert prompt_upstream_abbrev_interactive(repo, "feature", settings=Settings.from_cwd(repo)) == "origin/main"
+
+
+def test_missing_upstream_without_a_console_reports_instead_of_prompting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _make_repo_with_origin(tmp_path)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
+
+    assert require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo)) is False
+    assert "No upstream configured" in capsys.readouterr().err

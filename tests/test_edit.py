@@ -212,6 +212,15 @@ def test_greword_warns_when_the_change_id_changes(stack_repo: Path, monkeypatch:
     assert f"warning: Change-Id {tip.change_id} left the stack" in err
 
 
+def test_gedit_cursor_needs_no_upstream_when_there_is_no_cursor(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
+    code, out, _err = run_cli(stack_repo, gedit_main, ["--cursor"], monkeypatch)
+    assert code == 0
+    assert "attention cursor: (none)" in out
+
+
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Used to exit 7 (GIT) because resolution errors were wrapped in GitError."""
     from gerrit_workflow_tools.cli_common import ExitCode
