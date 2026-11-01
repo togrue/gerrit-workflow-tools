@@ -438,3 +438,10 @@ def test_read_commit_rows_keeps_a_last_commit_with_an_empty_message(gcid_cli_rep
     git("commit", "--allow-empty", "--allow-empty-message", "-m", "", cwd=gcid_cli_repo)
     rows = read_commit_rows(gcid_cli_repo, "-1", "HEAD")
     assert [row.subject for row in rows] == [""]
+
+
+def test_gcid_empty_range_says_so_on_stderr(gcid_cli_repo, monkeypatch):
+    code, out, err = run_cli(gcid_cli_repo, gcid_main, ["HEAD..HEAD"], monkeypatch)
+    assert code == 0
+    assert out == ""
+    assert "(no commits in range)" in err

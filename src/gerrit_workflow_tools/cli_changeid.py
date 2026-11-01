@@ -79,6 +79,8 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
         rows = read_commit_rows(cwd, "--reverse", rev)
     else:
         rows = read_commit_rows(cwd, "-1", rev)
+    if not rows:
+        print("(no commits in range)", file=sys.stderr)
     for row in rows:
         _audit_change_ids([row])
         print(row.change_id)
