@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -19,7 +19,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
-from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git_out
 
 
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
@@ -36,7 +36,6 @@ __all__ = [
     "SelectedChange",
     "SelectedReason",
     "format_resolution_note",
-    "resolution_fields_from_change_rows",
     "resolution_from_change_rows",
     "resolve_changeish",
     "resolve_stack_changeish",
@@ -88,13 +87,7 @@ class SelectedChange:
         )
 
     def to_json_dict(self) -> dict[str, Any]:
-        return {
-            "number": self.number,
-            "triplet": self.triplet,
-            "branch": self.branch,
-            "change_id": self.change_id,
-            "status": self.status,
-        }
+        return asdict(self)
 
 
 @dataclass
@@ -137,17 +130,9 @@ def parse_changeish(s: str) -> Changeish:
     return parsed
 
 
-def _local_sha_or_none(cwd: Path | str | None, rev: str) -> str | None:
-    """Full SHA for *rev* when the repository can resolve it to a commit, else ``None``."""
-    p = git("rev-parse", "-q", "--verify", f"{rev}^{{commit}}", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    return p.stdout.strip() or None
-
-
 def _verified_local_sha(cwd: Path | str | None, rev: str) -> str:
     """Full SHA for *rev*, with a message that names the input rather than git's internals."""
-    sha = _local_sha_or_none(cwd, rev)
+    sha = commit_sha_or_none(cwd, rev)
     if sha is None:
         raise ChangeResolutionError(f"not a valid commit-ish: {rev!r}")
     return sha
@@ -186,85 +171,48 @@ def _is_active_status(status: str) -> bool:
     return status.upper() not in _INACTIVE_STATUSES
 
 
-def _narrow_change_id_matches(
+def _narrow_matches(
+    resolution: Resolution,
     rows: list[dict[str, Any]],
     *,
     push_branch: str,
     explicit_target: bool,
-) -> tuple[SelectedChange | None, SelectedReason | None, bool, list[SelectedChange]]:
-    """Apply spec §3.1 narrowing for bare Change-Id query results."""
-    if not rows:
-        return None, None, False, []
+) -> Resolution:
+    """*resolution* with spec §3.1 narrowing applied to one Change-Id's rows. Never contacts Gerrit."""
+    changes = [SelectedChange.from_change_row(row) for row in rows]
+    on_branch = [change for change in changes if change.branch == push_branch]
+    elsewhere = [change for change in changes if change.branch != push_branch]
 
-    selected_rows = [row for row in rows if isinstance(row.get("branch"), str) and row["branch"] == push_branch]
-    other_rows = [row for row in rows if row not in selected_rows]
-    ambiguous = len(rows) > 1
-    alternatives = [SelectedChange.from_change_row(row) for row in other_rows]
-
-    if len(selected_rows) == 1:
-        return (
-            SelectedChange.from_change_row(selected_rows[0]),
-            "target-branch",
-            ambiguous,
-            alternatives,
+    def _picked(selected: SelectedChange, reason: SelectedReason, alternatives: list[SelectedChange]) -> Resolution:
+        return replace(
+            resolution,
+            selected=selected,
+            selected_reason=reason,
+            ambiguous=reason != "unique",
+            alternatives=alternatives,
         )
 
-    if len(selected_rows) > 1:
-        active = [row for row in selected_rows if _is_active_status(str(row.get("status", "")))]
-        inactive = [row for row in selected_rows if not _is_active_status(str(row.get("status", "")))]
+    if len(changes) == 1 and on_branch:
+        return _picked(changes[0], "unique", [])
+    if len(on_branch) == 1:
+        return _picked(on_branch[0], "target-branch", elsewhere)
+    if on_branch:
+        active = [change for change in on_branch if _is_active_status(change.status)]
         if len(active) == 1:
-            inactive_alts = [SelectedChange.from_change_row(row) for row in inactive]
-            return (
-                SelectedChange.from_change_row(active[0]),
-                "prefer-open",
-                True,
-                alternatives + inactive_alts,
-            )
-        if len(active) > 1:
-            candidates = [SelectedChange.from_change_row(row) for row in active]
-            raise ChangeAmbiguousError(
-                f"ambiguous Change-Id: {len(active)} open changes on branch {push_branch!r}",
-                alternatives=candidates,
-            )
-        candidates = [SelectedChange.from_change_row(row) for row in selected_rows]
+            inactive = [change for change in on_branch if change is not active[0]]
+            return _picked(active[0], "prefer-open", elsewhere + inactive)
+        matched = f"{len(active)} open changes" if active else f"{len(on_branch)} changes"
         raise ChangeAmbiguousError(
-            f"ambiguous Change-Id: {len(selected_rows)} changes on branch {push_branch!r}",
-            alternatives=candidates,
+            f"ambiguous Change-Id: {matched} on branch {push_branch!r}",
+            alternatives=active or on_branch,
         )
-
-    if not explicit_target:
-        return None, None, len(rows) > 1, [SelectedChange.from_change_row(row) for row in rows]
-
-    if len(rows) == 1:
-        picked = SelectedChange.from_change_row(rows[0])
-        return picked, "branch-mismatch", True, []
-
-    candidates = [SelectedChange.from_change_row(row) for row in rows]
+    if not explicit_target or not changes:
+        return replace(resolution, ambiguous=len(changes) > 1, alternatives=changes)
+    if len(changes) == 1:
+        return _picked(changes[0], "branch-mismatch", [])
     raise ChangeAmbiguousError(
         f"ambiguous Change-Id: matches changes on other branches (not {push_branch!r})",
-        alternatives=candidates,
-    )
-
-
-def resolution_fields_from_change_rows(
-    rows: list[dict[str, Any]],
-    *,
-    push_branch: str,
-    explicit_target: bool,
-) -> tuple[SelectedChange | None, SelectedReason | None, bool, list[SelectedChange]]:
-    """Narrow ChangeInfo rows for one Change-Id without contacting Gerrit."""
-    if len(rows) == 1:
-        only = SelectedChange.from_change_row(rows[0])
-        if only.branch == push_branch:
-            return only, "unique", False, []
-        if explicit_target:
-            return only, "branch-mismatch", True, []
-        return None, None, False, [only]
-
-    return _narrow_change_id_matches(
-        rows,
-        push_branch=push_branch,
-        explicit_target=explicit_target,
+        alternatives=changes,
     )
 
 
@@ -276,18 +224,8 @@ def resolution_from_change_rows(
     explicit_target: bool = False,
 ) -> Resolution:
     """Build a :class:`Resolution` from already-fetched/cached ChangeInfo rows."""
-    selected, reason, ambiguous, alternatives = resolution_fields_from_change_rows(
-        rows,
-        push_branch=push_branch,
-        explicit_target=explicit_target,
-    )
-    return Resolution(
-        input=change_id,
-        kind="change-id",
-        selected=selected,
-        selected_reason=reason,
-        ambiguous=ambiguous,
-        alternatives=alternatives,
+    return _narrow_matches(
+        Resolution(input=change_id, kind="change-id"), rows, push_branch=push_branch, explicit_target=explicit_target
     )
 
 
@@ -340,38 +278,13 @@ def resolve_changeish(
         rows = _query_changes(client, f"change:{change_id}")
         if not rows:
             return resolution
-        if len(rows) == 1:
-            only = SelectedChange.from_change_row(rows[0])
-            try:
-                stack = resolve_stack_context(cwd, branch, settings=settings)
-                selected, reason, ambiguous, alternatives = resolution_fields_from_change_rows(
-                    rows,
-                    push_branch=stack.push_branch,
-                    explicit_target=explicit_target,
-                )
-            except ChangeResolutionError:
-                if explicit_target:
-                    resolution.selected = only
-                    resolution.selected_reason = "unique"
-                    return resolution
-                raise
-            resolution.selected = selected
-            resolution.selected_reason = reason
-            resolution.ambiguous = ambiguous
-            resolution.alternatives = alternatives
-            return resolution
-
-        stack = resolve_stack_context(cwd, branch, settings=settings)
-        selected, reason, ambiguous, alternatives = resolution_fields_from_change_rows(
-            rows,
-            push_branch=stack.push_branch,
-            explicit_target=explicit_target,
-        )
-        resolution.selected = selected
-        resolution.selected_reason = reason
-        resolution.ambiguous = ambiguous
-        resolution.alternatives = alternatives
-        return resolution
+        try:
+            stack = resolve_stack_context(cwd, branch, settings=settings)
+        except ChangeResolutionError:
+            if explicit_target and len(rows) == 1:
+                return replace(resolution, selected=SelectedChange.from_change_row(rows[0]), selected_reason="unique")
+            raise
+        return _narrow_matches(resolution, rows, push_branch=stack.push_branch, explicit_target=explicit_target)
 
     resolution.selected = SelectedChange.from_change_row(_fetch_unique_row(parsed, client))
     resolution.selected_reason = "unique"
@@ -441,7 +354,7 @@ def resolve_to_stack_sha(
     if parsed.kind == "change-ref":
         # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a
         # ref the repository can resolve on its own would be a round trip for nothing.
-        local = _local_sha_or_none(cwd, parsed.raw)
+        local = commit_sha_or_none(cwd, parsed.raw)
         if local is not None:
             return _stack_commit(cwd, branch, local, require_in_stack=require_in_stack)
 

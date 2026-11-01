@@ -379,7 +379,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `GitError`) |
+| `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list` snapshot of all `gerrit.*` and `branch.*` values |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, stored-vs-default resolution |
 | `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination |
@@ -452,11 +452,11 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 4. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 5. **One Change-Id audit.** `change_id.classify_issues` and `cli_changeid.py`'s own loop classify the same footer problems independently.
 6. **One confirmation prompt.** y/n parsing lives in `cli_push.py` (`_prompt_save_reviewers`, `_parse_confirm_answer`, `_parse_gerrit_push_confirm`) and `cli_fix.py`. *Tracked by:* the y/n concept.
-7. **One git runner.** `core/git_run.py` cannot run interactively or feed stdin, so `cli_edit.py`, `cli_rebase.py` and `core/gerrit_change_status.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
+7. **One git runner.** `core/git_run.py` cannot run interactively, so `cli_edit.py` and `cli_rebase.py` call `subprocess` directly. *Tracked by:* the subprocess concept.
 8. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
 9. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
 10. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
-11. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, with its own copy of `_local_sha_or_none`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+11. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
 
 ---
 

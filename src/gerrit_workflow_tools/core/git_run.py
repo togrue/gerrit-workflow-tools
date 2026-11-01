@@ -171,3 +171,11 @@ def git_out(
 ) -> str:
     """Return stripped stdout from git."""
     return git(*args, cwd=cwd, env=env).stdout.strip()
+
+
+def commit_sha_or_none(cwd: Path | str | None, rev: str) -> str | None:
+    """Full SHA for *rev* when the repository can resolve it to a commit, else ``None``."""
+    p = git("rev-parse", "-q", "--verify", f"{rev}^{{commit}}", cwd=cwd, check=False)
+    if p.returncode != 0:
+        return None
+    return p.stdout.strip() or None

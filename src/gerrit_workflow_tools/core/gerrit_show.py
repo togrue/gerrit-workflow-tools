@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
 
@@ -76,13 +77,6 @@ def resolve_show_commit_row(
     return ShowCommitResolution(row=row, is_local_commit=False, resolution=resolution)
 
 
-def _local_sha_or_none(cwd: Path | str, rev: str) -> str | None:
-    p = git("rev-parse", "-q", "--verify", f"{rev}^{{commit}}", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    return p.stdout.strip() or None
-
-
 def resolve_range_endpoint_sha(
     cwd: Path | str,
     arg: str,
@@ -118,7 +112,7 @@ def resolve_range_endpoint_sha(
         if resolution.selected is not None:
             rev = ChangeView.from_payload(client.get_change(resolution.selected.triplet)).current_revision
             if rev is not None:
-                local = _local_sha_or_none(cwd, rev)
+                local = commit_sha_or_none(cwd, rev)
                 if local is not None:
                     return local
 
@@ -147,8 +141,15 @@ def parse_show_range(arg: str) -> tuple[str, str, str] | None:
     return left, dots, right
 
 
-def _resolution_for_local_sha(sha: str, *, input_arg: str) -> Resolution:
-    return Resolution(input=input_arg, kind="git-rev", local_sha=sha)
+def _local_resolutions(rows: Iterable[Commit], *, input_arg: str) -> list[ShowCommitResolution]:
+    return [
+        ShowCommitResolution(
+            row=row,
+            is_local_commit=True,
+            resolution=Resolution(input=input_arg, kind="git-rev", local_sha=row.sha),
+        )
+        for row in rows
+    ]
 
 
 def expand_show_range(
@@ -167,15 +168,7 @@ def expand_show_range(
     left_sha = resolve_range_endpoint_sha(cwd, left, client, settings=settings, branch=branch)
     right_sha = resolve_range_endpoint_sha(cwd, right, client, settings=settings, branch=branch)
     rev_range = f"{left_sha}{dots}{right_sha}"
-    rows = commits_in_range(cwd, rev_range)
-    return [
-        ShowCommitResolution(
-            row=c,
-            is_local_commit=True,
-            resolution=_resolution_for_local_sha(c.sha, input_arg=arg),
-        )
-        for c in rows
-    ]
+    return _local_resolutions(commits_in_range(cwd, rev_range), input_arg=arg)
 
 
 def expand_stack_range(
@@ -186,14 +179,7 @@ def expand_stack_range(
 ) -> list[ShowCommitResolution]:
     """Oldest-first commits in ``upstream_tip..HEAD``."""
     snap = get_stack_snapshot(cwd, branch, settings=settings)
-    return [
-        ShowCommitResolution(
-            row=c,
-            is_local_commit=True,
-            resolution=_resolution_for_local_sha(c.sha, input_arg="--stack"),
-        )
-        for c in snap.commits
-    ]
+    return _local_resolutions(snap.commits, input_arg="--stack")
 
 
 def _dedupe_key(resolved: ShowCommitResolution) -> str:
@@ -232,12 +218,7 @@ def resolve_show_targets(
         else:
             pieces.append(resolve_show_commit_row(cwd, raw, client, settings=settings, branch=branch))
 
-    seen: set[str] = set()
-    out: list[ShowCommitResolution] = []
+    first_by_key: dict[str, ShowCommitResolution] = {}
     for item in pieces:
-        key = _dedupe_key(item)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(item)
-    return out
+        first_by_key.setdefault(_dedupe_key(item), item)
+    return list(first_by_key.values())

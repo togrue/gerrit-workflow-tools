@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 
@@ -113,14 +112,7 @@ def _patch_id_single_parent(cwd: Path | str | None, sha: str) -> str | None:
     diff_p = git("diff", f"{parent}..{sha}", cwd=cwd, check=False)
     if diff_p.returncode != 0 or not diff_p.stdout.strip():
         return None
-    pid = subprocess.run(
-        ["git", "patch-id"],
-        cwd=str(cwd) if cwd is not None else None,
-        input=diff_p.stdout,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    pid = git("patch-id", cwd=cwd, input=diff_p.stdout, check=False)
     if pid.returncode != 0 or not pid.stdout.strip():
         return None
     line = pid.stdout.strip().splitlines()[0]
@@ -142,8 +134,7 @@ def compute_merged_equivalent(
         return None
     if norm_sha(local_sha) == norm_sha(cur):
         return True
-    p = git("rev-parse", "-q", "--verify", f"{cur}^{{commit}}", cwd=cwd, check=False)
-    if p.returncode != 0:
+    if commit_sha_or_none(cwd, cur) is None:
         return None
     if _is_merge_commit(cwd, local_sha) or _is_merge_commit(cwd, cur):
         return None
@@ -220,8 +211,6 @@ def build_log_commit(
                 verified=None,
                 code_review=None,
                 comments_unresolved=0,
-                change_status=None,
-                merged_equivalent=None,
             ),
             frozenset(),
         )
@@ -261,9 +250,6 @@ def build_log_commit(
             verified=change.verified,
             code_review=change.code_review,
             comments_unresolved=change.unresolved_comments or 0,
-            ci_failures=[],
-            ci_links=[],
-            ci_pipelines=[],
             gerrit_url=change.url(web_base),
             submittable=change.submittable,
             change_status=change.status,

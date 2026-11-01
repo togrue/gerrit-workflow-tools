@@ -223,7 +223,6 @@ CONCEPTS = [
         debt={
             "cli_edit.py": "one git runner: interactive `git rebase -i`",
             "cli_rebase.py": "one git runner: interactive `git rebase -i`",
-            "core/gerrit_change_status.py": "one git runner: `git patch-id` needs stdin",
         },
         fix="Run git through core/git_run.py; extend git_run if it lacks what you need.",
     ),
@@ -363,7 +362,7 @@ SIZE_BASELINE = {
     "cli_push.py": 837,
     "cli_show.py": 416,
     "core/gerrit/cache.py": 684,
-    "core/gerrit/change_resolution.py": 549,
+    "core/gerrit/change_resolution.py": 462,
     "core/gerrit/rest.py": 824,
     "core/gerrit/service.py": 472,
     "push_input_line.py": 441,
