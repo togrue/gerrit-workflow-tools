@@ -63,6 +63,8 @@ class CommentChain:
     line: int | None
     comments: tuple[InlineComment, ...]
     resolved: bool
+    start_line: int | None = None
+    """First line of a range comment; ``line`` is then its last line."""
 
 
 @dataclass

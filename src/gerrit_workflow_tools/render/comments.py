@@ -28,7 +28,9 @@ _HEADING_CHROME = 4
 
 
 def chain_location(chain: CommentChain) -> str:
-    """``path:line`` when a line is known, otherwise just the path."""
+    """``path:line`` when a line is known, ``path:start-end`` for a range, otherwise just the path."""
+    if chain.start_line is not None and chain.start_line != chain.line:
+        return f"{chain.path}:{chain.start_line}-{chain.line}"
     if chain.line is not None:
         return f"{chain.path}:{chain.line}"
     return chain.path

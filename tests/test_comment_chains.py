@@ -8,6 +8,7 @@ from gerrit_workflow_tools.core.comment_chains import (
     collect_unresolved_comment_chains,
     count_unresolved_in_file_map,
 )
+from gerrit_workflow_tools.render.comments import chain_location
 
 
 def _comment(
@@ -155,3 +156,10 @@ def test_build_comment_chains_keeps_context_lines() -> None:
         (1, "alpha()"),
         (2, "beta()"),
     ]
+
+
+def test_range_comment_keeps_its_first_line() -> None:
+    comment = {"id": "c1", "line": 4, "range": {"start_line": 2, "end_line": 4}, "unresolved": True}
+    chain = build_comment_chains({"s3.txt": [comment]})[0]
+    assert (chain.start_line, chain.line) == (2, 4)
+    assert chain_location(chain) == "s3.txt:2-4"

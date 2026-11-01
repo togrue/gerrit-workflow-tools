@@ -33,6 +33,12 @@ def _comment_line(c: dict[str, Any]) -> int | None:
     return None
 
 
+def _comment_start_line(c: dict[str, Any]) -> int | None:
+    rng = c.get("range")
+    start_line = rng.get("start_line") if isinstance(rng, dict) else None
+    return start_line if isinstance(start_line, int) else None
+
+
 def _comment_sort_key(c: dict[str, Any]) -> str:
     updated = c.get("updated")
     if isinstance(updated, str):
@@ -125,6 +131,7 @@ def build_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[Comm
                 line=_comment_line(root_comment),
                 comments=tuple(_inline_comment_from_raw(p, c) for p, c in items),
                 resolved=_chain_resolved_from_raw(raw_only),
+                start_line=_comment_start_line(root_comment),
             )
         )
 
