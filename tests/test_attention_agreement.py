@@ -99,3 +99,17 @@ def test_project_strategy_decides_what_is_printed(stack_repo: Path) -> None:
     assert commit.attention_reasons == [Attention.UNRESOLVED_COMMENTS]
     assert _texts(commit) == ["2 unresolved comments"]
     assert attention_text(commit) == "2 unresolved comments"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"patchset_status": PatchsetStatus.NEWER}, "ahead of gerrit"),
+        ({"patchset_status": PatchsetStatus.OUTDATED}, "outdated patchset"),
+        ({"code_review": -1}, "review issues"),
+    ],
+)
+def test_every_stateful_reason_reaches_the_text_note(overrides: dict[str, Any], expected: str) -> None:
+    commit = replace(_STABLE, **overrides)
+    annotate_attention([commit])
+    assert expected in _texts(commit)

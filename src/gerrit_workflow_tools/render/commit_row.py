@@ -233,6 +233,16 @@ _TERMINAL_TOKENS = (
 )
 
 
+# Awaiting-review is left out: it is true of every commit under review, so `ger log` would
+# print it on nearly every line. `ger show` and JSON list it.
+_STATE_TOKENS = (
+    (Attention.AHEAD_OF_GERRIT, "ahead of gerrit", ANSI_YELLOW),
+    (Attention.OUTDATED_PATCHSET, "outdated patchset", ANSI_RED),
+    (Attention.REVIEW_ISSUES, "review issues", ANSI_YELLOW),
+    (Attention.CHAIN_BLOCKED, "chain blocked", ANSI_DIM_GRAY),
+)
+
+
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
     """Attention (text, ANSI-color) pairs for the trailing annotation column.
 
@@ -256,6 +266,7 @@ def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
         tokens.append(("no reviewers", ANSI_DIM_GRAY))
     if commit.submittable and not tokens:
         tokens.append(("submittable", ANSI_GREEN))
+    tokens.extend((text, code) for reason, text, code in _STATE_TOKENS if reason in reasons)
     return tokens
 
 

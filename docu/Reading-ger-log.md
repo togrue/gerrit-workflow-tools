@@ -103,6 +103,10 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comment(s)` | Open review threads |
 | `no reviewers` | Change has no reviewers assigned |
+| `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
+| `outdated patchset` | Gerrit has a newer patch set than this commit |
+| `review issues` | A negative Code-Review vote |
+| `chain blocked` | An earlier commit in the stack keeps this one from being submitted |
 | `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review` |
 | `private` | Change is private on Gerrit. Information only, not an attention reason |
 | `submittable` | Gerrit reports submittable and no blocking issues above |
