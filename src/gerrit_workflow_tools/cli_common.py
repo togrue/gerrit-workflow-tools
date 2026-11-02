@@ -284,3 +284,8 @@ def run_interactive_rebase(cwd: Path, base: str, *, sequence_editor: str, env: d
     editor = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.{sequence_editor}"
     env = {**env, "GIT_SEQUENCE_EDITOR": editor}
     return git("rebase", "-i", base, cwd=cwd, env=env, check=False, capture=False).returncode
+
+
+def continue_rebase(cwd: Path) -> int:
+    """``git rebase --continue``; return git's exit code. Output goes to the terminal."""
+    return git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode

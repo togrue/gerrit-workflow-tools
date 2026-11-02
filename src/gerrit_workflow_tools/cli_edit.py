@@ -12,6 +12,7 @@ from gerrit_workflow_tools.cli_attention import require_stack_upstream
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
+    continue_rebase,
     init_cli_runtime,
     print_resolution_note,
     require_no_rebase_in_progress,
@@ -148,7 +149,8 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
         dest="next_attention",
         help=(
             "Edit the next edit-attention commit tip-ward of the attention cursor "
-            "(or of REV when given), even if the cursor still needs attention."
+            "(or of REV when given), even if the cursor still needs attention. "
+            "An in-progress rebase is continued first."
         ),
     )
     p.add_argument(
@@ -262,6 +264,24 @@ def _resolve_target(
     return target.sha, target.change_id, mode
 
 
+def _continue_stopped_rebase(cwd: Path) -> int:
+    """Finish the rebase a previous edit left stopped.
+
+    Returns 0 when that rebase is done. Git's own code when ``--continue`` fails.
+    ``ExitCode.GIT`` when git exited 0 but a rebase is still underway, so a new one
+    cannot start.
+    """
+    print("continuing the rebase", file=sys.stderr)
+    code = continue_rebase(cwd)
+    if not rebase_in_progress(cwd):
+        return code
+    if code == 0:
+        print("rebase is still in progress; `ger edit -n` to continue it", file=sys.stderr)
+        return int(ExitCode.GIT)
+    print("`ger edit -n` again once the rebase can continue", file=sys.stderr)
+    return code
+
+
 def _run_interactive_stack_rebase(
     argv: list[str] | None,
     *,
@@ -299,6 +319,10 @@ def _run_interactive_stack_rebase(
         action,
     )
 
+    if rebase_in_progress(cwd) and default_action == "edit" and args.next_attention:
+        continued = _continue_stopped_rebase(cwd)
+        if continued != 0:
+            return continued
     require_no_rebase_in_progress(cwd)
     full, cursor_change_id, cursor_action = _resolve_target(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
@@ -316,7 +340,7 @@ def _run_interactive_stack_rebase(
     if returncode == 0 and rebase_in_progress(cwd):
         subject = git_out("log", "-1", "--format=%s", full, cwd=cwd)
         print(f"stopped at {short} {subject}", file=sys.stderr)
-        print("next: amend it, `git rebase --continue`, then `ger edit -n`", file=sys.stderr)
+        print("next: amend it, then `ger edit -n`", file=sys.stderr)
     elif returncode == 0:
         for lost in sorted(change_ids_before - _stack_change_ids(cwd, branch)):
             print(f"warning: Change-Id {lost} left the stack; the next push creates a new change", file=sys.stderr)

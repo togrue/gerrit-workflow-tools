@@ -157,15 +157,25 @@ def test_gedit_cursor_flag_prints_status(stack_repo: Path, monkeypatch: pytest.M
 # -- Semantic exit codes, shared with `ger fix` --------------------------------------
 
 
-@pytest.mark.parametrize("main_fn", [gedit_main, grebase_main])
+@pytest.mark.parametrize(
+    ("main_fn", "argv"),
+    [
+        (gedit_main, []),
+        (gedit_main, ["--first-attention-commit"]),
+        (greword_main, ["-n"]),
+        (grebase_main, []),
+    ],
+)
 def test_rebase_in_progress_is_refused_before_anything_moves(
-    main_fn: Callable[..., int], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    main_fn: Callable[..., int],
+    argv: list[str],
+    stack_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _configure_repo(stack_repo)
     write_rebase_head(stack_repo, "feature")
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"verified": -1} for _ in rows]))
-    argv = ["-n"] if main_fn is gedit_main else []
 
     code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=store)
 
@@ -259,7 +269,7 @@ def test_gedit_says_where_it_stopped_and_what_comes_next(stack_repo: Path, monke
 
     assert code == 0
     assert f"stopped at {rows[0].short_sha} {rows[0].subject}" in err
-    assert "`git rebase --continue`" in err
+    assert "then `ger edit -n`" in err
 
 
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -346,6 +356,105 @@ def test_greword_next_ignores_edit_next_show(stack_repo: Path, monkeypatch: pyte
     code, _out, err = run_cli(stack_repo, greword_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert calls == []
+
+
+def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
+    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1}
+    overrides[1] = {"verified": -1}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+
+    code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert rebase_in_progress(stack_repo)
+    assert "then `ger edit -n`" in err
+
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "continuing the rebase" in err
+    assert "stopped at" in err
+    assert rows[1].subject in err
+    assert rebase_in_progress(stack_repo)
+    cursor = load_branch_cursor(Settings.from_cwd(stack_repo), "feature")
+    assert cursor is not None
+    assert cursor.change_id == rows[1].change_id
+
+
+def test_gedit_next_does_not_walk_when_continue_fails(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
+    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1}
+    overrides[1] = {"verified": -1}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+    code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+    assert code == 0, err
+
+    real_run = subprocess.run
+    started: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "--continue"]:
+            return subprocess.CompletedProcess(cmd, 1)
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            started.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+
+    assert code == 1
+    assert "continuing the rebase" in err
+    assert "`ger edit -n` again" in err
+    assert started == []
+    assert rebase_in_progress(stack_repo)
+    cursor = load_branch_cursor(Settings.from_cwd(stack_repo), "feature")
+    assert cursor is not None
+    assert cursor.change_id == rows[0].change_id
+
+
+def test_gedit_next_stops_when_continue_leaves_the_rebase_running(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+    code, _out, _err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+    assert code == 0
+
+    real_run = subprocess.run
+    started: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "--continue"]:
+            return subprocess.CompletedProcess(cmd, 0)
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            started.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+
+    assert code == ExitCode.GIT
+    assert "rebase is still in progress" in err
+    assert started == []
+    assert rebase_in_progress(stack_repo)
 
 
 def test_gedit_next_show_failure_is_returned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

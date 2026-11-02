@@ -34,7 +34,7 @@ A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` qu
 |--------|-------------|
 | `REV` | Optional SHA or Change-Id in stack. With `-n`, treated as AFTER (next above that Change-Id). Omitted → **resume** the attention walk |
 | `--first-attention-commit` | **Reset** the walk to the oldest edit-attention commit on the same first-parent chain `ger log` shows |
-| `-n` / `--next` | Force the next edit-attention commit tip-ward of the cursor (or of `REV`), even if the cursor still needs attention |
+| `-n` / `--next` | Force the next edit-attention commit tip-ward of the cursor (or of `REV`), even if the cursor still needs attention. When a rebase is already in progress, `ger edit -n` runs `git rebase --continue` first |
 | `--cursor` | Print the attention cursor for the working branch and exit |
 | `--cursor-history` | Print recent walk events from `.git/ger/attention-history.jsonl` and exit |
 | `--set-cursor CHANGEISH` | Set the cursor without starting a rebase |
@@ -61,13 +61,13 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
 
 ## Behavior
 
-1. Resolve target commit in stack (explicit `REV`, or attention walk).
-2. On a successful attention or explicit-stack target, update the attention cursor when a Change-Id is known.
-3. Refuse with exit `7` while a rebase is already in progress, before the cursor moves. `ger rebase` makes the same check.
+1. `ger edit -n` / `--next`, when a rebase is already in progress, runs `git rebase --continue` before resolving the next commit. The cursor does not move unless that rebase finishes and the next one starts. A failed continue returns git's exit code. If git exits 0 but the rebase is still underway, the command exits `7`.
+2. Any other `ger edit` or `ger reword` invocation refuses with exit `7` while a rebase is in progress, before the cursor moves. `ger rebase` makes the same refusal.
+3. Resolve target commit in stack (explicit `REV`, or attention walk).
 4. `git rebase -i <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`).
 5. `ger reword` warns when a Change-Id left the stack: the next push would create a new change and leave the old one open. `ger edit` cannot tell, because the commit is amended after it returns.
-6. The attention cursor moves only once the rebase has started: it exited `0`, or stopped with a conflict.
-7. For `edit`, user amends then `git rebase --continue`.
+6. The attention cursor moves only once the rebase has started (it exited `0`, or stopped with a conflict) and the target's Change-Id is known.
+7. For `edit`, the user amends, then `ger edit -n` continues the rebase and walks to the next edit-attention commit.
 8. When `gerrit.editNextShow` is true, this was `ger edit --next` (not `ger reword`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Unset, the flag is off and `--next` only moves.
 
 ---
