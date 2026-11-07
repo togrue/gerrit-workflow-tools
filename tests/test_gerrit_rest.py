@@ -16,9 +16,9 @@ from gerrit_workflow_tools.core.gerrit.change_queries import (
     query_single_change,
     resolve_change_ref,
 )
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
-    HttpGerritRest,
     encode_gerrit_path_segment,
     pick_change_from_query_result,
 )
@@ -53,7 +53,7 @@ def test_encode_gerrit_path_segment_does_not_double_encode() -> None:
 
 def test_get_messages_uses_single_encoded_project_path() -> None:
     """Follow-ups pass Gerrit's compact id; REST paths must not double-encode."""
-    from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     paths: list[str] = []
@@ -71,7 +71,8 @@ def test_get_messages_uses_single_encoded_project_path() -> None:
 
 def test_get_change_requests_the_batch_row_options() -> None:
     """``/detail`` has no ``current_revision``; ChangeStore.get_change assumes these options."""
-    from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritAuth
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     captured: list[tuple[str, object]] = []
@@ -88,7 +89,7 @@ def test_get_change_requests_the_batch_row_options() -> None:
 
 
 def test_get_comments_enable_context_query_params() -> None:
-    from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     captured: list[tuple[str, object]] = []
@@ -112,7 +113,7 @@ def test_get_comments_enable_context_query_params() -> None:
 def test_set_reviewers_batch_confirms_reviewers_on_the_review_request() -> None:
     """Set Review rejects the whole body with HTTP 400 unless large groups are confirmed."""
 
-    from gerrit_workflow_tools.core.gerrit.rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     calls: list[tuple[str, object]] = []

@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, HttpGerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.reviewer_completion import (
@@ -129,7 +130,7 @@ class ReviewerCatalog:
                 change_id_hint=None,
             )
         try:
-            web_base = resolve_gerrit_web_base(settings)
+            client = HttpGerritRest.from_settings(settings)
         except ValueError:
             return cls(
                 client=None,
@@ -138,7 +139,6 @@ class ReviewerCatalog:
                 change_id_hint=None,
             )
 
-        client = HttpGerritRest.from_settings(web_base, settings)
         try:
             stack = resolve_stack_context(cwd, settings=settings)
             project = stack.project

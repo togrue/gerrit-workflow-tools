@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.http_rest import gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.reviewers_strategy import default_reviewers_via_registry
 from gerrit_workflow_tools.core.stack import get_stack_snapshot

@@ -11,13 +11,12 @@ from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, Changeish, ChangeishKind, address_problem, parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
-    HttpGerritRest,
     norm_change_id,
     pick_change_from_query_result,
-    resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git_out
@@ -417,7 +416,7 @@ def resolve_stack_changeish(
     def _build_client() -> GerritRest:
         if gerrit is not None:
             return gerrit
-        return HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
+        return HttpGerritRest.from_settings(settings)
 
     return resolve_to_stack_sha(
         ref,

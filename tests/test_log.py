@@ -319,7 +319,7 @@ def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkey
 
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.gerrit.service.resolve_gerrit_web_base",
+        "gerrit_workflow_tools.core.gerrit.http_rest.resolve_gerrit_web_base",
         lambda _cwd: (_ for _ in ()).throw(ConfigError("missing gerrit.webUrl")),
     )
     code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch)

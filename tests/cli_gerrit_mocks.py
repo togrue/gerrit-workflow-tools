@@ -109,7 +109,7 @@ def build_details_by_change_id(
 def gerrit_client_class_stub(inst: object) -> MagicMock:
     """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
 
-    Production builds clients via ``HttpGerritRest.from_settings(web_base, settings)``;
+    Production builds clients via ``HttpGerritRest.from_settings(settings)``;
     patching the class with a plain ``return_value`` only covers ``HttpGerritRest(...)`` and
     leaves ``.from_settings()`` handing back a fresh auto-mock.
     """

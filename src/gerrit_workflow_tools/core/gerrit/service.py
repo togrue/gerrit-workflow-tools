@@ -20,13 +20,12 @@ from gerrit_workflow_tools.core.gerrit.change_queries import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
-    HttpGerritRest,
     change_id_for_gerrit_rest_path,
     parallel_map,
-    resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.review_chain import (
@@ -98,10 +97,8 @@ class GerritService:
             refresh = True
         resolved = settings if settings is not None else Settings.from_cwd(cwd)
         if rest is None:
-            web_base = resolve_gerrit_web_base(resolved)
-            rest = HttpGerritRest.from_settings(web_base, resolved)
-        else:
-            web_base = rest.web_base
+            rest = HttpGerritRest.from_settings(resolved)
+        web_base = rest.web_base
         return cls(
             rest,
             cache if cache is not None else GerritCache.for_web_base(web_base),

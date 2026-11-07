@@ -8,7 +8,7 @@ import sys
 from urllib.parse import quote, urlsplit
 
 from gerrit_workflow_tools.cli_common import ExitCode, add_verbose_and_debug_log_args, init_cli_runtime, run_cli_command
-from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -61,7 +61,7 @@ def _run(argv: list[str] | None) -> int:
             file=sys.stderr,
         )
         return int(ExitCode.USAGE)
-    client = HttpGerritRest.from_settings(resolve_gerrit_web_base(settings), settings)
+    client = HttpGerritRest.from_settings(settings)
     data = client.get_json(path)
     indent = None if args.compact else 2
     print(json.dumps(data, indent=indent, sort_keys=True))

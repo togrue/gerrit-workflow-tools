@@ -223,7 +223,7 @@ CONCEPTS = [
         name="HttpGerritRest construction",
         pattern=r"HttpGerritRest(\.from_settings)?\(",
         owners={
-            "core/gerrit/rest.py": "defines it",
+            "core/gerrit/http_rest.py": "defines it",
             "core/gerrit/service.py": "GerritService.from_cwd is the construction path",
             "core/gerrit/change_resolution.py": "built lazily so local-only resolution never needs gerrit.webUrl",
             "cli_fetch_api.py": "GETs raw paths from the real server by purpose",
@@ -332,9 +332,8 @@ MAX_LINES = 400
 SIZE_BASELINE = {
     "cli_push.py": 613,
     "core/gerrit/cache.py": 684,
-    "core/gerrit/change_resolution.py": 462,
-    "core/gerrit/rest.py": 469,
-    "core/gerrit/service.py": 407,
+    "core/gerrit/change_resolution.py": 461,
+    "core/gerrit/service.py": 404,
     "push_input_line.py": 441,
     "reviewer_catalog.py": 478,
 }

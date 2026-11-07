@@ -9,7 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from tests.conftest import run_cli
 from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
@@ -39,7 +39,7 @@ def test_set_topic_sets_and_clears(
     assert change_id, "expected an open change after push"
 
     # HttpGerritRest reads credentials from the git config set by prepare_topic_repo.
-    client = HttpGerritRest.from_settings(ctx.http_base, Settings.from_cwd(repo))
+    client = HttpGerritRest.from_settings(Settings.from_cwd(repo), web_base=ctx.http_base)
 
     # --- set a non-empty topic ---
     new_topic = f"my-topic-{secrets.token_hex(3)}"

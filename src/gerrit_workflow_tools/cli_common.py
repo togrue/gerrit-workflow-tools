@@ -36,7 +36,8 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     Resolution,
     format_resolution_note,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, set_log_gerrit_response_bodies
+from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_bodies
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
