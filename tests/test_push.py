@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
-from gerrit_workflow_tools.push_input_prompt import load_push_options_history
+from gerrit_workflow_tools.push_options_history import load_push_options_history
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -886,6 +886,63 @@ def test_gpush_saves_typed_options_only_after_a_push(
 
     assert code == 0
     assert load_push_options_history(web_base="https://g.example.test", project="proj") == saved
+
+
+def _confirm_line_session(
+    monkeypatch: pytest.MonkeyPatch, line: str | type[BaseException]
+) -> tuple[MagicMock, list[dict[str, object]]]:
+    """Make the confirmation the options input line, answering *line* (or raising it); mock ``git push``."""
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("the options line replaces the [Y/n/r] question"))
+    calls: list[dict[str, object]] = []
+
+    def _prompt(*_a: object, **kw: object) -> object:
+        calls.append(kw)
+        if isinstance(line, str):
+            return parse_push_options_line(line)
+        raise line
+
+    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    return mock_run, calls
+
+
+def test_gpush_options_line_empty_pushes_without_reviewers(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_run, calls = _confirm_line_session(monkeypatch, "")
+    code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    assert "%r=" not in _mock_gerrit_push_refspec(mock_run)
+    assert calls[0]["prefill"] is False
+
+
+def test_gpush_options_line_typed_reviewers_ride_the_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_run, _calls = _confirm_line_session(monkeypatch, "alice,bob")
+    code, _out, _err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    refspec = _mock_gerrit_push_refspec(mock_run)
+    assert refspec.endswith("%r=alice,bob")
+
+
+def test_gpush_options_line_empty_keeps_reviewers_from_the_flag(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mock_run, _calls = _confirm_line_session(monkeypatch, "")
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["--reviewers", "carol"], monkeypatch)
+    assert code == 0
+    assert "r=carol" in _mock_gerrit_push_refspec(mock_run)
+
+
+@pytest.mark.parametrize("interrupt", [KeyboardInterrupt, EOFError])
+def test_gpush_options_line_interrupt_cancels(
+    interrupt: type[BaseException], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mock_run, _calls = _confirm_line_session(monkeypatch, interrupt)
+    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0
+    assert "Push cancelled." in err
+    mock_run.assert_not_called()
 
 
 def test_gpush_interactive_reviewers_overwrites_branch_and_cli(

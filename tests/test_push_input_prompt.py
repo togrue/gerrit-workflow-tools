@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gerrit_workflow_tools import push_input_prompt as pip
+from gerrit_workflow_tools import push_input_prompt as pip, push_options_history as hist
 from gerrit_workflow_tools.core.gerrit.paths import push_options_history_path
 from gerrit_workflow_tools.push_input_line import apply_session_strategy, format_canonical, parse
 
@@ -24,46 +24,46 @@ def history_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_load_push_options_history_empty(history_cache: Path) -> None:
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_A) == []
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == []
 
 
 def test_load_push_options_history_missing_identity_is_empty(history_cache: Path) -> None:
-    assert pip.load_push_options_history(web_base=None, project=PROJECT_A) == []
-    assert pip.load_push_options_history(web_base=WEB, project=None) == []
+    assert hist.load_push_options_history(web_base=None, project=PROJECT_A) == []
+    assert hist.load_push_options_history(web_base=WEB, project=None) == []
 
 
 def test_prepend_skips_when_identity_missing(history_cache: Path) -> None:
-    pip.prepend_push_options_history("r=alice", web_base=None, project=PROJECT_A)
-    pip.prepend_push_options_history("r=alice", web_base=WEB, project=None)
+    hist.prepend_push_options_history("r=alice", web_base=None, project=PROJECT_A)
+    hist.prepend_push_options_history("r=alice", web_base=WEB, project=None)
     assert list(history_cache.rglob("*.txt")) == []
 
 
 def test_prepend_push_options_history_newest_first(history_cache: Path) -> None:
-    pip.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
-    pip.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_A)
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=bob", "r=alice"]
+    hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
+    hist.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_A)
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=bob", "r=alice"]
 
 
 def test_prepend_push_options_history_dedupes(history_cache: Path) -> None:
-    pip.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
-    pip.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_A)
-    pip.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice", "r=bob"]
+    hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
+    hist.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_A)
+    hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice", "r=bob"]
 
 
 def test_prepend_push_options_history_caps(history_cache: Path) -> None:
     for i in range(25):
-        pip.prepend_push_options_history(f"r=user{i}", web_base=WEB, project=PROJECT_A)
-    loaded = pip.load_push_options_history(web_base=WEB, project=PROJECT_A)
+        hist.prepend_push_options_history(f"r=user{i}", web_base=WEB, project=PROJECT_A)
+    loaded = hist.load_push_options_history(web_base=WEB, project=PROJECT_A)
     assert len(loaded) == 20
     assert loaded[0] == "r=user24"
 
 
 def test_history_is_scoped_per_project(history_cache: Path) -> None:
-    pip.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
-    pip.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_B)
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice"]
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_B) == ["r=bob"]
+    hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
+    hist.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_B)
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice"]
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_B) == ["r=bob"]
 
 
 def test_history_path_uses_xdg_and_host(history_cache: Path) -> None:
@@ -72,14 +72,14 @@ def test_history_path_uses_xdg_and_host(history_cache: Path) -> None:
 
 
 def test_prepend_strips_strategy_from_history(history_cache: Path) -> None:
-    pip.prepend_push_options_history("r=alice topic=t wip lazy", web_base=WEB, project=PROJECT_A)
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice topic=t wip"]
+    hist.prepend_push_options_history("r=alice topic=t wip lazy", web_base=WEB, project=PROJECT_A)
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice topic=t wip"]
 
 
 def test_prepend_dedupes_after_stripping_strategy(history_cache: Path) -> None:
-    pip.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
-    pip.prepend_push_options_history("r=alice lazy", web_base=WEB, project=PROJECT_A)
-    assert pip.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice"]
+    hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
+    hist.prepend_push_options_history("r=alice lazy", web_base=WEB, project=PROJECT_A)
+    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=alice"]
 
 
 def test_apply_session_strategy_merges_non_default() -> None:
@@ -95,18 +95,40 @@ def test_format_canonical_can_omit_strategy() -> None:
     assert format_canonical(state, include_strategy=False) == "r=alice"
 
 
-def test_in_memory_history_entries_skips_initial() -> None:
-    history = ["r=new", "r=mid", "r=old"]
-    assert pip._in_memory_history_entries(history, "r=new") == ["r=old", "r=mid"]
-    assert pip._in_memory_history_entries(history, "") == ["r=old", "r=mid", "r=new"]
-    assert pip._in_memory_history_entries(history, "r=other") == ["r=old", "r=mid", "r=new"]
+def test_history_cursor_up_walks_back_and_down_returns_to_the_typed_line() -> None:
+    cursor = hist.HistoryCursor(["r=new", "r=old"])
+    assert cursor.up("") == "r=new"
+    assert cursor.up("r=new") == "r=old"
+    assert cursor.up("r=old") == "r=old"  # past the oldest: stays
+    assert cursor.down("r=old") == "r=new"
+    assert cursor.down("r=new") == ""
+    assert cursor.down("") == ""
 
 
-def test_should_navigate_requires_cursor_at_end() -> None:
+def test_history_cursor_keeps_the_line_typed_before_recall() -> None:
+    cursor = hist.HistoryCursor(["r=new"])
+    assert cursor.up("topic=x") == "r=new"
+    assert cursor.down("r=new") == "topic=x"
+
+
+def test_history_cursor_edited_entry_becomes_the_current_line() -> None:
+    cursor = hist.HistoryCursor(["r=new", "r=old"])
+    assert cursor.up("") == "r=new"
+    assert cursor.up("r=new,dave") == "r=new"  # edit is the current line: Up restarts at the newest entry
+    assert cursor.down("r=new") == "r=new,dave"
+
+
+def test_history_cursor_without_entries_changes_nothing() -> None:
+    cursor = hist.HistoryCursor([])
+    assert cursor.up("abc") == "abc"
+    assert cursor.down("abc") == "abc"
+
+
+def test_should_navigate_with_the_cursor_anywhere_in_the_line() -> None:
     buffer = MagicMock()
     buffer.complete_state = None
     buffer.document.is_cursor_at_the_end = False
-    assert pip.should_navigate_push_options_history(buffer) is False
+    assert pip.should_navigate_push_options_history(buffer) is True
 
 
 def test_should_navigate_false_when_completions_active() -> None:

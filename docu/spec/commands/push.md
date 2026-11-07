@@ -71,21 +71,26 @@ Interactive push line (`push_input_prompt`) can set strategy keywords; see modul
 
 ### Push-options history
 
-The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
+The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persists recent lines under
 `$XDG_CACHE_HOME/ger/<host>/push_options_history/<project-safe>.txt`, keyed by
 `gerrit.webUrl` host and `gerrit.project` (see
 [ADR-0005](../../adr/0005-push-options-history-is-host-and-project-scoped.md)).
 
 - Cap: 20 entries per (host, project), newest first, exact-line dedupe.
 - Stored: reviewers, topic, `wip` / `private`. **Not** stored: strategy.
+- History is only a suggestion: the line never starts as a history entry. Up/Down
+  recall entries into the line (no completion menu open; with one, the arrows walk the
+  menu and Down past its last item returns to the typed text). Down past the newest
+  entry returns to the line you had. Editing a recalled entry makes it the current line:
+  Up then restarts at the newest entry and Down returns to the edit.
 - If `--reviewer-strategy` is set, that strategy is merged into the visible
-  prefill and Up/Down recall for the session; accept still strips strategy
+  line and Up/Down recall for the session; accept still strips strategy
   before save.
 - A line is saved after the push succeeds, never at the prompt, so a cancelled push or a rejected line leaves no entry.
 - Missing host/project identity: no read/write of history.
-- Empty history: prefill `r=…` from `--reviewers`, else `.ger/reviewers` /
-  host registry, else `branch.*.gerritReviewers`. Non-empty history always
-  wins over those sources for the initial buffer.
+- Initial line: empty for the confirmation line. `-i` and confirm-loop `r` start with
+  `r=…` from `--reviewers`, else `.ger/reviewers` / host registry, else
+  `branch.*.gerritReviewers`.
 
 ---
 
@@ -102,7 +107,7 @@ The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
 
 ## Confirmation output
 
-Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt: `Do you want to push these commits? [Y/n/r]:` unless `--dry-run` / `-y` / non-TTY without `-y`.
+Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt, on a terminal with no drafts to publish: the push-options input line (`Push options (Enter pushes, Up: history, Ctrl-C cancels):`). Enter on the empty line pushes with the options the status line shows (no reviewers unless `--reviewers`/config gave some); a typed line (`r=alice,bob topic=x wip …`, with completion and history) sets them first; Ctrl-C / Ctrl-D cancels (exit `0`). Without a terminal on stdout, or with drafts, the question is `Do you want to push these commits? [Y/n/r]:`. No prompt with `--dry-run` / `-y` / non-TTY without `-y`.
 
 **Drafts.** When you have drafts on changes the push updates, the status line shows `Drafts keep N` and the prompt becomes `Push and publish N draft(s)? [Y/n/p/r]`. Yes adds Gerrit's `publish-comments` push option; `p` pushes and keeps them. Whenever the push does not publish, it sends `no-publish-comments`, so an account preference that publishes on push cannot publish them behind your back. Drafts on commits Gerrit already has (no new patchset) cannot be published by a push; the preview names them (`drafts on … stay drafts`). Details: [reply.md](reply.md#publishing-with-ger-push).
 

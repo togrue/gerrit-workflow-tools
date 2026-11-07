@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import PushBoundary, PushOptions, PushPlan, push_argv, revise
 from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
@@ -234,8 +235,10 @@ def prompt_reviewers_line(
     change_id_hint: str | None = None,
     reviewer_flag_segments: list[str] | None = None,
     session_strategy: ReviewerStrategy | None = None,
+    message: str = "Push options: ",
+    prefill: bool = True,
 ) -> ParseResult:
-    """Confirm-loop ``r`` action: open the highlighted push-options input line."""
+    """Open the highlighted push-options input line, prefilled from flags/registry unless *prefill* is off."""
     from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
 
     return prompt_branch_push_options(
@@ -245,6 +248,8 @@ def prompt_reviewers_line(
         change_id_hint=change_id_hint,
         reviewer_flag_segments=reviewer_flag_segments,
         session_strategy=session_strategy,
+        message=message,
+        prefill=prefill,
     )
 
 
@@ -295,6 +300,39 @@ def apply_interactive_line(
     if save and prompt_save_reviewers():
         set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(revised.options.reviewers))
     return revised
+
+
+def options_line_available() -> bool:
+    """True when the confirmation can be the options input line (it needs a terminal on both ends)."""
+    return prompt_toolkit_can_run() and sys.stdout.isatty()
+
+
+_CONFIRM_LINE_MESSAGE = "Push options (Enter pushes, Up: history, Ctrl-C cancels): "
+
+
+def confirm_with_options_line(
+    cwd: Path, plan: PushPlan, args: argparse.Namespace, *, settings: Settings
+) -> PushPlan | None:
+    """The one-line push confirmation: Enter pushes, a typed line sets options first. ``None`` cancels.
+
+    An empty line keeps the options *plan* already has, as the status line shows them.
+    """
+    try:
+        res = prompt_reviewers_line(
+            cwd,
+            plan.branch,
+            settings=settings,
+            change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
+            reviewer_flag_segments=list(args.reviewers),
+            session_strategy=_session_strategy(args),
+            message=_CONFIRM_LINE_MESSAGE,
+            prefill=False,
+        )
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if not _line_sets_options(res.state):
+        return plan
+    return revise(plan, _options_from_line(res.state), settings=settings)
 
 
 def prompt_initial_options(

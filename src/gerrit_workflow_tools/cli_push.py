@@ -39,11 +39,12 @@ from gerrit_workflow_tools.core.push import (
 )
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
-from gerrit_workflow_tools.push_input_line import PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
     apply_interactive_line,
     ask_push_action,
     commit_lines,
+    confirm_with_options_line,
+    options_line_available,
     print_assignment_report,
     print_dry_run,
     print_gpush_preview,
@@ -299,7 +300,12 @@ def _confirm_gerrit_push(
         print_plan_status(plan)
         print()
         drafts = publishable_drafts(plan) if plan.options.publish_comments is False else 0
-        act = ask_push_action(drafts)
+        if not drafts and options_line_available():
+            revised = confirm_with_options_line(cwd, plan, args, settings=settings)
+            act = "push" if revised else "cancel"
+            plan = revised or plan
+        else:
+            act = ask_push_action(drafts)
         if act == "push" and drafts:
             plan = publish_drafts_with(plan, True)
         if act == "cancel":
@@ -314,16 +320,6 @@ def _confirm_gerrit_push(
             print(plan.credential_error, file=sys.stderr)
             continue
         return plan
-
-
-def _remember_push_options(cwd: Path, plan: PushPlan, *, settings: Settings) -> None:
-    """Save options the user typed, now that a push has shown they work."""
-    from gerrit_workflow_tools.push_input_prompt import prepend_push_options_history, push_options_history_identity
-
-    options = plan.options
-    state = PushLineState(list(options.reviewers), options.topic, options.wip, options.private)
-    web_base, project = push_options_history_identity(cwd, settings=settings)
-    prepend_push_options_history(format_canonical(state, include_strategy=False), web_base=web_base, project=project)
 
 
 def _push_gerrit(
@@ -368,7 +364,9 @@ def _push_gerrit(
         return confirmed
     code = _finish_push(execute(cwd, confirmed, settings=settings, gerrit=gerrit), confirmed)
     if code == 0 and confirmed.options != prepared.options:
-        _remember_push_options(cwd, confirmed, settings=settings)
+        from gerrit_workflow_tools.push_options_history import remember_push_options
+
+        remember_push_options(cwd, confirmed, settings=settings)
     return code
 
 

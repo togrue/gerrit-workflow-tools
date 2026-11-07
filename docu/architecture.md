@@ -40,7 +40,7 @@ flowchart TB
   subgraph presentation [Presentation — render/ + package root]
     render[render/commit_row.py · render/status_fmt.py · render/comments.py]
     highlight[summary_highlight.py]
-    push_ui[push_input_line.py · push_input_prompt.py]
+    push_ui[push_input_line.py · push_input_prompt.py · push_options_history.py]
     rebase_hook[rebase_enricher.py · rebase_sequence_editor.py]
   end
 
@@ -444,6 +444,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question, what it assigned |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |
+| `push_options_history.py` | Push-options history per Gerrit host and project, and Up/Down recall |
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |

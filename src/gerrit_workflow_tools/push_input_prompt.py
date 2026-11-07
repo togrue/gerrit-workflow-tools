@@ -3,7 +3,7 @@
 The pure parsing/formatting logic lives in :mod:`push_input_line`. This module
 wires it into a prompt_toolkit ``PromptSession`` with a syntax-highlighting
 lexer, live validation, keyword/reviewer completion, persisted push-options
-history, and Up/Down recall when completion is inactive.
+history, and Up/Down recall (:class:`HistoryCursor`) when no completion menu is open.
 """
 
 from __future__ import annotations
@@ -19,15 +19,12 @@ from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.lexers import Lexer
 from prompt_toolkit.validation import ValidationError, Validator
 
 from gerrit_workflow_tools.cli_style import is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.paths import push_options_history_path
-from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
 from gerrit_workflow_tools.push_input_line import (
     KW_LAZY,
@@ -40,8 +37,12 @@ from gerrit_workflow_tools.push_input_line import (
     ParseResult,
     SpanKind,
     apply_session_strategy,
-    format_canonical,
     parse,
+)
+from gerrit_workflow_tools.push_options_history import (
+    HistoryCursor,
+    load_push_options_history,
+    push_options_history_identity,
 )
 from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
 
@@ -155,59 +156,8 @@ class PushOptionsCompleter(Completer):
                 yield Completion(value, start_position=-len(raw_word), display_meta=meta)
 
 
-_HISTORY_LIMIT = 20
-
-
-def _history_file(web_base: str, project: str) -> Path:
-    return push_options_history_path(web_base, project)
-
-
-def load_push_options_history(*, web_base: str | None, project: str | None) -> list[str]:
-    """Return stored history lines for *web_base*+*project*, newest first.
-
-    Returns an empty list when host/project identity is missing (no global
-    fallback). Lines never include strategy keywords.
-    """
-    if not web_base or not project:
-        return []
-    try:
-        raw = _history_file(web_base, project).read_text(encoding="utf-8")
-    except OSError:
-        return []
-    return [line for line in raw.splitlines() if line.strip()]
-
-
-def prepend_push_options_history(
-    line: str,
-    *,
-    web_base: str | None,
-    project: str | None,
-) -> None:
-    """Prepend a history line (strategy stripped; dedupe; cap at :data:`_HISTORY_LIMIT`).
-
-    No-op when host/project identity is missing.
-    """
-    if not web_base or not project:
-        return
-    # Persist reviewers/topic/wip/private only — never strategy.
-    canonical = format_canonical(parse(line).state, include_strategy=False).strip()
-    recent = [entry for entry in load_push_options_history(web_base=web_base, project=project) if entry != canonical]
-    updated = ([canonical, *recent] if canonical else recent)[:_HISTORY_LIMIT]
-    path = _history_file(web_base, project)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with contextlib.suppress(OSError):
-        path.write_text("\n".join(updated) + ("\n" if updated else ""), encoding="utf-8")
-
-
-def _in_memory_history_entries(history: list[str], initial: str) -> list[str]:
-    """Oldest-first entries for ``InMemoryHistory``, omitting the pre-filled buffer line."""
-    return list(reversed([entry for entry in history if entry != initial]))
-
-
 def should_navigate_push_options_history(buffer: Buffer) -> bool:
-    """True when Up/Down should walk push-options history instead of completion."""
-    if not buffer.document.is_cursor_at_the_end:
-        return False
+    """True when Up/Down should walk push-options history: no completion menu is open."""
     complete_state = buffer.complete_state
     return complete_state is None or not complete_state.completions
 
@@ -220,30 +170,21 @@ def _push_options_history_navigation() -> bool:
         return False
 
 
-_PUSH_OPTIONS_HISTORY_BINDINGS = KeyBindings()
+def _history_bindings(cursor: HistoryCursor) -> KeyBindings:
+    bindings = KeyBindings()
 
+    def _show(buffer: Buffer, text: str) -> None:
+        buffer.document = Document(text, cursor_position=len(text))
 
-@_PUSH_OPTIONS_HISTORY_BINDINGS.add("up", filter=_push_options_history_navigation)
-def _history_up(event):  # type: ignore[no-untyped-def]
-    event.current_buffer.history_backward()
+    @bindings.add("up", filter=_push_options_history_navigation)
+    def _history_up(event):  # type: ignore[no-untyped-def]
+        _show(event.current_buffer, cursor.up(event.current_buffer.text))
 
+    @bindings.add("down", filter=_push_options_history_navigation)
+    def _history_down(event):  # type: ignore[no-untyped-def]
+        _show(event.current_buffer, cursor.down(event.current_buffer.text))
 
-@_PUSH_OPTIONS_HISTORY_BINDINGS.add("down", filter=_push_options_history_navigation)
-def _history_down(event):  # type: ignore[no-untyped-def]
-    event.current_buffer.history_forward()
-
-
-def push_options_history_identity(
-    cwd: Path | None,
-    *,
-    settings: Settings,
-) -> tuple[str | None, str | None]:
-    """Return ``(web_base, project)`` for push-options history, or ``(None, None)``."""
-    web_base = settings.gerrit_web_url
-    project = stack_project(cwd, settings=settings) if cwd is not None else settings.gerrit_project
-    if not web_base or not project:
-        return None, None
-    return web_base, project
+    return bindings
 
 
 def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> FormattedText | None:
@@ -285,16 +226,16 @@ def prompt_push_options_line(
 ) -> ParseResult:
     """Show the prompt and return the parsed result for the accepted line.
 
-    History is keyed by ``(web_base, project)``. When identity is missing,
-    history is neither loaded nor saved. ``default`` prefills only when that
-    history is empty. When ``session_strategy`` is a non-default CLI strategy,
-    it is merged into the visible prefill and Up/Down entries for this session.
+    The line starts as ``default`` (empty unless given): history is only a suggestion,
+    reached with Up/Down, and an edited entry becomes the current line. History is keyed by
+    ``(web_base, project)``; when identity is missing it is neither loaded nor saved. When
+    ``session_strategy`` is a non-default CLI strategy, it is merged into the visible
+    line and Up/Down entries for this session.
     The prompt saves nothing: ``ger push`` records a line once the push has succeeded.
     """
     stored = load_push_options_history(web_base=web_base, project=project)
-    base = stored[0] if stored else (default if default is not None else "")
     display_history = [apply_session_strategy(entry, session_strategy) for entry in stored]
-    initial = apply_session_strategy(base, session_strategy)
+    initial = apply_session_strategy(default or "", session_strategy)
     seed_list = [s for s in reviewer_seeds if s]
 
     def _invalidate_prompt() -> None:
@@ -316,8 +257,7 @@ def prompt_push_options_line(
         validate_while_typing=False,
         completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
-        history=InMemoryHistory(_in_memory_history_entries(display_history, initial)),
-        key_bindings=_PUSH_OPTIONS_HISTORY_BINDINGS,
+        key_bindings=_history_bindings(HistoryCursor(display_history, initial)),
         bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
     )
     try:
@@ -335,20 +275,23 @@ def prompt_branch_push_options(
     change_id_hint: str | None = None,
     reviewer_flag_segments: list[str] | None = None,
     session_strategy: ReviewerStrategy | None = None,
+    message: str = "Push options: ",
+    prefill: bool = True,
 ) -> ParseResult:
     """Open the highlighted push-options input line for *branch*, history keyed by the stack's project.
 
-    The line starts with the reviewers ``--reviewers`` / the registry / ``branch.*.gerritReviewers`` give.
+    With *prefill* the line starts with the reviewers ``--reviewers`` / the registry /
+    ``branch.*.gerritReviewers`` give; without it, the line is empty.
     """
     seeds = branch_reviewers(branch, settings=settings) if branch is not None else []
     web_base, project = push_options_history_identity(cwd, settings=settings)
     default = ""
-    if cwd is not None and branch is not None:
+    if prefill and cwd is not None and branch is not None:
         reviewers = resolve_push_reviewers(cwd, branch, reviewer_flag_segments or [], settings=settings)
         default = f"r={','.join(reviewers)}" if reviewers else ""
     return prompt_push_options_line(
         reviewer_seeds=seeds,
-        message="Push options: ",
+        message=message,
         cwd=cwd,
         settings=settings,
         change_id_hint=change_id_hint,
