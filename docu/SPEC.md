@@ -75,6 +75,17 @@ Commands listed here are registered in `cli_ger.py` today.
 
 ---
 
+## Planned commands
+
+Specified but not registered in `cli_ger.py` yet. Move a row into the registry above when the command ships.
+
+| Command | Spec |
+|---------|------|
+| ger assign | [spec/commands/assign.md](spec/commands/assign.md) |
+| ger reply | [spec/commands/reply.md](spec/commands/reply.md): draft replies to comment chains, and publishing them |
+
+---
+
 ## Configuration & setup
 
 - **First-time setup:** [Getting-Started.md](Getting-Started.md)

@@ -310,6 +310,7 @@ Read before "simplifying" the resolution rules.
 | Area | Status |
 |------|--------|
 | [`ger assign`](commands/assign.md) | Planned — not in `cli_ger.py` yet |
+| [`ger reply`](commands/reply.md) | Planned — `--change` takes a full changeish; a bare comment id is looked up across the local stack |
 | Full `resolution` JSON block on every resolving command | Implemented on `ger show`, `ger fix`, and `ger resolve`; `ger log` emits `stack` + per-commit `resolution_note`; `ger push` / `ger edit` do not emit the §5 block |
 
 ---
