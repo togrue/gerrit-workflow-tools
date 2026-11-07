@@ -39,6 +39,12 @@ def _change_path(change_id: str, suffix: str = "") -> str:
     return f"changes/{encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))}{suffix}"
 
 
+def _draft_path(change_id: str, revision: int | str, draft_id: str | None) -> str:
+    """``changes/<id>/revisions/<rev>/drafts[/<draft-id>]``; a patchset number is a valid revision id."""
+    suffix = f"/revisions/{encode_gerrit_path_segment(revision)}/drafts"
+    return _change_path(change_id, f"{suffix}/{encode_gerrit_path_segment(draft_id)}" if draft_id else suffix)
+
+
 def _file_map(data: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """A CommentInfo map by file path, keeping only well-formed rows."""
     return {path: [c for c in rows if isinstance(c, dict)] for path, rows in data.items() if isinstance(rows, list)}
@@ -298,6 +304,16 @@ class HttpGerritRest:
     def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """GET ``changes/<id>/drafts``: the caller's drafts on every patchset, grouped by file path."""
         return _file_map(self._request_dict("drafts", _change_path(change_id, "/drafts")))
+
+    def put_draft(
+        self, change_id: str, revision: int | str, comment: dict[str, Any], *, draft_id: str | None = None
+    ) -> dict[str, Any]:
+        """PUT ``…/revisions/<rev>/drafts`` (create) or ``…/drafts/<id>`` (update)."""
+        return self._request_dict("draft", _draft_path(change_id, revision, draft_id), method="PUT", json_body=comment)
+
+    def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
+        """DELETE ``…/revisions/<rev>/drafts/<id>``."""
+        self._request_json(_draft_path(change_id, revision, draft_id), method="DELETE")
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.

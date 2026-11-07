@@ -362,6 +362,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
 | `cli_show.py` | `ger show` |
+| `cli_reply.py` | `ger reply` |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |

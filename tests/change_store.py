@@ -373,6 +373,25 @@ class ChangeStore:
             for path, rows in self._drafts.get(self._payload_id(change_id), {}).items()
         }
 
+    def put_draft(
+        self, change_id: str, revision: int | str, comment: dict[str, Any], *, draft_id: str | None = None
+    ) -> dict[str, Any]:
+        """Create or update a draft the way Gerrit does: the reply lands on *revision*."""
+        self._record("put_draft", change_id, revision, comment, draft_id=draft_id)
+        file_map = self._drafts.setdefault(self._payload_id(change_id), {})
+        if draft_id is not None:
+            for rows in file_map.values():
+                rows[:] = [row for row in rows if row.get("id") != draft_id]
+        row = {**comment, "id": draft_id or f"draft-{len(self.calls)}", "patch_set": int(revision)}
+        file_map.setdefault(str(comment["path"]), []).append(row)
+        return dict(row)
+
+    def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
+        """Delete one draft."""
+        self._record("delete_draft", change_id, revision, draft_id)
+        for rows in self._drafts.get(self._payload_id(change_id), {}).values():
+            rows[:] = [row for row in rows if row.get("id") != draft_id]
+
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
         self._record("get_checks", change_id)

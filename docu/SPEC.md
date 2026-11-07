@@ -45,6 +45,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger inbox` | [spec/commands/inbox.md](spec/commands/inbox.md) |
 | `ger push` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger show` | [spec/commands/show.md](spec/commands/show.md) |
+| `ger reply` | [spec/commands/reply.md](spec/commands/reply.md) (partial: drafts; publishing planned) |
 
 ### Stack editing & identifiers
 
@@ -82,7 +83,6 @@ Specified but not registered in `cli_ger.py` yet. Move a row into the registry a
 | Command | Spec |
 |---------|------|
 | ger assign | [spec/commands/assign.md](spec/commands/assign.md) |
-| ger reply | [spec/commands/reply.md](spec/commands/reply.md): draft replies to comment chains, and publishing them |
 
 ---
 

@@ -25,7 +25,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
-from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
+from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
@@ -63,11 +63,6 @@ def _context_padding_value(raw: str) -> int:
     if value < 0:
         raise argparse.ArgumentTypeError("context padding must be >= 0")
     return value
-
-
-def _gerrit_rest_key(commit: LogCommit, resolution: object) -> str | None:
-    selected = getattr(resolution, "selected", None)
-    return selected.triplet if selected is not None else commit.change_id
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -343,7 +338,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         if attention:
             any_attention = True
 
-        rest_key = _gerrit_rest_key(commit, resolved.resolution)
+        rest_key = gerrit_rest_key(commit, resolved.resolution)
         chains = (
             service.comments.get_chains(
                 rest_key,

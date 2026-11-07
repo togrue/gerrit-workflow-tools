@@ -110,6 +110,14 @@ class GerritRest(Protocol):
     def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """Return the caller's draft comments on every patchset, grouped by file path."""
 
+    def put_draft(
+        self, change_id: str, revision: int | str, comment: dict[str, Any], *, draft_id: str | None = None
+    ) -> dict[str, Any]:
+        """Create a draft (CommentInput) on *revision*, or update *draft_id*; return its CommentInfo."""
+
+    def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
+        """Delete one of the caller's drafts."""
+
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
 

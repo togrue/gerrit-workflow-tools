@@ -2,8 +2,8 @@
 
 | | |
 |--|--|
-| **Status** | **Planned**: not in `cli_ger.py` yet |
-| **Module** | cli_reply.py (new); draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
+| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard) is implemented; publishing, the push integration and the guided reply are planned (see [Delivery](#delivery)) |
+| **Module** | `cli_reply.py`; draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
 | **Requires** | `gerrit.webUrl`, credentials |
 
 Answer an inline comment chain as a **draft**, and later publish your drafts. This closes the author's review loop from the terminal: `ger show` reads the chains, you (or an agent) fix the code, `ger reply` answers each chain, and the answers reach reviewers when you push.
@@ -68,11 +68,11 @@ ger reply --publish [REV ... | --stack] [-m MSG] [--dry-run] [-y] [--json]
 | Form | Example | Change comes from |
 |------|---------|-------------------|
 | Comment id | `9f8e7d6c` | `--change`, else a lookup across the local stack |
-| Comment URL | `https://host/c/proj/+/123/comment/a1b2c3d4_5e6f7a8b/` | The URL. `--change` must agree or exit `2` |
+| Comment URL | `https://host/c/proj/+/123/comment/a1b2c3d4_5e6f7a8b/` | The URL. Giving `--change` as well exits `2` |
 
 Any comment in the chain names the whole chain, whether it is the root or a reply. That way an id copied from any line of `ger show --json` works.
 
-**Without `--change`**, the id is looked up in the comment chains of every change in the local stack (`upstream_tip..HEAD`). These are the same comment fetches `ger show --stack` makes, served from the follow-up cache. One match is used. No match exits `3`, and the message names the changes it searched. More than one match exits `4` and lists the candidates. Comment ids are UUIDs, so this should only happen on corrupt data.
+**Without `--change`**, the id is looked up in the comment chains of every change in the local stack (`upstream_tip..HEAD`). These are the same comment fetches `ger show --stack` makes, served from the follow-up cache. Writes go to the stack's triplet, never to a bare Change-Id that could name several branches. On a detached HEAD with no branch to take a stack from, only HEAD's change is searched. One match is used. No match exits `3`, and the message names the changes it searched. More than one match exits `4` and lists the candidates. Comment ids are UUIDs, so this should only happen on corrupt data.
 
 **With `--change`**, the full changeish grammar applies ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)), and only that change is searched. This is how you reply on a change that is not in your local stack, for example one you are reviewing.
 
@@ -83,7 +83,7 @@ Any comment in the chain names the whole chain, whether it is the root or a repl
 | `-m MSG` | Message text. Repeat it for more paragraphs, as with `git commit -m` |
 | `-F FILE` | Read the message from a file. `-F -` reads stdin, which is what agents should use for multi-line text |
 | `--done` | Shorthand for `-m Done --resolve`, the web UI's quick reply |
-| `--resolve` / `--unresolve` | Set the chain's state once the draft is published. Without either, Gerrit's default applies: the reply inherits the state of the comment it answers, so an open chain stays open |
+| `--resolve` / `--unresolve` | Set the chain's state once the draft is published. Without either, a new draft inherits the state of the comment it answers (Gerrit's default), so an open chain stays open, and an updated draft keeps its own state |
 
 An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` also exits `2`.
 
@@ -172,7 +172,7 @@ Drafts live in Gerrit's All-Users repository, not in the change's NoteDb meta re
 - **`ger log`:** one `has:draft` query restricted to the stack's change numbers. Then a drafts GET only for the changes it returns. A stack with no drafts costs one query.
 - **Offline / cache-only:** drafts are not fetched. `ger log` and `ger show` print `drafts not checked (offline)` and keep `unresolved-comments`. They do not guess.
 
-After any write (create, update, discard, publish), the change's cached entries are invalidated with `invalidate_changes`, as `set_reviewers` does today. A publish moves the meta ref anyway, but invalidating makes the next `ger show` refetch straight away, inside the 10-second trust window too.
+Writing or discarding a draft needs no invalidation: drafts are never cached, and the published comments did not change. A publish does change them, so it invalidates the change's cached entries with `invalidate_changes`, as `set_reviewers` does today. The meta ref moves anyway, but invalidating makes the next `ger show` refetch straight away, inside the 10-second trust window too.
 
 ---
 
@@ -210,7 +210,7 @@ updated draft on src/app.py:42 (replaced: "Will do, after the refactor")
 ```json
 {
   "action": "created",
-  "change": {"number": 123, "triplet": "proj~main~I1a2b..."},
+  "change": "proj~main~I1a2b...",
   "root_id": "a1b2c3d4_5e6f7a8b",
   "draft_id": "f0e1d2c3_b4a59687",
   "patch_set": 3,
@@ -232,7 +232,7 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 |------|------|
 | `0` | Draft written, discarded or published; `--dry-run` |
 | `1` | Publish declined, or non-TTY without `-y` |
-| `2` | Empty message, conflicting flags, `CHAIN` with `--publish`, URL and `--change` disagree, no `CHAIN` without a TTY, publishing while **GER_NO_PUBLISH** is set |
+| `2` | Empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while **GER_NO_PUBLISH** is set |
 | `3` | Chain or change not found; `--discard` with no draft |
 | `4` | Comment id matched more than one change; ambiguous changeish |
 | `5` | Gerrit rejected a write, including a partial publish |
@@ -267,7 +267,7 @@ Built in this order. Each step works on its own.
 |---|------|--------|
 | 1 | Comments keep their patchset and a draft flag; `ger show --json` adds `root_id` and `patch_set` | Done |
 | 2 | Drafts are read live and merged into their chains; `ger show` displays them | Done |
-| 3 | `ger reply CHAIN` writes, updates and discards drafts | |
+| 3 | `ger reply CHAIN` writes, updates and discards drafts | Done |
 | 4 | `ger reply --publish` and the publish guard | |
 | 5 | `ger push` publishes drafts with the push | |
 | 6 | Blue `com` token and `unpublished-drafts` attention | |

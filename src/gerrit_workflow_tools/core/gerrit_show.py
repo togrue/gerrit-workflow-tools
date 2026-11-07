@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
@@ -25,6 +26,12 @@ class ShowCommitResolution:
     row: Commit
     is_local_commit: bool
     resolution: Resolution
+
+
+def gerrit_rest_key(commit: LogCommit, resolution: object) -> str | None:
+    """The REST key for *commit*'s change: the resolved triplet, else its Change-Id."""
+    selected = getattr(resolution, "selected", None)
+    return selected.triplet if selected is not None else commit.change_id
 
 
 def _row_from_gerrit_change(change: ChangeView) -> Commit:

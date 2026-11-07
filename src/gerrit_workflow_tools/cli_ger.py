@@ -46,6 +46,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     ),
     "push": ("Push the ready prefix or full stack to Gerrit.", "gerrit_workflow_tools.cli_push:main"),
     "rebase": ("Interactive rebase with Gerrit status annotations.", "gerrit_workflow_tools.cli_rebase:main"),
+    "reply": (
+        "Answer a comment chain with a draft reply (published with ger push).",
+        "gerrit_workflow_tools.cli_reply:main",
+    ),
     "resolve": (
         "Resolve a changeish to a local commit and/or Gerrit change.",
         "gerrit_workflow_tools.cli_resolve:main",

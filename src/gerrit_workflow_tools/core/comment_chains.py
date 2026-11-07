@@ -152,6 +152,7 @@ def build_comment_chains(
                 comments=tuple(_inline_comment_from_raw(p, c, draft=is_draft(c)) for p, c in items),
                 resolved=_chain_resolved_from_raw(published or [c for _, c in items]),
                 start_line=_comment_start_line(root_comment),
+                on_parent=root_comment.get("side") == "PARENT",
             )
         )
 

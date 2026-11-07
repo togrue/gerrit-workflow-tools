@@ -2,16 +2,42 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, collect_comment_chains
 from gerrit_workflow_tools.core.gerrit.cache import comments_context_key
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
+from gerrit_workflow_tools.core.gerrit.rest import parallel_map
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 
 
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit.service import GerritService
+
+
+@dataclass(frozen=True)
+class ChainMatch:
+    """A comment chain and the change it was found on."""
+
+    change: str
+    """REST key of the change (triplet or Change-Id)."""
+    chain: CommentChain
+
+
+@dataclass(frozen=True)
+class DraftReply:
+    """What :meth:`CommentApi.save_reply` wrote."""
+
+    action: Literal["created", "updated"]
+    draft_id: str | None
+    patch_set: int | None
+    unresolved: bool
+    """The chain's state once this draft is published."""
+    replaced_message: str | None = None
+    """Text of the draft this one replaced; ``None`` when it was created."""
 
 
 class CommentApi:
@@ -31,6 +57,60 @@ class CommentApi:
         """Comment chains of *change_id* selected by *comments*, with your drafts in their chains."""
         file_map = self.get_file_map(change_id, change_updated=change_updated, context_padding=context_padding)
         return collect_comment_chains(file_map, comments=comments, drafts=self.get_drafts(change_id))
+
+    def find_chain(self, changes: Mapping[str, str | None], comment_id: str) -> list[ChainMatch]:
+        """Chains that contain *comment_id*, among *changes* (REST key -> freshness token).
+
+        Any comment in a chain names the whole chain, root or reply, published or draft.
+        """
+
+        def matches(change: str, freshness: str | None) -> list[ChainMatch]:
+            chains = self.get_chains(change, change_updated=freshness, comments="all")
+            return [
+                ChainMatch(change, chain) for chain in chains if any(c.comment_id == comment_id for c in chain.comments)
+            ]
+
+        found = parallel_map(partial(matches, change, freshness) for change, freshness in changes.items())
+        return [match for per_change in found for match in per_change]
+
+    def save_reply(self, change_id: str, chain: CommentChain, message: str, *, unresolved: bool | None) -> DraftReply:
+        """Write your reply to *chain* as a draft; update the draft you already have there.
+
+        The draft answers the newest published comment, on that comment's patchset and
+        side, as the web UI does. *unresolved* ``None`` keeps your existing draft's flag,
+        else inherits the answered comment's: an open chain stays open.
+        """
+        answered, existing = chain.answered, chain.draft
+        basis = existing or answered
+        flag = basis.unresolved if unresolved is None else unresolved
+        body: dict[str, Any] = {"path": chain.path, "message": message, "unresolved": flag}
+        if answered.comment_id and not answered.draft:
+            body["in_reply_to"] = answered.comment_id
+        if chain.line is not None:
+            body["line"] = chain.line
+        if chain.on_parent:
+            body["side"] = "PARENT"
+        revision = basis.patch_set if basis.patch_set is not None else "current"
+        row = self._service.rest.put_draft(
+            change_id, revision, body, draft_id=existing.comment_id if existing else None
+        )
+        draft_id = row.get("id")
+        return DraftReply(
+            action="updated" if existing else "created",
+            draft_id=draft_id if isinstance(draft_id, str) else None,
+            patch_set=basis.patch_set,
+            unresolved=flag,
+            replaced_message=existing.message if existing else None,
+        )
+
+    def discard_reply(self, change_id: str, chain: CommentChain) -> InlineComment:
+        """Delete your draft in *chain* and return it. A chain without one is not found."""
+        existing = chain.draft
+        if existing is None or existing.comment_id is None:
+            raise ChangeResolutionError(f"no draft of yours in the chain at {chain.path}")
+        revision = existing.patch_set if existing.patch_set is not None else "current"
+        self._service.rest.delete_draft(change_id, revision, existing.comment_id)
+        return existing
 
     def get_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """Your drafts on every patchset of *change_id*, always fetched.

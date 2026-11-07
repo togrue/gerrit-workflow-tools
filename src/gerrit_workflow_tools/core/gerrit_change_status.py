@@ -71,6 +71,14 @@ class CommentChain:
     """Gerrit's published state: the flag of the last *published* comment."""
     start_line: int | None = None
     """First line of a range comment; ``line`` is then its last line."""
+    on_parent: bool = False
+    """The chain sits on the parent side of the diff (Gerrit ``side: PARENT``)."""
+
+    @property
+    def answered(self) -> InlineComment:
+        """The comment a reply answers: the newest published one."""
+        published = [c for c in self.comments if not c.draft]
+        return (published or list(self.comments))[-1]
 
     @property
     def draft(self) -> InlineComment | None:
