@@ -1,0 +1,30 @@
+# Jenkins next to an existing Gerrit container. Values come from the `.env` that
+# ../deploy.sh writes from tests/integration/local.env (see local.env.example).
+services:
+  jenkins:
+    build: .
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      - "${JENKINS_PORT:-8090}:8080"
+    environment:
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc
+      JENKINS_PUBLIC_URL: ${JENKINS_PUBLIC_URL:?set by deploy.sh}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?set by deploy.sh}
+      GERRIT_INTERNAL_HOST: ${GERRIT_INTERNAL_HOST:-gerrit}
+      GERRIT_SSH_PORT: ${GERRIT_SSH_PORT:-29418}
+      GERRIT_FRONTEND_URL: ${GERRIT_FRONTEND_URL:?set by deploy.sh}
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - ./casc:/var/jenkins_home/casc:ro
+      - ./init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      - ./secrets:/var/jenkins_home/secrets-in:ro
+    networks: [gerrit]
+
+volumes:
+  jenkins-home:
+
+networks:
+  gerrit:
+    name: ${GERRIT_NETWORK:-gerrit_default}
+    external: true

@@ -1,0 +1,28 @@
+jenkins:
+  systemMessage: "CI test bench for the ger tool (Gerrit -> Jenkins)"
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: ${JENKINS_ADMIN_PASSWORD}
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+unclassified:
+  location:
+    url: ${JENKINS_PUBLIC_URL}
+jobs:
+  - file: /var/jenkins_home/casc/jobs.groovy
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: gerrit-ssh
+              username: jenkins
+              privateKeySource:
+                directEntry:
+                  privateKey: ${readFile:/var/jenkins_home/secrets-in/jenkins_ssh}
