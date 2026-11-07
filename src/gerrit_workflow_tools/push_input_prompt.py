@@ -27,6 +27,8 @@ from prompt_toolkit.validation import ValidationError, Validator
 from gerrit_workflow_tools.cli_style import is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.paths import push_options_history_path
+from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
+from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
 from gerrit_workflow_tools.push_input_line import (
     KW_LAZY,
     KW_OVERWRITE,
@@ -231,6 +233,19 @@ def _history_down(event):  # type: ignore[no-untyped-def]
     event.current_buffer.history_forward()
 
 
+def push_options_history_identity(
+    cwd: Path | None,
+    *,
+    settings: Settings,
+) -> tuple[str | None, str | None]:
+    """Return ``(web_base, project)`` for push-options history, or ``(None, None)``."""
+    web_base = settings.gerrit_web_url
+    project = stack_project(cwd, settings=settings) if cwd is not None else settings.gerrit_project
+    if not web_base or not project:
+        return None, None
+    return web_base, project
+
+
 def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> FormattedText | None:
     res = parse(text)
     errors = [d for d in res.diagnostics if d.severity == "error"]
@@ -310,3 +325,35 @@ def prompt_push_options_line(
     finally:
         catalog.close()
     return parse(raw)
+
+
+def prompt_branch_push_options(
+    cwd: Path | None = None,
+    branch: str | None = None,
+    *,
+    settings: Settings,
+    change_id_hint: str | None = None,
+    reviewer_flag_segments: list[str] | None = None,
+    session_strategy: ReviewerStrategy | None = None,
+) -> ParseResult:
+    """Open the highlighted push-options input line for *branch*, history keyed by the stack's project.
+
+    The line starts with the reviewers ``--reviewers`` / the registry / ``branch.*.gerritReviewers`` give.
+    """
+    seeds = branch_reviewers(branch, settings=settings) if branch is not None else []
+    web_base, project = push_options_history_identity(cwd, settings=settings)
+    default = ""
+    if cwd is not None and branch is not None:
+        reviewers = resolve_push_reviewers(cwd, branch, reviewer_flag_segments or [], settings=settings)
+        default = f"r={','.join(reviewers)}" if reviewers else ""
+    return prompt_push_options_line(
+        reviewer_seeds=seeds,
+        message="Push options: ",
+        cwd=cwd,
+        settings=settings,
+        change_id_hint=change_id_hint,
+        web_base=web_base,
+        project=project,
+        default=default,
+        session_strategy=session_strategy.value if session_strategy is not None else None,
+    )

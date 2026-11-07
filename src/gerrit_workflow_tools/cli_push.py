@@ -21,7 +21,6 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
@@ -42,7 +41,7 @@ from gerrit_workflow_tools.core.push import (
     push_argv,
     revise,
 )
-from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
+from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
@@ -60,33 +59,6 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_s
 logger = logging.getLogger(__name__)
 
 
-def _push_options_history_identity(
-    cwd: Path | None,
-    *,
-    settings: Settings,
-) -> tuple[str | None, str | None]:
-    """Return ``(web_base, project)`` for push-options history, or ``(None, None)``."""
-    web_base = settings.gerrit_web_url
-    project = stack_project(cwd, settings=settings) if cwd is not None else settings.gerrit_project
-    if not web_base or not project:
-        return None, None
-    return web_base, project
-
-
-def _synthesize_push_options_default(
-    cwd: Path,
-    branch: str,
-    reviewer_flag_segments: list[str],
-    *,
-    settings: Settings,
-) -> str:
-    """Build an empty-history prefill from ``--reviewers`` / registry / branch config."""
-    reviewers = resolve_push_reviewers(cwd, branch, reviewer_flag_segments, settings=settings)
-    if not reviewers:
-        return ""
-    return f"r={','.join(reviewers)}"
-
-
 def _prompt_save_reviewers() -> bool:
     return confirm("Save reviewers to branch config?", default=False)
 
@@ -101,23 +73,15 @@ def _prompt_reviewers_line_ptk(
     session_strategy: ReviewerStrategy | None = None,
 ) -> ParseResult:
     """Confirm-loop ``r`` action: open the highlighted push-options input line."""
-    from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
+    from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
 
-    seeds = branch_reviewers(branch, settings=settings) if branch is not None else []
-    web_base, project = _push_options_history_identity(cwd, settings=settings)
-    empty_default = ""
-    if cwd is not None and branch is not None:
-        empty_default = _synthesize_push_options_default(cwd, branch, reviewer_flag_segments or [], settings=settings)
-    return prompt_push_options_line(
-        reviewer_seeds=seeds,
-        message="Push options: ",
-        cwd=cwd,
+    return prompt_branch_push_options(
+        cwd,
+        branch,
         settings=settings,
         change_id_hint=change_id_hint,
-        web_base=web_base,
-        project=project,
-        default=empty_default,
-        session_strategy=session_strategy.value if session_strategy is not None else None,
+        reviewer_flag_segments=reviewer_flag_segments,
+        session_strategy=session_strategy,
     )
 
 
@@ -453,11 +417,11 @@ def _confirm_gerrit_push(
 
 def _remember_push_options(cwd: Path, plan: PushPlan, *, settings: Settings) -> None:
     """Save options the user typed, now that a push has shown they work."""
-    from gerrit_workflow_tools.push_input_prompt import prepend_push_options_history
+    from gerrit_workflow_tools.push_input_prompt import prepend_push_options_history, push_options_history_identity
 
     options = plan.options
     state = PushLineState(list(options.reviewers), options.topic, options.wip, options.private)
-    web_base, project = _push_options_history_identity(cwd, settings=settings)
+    web_base, project = push_options_history_identity(cwd, settings=settings)
     prepend_push_options_history(format_canonical(state, include_strategy=False), web_base=web_base, project=project)
 
 
