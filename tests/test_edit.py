@@ -150,6 +150,7 @@ def test_gedit_cursor_flag_prints_status(stack_repo: Path, monkeypatch: pytest.M
     run_cli(stack_repo, gedit_main, ["--first-attention-commit"], monkeypatch, gerrit=ChangeStore(details))
     code, out, err = run_cli(stack_repo, gedit_main, ["--cursor"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
+    assert rows[0].change_id is not None
     assert rows[0].change_id in out
     assert "editAttention: True" in out
 
@@ -348,10 +349,12 @@ def test_greword_next_ignores_edit_next_show(stack_repo: Path, monkeypatch: pyte
     overrides[0] = {"unresolved_comment_count": 2}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     calls: list[list[str]] = []
-    monkeypatch.setattr(
-        "gerrit_workflow_tools.cli_ger.run_show",
-        lambda argv=None, **_kwargs: calls.append(list(argv or [])) or 0,
-    )
+
+    def _run_show(argv: list[str] | None = None, **_kwargs: object) -> int:
+        calls.append(list(argv or []))
+        return 0
+
+    monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", _run_show)
     _fake_rebase_capture(monkeypatch)
     code, _out, err = run_cli(stack_repo, greword_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err

@@ -47,7 +47,8 @@ def _run_push(
     return code, out, err, refspec
 
 
-def _options(refspec: str) -> list[str]:
+def _options(refspec: str | None) -> list[str]:
+    assert refspec is not None
     return refspec.partition("%")[2].split(",") if "%" in refspec else []
 
 
@@ -115,7 +116,12 @@ def test_guard_never_offers_to_publish(stack_repo: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("GER_NO_PUBLISH", "1")
     prompts: list[str] = []
     monkeypatch.setattr(sys, "stdin", _Tty())
-    monkeypatch.setattr("builtins.input", lambda prompt="": prompts.append(prompt) or "")
+
+    def _input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return ""
+
+    monkeypatch.setattr("builtins.input", _input)
     code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
     assert code == ExitCode.OK
     assert not any("publish" in p for p in prompts)
