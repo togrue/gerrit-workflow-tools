@@ -11,22 +11,21 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.cache import (
-    DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-    GerritCache,
-    comments_context_key,
+from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_SECONDS, GerritCache
+from gerrit_workflow_tools.core.gerrit.change_queries import (
+    batch_load_change_details,
+    batch_load_changes_by_commit,
+    delta_changes_since,
+    probe_changes_updated,
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.comments import CommentApi
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
     HttpGerritRest,
-    batch_load_change_details,
-    batch_load_changes_by_commit,
     change_id_for_gerrit_rest_path,
-    delta_changes_since,
     parallel_map,
-    probe_changes_updated,
     resolve_gerrit_web_base,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
@@ -406,33 +405,3 @@ class ChangeApi:
             service.rest.set_reviewers_batch(rest_ref, reviewers=add or [], ccs=ccs or [])
         parallel_map([partial(service.rest.delete_reviewer, rest_ref, account_id) for account_id in remove or []])
         service.cache.upsert_changes({cache_key: service.rest.get_change(rest_ref)})
-
-
-class CommentApi:
-    """Cache-aware inline comment operations."""
-
-    def __init__(self, service: GerritService) -> None:
-        self._service = service
-
-    def get_file_map(
-        self,
-        change_id: str,
-        *,
-        change_updated: str | None = None,
-        context_padding: int | None = None,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Return raw Gerrit comments grouped by file path."""
-
-        rest = self._service.rest
-        fetch = rest.get_comments
-        if context_padding is not None:
-            fetch = partial(rest.get_comments, enable_context=True, context_padding=context_padding)
-
-        return self._service.cache.load_comments(
-            change_id,
-            fetch_comments=fetch,
-            change_updated=change_updated,
-            trust_window_seconds=self._service.trust_window_seconds,
-            refresh=self._service.refresh,
-            context_key=comments_context_key(context_padding),
-        )

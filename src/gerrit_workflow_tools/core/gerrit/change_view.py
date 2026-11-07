@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.changeish import Changeish
-from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
+from gerrit_workflow_tools.core.gerrit.change_queries import change_freshness_key
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount, reviewer_accounts_from_change_info
 
 

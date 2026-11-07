@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
+from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, change_freshness_key
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
-from gerrit_workflow_tools.core.gerrit.rest import alias_batch_fetch_results, change_freshness_key
 
 
 SCHEMA_VERSION = "4"

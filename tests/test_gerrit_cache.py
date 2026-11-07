@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
-from gerrit_workflow_tools.core.gerrit.rest import change_freshness_key
+from gerrit_workflow_tools.core.gerrit.change_queries import change_freshness_key
 
 
 def _change(

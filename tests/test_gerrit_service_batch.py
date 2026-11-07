@@ -7,10 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
-from gerrit_workflow_tools.core.gerrit.rest import (
-    alias_batch_fetch_results,
-    batch_load_change_details,
-)
+from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, batch_load_change_details
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
 from tests.change_store import ChangeStore

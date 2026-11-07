@@ -8,17 +8,19 @@ from urllib.parse import quote
 
 import pytest
 
-from gerrit_workflow_tools.core.gerrit.rest import (
-    GerritApiError,
-    HttpGerritRest,
+from gerrit_workflow_tools.core.gerrit.change_queries import (
     _chunk_by_query_budget,
     _chunk_to_query,
     alias_batch_fetch_results,
     batch_load_change_details,
-    encode_gerrit_path_segment,
-    pick_change_from_query_result,
     query_single_change,
     resolve_change_ref,
+)
+from gerrit_workflow_tools.core.gerrit.rest import (
+    GerritApiError,
+    HttpGerritRest,
+    encode_gerrit_path_segment,
+    pick_change_from_query_result,
 )
 
 

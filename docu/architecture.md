@@ -337,7 +337,7 @@ flowchart LR
 
 ### 9. The Gerrit seam
 
-**`GerritRest`** (`core/gerrit/rest.py`) is the seam: single-round-trip Gerrit operations. Chunking, `OR` batching, triplet aliasing, the SQLite cache and parallelism all sit *above* it. It carries no `cwd`, and it has no raw-path escape hatch ([ADR-0002](adr/0002-no-raw-path-escape-hatch-on-gerritrest.md)).
+**`GerritRest`** (`core/gerrit/rest.py`) is the seam: single-round-trip Gerrit operations. Chunking, `OR` batching, triplet aliasing, the SQLite cache and parallelism all sit *above* it; the batched queries live in `core/gerrit/change_queries.py`. It carries no `cwd`, and it has no raw-path escape hatch ([ADR-0002](adr/0002-no-raw-path-escape-hatch-on-gerritrest.md)).
 
 | Implementation | Use |
 |----------------|-----|
@@ -420,7 +420,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `core/gerrit/rest.py` | The `GerritRest` seam and `HttpGerritRest` |
+| `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe, `since:` delta |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
+| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
 | `core/gerrit/change_resolution.py` | Changeish resolution, resolution notes |

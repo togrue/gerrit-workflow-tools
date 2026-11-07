@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Planned**: not in `cli_ger.py` yet |
-| **Module** | cli_reply.py (new); draft round trips on `CommentApi` in `core/gerrit/service.py`; chain merging in `core/comment_chains.py` |
+| **Module** | cli_reply.py (new); draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
 | **Requires** | `gerrit.webUrl`, credentials |
 
 Answer an inline comment chain as a **draft**, and later publish your drafts. This closes the author's review loop from the terminal: `ger show` reads the chains, you (or an agent) fix the code, `ger reply` answers each chain, and the answers reach reviewers when you push.
