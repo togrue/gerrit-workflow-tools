@@ -16,9 +16,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
-from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
@@ -29,7 +27,6 @@ from gerrit_workflow_tools.core.git_state import (
     resolve_working_branch,
 )
 from gerrit_workflow_tools.core.push import (
-    PushOptions,
     PushPlan,
     PushRefusal,
     PushResult,
@@ -39,12 +36,12 @@ from gerrit_workflow_tools.core.push import (
     publish_drafts_with,
     publishable_drafts,
     push_argv,
-    revise,
 )
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
-from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
+from gerrit_workflow_tools.push_input_line import PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
+    apply_interactive_line,
     ask_push_action,
     commit_lines,
     print_assignment_report,
@@ -52,53 +49,12 @@ from gerrit_workflow_tools.push_preview import (
     print_gpush_preview,
     print_plan_status,
     print_ready_boundary_notice,
+    prompt_initial_options,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_summary_highlighter
 
 
 logger = logging.getLogger(__name__)
-
-
-def _prompt_save_reviewers() -> bool:
-    return confirm("Save reviewers to branch config?", default=False)
-
-
-def _prompt_reviewers_line_ptk(
-    cwd: Path | None = None,
-    branch: str | None = None,
-    *,
-    settings: Settings,
-    change_id_hint: str | None = None,
-    reviewer_flag_segments: list[str] | None = None,
-    session_strategy: ReviewerStrategy | None = None,
-) -> ParseResult:
-    """Confirm-loop ``r`` action: open the highlighted push-options input line."""
-    from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
-
-    return prompt_branch_push_options(
-        cwd,
-        branch,
-        settings=settings,
-        change_id_hint=change_id_hint,
-        reviewer_flag_segments=reviewer_flag_segments,
-        session_strategy=session_strategy,
-    )
-
-
-def _line_sets_options(state: PushLineState) -> bool:
-    return bool(
-        state.reviewers or state.topic or state.wip or state.private or state.strategy != ReviewerStrategy.PUSH.value
-    )
-
-
-def _options_from_line(state: PushLineState) -> PushOptions:
-    return PushOptions(
-        reviewers=tuple(state.reviewers),
-        strategy=ReviewerStrategy(state.strategy),
-        topic=state.topic,
-        wip=state.wip,
-        private=state.private,
-    )
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -270,61 +226,6 @@ def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Setting
     return branch
 
 
-def _session_strategy(args: argparse.Namespace) -> ReviewerStrategy | None:
-    return ReviewerStrategy(args.reviewer_strategy) if args.reviewer_strategy else None
-
-
-def _apply_interactive_line(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-    save: bool,
-) -> PushPlan | None:
-    """Revise *plan* from a push-options line. ``None`` means the line was not applied."""
-    res = _prompt_reviewers_line_ptk(
-        cwd,
-        plan.branch,
-        settings=settings,
-        change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
-        reviewer_flag_segments=list(args.reviewers),
-        session_strategy=_session_strategy(args),
-    )
-    if not res.valid_for_apply:
-        print("Invalid push options; nothing changed.", file=sys.stderr)
-        return None
-    if not _line_sets_options(res.state):
-        print("No push options entered; nothing changed.")
-        return None
-    revised = revise(plan, _options_from_line(res.state), settings=settings)
-    if save and _prompt_save_reviewers():
-        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(revised.options.reviewers))
-    return revised
-
-
-def _maybe_prompt_initial_options(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-) -> PushPlan:
-    res = _prompt_reviewers_line_ptk(
-        cwd,
-        plan.branch,
-        settings=settings,
-        change_id_hint=change_id_of_rev(cwd, plan.branch),
-        reviewer_flag_segments=list(args.reviewers),
-        session_strategy=_session_strategy(args),
-    )
-    if _line_sets_options(res.state):
-        plan = revise(plan, _options_from_line(res.state), settings=settings)
-    if _prompt_save_reviewers():
-        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(plan.options.reviewers))
-    return plan
-
-
 def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, settings: Settings) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
     if _gerrit_flags_set(args):
@@ -405,7 +306,7 @@ def _confirm_gerrit_push(
             print("Push cancelled.", file=sys.stderr)
             return 0
         if act == "reviewers":
-            revised = _apply_interactive_line(cwd, plan, args, settings=settings, save=False)
+            revised = apply_interactive_line(cwd, plan, args, settings=settings, save=False)
             if revised is not None:
                 plan = revised
             continue
@@ -460,7 +361,7 @@ def _push_gerrit(
         print(warning, file=sys.stderr)
     plan = prepared
     if args.i:
-        plan = _maybe_prompt_initial_options(cwd, plan, args, settings=settings)
+        plan = prompt_initial_options(cwd, plan, args, settings=settings)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):

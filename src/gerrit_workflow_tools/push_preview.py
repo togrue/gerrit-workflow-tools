@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
+from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import ask_choice
+from gerrit_workflow_tools.cli_common import ask_choice, confirm
 from gerrit_workflow_tools.cli_style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -18,9 +20,13 @@ from gerrit_workflow_tools.cli_style import (
     color_short_sha,
     color_text,
 )
-from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, push_argv
+from gerrit_workflow_tools.core.change_id import change_id_of_rev
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_write import set_branch_config
+from gerrit_workflow_tools.core.push import PushBoundary, PushOptions, PushPlan, push_argv, revise
 from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -214,3 +220,100 @@ def print_assignment_report(plan: PushPlan, outcomes: list[ReviewerApplyChangeOu
         if not frag:
             continue
         print(f"{sha} {subject} assigned {frag}")
+
+
+def prompt_save_reviewers() -> bool:
+    return confirm("Save reviewers to branch config?", default=False)
+
+
+def prompt_reviewers_line(
+    cwd: Path | None = None,
+    branch: str | None = None,
+    *,
+    settings: Settings,
+    change_id_hint: str | None = None,
+    reviewer_flag_segments: list[str] | None = None,
+    session_strategy: ReviewerStrategy | None = None,
+) -> ParseResult:
+    """Confirm-loop ``r`` action: open the highlighted push-options input line."""
+    from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
+
+    return prompt_branch_push_options(
+        cwd,
+        branch,
+        settings=settings,
+        change_id_hint=change_id_hint,
+        reviewer_flag_segments=reviewer_flag_segments,
+        session_strategy=session_strategy,
+    )
+
+
+def _line_sets_options(state: PushLineState) -> bool:
+    return bool(
+        state.reviewers or state.topic or state.wip or state.private or state.strategy != ReviewerStrategy.PUSH.value
+    )
+
+
+def _options_from_line(state: PushLineState) -> PushOptions:
+    return PushOptions(
+        reviewers=tuple(state.reviewers),
+        strategy=ReviewerStrategy(state.strategy),
+        topic=state.topic,
+        wip=state.wip,
+        private=state.private,
+    )
+
+
+def _session_strategy(args: argparse.Namespace) -> ReviewerStrategy | None:
+    return ReviewerStrategy(args.reviewer_strategy) if args.reviewer_strategy else None
+
+
+def apply_interactive_line(
+    cwd: Path,
+    plan: PushPlan,
+    args: argparse.Namespace,
+    *,
+    settings: Settings,
+    save: bool,
+) -> PushPlan | None:
+    """Revise *plan* from a push-options line. ``None`` means the line was not applied."""
+    res = prompt_reviewers_line(
+        cwd,
+        plan.branch,
+        settings=settings,
+        change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
+        reviewer_flag_segments=list(args.reviewers),
+        session_strategy=_session_strategy(args),
+    )
+    if not res.valid_for_apply:
+        print("Invalid push options; nothing changed.", file=sys.stderr)
+        return None
+    if not _line_sets_options(res.state):
+        print("No push options entered; nothing changed.")
+        return None
+    revised = revise(plan, _options_from_line(res.state), settings=settings)
+    if save and prompt_save_reviewers():
+        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(revised.options.reviewers))
+    return revised
+
+
+def prompt_initial_options(
+    cwd: Path,
+    plan: PushPlan,
+    args: argparse.Namespace,
+    *,
+    settings: Settings,
+) -> PushPlan:
+    res = prompt_reviewers_line(
+        cwd,
+        plan.branch,
+        settings=settings,
+        change_id_hint=change_id_of_rev(cwd, plan.branch),
+        reviewer_flag_segments=list(args.reviewers),
+        session_strategy=_session_strategy(args),
+    )
+    if _line_sets_options(res.state):
+        plan = revise(plan, _options_from_line(res.state), settings=settings)
+    if prompt_save_reviewers():
+        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(plan.options.reviewers))
+    return plan

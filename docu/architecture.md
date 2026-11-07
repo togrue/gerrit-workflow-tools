@@ -298,7 +298,7 @@ sequenceDiagram
   end
 ```
 
-`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop, the `-i` prompt, the upstream prompt, and the save-reviewers question stay in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)). Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push.py`.
+`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)); the prompts it calls (`-i`, the options line, the save-reviewers question) live in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push.py`.
 
 ---
 
