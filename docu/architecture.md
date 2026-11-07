@@ -389,7 +389,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
-| `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `classify_issues`, generate and fix |
+| `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |
 | `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_rewrite_rows`, ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |

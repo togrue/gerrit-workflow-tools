@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
-from gerrit_workflow_tools.core.change_id import extract_valid_change_id
+from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -41,7 +41,7 @@ from gerrit_workflow_tools.core.push import (
     revise,
 )
 from gerrit_workflow_tools.core.push_reviewers import needs_rest_assignment
-from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, parse_reviewer_names, resolve_push_reviewers
+from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
@@ -57,11 +57,6 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_su
 
 
 logger = logging.getLogger(__name__)
-
-
-def _reviewer_seeds_for_prompt(branch: str, *, settings: Settings) -> list[str]:
-    cfg = settings.branch_gerrit_reviewers(branch)
-    return parse_reviewer_names(cfg) if cfg else []
 
 
 def _push_options_history_identity(
@@ -91,14 +86,6 @@ def _synthesize_push_options_default(
     return f"r={','.join(reviewers)}"
 
 
-def _change_id_for_rev(cwd: Path, rev: str) -> str | None:
-    try:
-        msg = git_out("show", "-s", "--format=%B", rev, cwd=cwd)
-    except GitError:
-        return None
-    return extract_valid_change_id(msg)
-
-
 def _prompt_save_reviewers() -> bool:
     return confirm("Save reviewers to branch config?", default=False)
 
@@ -115,7 +102,7 @@ def _prompt_reviewers_line_ptk(
     """Confirm-loop ``r`` action: open the highlighted push-options input line."""
     from gerrit_workflow_tools.push_input_prompt import prompt_push_options_line
 
-    seeds = _reviewer_seeds_for_prompt(branch, settings=settings) if branch is not None else []
+    seeds = branch_reviewers(branch, settings=settings) if branch is not None else []
     web_base, project = _push_options_history_identity(cwd, settings=settings)
     empty_default = ""
     if cwd is not None and branch is not None:
@@ -366,7 +353,7 @@ def _apply_interactive_line(
         cwd,
         plan.branch,
         settings=settings,
-        change_id_hint=_change_id_for_rev(cwd, plan.tip_sha),
+        change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
         reviewer_flag_segments=list(args.reviewers),
         session_strategy=_session_strategy(args),
     )
@@ -393,7 +380,7 @@ def _maybe_prompt_initial_options(
         cwd,
         plan.branch,
         settings=settings,
-        change_id_hint=_change_id_for_rev(cwd, plan.branch),
+        change_id_hint=change_id_of_rev(cwd, plan.branch),
         reviewer_flag_segments=list(args.reviewers),
         session_strategy=_session_strategy(args),
     )

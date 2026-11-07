@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import CHANGE_ID_RE
-from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 
 # Gerrit Change-Id line value: I + 40 hex digits, either case. The grammar itself lives in
@@ -87,6 +87,14 @@ def extract_valid_change_id(msg: str) -> str | None:
     raw = parse_change_id_footer(msg)
     valid, _malformed = validate_change_id_value(raw)
     return raw if valid else None
+
+
+def change_id_of_rev(cwd: Path | str | None, rev: str) -> str | None:
+    """The valid Change-Id in *rev*'s commit message, or ``None`` (also when *rev* is no commit)."""
+    try:
+        return extract_valid_change_id(git_out("log", "-1", "--format=%B", rev, cwd=cwd))
+    except GitError:
+        return None
 
 
 def strip_change_id_lines(msg: str) -> str:

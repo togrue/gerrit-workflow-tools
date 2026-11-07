@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from gerrit_workflow_tools.core.change_id import extract_valid_change_id
+from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, Changeish, ChangeishKind, address_problem, parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
@@ -270,8 +270,7 @@ def resolve_changeish(
     change_id = parsed.change_id
     if parsed.kind == "git-rev":
         resolution.local_sha = _resolve_local_sha(cwd, parsed.rev or parsed.raw)
-        msg = git_out("log", "-1", "--format=%B", resolution.local_sha, cwd=cwd)
-        change_id = extract_valid_change_id(msg)
+        change_id = change_id_of_rev(cwd, resolution.local_sha)
         if not change_id:
             return resolution
 

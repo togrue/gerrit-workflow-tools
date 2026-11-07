@@ -145,5 +145,10 @@ def resolve_push_reviewers(
     )
     if scripted is not None:
         return scripted
+    return branch_reviewers(branch, settings=settings)
+
+
+def branch_reviewers(branch: str, *, settings: Settings) -> list[str]:
+    """Reviewers saved in *branch*'s ``gerritReviewers`` config."""
     cfg = settings.branch_gerrit_reviewers(branch)
     return parse_reviewer_names(cfg) if cfg else []
