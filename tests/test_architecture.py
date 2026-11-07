@@ -115,6 +115,7 @@ SUBSTRATE = {
     "core/change_id.py",
     "core/changeish.py",
     "core/config.py",
+    "core/config_write.py",
     "core/git_run.py",
 }
 

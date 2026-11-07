@@ -260,7 +260,7 @@ def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryH
     Commands without ``--debug-log`` or ``--color`` get logging off and color on ``auto``.
 
     This is where a command's :class:`Settings` snapshot is taken: once, at the entry
-    point, from a single ``git config --list``. Everything below receives it as an
+    point, from a single ``git config --list --show-scope``. Everything below receives it as an
     argument rather than reading configuration again.
     """
 

@@ -92,7 +92,7 @@ class GerritService:
         base comes from the implementation — so callers that inject need no Gerrit config.
         *settings* defaults to one read from
         *cwd*; pass it when the caller has already taken a snapshot, so the whole command
-        works from a single ``git config --list``.
+        works from a single ``git config --list --show-scope``.
         """
 
         if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):

@@ -112,7 +112,7 @@ Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbo
 | `branch.<name>.gerritReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
 | `branch.<name>.gerAttentionCursor` / `…CursorAt` | See [Attention cursor](#attention-cursor-ger-and-branch-local). |
 
-Set via `git config` (or `set_branch_config` / attention-cursor helpers in code).
+Set via `git config` (or `set_branch_config` / attention-cursor helpers in `core/config_write.py`).
 
 ---
 

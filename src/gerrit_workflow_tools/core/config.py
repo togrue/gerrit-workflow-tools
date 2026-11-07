@@ -1,26 +1,33 @@
-"""The git/Gerrit settings snapshot — one effective ``git config --list``, read once.
+"""The git/Gerrit settings snapshot — one ``git config --list --show-scope``, read once.
 
 Settings only. Anything that asks what the repository currently looks like (branch, HEAD,
 upstream, rebase state) lives in :mod:`gerrit_workflow_tools.core.git_state`, which imports
 from here; this module never queries repository state, so the dependency stays one-way.
 
 A :class:`Settings` is immutable and carries every key it will ever answer, so reading one
-costs a single ``git config --list``. Build it once per command (``Settings.from_cwd``) and
-pass it down; tests build one from a plain mapping (``Settings.from_map``) with no repository
-and nothing to invalidate.
+costs a single ``git config --list --show-scope``. Build it once per command
+(``Settings.from_cwd``) and pass it down; tests build one from a plain mapping
+(``Settings.from_map``) with no repository and nothing to invalidate.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
+from gerrit_workflow_tools.core import config_write as _config_write
 from gerrit_workflow_tools.core.git_run import git
 
 
 logger = logging.getLogger(__name__)
+
+# Implementations live in config_write; re-exported for existing call sites.
+set_branch_config = _config_write.set_branch_config
+set_attention_cursor_config = _config_write.set_attention_cursor_config
+set_last_attention_change_id = _config_write.set_last_attention_change_id
 
 
 class ConfigError(ValueError):
@@ -30,6 +37,16 @@ class ConfigError(ValueError):
     working; it exists so the CLI can tell "you have not configured this" apart from any
     other :class:`ValueError`, which would otherwise be reported as a config problem.
     """
+
+
+class ConfigScope(Enum):
+    """Where an effective git config value was defined (``git config --show-scope``)."""
+
+    SYSTEM = "system"
+    GLOBAL = "global"
+    LOCAL = "local"
+    WORKTREE = "worktree"
+    COMMAND = "command"
 
 
 # Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
@@ -46,6 +63,8 @@ _DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
 _DEFAULT_WRAP_WIDTH = 120
 EDIT_NEXT_SHOW_KEY = "gerrit.editNextShow"
 
+_SCOPE_BY_NAME = {scope.value: scope for scope in ConfigScope}
+
 
 def _canonical_cfg_key(key: str) -> str:
     """Match key normalization used in `git config --list` (last segment lowercased)."""
@@ -55,18 +74,34 @@ def _canonical_cfg_key(key: str) -> str:
     return f"{head}.{tail.lower()}"
 
 
-def _load_git_config_map(cwd: Path | str | None) -> dict[str, str]:
-    """Parse effective `git config --list` (all scopes); last value wins for each key."""
-    p = git("config", "--list", cwd=cwd, check=False)
-    single: dict[str, str] = {}
+def _parse_show_scope_line(raw: str) -> tuple[ConfigScope, str, str] | None:
+    """Parse one ``git config --list --show-scope`` line into scope, key, and value."""
+    if not raw.strip() or "\t" not in raw or "=" not in raw:
+        return None
+    scope_name, rest = raw.split("\t", 1)
+    scope = _SCOPE_BY_NAME.get(scope_name.strip().lower())
+    if scope is None or "=" not in rest:
+        return None
+    key, value = rest.split("=", 1)
+    return scope, key, value
+
+
+def _load_git_config(cwd: Path | str | None) -> tuple[dict[str, str], dict[str, ConfigScope]]:
+    """Parse effective ``git config --list --show-scope``; last value wins for each key."""
+    p = git("config", "--list", "--show-scope", cwd=cwd, check=False)
+    values: dict[str, str] = {}
+    scopes: dict[str, ConfigScope] = {}
     if p.returncode != 0 or not p.stdout:
-        return single
+        return values, scopes
     for raw in p.stdout.splitlines():
-        if not raw.strip() or "=" not in raw:
+        parsed = _parse_show_scope_line(raw)
+        if parsed is None:
             continue
-        k, v = raw.split("=", 1)
-        single[_canonical_cfg_key(k)] = v
-    return single
+        scope, key, value = parsed
+        canon = _canonical_cfg_key(key)
+        values[canon] = value
+        scopes[canon] = scope
+    return values, scopes
 
 
 @dataclass(frozen=True)
@@ -78,16 +113,33 @@ class Settings:
     """
 
     values: Mapping[str, str]
+    scopes: Mapping[str, ConfigScope] = field(default_factory=dict)
 
     @classmethod
     def from_cwd(cls, cwd: Path | str | None) -> Settings:
-        """Read the effective configuration for *cwd* with one ``git config --list``."""
-        return cls(values=_load_git_config_map(cwd))
+        """Read the effective configuration for *cwd* with one ``git config --list --show-scope``."""
+        values, scopes = _load_git_config(cwd)
+        return cls(values=values, scopes=scopes)
 
     @classmethod
-    def from_map(cls, raw: Mapping[str, str]) -> Settings:
-        """Build a snapshot from literal ``key -> value`` pairs, keys canonicalized as git does."""
-        return cls(values={_canonical_cfg_key(k): v for k, v in raw.items()})
+    def from_map(
+        cls,
+        raw: Mapping[str, str],
+        *,
+        scopes: Mapping[str, ConfigScope] | None = None,
+    ) -> Settings:
+        """Build a snapshot from literal ``key -> value`` pairs, keys canonicalized as git does.
+
+        Keys without an entry in *scopes* default to :attr:`ConfigScope.LOCAL`.
+        """
+        values = {_canonical_cfg_key(k): v for k, v in raw.items()}
+        if scopes is None:
+            resolved_scopes = dict.fromkeys(values, ConfigScope.LOCAL)
+        else:
+            resolved_scopes = {_canonical_cfg_key(k): scope for k, scope in scopes.items()}
+            for key in values:
+                resolved_scopes.setdefault(key, ConfigScope.LOCAL)
+        return cls(values=values, scopes=resolved_scopes)
 
     def get(self, key: str) -> str | None:
         """Return the value for *key*, stripped, or ``None`` when unset or blank.
@@ -100,6 +152,12 @@ class Settings:
             return None
         stripped = v.strip()
         return stripped or None
+
+    def scope(self, key: str) -> ConfigScope | None:
+        """Return where the effective value for *key* was defined, or ``None`` when unset/blank."""
+        if self.get(key) is None:
+            return None
+        return self.scopes.get(_canonical_cfg_key(key))
 
     def flag(self, key: str, *, default: bool = False) -> bool:
         """Return whether *key* is truthy (``1``, ``true``, ``yes``, ``on``; case-insensitive)."""
@@ -315,50 +373,3 @@ class Settings:
         header, and the commit message are.
         """
         return self._positive_int("gerrit.wrapWidth") or _DEFAULT_WRAP_WIDTH
-
-
-def set_branch_config(
-    cwd: Path | str | None,
-    branch: str,
-    *,
-    gerrit_reviewers: str | None = None,
-) -> None:
-    """Write branch-scoped Gerrit settings via ``git config``.
-
-    Any :class:`Settings` read before this call still reports the old value; take a fresh
-    snapshot if the new one has to be visible.
-    """
-    if gerrit_reviewers is not None:
-        git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
-
-
-def _write_stamped(cwd: Path | str | None, key: str, value: str | None, touched_at: str | None) -> None:
-    """Write *key* and its ``…At`` timestamp, or clear both when *value* is ``None``."""
-    if value is None:
-        git("config", "--unset-all", key, cwd=cwd, check=False)
-        git("config", "--unset-all", f"{key}At", cwd=cwd, check=False)
-        return
-    git("config", key, value, cwd=cwd)
-    if touched_at is not None:
-        git("config", f"{key}At", touched_at, cwd=cwd)
-
-
-def set_attention_cursor_config(
-    cwd: Path | str | None,
-    branch: str,
-    *,
-    change_id: str | None,
-    touched_at: str | None,
-) -> None:
-    """Write or clear ``branch.<branch>.gerAttentionCursor`` and ``…CursorAt``."""
-    _write_stamped(cwd, f"branch.{branch}.gerAttentionCursor", change_id, touched_at)
-
-
-def set_last_attention_change_id(
-    cwd: Path | str | None,
-    *,
-    change_id: str | None,
-    touched_at: str | None = None,
-) -> None:
-    """Write or clear repo-local ``ger.lastAttentionChangeId`` and ``…At`` for lazy adopt."""
-    _write_stamped(cwd, "ger.lastAttentionChangeId", change_id, touched_at)

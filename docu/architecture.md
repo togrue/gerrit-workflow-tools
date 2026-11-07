@@ -95,7 +95,7 @@ flowchart TB
 Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which runs in the pre-commit hook:
 
 - `core/` imports only `core/`, and never prints or prompts.
-- The substrate (`core/git_run.py`, `core/config.py`, `core/call_trace.py`, `core/changeish.py`, `core/change_id.py`) imports nothing above itself.
+- The substrate (`core/git_run.py`, `core/config.py`, `core/config_write.py`, `core/call_trace.py`, `core/changeish.py`, `core/change_id.py`) imports nothing above itself.
 - `render/` does not import `cli_*`.
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
@@ -152,7 +152,7 @@ flowchart LR
   git --> repo
 ```
 
-`config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list`, then passes it down; there is no process-wide cache and nothing to invalidate. Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
+`config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list --show-scope`, then passes it down; there is no process-wide cache and nothing to invalidate. Values answer with `get`; the winning file scope answers with `scope` (`local` / `global` / …). Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
 
 `git_state.py` answers what the repository currently looks like — branch, HEAD, rebase state, upstream, and the Gerrit push destination. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
@@ -380,7 +380,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
-| `core/config.py` | `Settings`: one `git config --list` snapshot of all `gerrit.*` and `branch.*` values |
+| `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
+| `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, stored-vs-default resolution |
 | `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |

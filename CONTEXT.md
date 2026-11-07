@@ -27,7 +27,7 @@ The **target branch** is the Gerrit destination (may be `origin/main`). The **pu
 _Avoid_: using either name for the other
 
 **Settings**:
-An immutable snapshot of the repository's effective `git config`, read once per command with a single `git config --list`. Values written after the snapshot are not visible in it; the answer is a new snapshot, not an invalidation. Settings only — nothing in it asks what the repository currently looks like.
+An immutable snapshot of the repository's effective `git config`, read once per command with a single `git config --list --show-scope`. Carries each key's value and the scope that won (`local`, `global`, …). Values written after the snapshot are not visible in it; the answer is a new snapshot, not an invalidation. Settings only — nothing in it asks what the repository currently looks like.
 _Avoid_: config, config cache, options
 
 **Repository state**:

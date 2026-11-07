@@ -5,6 +5,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.config import (
     _DEFAULT_STOP_PATTERN,
     _DEFAULT_WARNING_PATTERN,
+    ConfigScope,
     Settings,
 )
 from gerrit_workflow_tools.core.git_run import git
@@ -107,7 +108,7 @@ def test_branch_scoped_keys_preserve_branch_name_case() -> None:
 
 
 def test_from_cwd_reads_effective_git_config(stack_repo: Path) -> None:
-    """The one test that needs a repository: that ``git config --list`` is what feeds the map."""
+    """``git config --list --show-scope`` feeds both values and winning scopes."""
     git("config", "gerrit.stopPattern", r"^hold:", cwd=stack_repo)
     git("config", "gerrit.remote", "gerrit", cwd=stack_repo)
 
@@ -115,6 +116,27 @@ def test_from_cwd_reads_effective_git_config(stack_repo: Path) -> None:
 
     assert settings.stop_pattern == r"^hold:"
     assert settings.gerrit_remote == "gerrit"
+    assert settings.scope("gerrit.stopPattern") is ConfigScope.LOCAL
+    assert settings.scope("gerrit.remote") is ConfigScope.LOCAL
+    assert settings.scope("gerrit.webUrl") is None
+
+
+def test_from_map_defaults_scope_to_local_and_accepts_overrides() -> None:
+    local = Settings.from_map({"gerrit.remote": "gerrit"})
+    assert local.scope("gerrit.remote") is ConfigScope.LOCAL
+    assert local.scope("missing") is None
+    global_remote = Settings.from_map(
+        {"gerrit.remote": "origin", "gerrit.webUrl": "https://g.example"},
+        scopes={"gerrit.webUrl": ConfigScope.GLOBAL},
+    )
+    assert global_remote.scope("gerrit.remote") is ConfigScope.LOCAL
+    assert global_remote.scope("gerrit.webUrl") is ConfigScope.GLOBAL
+
+
+def test_blank_value_has_no_scope() -> None:
+    settings = Settings.from_map({"gerrit.project": "   "}, scopes={"gerrit.project": ConfigScope.GLOBAL})
+    assert settings.get("gerrit.project") is None
+    assert settings.scope("gerrit.project") is None
 
 
 def test_from_cwd_is_a_snapshot_not_a_live_view(stack_repo: Path) -> None:
