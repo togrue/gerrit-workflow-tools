@@ -1,11 +1,13 @@
-"""What ``ger push`` shows: commit list, boundary notice, status line, and what it assigned."""
+"""What ``ger push`` shows and asks: commit list, boundary notice, status line, confirmation, assignments."""
 
 from __future__ import annotations
 
 import re
 import sys
 
+from gerrit_workflow_tools.cli_common import ask_choice
 from gerrit_workflow_tools.cli_style import (
+    ANSI_BLUE,
     ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
@@ -129,7 +131,46 @@ def print_plan_status(plan: PushPlan) -> None:
     ]
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
+    stuck = [sha for sha in plan.drafts if sha in plan.unchanged]
+    updated = sum(count for sha, count in plan.drafts.items() if sha not in stuck)
+    if updated:
+        decision = "publish" if options.publish_comments else "keep"
+        fields.append(
+            ("Drafts", color_text(f"{decision} {updated}", ANSI_BLUE if options.publish_comments else ANSI_DIM))
+        )
     print(color_text("  |  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
+    if stuck:
+        print(color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit gets no new patchset there", ANSI_DIM))
+
+
+def ask_push_action(drafts: int) -> str:
+    """Ask the push confirmation: ``push``, ``cancel`` or ``reviewers``, plus ``push-only`` with *drafts*.
+
+    With drafts, the question offers them: ``push`` publishes them with the push, ``push-only`` keeps them.
+    """
+    answers = {
+        "": "push",
+        "y": "push",
+        "yes": "push",
+        "n": "cancel",
+        "no": "cancel",
+        "r": "reviewers",
+        "reviewer": "reviewers",
+        "reviewers": "reviewers",
+    }
+    if drafts:
+        return ask_choice(
+            f"Push and publish {drafts} draft(s)? [Y/n/p/r]: ",
+            {**answers, "p": "push-only"},
+            hint="  (Enter or y: push and publish, p: push and keep the drafts, n: cancel, r: set reviewers)",
+            on_eof="cancel",
+        )
+    return ask_choice(
+        "Do you want to push these commits? [Y/n/r]: ",
+        answers,
+        hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
+        on_eof="cancel",
+    )
 
 
 def print_dry_run(plan: PushPlan) -> None:

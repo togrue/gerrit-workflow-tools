@@ -215,8 +215,12 @@ class ChangeStore:
 
         Handles project-scoped ``Change-Id`` OR batches (the stack overlay), exact
         ``project:P branch:B change:I`` triplet scoping, bare ``change:`` lookups, and
-        ``since:`` delta freshness queries.
+        ``since:`` delta freshness queries. ``has:draft`` keeps the changes the caller has
+        drafts on.
         """
+        if "has:draft" in query:
+            drafted = {key for key, file_map in self._drafts.items() if any(file_map.values())}
+            return [row for row in self._query_rows(query.replace("has:draft", "")) if str(row.get("id")) in drafted]
         since_match = re.search(r'since:"([^"]+)"', query) or re.search(r"since:(\S+)", query)
         if since_match:
             since_val = since_match.group(1).rstrip(")")

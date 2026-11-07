@@ -2,7 +2,7 @@
 
 | | |
 |--|--|
-| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard) and `ger reply --publish` are implemented; the push integration and the guided reply are planned (see [Delivery](#delivery)) |
+| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard), `ger reply --publish` and publishing with `ger push` are implemented; the guided reply is planned (see [Delivery](#delivery)) |
 | **Module** | `cli_reply.py`; draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
 | **Requires** | `gerrit.webUrl`, credentials |
 
@@ -123,11 +123,11 @@ With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "sta
 
 `ger push` looks for your drafts on the changes it is about to push: one `has:draft` query for those change numbers. When there are any:
 
-- **On a TTY**, the preview gains `publish N drafts on M changes` and the prompt becomes `Push and publish N drafts? [Y/n]`. Yes adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Answering `p` pushes without publishing.
+- **On a TTY**, the status line gains `Drafts keep N` and the prompt becomes `Push and publish N draft(s)? [Y/n/p/r]`. Yes adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Answering `p` pushes without publishing.
 - **With `-y`**, drafts are published only when `--publish-comments` is also given. Scripts and agents never publish by accident.
 - Drafts on a change the push does **not** update (behind the ready boundary, or with nothing new) stay drafts. The preview lists them by change.
 
-**Account preference.** Gerrit has an account preference that publishes drafts on every push (publish_comments_on_push in the account preferences). With it on, every push would publish. `ger push` therefore passes `no-publish-comments` whenever it is not publishing, so the answer above is the only thing that decides.
+**Account preference.** Gerrit has an account preference that publishes drafts on every push (publish_comments_on_push in the account preferences). With it on, every push would publish. `ger push` therefore passes `no-publish-comments` whenever there are drafts and it is not publishing, so the answer above is the only thing that decides. Without drafts it sends neither option.
 
 ### The publish guard
 
@@ -196,8 +196,7 @@ PUT    /changes/{id}/revisions/{ps}/drafts/{draft-id}          update
 DELETE /changes/{id}/revisions/{ps}/drafts/{draft-id}          discard
 POST   /changes/{id}/revisions/current/review                  publish:
          {"drafts": "PUBLISH_ALL_REVISIONS", "message": optional}
-GET    /changes/?q=has:draft+(change:N+OR+...)&o=SKIP_DIFFSTAT  which stack changes have drafts
-GET    /accounts/self/preferences                              publish_comments_on_push (push preview)
+GET    /changes/?q=has:draft+(change:N+OR+...)                 which pushed changes have drafts
 ```
 
 The comment GET today already returns the published `patch_set`. The model keeps it: `InlineComment` gains its patchset and a draft flag, and `build_comment_chains` takes the drafts file map next to the published one. That keeps chain assembly in its one owner, `core/comment_chains.py`, so there is no second threading pass for drafts.
@@ -278,7 +277,7 @@ Built in this order. Each step works on its own.
 | 2 | Drafts are read live and merged into their chains; `ger show` displays them | Done |
 | 3 | `ger reply CHAIN` writes, updates and discards drafts | Done |
 | 4 | `ger reply --publish` and the publish guard | Done |
-| 5 | `ger push` publishes drafts with the push | |
+| 5 | `ger push` publishes drafts with the push | Done |
 | 6 | Blue `com` token and `unpublished-drafts` attention | |
 | 7 | `ger edit` lists the open chains on every stop, `--json` for agents | |
 | 8 | Guided `ger reply` | |

@@ -11,7 +11,6 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
-    ask_choice,
     confirm,
     init_cli_runtime,
     run_cli_command,
@@ -20,6 +19,7 @@ from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
+from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
@@ -37,6 +37,8 @@ from gerrit_workflow_tools.core.push import (
     execute,
     prepare,
     prepare_vanilla,
+    publish_drafts_with,
+    publishable_drafts,
     push_argv,
     revise,
 )
@@ -44,6 +46,7 @@ from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewe
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
+    ask_push_action,
     commit_lines,
     print_assignment_report,
     print_dry_run,
@@ -118,24 +121,6 @@ def _prompt_reviewers_line_ptk(
     )
 
 
-def _prompt_gerrit_push_confirm_action() -> str:
-    return ask_choice(
-        "Do you want to push these commits? [Y/n/r]: ",
-        {
-            "": "push",
-            "y": "push",
-            "yes": "push",
-            "n": "cancel",
-            "no": "cancel",
-            "r": "reviewers",
-            "reviewer": "reviewers",
-            "reviewers": "reviewers",
-        },
-        hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
-        on_eof="cancel",
-    )
-
-
 def _line_sets_options(state: PushLineState) -> bool:
     return bool(
         state.reviewers or state.topic or state.wip or state.private or state.strategy != ReviewerStrategy.PUSH.value
@@ -180,6 +165,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--yes",
         action="store_true",
         help="Push without confirmation (required when stdin is not a terminal).",
+    )
+    parser.add_argument(
+        "--publish-comments",
+        action="store_true",
+        help="Publish your drafts on the updated changes with the push (needed with -y; the prompt asks).",
     )
     parser.add_argument(
         "--all",
@@ -443,7 +433,10 @@ def _confirm_gerrit_push(
         print()
         print_plan_status(plan)
         print()
-        act = _prompt_gerrit_push_confirm_action()
+        drafts = publishable_drafts(plan) if plan.options.publish_comments is False else 0
+        act = ask_push_action(drafts)
+        if act == "push" and drafts:
+            plan = publish_drafts_with(plan, True)
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
             return 0
@@ -494,6 +487,7 @@ def _push_gerrit(
         no_rebase_check=bool(args.no_rebase_check),
         show_attributes=defaults["show_attributes"],
         update_last_pushed=defaults["last_pushed_branch"],
+        publish_comments=bool(args.publish_comments),
     )
     if isinstance(prepared, PushRefusal):
         _print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
@@ -539,6 +533,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     )
     if args.i and args.yes:
         parser.error("-i cannot be used with --yes (-y)")
+    if args.publish_comments and publish_blocked():
+        parser.error(f"--publish-comments is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     if args.i and not stdin_is_terminal():
         print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
         return 1

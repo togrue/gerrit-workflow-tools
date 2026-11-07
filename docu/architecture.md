@@ -440,8 +440,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_json.py` | JSON payloads for ``ger show`` |
-| `summary_highlight.py` | Subject highlighting from stop/warning patterns |
-| `push_preview.py` | What `ger push` shows: commit list, boundary notice, status line, what it assigned |
+| `summary_highlight.py` | Subject highlighting from stop/warning patterns, and the highlighter for a branch's stack |
+| `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question, what it assigned |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |

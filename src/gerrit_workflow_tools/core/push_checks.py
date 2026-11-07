@@ -82,6 +82,8 @@ class ExistingChanges(NamedTuple):
     warnings: tuple[str, ...] = ()
     unchanged: tuple[str, ...] = ()
     """Short SHAs that already are their change's current patchset."""
+    drafts: tuple[tuple[str, int], ...] = ()
+    """``(short SHA, count)`` of your unpublished drafts, for commits whose change has any."""
 
 
 def check_existing_changes(
@@ -106,9 +108,10 @@ def check_existing_changes(
         return ExistingChanges()
     warnings: list[str] = []
     unchanged: list[str] = []
+    views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
+    drafts = _draft_counts(service, commits, triplets, views)
     for commit in commits:
-        payload = payloads.get(triplets.get(commit.sha, ""))
-        view = ChangeView.from_payload(payload) if payload else None
+        view = views.get(commit.sha)
         if view is not None and (view.status or "").upper() == "ABANDONED":
             warnings.append(
                 f"warning: {commit.short_sha} targets abandoned change {view.number}; "
@@ -116,4 +119,24 @@ def check_existing_changes(
             )
         elif view is not None and view.current_revision == commit.sha.lower():
             unchanged.append(commit.short_sha)
-    return ExistingChanges(tuple(warnings), tuple(unchanged))
+    return ExistingChanges(tuple(warnings), tuple(unchanged), drafts)
+
+
+def _draft_counts(
+    service: GerritService, commits: Sequence[Commit], triplets: dict[str, str], views: dict[str, ChangeView]
+) -> tuple[tuple[str, int], ...]:
+    """Your drafts per commit: one ``has:draft`` query, then a drafts GET only where it found some.
+
+    Best effort, like the rest of this check: a failed lookup finds no drafts.
+    """
+    by_number = {view.number: sha for sha, view in views.items() if view.number is not None}
+    if not by_number:
+        return ()
+    query = "has:draft (" + " OR ".join(f"change:{number}" for number in by_number) + ")"
+    try:
+        rows = service.rest.query_changes(query, n=len(by_number))
+        drafted = [by_number[n] for n in (ChangeView.from_payload(r).number for r in rows) if n in by_number]
+        counts = {sha: sum(map(len, service.comments.get_drafts(triplets[sha]).values())) for sha in drafted}
+    except GerritApiError:
+        return ()
+    return tuple((c.short_sha, counts[c.sha]) for c in commits if counts.get(c.sha))

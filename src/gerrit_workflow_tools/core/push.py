@@ -5,13 +5,14 @@ from __future__ import annotations
 import contextlib
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+from gerrit_workflow_tools.core.gerrit.comments import publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
@@ -44,6 +45,9 @@ class PushOptions:
     topic: str | None = None
     wip: bool = False
     private: bool = False
+    publish_comments: bool | None = None
+    """Your drafts on the updated changes: ``True`` publish them, ``False`` keep them (overriding
+    an account preference that publishes on push), ``None`` say nothing (there are none)."""
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,8 @@ class PushPlan:
     update_last_pushed: bool
     unchanged: tuple[str, ...] = ()
     """Short SHAs Gerrit already has as current patchsets: push options do not reach them."""
+    drafts: dict[str, int] = field(default_factory=dict)
+    """Your unpublished drafts per pushed commit (short SHA -> count)."""
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,7 @@ def refspec_option_segments(
     wip: bool,
     private: bool,
     topic: str | None,
+    publish_comments: bool | None = None,
 ) -> list[str]:
     parts: list[str] = []
     if strategy == ReviewerStrategy.PUSH:
@@ -106,6 +113,8 @@ def refspec_option_segments(
         parts.append("private")
     if topic:
         parts.append(f"topic={quote(topic, safe='')}")
+    if publish_comments is not None:
+        parts.append("publish-comments" if publish_comments else "no-publish-comments")
     return parts
 
 
@@ -117,6 +126,7 @@ def push_refspec(tip: str, push_branch: str, options: PushOptions) -> str:
         wip=options.wip,
         private=options.private,
         topic=options.topic,
+        publish_comments=options.publish_comments,
     )
     if parts:
         ref += "%" + ",".join(parts)
@@ -136,11 +146,27 @@ def run_git_push(cmd: list[str], cwd: Path | str | None) -> Any:
 
 
 def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushPlan:
+    """Take new push options; the decision about drafts is not one of them and is kept."""
+    options = replace(options, publish_comments=plan.options.publish_comments)
     return replace(
         plan,
         options=options,
         credential_error=credential_error(options.strategy, options.reviewers, settings),
     )
+
+
+def publishable_drafts(plan: PushPlan) -> int:
+    """Drafts this push would publish if asked: on changes it updates, while the guard allows it."""
+    if publish_blocked():
+        return 0
+    return sum(count for sha, count in plan.drafts.items() if sha not in plan.unchanged)
+
+
+def publish_drafts_with(plan: PushPlan, publish: bool) -> PushPlan:
+    """*plan* deciding to publish your drafts with the push, or to keep them. The guard always keeps."""
+    if not plan.drafts:
+        return plan
+    return replace(plan, options=replace(plan.options, publish_comments=publish and not publish_blocked()))
 
 
 def prepare_vanilla(
@@ -179,6 +205,7 @@ def prepare(
     no_rebase_check: bool = False,
     show_attributes: bool = False,
     update_last_pushed: bool = True,
+    publish_comments: bool = False,
 ) -> PushPlan | PushRefusal:
     if topic and "," in topic:
         return PushRefusal(f"error: invalid topic {topic!r}: a comma separates push options")
@@ -222,7 +249,7 @@ def prepare(
         existing = check_existing_changes(cwd, commits, settings=settings, gerrit=gerrit)
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
-    return PushPlan(
+    plan = PushPlan(
         branch=branch,
         push_branch=refs_for_push_branch_name(destination, settings=settings),
         remote=settings.gerrit_remote,
@@ -235,7 +262,9 @@ def prepare(
         warnings=(*warnings, *existing.warnings),
         update_last_pushed=update_last_pushed,
         unchanged=existing.unchanged,
+        drafts=dict(existing.drafts),
     )
+    return publish_drafts_with(plan, publish_comments)
 
 
 def execute(

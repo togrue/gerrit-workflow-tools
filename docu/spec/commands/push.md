@@ -30,6 +30,7 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 |--------|-------------|
 | `--dry-run` | Print preview only. Writes nothing, so a missing upstream is an error instead of a prompt |
 | `-y`, `--yes` | Skip confirmation (required when stdin is not a TTY) |
+| `--publish-comments` | Publish your drafts on the updated changes with the push. Needed with `-y`; on a TTY the prompt asks. Exits `2` while `GER_NO_PUBLISH` is set |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
 | `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip) |
 | `--reviewers ACCOUNTS` | Comma-separated reviewers (repeatable; merged, deduped) |
@@ -95,12 +96,15 @@ The interactive prompt (`-i`, and confirm-loop `r`) persists recent lines under
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
 3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
+4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset, and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
 
 ---
 
 ## Confirmation output
 
-Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt: `Do you want to push these commits? [Y/n]:` unless `--dry-run` / `-y` / non-TTY without `-y`.
+Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt: `Do you want to push these commits? [Y/n/r]:` unless `--dry-run` / `-y` / non-TTY without `-y`.
+
+**Drafts.** When you have drafts on changes the push updates, the status line shows `Drafts keep N` and the prompt becomes `Push and publish N draft(s)? [Y/n/p/r]`. Yes adds Gerrit's `publish-comments` push option; `p` pushes and keeps them. Whenever the push does not publish, it sends `no-publish-comments`, so an account preference that publishes on push cannot publish them behind your back. Drafts on commits Gerrit already has (no new patchset) cannot be published by a push; the preview names them (`drafts on … stay drafts`). Details: [reply.md](reply.md#publishing-with-ger-push).
 
 After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, default on).
 
