@@ -19,11 +19,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.core.annotated_stack import annotate
-from gerrit_workflow_tools.core.comment_chains import (
-    COMMENT_SELECTIONS,
-    CommentSelection,
-    collect_comment_chains,
-)
+from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -348,16 +344,16 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             any_attention = True
 
         rest_key = _gerrit_rest_key(commit, resolved.resolution)
-        file_map = (
-            service.comments.get_file_map(
+        chains = (
+            service.comments.get_chains(
                 rest_key,
                 change_updated=commit.freshness,
                 context_padding=_requested_context_padding(args),
+                comments=args.comments,
             )
             if (commit.pushed and rest_key)
-            else {}
+            else []
         )
-        chains = collect_comment_chains(file_map, comments=args.comments)
 
         if out_fmt == "json":
             json_payloads.append(

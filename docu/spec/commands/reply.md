@@ -265,8 +265,8 @@ Built in this order. Each step works on its own.
 
 | # | Step | Status |
 |---|------|--------|
-| 1 | Comments keep their patchset and a draft flag; `ger show --json` adds `root_id` and `patch_set` | |
-| 2 | Drafts are read live and merged into their chains; `ger show` displays them | |
+| 1 | Comments keep their patchset and a draft flag; `ger show --json` adds `root_id` and `patch_set` | Done |
+| 2 | Drafts are read live and merged into their chains; `ger show` displays them | Done |
 | 3 | `ger reply CHAIN` writes, updates and discards drafts | |
 | 4 | `ger reply --publish` and the publish guard | |
 | 5 | `ger push` publishes drafts with the push | |

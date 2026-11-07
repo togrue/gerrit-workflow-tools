@@ -172,3 +172,35 @@ def test_chain_comments_keep_patchset_and_own_flag() -> None:
     reply["patch_set"] = 4
     (chain,) = build_comment_chains({"a.py": [root, reply]})
     assert [(c.patch_set, c.unresolved, c.draft) for c in chain.comments] == [(3, True, False), (4, False, False)]
+
+
+def _draft(cid: str, *, in_reply_to: str | None, unresolved: bool, updated: str = "", message: str = "Done") -> dict:
+    out = _comment(cid, message=message, unresolved=unresolved, in_reply_to=in_reply_to, updated=updated)
+    out["patch_set"] = 2
+    return out
+
+
+def test_draft_reply_joins_its_chain_last_and_keeps_published_state() -> None:
+    published = {"a.py": [_comment("root", updated="2024-01-02 10:00:00", unresolved=True)]}
+    # Older timestamp than the comment it answers: publishing stamps it last anyway.
+    drafts = {"a.py": [_draft("mine", in_reply_to="root", unresolved=False, updated="2024-01-01 09:00:00")]}
+    (chain,) = build_comment_chains(published, drafts)
+    assert [c.comment_id for c in chain.comments] == ["root", "mine"]
+    assert chain.resolved is False
+    assert chain.resolved_after_publish is True
+    assert chain.draft is not None and chain.draft.comment_id == "mine"
+    # Still listed as unresolved: the filter is Gerrit's published state.
+    assert collect_comment_chains(published, drafts=drafts) == [chain]
+
+
+def test_chain_without_drafts_has_no_draft_and_same_state_after_publish() -> None:
+    (chain,) = build_comment_chains({"a.py": [_comment("root", unresolved=True)]})
+    assert chain.draft is None
+    assert chain.resolved_after_publish is chain.resolved is False
+
+
+def test_draft_only_chain_is_your_own_unpublished_comment() -> None:
+    (chain,) = build_comment_chains({}, {"b.py": [_draft("new", in_reply_to=None, unresolved=True)]})
+    assert chain.root_id == "new"
+    assert chain.comments[0].draft is True
+    assert chain.resolved is False and chain.resolved_after_publish is False

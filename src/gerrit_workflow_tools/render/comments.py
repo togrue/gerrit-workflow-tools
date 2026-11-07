@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.cli_style import (
+    ANSI_BLUE,
     ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
@@ -13,7 +14,12 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, gerrit_inline_comment_url
+from gerrit_workflow_tools.core.gerrit_change_status import (
+    CommentChain,
+    ContextLine,
+    InlineComment,
+    gerrit_inline_comment_url,
+)
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
@@ -42,6 +48,13 @@ def chain_heading(chain: CommentChain) -> str:
     if chain.resolved:
         return f"{loc} (resolved)"
     return loc
+
+
+def draft_label(chain: CommentChain, comment: InlineComment, *, label: str = "draft (you)") -> str:
+    """*label*, plus how your newest draft changes the chain's state once published."""
+    if comment is not chain.draft or chain.resolved == chain.resolved_after_publish:
+        return label
+    return f"{label} -> {'resolves' if chain.resolved_after_publish else 'reopens'}"
 
 
 def _box_border(text: str, *, resolved: bool) -> str:
@@ -91,6 +104,11 @@ def _box_content_rows(
                 rows.append(color_text(part, ANSI_DIM))
         rows.append("")
     for row_item in chain.comments:
+        if row_item.draft:
+            rows.append(color_text(draft_label(chain, row_item), ANSI_BOLD + ANSI_BLUE))
+            for ln in row_item.message.splitlines() or [""]:
+                rows.extend(color_text(part, ANSI_BLUE) for part in _prefixed_wrap(ln, width, prefix="  "))
+            continue
         if row_item.author:
             for part in wrap_lines(row_item.author, width):
                 rows.append(color_text(part, ANSI_DIM))
@@ -171,8 +189,10 @@ def format_comment_chain_markdown(
         lines.append("")
 
     for row_item in chain.comments:
-        author = row_item.author or "anonymous"
-        lines.append(f"**{author}**")
+        if row_item.draft:
+            lines.append(f"**{draft_label(chain, row_item, label='Draft reply (unpublished)')}**")
+        else:
+            lines.append(f"**{row_item.author or 'anonymous'}**")
         body = row_item.message.rstrip("\n")
         if body:
             for ln in body.splitlines() or [""]:

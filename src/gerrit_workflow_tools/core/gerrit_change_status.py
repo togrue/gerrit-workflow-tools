@@ -68,8 +68,20 @@ class CommentChain:
     line: int | None
     comments: tuple[InlineComment, ...]
     resolved: bool
+    """Gerrit's published state: the flag of the last *published* comment."""
     start_line: int | None = None
     """First line of a range comment; ``line`` is then its last line."""
+
+    @property
+    def draft(self) -> InlineComment | None:
+        """Your unpublished reply in this chain, if you have one."""
+        drafts = [c for c in self.comments if c.draft]
+        return drafts[-1] if drafts else None
+
+    @property
+    def resolved_after_publish(self) -> bool:
+        """The state once your drafts are published: drafts sort last, and the last comment decides."""
+        return not self.comments[-1].unresolved if self.comments else self.resolved
 
 
 @dataclass

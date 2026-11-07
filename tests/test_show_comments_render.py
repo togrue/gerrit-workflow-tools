@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from gerrit_workflow_tools.cli_style import (
+    ANSI_BLUE,
     ANSI_DIM_GRAY,
     ANSI_YELLOW,
     GERRIT_LINK_LABEL,
@@ -232,3 +233,35 @@ def test_format_comment_chain_markdown_ignores_hyperlinks() -> None:
     assert "https://g.example/c/1" in joined
     assert "\x1b]8;" not in joined
     assert GERRIT_LINK_LABEL not in joined
+
+
+def _answered_chain() -> CommentChain:
+    return CommentChain(
+        root_id="r1",
+        path="f.py",
+        line=3,
+        comments=(
+            InlineComment(path="f.py", line=3, message="rename n", comment_id="r1", author="Rita", unresolved=True),
+            InlineComment(path="f.py", line=3, message="Done", comment_id="d1", unresolved=False, draft=True),
+        ),
+        resolved=False,
+    )
+
+
+def test_draft_reply_is_blue_and_says_it_resolves() -> None:
+    set_color_mode(True)
+    try:
+        lines = format_comment_chain_human(_answered_chain(), "https://g.example/c/p/+/1")
+    finally:
+        set_color_mode(False)
+    label = next(line for line in lines if "draft (you)" in line)
+    assert ANSI_BLUE in label
+    assert "draft (you) -> resolves" in strip_ansi(label)
+    done = next(line for line in lines if "Done" in line)
+    assert ANSI_BLUE in done
+
+
+def test_draft_reply_markdown_is_marked_unpublished() -> None:
+    lines = format_comment_chain_markdown(_answered_chain(), "https://g.example/c/p/+/1")
+    assert "**Draft reply (unpublished) -> resolves**" in lines
+    assert "> Done" in lines

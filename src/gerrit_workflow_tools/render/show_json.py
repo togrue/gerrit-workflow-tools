@@ -45,6 +45,7 @@ def comment_json_payload(
                 "start_line": chain.start_line,
                 "url": gerrit_inline_comment_url(gerrit_url, chain.root_id),
                 "resolved": chain.resolved,
+                "resolved_after_publish": chain.resolved_after_publish,
                 "comments": chain_comments,
             }
         )

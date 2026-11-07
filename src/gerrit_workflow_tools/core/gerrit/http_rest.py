@@ -39,6 +39,11 @@ def _change_path(change_id: str, suffix: str = "") -> str:
     return f"changes/{encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))}{suffix}"
 
 
+def _file_map(data: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """A CommentInfo map by file path, keeping only well-formed rows."""
+    return {path: [c for c in rows if isinstance(c, dict)] for path, rows in data.items() if isinstance(rows, list)}
+
+
 def _strip_magic_json_prefix(raw: str) -> str:
     s = raw.lstrip()
     if s.startswith(")]}'"):
@@ -288,8 +293,11 @@ class HttpGerritRest:
             params = {"enable-context": "true"}
             if context_padding is not None:
                 params["context-padding"] = str(context_padding)
-        data = self._request_dict("comments", _change_path(change_id, "/comments"), params=params)
-        return {path: [c for c in rows if isinstance(c, dict)] for path, rows in data.items() if isinstance(rows, list)}
+        return _file_map(self._request_dict("comments", _change_path(change_id, "/comments"), params=params))
+
+    def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+        """GET ``changes/<id>/drafts``: the caller's drafts on every patchset, grouped by file path."""
+        return _file_map(self._request_dict("drafts", _change_path(change_id, "/drafts")))
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.

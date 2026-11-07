@@ -68,7 +68,7 @@ def _context_lines_from_raw(comment: dict[str, Any]) -> tuple[ContextLine, ...]:
     return tuple(lines)
 
 
-def _inline_comment_from_raw(path: str, comment: dict[str, Any]) -> InlineComment:
+def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool = False) -> InlineComment:
     from gerrit_workflow_tools.core.reviewer import format_gerrit_account_label
 
     raw_msg = comment.get("message")
@@ -87,21 +87,35 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any]) -> InlineCommen
         context_lines=_context_lines_from_raw(comment),
         patch_set=patch_set if isinstance(patch_set, int) else None,
         unresolved=comment.get("unresolved") is True,
+        draft=draft,
     )
 
 
-def build_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[CommentChain]:
-    """Group Gerrit file-map comments into chains keyed by thread root."""
+def build_comment_chains(
+    file_map: dict[str, list[dict[str, Any]]],
+    drafts: dict[str, list[dict[str, Any]]] | None = None,
+) -> list[CommentChain]:
+    """Group Gerrit file-map comments into chains keyed by thread root.
+
+    *drafts* (``GET …/drafts``) join the chain they reply to and sort after every
+    published comment: publishing stamps them last, so they decide the state you will
+    publish. ``resolved`` stays the published state. A chain of drafts only is your own
+    unpublished comment.
+    """
 
     by_id: dict[str, tuple[str, dict[str, Any]]] = {}
-    for path, comments in file_map.items():
-        for comment in comments:
-            if not isinstance(comment, dict):
-                continue
-            raw_id = comment.get("id")
-            if not isinstance(raw_id, str) or not raw_id.strip():
-                continue
-            by_id[raw_id] = (path, comment)
+    draft_ids: set[str] = set()
+    for source, from_drafts in ((file_map, False), (drafts or {}, True)):
+        for path, comments in source.items():
+            for comment in comments:
+                if not isinstance(comment, dict):
+                    continue
+                raw_id = comment.get("id")
+                if not isinstance(raw_id, str) or not raw_id.strip():
+                    continue
+                by_id[raw_id] = (path, comment)
+                if from_drafts:
+                    draft_ids.add(raw_id)
 
     def thread_root(comment_id: str) -> str:
         seen: set[str] = set()
@@ -122,18 +136,21 @@ def build_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[Comm
         root = thread_root(comment_id)
         grouped.setdefault(root, []).append((path, comment))
 
+    def is_draft(comment: dict[str, Any]) -> bool:
+        return comment.get("id") in draft_ids
+
     chains: list[CommentChain] = []
     for root_id, items in grouped.items():
-        items.sort(key=lambda pair: _comment_sort_key(pair[1]))
-        raw_only = [c for _, c in items]
+        items.sort(key=lambda pair: (is_draft(pair[1]), _comment_sort_key(pair[1])))
+        published = [c for _, c in items if not is_draft(c)]
         root_path, root_comment = by_id[root_id]
         chains.append(
             CommentChain(
                 root_id=root_id,
                 path=root_path,
                 line=_comment_line(root_comment),
-                comments=tuple(_inline_comment_from_raw(p, c) for p, c in items),
-                resolved=_chain_resolved_from_raw(raw_only),
+                comments=tuple(_inline_comment_from_raw(p, c, draft=is_draft(c)) for p, c in items),
+                resolved=_chain_resolved_from_raw(published or [c for _, c in items]),
                 start_line=_comment_start_line(root_comment),
             )
         )
@@ -146,14 +163,15 @@ def collect_comment_chains(
     file_map: dict[str, list[dict[str, Any]]],
     *,
     comments: CommentSelection = "unresolved",
+    drafts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[CommentChain]:
-    """Return comment chains filtered by *comments*.
+    """Return comment chains filtered by *comments*, on their published state.
 
     ``all`` lists unresolved chains first (path/line order within each group), then
     resolved ones. That keeps the attention-bearing threads at the top.
     """
 
-    chains = build_comment_chains(file_map)
+    chains = build_comment_chains(file_map, drafts)
     if comments == "all":
         return [chain for chain in chains if not chain.resolved] + [chain for chain in chains if chain.resolved]
     if comments == "resolved":

@@ -1224,3 +1224,70 @@ def test_show_text_has_subject_and_every_attention_reason_without_a_local_commit
     assert "attention: " in out
     assert "no-reviewers" in out
     assert "awaiting-review" in out
+
+
+def _open_thread_with_draft_reply(store: ChangeStore, change_key: str) -> None:
+    store.set_comments(
+        change_key,
+        {"f.py": [{"id": "root-id", "line": 1, "message": "please fix", "unresolved": True, "patch_set": 1}]},
+    )
+    store.set_drafts(
+        change_key,
+        {
+            "f.py": [
+                {
+                    "id": "draft-id",
+                    "line": 1,
+                    "message": "Done",
+                    "unresolved": False,
+                    "in_reply_to": "root-id",
+                    "patch_set": 1,
+                }
+            ]
+        },
+    )
+
+
+def test_gshow_shows_your_draft_reply_in_its_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    ch = _detail_ok(change_id="I" + "b" * 40, sha="abc" + "1" * 37, cr_value=2, number=42)
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    _open_thread_with_draft_reply(store, str(ch["id"]))
+
+    code, out, _err = run_cli(stack_repo, gshow_main, ["--color=never", "change:42"], monkeypatch, gerrit=store)
+    assert code == 0
+    assert "please fix" in out
+    assert "draft (you) -> resolves" in out
+    assert out.index("please fix") < out.index("Done")
+
+    code, out, _err = run_cli(stack_repo, gshow_main, ["--ai", "change:42"], monkeypatch, gerrit=store)
+    assert "**Draft reply (unpublished) -> resolves**" in out
+
+
+def test_gshow_json_tells_published_state_from_state_after_publish(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    ch = _detail_ok(change_id="I" + "b" * 40, sha="abc" + "1" * 37, cr_value=2, number=42)
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    _open_thread_with_draft_reply(store, str(ch["id"]))
+
+    code, out, _err = run_cli(stack_repo, gshow_main, ["--json", "change:42"], monkeypatch, gerrit=store)
+    assert code == 0
+    (chain,) = json_stdout(out)["comment_chains"]
+    assert chain["resolved"] is False
+    assert chain["resolved_after_publish"] is True
+    assert [(c["comment_id"], c["draft"]) for c in chain["comments"]] == [("root-id", False), ("draft-id", True)]
+
+
+def test_gshow_fetches_drafts_every_time(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drafts never move the change's freshness token, so a cached copy could never be trusted."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    ch = _detail_ok(change_id="I" + "b" * 40, sha="abc" + "1" * 37, cr_value=2, number=42)
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    _open_thread_with_draft_reply(store, str(ch["id"]))
+    run_cli(stack_repo, gshow_main, ["--json", "change:42"], monkeypatch, gerrit=store)
+    store.set_drafts(str(ch["id"]), {})
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--json", "change:42"], monkeypatch, gerrit=store)
+    (chain,) = json_stdout(out)["comment_chains"]
+    assert [c["draft"] for c in chain["comments"]] == [False]

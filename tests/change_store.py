@@ -132,6 +132,7 @@ class ChangeStore:
         self._accounts: dict[int, dict[str, Any]] = dict(accounts or {})
         self._self_account_id = self_account_id
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
+        self._drafts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._checks: dict[str, list[dict[str, Any]]] = dict(checks or {})
         self._messages: dict[str, list[dict[str, Any]]] = dict(messages or {})
         self._project_reviewers = dict(project_reviewers) if project_reviewers is not None else None
@@ -152,6 +153,10 @@ class ChangeStore:
     def set_comments(self, change_ref: str, file_map: dict[str, list[dict[str, Any]]]) -> None:
         """Seed inline comments for one change."""
         self._comments[self._payload_id(change_ref)] = file_map
+
+    def set_drafts(self, change_ref: str, file_map: dict[str, list[dict[str, Any]]]) -> None:
+        """Seed the caller's draft comments for one change (each row carries ``patch_set``)."""
+        self._drafts[self._payload_id(change_ref)] = file_map
 
     def set_checks(self, change_ref: str, rows: list[dict[str, Any]]) -> None:
         """Seed Checks-plugin rows for one change."""
@@ -359,6 +364,14 @@ class ChangeStore:
         if enable_context:
             return payload
         return {path: [_without_comment_context(row) for row in rows] for path, rows in payload.items()}
+
+    def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Return the caller's drafts grouped by file path, like ``GET changes/<id>/drafts``."""
+        self._record("list_drafts", change_id)
+        return {
+            path: [dict(row) for row in rows]
+            for path, rows in self._drafts.get(self._payload_id(change_id), {}).items()
+        }
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""

@@ -107,6 +107,9 @@ class GerritRest(Protocol):
     ) -> dict[str, list[dict[str, Any]]]:
         """Return inline comments grouped by file path."""
 
+    def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Return the caller's draft comments on every patchset, grouped by file path."""
+
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
 
