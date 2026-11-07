@@ -18,16 +18,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from gerrit_workflow_tools.core import config_write as _config_write
 from gerrit_workflow_tools.core.git_run import git
 
 
 logger = logging.getLogger(__name__)
-
-# Implementations live in config_write; re-exported for existing call sites.
-set_branch_config = _config_write.set_branch_config
-set_attention_cursor_config = _config_write.set_attention_cursor_config
-set_last_attention_change_id = _config_write.set_last_attention_change_id
 
 
 class ConfigError(ValueError):

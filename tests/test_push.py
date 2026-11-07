@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as gpush_main
 from gerrit_workflow_tools.cli_style import ANSI_YELLOW
-from gerrit_workflow_tools.core.config import set_branch_config
+from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready

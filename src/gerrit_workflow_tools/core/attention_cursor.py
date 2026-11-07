@@ -21,7 +21,8 @@ from gerrit_workflow_tools.core.attention import (
     first_commit_needing_edit_attention,
     next_commit_needing_edit_attention_after,
 )
-from gerrit_workflow_tools.core.config import Settings, set_attention_cursor_config, set_last_attention_change_id
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_write import set_attention_cursor_config, set_last_attention_change_id
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_state import git_dir

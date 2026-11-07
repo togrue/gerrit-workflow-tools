@@ -7,9 +7,29 @@ snapshot if the new one has to be visible.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
+from gerrit_workflow_tools.core.config import ConfigScope
 from gerrit_workflow_tools.core.git_run import git
+
+
+_SCOPE_FLAG = {
+    ConfigScope.LOCAL: "--local",
+    ConfigScope.GLOBAL: "--global",
+    ConfigScope.WORKTREE: "--worktree",
+}
+
+
+@dataclass(frozen=True)
+class ConfigWrite:
+    """A git config change to apply after the ``ger config`` editor closes."""
+
+    key: str
+    action: Literal["set", "unset"]
+    value: str = ""
+    scope: ConfigScope = ConfigScope.LOCAL
 
 
 def set_branch_config(
@@ -21,6 +41,17 @@ def set_branch_config(
     """Write branch-scoped Gerrit settings via ``git config``."""
     if gerrit_reviewers is not None:
         git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
+
+
+def apply_config_write(cwd: Path | str | None, write: ConfigWrite) -> None:
+    """Apply one scoped set/unset from the ``ger config`` editor."""
+    flag = _SCOPE_FLAG.get(write.scope)
+    if flag is None:
+        raise ValueError(f"cannot write {write.key} at scope {write.scope.value}")
+    if write.action == "unset":
+        git("config", flag, "--unset-all", write.key, cwd=cwd, check=False)
+        return
+    git("config", flag, write.key, write.value, cwd=cwd)
 
 
 def _write_stamped(cwd: Path | str | None, key: str, value: str | None, touched_at: str | None) -> None:

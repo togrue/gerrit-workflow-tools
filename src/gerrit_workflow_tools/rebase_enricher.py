@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
-import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -18,6 +16,7 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
 )
+from gerrit_workflow_tools.core.git_editor import resolve_git_editor, run_git_editor
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.stack import Commit, read_commit_rows
 from gerrit_workflow_tools.render.status_fmt import (
@@ -103,35 +102,8 @@ def _load_commit_metadata(short_shas: list[str], cwd: Path) -> dict[str, Commit]
 
 
 def _resolve_editor(cwd: Path, *, settings: Settings | None = None) -> str:
-    """Find the real editor, following git's lookup order (skipping ``sequence.editor``).
-
-    Priority:
-    1. ``GREBASE_EDITOR`` env var (explicit override; set by ``ger rebase`` if needed)
-    2. ``GIT_EDITOR`` env var
-    3. ``core.editor`` git config
-    4. ``VISUAL`` env var
-    5. ``EDITOR`` env var
-    6. ``vi`` fallback
-
-    ``sequence.editor`` is deliberately skipped: we *are* the sequence editor, and
-    reading it risks infinite recursion when users set it to this wrapper directly.
-    """
-    for env_var in ("GREBASE_EDITOR", "GIT_EDITOR"):
-        val = os.environ.get(env_var)
-        if val:
-            return val
-
-    snap = settings if settings is not None else Settings.from_cwd(cwd)
-    editor = snap.get("core.editor")
-    if editor:
-        return editor
-
-    for env_var in ("VISUAL", "EDITOR"):
-        val = os.environ.get(env_var)
-        if val:
-            return val
-
-    return "vi"
+    """Find the real editor; ``GREBASE_EDITOR`` wins, then the shared git editor lookup."""
+    return resolve_git_editor(cwd, settings=settings, env_overrides=("GREBASE_EDITOR",))
 
 
 # ---------------------------------------------------------------------------
@@ -270,18 +242,15 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         print(f"error: cannot write rebase todo: {e}", file=sys.stderr)
         return 1
 
-    # Launch the real editor.
     editor = _resolve_editor(cwd, settings=settings)
     logger.debug("rebase_enricher: launching editor %r on %s", editor, todo)
     try:
-        ed_cmd = [*shlex.split(editor), str(todo)]
-        logger.debug("rebase_enricher: run: %s", " ".join(ed_cmd))
-        result = subprocess.run(ed_cmd, check=False)
-        logger.debug("rebase_enricher: editor finished rc=%s", result.returncode)
-        return result.returncode
+        returncode = run_git_editor(todo, cwd, settings=settings, env_overrides=("GREBASE_EDITOR",))
     except FileNotFoundError:
         print(f"error: editor not found: {editor!r}", file=sys.stderr)
         return 1
+    logger.debug("rebase_enricher: editor finished rc=%s", returncode)
+    return returncode
 
 
 if __name__ == "__main__":

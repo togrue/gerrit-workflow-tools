@@ -1,27 +1,11 @@
-"""``ger config`` — full-screen editor for git config settings, grouped by command.
-
-Every field is editable when the screen opens. There is no read-only mode. Values still
-at their default are filled in from that default when git config has no entry. This
-screen does not write git config: save-on-blur and batch confirm are not implemented.
-"""
+"""``ger config`` — edit ger git config settings via a temporary key=value file."""
 
 from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
-
-from prompt_toolkit.application import Application
-from prompt_toolkit.input import Input
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import Layout
-from prompt_toolkit.layout.containers import HSplit, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.layout.dimension import Dimension
-from prompt_toolkit.layout.scrollable_pane import ScrollablePane
-from prompt_toolkit.output import Output
-from prompt_toolkit.styles import Style
-from prompt_toolkit.widgets import Frame, RadioList, TextArea
+import tempfile
+from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -30,43 +14,16 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.config_form import (
-    ConfigSection,
-    ResolvedSetting,
-    SettingKind,
-    format_setting_detail,
-    resolve_config_form,
+from gerrit_workflow_tools.core.config_editor_file import (
+    ParseError,
+    parse_config_editor_text,
+    planned_editor_writes,
+    render_config_editor_text,
 )
+from gerrit_workflow_tools.core.config_form import resolve_config_form
+from gerrit_workflow_tools.core.config_write import apply_config_write
+from gerrit_workflow_tools.core.git_editor import run_git_editor
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-
-
-_STATUS = "Edits stay on this screen. Git config is not written yet. Ctrl-C exits."
-
-_STYLE = Style.from_dict(
-    {
-        "setting-key": "bold",
-        "setting-meta": "#888888",
-        "frame.label": "bold",
-        "status-bar": "reverse",
-    }
-)
-
-
-@dataclass(frozen=True)
-class ConfigField:
-    """One on-screen editor and the resolved setting it shows."""
-
-    resolved: ResolvedSetting
-    editor: TextArea | RadioList
-
-
-@dataclass(frozen=True)
-class ConfigScreen:
-    """The prompt_toolkit screen for one resolved config form."""
-
-    application: Application
-    section_titles: tuple[str, ...]
-    fields: tuple[ConfigField, ...]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -74,8 +31,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger config",
         description=(
-            "Show ger settings in sections, one per command, with every field editable. "
-            "A setting left at its default is shown even when git config has no value for it."
+            "Open ger settings in your git editor as key=value pairs. "
+            "Uncomment a line to set it (local); comment it out to unset. "
+            "Delete all content and save to abort."
         ),
     )
     add_color_args(parser)
@@ -83,104 +41,21 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _choice_pairs(resolved: ResolvedSetting) -> list[tuple[str, str]]:
-    choices = list(resolved.spec.choices)
-    if resolved.value not in choices:
-        choices.insert(0, resolved.value)
-    return [(choice, choice) for choice in choices]
-
-
-def _editor(resolved: ResolvedSetting) -> TextArea | RadioList:
-    """An editable control. Nothing on this screen is read-only."""
-    if resolved.spec.kind in (SettingKind.BOOL, SettingKind.CHOICE):
-        return RadioList(_choice_pairs(resolved), default=resolved.value, show_scrollbar=False)
-    return TextArea(
-        text=resolved.value,
-        height=1,
-        multiline=False,
-        wrap_lines=False,
-        read_only=False,
-        focusable=True,
-    )
-
-
-def _setting_block(field: ConfigField) -> HSplit:
-    detail = format_setting_detail(field.resolved)
-    return HSplit(
-        [
-            Window(
-                FormattedTextControl(field.resolved.spec.key),
-                height=1,
-                dont_extend_height=True,
-                style="class:setting-key",
-            ),
-            field.editor,
-            Window(
-                FormattedTextControl(detail),
-                height=Dimension(min=detail.count("\n") + 1, max=detail.count("\n") + 3),
-                dont_extend_height=True,
-                wrap_lines=True,
-                style="class:setting-meta",
-            ),
-        ]
-    )
-
-
-def build_config_screen(
-    sections: tuple[ConfigSection, ...],
-    *,
-    input: Input | None = None,
-    output: Output | None = None,
-) -> ConfigScreen:
-    """Build the sectioned prompt_toolkit layout. Does not read or write git config.
-
-    Pass ``input`` and ``output`` to build the screen without a real console (tests).
-    """
-    fields: list[ConfigField] = []
-    frames: list[Frame] = []
-    for section in sections:
-        blocks: list[HSplit] = []
-        for resolved in section.settings:
-            field = ConfigField(resolved, _editor(resolved))
-            fields.append(field)
-            blocks.append(_setting_block(field))
-        frames.append(Frame(HSplit(blocks, padding=1), title=section.title))
-
-    bindings = KeyBindings()
-
-    @bindings.add("c-c", eager=True)
-    def _quit(event) -> None:
-        event.app.exit(result=0)
-
-    body = HSplit(
-        [
-            ScrollablePane(HSplit(frames, padding=1)),
-            Window(
-                FormattedTextControl(_STATUS),
-                height=1,
-                dont_extend_height=True,
-                style="class:status-bar",
-            ),
-        ]
-    )
-    application: Application = Application(
-        layout=Layout(body, focused_element=fields[0].editor),
-        key_bindings=bindings,
-        style=_STYLE,
-        full_screen=True,
-        mouse_support=False,
-        erase_when_done=True,
-        input=input,
-        output=output,
-    )
-    return ConfigScreen(application, tuple(section.title for section in sections), tuple(fields))
-
-
 def _stream_is_tty(stream: object) -> bool:
     isatty = getattr(stream, "isatty", None)
     if not callable(isatty):
         return False
     return bool(isatty())
+
+
+def _format_parse_errors(errors: tuple[ParseError, ...]) -> str:
+    parts: list[str] = []
+    for err in errors:
+        if err.line is None:
+            parts.append(f"error: {err.message}")
+        else:
+            parts.append(f"error: line {err.line}: {err.message}")
+    return "\n".join(parts)
 
 
 def _run(argv: list[str] | None) -> int:
@@ -191,9 +66,57 @@ def _run(argv: list[str] | None) -> int:
         return int(ExitCode.ATTENTION)
 
     branch = resolve_working_branch(cwd, settings=settings)
-    screen = build_config_screen(resolve_config_form(settings, branch=branch))
-    code = screen.application.run()
-    return int(code) if isinstance(code, int) else int(ExitCode.OK)
+    sections = resolve_config_form(settings, branch=branch)
+    text = render_config_editor_text(sections)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".gerconfig",
+        prefix="ger-config-",
+        delete=False,
+    ) as handle:
+        path = Path(handle.name)
+        handle.write(text)
+
+    try:
+        try:
+            editor_rc = run_git_editor(path, cwd, settings=settings)
+        except FileNotFoundError as exc:
+            print(f"error: editor not found: {exc}", file=sys.stderr)
+            return int(ExitCode.GIT)
+        if editor_rc != 0:
+            print(f"error: editor exited with status {editor_rc}", file=sys.stderr)
+            return int(ExitCode.ATTENTION)
+
+        edited = path.read_text(encoding="utf-8")
+    finally:
+        path.unlink(missing_ok=True)
+
+    if not edited.strip():
+        print("Aborted: empty config file.", file=sys.stderr)
+        return int(ExitCode.ATTENTION)
+
+    parsed, parse_errors = parse_config_editor_text(edited, sections)
+    if parse_errors:
+        print(_format_parse_errors(parse_errors), file=sys.stderr)
+        return int(ExitCode.USAGE)
+
+    writes, write_errors = planned_editor_writes(sections, parsed)
+    if write_errors:
+        print(_format_parse_errors(write_errors), file=sys.stderr)
+        return int(ExitCode.USAGE)
+
+    if not writes:
+        return int(ExitCode.OK)
+
+    for write in writes:
+        apply_config_write(cwd, write)
+        if write.action == "unset":
+            print(f"unset {write.key} ({write.scope.value})")
+        else:
+            print(f"set {write.key}={write.value} ({write.scope.value})")
+    return int(ExitCode.OK)
 
 
 def main(argv: list[str] | None = None) -> int:

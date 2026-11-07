@@ -360,7 +360,7 @@ def test_main_enriches_todo_and_launches_editor(tmp_path: Path, stack_repo: Path
     with (
         patch("gerrit_workflow_tools.rebase_enricher.Settings.from_cwd", return_value=Settings.from_map({})),
         patch("gerrit_workflow_tools.rebase_enricher._enrich_todo", return_value=enriched_text),
-        patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run),
+        patch("gerrit_workflow_tools.core.git_editor.subprocess.run", mock_run),
     ):
         code = enricher_main(["_", str(todo)])
 
@@ -394,7 +394,7 @@ def test_main_on_gerrit_error_prepends_comment_and_still_opens_editor(tmp_path: 
             "gerrit_workflow_tools.rebase_enricher._enrich_todo",
             side_effect=GerritApiError("connection refused"),
         ),
-        patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run),
+        patch("gerrit_workflow_tools.core.git_editor.subprocess.run", mock_run),
     ):
         code = enricher_main(["_", str(todo)])
 
@@ -425,7 +425,7 @@ def test_main_returns_editor_exit_code(tmp_path: Path, stack_repo: Path, monkeyp
     monkeypatch.setenv("GIT_EDITOR", "vim")
     mock_run = MagicMock(return_value=MagicMock(returncode=42))
 
-    with patch("gerrit_workflow_tools.rebase_enricher.subprocess.run", mock_run):
+    with patch("gerrit_workflow_tools.core.git_editor.subprocess.run", mock_run):
         code = enricher_main(["_", str(todo)], gerrit=_store(details))
 
     assert code == 42
@@ -451,32 +451,32 @@ def test_resolve_editor_prefers_grebase_editor(tmp_path: Path, monkeypatch):
 
 
 def test_resolve_editor_falls_back_to_git_editor(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
+    from gerrit_workflow_tools.core.git_editor import resolve_git_editor
 
     monkeypatch.delenv("GREBASE_EDITOR", raising=False)
     monkeypatch.setenv("GIT_EDITOR", "nano")
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.delenv("EDITOR", raising=False)
-    assert _resolve_editor(tmp_path) == "nano"
+    assert resolve_git_editor(tmp_path) == "nano"
 
 
 def test_resolve_editor_falls_back_to_editor_env(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
+    from gerrit_workflow_tools.core.git_editor import resolve_git_editor
 
     monkeypatch.delenv("GREBASE_EDITOR", raising=False)
     monkeypatch.delenv("GIT_EDITOR", raising=False)
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "emacs")
-    assert _resolve_editor(tmp_path) == "emacs"
+    assert resolve_git_editor(tmp_path) == "emacs"
 
 
 def test_resolve_editor_vi_fallback(tmp_path: Path, monkeypatch):
-    from gerrit_workflow_tools.rebase_enricher import _resolve_editor
+    from gerrit_workflow_tools.core.git_editor import resolve_git_editor
 
     for var in ("GREBASE_EDITOR", "GIT_EDITOR", "VISUAL", "EDITOR"):
         monkeypatch.delenv(var, raising=False)
     settings = Settings.from_map({})
-    assert _resolve_editor(tmp_path, settings=settings) == "vi"
+    assert resolve_git_editor(tmp_path, settings=settings) == "vi"
 
 
 # ---------------------------------------------------------------------------

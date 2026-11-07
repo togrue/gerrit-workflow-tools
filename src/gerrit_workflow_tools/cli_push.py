@@ -18,7 +18,8 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
-from gerrit_workflow_tools.core.config import Settings, set_branch_config
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
