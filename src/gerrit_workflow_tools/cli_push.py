@@ -40,20 +40,18 @@ from gerrit_workflow_tools.core.push import (
     push_argv,
     revise,
 )
-from gerrit_workflow_tools.core.push_reviewers import needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
-from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_preview import (
     commit_lines,
     print_assignment_report,
+    print_dry_run,
     print_gpush_preview,
     print_plan_status,
     print_ready_boundary_notice,
-    strategy_status_label,
 )
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_summary_highlighter
 
 
 logger = logging.getLogger(__name__)
@@ -135,24 +133,6 @@ def _prompt_gerrit_push_confirm_action() -> str:
         },
         hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
         on_eof="cancel",
-    )
-
-
-def _summary_highlighter_for_push(
-    cwd: Path,
-    *,
-    branch: str,
-    first_parent: bool,
-    settings: Settings,
-) -> SummaryHighlighter:
-    """Highlighter aligned with the ready boundary for *branch*'s local stack."""
-    snap = get_stack_snapshot(cwd, branch, head=branch, first_parent=first_parent, settings=settings)
-    return build_summary_highlighter(
-        settings,
-        cwd=cwd,
-        commits=list(snap.commits),
-        project=stack_project(cwd, branch, settings=settings),
-        web_base=settings.gerrit_web_url,
     )
 
 
@@ -307,7 +287,7 @@ def _print_refusal(
     for warning in refusal.warnings:
         print(warning, file=sys.stderr)
     if refusal.boundary is not None:
-        highlighter = _summary_highlighter_for_push(cwd, branch=branch, first_parent=first_parent, settings=settings)
+        highlighter = branch_summary_highlighter(cwd, branch, first_parent=first_parent, settings=settings)
         print_ready_boundary_notice(refusal.boundary, summary_highlighter=highlighter)
     print(refusal.message, file=sys.stderr)
 
@@ -427,20 +407,6 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
     return _finish_push(execute(cwd, cmd, settings=settings), None)
 
 
-def _print_dry_run(plan: PushPlan) -> int:
-    print()
-    print_plan_status(plan)
-    print(color_text(" ".join(push_argv(plan)), ANSI_DIM_GRAY))
-    if needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
-        label = strategy_status_label(plan.options.strategy)
-        print(
-            f"[dry-run] after a successful push would apply reviewers via {plan.options.strategy.value} ({label})",
-            file=sys.stderr,
-        )
-    print("[dry-run] not executing push", file=sys.stderr)
-    return 0
-
-
 def _confirm_gerrit_push(
     cwd: Path,
     plan: PushPlan,
@@ -465,7 +431,8 @@ def _confirm_gerrit_push(
             print_gpush_preview(plan, commit_lines(plan, summary_highlighter), summary_highlighter=summary_highlighter)
             stack_printed = True
         if args.dry_run:
-            return _print_dry_run(plan)
+            print_dry_run(plan)
+            return 0
         if _refuses_non_interactive(args):
             return 1
         if args.yes:
@@ -536,7 +503,7 @@ def _push_gerrit(
     plan = prepared
     if args.i:
         plan = _maybe_prompt_initial_options(cwd, plan, args, settings=settings)
-    highlighter = _summary_highlighter_for_push(cwd, branch=plan.branch, first_parent=first_parent, settings=settings)
+    highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed

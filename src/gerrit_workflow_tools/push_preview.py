@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
@@ -15,8 +16,8 @@ from gerrit_workflow_tools.cli_style import (
     color_short_sha,
     color_text,
 )
-from gerrit_workflow_tools.core.push import PushBoundary, PushPlan
-from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome
+from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, push_argv
+from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
@@ -129,6 +130,20 @@ def print_plan_status(plan: PushPlan) -> None:
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
     print(color_text("  |  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
+
+
+def print_dry_run(plan: PushPlan) -> None:
+    """Status line and the ``git push`` that would run; what would happen after it on stderr."""
+    print()
+    print_plan_status(plan)
+    print(color_text(" ".join(push_argv(plan)), ANSI_DIM_GRAY))
+    if needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
+        label = strategy_status_label(plan.options.strategy)
+        print(
+            f"[dry-run] after a successful push would apply reviewers via {plan.options.strategy.value} ({label})",
+            file=sys.stderr,
+        )
+    print("[dry-run] not executing push", file=sys.stderr)
 
 
 def _escape_topic_for_assignment_report(topic: str) -> str:

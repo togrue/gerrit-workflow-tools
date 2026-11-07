@@ -8,8 +8,9 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 
 
 @dataclass(frozen=True)
@@ -73,3 +74,17 @@ def build_summary_highlighter(
             warning_re = None
 
     return SummaryHighlighter(blocked_shas=blocked, warning_re=warning_re)
+
+
+def branch_summary_highlighter(
+    cwd: Path, branch: str, *, first_parent: bool = True, settings: Settings
+) -> SummaryHighlighter:
+    """Highlighter aligned with the ready boundary of *branch*'s local stack."""
+    snap = get_stack_snapshot(cwd, branch, head=branch, first_parent=first_parent, settings=settings)
+    return build_summary_highlighter(
+        settings,
+        cwd=cwd,
+        commits=list(snap.commits),
+        project=stack_project(cwd, branch, settings=settings),
+        web_base=settings.gerrit_web_url,
+    )
