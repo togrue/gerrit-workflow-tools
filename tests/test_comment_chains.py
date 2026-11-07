@@ -163,3 +163,12 @@ def test_range_comment_keeps_its_first_line() -> None:
     chain = build_comment_chains({"s3.txt": [comment]})[0]
     assert (chain.start_line, chain.line) == (2, 4)
     assert chain_location(chain) == "s3.txt:2-4"
+
+
+def test_chain_comments_keep_patchset_and_own_flag() -> None:
+    root = _comment("root", updated="2024-01-01 10:00:00", unresolved=True)
+    root["patch_set"] = 3
+    reply = _comment("reply", in_reply_to="root", updated="2024-01-01 11:00:00", unresolved=False)
+    reply["patch_set"] = 4
+    (chain,) = build_comment_chains({"a.py": [root, reply]})
+    assert [(c.patch_set, c.unresolved, c.draft) for c in chain.comments] == [(3, True, False), (4, False, False)]

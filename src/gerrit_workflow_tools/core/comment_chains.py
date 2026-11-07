@@ -77,6 +77,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any]) -> InlineCommen
     raw_author = comment.get("author")
     if isinstance(raw_author, dict):
         author_label = format_gerrit_account_label(raw_author)
+    patch_set = comment.get("patch_set")
     return InlineComment(
         path=path,
         line=_comment_line(comment),
@@ -84,6 +85,8 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any]) -> InlineCommen
         comment_id=raw_id if isinstance(raw_id, str) else None,
         author=author_label,
         context_lines=_context_lines_from_raw(comment),
+        patch_set=patch_set if isinstance(patch_set, int) else None,
+        unresolved=comment.get("unresolved") is True,
     )
 
 

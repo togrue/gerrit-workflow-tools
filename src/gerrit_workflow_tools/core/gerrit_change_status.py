@@ -52,6 +52,11 @@ class InlineComment:
     comment_id: str | None = None
     author: str | None = None
     context_lines: tuple[ContextLine, ...] = ()
+    patch_set: int | None = None
+    unresolved: bool = False
+    """This comment's own flag. The chain takes the flag of its last comment."""
+    draft: bool = False
+    """Unpublished: visible only to its author until published."""
 
 
 @dataclass(frozen=True)

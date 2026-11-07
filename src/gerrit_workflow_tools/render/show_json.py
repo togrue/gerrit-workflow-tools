@@ -24,6 +24,8 @@ def comment_json_payload(
                 "line": row_item.line,
                 "message": row_item.message,
                 "url": gerrit_inline_comment_url(gerrit_url, row_item.comment_id),
+                "patch_set": row_item.patch_set,
+                "draft": row_item.draft,
             }
             if row_item.author:
                 entry["author"] = row_item.author
@@ -37,6 +39,7 @@ def comment_json_payload(
             comment_payload.append(entry)
         chain_payload.append(
             {
+                "root_id": chain.root_id,
                 "path": chain.path,
                 "line": chain.line,
                 "start_line": chain.start_line,

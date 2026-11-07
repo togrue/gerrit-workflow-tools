@@ -507,6 +507,7 @@ def test_gshow_json_long_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPat
                 "line": 1,
                 "message": long_msg,
                 "unresolved": True,
+                "patch_set": 1,
             }
         ]
     }
@@ -526,6 +527,10 @@ def test_gshow_json_long_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     assert "line0" in c0["message"] and "line14" in c0["message"]
     assert data["comments"][0]["url"] == "https://g.example/c/testproj/+/42/comment/TvcXrmjM/"
     assert data["comment_chains"][0]["resolved"] is False
+    # An agent names a chain by its root id, and a reply lands on the comment's patchset.
+    assert data["comment_chains"][0]["root_id"] == "TvcXrmjM"
+    assert c0["patch_set"] == 1
+    assert c0["draft"] is False
 
 
 def test_gshow_skips_resolved_comment_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
