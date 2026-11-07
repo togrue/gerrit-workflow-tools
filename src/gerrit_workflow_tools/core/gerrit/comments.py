@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import partial
@@ -16,6 +17,17 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, Inline
 
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit.service import GerritService
+
+
+PUBLISH_GUARD_ENV = "GER_NO_PUBLISH"
+
+
+def publish_blocked() -> bool:
+    """True when :data:`PUBLISH_GUARD_ENV` forbids publishing drafts (agent environments set it).
+
+    A guard against mistakes, not a security boundary: a process can change its own environment.
+    """
+    return os.environ.get(PUBLISH_GUARD_ENV, "").strip().lower() in ("1", "true", "yes")
 
 
 @dataclass(frozen=True)
@@ -111,6 +123,17 @@ class CommentApi:
         revision = existing.patch_set if existing.patch_set is not None else "current"
         self._service.rest.delete_draft(change_id, revision, existing.comment_id)
         return existing
+
+    def publish_drafts(self, change_id: str, *, message: str | None = None) -> None:
+        """Publish your drafts on *change_id*, then drop its cached rows.
+
+        Publishing moves the change's meta ref, but inside the trust window the probe is
+        skipped; invalidating makes the next read see the published chains straight away.
+        Callers check :func:`publish_blocked` first: the guard is policy, this is the act.
+        """
+        service = self._service
+        service.rest.publish_drafts(change_id, message=message)
+        service.cache.invalidate_changes([service.cache_key(change_id)])
 
     def get_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """Your drafts on every patchset of *change_id*, always fetched.

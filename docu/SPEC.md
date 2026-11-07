@@ -45,7 +45,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger inbox` | [spec/commands/inbox.md](spec/commands/inbox.md) |
 | `ger push` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger show` | [spec/commands/show.md](spec/commands/show.md) |
-| `ger reply` | [spec/commands/reply.md](spec/commands/reply.md) (partial: drafts; publishing planned) |
+| `ger reply` | [spec/commands/reply.md](spec/commands/reply.md) (partial: push integration and guided reply planned) |
 
 ### Stack editing & identifiers
 

@@ -2,7 +2,7 @@
 
 | | |
 |--|--|
-| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard) is implemented; publishing, the push integration and the guided reply are planned (see [Delivery](#delivery)) |
+| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard) and `ger reply --publish` are implemented; the push integration and the guided reply are planned (see [Delivery](#delivery)) |
 | **Module** | `cli_reply.py`; draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
 | **Requires** | `gerrit.webUrl`, credentials |
 
@@ -32,7 +32,7 @@ ger edit -n                 -> next commit
 ger push                    -> "Push and publish 3 drafts? [Y/n]"
 ```
 
-An agent, with **GER_NO_PUBLISH=1** in its environment:
+An agent, with `GER_NO_PUBLISH=1` in its environment:
 
 ```text
 ger edit --json             -> the stop, with its open chains, ids and code context
@@ -98,17 +98,26 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 ### Publishing
 
-`ger reply --publish` publishes **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with `--stack` or with no `REV`. Changes without drafts are skipped and listed as such.
+`ger reply --publish` publishes **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with no `REV`. Changes without drafts are skipped and listed as such.
 
 | Option | Effect |
 |--------|--------|
 | `-m MSG` | Top-level change message posted with the drafts. It is posted only on changes that have drafts |
-| `--dry-run` | List what would be published and exit `0` |
-| `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push` |
+| `--dry-run` | List what would be published and exit `0`. Allowed under the publish guard |
+| `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json`, which never prompts |
 
-Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N drafts on M changes? [y/N]` (default **no**: this one sends mail). Declining, or a non-TTY run without `-y`, publishes nothing and exits `1`.
+Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s) on M change(s)? [y/N]` (default **no**: this one sends mail). Declining, or a run without `-y` that cannot prompt, publishes nothing and exits `1`. Each published change prints `published N draft(s) on <subject>`.
 
-Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away.
+Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
+
+```text
+ger reply --publish --dry-run
+Add retry helper  https://host/c/proj/+/123
+  src/retry.py:42 -> resolves: "Done"
+  src/retry.py:80: "The table is 8 entries..."
+```
+
+With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "status": ...}]}`, where `status` is `published`, `dry-run`, `no-drafts` or `failed` (then with `error`).
 
 ### Publishing with `ger push`
 
@@ -122,7 +131,7 @@ Each change is one REST call. A failure on one change is reported, the others ar
 
 ### The publish guard
 
-With **GER_NO_PUBLISH=1** in the environment, `ger reply --publish` and `ger push --publish-comments` exit `2` without contacting Gerrit, and `ger push` passes `no-publish-comments` without asking. Agent settings set it so that "the human publishes" holds even when an agent is told otherwise. It guards against mistakes; it is not a security boundary, since a process can change its own environment.
+With `GER_NO_PUBLISH=1` in the environment, `ger reply --publish` and `ger push --publish-comments` exit `2` without contacting Gerrit, and `ger push` passes `no-publish-comments` without asking. Agent settings set it so that "the human publishes" holds even when an agent is told otherwise. It guards against mistakes; it is not a security boundary, since a process can change its own environment.
 
 ---
 
@@ -232,7 +241,7 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 |------|------|
 | `0` | Draft written, discarded or published; `--dry-run` |
 | `1` | Publish declined, or non-TTY without `-y` |
-| `2` | Empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while **GER_NO_PUBLISH** is set |
+| `2` | Empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while `GER_NO_PUBLISH` is set |
 | `3` | Chain or change not found; `--discard` with no draft |
 | `4` | Comment id matched more than one change; ambiguous changeish |
 | `5` | Gerrit rejected a write, including a partial publish |
@@ -268,7 +277,7 @@ Built in this order. Each step works on its own.
 | 1 | Comments keep their patchset and a draft flag; `ger show --json` adds `root_id` and `patch_set` | Done |
 | 2 | Drafts are read live and merged into their chains; `ger show` displays them | Done |
 | 3 | `ger reply CHAIN` writes, updates and discards drafts | Done |
-| 4 | `ger reply --publish` and the publish guard | |
+| 4 | `ger reply --publish` and the publish guard | Done |
 | 5 | `ger push` publishes drafts with the push | |
 | 6 | Blue `com` token and `unpublished-drafts` attention | |
 | 7 | `ger edit` lists the open chains on every stop, `--json` for agents | |

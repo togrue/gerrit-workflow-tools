@@ -118,6 +118,9 @@ class GerritRest(Protocol):
     def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
         """Delete one of the caller's drafts."""
 
+    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
+        """Publish all the caller's drafts on every patchset, with an optional change message."""
+
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
 

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError
@@ -391,6 +392,17 @@ class ChangeStore:
         self._record("delete_draft", change_id, revision, draft_id)
         for rows in self._drafts.get(self._payload_id(change_id), {}).values():
             rows[:] = [row for row in rows if row.get("id") != draft_id]
+
+    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
+        """Move every draft into the published comments, the way Gerrit's review POST does."""
+        self._record("publish_drafts", change_id, message=message)
+        key = self._payload_id(change_id)
+        published = self._comments.setdefault(key, {})
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f000")
+        for path, rows in self._drafts.pop(key, {}).items():
+            # Gerrit stamps publish time: a published draft becomes its chain's newest comment.
+            published.setdefault(path, []).extend({**row, "updated": stamp} for row in rows)
+        return {}
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
