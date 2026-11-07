@@ -89,3 +89,7 @@ Prints per-phase timings (Docker, session seed, each `prepare_topic_repo`, each 
 | Port / bind errors when starting the container | Another process (including a non-test Gerrit) is using `GERRIT_IT_HOST_PORT_HTTP` or `GERRIT_IT_HOST_PORT_SSH` on the Docker host. Pick unused ports and update `local.env`. |
 | `docker ps` over SSH works; pytest still fails Docker on Windows | Use `GERRIT_IT_DOCKER_HOST=ssh://user@real-hostname`. Confirm firewall allows your PC → those TCP ports on the Docker host. |
 | HTTP / git clone timeouts from your PC | `GERRIT_IT_PUBLIC_HOST` must be reachable from the machine running pytest (not only `localhost` on the remote). |
+
+## CI test bench (Jenkins)
+
+For exercising `ger` against real CI results (`Verified` votes), see [`testenv/README.md`](../../testenv/README.md). It reuses `local.env` (the `TESTENV_*` block).
