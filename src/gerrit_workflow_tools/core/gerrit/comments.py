@@ -70,6 +70,11 @@ class CommentApi:
         file_map = self.get_file_map(change_id, change_updated=change_updated, context_padding=context_padding)
         return collect_comment_chains(file_map, comments=comments, drafts=self.get_drafts(change_id))
 
+    def chains_with_drafts(self, change_id: str, *, change_updated: str | None = None) -> list[CommentChain]:
+        """The chains of *change_id* that hold a draft of yours: what a publish would send."""
+        chains = self.get_chains(change_id, change_updated=change_updated, comments="all")
+        return [chain for chain in chains if chain.draft is not None]
+
     def find_chain(self, changes: Mapping[str, str | None], comment_id: str) -> list[ChainMatch]:
         """Chains that contain *comment_id*, among *changes* (REST key -> freshness token).
 

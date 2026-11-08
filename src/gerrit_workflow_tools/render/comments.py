@@ -57,6 +57,32 @@ def draft_label(chain: CommentChain, comment: InlineComment, *, label: str = "dr
     return f"{label} -> {'resolves' if chain.resolved_after_publish else 'reopens'}"
 
 
+def draft_transition(chain: CommentChain, unresolved: bool) -> str:
+    """`` -> resolves`` / `` -> reopens`` when a draft flagged *unresolved* changes *chain*'s state."""
+    if chain.resolved == (not unresolved):
+        return ""
+    return " -> reopens" if unresolved else " -> resolves"
+
+
+def first_line(text: str) -> str:
+    """The first line of *text*, stripped; empty for blank text."""
+    return text.strip().splitlines()[0] if text.strip() else ""
+
+
+def drafts_in(chains: list[CommentChain]) -> list[tuple[CommentChain, InlineComment]]:
+    """Every draft in *chains*, with the chain it sits in."""
+    return [(chain, c) for chain in chains for c in chain.comments if c.draft]
+
+
+def format_pending_drafts(heading: str, chains: list[CommentChain]) -> list[str]:
+    """*heading*, then one line per draft about to be published: where, the state change, its text."""
+    lines = [heading]
+    for chain, draft in drafts_in(chains):
+        state = draft_transition(chain, draft.unresolved) if draft is chain.draft else ""
+        lines.append(f'  {chain_location(chain)}{state}: "{first_line(draft.message)}"')
+    return lines
+
+
 def _box_border(text: str, *, resolved: bool) -> str:
     return color_text(text, ANSI_DIM_GRAY if resolved else ANSI_YELLOW)
 

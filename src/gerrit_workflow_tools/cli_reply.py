@@ -29,7 +29,13 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, Inline
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
-from gerrit_workflow_tools.render.comments import chain_location
+from gerrit_workflow_tools.render.comments import (
+    chain_location,
+    draft_transition,
+    drafts_in,
+    first_line,
+    format_pending_drafts,
+)
 
 
 _COMMENT_URL_RE = re.compile(r"/comment/([^/?#]+)")
@@ -180,16 +186,6 @@ def _find(
     return matches[0], next(c.url for c in changes if c.key == matches[0].change)
 
 
-def _first_line(text: str) -> str:
-    return text.strip().splitlines()[0] if text.strip() else ""
-
-
-def _transition(chain: CommentChain, unresolved: bool) -> str:
-    if chain.resolved == (not unresolved):
-        return ""
-    return " -> reopens" if unresolved else " -> resolves"
-
-
 def _emit_reply(match: ChainMatch, reply: DraftReply, url: str | None, *, as_json: bool) -> None:
     if as_json:
         payload = {
@@ -206,10 +202,10 @@ def _emit_reply(match: ChainMatch, reply: DraftReply, url: str | None, *, as_jso
         return
     loc = chain_location(match.chain)
     if reply.action == "updated":
-        replaced = _first_line(reply.replaced_message or "")
-        print(f'updated draft on {loc}{_transition(match.chain, reply.unresolved)} (replaced: "{replaced}")')
+        replaced = first_line(reply.replaced_message or "")
+        print(f'updated draft on {loc}{draft_transition(match.chain, reply.unresolved)} (replaced: "{replaced}")')
     else:
-        print(f"draft reply on {loc} (patchset {reply.patch_set}){_transition(match.chain, reply.unresolved)}")
+        print(f"draft reply on {loc} (patchset {reply.patch_set}){draft_transition(match.chain, reply.unresolved)}")
     if url:
         print(f"  {url}")
 
@@ -227,30 +223,17 @@ def _emit_discard(match: ChainMatch, removed: InlineComment, url: str | None, *,
         }
         print(json.dumps(payload, indent=2))
         return
-    print(f'discarded draft on {chain_location(match.chain)}: "{_first_line(removed.message)}"')
-
-
-def _drafts_of(chains: list[CommentChain]) -> list[tuple[CommentChain, InlineComment]]:
-    return [(chain, c) for chain in chains for c in chain.comments if c.draft]
+    print(f'discarded draft on {chain_location(match.chain)}: "{first_line(removed.message)}"')
 
 
 def _pending_drafts(service: GerritService, changes: list[_Change]) -> list[tuple[_Change, list[CommentChain]]]:
     """Each change that has drafts of yours, with the chains holding them."""
     out: list[tuple[_Change, list[CommentChain]]] = []
     for change in changes:
-        chains = service.comments.get_chains(change.key, change_updated=change.freshness, comments="all")
-        with_drafts = [chain for chain in chains if chain.draft is not None]
+        with_drafts = service.comments.chains_with_drafts(change.key, change_updated=change.freshness)
         if with_drafts:
             out.append((change, with_drafts))
     return out
-
-
-def _print_pending(pending: list[tuple[_Change, list[CommentChain]]]) -> None:
-    for change, chains in pending:
-        print(f"{change.summary}  {change.url or change.key}")
-        for chain, draft in _drafts_of(chains):
-            state = _transition(chain, draft.unresolved) if draft is chain.draft else ""
-            print(f'  {chain_location(chain)}{state}: "{_first_line(draft.message)}"')
 
 
 def _confirmed(args: argparse.Namespace, count: int, changes: int) -> bool:
@@ -272,18 +255,18 @@ def _publish(args: argparse.Namespace, service: GerritService, cwd: Path, branch
         {"change": c.key, "url": c.url, "drafts": 0, "status": "no-drafts"} for c in changes if c.key not in with_drafts
     ]
     if not args.json_:
-        if pending:
-            _print_pending(pending)
-        else:
+        for change, chains in pending:
+            print("\n".join(format_pending_drafts(f"{change.summary}  {change.url or change.key}", chains)))
+        if not pending:
             print(f"no drafts to publish on {where}")
-    count = sum(len(_drafts_of(chains)) for _, chains in pending)
+    count = sum(len(drafts_in(chains)) for _, chains in pending)
     if pending and not args.dry_run and not _confirmed(args, count, len(pending)):
         return int(ExitCode.ATTENTION)
 
     message = "\n\n".join(args.message) if args.message else None
     failed = False
     for change, chains in pending:
-        row: dict[str, object] = {"change": change.key, "url": change.url, "drafts": len(_drafts_of(chains))}
+        row: dict[str, object] = {"change": change.key, "url": change.url, "drafts": len(drafts_in(chains))}
         if args.dry_run:
             row["status"] = "dry-run"
         else:
