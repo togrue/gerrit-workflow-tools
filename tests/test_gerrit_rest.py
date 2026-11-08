@@ -421,3 +421,36 @@ def test_ambiguous_query_says_when_the_list_is_cut_short() -> None:
     with pytest.raises(GerritApiError) as raised:
         pick_change_from_query_result(rows)
     assert "(25+ matches): 1, 2, 3, 4, 5, ..." in str(raised.value)
+
+
+def _capturing_client() -> tuple[HttpGerritRest, list[tuple[str, str, object]]]:
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    calls: list[tuple[str, str, object]] = []
+
+    def _capture(path: str, *, method: str = "GET", params=None, json_body=None) -> dict[str, Any]:
+        del params
+        calls.append((method, path, json_body))
+        return {}
+
+    client._request_json = _capture  # type: ignore[method-assign]
+    return client, calls
+
+
+def test_publish_drafts_sends_votes_with_the_drafts() -> None:
+    client, calls = _capturing_client()
+    client.publish_drafts("proj~main~I" + "c" * 40, message="lgtm", labels={"Code-Review": 1})
+    assert calls == [
+        (
+            "POST",
+            f"changes/proj~main~I{'c' * 40}/revisions/current/review",
+            {"drafts": "PUBLISH_ALL_REVISIONS", "message": "lgtm", "labels": {"Code-Review": 1}},
+        )
+    ]
+
+
+def test_get_related_asks_for_the_relation_chain_of_one_patchset() -> None:
+    client, calls = _capturing_client()
+    client.get_related("proj~main~I" + "c" * 40, 3)
+    assert calls == [("GET", f"changes/proj~main~I{'c' * 40}/revisions/3/related", None)]

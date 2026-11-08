@@ -145,15 +145,17 @@ class CommentApi:
         self._service.rest.delete_draft(change_id, revision, existing.comment_id)
         return existing
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> None:
-        """Publish your drafts on *change_id*, then drop its cached rows.
+    def publish_drafts(
+        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+    ) -> None:
+        """Publish your drafts on *change_id*, with *labels* voted, then drop its cached rows.
 
         Publishing moves the change's meta ref, but inside the trust window the probe is
         skipped; invalidating makes the next read see the published chains straight away.
         Callers check :func:`publish_blocked` first: the guard is policy, this is the act.
         """
         service = self._service
-        service.rest.publish_drafts(change_id, message=message)
+        service.rest.publish_drafts(change_id, message=message, labels=labels)
         service.cache.invalidate_changes([service.cache_key(change_id)])
 
     def get_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:

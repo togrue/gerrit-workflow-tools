@@ -1,9 +1,9 @@
-# `ger review` *(planned)*
+# `ger review`
 
 | | |
 |--|--|
-| **Status** | **Planned**: not in `cli_ger.py` yet |
-| **Module** | cli_review.py (new); checkout and review state in core/review_checkout.py (new); votes on `CommentApi` in `core/gerrit/comments.py` |
+| **Status** | **Implemented** |
+| **Module** | `cli_review.py`; checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
 | **Requires** | A git repository, `gerrit.webUrl`, credentials |
 
 Review someone else's change in your editor. `ger review` checks the change out, shows *what this commit changed* to every git tool you already use, walks up and down its review chain, and publishes your comments with your vote.
@@ -36,7 +36,7 @@ ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json]
 ger review --done [--force] [--json]
 ```
 
-`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a change number, a Gerrit URL, a triplet. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
+`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a Gerrit URL, a triplet, `change:N`. A bare number is a change number here, not a git revision. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
 
 ---
 

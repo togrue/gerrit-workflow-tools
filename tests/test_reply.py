@@ -258,10 +258,10 @@ def test_a_failed_change_does_not_stop_the_others(stack_repo: Path, monkeypatch:
     store.set_drafts(second, {"g.py": [_comment("d-2", "because", unresolved=True, updated="", in_reply_to="c-2")]})
     real = store.publish_drafts
 
-    def flaky(change_id: str, *, message: str | None = None) -> dict[str, Any]:
+    def flaky(change_id: str, *, message: str | None = None, labels: Any = None) -> dict[str, Any]:
         if change_id == first:
             raise GerritApiError("Gerrit HTTP 409", status=409)
-        return real(change_id, message=message)
+        return real(change_id, message=message, labels=labels)
 
     monkeypatch.setattr(store, "publish_drafts", flaky)
     code, out, err = run_cli(stack_repo, reply_main, ["--publish", "-y", "--json"], monkeypatch, gerrit=store)

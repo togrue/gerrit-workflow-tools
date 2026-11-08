@@ -306,6 +306,22 @@ class Settings:
         return self.flag(EDIT_NEXT_SHOW_KEY)
 
     @property
+    def review_checkout(self) -> str | None:
+        """``ger.reviewCheckout``: ``worktree`` or ``branch``; ``None`` when unset (ask on first use)."""
+        value = (self.get("ger.reviewCheckout") or "").strip().lower()
+        return value if value in ("worktree", "branch") else None
+
+    @property
+    def review_worktree(self) -> str | None:
+        """``ger.reviewWorktree``: where the review worktree lives; ``None`` for the default."""
+        return self.get("ger.reviewWorktree")
+
+    @property
+    def review_stage(self) -> bool:
+        """``ger.reviewStage``: stage the reviewed change's diff. Default on."""
+        return self.flag("ger.reviewStage", default=True)
+
+    @property
     def inbox_require_verified(self) -> bool:
         """``inbox.requireVerified``: CI gate for ready chains. Default on."""
         return self.flag("inbox.requireVerified", default=True)

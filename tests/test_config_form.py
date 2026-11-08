@@ -24,6 +24,7 @@ def test_sections_follow_command_order() -> None:
         "ger log",
         "ger push",
         "ger inbox",
+        "ger review",
         "ger rebase",
         "ger edit",
     )

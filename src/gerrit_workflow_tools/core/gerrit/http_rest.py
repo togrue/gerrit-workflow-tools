@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -315,13 +316,21 @@ class HttpGerritRest:
         """DELETE ``…/revisions/<rev>/drafts/<id>``."""
         self._request_json(_draft_path(change_id, revision, draft_id), method="DELETE")
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
+    def publish_drafts(
+        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+    ) -> dict[str, Any]:
         """POST a review that publishes the caller's drafts on all revisions, as the web UI's Send."""
         review: dict[str, Any] = {"drafts": "PUBLISH_ALL_REVISIONS"}
         if message:
             review["message"] = message
+        if labels:
+            review.update(labels=dict(labels))
         path = _change_path(change_id, "/revisions/current/review")
         return self._request_dict("publish drafts", path, method="POST", json_body=review)
+
+    def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
+        """GET ``changes/<id>/revisions/<rev>/related``."""
+        return self._request_dict("related changes", _change_path(change_id, f"/revisions/{revision}/related"))
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.

@@ -26,6 +26,7 @@ questions; deciding what is stale is the cache's job, above the seam.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -134,6 +135,7 @@ class ChangeStore:
         self._self_account_id = self_account_id
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
         self._drafts: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        self._related: dict[str, list[dict[str, Any]]] = {}
         self._checks: dict[str, list[dict[str, Any]]] = dict(checks or {})
         self._messages: dict[str, list[dict[str, Any]]] = dict(messages or {})
         self._project_reviewers = dict(project_reviewers) if project_reviewers is not None else None
@@ -397,16 +399,36 @@ class ChangeStore:
         for rows in self._drafts.get(self._payload_id(change_id), {}).values():
             rows[:] = [row for row in rows if row.get("id") != draft_id]
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
-        """Move every draft into the published comments, the way Gerrit's review POST does."""
-        self._record("publish_drafts", change_id, message=message)
+    def publish_drafts(
+        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+    ) -> dict[str, Any]:
+        """Move every draft into the published comments and apply *labels*, as Gerrit's review POST does."""
+        self._record("publish_drafts", change_id, message=message, labels=dict(labels) if labels else None)
         key = self._payload_id(change_id)
+        payload_labels = self._row_or_raise(change_id).setdefault("labels", {})
+        for name, value in (labels or {}).items():
+            payload_labels[name] = {"value": value, "all": [{"value": value}]}
         published = self._comments.setdefault(key, {})
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f000")
         for path, rows in self._drafts.pop(key, {}).items():
             # Gerrit stamps publish time: a published draft becomes its chain's newest comment.
             published.setdefault(path, []).extend({**row, "updated": stamp} for row in rows)
         return {}
+
+    def upload_patchset(self, change_ref: str, sha: str, number: int) -> None:
+        """Make *sha* the change's new current patchset *number*, as a push from elsewhere would."""
+        row = self._row_or_raise(change_ref)
+        row["revisions"] = {**row.get("revisions", {}), sha: {"_number": number}}
+        row["current_revision"] = sha
+
+    def set_related(self, change_ref: str, rows: list[dict[str, Any]]) -> None:
+        """Seed ``GET …/related`` for one change: RelatedChangeAndCommitInfo rows, newest first."""
+        self._related[self._payload_id(change_ref)] = rows
+
+    def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
+        """Return the seeded relation chain; a change with none seeded is alone (``changes: []``)."""
+        self._record("get_related", change_id, revision)
+        return {"changes": self._related.get(self._payload_id(change_id), [])}
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""

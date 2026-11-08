@@ -364,6 +364,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_show.py` | `ger show` |
 | `cli_reply.py` | `ger reply` |
 | `cli_comment.py` | `ger comment` |
+| `cli_review.py` | `ger review` |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |
@@ -402,6 +403,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
+| `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
