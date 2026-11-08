@@ -120,6 +120,22 @@ class CommentApi:
             replaced_message=existing.message if existing else None,
         )
 
+    def create_draft(self, change_id: str, patch_set: int, comment: Mapping[str, Any]) -> str | None:
+        """Start a new chain: a draft *comment* (CommentInput fields) on *patch_set*; return its id."""
+        row = self._service.rest.put_draft(change_id, patch_set, dict(comment))
+        draft_id = row.get("id")
+        return draft_id if isinstance(draft_id, str) else None
+
+    def discard_draft(self, change_id: str, draft_id: str) -> InlineComment | None:
+        """Delete your draft *draft_id* on any patchset of *change_id* and return it; ``None`` if absent."""
+        for chain in self.get_chains(change_id, comments="all"):
+            for comment in chain.comments:
+                if comment.draft and comment.comment_id == draft_id:
+                    revision = comment.patch_set if comment.patch_set is not None else "current"
+                    self._service.rest.delete_draft(change_id, revision, draft_id)
+                    return comment
+        return None
+
     def discard_reply(self, change_id: str, chain: CommentChain) -> InlineComment:
         """Delete your draft in *chain* and return it. A chain without one is not found."""
         existing = chain.draft

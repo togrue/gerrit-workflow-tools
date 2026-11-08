@@ -17,6 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     confirm,
     init_cli_runtime,
+    read_message,
     run_cli_command,
 )
 from gerrit_workflow_tools.core.annotated_stack import annotate
@@ -109,11 +110,7 @@ def _message_and_flag(p: argparse.ArgumentParser, args: argparse.Namespace) -> t
         if args.unresolve:
             p.error("--done resolves the chain; it cannot be combined with --unresolve")
         return _DONE, False
-    if args.file is not None:
-        message = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
-    else:
-        message = "\n\n".join(args.message)
-    message = message.strip()
+    message = read_message(args.message, args.file)
     if not message:
         p.error("the reply is empty")
     return message, False if args.resolve else True if args.unresolve else None

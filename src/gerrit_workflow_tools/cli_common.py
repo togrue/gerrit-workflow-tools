@@ -29,6 +29,7 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
+from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
@@ -88,10 +89,11 @@ class ExitCode(IntEnum):
     """An attention walk has nothing left to visit. Scripts loop until they see this."""
 
 
-# Ordered longest-subclass-first: ChangeAmbiguousError derives from ChangeResolutionError,
+# Ordered longest-subclass-first: ChangeAmbiguousError and MissingChangeIdError derive from ChangeResolutionError,
 # and ConfigError from ValueError, so the more specific entry has to be matched first.
 _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeAmbiguousError, ExitCode.AMBIGUOUS, "error"),
+    (MissingChangeIdError, ExitCode.MISSING_CHANGE_ID, "error"),
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),
@@ -154,6 +156,15 @@ def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = Non
             return answers[reply]
         if hint:
             print(hint, file=sys.stderr)
+
+
+def read_message(messages: list[str] | None, file: str | None) -> str:
+    """Message text from repeated ``-m`` (one paragraph each) or ``-F FILE`` (``-``: stdin), stripped."""
+    if file is not None:
+        text = sys.stdin.read() if file == "-" else Path(file).read_text(encoding="utf-8")
+    else:
+        text = "\n\n".join(messages or [])
+    return text.strip()
 
 
 def confirm(question: str, *, default: bool) -> bool:

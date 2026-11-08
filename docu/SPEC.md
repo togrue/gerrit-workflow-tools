@@ -45,6 +45,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger inbox` | [spec/commands/inbox.md](spec/commands/inbox.md) |
 | `ger push` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger show` | [spec/commands/show.md](spec/commands/show.md) |
+| `ger comment` | [spec/commands/comment.md](spec/commands/comment.md) (partial: notes and local drafts planned) |
 | `ger reply` | [spec/commands/reply.md](spec/commands/reply.md) (partial: guided reply planned) |
 
 ### Stack editing & identifiers
@@ -83,7 +84,6 @@ Specified but not registered in `cli_ger.py` yet. Move a row into the registry a
 | Command | Spec |
 |---------|------|
 | ger assign | [spec/commands/assign.md](spec/commands/assign.md) |
-| ger comment | [spec/commands/comment.md](spec/commands/comment.md): new comments on a line or range, as Gerrit drafts, local drafts or notes |
 | ger review | [spec/commands/review.md](spec/commands/review.md): check out a change to review, staged; walk its chain; vote |
 
 ---

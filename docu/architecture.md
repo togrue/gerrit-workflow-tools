@@ -363,6 +363,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_inbox.py` | `ger inbox` |
 | `cli_show.py` | `ger show` |
 | `cli_reply.py` | `ger reply` |
+| `cli_comment.py` | `ger comment` |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |
@@ -402,6 +403,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
+| `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
+| `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |
 | `core/ci_strategy.py` | Loading CI link strategies from `.ger/ci/` |
