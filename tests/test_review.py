@@ -254,3 +254,18 @@ def test_walking_without_a_review_is_a_usage_error(
     store, _keys, _shas = gerrit
     code, _, err = _review(stack_repo, store, ["--next"], monkeypatch)
     assert code == ExitCode.USAGE and "no review going on" in err
+
+
+def test_a_new_patchset_replaces_the_one_the_review_fetched(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, shas = gerrit
+    assert _review(stack_repo, store, ["102"], monkeypatch)[0] == ExitCode.OK
+    tree = git_out("rev-parse", f"{shas[2]}^{{tree}}", cwd=stack_repo)
+    ps2 = git_out("commit-tree", tree, "-p", shas[1], "-m", "reworded", cwd=stack_repo)
+    git("update-ref", changes_ref(102, 2), ps2, cwd=stack_repo)
+    store.upload_patchset(keys[2], ps2, 2)
+    code, out, err = _review(stack_repo, store, ["102", "--json"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert json_stdout(out)["patch_set"] == 2
+    assert git_out("rev-parse", "change-102", cwd=_worktree(stack_repo)) == ps2

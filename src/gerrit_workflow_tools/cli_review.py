@@ -27,7 +27,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
@@ -153,7 +153,8 @@ def _patchset(
         raise ChangeResolutionError(f"change {view.number} has no patchset {wanted}")
     target = PatchsetToReview(
         number=view.number,
-        key=view.key or resolution.selected.triplet,
+        # A triplet, never Gerrit's `id`: real servers send the compact project~number form.
+        key=build_triplet(view.project, view.branch, view.change_id) if view.project else resolution.selected.triplet,
         change_id=view.change_id,
         patch_set=wanted,
         commit=sha,
