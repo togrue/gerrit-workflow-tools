@@ -407,6 +407,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
+| `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |
 | `core/ci_strategy.py` | Loading CI link strategies from `.ger/ci/` |

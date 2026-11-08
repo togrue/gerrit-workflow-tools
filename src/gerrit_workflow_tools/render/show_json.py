@@ -23,9 +23,10 @@ def comment_json_payload(
                 "path": row_item.path,
                 "line": row_item.line,
                 "message": row_item.message,
-                "url": gerrit_inline_comment_url(gerrit_url, row_item.comment_id),
+                "url": None if row_item.local else gerrit_inline_comment_url(gerrit_url, row_item.comment_id),
                 "patch_set": row_item.patch_set,
                 "draft": row_item.draft,
+                "state": row_item.state,
             }
             if row_item.author:
                 entry["author"] = row_item.author
@@ -43,8 +44,9 @@ def comment_json_payload(
                 "path": chain.path,
                 "line": chain.line,
                 "start_line": chain.start_line,
-                "url": gerrit_inline_comment_url(gerrit_url, chain.root_id),
+                "url": None if chain.local else gerrit_inline_comment_url(gerrit_url, chain.root_id),
                 "resolved": chain.resolved,
+                "anchor_moved": chain.anchor_moved,
                 "resolved_after_publish": chain.resolved_after_publish,
                 "comments": chain_comments,
             }

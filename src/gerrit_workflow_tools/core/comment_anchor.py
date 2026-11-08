@@ -79,6 +79,50 @@ class CommentLocation:
         return f"{self.path}:{self.line}"
 
 
+@dataclass(frozen=True)
+class Anchor:
+    """Where a local comment sits, for good: a location in one version of a file (ADR-0011)."""
+
+    commit: str
+    """The commit the comment was written on."""
+    location: CommentLocation
+    blob: str | None
+    """Blob of the file in *commit*: the version the line and range refer to."""
+    text: str
+    """The anchored text, for showing the comment where its lines have changed."""
+
+    def to_json(self) -> dict[str, Any]:
+        """The stored form."""
+        rng = self.location.range
+        return {
+            "commit": self.commit,
+            "path": self.location.path,
+            "line": self.location.line,
+            "range": rng.as_gerrit() if rng else None,
+            "blob": self.blob,
+            "text": self.text,
+        }
+
+    @classmethod
+    def from_json(cls, raw: dict[str, Any]) -> Anchor:
+        """Parse the stored form; raises ``KeyError``/``TypeError`` on a malformed one."""
+        rng = raw.get("range")
+        location = CommentLocation(
+            path=raw["path"], line=raw.get("line"), range=CommentRange(**rng) if isinstance(rng, dict) else None
+        )
+        return cls(commit=raw["commit"], location=location, blob=raw.get("blob"), text=raw.get("text") or "")
+
+
+def anchor_at(cwd: Path | str, commit: str, location: CommentLocation, lines: list[str]) -> Anchor:
+    """The anchor of *location* (already fitted to *lines*) in *commit*."""
+    return Anchor(
+        commit=commit,
+        location=location,
+        blob=blob_of(cwd, commit, location.path),
+        text=anchored_text(location, lines),
+    )
+
+
 def parse_location(text: str) -> CommentLocation:
     """Parse a LOCATION. Raises :class:`LocationError` for a malformed or backwards one."""
     raw = text.strip()

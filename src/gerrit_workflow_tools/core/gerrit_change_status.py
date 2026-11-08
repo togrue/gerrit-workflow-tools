@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+LocalCommentState = Literal["note", "local-draft"]
+"""A comment that lives only in the local comment store."""
+CommentState = Literal["note", "local-draft", "draft", "published"]
 
 
 class PatchsetStatus(str, Enum):
@@ -56,7 +60,16 @@ class InlineComment:
     unresolved: bool = False
     """This comment's own flag. The chain takes the flag of its last comment."""
     draft: bool = False
-    """Unpublished: visible only to its author until published."""
+    """A Gerrit draft: visible only to its author until published."""
+    local: LocalCommentState | None = None
+    """Set for a note or local draft: it is in the local comment store, not on Gerrit."""
+
+    @property
+    def state(self) -> CommentState:
+        """Where the comment is in its life: note, local draft, draft or published."""
+        if self.local is not None:
+            return self.local
+        return "draft" if self.draft else "published"
 
 
 @dataclass(frozen=True)
@@ -73,6 +86,13 @@ class CommentChain:
     """First line of a range comment; ``line`` is then its last line."""
     on_parent: bool = False
     """The chain sits on the parent side of the diff (Gerrit ``side: PARENT``)."""
+    anchor_moved: bool = False
+    """A local comment shown on a version of the file it was not written on."""
+
+    @property
+    def local(self) -> bool:
+        """A chain from the local comment store: it has no Gerrit URL."""
+        return any(c.local is not None for c in self.comments)
 
     @property
     def answered(self) -> InlineComment:

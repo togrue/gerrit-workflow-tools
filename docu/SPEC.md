@@ -45,7 +45,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger inbox` | [spec/commands/inbox.md](spec/commands/inbox.md) |
 | `ger push` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger show` | [spec/commands/show.md](spec/commands/show.md) |
-| `ger comment` | [spec/commands/comment.md](spec/commands/comment.md) (partial: notes and local drafts planned) |
+| `ger comment` | [spec/commands/comment.md](spec/commands/comment.md) (partial: re-anchoring, uploading local drafts and orphans planned) |
 | `ger review` | [spec/commands/review.md](spec/commands/review.md) |
 | `ger reply` | [spec/commands/reply.md](spec/commands/reply.md) (partial: guided reply planned) |
 
