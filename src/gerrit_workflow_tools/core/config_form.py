@@ -24,6 +24,7 @@ SECTION_TITLES: tuple[str, ...] = (
     "ger log",
     "ger push",
     "ger inbox",
+    "ger review",
     "ger rebase",
     "ger edit",
 )
@@ -174,6 +175,22 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         SettingKind.TEXT,
         "",
     ),
+    _spec(
+        "ger.reviewCheckout",
+        "ger review",
+        "Check out reviews in a separate worktree, or on a branch in the current checkout.",
+        SettingKind.CHOICE,
+        "worktree",
+        ("worktree", "branch"),
+    ),
+    _spec(
+        "ger.reviewWorktree",
+        "ger review",
+        "Path of the review worktree. Empty: <repository>-review beside the main worktree.",
+        SettingKind.TEXT,
+        "",
+    ),
+    _bool("ger.reviewStage", "ger review", "Stage the reviewed change's diff (HEAD at its parent).", default="true"),
     _bool(
         "inbox.requireVerified",
         "ger inbox",

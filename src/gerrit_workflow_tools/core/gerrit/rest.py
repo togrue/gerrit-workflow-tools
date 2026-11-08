@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 from urllib.parse import quote, unquote
@@ -118,8 +118,13 @@ class GerritRest(Protocol):
     def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
         """Delete one of the caller's drafts."""
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
-        """Publish all the caller's drafts on every patchset, with an optional change message."""
+    def publish_drafts(
+        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+    ) -> dict[str, Any]:
+        """Publish all the caller's drafts on every patchset, with an optional message and votes."""
+
+    def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
+        """Return RelatedChangesInfo: the relation chain of *revision*, newest first."""
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""

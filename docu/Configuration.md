@@ -70,6 +70,16 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 
 ---
 
+## `ger review` — `ger.review*`
+
+| Key | Effect |
+|-----|--------|
+| `ger.reviewCheckout` | `worktree` (a reusable review worktree; the default) or `branch` (in the current checkout). When unset, `ger review` asks on first use and writes the answer to the local config; without a terminal it uses the worktree. |
+| `ger.reviewWorktree` | Path of the review worktree. Relative paths resolve from the main worktree's parent. Default: `<repository>-review` beside the main worktree. |
+| `ger.reviewStage` | Default on: stage the reviewed change's diff (HEAD at its parent). `false` checks the `change-<number>` branch out instead. |
+
+---
+
 ## `ger inbox` — `inbox.*`
 
 Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbox.md).

@@ -24,12 +24,13 @@ from gerrit_workflow_tools.core.comment_anchor import (
     parse_location,
     repository_path,
 )
-from gerrit_workflow_tools.core.comment_target import CommentTarget, resolve_comment_target
+from gerrit_workflow_tools.core.comment_target import CommentTarget, resolve_comment_target, target_for_commit
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import gerrit_inline_comment_url
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.review_checkout import load_state
 from gerrit_workflow_tools.render.comments import first_line
 
 
@@ -56,7 +57,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--change",
         metavar="CHANGEISH",
         default=None,
-        help="Comment on this change (default: the commit at HEAD).",
+        help="Comment on this change (default: the change under review here, else the commit at HEAD).",
     )
     p.add_argument("--branch", metavar="NAME", default=None, help="Local branch whose stack to resolve in.")
     text = p.add_argument_group("message")
@@ -161,7 +162,13 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     cwd, settings, _ = init_cli_runtime(args)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    target = resolve_comment_target(service, cwd, args.change, branch=branch)
+    review = load_state(cwd) if args.change is None else None
+    if review is not None:
+        # Staged, HEAD sits at the parent: the review state names the commit under review.
+        change = review.change
+        target = target_for_commit(service, change.key, change.change_id, change.commit, summary=change.subject)
+    else:
+        target = resolve_comment_target(service, cwd, args.change, branch=branch)
     if args.discard is not None:
         _discard(service, target, args.discard.strip(), as_json=args.json_)
         return int(ExitCode.OK)

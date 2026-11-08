@@ -54,6 +54,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "Answer a comment chain with a draft reply (published with ger push).",
         "gerrit_workflow_tools.cli_reply:main",
     ),
+    "review": (
+        "Check a change out to review it (diff staged), walk its chain, vote.",
+        "gerrit_workflow_tools.cli_review:main",
+    ),
     "resolve": (
         "Resolve a changeish to a local commit and/or Gerrit change.",
         "gerrit_workflow_tools.cli_resolve:main",
