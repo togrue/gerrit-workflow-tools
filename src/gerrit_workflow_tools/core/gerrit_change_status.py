@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -73,6 +73,49 @@ class InlineComment:
 
 
 @dataclass(frozen=True)
+class AnchorStatus:
+    """Where a local comment's anchor sits on the version of the file it is shown on (ADR-0011)."""
+
+    path: str
+    line: int | None
+    start_line: int | None
+    """Where the comment is shown: the anchor mapped onto the shown file."""
+    anchored_path: str
+    anchored_line: int | None
+    anchored_start_line: int | None
+    anchored_text: str
+    """Where it was written, and the text it was written on."""
+    moved: bool = False
+    """Shown on another version of the file, or at another path, than it was written on."""
+    outdated: bool = False
+    """Its anchored lines changed or were deleted (or the file is gone): shown near where they were."""
+
+    @classmethod
+    def at_anchor(cls, path: str, line: int | None, start_line: int | None, text: str) -> AnchorStatus:
+        """Shown on the very version it was written on."""
+        return cls(path, line, start_line, path, line, start_line, text)
+
+    def placed(
+        self, *, path: str, line: int | None, start_line: int | None, outdated: bool = False, moved: bool = True
+    ) -> AnchorStatus:
+        """This anchor shown at *path*:*line* of another version of the file."""
+        return replace(self, path=path, line=line, start_line=start_line, outdated=outdated, moved=moved or outdated)
+
+    @property
+    def anchored_location(self) -> str:
+        """``path:line`` or ``path:start-end`` where it was written."""
+        if self.anchored_line is None:
+            return self.anchored_path
+        start = self.anchored_start_line
+        lines = (
+            f"{start}-{self.anchored_line}"
+            if start is not None and start != self.anchored_line
+            else f"{self.anchored_line}"
+        )
+        return lines if self.anchored_path == self.path else f"{self.anchored_path}:{lines}"
+
+
+@dataclass(frozen=True)
 class CommentChain:
     """Thread of Gerrit inline comments (root + replies via ``in_reply_to``)."""
 
@@ -86,8 +129,18 @@ class CommentChain:
     """First line of a range comment; ``line`` is then its last line."""
     on_parent: bool = False
     """The chain sits on the parent side of the diff (Gerrit ``side: PARENT``)."""
-    anchor_moved: bool = False
-    """A local comment shown on a version of the file it was not written on."""
+    anchor: AnchorStatus | None = None
+    """A local comment's anchor, and how it sits on the file version shown."""
+
+    @property
+    def anchor_moved(self) -> bool:
+        """A local comment shown on a version of the file it was not written on."""
+        return self.anchor is not None and self.anchor.moved
+
+    @property
+    def outdated(self) -> bool:
+        """A local comment whose anchored lines changed since it was written."""
+        return self.anchor is not None and self.anchor.outdated
 
     @property
     def local(self) -> bool:

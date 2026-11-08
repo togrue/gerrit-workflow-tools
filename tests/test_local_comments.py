@@ -107,16 +107,41 @@ def test_local_comments_sit_beside_gerrit_chains(stack_repo: Path, monkeypatch: 
     assert [c["comments"][0]["state"] for c in chains] == ["draft", "note"]
 
 
-def test_a_changed_file_marks_the_anchor_moved(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _amend_d(repo: Path, text: str) -> None:
+    (repo / "d.txt").write_text(text, encoding="utf-8")
+    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=repo)
+
+
+def test_a_comment_moves_with_its_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _nothing_on_gerrit(stack_repo)
     _comment(stack_repo, ["d.txt:1", "-m", "x"], monkeypatch, store)
-    assert _show_json(stack_repo, store, monkeypatch)["comment_chains"][0]["anchor_moved"] is False
-    (stack_repo / "d.txt").write_text("file d.txt, reworked\n", encoding="utf-8")
-    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
     [chain] = _show_json(stack_repo, store, monkeypatch)["comment_chains"]
-    assert chain["anchor_moved"] is True
+    assert (chain["anchor_moved"], chain["outdated"], chain["line"]) == (False, False, 1)
+    _amend_d(stack_repo, "a new first line\nfile d.txt\n")
+    [chain] = _show_json(stack_repo, store, monkeypatch)["comment_chains"]
+    assert (chain["anchor_moved"], chain["outdated"], chain["line"], chain["anchored_line"]) == (True, False, 2, 1)
+    assert chain["comments"][0]["line"] == 2
     _code, out, _ = run_cli(stack_repo, show_main, ["--color=never"], monkeypatch, gerrit=store)
-    assert "d.txt:1 (file changed since)" in out
+    assert "d.txt:2 (moved from 1)" in out
+    # Nothing is written back: the store still holds the original anchor.
+    [stored] = LocalCommentStore(stack_repo).all()
+    assert stored.anchor.location.line == 1
+
+
+def test_an_edited_line_shows_the_comment_outdated_with_its_text(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _nothing_on_gerrit(stack_repo)
+    _comment(stack_repo, ["d.txt:1", "-m", "x"], monkeypatch, store)
+    _amend_d(stack_repo, "file d.txt, reworked\n")
+    [chain] = _show_json(stack_repo, store, monkeypatch)["comment_chains"]
+    assert (chain["outdated"], chain["line"], chain["anchored_line"]) == (True, 1, 1)
+    assert chain["anchored_text"] == "file d.txt"
+    _code, out, _ = run_cli(stack_repo, show_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert "d.txt:1 (outdated: lines changed since)" in out
+    assert "   1  file d.txt " in out
+    _code, out, _ = run_cli(stack_repo, show_main, ["--ai"], monkeypatch, gerrit=store)
+    assert "### `d.txt:1` (outdated: lines changed since)" in out and "   1  file d.txt\n" in out
 
 
 def test_resolved_local_comments_follow_the_comments_filter(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

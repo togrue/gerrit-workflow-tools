@@ -2,8 +2,8 @@
 
 | | |
 |--|--|
-| **Status** | **Partial**: Gerrit drafts, notes, local drafts and `--discard` ship. [Later slices](#later-slices) (re-anchoring, uploading, orphans, `ger log`) are planned |
-| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in `core/local_comments.py`; chain assembly in `core/comment_chains.py` |
+| **Status** | **Partial**: Gerrit drafts, notes, local drafts, `--discard` and re-anchoring ship. [Later slices](#later-slices) (uploading, orphans, `ger log`) are planned |
+| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in `core/local_comments.py`; chain assembly in `core/comment_chains.py`; re-anchoring in `core/anchor_mapping.py` |
 | **Requires** | A git repository. `gerrit.webUrl` and credentials, except for `--note`, `--local` and `--discard` of a local comment, which work without Gerrit configured |
 
 Write a new comment on a line, a range or a file of a change. `ger reply` answers a chain that already exists; `ger comment` starts one.
@@ -91,15 +91,26 @@ The change's **triplet**: its key, built from the stack context for a commit Ger
 
 The anchor never changes after the comment is written ([ADR-0011](../../adr/0011-comment-anchors-are-immutable.md)). Showing the comment on a later version of the file maps it from the anchor, never from a previous mapping.
 
+### Re-anchoring
+
+When a local comment is shown on a commit whose file is not the anchored blob, ger maps it there. The mapping is computed on read and never written back, so worktrees holding different versions of a change each see the comment in the right place without fighting over the store.
+
+- **One diff, straight from the anchor.** `git diff -U0` from the anchored blob to the shown one. Never chained through an earlier mapping, so ten rebases map exactly as one.
+- **Clean move.** A line outside every hunk shifts by the line-count change of the hunks above it. A range shifts at each end, so an insertion inside it widens it. The comment shows at its new line.
+- **Outdated.** A hunk that changes or deletes any anchored line makes the comment **outdated**. It sits on the line just before that hunk in the shown version (line 1 when the hunk starts the file), and the anchored text is shown with it. It is never dropped.
+- **Renames.** When the anchored path is not in the shown commit, `git diff -M` from the anchor's commit finds where it went. When that commit is gone, a file in the shown commit with the anchored blob is taken. A file that cannot be found leaves an outdated file comment on the old path.
+- **File comments** follow a rename and are never outdated while the file exists.
+- **Cached** by (anchored blob, shown blob) for the life of the process. Both are content-addressed, so a cached mapping is never stale.
+
 ---
 
 ## Changes to `ger show`
 
 Local comments join the commit's chains. They show for commits Gerrit does not have, too, which until now showed no chains at all.
 
-- **Human:** each local comment is a chain of its own, headed `note (private)` or `local draft (not on Gerrit)`, after the Gerrit chains at the same location. When the file in the shown commit is not the anchored version, the heading adds `(file changed since)`. Mapping the line onto the new version is a later slice.
-- **Markdown / `--ai`:** the same, headed `**Note (private)**` or `**Local draft (not on Gerrit)**`.
-- **JSON:** every comment gains `state`: `note`, `local-draft`, `draft` or `published`. `draft` stays true for Gerrit drafts only. A local chain's `root_id` is the local comment's id, and its `url` is `null`. Every chain gains `anchor_moved`, true for a local comment shown on a version of the file it was not written on.
+- **Human:** each local comment is a chain of its own, headed `note (private)` or `local draft (not on Gerrit)`, after the Gerrit chains at the same location, at the line [re-anchoring](#re-anchoring) maps it to. A comment that moved adds `(moved from L)` to the heading, `L` being where it was written (`old/path:L` after a rename). An outdated one adds `(outdated: lines changed since)` and shows the anchored text as context lines, numbered as they were.
+- **Markdown / `--ai`:** the same, headed `**Note (private)**` or `**Local draft (not on Gerrit)**`, with the same heading suffix and context block.
+- **JSON:** every comment gains `state`: `note`, `local-draft`, `draft` or `published`. `draft` stays true for Gerrit drafts only. A local chain's `root_id` is the local comment's id, and its `url` is `null`. Every chain gains `anchor_moved`, true for a local comment shown on another version of the file or at another path than it was written on, and `outdated`, true when its anchored lines changed. `path`, `line` and `start_line` are where the comment is shown; `anchored_line` and `anchored_text` are where it was written and the text it covered (`null` for Gerrit chains).
 
 `--comments unresolved|all|resolved` filters local comments on their own flag.
 
@@ -157,7 +168,6 @@ note on src/app.py (commit 1a2b3c4) id 0b6e2d7f8c9a4b13
 
 Specified here so the store's shape is fixed now. Not implemented yet.
 
-1. **Re-anchoring.** When a comment is shown on a commit whose file is not the anchored blob, diff the anchored blob against the shown one (rename detection on) and map the range through the hunks. A clean mapping moves the comment. A range whose own lines changed or were deleted marks it **outdated**: it stays near the old position with the original text shown, never dropped. Mappings are cached by (anchor blob, target blob). Nothing is written back.
-2. **Uploading local drafts.** `ger push` maps each local draft onto the commit it pushes and creates it as a Gerrit draft on the new patchset, recording the Gerrit draft id so a second push updates instead of duplicating. Whether it is then published follows the [`ger reply`](reply.md#publishing-with-ger-push) rules, `GER_NO_PUBLISH` included. `ger comment --upload` does the same without a push. A note is never uploaded; `ger comment --promote ID` turns it into a local draft.
-3. **Orphans.** A triplet in the store that is neither in the local stack nor on Gerrit is **orphaned**, usually after a squash. `ger log` counts them. ger offers to move them to the stack commit whose files contain the anchored text; `ger fix` and squashes made by `ger rebase` move them directly. Only `ger comment --gc` deletes, and it prints what it removes.
-4. **`ger log`** shows a count of local drafts per commit next to the comment token.
+1. **Uploading local drafts.** `ger push` maps each local draft onto the commit it pushes and creates it as a Gerrit draft on the new patchset, recording the Gerrit draft id so a second push updates instead of duplicating. Whether it is then published follows the [`ger reply`](reply.md#publishing-with-ger-push) rules, `GER_NO_PUBLISH` included. `ger comment --upload` does the same without a push. A note is never uploaded; `ger comment --promote ID` turns it into a local draft.
+2. **Orphans.** A triplet in the store that is neither in the local stack nor on Gerrit is **orphaned**, usually after a squash. `ger log` counts them. ger offers to move them to the stack commit whose files contain the anchored text; `ger fix` and squashes made by `ger rebase` move them directly. Only `ger comment --gc` deletes, and it prints what it removes.
+3. **`ger log`** shows a count of local drafts per commit next to the comment token.
