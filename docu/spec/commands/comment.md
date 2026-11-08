@@ -1,9 +1,9 @@
-# `ger comment` *(planned)*
+# `ger comment`
 
 | | |
 |--|--|
-| **Status** | **Planned**: not in `cli_ger.py` yet |
-| **Module** | cli_comment.py (new); Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in core/local_comments.py (new); chain assembly in `core/comment_chains.py` |
+| **Status** | **Partial**: Gerrit drafts and `--discard` ship. Notes, local drafts (`--note`, `--local`) and the review-state default are still planned |
+| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in core/local_comments.py (new); chain assembly in `core/comment_chains.py` |
 | **Requires** | A git repository. `gerrit.webUrl` and credentials only for comments that go to Gerrit |
 
 Write a new comment on a line, a range or a file of a change. `ger reply` answers a chain that already exists; `ger comment` starts one.

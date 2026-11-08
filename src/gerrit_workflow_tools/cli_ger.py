@@ -24,6 +24,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_bash_completion:main",
     ),
     "cache": ("Inspect or clear the local Gerrit API cache.", "gerrit_workflow_tools.cli_cache:main"),
+    "comment": (
+        "Start a comment chain on a line or range of a change, as a draft.",
+        "gerrit_workflow_tools.cli_comment:main",
+    ),
     "config": (
         "Full-screen editor for ger settings, grouped by command.",
         "gerrit_workflow_tools.cli_config:main",
