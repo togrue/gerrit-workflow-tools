@@ -187,8 +187,9 @@ def own_edits(worktree: Path | str, state: ReviewState | None) -> list[str]:
     return sorted(name for name in names if name)
 
 
-def _commits_not_in(worktree: Path | str, tip: str, base: str) -> list[str]:
-    return git_out("rev-list", f"{base}..{tip}", cwd=worktree).split()
+def _commits_not_in(worktree: Path | str, tip: str, *bases: str) -> list[str]:
+    """Commits reachable from *tip* but from none of *bases*."""
+    return git_out("rev-list", tip, "--not", *bases, cwd=worktree).split()
 
 
 def _unstage(worktree: Path | str, state: ReviewState) -> ReviewState:
@@ -275,7 +276,8 @@ def _claim_branch(
     existing = commit_sha_or_none(worktree, f"refs/heads/{branch}")
     moved_from: str | None = None
     if existing is not None and existing != commit:
-        own = _commits_not_in(worktree, existing, commit)
+        # What this review put on the branch (an older patchset of the change) is not yours.
+        own = _commits_not_in(worktree, existing, commit, *([created[branch]] if branch in created else []))
         moved_from = existing if own else None
         if own and not force:
             raise ReviewRefusal(
