@@ -1,6 +1,6 @@
 # Integration tests (Docker + Gerrit)
 
-These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Draft replies (`ger reply`, publishing with `ger push`) are in **`test_11_draft_replies.py`**. Change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, live ``ger log --json`` overlay with compact ``project~number`` ids, batch query call budget, push→resolve/show JSON agreement).
+These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Draft replies (`ger reply`, publishing with `ger push`) are in **`test_11_draft_replies.py`**; reviewing (`ger review` staging, chain walk, votes) and `ger comment` drafts and notes in **`test_12_review_and_comment.py`**. Change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, live ``ger log --json`` overlay with compact ``project~number`` ids, batch query call budget, push→resolve/show JSON agreement).
 
 Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly.
 
