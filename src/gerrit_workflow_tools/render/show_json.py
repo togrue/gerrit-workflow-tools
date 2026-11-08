@@ -47,6 +47,9 @@ def comment_json_payload(
                 "url": None if chain.local else gerrit_inline_comment_url(gerrit_url, chain.root_id),
                 "resolved": chain.resolved,
                 "anchor_moved": chain.anchor_moved,
+                "outdated": chain.outdated,
+                "anchored_line": chain.anchor.anchored_line if chain.anchor else None,
+                "anchored_text": chain.anchor.anchored_text if chain.anchor else None,
                 "resolved_after_publish": chain.resolved_after_publish,
                 "comments": chain_comments,
             }

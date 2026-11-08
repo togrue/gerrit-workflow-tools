@@ -153,7 +153,7 @@ The `refs/ger/comments` ref holding every note and local draft of a repository, 
 _Avoid_: comment cache, comment db, notes (for the store)
 
 **Anchor**:
-Where a local comment sits: the blob of the file it was written on, the range in it, and the anchored text. Written once and never updated; showing the comment on another version maps it from the anchor.
+Where a local comment sits: the blob of the file it was written on, the range in it, and the anchored text. Written once and never updated; showing the comment on another version maps it from the anchor. When the anchored lines themselves changed, the comment is **outdated**: shown next to where they were, with the anchored text. (Not the `outdated` patchset status.)
 _Avoid_: position, location (for the stored value)
 
 ### Talking to Gerrit

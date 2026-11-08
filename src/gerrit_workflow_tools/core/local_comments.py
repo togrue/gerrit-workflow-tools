@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote
 
-from gerrit_workflow_tools.core.comment_anchor import Anchor, blob_of
+from gerrit_workflow_tools.core.anchor_mapping import place_anchor
+from gerrit_workflow_tools.core.comment_anchor import Anchor
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, local_comment_chain, select_chains
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
@@ -201,26 +202,21 @@ class LocalCommentStore:
 def local_chains(cwd: Path | str, key: str, commit: str | None, *, comments: CommentSelection) -> list[CommentChain]:
     """The notes and local drafts of change *key* as chains, shown on *commit*, selected by *comments*.
 
-    A comment whose file in *commit* is not its anchored blob is marked ``anchor_moved``;
-    mapping it onto the new version is a later slice (comment.md § Later slices).
+    Each sits where its anchor maps to in *commit*'s version of the file
+    (:func:`~gerrit_workflow_tools.core.anchor_mapping.place_anchor`); nothing is written back.
     """
     chains: list[CommentChain] = []
     for comment in LocalCommentStore(cwd).for_change(key):
-        location = comment.anchor.location
-        moved = (
-            commit is not None
-            and comment.anchor.blob is not None
-            and blob_of(cwd, commit, location.path) != comment.anchor.blob
-        )
+        anchor = place_anchor(cwd, comment.anchor, commit)
         inline = InlineComment(
-            path=location.path,
-            line=location.line,
+            path=anchor.path,
+            line=anchor.line,
             message=comment.message,
             comment_id=comment.id,
             unresolved=comment.unresolved,
             local=comment.state,
         )
-        chains.append(local_comment_chain(comment.id, inline, start_line=location.start_line, anchor_moved=moved))
+        chains.append(local_comment_chain(comment.id, inline, anchor))
     return select_chains(chains, comments)
 
 

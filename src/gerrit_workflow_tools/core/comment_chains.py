@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
+from gerrit_workflow_tools.core.gerrit_change_status import AnchorStatus, CommentChain, ContextLine, InlineComment
 
 
 CommentSelection = Literal["unresolved", "all", "resolved"]
@@ -169,18 +169,16 @@ def select_chains(chains: list[CommentChain], comments: CommentSelection) -> lis
     return [chain for chain in chains if not chain.resolved]
 
 
-def local_comment_chain(
-    comment_id: str, comment: InlineComment, *, start_line: int | None, anchor_moved: bool
-) -> CommentChain:
-    """A note or local draft as a chain of its own: always a root, never a reply."""
+def local_comment_chain(comment_id: str, comment: InlineComment, anchor: AnchorStatus) -> CommentChain:
+    """A note or local draft as a chain of its own, where *anchor* puts it: always a root, never a reply."""
     return CommentChain(
         root_id=comment_id,
-        path=comment.path,
-        line=comment.line,
+        path=anchor.path,
+        line=anchor.line,
         comments=(comment,),
         resolved=not comment.unresolved,
-        start_line=start_line,
-        anchor_moved=anchor_moved,
+        start_line=anchor.start_line,
+        anchor=anchor,
     )
 
 
