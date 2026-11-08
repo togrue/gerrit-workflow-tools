@@ -130,6 +130,32 @@ _Avoid_: build URL (unqualified), CI failure (the name alone)
 Callable (built-in or under ``.ger/ci/registry.py``, keyed by ``gerrit.project``) that turns Checks rows and/or change messages into **CI links**. Built-in parsing covers common Jenkins Gerrit trigger messages; override per project when needed.
 _Avoid_: CI plugin, hook script, config regex
 
+### Reviewing and comments
+
+**Review checkout**:
+Where `ger review` checks a change out: the **review worktree** (one reusable worktree beside the main one, the default) or **in place** (the current worktree). Set by `ger.reviewCheckout`. Either way the change sits on a `change-<number>` branch.
+_Avoid_: review clone, sandbox
+
+**Staged review**:
+A review checkout with HEAD detached at the change's parent and the change's diff in the index, so every git tool shows the commit as staged changes. The `change-<number>` branch stays on the change.
+_Avoid_: soft reset mode, diff mode
+
+**Review state**:
+What is being reviewed in one worktree — change, patchset, commit, staged or not — recorded under that worktree's git dir. Not Gerrit state, and not the **attention cursor**.
+_Avoid_: current review (unqualified), session
+
+**Comment state**:
+Where a comment is in its life: **note** (local, private, never uploaded), **local draft** (local, meant for Gerrit), **draft** (on Gerrit, visible only to you), **published**. "Private" is not a comment state: in Gerrit it names a kind of *change*.
+_Avoid_: private comment, pending comment, unsent comment
+
+**Local comment store**:
+The `refs/ger/comments` ref holding every note and local draft of a repository, keyed by **triplet**. Shared by all worktrees. Not a cache: it is the only copy.
+_Avoid_: comment cache, comment db, notes (for the store)
+
+**Anchor**:
+Where a local comment sits: the blob of the file it was written on, the range in it, and the anchored text. Written once and never updated; showing the comment on another version maps it from the anchor.
+_Avoid_: position, location (for the stored value)
+
 ### Talking to Gerrit
 
 **GerritRest**:
