@@ -160,6 +160,36 @@ def build_comment_chains(
     return chains
 
 
+def select_chains(chains: list[CommentChain], comments: CommentSelection) -> list[CommentChain]:
+    """*chains* filtered by *comments* on their published state; ``all`` puts unresolved first."""
+    if comments == "all":
+        return [chain for chain in chains if not chain.resolved] + [chain for chain in chains if chain.resolved]
+    if comments == "resolved":
+        return [chain for chain in chains if chain.resolved]
+    return [chain for chain in chains if not chain.resolved]
+
+
+def local_comment_chain(
+    comment_id: str, comment: InlineComment, *, start_line: int | None, anchor_moved: bool
+) -> CommentChain:
+    """A note or local draft as a chain of its own: always a root, never a reply."""
+    return CommentChain(
+        root_id=comment_id,
+        path=comment.path,
+        line=comment.line,
+        comments=(comment,),
+        resolved=not comment.unresolved,
+        start_line=start_line,
+        anchor_moved=anchor_moved,
+    )
+
+
+def merge_chains(gerrit: list[CommentChain], local: list[CommentChain]) -> list[CommentChain]:
+    """Gerrit and local chains in one list: by path and line, Gerrit's first at a location."""
+    merged = [*gerrit, *local]
+    return sorted(merged, key=lambda ch: (ch.resolved, ch.path, ch.line if ch.line is not None else -1, ch.local))
+
+
 def collect_comment_chains(
     file_map: dict[str, list[dict[str, Any]]],
     *,
@@ -172,12 +202,7 @@ def collect_comment_chains(
     resolved ones. That keeps the attention-bearing threads at the top.
     """
 
-    chains = build_comment_chains(file_map, drafts)
-    if comments == "all":
-        return [chain for chain in chains if not chain.resolved] + [chain for chain in chains if chain.resolved]
-    if comments == "resolved":
-        return [chain for chain in chains if chain.resolved]
-    return [chain for chain in chains if not chain.resolved]
+    return select_chains(build_comment_chains(file_map, drafts), comments)
 
 
 def collect_unresolved_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[CommentChain]:

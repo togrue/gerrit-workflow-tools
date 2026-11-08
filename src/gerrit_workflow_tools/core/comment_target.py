@@ -8,11 +8,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.stack import read_commit_rows
 
 
 class MissingChangeIdError(ChangeResolutionError):
@@ -32,7 +34,6 @@ class CommentTarget:
     """The Gerrit patchset that *commit* is (or the current one, without a local commit).
     ``None`` when Gerrit has no patchset with these lines: not pushed, or rewritten locally."""
     change_url: str | None
-    summary: str
 
     @property
     def on_gerrit(self) -> bool:
@@ -56,9 +57,21 @@ def resolve_comment_target(
     selected = resolved.resolution.selected
     key = selected.triplet if selected is not None else service.cache_key(change_id)
     local = row.sha if resolved.is_local_commit else (commit_sha_or_none(cwd, row.sha) if row.sha else None)
-    return target_for_commit(
-        service, key, change_id, local, summary=row.subject, gerrit_current=not resolved.is_local_commit
-    )
+    return target_for_commit(service, key, change_id, local, gerrit_current=not resolved.is_local_commit)
+
+
+def local_target(cwd: Path | str, rev: str | None, *, settings: Settings, branch: str | None) -> CommentTarget:
+    """Without Gerrit: the local commit *rev* (``HEAD`` when ``None``), keyed through the stack context."""
+    sha = commit_sha_or_none(cwd, rev or "HEAD")
+    if sha is None:
+        raise ChangeResolutionError(f"no commit {rev or 'HEAD'!r} here (and Gerrit is not configured)")
+    row = read_commit_rows(cwd, "-1", sha)[0]
+    change_id = row.valid_change_id
+    if not change_id:
+        raise MissingChangeIdError(f"commit {row.short_sha} has no Change-Id")
+    ctx = resolve_stack_context(cwd, branch, settings=settings)
+    key = build_triplet(ctx.project, ctx.push_branch, change_id)
+    return CommentTarget(key=key, change_id=change_id, commit=sha, patch_set=None, change_url=None)
 
 
 def target_for_commit(
@@ -67,7 +80,6 @@ def target_for_commit(
     change_id: str,
     commit: str | None,
     *,
-    summary: str,
     gerrit_current: bool = False,
 ) -> CommentTarget:
     """The target for local *commit* of change *key*: which patchset it is on Gerrit, if any.
@@ -90,5 +102,4 @@ def target_for_commit(
         commit=commit,
         patch_set=patch_set,
         change_url=view.url(service.web_base) if view is not None else None,
-        summary=summary,
     )

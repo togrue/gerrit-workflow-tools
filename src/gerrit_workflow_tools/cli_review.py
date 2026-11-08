@@ -206,18 +206,22 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     return int(ExitCode.OK)
 
 
+def _vote_target(args: argparse.Namespace, service: GerritService, cwd: Path) -> tuple[str, int, int | None]:
+    """``(triplet, number, reviewed patchset)`` to vote on: ``--change``, else the review going on."""
+    if args.change is not None:
+        target, _url = _patchset(service, cwd, args.change, None)
+        return target.key, target.number, None
+    state = find_review(cwd, service.settings)
+    if state is None:
+        raise ReviewUsageError("no review going on here: name the change with --change")
+    return state.key, state.number, state.patch_set
+
+
 def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path) -> int:
     votes = _parse_votes(p, args.vote)
     if publish_blocked() and not args.dry_run:
         p.error(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
-    state = find_review(cwd, service.settings)
-    if args.change is not None:
-        target, _url = _patchset(service, cwd, args.change, None)
-        key, number, reviewed = target.key, target.number, None
-    elif state is not None:
-        key, number, reviewed = state.key, state.number, state.patch_set
-    else:
-        raise ReviewUsageError("no review going on here: name the change with --change")
+    key, number, reviewed = _vote_target(args, service, cwd)
     current = ChangeView.from_payload(service.rest.get_change(key)).current_revision_number
     if reviewed is not None and current != reviewed:
         print(

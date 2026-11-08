@@ -2,9 +2,9 @@
 
 | | |
 |--|--|
-| **Status** | **Partial**: Gerrit drafts and `--discard` ship. Notes, local drafts (`--note`, `--local`) and the review-state default are still planned |
-| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in core/local_comments.py (new); chain assembly in `core/comment_chains.py` |
-| **Requires** | A git repository. `gerrit.webUrl` and credentials only for comments that go to Gerrit |
+| **Status** | **Partial**: Gerrit drafts, notes, local drafts and `--discard` ship. [Later slices](#later-slices) (re-anchoring, uploading, orphans, `ger log`) are planned |
+| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in `core/local_comments.py`; chain assembly in `core/comment_chains.py` |
+| **Requires** | A git repository. `gerrit.webUrl` and credentials, except for `--note`, `--local` and `--discard` of a local comment, which work without Gerrit configured |
 
 Write a new comment on a line, a range or a file of a change. `ger reply` answers a chain that already exists; `ger comment` starts one.
 
@@ -99,7 +99,7 @@ Local comments join the commit's chains. They show for commits Gerrit does not h
 
 - **Human:** each local comment is a chain of its own, headed `note (private)` or `local draft (not on Gerrit)`, after the Gerrit chains at the same location. When the file in the shown commit is not the anchored version, the heading adds `(file changed since)`. Mapping the line onto the new version is a later slice.
 - **Markdown / `--ai`:** the same, headed `**Note (private)**` or `**Local draft (not on Gerrit)**`.
-- **JSON:** every comment gains `state`: `note`, `local-draft`, `draft` or `published`. `draft` stays true for Gerrit drafts only. A local chain's `root_id` is the local comment's id, and its `url` is `null`.
+- **JSON:** every comment gains `state`: `note`, `local-draft`, `draft` or `published`. `draft` stays true for Gerrit drafts only. A local chain's `root_id` is the local comment's id, and its `url` is `null`. Every chain gains `anchor_moved`, true for a local comment shown on a version of the file it was not written on.
 
 `--comments unresolved|all|resolved` filters local comments on their own flag.
 

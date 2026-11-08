@@ -19,7 +19,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.core.annotated_stack import annotate
-from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
+from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection, merge_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -28,6 +28,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCom
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.comments import (
@@ -349,6 +350,9 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             if (commit.pushed and rest_key)
             else []
         )
+        if rest_key:
+            local = local_chains_of(service, rest_key, commit.sha or None, comments=args.comments)
+            chains = merge_chains(chains, local)
 
         if out_fmt == "json":
             json_payloads.append(
