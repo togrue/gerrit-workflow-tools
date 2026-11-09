@@ -60,6 +60,8 @@ def _anchored_fields(chain: CommentChain) -> dict[str, object]:
     """Where a local comment was written and the text it covered; ``null`` for a Gerrit chain."""
     anchor = chain.anchor
     return {
+        "anchored_path": anchor.anchored.path if anchor else None,
+        "anchored_start_line": anchor.anchored.start_line if anchor else None,
         "anchored_line": anchor.anchored.line if anchor else None,
         "anchored_text": anchor.text if anchor else None,
     }

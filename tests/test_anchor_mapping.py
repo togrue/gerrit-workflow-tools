@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.core.anchor_mapping import Hunk, MappedLines, map_lines, place_anchor
+from gerrit_workflow_tools.core.anchor_mapping import Hunk, MappedLines, blob_hunks, map_lines, place_anchor
 from gerrit_workflow_tools.core.comment_anchor import Anchor, anchor_at, fit_to_file, parse_location
 from gerrit_workflow_tools.core.git_run import git, git_out
 
@@ -29,6 +29,7 @@ def _commit(repo: Path, files: dict[str, list[str] | None]) -> str:
         if lines is None:
             git("rm", "-q", name, cwd=repo)
             continue
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
         (repo / name).write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
         git("add", name, cwd=repo)
     git("commit", "-q", "-m", "c", "--allow-empty", cwd=repo)
@@ -106,14 +107,80 @@ def test_a_deleted_file_leaves_an_outdated_file_comment(repo: Path) -> None:
     assert (placed.shown.path, placed.shown.line, placed.outdated, placed.text) == ("a.txt", None, True, "line 5")
 
 
-def test_the_mapping_is_direct_from_the_anchor(repo: Path) -> None:
+def test_two_successive_rewrites_map_the_same_as_one(repo: Path) -> None:
     first = _commit(repo, {"a.txt": LINES})
     anchor = _anchor(repo, first, "a.txt:5")
-    # Rewrite 1 edits line 5 away; rewrite 2 restores it. Chained, the comment would stay
-    # outdated; mapped straight from the anchor, it is a clean move.
-    _commit(repo, {"a.txt": _with(LINES, 5, ["changed"], drop=1)})
-    placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": _with(LINES, 1, ["new"])}))
-    assert (placed.shown.line, placed.outdated) == (6, False)
+    # Rewrite 1 edits line 5 away: mapped onto it, the comment is outdated.
+    edited = _commit(repo, {"a.txt": _with(LINES, 5, ["changed"], drop=1)})
+    assert place_anchor(repo, anchor, edited).outdated
+    # Rewrite 2 restores line 5 below a new first line. Chained through rewrite 1, the
+    # comment would stay outdated; mapped from the anchor, it is the same clean move as
+    # the one rewrite straight from the anchor's commit.
+    twice = place_anchor(repo, anchor, _commit(repo, {"a.txt": _with(LINES, 1, ["new"])}))
+    git("checkout", "-q", "-b", "once", first, cwd=repo)
+    once = place_anchor(repo, anchor, _commit(repo, {"a.txt": _with(LINES, 1, ["new"])}))
+    assert twice == once
+    assert (twice.shown.line, twice.outdated) == (6, False)
+
+
+def test_user_diff_config_does_not_merge_hunks(repo: Path) -> None:
+    git("config", "diff.interHunkContext", "5", cwd=repo)
+    first = _commit(repo, {"a.txt": LINES})
+    anchor = _anchor(repo, first, "a.txt:3")
+    edited = _with(_with(LINES, 5, ["line five"], drop=1), 1, ["line one"], drop=1)
+    placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": edited}))
+    assert (placed.shown.line, placed.outdated) == (3, False)
+
+
+def test_renames_are_found_from_a_subdirectory(repo: Path) -> None:
+    git("config", "diff.relative", "true", cwd=repo)
+    first = _commit(repo, {"src/a.txt": LINES, "src/keep.txt": ["x"]})
+    anchor = _anchor(repo, first, "src/a.txt:5")
+    (repo / "lib").mkdir()
+    git("mv", "src/a.txt", "lib/a.txt", cwd=repo)
+    shown = _commit(repo, {"lib/a.txt": _with(LINES, 1, ["new"])})
+    placed = place_anchor(repo / "src", anchor, shown)
+    assert (placed.shown.path, placed.shown.line) == ("lib/a.txt", 6)
+    gone = Anchor(commit="0" * 40, location=anchor.location, blob=anchor.blob, text=anchor.text)
+    git("mv", "lib/a.txt", "lib/b.txt", cwd=repo)
+    (repo / "lib" / "b.txt").write_text("".join(f"{line}\n" for line in LINES), encoding="utf-8")
+    git("add", "lib/b.txt", cwd=repo)
+    by_blob = place_anchor(repo / "src", gone, _commit(repo, {}))
+    assert (by_blob.shown.path, by_blob.shown.line) == ("lib/b.txt", 5)
+
+
+def test_deleting_the_last_line_marks_it_outdated(repo: Path) -> None:
+    first = _commit(repo, {"a.txt": LINES})
+    anchor = _anchor(repo, first, "a.txt:10")
+    placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": LINES[:9]}))
+    assert (placed.shown.line, placed.outdated) == (9, True)
+
+
+def test_an_emptied_file_leaves_an_outdated_file_comment(repo: Path) -> None:
+    first = _commit(repo, {"a.txt": LINES})
+    anchor = _anchor(repo, first, "a.txt:5")
+    placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": []}))
+    assert (placed.shown.path, placed.shown.line, placed.outdated) == ("a.txt", None, True)
+
+
+def test_a_binary_file_leaves_an_outdated_file_comment(repo: Path) -> None:
+    first = _commit(repo, {"a.txt": LINES})
+    anchor = _anchor(repo, first, "a.txt:5")
+    (repo / "a.txt").write_bytes(b"\0binary\0" * 10)
+    git("add", "a.txt", cwd=repo)
+    placed = place_anchor(repo, anchor, _commit(repo, {}))
+    assert (placed.shown.path, placed.shown.line, placed.outdated) == ("a.txt", None, True)
+
+
+def test_a_failed_diff_is_not_cached(repo: Path) -> None:
+    first = _commit(repo, {"a.txt": LINES})
+    blob = git_out("rev-parse", f"{first}:a.txt", cwd=repo)
+    # Content no other test writes: the cache is keyed by content and shared by every repo.
+    later = "".join(f"{line}\n" for line in ["only in this test", *LINES])
+    missing = git("hash-object", "--stdin", cwd=repo, input=later).stdout.strip()
+    assert blob_hunks(repo, blob, missing) is None
+    git("hash-object", "-w", "--stdin", cwd=repo, input=later)
+    assert blob_hunks(repo, blob, missing) == (Hunk(0, 0, 1, 1),)
 
 
 def test_the_same_blob_is_not_moved(repo: Path) -> None:
