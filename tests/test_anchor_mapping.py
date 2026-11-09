@@ -50,7 +50,7 @@ def test_an_insertion_above_moves_the_line_and_keeps_its_text(repo: Path) -> Non
     anchor = _anchor(repo, first, "a.txt:5")
     shown = _commit(repo, {"a.txt": _with(LINES, 2, ["new 1", "new 2"])})
     placed = place_anchor(repo, anchor, shown)
-    assert (placed.line, placed.moved, placed.outdated, placed.anchored_text) == (7, True, False, "line 5")
+    assert (placed.shown.line, placed.moved, placed.outdated, placed.text) == (7, True, False, "line 5")
 
 
 def test_an_edit_of_the_anchored_line_marks_it_outdated(repo: Path) -> None:
@@ -58,7 +58,7 @@ def test_an_edit_of_the_anchored_line_marks_it_outdated(repo: Path) -> None:
     anchor = _anchor(repo, first, "a.txt:5")
     shown = _commit(repo, {"a.txt": _with(LINES, 5, ["line five"], drop=1)})
     placed = place_anchor(repo, anchor, shown)
-    assert (placed.line, placed.outdated, placed.anchored_line, placed.anchored_text) == (4, True, 5, "line 5")
+    assert (placed.shown.line, placed.outdated, placed.anchored.line, placed.text) == (4, True, 5, "line 5")
 
 
 def test_deleting_the_anchored_line_marks_it_outdated(repo: Path) -> None:
@@ -67,8 +67,8 @@ def test_deleting_the_anchored_line_marks_it_outdated(repo: Path) -> None:
     shown = _commit(repo, {"a.txt": _with(LINES, 1, ["top"], drop=0)[:5] + LINES[6:]})
     placed = place_anchor(repo, anchor, shown)
     # "top" pushed line 4 to line 5: the outdated comment sits right after it.
-    assert (placed.line, placed.start_line, placed.outdated) == (5, None, True)
-    assert placed.anchored_text == "line 5\nline 6"
+    assert (placed.shown.describe(), placed.outdated) == ("a.txt:5", True)
+    assert placed.text == "line 5\nline 6"
 
 
 def test_a_range_over_an_untouched_block_survives_an_edit_elsewhere(repo: Path) -> None:
@@ -76,7 +76,7 @@ def test_a_range_over_an_untouched_block_survives_an_edit_elsewhere(repo: Path) 
     anchor = _anchor(repo, first, "a.txt:4-6")
     edited = _with(_with(LINES, 9, ["line nine"], drop=1), 1, ["head"], drop=1)
     placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": _with(edited, 2, ["extra"])}))
-    assert (placed.start_line, placed.line, placed.outdated) == (5, 7, False)
+    assert (placed.shown.start_line, placed.shown.line, placed.outdated) == (5, 7, False)
 
 
 def test_a_rename_is_followed(repo: Path) -> None:
@@ -85,7 +85,7 @@ def test_a_rename_is_followed(repo: Path) -> None:
     git("mv", "a.txt", "b.txt", cwd=repo)
     shown = _commit(repo, {"b.txt": _with(LINES, 1, ["new"])})
     placed = place_anchor(repo, anchor, shown)
-    assert (placed.path, placed.line, placed.outdated) == ("b.txt", 6, False)
+    assert (placed.shown.path, placed.shown.line, placed.outdated) == ("b.txt", 6, False)
 
 
 def test_a_rename_is_found_by_blob_once_the_anchor_commit_is_gone(repo: Path) -> None:
@@ -96,14 +96,14 @@ def test_a_rename_is_found_by_blob_once_the_anchor_commit_is_gone(repo: Path) ->
     shown = _commit(repo, {})
     gone = Anchor(commit="0" * 40, location=anchor.location, blob=anchor.blob, text=anchor.text)
     placed = place_anchor(repo, gone, shown)
-    assert (placed.path, placed.line, placed.moved, placed.outdated) == ("moved/a.txt", 5, True, False)
+    assert (placed.shown.path, placed.shown.line, placed.moved, placed.outdated) == ("moved/a.txt", 5, True, False)
 
 
 def test_a_deleted_file_leaves_an_outdated_file_comment(repo: Path) -> None:
     first = _commit(repo, {"a.txt": LINES, "keep.txt": ["x"]})
     anchor = _anchor(repo, first, "a.txt:5")
     placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": None}))
-    assert (placed.path, placed.line, placed.outdated, placed.anchored_text) == ("a.txt", None, True, "line 5")
+    assert (placed.shown.path, placed.shown.line, placed.outdated, placed.text) == ("a.txt", None, True, "line 5")
 
 
 def test_the_mapping_is_direct_from_the_anchor(repo: Path) -> None:
@@ -113,14 +113,14 @@ def test_the_mapping_is_direct_from_the_anchor(repo: Path) -> None:
     # outdated; mapped straight from the anchor, it is a clean move.
     _commit(repo, {"a.txt": _with(LINES, 5, ["changed"], drop=1)})
     placed = place_anchor(repo, anchor, _commit(repo, {"a.txt": _with(LINES, 1, ["new"])}))
-    assert (placed.line, placed.outdated) == (6, False)
+    assert (placed.shown.line, placed.outdated) == (6, False)
 
 
 def test_the_same_blob_is_not_moved(repo: Path) -> None:
     first = _commit(repo, {"a.txt": LINES})
     anchor = _anchor(repo, first, "a.txt:5")
     placed = place_anchor(repo, anchor, _commit(repo, {"other.txt": ["x"]}))
-    assert (placed.line, placed.moved, placed.outdated) == (5, False, False)
+    assert (placed.shown.line, placed.moved, placed.outdated) == (5, False, False)
 
 
 @pytest.mark.parametrize(

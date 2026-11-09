@@ -10,19 +10,56 @@ Spec: docu/spec/commands/comment.md § Re-anchoring.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from gerrit_workflow_tools.core.comment_anchor import Anchor, blob_of
-from gerrit_workflow_tools.core.gerrit_change_status import AnchorStatus
+from gerrit_workflow_tools.core.comment_anchor import Anchor, CommentLocation, blob_of
+from gerrit_workflow_tools.core.gerrit_change_status import ContextLine
 from gerrit_workflow_tools.core.git_run import git
 
 
 _EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
-_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+_HUNK_HEADER = re.compile(
+    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@"
+)
 _CACHE_LIMIT = 4096
 _HUNKS: dict[tuple[str, str], tuple[Hunk, ...] | None] = {}
 """Hunks by (anchored blob, shown blob). Both are content-addressed, so an entry never goes stale."""
+
+
+@dataclass(frozen=True)
+class AnchorPlacement:
+    """Where a local comment's anchor lands on the version of the file it is shown on."""
+
+    shown: CommentLocation
+    """Where the comment is shown: the anchor mapped onto the shown file."""
+    anchored: CommentLocation
+    """Where it was written."""
+    text: str
+    """The text it was written on."""
+    moved: bool = False
+    """Shown on another version of the file, or at another path, than it was written on."""
+    outdated: bool = False
+    """Its anchored lines changed or were deleted (or the file is gone): shown near where they were."""
+
+    @classmethod
+    def at_anchor(cls, anchor: Anchor) -> AnchorPlacement:
+        """Shown on the very version it was written on."""
+        return cls(shown=anchor.location, anchored=anchor.location, text=anchor.text)
+
+    def moved_to(self, shown: CommentLocation) -> AnchorPlacement:
+        """Cleanly mapped to *shown* on another version of the file."""
+        return replace(self, shown=shown, moved=True)
+
+    def outdated_at(self, shown: CommentLocation) -> AnchorPlacement:
+        """Its lines are gone; shown at *shown*, next to where they were."""
+        return replace(self, shown=shown, moved=True, outdated=True)
+
+    @property
+    def context_lines(self) -> tuple[ContextLine, ...]:
+        """The anchored text as numbered lines, as it was: what an outdated comment shows beside it."""
+        first = self.anchored.start_line or 1
+        return tuple(ContextLine(first + i, text) for i, text in enumerate(self.text.splitlines()))
 
 
 @dataclass(frozen=True)
@@ -94,8 +131,8 @@ def _diff_blobs(cwd: Path | str, old: str, new: str) -> tuple[Hunk, ...] | None:
     for line in shown.stdout.splitlines():
         match = _HUNK_HEADER.match(line)
         if match:
-            a, b, c, d = match.groups()
-            hunks.append(Hunk(int(a), int(b) if b is not None else 1, int(c), int(d) if d is not None else 1))
+            counts = {name: int(value) if value is not None else 1 for name, value in match.groupdict().items()}
+            hunks.append(Hunk(**counts))
     if not hunks and "Binary files" in shown.stdout:
         return None
     return tuple(hunks)
@@ -142,23 +179,27 @@ def _path_of_blob(cwd: Path | str, commit: str, blob: str | None) -> str | None:
     return None
 
 
-def place_anchor(cwd: Path | str, anchor: Anchor, commit: str | None) -> AnchorStatus:
-    """Where *anchor* sits in *commit*'s version of its file (the anchor itself without a commit)."""
+def place_anchor(cwd: Path | str, anchor: Anchor, commit: str | None) -> AnchorPlacement:
+    """Where *anchor* lands in *commit*'s version of its file (the anchor itself without a commit)."""
     location = anchor.location
-    status = AnchorStatus.at_anchor(location.path, location.line, location.start_line, anchor.text)
+    placement = AnchorPlacement.at_anchor(anchor)
     if commit is None or anchor.blob is None:
-        return status
+        return placement
     path = shown_path(cwd, anchor, commit)
     target = blob_of(cwd, commit, path) if path is not None else None
     if path is None or target is None:
-        return status.placed(path=location.path, line=None, start_line=None, outdated=True)
-    if target == anchor.blob or location.line is None:
-        moved = target != anchor.blob or path != location.path
-        return status.placed(path=path, line=location.line, start_line=location.start_line, moved=moved)
+        return placement.outdated_at(CommentLocation(path=location.path))
+    if target == anchor.blob:
+        return placement if path == location.path else placement.moved_to(replace(location, path=path))
+    if location.line is None:
+        return placement.moved_to(replace(location, path=path))
     hunks = blob_hunks(cwd, anchor.blob, target)
     if hunks is None or target == _EMPTY_BLOB:
-        return status.placed(path=path, line=None, start_line=None, outdated=True)
+        return placement.outdated_at(CommentLocation(path=path))
     start = location.start_line if location.start_line is not None else location.line
     mapped = map_lines(hunks, start, location.line)
-    start_line = mapped.start if location.start_line is not None and not mapped.outdated else None
-    return status.placed(path=path, line=mapped.end, start_line=start_line, outdated=mapped.outdated)
+    if mapped.outdated:
+        return placement.outdated_at(CommentLocation(path=path, line=mapped.end))
+    rng = location.range
+    shown_range = replace(rng, start_line=mapped.start, end_line=mapped.end) if rng is not None else None
+    return placement.moved_to(replace(location, path=path, line=mapped.end, range=shown_range))
