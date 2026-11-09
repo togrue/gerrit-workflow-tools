@@ -111,22 +111,38 @@ def _above(hunk: Hunk, line: int) -> bool:
     return hunk.old_start + hunk.old_count - 1 < line
 
 
+class _DiffFailed(Exception):
+    """git could not diff the blobs (one is missing, say): not a fact about their content."""
+
+
 def blob_hunks(cwd: Path | str, old: str, new: str) -> tuple[Hunk, ...] | None:
-    """The ``-U0`` hunks from blob *old* to blob *new*; ``None`` when git cannot diff them by line."""
+    """The ``-U0`` hunks from blob *old* to blob *new*; ``None`` when they cannot be diffed by line.
+
+    Only a diff git produced is cached: it is a fact about two content-addressed blobs.
+    A failed diff is not, so it is retried next time.
+    """
     key = (old, new)
     if key not in _HUNKS:
+        try:
+            hunks = _diff_blobs(cwd, old, new)
+        except _DiffFailed:
+            return None
         if len(_HUNKS) >= _CACHE_LIMIT:
             _HUNKS.clear()
-        _HUNKS[key] = _diff_blobs(cwd, old, new)
+        _HUNKS[key] = hunks
     return _HUNKS[key]
 
 
 def _diff_blobs(cwd: Path | str, old: str, new: str) -> tuple[Hunk, ...] | None:
+    """Hunks of the diff; ``None`` for a binary one. Raises :class:`_DiffFailed`."""
     if old == new:
         return ()
-    shown = git("diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", old, new, cwd=cwd, check=False)
+    # Pinned against user config: diff.interHunkContext would merge nearby hunks, and
+    # an untouched line between two edits would then look changed.
+    flags = ("-U0", "--inter-hunk-context=0", "--no-color", "--no-ext-diff", "--no-textconv")
+    shown = git("diff", *flags, old, new, cwd=cwd, check=False)
     if shown.returncode != 0:
-        return None
+        raise _DiffFailed(shown.stderr.strip())
     hunks = []
     for line in shown.stdout.splitlines():
         match = _HUNK_HEADER.match(line)
@@ -154,7 +170,8 @@ def shown_path(cwd: Path | str, anchor: Anchor, commit: str) -> str | None:
 def _renamed_to(cwd: Path | str, old_commit: str, commit: str, path: str) -> str | None:
     if git("cat-file", "-e", f"{old_commit}^{{commit}}", cwd=cwd, check=False).returncode != 0:
         return None
-    listed = git("diff", "-M", "--name-status", "-z", "--no-color", old_commit, commit, cwd=cwd, check=False)
+    flags = ("-M", "--name-status", "-z", "--no-color", "--no-relative")
+    listed = git("diff", *flags, old_commit, commit, cwd=cwd, check=False)
     fields = listed.stdout.split("\0") if listed.returncode == 0 else []
     i = 0
     while i < len(fields) and fields[i]:
@@ -171,7 +188,8 @@ def _renamed_to(cwd: Path | str, old_commit: str, commit: str, path: str) -> str
 def _path_of_blob(cwd: Path | str, commit: str, blob: str | None) -> str | None:
     if blob is None:
         return None
-    listed = git("ls-tree", "-r", "-z", commit, cwd=cwd, check=False)
+    # --full-tree: from a subdirectory, ls-tree would list only that subtree, relative to it.
+    listed = git("ls-tree", "-r", "-z", "--full-tree", commit, cwd=cwd, check=False)
     for entry in listed.stdout.split("\0") if listed.returncode == 0 else []:
         meta, _, name = entry.partition("\t")
         if meta.split(" ")[-1:] == [blob]:

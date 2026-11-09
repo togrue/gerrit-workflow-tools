@@ -136,7 +136,7 @@ def test_an_edited_line_shows_the_comment_outdated_with_its_text(
     _amend_d(stack_repo, "file d.txt, reworked\n")
     [chain] = _show_json(stack_repo, store, monkeypatch)["comment_chains"]
     assert (chain["outdated"], chain["line"], chain["anchored_line"]) == (True, 1, 1)
-    assert chain["anchored_text"] == "file d.txt"
+    assert (chain["anchored_path"], chain["anchored_start_line"], chain["anchored_text"]) == ("d.txt", 1, "file d.txt")
     _code, out, _ = run_cli(stack_repo, show_main, ["--color=never"], monkeypatch, gerrit=store)
     assert "d.txt:1 (outdated: lines changed since)" in out
     assert "   1  file d.txt " in out

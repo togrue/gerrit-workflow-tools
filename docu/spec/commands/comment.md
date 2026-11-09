@@ -95,12 +95,13 @@ The anchor never changes after the comment is written ([ADR-0011](../../adr/0011
 
 When a local comment is shown on a commit whose file is not the anchored blob, ger maps it there. The mapping is computed on read and never written back, so worktrees holding different versions of a change each see the comment in the right place without fighting over the store.
 
-- **One diff, straight from the anchor.** `git diff -U0` from the anchored blob to the shown one. Never chained through an earlier mapping, so ten rebases map exactly as one.
+- **One diff, straight from the anchor.** `git diff -U0 --inter-hunk-context=0` from the anchored blob to the shown one, so no user config merges nearby hunks. Never chained through an earlier mapping, so ten rebases map exactly as one.
 - **Clean move.** A line outside every hunk shifts by the line-count change of the hunks above it. A range shifts at each end, so an insertion inside it widens it. The comment shows at its new line.
 - **Outdated.** A hunk that changes or deletes any anchored line makes the comment **outdated**. It sits on the line just before that hunk in the shown version (line 1 when the hunk starts the file), and the anchored text is shown with it. It is never dropped.
-- **Renames.** When the anchored path is not in the shown commit, `git diff -M` from the anchor's commit finds where it went. When that commit is gone, a file in the shown commit with the anchored blob is taken. A file that cannot be found leaves an outdated file comment on the old path.
+- **Renames.** When the anchored path is not in the shown commit, `git diff -M` from the anchor's commit finds where it went. When that commit is gone, a file in the shown commit with the anchored blob is taken. A file that cannot be found leaves an outdated file comment on the old path. Both lookups cover the whole tree, whatever directory ger runs in.
 - **File comments** follow a rename and are never outdated while the file exists.
-- **Cached** by (anchored blob, shown blob) for the life of the process. Both are content-addressed, so a cached mapping is never stale.
+- **No lines to map to.** A shown file that is binary or empty, or a diff git cannot make, leaves an outdated file comment.
+- **Cached** by (anchored blob, shown blob), in memory and bounded. Both are content-addressed, so a cached diff is never stale. A diff git failed to make is not cached.
 
 ---
 
@@ -108,9 +109,9 @@ When a local comment is shown on a commit whose file is not the anchored blob, g
 
 Local comments join the commit's chains. They show for commits Gerrit does not have, too, which until now showed no chains at all.
 
-- **Human:** each local comment is a chain of its own, headed `note (private)` or `local draft (not on Gerrit)`, after the Gerrit chains at the same location, at the line [re-anchoring](#re-anchoring) maps it to. A comment that moved adds `(moved from L)` to the heading, `L` being where it was written (`old/path:L` after a rename). An outdated one adds `(outdated: lines changed since)` and shows the anchored text as context lines, numbered as they were.
+- **Human:** each local comment is a chain of its own, headed `note (private)` or `local draft (not on Gerrit)`, after the Gerrit chains at the same location, at the line [re-anchoring](#re-anchoring) maps it to. A comment that moved to another line adds `(moved from L)` to the heading, `L` being where it was written (`old/path:L` after a rename). An outdated one adds `(outdated: lines changed since)` and shows the anchored text as context lines, numbered as they were.
 - **Markdown / `--ai`:** the same, headed `**Note (private)**` or `**Local draft (not on Gerrit)**`, with the same heading suffix and context block.
-- **JSON:** every comment gains `state`: `note`, `local-draft`, `draft` or `published`. `draft` stays true for Gerrit drafts only. A local chain's `root_id` is the local comment's id, and its `url` is `null`. Every chain gains `anchor_moved`, true for a local comment shown on another version of the file or at another path than it was written on, and `outdated`, true when its anchored lines changed. `path`, `line` and `start_line` are where the comment is shown; `anchored_line` and `anchored_text` are where it was written and the text it covered (`null` for Gerrit chains).
+- **JSON:** every comment gains `state`: `note`, `local-draft`, `draft` or `published`. `draft` stays true for Gerrit drafts only. A local chain's `root_id` is the local comment's id, and its `url` is `null`. Every chain gains `anchor_moved`, true for a local comment shown on another version of the file or at another path than it was written on, and `outdated`, true when its anchored lines changed. `path`, `line` and `start_line` are where the comment is shown; `anchored_path`, `anchored_start_line`, `anchored_line` and `anchored_text` are where it was written and the text it covered (`null` for Gerrit chains).
 
 `--comments unresolved|all|resolved` filters local comments on their own flag.
 
