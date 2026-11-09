@@ -89,9 +89,52 @@ pipeline URL your team uses. The registry runs only for matching
 
 ---
 
-## Next: CI content
+## CI content providers
 
-**CI links** stop at the URL. Opening the console, extracting **CI findings**, and dumping a log for an agent is a separate layer (**CI content provider**) used by planned `ger ci` and opt-in `ger show` — see [spec/ci-content.md](spec/ci-content.md).
+**CI links** stop at the URL. [`ger ci`](spec/commands/ci.md) and `ger show --ci` go one hop
+further: a **CI content provider** fetches what the link points at and extracts **CI findings**
+(design: [spec/ci-content.md](spec/ci-content.md)). Providers are matched by URL host/pattern,
+not by `gerrit.project`, so they live beside link strategies in the same `registry.py`:
+
+```python
+from gerrit_workflow_tools.core.ci_content import CiFetched
+from gerrit_workflow_tools.core.ci_findings import find_ci_findings
+
+class BuildsProvider:
+    id = "builds"
+
+    def matches(self, url):
+        return url.startswith("https://builds.example.org/")
+
+    def cache_key(self, url):
+        return url.split("?")[0]
+
+    def fetch(self, link, ctx):
+        # ctx.credential is ger.ciCredential.<host>; build your own auth header from it.
+        log = ctx.http.get_text(link.url + "/log.txt")
+        return CiFetched(
+            url=link.url,
+            findings=find_ci_findings(log.text),  # the built-in ordered finders
+            body=log.text,
+            cache_verdict="body",  # only when the content can never change
+            truncated=log.truncated,
+        )
+
+CONTENT_PROVIDERS = [BuildsProvider()]
+```
+
+**Contract:**
+
+- `matches(url)` decides; the first matching provider wins. Registry providers (local tier,
+  then global) come before the built-in Jenkins provider.
+- `cache_verdict` is `"none"` (do not reuse), `"findings"`, or `"body"`. Say `"none"` for
+  anything still running or for a floating URL ("latest build"); **ger** decides how much of an
+  allowed result it can afford to keep.
+- Raise on failure; **ger** records the message on that link (`ger ci` exits `11`,
+  `ger show --ci` keeps going).
+
+Jenkins needs nothing: the built-in provider handles any `…/job/<name>/<n>/…` URL. Set
+`ger.ciCredential.<host>` to `user:apitoken` when the console needs a login.
 
 ---
 
@@ -100,4 +143,4 @@ pipeline URL your team uses. The registry runs only for matching
 - [Configuration.md](Configuration.md) — registry paths and resolution order
 - [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) — testReport URL example
 - [spec/commands/log.md](spec/commands/log.md) — `ci_links` JSON field
-- [spec/ci-content.md](spec/ci-content.md) — sketch: fetch/parse behind CI links
+- [spec/ci-content.md](spec/ci-content.md) — fetch/parse behind CI links

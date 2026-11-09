@@ -348,6 +348,30 @@ Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd
 
 ---
 
+### 10. CI content (`ger ci`, `ger show --ci`)
+
+```mermaid
+flowchart LR
+  links[CiLink rows · overlay]
+  svc[core/ci_content_service.py]
+  prov[CI content providers · .ger/ci CONTENT_PROVIDERS · ci_jenkins]
+  find[core/ci_findings.py]
+  http[core/ci_http.py]
+  store[(ci_content store)]
+  render[render/ci_content.py]
+
+  links --> svc
+  svc --> store
+  svc --> prov
+  prov --> http
+  prov --> find
+  svc --> render
+```
+
+A second, opt-in hop after the overlay: the overlay stops at **CI links**; `CiContentService` matches each link to a provider by URL, passes it `ger.ciCredential.<host>`, and turns what comes back into one `CiContent` (provenance, findings, optional body). The provider's cache verdict says what is safe to reuse; `CiContentStore` decides what it can afford to keep. Failures are recorded per link, never raised: `ger ci` turns them into exit `11`, `ger show` reports them inline. Design: [spec/ci-content.md](spec/ci-content.md).
+
+---
+
 ## Module catalog
 
 One row per module, by package-relative path. **Owns** is the concept the module is the single home for: extend it rather than writing a second copy. [`tests/test_docs.py`](../tests/test_docs.py) fails when a module is missing here or a listed one no longer exists.
@@ -357,11 +381,12 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, shared argparse groups, `print_resolution_note`, `confirm`, `run_interactive_rebase` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm`, `run_interactive_rebase` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
 | `cli_show.py` | `ger show` |
+| `cli_ci.py` | `ger ci` |
 | `cli_reply.py` | `ger reply` |
 | `cli_comment.py` | `ger comment` |
 | `cli_review.py` | `ger review` |
@@ -392,7 +417,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |
-| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_rewrite_rows`, ranges, merge-base |
+| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention |
@@ -411,7 +436,13 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |
-| `core/ci_strategy.py` | Loading CI link strategies from `.ger/ci/` |
+| `core/ci_strategy.py` | Loading CI link strategies and **CI content providers** from `.ger/ci/` |
+| `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding`, provenance, cache verdict) and the `CiContentProvider` seam |
+| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape |
+| `core/ci_content_store.py` | `CiContentStore`: size-bounded LRU store of immutable CI content, apart from the Gerrit cache |
+| `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`) |
+| `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
+| `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
@@ -447,6 +478,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_json.py` | JSON payloads for ``ger show`` |
+| `render/ci_content.py` | **CI content** projections: JSON, human and Markdown, grouped by CI link label |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns, and the highlighter for a branch's stack |
 | `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question, what it assigned |
 | `push_input_line.py` | Push options line: parsing and formatting |

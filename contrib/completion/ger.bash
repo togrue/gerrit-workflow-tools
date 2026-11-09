@@ -270,7 +270,7 @@ _ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --stack --first-attention -n --next-attention --branch --comments --context --context-padding --json --format --ai --color --hyperlinks -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --stack --first-attention -n --next-attention --branch --comments --context --context-padding --ci --no-ci --json --format --ai --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
@@ -299,7 +299,7 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion cache change-id changeid comment config edit fetch-api fix inbox log push rebase reply resolve restack review reword setup sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid ci comment config edit fetch-api fix inbox log push rebase reply resolve restack review reword setup sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -307,6 +307,7 @@ _ger() {
         bash-completion) _ger_bash_completion ;;
         cache) _ger_cache ;;
         change-id|changeid) _ger_change_id ;;
+        ci) _ger_ci ;;
         comment) _ger_comment ;;
         config) _ger_config ;;
         edit) _ger_edit ;;

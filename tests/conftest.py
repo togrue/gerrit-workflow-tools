@@ -188,6 +188,7 @@ def run_cli(
     *,
     catch_sys_exit: bool = False,
     gerrit: object | None = None,
+    ci_http: object | None = None,
 ) -> tuple[int, str, str]:
     """Run a CLI main with cwd set; capture stdout and stderr.
 
@@ -196,7 +197,8 @@ def run_cli(
 
     Pass *gerrit* to hand the command a ``GerritRest`` implementation (usually a
     :class:`ChangeStore`) instead of letting it build an ``HttpGerritRest``. Commands that
-    take no ``gerrit`` parameter must not be given one.
+    take no ``gerrit`` parameter must not be given one. *ci_http* likewise hands ``ger ci`` /
+    ``ger show`` a fake CI HTTP seam.
     """
     import io
     import sys
@@ -206,7 +208,9 @@ def run_cli(
     err_buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", out_buf)
     monkeypatch.setattr(sys, "stderr", err_buf)
-    kwargs = {"gerrit": gerrit} if gerrit is not None else {}
+    kwargs: dict[str, object] = {"gerrit": gerrit} if gerrit is not None else {}
+    if ci_http is not None:
+        kwargs["ci_http"] = ci_http
     try:
         code = main_fn(list(argv), **kwargs)
     except SystemExit as e:

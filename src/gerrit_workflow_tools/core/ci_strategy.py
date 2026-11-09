@@ -1,10 +1,11 @@
-"""Load CI link strategies from ``<scriptsDir>/ci/registry.py`` (and global config dir)."""
+"""Load CI link strategies and **CI content providers** from ``<scriptsDir>/ci/registry.py`` (and global config dir)."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiStrategy
 from gerrit_workflow_tools.core.config import Settings
@@ -14,6 +15,12 @@ from gerrit_workflow_tools.core.gerrit_message_parsing import (
     ci_links_from_failed_checks,
 )
 
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.ci_content import CiContentProvider
+
+
+logger = logging.getLogger(__name__)
 
 _REGISTRY = ExtensionRegistry("ci", "ger_ci", label="CI links")
 
@@ -101,9 +108,35 @@ def extract_ci_links_via_registry(
     return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
 
 
+def load_ci_content_providers(
+    cwd: Path | str | None,
+    *,
+    settings: Settings | None = None,
+    web_base: str | None = None,
+) -> list[CiContentProvider]:
+    """**CI content providers** in match order: ``CONTENT_PROVIDERS`` of the local, then the
+    global ``.ger/ci/registry.py``, then the built-in Jenkins provider.
+
+    Providers are matched by URL host/pattern, not by ``gerrit.project``, so every tier's
+    list is used. Entries without ``matches`` / ``fetch`` are skipped with a warning.
+    """
+    from gerrit_workflow_tools.core.ci_jenkins import JenkinsProvider
+
+    providers: list[CiContentProvider] = []
+    for module in _REGISTRY.tier_modules(cwd, settings=settings, web_base=web_base):
+        for candidate in getattr(module, "CONTENT_PROVIDERS", None) or ():
+            if all(callable(getattr(candidate, attr, None)) for attr in ("matches", "fetch")):
+                providers.append(candidate)
+            else:
+                logger.warning("ignoring CI content provider %r: it needs matches() and fetch()", candidate)
+    providers.append(JenkinsProvider())
+    return providers
+
+
 __all__ = [
     "LazyRows",
     "clear_ci_strategy_cache",
     "default_extract_ci_links",
     "extract_ci_links_via_registry",
+    "load_ci_content_providers",
 ]

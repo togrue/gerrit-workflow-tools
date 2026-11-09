@@ -80,6 +80,15 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 
 ---
 
+## `ger show` and `ger ci` — CI content
+
+| Key | Effect |
+|-----|--------|
+| `ger.showCiContent` | When `true`, `ger show` fetches the CI logs behind failed **CI links** and attaches their **CI findings** (same as `--ci`; `--no-ci` overrides). Default off: fetching logs is expensive. |
+| `ger.ciCredential.<host>` | Secret a **CI content provider** sends to `<host>` (the link URL's hostname, lowercase, no port), e.g. `git config --global ger.ciCredential.ci.example.org bot:apitoken`. `user:token` is HTTP Basic (Jenkins API tokens); anything else is a Bearer token. Used by `ger ci` and `ger show --ci`. |
+
+---
+
 ## `ger inbox` — `inbox.*`
 
 Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbox.md).
@@ -171,7 +180,7 @@ Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same 
 
 | Domain | Path segment | Role |
 |--------|--------------|------|
-| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. Built-in Jenkins parsing applies when no registry matches; `messages` may be lazily fetched — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md). |
+| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. Built-in Jenkins parsing applies when no registry matches; `messages` may be lazily fetched — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md). Optionally also `CONTENT_PROVIDERS`: **CI content providers** for `ger ci` / `ger show --ci`, matched by URL rather than project — see [CI content providers](gerrit-ci-strategies.md#ci-content-providers). |
 | Ready boundary | `ready/` | Choose the pushable stack tip and non-pushable tail highlighting. Callable: `find_ready_boundary(*, commits, stop_pattern, overlay) -> BoundaryResult`. |
 | Attention | `attention/` | Override attention reasons (`STRATEGIES` / `get_strategy`) and optional chain blocking (`CHAIN_BLOCK_STRATEGIES` / `get_chain_block_strategy`). |
 | Reviewers | `reviewers/` | Default push reviewers when CLI/branch config does not. Callable: `default_reviewers(*, branch, commits, settings) -> list[str]`. |

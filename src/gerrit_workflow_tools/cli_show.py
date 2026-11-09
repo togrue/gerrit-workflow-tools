@@ -20,6 +20,9 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.ci_content_service import CiContentService
+from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection, merge_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -31,6 +34,7 @@ from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
+from gerrit_workflow_tools.render.ci_content import format_ci_section_human, format_ci_section_markdown
 from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
     format_unresolved_section_human,
@@ -111,6 +115,12 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Extra source lines before/after the comment (implies --context; default 2).",
     )
+    p.add_argument(
+        "--ci",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Attach CI findings from failed CI links (fetches CI logs; default: ger.showCiContent, off).",
+    )
     add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(
@@ -146,6 +156,7 @@ def _emit_human_commit(
     *,
     is_local: bool,
     chains: list[CommentChain],
+    ci_contents: list[CiContent] | None,
     summary_highlighter: SummaryHighlighter,
     wrap_width: int,
 ) -> None:
@@ -176,6 +187,11 @@ def _emit_human_commit(
         )
     elif commit.summary:
         print(f"\n    {commit.summary}")
+
+    if ci_contents:
+        print(f"\n{color_text('CI findings:', ANSI_DIM)}")
+        for line in format_ci_section_human(ci_contents):
+            print(line)
 
     comment_lines = format_unresolved_section_human(
         chains,
@@ -208,6 +224,7 @@ def _emit_markdown_commit(
     commit: LogCommit,
     *,
     chains: list[CommentChain],
+    ci_contents: list[CiContent] | None,
     comments: CommentSelection,
 ) -> None:
     short = commit.short_sha or (commit.sha[:8] if commit.sha else "????????")
@@ -224,17 +241,22 @@ def _emit_markdown_commit(
         comments=comments,
     ):
         print(line)
+    if ci_contents:
+        print()
+        for line in format_ci_section_markdown(ci_contents):
+            print(line)
 
 
-def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> int:
     """Resolve revision(s) and print human, Markdown, or JSON Gerrit status details."""
-    return run_cli_command(lambda: _run(argv, gerrit=gerrit))
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit, ci_http=ci_http))
 
 
 def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     argv: list[str] | None,
     *,
     gerrit: GerritRest | None,
+    ci_http: CiHttp | None,
 ) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
@@ -273,6 +295,12 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=verbose_level >= 1)
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
+    ci_by_commit: list[list[CiContent] | None] = [None] * len(commits)
+    if settings.show_ci_content if args.ci is None else args.ci:
+        ci = CiContentService.from_settings(
+            cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh
+        )
+        ci_by_commit = [ci.fetch(c.ci_links) for c in commits]  # soft: a failure stays on its result
 
     if any(t.is_local_commit for t in targets) and branch is not None and branch_has_upstream(cwd, branch):
         try:
@@ -293,7 +321,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     json_payloads: list[dict[str, object]] = []
     multi = len(targets) > 1
 
-    for resolved, commit in zip(targets, commits, strict=True):
+    for resolved, commit, ci_contents in zip(targets, commits, ci_by_commit, strict=True):
         attention = commit.attention_reasons
         if attention:
             any_attention = True
@@ -320,16 +348,17 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                     is_local=resolved.is_local_commit,
                     resolution=resolved.resolution,
                     chains=chains,
+                    ci_content=ci_contents,
                 )
             )
         else:
             if out_fmt == "markdown":
-                _emit_markdown_commit(commit, chains=chains, comments=args.comments)
+                _emit_markdown_commit(commit, chains=chains, ci_contents=ci_contents, comments=args.comments)
                 print()
                 continue
             if resolved is not targets[0]:
                 print(color_text(_COMMIT_SEPARATOR, ANSI_YELLOW))
-            if multi and not chains:
+            if multi and not chains and not ci_contents:
                 _emit_brief_commit(commit, comments=args.comments)
                 continue
             _emit_human_commit(
@@ -337,6 +366,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                 commit,
                 is_local=resolved.is_local_commit,
                 chains=chains,
+                ci_contents=ci_contents,
                 summary_highlighter=summary_highlighter,
                 wrap_width=settings.wrap_width,
             )

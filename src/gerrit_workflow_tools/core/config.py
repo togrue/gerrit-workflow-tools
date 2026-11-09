@@ -306,6 +306,16 @@ class Settings:
         return self.flag(EDIT_NEXT_SHOW_KEY)
 
     @property
+    def show_ci_content(self) -> bool:
+        """``ger.showCiContent``: attach **CI findings** to ``ger show`` (``--ci`` / ``--no-ci`` override)."""
+        return self.flag("ger.showCiContent")
+
+    def ci_credential(self, host: str) -> str | None:
+        """``ger.ciCredential.<host>``: secret for CI content providers on *host* (key matched case-insensitively)."""
+        want = f"ger.cicredential.{host}".lower()
+        return next((v.strip() for k, v in self.values.items() if k.lower() == want and v.strip()), None)
+
+    @property
     def review_checkout(self) -> str | None:
         """``ger.reviewCheckout``: ``worktree`` or ``branch``; ``None`` when unset (ask on first use)."""
         value = (self.get("ger.reviewCheckout") or "").strip().lower()

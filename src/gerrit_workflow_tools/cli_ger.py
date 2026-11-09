@@ -23,6 +23,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "Print or install bash tab-completion for ger.",
         "gerrit_workflow_tools.cli_bash_completion:main",
     ),
+    "ci": (
+        "Fetch the CI logs behind failed CI links and list why CI failed.",
+        "gerrit_workflow_tools.cli_ci:main",
+    ),
     "cache": ("Inspect or clear the local Gerrit API cache.", "gerrit_workflow_tools.cli_cache:main"),
     "comment": (
         "Start a comment chain on a line or range of a change, as a draft.",
