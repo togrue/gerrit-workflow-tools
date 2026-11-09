@@ -89,9 +89,16 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 ---
 
+## Planned: CI content
+
+Opt-in attachment of **CI findings** from **CI links** (Settings + flag). Findings only — no log body. Soft fetch failures. Sketch: [ci-content.md](../ci-content.md).
+
+---
+
 ## See also
 
 - [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger edit`](edit.md)
+- [ci-content.md](../ci-content.md) — planned CI findings enrichment
 - [architecture.md](../../architecture.md)
