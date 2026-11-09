@@ -193,6 +193,32 @@ def add_json_arg(parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGr
     parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
 
 
+def add_output_format_args(parser: argparse.ArgumentParser) -> None:
+    """Register mutually exclusive ``--json`` / ``--format {human,markdown}`` / ``--ai``.
+
+    Read the choice back with :func:`output_format`.
+    """
+    fmt = parser.add_mutually_exclusive_group()
+    add_json_arg(fmt)
+    fmt.add_argument(
+        "--format",
+        choices=("human", "markdown"),
+        default=None,
+        dest="format_",
+        help="Output format (default: human). 'markdown' is suited for AI review.",
+    )
+    fmt.add_argument("--ai", action="store_true", help="Alias for --format markdown.")
+
+
+def output_format(args: argparse.Namespace) -> str:
+    """``json``, ``markdown`` or ``human``, from the flags :func:`add_output_format_args` registered."""
+    if args.json_:
+        return "json"
+    if args.ai or args.format_ == "markdown":
+        return "markdown"
+    return "human"
+
+
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Register shared color-output and hyperlink flags."""
     parser.add_argument(
