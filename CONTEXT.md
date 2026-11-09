@@ -130,6 +130,22 @@ _Avoid_: build URL (unqualified), CI failure (the name alone)
 Callable (built-in or under ``.ger/ci/registry.py``, keyed by ``gerrit.project``) that turns Checks rows and/or change messages into **CI links**. Built-in parsing covers common Jenkins Gerrit trigger messages; override per project when needed.
 _Avoid_: CI plugin, hook script, config regex
 
+**CI content provider**:
+Matches a **CI link** URL (by host/pattern) and knows how to fetch and parse what sits behind it. Distinct from a **CI strategy**, which only discovers and transforms links. Built-in providers (e.g. Jenkins) sit behind this seam; they are not domain concepts of their own.
+_Avoid_: link content provider, CI plugin, log scraper (unqualified)
+
+**CI content**:
+What a **CI content provider** returns for one **CI link**: **provenance**, **CI findings**, and an optional body (raw or truncated log text). One result shape; views differ by which parts a command asks for.
+_Avoid_: CI log (unqualified), build output, console dump
+
+**CI finding**:
+One normalized, fingerprintable failure or diagnostic extracted from **CI content** (tool/kind, path, line, message, …). What `ger show` attaches when CI content is enabled, and what `ger ci` prints by default.
+_Avoid_: error (unqualified), log line, failure (the Checks name alone)
+
+**Introduced findings**:
+**CI findings** on a change that are not present on its parent’s findings. A planned follow-up for richer edit-attention stops; not part of the first `ger ci` / `ger show` slice.
+_Avoid_: new errors, delta failures, regression set
+
 ### Reviewing and comments
 
 **Review checkout**:

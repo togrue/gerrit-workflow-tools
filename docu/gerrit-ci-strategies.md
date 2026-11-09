@@ -89,8 +89,15 @@ pipeline URL your team uses. The registry runs only for matching
 
 ---
 
+## Next: CI content
+
+**CI links** stop at the URL. Opening the console, extracting **CI findings**, and dumping a log for an agent is a separate layer (**CI content provider**) used by planned `ger ci` and opt-in `ger show` — see [spec/ci-content.md](spec/ci-content.md).
+
+---
+
 ## See also
 
 - [Configuration.md](Configuration.md) — registry paths and resolution order
 - [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) — testReport URL example
 - [spec/commands/log.md](spec/commands/log.md) — `ci_links` JSON field
+- [spec/ci-content.md](spec/ci-content.md) — sketch: fetch/parse behind CI links

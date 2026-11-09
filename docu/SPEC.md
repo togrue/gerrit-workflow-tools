@@ -85,6 +85,7 @@ Specified but not registered in `cli_ger.py` yet. Move a row into the registry a
 | Command | Spec |
 |---------|------|
 | ger assign | [spec/commands/assign.md](spec/commands/assign.md) |
+| ger ci | [spec/ci-content.md](spec/ci-content.md) (sketch: findings from **CI links**; also opt-in on `ger show`) |
 
 ---
 

@@ -33,6 +33,7 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 | [adr/](adr/) | Architecture decision records — decisions and, more importantly, why the obvious alternative was rejected |
 | [spec/exit-codes.md](spec/exit-codes.md) | Exit-code contract shared by every command |
 | [spec/commands/](spec/commands/) | One spec per shipped `ger` command |
+| [spec/ci-content.md](spec/ci-content.md) | Sketch: **CI content** behind **CI links** (`ger ci`, opt-in `ger show`) |
 
 When docs and code disagree, fix the code or update the spec — see [SPEC.md](SPEC.md).
 
