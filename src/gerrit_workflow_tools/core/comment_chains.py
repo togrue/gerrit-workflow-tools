@@ -6,9 +6,13 @@ resolving ``in_reply_to`` links to find thread roots.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from gerrit_workflow_tools.core.gerrit_change_status import AnchorStatus, CommentChain, ContextLine, InlineComment
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.anchor_mapping import AnchorPlacement
 
 
 CommentSelection = Literal["unresolved", "all", "resolved"]
@@ -169,15 +173,15 @@ def select_chains(chains: list[CommentChain], comments: CommentSelection) -> lis
     return [chain for chain in chains if not chain.resolved]
 
 
-def local_comment_chain(comment_id: str, comment: InlineComment, anchor: AnchorStatus) -> CommentChain:
+def local_comment_chain(comment_id: str, comment: InlineComment, anchor: AnchorPlacement) -> CommentChain:
     """A note or local draft as a chain of its own, where *anchor* puts it: always a root, never a reply."""
     return CommentChain(
         root_id=comment_id,
-        path=anchor.path,
-        line=anchor.line,
+        path=anchor.shown.path,
+        line=anchor.shown.line,
         comments=(comment,),
         resolved=not comment.unresolved,
-        start_line=anchor.start_line,
+        start_line=anchor.shown.start_line,
         anchor=anchor,
     )
 

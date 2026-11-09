@@ -209,8 +209,8 @@ def local_chains(cwd: Path | str, key: str, commit: str | None, *, comments: Com
     for comment in LocalCommentStore(cwd).for_change(key):
         anchor = place_anchor(cwd, comment.anchor, commit)
         inline = InlineComment(
-            path=anchor.path,
-            line=anchor.line,
+            path=anchor.shown.path,
+            line=anchor.shown.line,
             message=comment.message,
             comment_id=comment.id,
             unresolved=comment.unresolved,

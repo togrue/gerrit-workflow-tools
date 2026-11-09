@@ -48,13 +48,21 @@ def comment_json_payload(
                 "resolved": chain.resolved,
                 "anchor_moved": chain.anchor_moved,
                 "outdated": chain.outdated,
-                "anchored_line": chain.anchor.anchored_line if chain.anchor else None,
-                "anchored_text": chain.anchor.anchored_text if chain.anchor else None,
+                **_anchored_fields(chain),
                 "resolved_after_publish": chain.resolved_after_publish,
                 "comments": chain_comments,
             }
         )
     return comment_payload, chain_payload
+
+
+def _anchored_fields(chain: CommentChain) -> dict[str, object]:
+    """Where a local comment was written and the text it covered; ``null`` for a Gerrit chain."""
+    anchor = chain.anchor
+    return {
+        "anchored_line": anchor.anchored.line if anchor else None,
+        "anchored_text": anchor.text if anchor else None,
+    }
 
 
 def commit_json_payload(

@@ -54,13 +54,12 @@ def anchor_suffix(chain: CommentChain) -> str:
         return ""
     if anchor.outdated:
         return " (outdated: lines changed since)"
-    if (anchor.path, anchor.line, anchor.start_line) == (
-        anchor.anchored_path,
-        anchor.anchored_line,
-        anchor.anchored_start_line,
-    ):
+    if anchor.shown == anchor.anchored:
         return ""
-    return f" (moved from {anchor.anchored_location})"
+    was = anchor.anchored.describe()
+    if anchor.anchored.path == anchor.shown.path:
+        was = was.removeprefix(f"{anchor.anchored.path}:")
+    return f" (moved from {was})"
 
 
 def chain_heading(chain: CommentChain) -> str:
@@ -125,11 +124,9 @@ def _format_context_line(line: ContextLine) -> str:
 
 
 def _chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
-    anchor = chain.anchor
-    if anchor is not None and anchor.outdated and anchor.anchored_text:
+    if chain.anchor is not None and chain.anchor.outdated and chain.anchor.text:
         # The lines it was written on are gone from this version: show them as they were.
-        first = anchor.anchored_start_line or anchor.anchored_line or 1
-        return tuple(ContextLine(first + i, text) for i, text in enumerate(anchor.anchored_text.splitlines()))
+        return chain.anchor.context_lines
     for row_item in chain.comments:
         if row_item.context_lines:
             return row_item.context_lines
