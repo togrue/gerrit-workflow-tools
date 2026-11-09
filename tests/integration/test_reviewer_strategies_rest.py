@@ -11,6 +11,8 @@ from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import run_cli
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.integration_helpers import (
+    add_change_reviewer,
+    chain_commits_oldest_first,
     first_change_id_from_tip,
     open_changes_on_branch,
     prepare_topic_repo,
@@ -279,3 +281,202 @@ def test_reviewer_strategy_assigns_after_initial_push_without_reviewers(
         )
         after_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
         assert after_revisions == before_revisions
+
+
+def _reviewer_slugs_by_change_id(
+    session: GerritHttpSession,
+    project: str,
+    topic: str,
+) -> dict[str, set[str]]:
+    """Live REVIEWER/CC slugs keyed by Change-Id for every open change on *topic*."""
+    rows = open_changes_on_branch(session, project, topic)
+    out: dict[str, set[str]] = {}
+    for row in rows:
+        cid = row.get("change_id") or row.get("id")
+        assert cid, f"missing change id in row: {row!r}"
+        cid_str = str(cid)
+        out[cid_str] = set(reviewer_slugs_from_reviewers_rest(session, cid_str))
+    return out
+
+
+def test_overwrite_on_chain_with_partial_existing_reviewers(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Overwrite must succeed when only some changes in the chain already have reviewers.
+
+    Seeds reviewers outside ``ger`` on the oldest and tip only, leaves the middle empty,
+    then pushes with ``overwrite`` and a different reviewer. Every change must end with
+    exactly that reviewer; the prior assignee must be gone.
+    """
+    ctx = gerrit_integration_context
+    topic = f"ow_partial_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(
+        repo,
+        [
+            "feat: overwrite partial base",
+            "feat: overwrite partial middle",
+            "feat: overwrite partial tip",
+        ],
+    )
+
+    code1, _o1, e1 = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
+    assert code1 == 0, e1
+
+    chain = chain_commits_oldest_first(repo)
+    assert len(chain) == 3, [c.subject for c in chain]
+    oldest, middle, tip = chain
+    add_change_reviewer(gerrit_admin_session, oldest.change_id, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, tip.change_id, ctx.admin_user)
+
+    before = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert before[oldest.change_id] == {ctx.admin_user}
+    assert before[middle.change_id] == set()
+    assert before[tip.change_id] == {ctx.admin_user}
+    before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+
+    code2, _o2, e2 = run_cli(
+        repo,
+        ger_push_main,
+        [
+            "--yes",
+            "--no-rebase-check",
+            "--reviewer-strategy",
+            "overwrite",
+            "--reviewers",
+            ctx.rev_alt_user,
+        ],
+        monkeypatch,
+    )
+    assert code2 == 0, e2
+    assert "could not update reviewers" not in e2
+    assert "pushed, but" not in e2
+
+    after = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert after[oldest.change_id] == {ctx.rev_alt_user}
+    assert after[middle.change_id] == {ctx.rev_alt_user}
+    assert after[tip.change_id] == {ctx.rev_alt_user}
+    assert _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic) == before_revisions
+
+
+def test_lazy_on_chain_with_partial_existing_reviewers(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lazy must fill only empty changes when the chain is partly assigned.
+
+    Seeds reviewers outside ``ger`` on the oldest and tip only, leaves the middle empty,
+    then pushes with ``lazy`` and a different reviewer. Already-assigned changes keep
+    their reviewer; the empty middle gets the new one.
+    """
+    ctx = gerrit_integration_context
+    topic = f"lz_partial_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(
+        repo,
+        [
+            "feat: lazy partial base",
+            "feat: lazy partial middle",
+            "feat: lazy partial tip",
+        ],
+    )
+
+    code1, _o1, e1 = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
+    assert code1 == 0, e1
+
+    chain = chain_commits_oldest_first(repo)
+    assert len(chain) == 3, [c.subject for c in chain]
+    oldest, middle, tip = chain
+    add_change_reviewer(gerrit_admin_session, oldest.change_id, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, tip.change_id, ctx.admin_user)
+
+    before = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert before[oldest.change_id] == {ctx.admin_user}
+    assert before[middle.change_id] == set()
+    assert before[tip.change_id] == {ctx.admin_user}
+    before_revisions = _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic)
+
+    code2, _o2, e2 = run_cli(
+        repo,
+        ger_push_main,
+        [
+            "--yes",
+            "--no-rebase-check",
+            "--reviewer-strategy",
+            "lazy",
+            "--reviewers",
+            ctx.rev_alt_user,
+        ],
+        monkeypatch,
+    )
+    assert code2 == 0, e2
+    assert "could not update reviewers" not in e2
+    assert "pushed, but" not in e2
+    assert "not added or checked" not in e2
+
+    after = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert after[oldest.change_id] == {ctx.admin_user}
+    assert after[middle.change_id] == {ctx.rev_alt_user}
+    assert after[tip.change_id] == {ctx.admin_user}
+    assert _snapshot_revision_counts(gerrit_admin_session, ctx.project_verified, topic) == before_revisions
+
+
+def test_overwrite_same_reviewer_on_chain_with_partial_existing_reviewers(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Overwrite with a reviewer already on some changes must still fill the rest."""
+    ctx = gerrit_integration_context
+    topic = f"ow_same_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(
+        repo,
+        [
+            "feat: overwrite same base",
+            "feat: overwrite same middle",
+            "feat: overwrite same tip",
+        ],
+    )
+
+    code1, _o1, e1 = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
+    assert code1 == 0, e1
+
+    chain = chain_commits_oldest_first(repo)
+    assert len(chain) == 3, [c.subject for c in chain]
+    oldest, middle, tip = chain
+    add_change_reviewer(gerrit_admin_session, oldest.change_id, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, tip.change_id, ctx.admin_user)
+
+    before = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert before[oldest.change_id] == {ctx.admin_user}
+    assert before[middle.change_id] == set()
+    assert before[tip.change_id] == {ctx.admin_user}
+
+    code2, _o2, e2 = run_cli(
+        repo,
+        ger_push_main,
+        [
+            "--yes",
+            "--no-rebase-check",
+            "--reviewer-strategy",
+            "overwrite",
+            "--reviewers",
+            ctx.admin_user,
+        ],
+        monkeypatch,
+    )
+    assert code2 == 0, e2
+    assert "could not update reviewers" not in e2
+    assert "pushed, but" not in e2
+
+    after = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert after[oldest.change_id] == {ctx.admin_user}
+    assert after[middle.change_id] == {ctx.admin_user}
+    assert after[tip.change_id] == {ctx.admin_user}
