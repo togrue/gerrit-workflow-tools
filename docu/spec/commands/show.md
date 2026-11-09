@@ -40,6 +40,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | `--comments {unresolved,all,resolved}` | Which inline comment chains to print (default: `unresolved`) |
 | `--context` | Include source lines around each comment (`enable-context` on `GET …/comments`; padding 2) |
 | `--context-padding N` | Extra source lines before/after the comment (implies `--context`) |
+| `--ci` / `--no-ci` | Attach **CI findings** from failed **CI links** (fetches CI logs). Default: `ger.showCiContent`, off. See [CI content](#ci-content) |
 | `--json` | JSON payload |
 | `--format {human,markdown}` | Output format (default: human) |
 | `--ai` | Alias for `--format markdown` |
@@ -86,12 +87,20 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | Key | Effect |
 |-----|--------|
 | `gerrit.warningPattern` | Subject highlighting on status line |
+| `ger.showCiContent` | Default for `--ci` (off) |
+| `ger.ciCredential.<host>` | Secret for fetching CI content from that host |
 
 ---
 
-## Planned: CI content
+## CI content
 
-Opt-in attachment of **CI findings** from **CI links** (Settings + flag). Findings only — no log body. Soft fetch failures. Sketch: [ci-content.md](../ci-content.md).
+Off by default: `ger show` never fetches CI logs unless asked. `--ci` (or `ger.showCiContent=true`, overridden by `--no-ci`) fetches the **CI content** behind each listed commit's failed **CI links** and attaches its **CI findings** — findings only, never the log body (use [`ger ci --full`](ci.md) for that).
+
+- **Human:** a dim `CI findings:` block after the commit message, before the comments: `label  url  (build, cached)` and one `tool  path:line  message` line per finding. A commit with findings is not collapsed in a multi-commit view.
+- **Markdown / `--ai`:** a `### CI findings` section with a `#### <label>` per label.
+- **JSON:** a `ci_content` array (same entries as `ger ci --json`, without `body`). The key is absent when CI content is off.
+
+**Fetch failure is soft:** the Gerrit and comment output is unchanged and the link's `error: …` is reported in the CI section (JSON: `provenance.error`). The exit code stays the attention code. Design: [ci-content.md](../ci-content.md).
 
 ---
 
@@ -100,5 +109,6 @@ Opt-in attachment of **CI findings** from **CI links** (Settings + flag). Findin
 - [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger edit`](edit.md)
-- [ci-content.md](../ci-content.md) — planned CI findings enrichment
+- [ci-content.md](../ci-content.md) — CI findings enrichment design
+- [`ger ci`](ci.md)
 - [architecture.md](../../architecture.md)

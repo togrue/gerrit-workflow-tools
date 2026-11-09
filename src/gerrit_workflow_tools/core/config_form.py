@@ -130,6 +130,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "120",
     ),
     _bool(
+        "ger.showCiContent",
+        "ger show",
+        "Fetch the CI logs behind failed CI links and attach their findings (same as --ci).",
+        default="false",
+    ),
+    _bool(
         "gerrit.logShowUrl",
         "ger log",
         "Include Gerrit URLs in text output even when hyperlinks are off.",

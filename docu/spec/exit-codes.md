@@ -17,6 +17,7 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | `8` | `DUPLICATE_CHANGE_ID` | The same Change-Id appears on more than one local commit |
 | `9` | `MISSING_CHANGE_ID` | A local commit has no Change-Id footer |
 | `10` | `NO_EDIT_ATTENTION` | An attention walk (`ger edit`, `show` or `sha` with `-n` or first-attention targeting) has nothing left to visit. Also the end of a review chain walk (`ger review --next` / `--prev`), so scripts loop on one code |
+| `11` | `CI_CONTENT` | A **CI link**'s content could not be fetched or parsed where the command required it (`ger ci`; `ger show --ci` reports it and carries on) |
 
 ## What is not remapped
 

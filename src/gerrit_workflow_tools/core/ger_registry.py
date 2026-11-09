@@ -275,6 +275,20 @@ class ExtensionRegistry:
         )
         return run_registry_callables(tiers, invoke=invoke, builtin=builtin, label=self.label, project=project)
 
+    def tier_modules(
+        self,
+        cwd: Path | str | None,
+        *,
+        settings: Settings | None = None,
+        web_base: str | None = None,
+    ) -> list[ModuleType]:
+        """The loaded ``registry.py`` modules, local tier first — for attributes not keyed by project."""
+        snap = settings if settings is not None else Settings.from_cwd(cwd)
+        host_base = web_base if web_base is not None else snap.gerrit_web_url
+        dirs = (local_domain_dir(cwd, snap.scripts_dir, self.domain), global_domain_dir(host_base, self.domain))
+        modules = [_load_registry_module(d, self.package_name) for d in dirs if d is not None]
+        return [m for m in modules if m is not None]
+
     def clear_cache(self) -> None:
         """Drop this registry's loaded modules (tests)."""
         clear_extension_registry_cache(package_prefix=self.package_name)

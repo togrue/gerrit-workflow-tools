@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
     LogCommit,
     gerrit_inline_comment_url,
 )
+from gerrit_workflow_tools.render.ci_content import ci_content_json
 
 
 def comment_json_payload(
@@ -73,9 +75,14 @@ def commit_json_payload(
     is_local: bool,
     resolution: object,
     chains: list[CommentChain],
+    ci_content: list[CiContent] | None = None,
 ) -> dict[str, object]:
-    """Build the per-commit JSON object for ``ger show --json``."""
+    """Build the per-commit JSON object for ``ger show --json``.
+
+    ``ci_content`` (findings per **CI link**, no body) is present only when CI content is on.
+    """
     comment_payload, chain_payload = comment_json_payload(chains, commit.gerrit_url)
+    ci_payload = {} if ci_content is None else {"ci_content": [ci_content_json(c) for c in ci_content]}
     return {
         "sha": commit.sha if commit.sha else None,
         "change_id": commit.change_id,
@@ -106,4 +113,5 @@ def commit_json_payload(
         "change_status": commit.change_status,
         "merged_equivalent": commit.merged_equivalent,
         "resolution": resolution.to_json_dict(),  # type: ignore[attr-defined]
+        **ci_payload,
     }

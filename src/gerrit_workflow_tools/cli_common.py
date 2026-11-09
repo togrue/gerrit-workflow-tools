@@ -29,6 +29,7 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
+from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -87,6 +88,8 @@ class ExitCode(IntEnum):
     """A local commit has no Change-Id footer."""
     NO_EDIT_ATTENTION = 10
     """An attention walk has nothing left to visit. Scripts loop until they see this."""
+    CI_CONTENT = 11
+    """A **CI link**'s content could not be fetched or parsed where a command required it (``ger ci``)."""
 
 
 # Ordered longest-subclass-first: ChangeAmbiguousError and MissingChangeIdError derive from ChangeResolutionError,
@@ -99,6 +102,7 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ConfigError, ExitCode.CONFIG, "error"),
     (UnknownRevisionError, ExitCode.NOT_FOUND, "error"),
     (NoEditAttentionError, ExitCode.NO_EDIT_ATTENTION, "error"),
+    (CiContentError, ExitCode.CI_CONTENT, "ci error"),
     (GitError, ExitCode.GIT, "error"),
 )
 
