@@ -11,9 +11,10 @@ from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_r
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    output_format,
     print_resolution_note,
     run_cli_command,
 )
@@ -26,10 +27,9 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
-from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.local_comments import local_chains_of
-from gerrit_workflow_tools.core.stack import get_stack_snapshot
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
@@ -111,55 +111,13 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Extra source lines before/after the comment (implies --context; default 2).",
     )
-    fmt = p.add_mutually_exclusive_group()
-    add_json_arg(fmt)
-    fmt.add_argument(
-        "--format",
-        choices=("human", "markdown"),
-        default=None,
-        dest="format_",
-        help="Output format (default: human). 'markdown' is suited for AI review.",
-    )
-    fmt.add_argument(
-        "--ai",
-        action="store_true",
-        help="Alias for --format markdown.",
-    )
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log Gerrit resolution to stderr.",
     )
     return p
-
-
-def _output_format(args: argparse.Namespace) -> str:
-    if args.json_:
-        return "json"
-    if args.ai or args.format_ == "markdown":
-        return "markdown"
-    return "human"
-
-
-def _local_commit_meta(cwd: Path | str | None, sha: str) -> tuple[str, str, str]:
-    """Return ``(author_line, date, message_body)`` from git for *sha*."""
-    raw = git_out(
-        "show",
-        "-s",
-        "--no-patch",
-        "--format=%an%n%ae%n%ad%n%B",
-        sha,
-        cwd=cwd,
-    )
-    lines = raw.splitlines()
-    while lines and lines[-1] == "":
-        lines.pop()
-    author = lines[0] if lines else ""
-    email = lines[1] if len(lines) > 1 else ""
-    date = lines[2] if len(lines) > 2 else ""
-    body = "\n".join(lines[3:]).rstrip("\n") if len(lines) > 3 else ""
-    author_line = f"{author} <{email}>" if email else author
-    return author_line, date, body
 
 
 def _print_wrapped_body(
@@ -197,10 +155,11 @@ def _emit_human_commit(
 
     body = ""
     if is_local and commit.sha:
-        author_line, date, body = _local_commit_meta(cwd, commit.sha)
-        meta = f"Author: {author_line}"
-        if date:
-            meta = f"{meta} [{date}]"
+        meta_row = read_commit_meta(cwd, commit.sha)
+        body = meta_row.body
+        meta = f"Author: {meta_row.author_line}"
+        if meta_row.date:
+            meta = f"{meta} [{meta_row.date}]"
         print(meta)
 
     if commit.gerrit_url:
@@ -280,7 +239,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     p = _build_parser()
     args = p.parse_args(argv)
     cwd, settings, summary_highlighter = init_cli_runtime(args)
-    out_fmt = _output_format(args)
+    out_fmt = output_format(args)
     verbose_level = int(args.verbose)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
 

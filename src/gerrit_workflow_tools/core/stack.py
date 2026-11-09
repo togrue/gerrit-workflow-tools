@@ -210,6 +210,25 @@ def read_commit_rows(cwd: Path | str | None, *log_args: str) -> list[Commit]:
 
 
 @dataclass(frozen=True)
+class CommitMeta:
+    """Author, date and full message of one commit, as ``ger show`` prints them."""
+
+    author_line: str
+    date: str
+    body: str
+
+
+def read_commit_meta(cwd: Path | str | None, sha: str) -> CommitMeta:
+    """``Author <email>``, the author date and the message body of *sha*, from one ``git show``."""
+    lines = git_out("show", "-s", "--no-patch", "--format=%an%n%ae%n%ad%n%B", sha, cwd=cwd).splitlines()
+    while lines and lines[-1] == "":
+        lines.pop()
+    author, email, date = [*lines, "", "", ""][:3]
+    body = "\n".join(lines[3:]).rstrip("\n")
+    return CommitMeta(author_line=f"{author} <{email}>" if email else author, date=date, body=body)
+
+
+@dataclass(frozen=True)
 class RewriteCommit:
     """One commit with everything a message-only ``commit-tree`` rewrite needs."""
 
