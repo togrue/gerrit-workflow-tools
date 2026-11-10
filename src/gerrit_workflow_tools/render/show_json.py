@@ -1,4 +1,4 @@
-"""JSON payloads for ``ger show``."""
+"""JSON payloads for one commit's overlay state: ``ger show`` and ``ger log``."""
 
 from __future__ import annotations
 
@@ -69,20 +69,8 @@ def _anchored_fields(chain: CommentChain) -> dict[str, object]:
     }
 
 
-def commit_json_payload(
-    commit: LogCommit,
-    *,
-    is_local: bool,
-    resolution: object,
-    chains: list[CommentChain],
-    ci_content: list[CiContent] | None = None,
-) -> dict[str, object]:
-    """Build the per-commit JSON object for ``ger show --json``.
-
-    ``ci_content`` (findings per **CI link**, no body) is present only when CI content is on.
-    """
-    comment_payload, chain_payload = comment_json_payload(chains, commit.gerrit_url)
-    ci_payload = {} if ci_content is None else {"ci_content": [ci_content_json(c) for c in ci_content]}
+def log_commit_json(commit: LogCommit) -> dict[str, object]:
+    """The overlay state of one commit: what ``ger log --json`` and ``ger show --json`` both carry."""
     return {
         "sha": commit.sha if commit.sha else None,
         "change_id": commit.change_id,
@@ -107,11 +95,30 @@ def commit_json_payload(
         "work_in_progress": commit.wip,
         "private": commit.private,
         "attention_reasons": commit.attention_reasons,
+        "change_status": commit.change_status,
+        "merged_equivalent": commit.merged_equivalent,
+    }
+
+
+def commit_json_payload(
+    commit: LogCommit,
+    *,
+    is_local: bool,
+    resolution: object,
+    chains: list[CommentChain],
+    ci_content: list[CiContent] | None = None,
+) -> dict[str, object]:
+    """Build the per-commit JSON object for ``ger show --json``.
+
+    ``ci_content`` (findings per **CI link**, no body) is present only when CI content is on.
+    """
+    comment_payload, chain_payload = comment_json_payload(chains, commit.gerrit_url)
+    ci_payload = {} if ci_content is None else {"ci_content": [ci_content_json(c) for c in ci_content]}
+    return {
+        **log_commit_json(commit),
         "comments": comment_payload,
         "comment_chains": chain_payload,
         "local_commit": is_local,
-        "change_status": commit.change_status,
-        "merged_equivalent": commit.merged_equivalent,
         "resolution": resolution.to_json_dict(),  # type: ignore[attr-defined]
         **ci_payload,
     }

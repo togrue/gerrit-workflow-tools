@@ -223,6 +223,14 @@ def set_staged(state: ReviewState, staged: bool) -> ReviewState:
     return new
 
 
+def fetch_patchset(cwd: Path | str, remote: str, number: int, patch_set: int, commit: str) -> None:
+    """Fetch patchset *patch_set* of change *number* from *remote*; it must bring *commit*."""
+    ref = changes_ref(number, patch_set)
+    git("fetch", "-q", remote, ref, cwd=cwd)
+    if commit_sha_or_none(cwd, commit) is None:
+        raise GitError(f"fetching {ref} did not bring {commit[:12]}")
+
+
 def open_review(
     cwd: Path | str, target: PatchsetToReview, *, settings: Settings, options: CheckoutOptions
 ) -> tuple[ReviewState, str | None]:
@@ -237,9 +245,7 @@ def open_review(
     worktree = review_worktree_path(cwd, settings) if mode == "worktree" else repo_toplevel(cwd)
     if worktree is None:
         raise GitError("not inside a git worktree")
-    git("fetch", "-q", remote, changes_ref(target.number, target.patch_set), cwd=cwd)
-    if commit_sha_or_none(cwd, target.commit) is None:
-        raise GitError(f"fetching {changes_ref(target.number, target.patch_set)} did not bring {target.commit[:12]}")
+    fetch_patchset(cwd, remote, target.number, target.patch_set, target.commit)
     if mode == "worktree":
         ensure_review_worktree(cwd, worktree, target.commit)
     previous = load_state(worktree)

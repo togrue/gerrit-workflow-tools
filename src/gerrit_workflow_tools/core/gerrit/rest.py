@@ -169,6 +169,15 @@ class GerritRest(Protocol):
         """Set or clear the private flag on a change."""
 
 
+def self_account_id(rest: GerritRest) -> int | None:
+    """The calling user's account id, or ``None`` when Gerrit will not say."""
+    try:
+        raw = rest.get_account("self").get("_account_id")
+    except GerritApiError:
+        return None
+    return raw if isinstance(raw, int) else None
+
+
 def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Return the single change from *rows* or raise :class:`GerritApiError` if none or ambiguous."""
     if not rows:

@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     GerritRest,
     change_id_for_gerrit_rest_path,
     parallel_map,
+    self_account_id as account_id_of_self,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.review_chain import (
@@ -214,13 +215,7 @@ class GerritService:
         moment = now if now is not None else datetime.now(timezone.utc)
         queried = self.rest.query_changes(query, n=500, options=list(INBOX_QUERY_OPTIONS))
         rows = [ChangeView.from_payload(row) for row in queried if isinstance(row, dict)]
-        account_id = self_account_id
-        if account_id is None:
-            try:
-                raw = self.rest.get_account("self").get("_account_id")
-                account_id = raw if isinstance(raw, int) else None
-            except GerritApiError:
-                account_id = None
+        account_id = self_account_id if self_account_id is not None else account_id_of_self(self.rest)
         parent_shas = missing_parent_shas(rows)
         follow_up_rows: list[ChangeView] = []
         unmatched: set[str] = set()

@@ -43,6 +43,7 @@ from gerrit_workflow_tools.render.commit_row import (
     oneline_body,
     oneline_line,
 )
+from gerrit_workflow_tools.render.show_json import log_commit_json
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -263,32 +264,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
         commit_payload = [
             {
-                "sha": c.sha,
-                "summary": c.summary,
-                "pushed": c.pushed,
-                "patchset_status": c.patchset_status,
-                "verified": c.verified,
-                "code_review": c.code_review,
-                "comments_unresolved": c.comments_unresolved,
-                "ci_failures": c.ci_failures,
-                "ci_links": [{"label": link.label, "url": link.url, "source": link.source} for link in c.ci_links],
-                "ci_pipelines": [
-                    {
-                        "label": pipe.label,
-                        "state": pipe.state,
-                        **({"url": pipe.url} if pipe.url else {}),
-                    }
-                    for pipe in c.ci_pipelines
-                ],
-                "gerrit_url": c.gerrit_url,
-                "submittable": c.submittable,
-                "work_in_progress": c.wip,
-                "private": c.private,
-                "change_id": c.change_id,
+                **log_commit_json(c),
                 "abandoned": c.abandoned,
-                "attention_reasons": c.attention_reasons,
-                "change_status": c.change_status,
-                "merged_equivalent": c.merged_equivalent,
                 **({"resolution_note": notes_by_sha[c.sha]} if c.sha in notes_by_sha else {}),
             }
             for c in commits

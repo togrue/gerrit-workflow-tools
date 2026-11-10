@@ -5,9 +5,15 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+
+
+def module_editor_command(module: str) -> str:
+    """A ``GIT_SEQUENCE_EDITOR`` value that runs Python *module* with this interpreter."""
+    return f"{shlex.quote(sys.executable)} -m {module}"
 
 
 def resolve_git_editor(

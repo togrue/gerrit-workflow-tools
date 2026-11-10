@@ -333,7 +333,6 @@ SIZE_BASELINE = {
     "cli_push.py": 426,
     "core/gerrit/cache.py": 684,
     "core/gerrit/change_resolution.py": 460,
-    "core/gerrit/service.py": 404,
     "push_input_line.py": 441,
     "reviewer_catalog.py": 478,
 }

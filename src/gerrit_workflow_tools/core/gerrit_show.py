@@ -6,6 +6,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.ci_content_service import CiContentService
+from gerrit_workflow_tools.core.comment_chains import CommentSelection, merge_chains
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
@@ -14,8 +18,10 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
+from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
 
@@ -245,3 +251,49 @@ def resolve_show_targets(
     for item in pieces:
         first_by_key.setdefault(_dedupe_key(item), item)
     return list(first_by_key.values())
+
+
+@dataclass(frozen=True)
+class ShownCommit:
+    """One resolved target with everything ``ger show`` reports about it."""
+
+    target: ShowCommitResolution
+    commit: LogCommit
+    chains: list[CommentChain]
+    """Gerrit and local comment chains, as selected."""
+    ci_contents: list[CiContent] | None
+    """**CI content** per failed **CI link**; ``None`` when it was not asked for."""
+
+
+def load_shown_commits(
+    targets: list[ShowCommitResolution],
+    *,
+    service: GerritService,
+    comments: CommentSelection = "unresolved",
+    context_padding: int | None = None,
+    fetch_ci_pipelines: bool = False,
+    ci: CiContentService | None = None,
+) -> list[ShownCommit]:
+    """Overlay, attention, comment chains and (with *ci*) **CI content** for *targets*, in order.
+
+    *targets* must be in stack order for chain-blocking attention. A CI link that cannot be
+    fetched stays on its result; nothing here raises for it.
+    """
+    commits = annotate(
+        [t.row for t in targets], service=service, cwd=service.cwd, fetch_ci_pipelines=fetch_ci_pipelines
+    )
+    if len(commits) != len(targets):
+        raise ChangeResolutionError("commit annotation mismatch")
+    shown: list[ShownCommit] = []
+    for target, commit in zip(targets, commits, strict=True):
+        ci_contents = ci.fetch(commit.ci_links) if ci is not None else None
+        rest_key = gerrit_rest_key(commit, target.resolution)
+        chains: list[CommentChain] = []
+        if commit.pushed and rest_key:
+            chains = service.comments.get_chains(
+                rest_key, change_updated=commit.freshness, context_padding=context_padding, comments=comments
+            )
+        if rest_key:
+            chains = merge_chains(chains, local_chains_of(service, rest_key, commit.sha or None, comments=comments))
+        shown.append(ShownCommit(target=target, commit=commit, chains=chains, ci_contents=ci_contents))
+    return shown

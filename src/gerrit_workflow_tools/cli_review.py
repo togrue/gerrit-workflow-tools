@@ -6,7 +6,6 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -19,33 +18,29 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.changeish import parse as parse_changeish
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
-from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_changeish
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
-    PatchsetToReview,
     ReviewChainEndError,
     ReviewMode,
     ReviewRefusal,
     ReviewState,
     ReviewUsageError,
-    chain_numbers,
     close_review,
     find_review,
     neighbour,
     open_review,
     set_staged,
 )
+from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
+from gerrit_workflow_tools.render.review_json import review_state_json
 
 
 _VOTE_RE = re.compile(r"^([A-Za-z][\w-]*)\s*(?:=\s*([+-]?\d+)|([+-]\d+))$")
@@ -136,45 +131,9 @@ def _mode(args: argparse.Namespace, cwd: Path, settings: Settings) -> ReviewMode
     return answer
 
 
-def _patchset(
-    service: GerritService, cwd: Path, changeish: str, patch_set: int | None
-) -> tuple[PatchsetToReview, str | None]:
-    """The Gerrit patchset *changeish* names (``--patchset`` or the URL's, else current)."""
-    branch = resolve_working_branch(cwd, settings=service.settings)
-    resolution = resolve_changeish(
-        changeish, client=service.rest, cwd=cwd, settings=service.settings, branch=branch, explicit_target=True
-    )
-    if resolution.selected is None:
-        raise ChangeResolutionError(f"{changeish!r} names no Gerrit change")
-    view = ChangeView.from_payload(service.rest.get_change(resolution.selected.triplet))
-    wanted = patch_set or parse_changeish(changeish).patchset or view.current_revision_number
-    sha = next((sha for sha, rev in view.revisions.items() if rev.number == wanted), None)
-    if view.number is None or wanted is None or sha is None:
-        raise ChangeResolutionError(f"change {view.number} has no patchset {wanted}")
-    target = PatchsetToReview(
-        number=view.number,
-        # A triplet, never Gerrit's `id`: real servers send the compact project~number form.
-        key=build_triplet(view.project, view.branch, view.change_id) if view.project else resolution.selected.triplet,
-        change_id=view.change_id,
-        patch_set=wanted,
-        commit=sha,
-        subject=view.subject,
-        target_branch=view.branch,
-    )
-    return target, view.url(service.web_base)
-
-
-def _chain(service: GerritService, state: ReviewState) -> list[int]:
-    try:
-        return chain_numbers(service.rest.get_related(state.key, state.patch_set))
-    except GerritApiError:
-        return []
-
-
 def _emit_state(state: ReviewState, *, chain: list[int] | None, url: str | None, as_json: bool) -> None:
     if as_json:
-        flat = {**asdict(state.change), **{k: v for k, v in asdict(state).items() if k != "change"}}
-        print(json.dumps({**flat, "branch": state.branch, "chain": chain, "url": url}, indent=2))
+        print(json.dumps(review_state_json(state, chain=chain, url=url), indent=2))
         return
     staged = " (staged)" if state.staged else ""
     print(f'reviewing {state.number} patchset {state.patch_set} "{state.change.subject}"{staged}')
@@ -188,29 +147,29 @@ def _emit_state(state: ReviewState, *, chain: list[int] | None, url: str | None,
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:
     settings = service.settings
     if args.changeish is not None:
-        # A bare number is a change number here: nobody reviews a commit by an all-digit SHA.
-        changeish = f"change:{args.changeish}" if args.changeish.isdigit() else args.changeish
-        target, url = _patchset(service, cwd, changeish, args.patchset)
+        target, url = patchset_to_review(service, cwd, args.changeish, args.patchset)
         mode = _mode(args, cwd, settings)
     else:
         if state is None:
             raise ReviewUsageError("no review going on here: name a CHANGEISH first")
-        number = neighbour(_chain(service, state), state.number, 1 if args.next else -1)
-        target, url = _patchset(service, cwd, f"change:{number}", None)
+        number = neighbour(
+            related_chain_numbers(service, state.key, state.patch_set), state.number, 1 if args.next else -1
+        )
+        target, url = patchset_to_review(service, cwd, f"change:{number}", None)
         mode = state.mode
     stage = settings.review_stage if args.stage is None else args.stage
     options = CheckoutOptions(mode=mode, stage=stage, force=args.force)
     new, moved_from = open_review(cwd, target, settings=settings, options=options)
     if moved_from is not None:
         print(f"moved {new.branch} off your commits; its old tip was {moved_from}", file=sys.stderr)
-    _emit_state(new, chain=_chain(service, new), url=url, as_json=args.json_)
+    _emit_state(new, chain=related_chain_numbers(service, new.key, new.patch_set), url=url, as_json=args.json_)
     return int(ExitCode.OK)
 
 
 def _vote_target(args: argparse.Namespace, service: GerritService, cwd: Path) -> tuple[str, int, int | None]:
     """``(triplet, number, reviewed patchset)`` to vote on: ``--change``, else the review going on."""
     if args.change is not None:
-        target, _url = _patchset(service, cwd, args.change, None)
+        target, _url = patchset_to_review(service, cwd, args.change, None)
         return target.key, target.number, None
     state = find_review(cwd, service.settings)
     if state is None:

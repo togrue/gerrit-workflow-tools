@@ -381,7 +381,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm`, `run_interactive_rebase` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm`, `run_interactive_rebase` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
@@ -412,7 +412,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
-| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR` |
+| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules |
 | `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
@@ -428,6 +428,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
+| `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`) and `section_summary` |
+| `core/review_target.py` | The Gerrit half of a review checkout: `patchset_to_review`, `related_chain_numbers` |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
@@ -444,7 +446,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
-| `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes |
+| `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
 | `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
@@ -458,7 +460,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError`, change-id path encoding, `parallel_map` |
+| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError`, change-id path encoding, `parallel_map`, `self_account_id` |
 | `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth` |
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe, `since:` delta |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
@@ -477,7 +479,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts |
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
-| `render/show_json.py` | JSON payloads for ``ger show`` |
+| `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
+| `render/review_json.py` | JSON for **review chains** (`chain_json`) and the **review state** (`review_state_json`) |
 | `render/ci_content.py` | **CI content** projections: JSON, human and Markdown, grouped by CI link label |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns, and the highlighter for a branch's stack |
 | `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question, what it assigned |

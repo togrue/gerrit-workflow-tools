@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import shlex
 import sys
 from collections.abc import Callable, Mapping
 from enum import IntEnum
@@ -40,6 +39,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
@@ -107,6 +107,14 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
 )
 
 
+def failure_exit(error: BaseException) -> tuple[ExitCode, str] | None:
+    """The exit code and message prefix a known failure is worth; ``None`` for anything else (a bug)."""
+    for failure_type, code, prefix in _FAILURE_EXITS:
+        if isinstance(error, failure_type):
+            return code, prefix
+    return None
+
+
 def run_cli_command(body: Callable[[], int]) -> int:
     """Run a command body, turning known failures into a message and an exit code.
 
@@ -122,11 +130,12 @@ def run_cli_command(body: Callable[[], int]) -> int:
     try:
         return body()
     except Exception as error:  # pylint: disable=broad-exception-caught
-        for failure_type, code, prefix in _FAILURE_EXITS:
-            if isinstance(error, failure_type):
-                print(f"{prefix}: {error}", file=sys.stderr)
-                return int(code)
-        raise
+        failure = failure_exit(error)
+        if failure is None:
+            raise
+        code, prefix = failure
+        print(f"{prefix}: {error}", file=sys.stderr)
+        return int(code)
     finally:
         print_call_trace_summary()
 
@@ -323,8 +332,7 @@ def require_no_rebase_in_progress(cwd: Path) -> None:
 
 def run_interactive_rebase(cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str]) -> int:
     """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code."""
-    editor = f"{shlex.quote(sys.executable)} -m gerrit_workflow_tools.{sequence_editor}"
-    env = {**env, "GIT_SEQUENCE_EDITOR": editor}
+    env = {**env, "GIT_SEQUENCE_EDITOR": module_editor_command(f"gerrit_workflow_tools.{sequence_editor}")}
     return git("rebase", "-i", base, cwd=cwd, env=env, check=False, capture=False).returncode
 
 

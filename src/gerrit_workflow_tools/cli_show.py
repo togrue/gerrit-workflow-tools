@@ -19,19 +19,17 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
-from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
-from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection, merge_chains
+from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
-from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
+from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human, format_ci_section_markdown
@@ -291,16 +289,19 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     for resolved in targets:
         print_resolution_note(resolved.resolution)
 
-    rows = [t.row for t in targets]
-    commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=verbose_level >= 1)
-    if len(commits) != len(targets):
-        raise ChangeResolutionError("commit annotation mismatch")
-    ci_by_commit: list[list[CiContent] | None] = [None] * len(commits)
+    ci = None
     if settings.show_ci_content if args.ci is None else args.ci:
         ci = CiContentService.from_settings(
             cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh
         )
-        ci_by_commit = [ci.fetch(c.ci_links) for c in commits]  # soft: a failure stays on its result
+    shown = load_shown_commits(
+        targets,
+        service=service,
+        comments=args.comments,
+        context_padding=_requested_context_padding(args),
+        fetch_ci_pipelines=verbose_level >= 1,
+        ci=ci,
+    )
 
     if any(t.is_local_commit for t in targets) and branch is not None and branch_has_upstream(cwd, branch):
         try:
@@ -321,25 +322,10 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     json_payloads: list[dict[str, object]] = []
     multi = len(targets) > 1
 
-    for resolved, commit, ci_contents in zip(targets, commits, ci_by_commit, strict=True):
-        attention = commit.attention_reasons
-        if attention:
+    for item in shown:
+        resolved, commit, chains, ci_contents = item.target, item.commit, item.chains, item.ci_contents
+        if commit.attention_reasons:
             any_attention = True
-
-        rest_key = gerrit_rest_key(commit, resolved.resolution)
-        chains = (
-            service.comments.get_chains(
-                rest_key,
-                change_updated=commit.freshness,
-                context_padding=_requested_context_padding(args),
-                comments=args.comments,
-            )
-            if (commit.pushed and rest_key)
-            else []
-        )
-        if rest_key:
-            local = local_chains_of(service, rest_key, commit.sha or None, comments=args.comments)
-            chains = merge_chains(chains, local)
 
         if out_fmt == "json":
             json_payloads.append(
