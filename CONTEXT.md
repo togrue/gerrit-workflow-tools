@@ -164,6 +164,10 @@ _Avoid_: soft reset mode, diff mode
 What is being reviewed in one worktree — change, patchset, commit, staged or not — recorded under that worktree's git dir. Not Gerrit state, and not the **attention cursor**.
 _Avoid_: current review (unqualified), session
 
+**Review delta**:
+What changed in a change since the patchset you last reviewed — the newest one you posted a vote or comment on. After a rebase it is narrowed to the files the change touches. Nothing to do with **unreviewed age**, which is a clock.
+_Avoid_: interdiff, patchset diff (unqualified), what's new
+
 **Comment state**:
 Where a comment is in its life: **note** (local, private, never uploaded), **local draft** (local, meant for Gerrit), **draft** (on Gerrit, visible only to you), **published**. "Private" is not a comment state: in Gerrit it names a kind of *change*.
 _Avoid_: private comment, pending comment, unsent comment

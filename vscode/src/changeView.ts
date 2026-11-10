@@ -12,12 +12,12 @@ import { ChangeTarget, Model, describeError } from "./model";
 export const FILE_SCHEME = "ger-file";
 const NOT_FILES = ["/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST"];
 
-type Group = "files" | "comments" | "ci";
+type Group = "delta" | "files" | "comments" | "ci";
 
 export type Node =
   | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon; tooltip?: string; command?: vscode.Command }
   | { kind: "group"; group: Group }
-  | { kind: "file"; file: FileChange }
+  | { kind: "file"; file: FileChange; diff: Diff }
   | { kind: "thread"; chain: CommentChain }
   | { kind: "comment"; comment: Comment; chain: CommentChain }
   | { kind: "link"; content: CiContent }
@@ -48,6 +48,8 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   target: ChangeTarget | undefined;
   shown: ShownCommit | undefined;
   diff: Diff | undefined;
+  /** What changed since you last reviewed; only asked for changes that are not your local commits. */
+  delta: Diff | undefined;
   private problem: string | undefined;
   private ci: Promise<CiState> | undefined;
   private readonly groups = new Map<Group, Node>();
@@ -64,13 +66,14 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     this.ci = undefined;
     try {
       const client = await this.model.client();
-      const [commits, diff] = await Promise.all([
+      const [commits, diff, delta] = await Promise.all([
         client.show([target.rev], { comments: "all", context: 3 }),
         client.diff(target.rev).catch(() => undefined),
+        target.local ? undefined : client.reviewDelta(target.rev).catch(() => undefined),
       ]);
-      [this.shown, this.diff, this.problem] = [commits[0], diff, undefined];
+      [this.shown, this.diff, this.delta, this.problem] = [commits[0], diff, delta, undefined];
     } catch (error) {
-      [this.shown, this.diff, this.problem] = [undefined, undefined, describeError(error)];
+      [this.shown, this.diff, this.delta, this.problem] = [undefined, undefined, undefined, describeError(error)];
     }
     this.changed.fire();
     this.loaded.fire();
@@ -168,6 +171,10 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
         icon: icon("history", "list.warningForeground"),
       });
     }
+    // Only once you have reviewed an earlier patchset is there a "since".
+    if (this.delta?.since && this.delta.since.patch_set !== null) {
+      nodes.push(this.group("delta"));
+    }
     nodes.push(this.group("files"), this.group("comments"));
     if (commit.ci_failures.length || commit.ci_links.length || commit.verified === -1) {
       nodes.push(this.group("ci"));
@@ -176,8 +183,9 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   }
 
   private async groupChildren(group: Group): Promise<Node[]> {
-    if (group === "files") {
-      return (this.diff?.files ?? []).map((file) => ({ kind: "file", file }));
+    if (group === "files" || group === "delta") {
+      const diff = group === "files" ? this.diff : this.delta;
+      return diff ? diff.files.map((file) => ({ kind: "file", file, diff })) : [];
     }
     if (group === "comments") {
       this.threads = this.chains().map((chain) => ({ kind: "thread", chain }));
@@ -240,7 +248,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       case "group":
         return this.groupItem(node.group);
       case "file":
-        return this.fileItem(node.file);
+        return this.fileItem(node.file, node.diff);
       case "thread":
         return this.threadItem(node.chain);
       case "comment": {
@@ -271,6 +279,22 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
 
   private groupItem(group: Group): vscode.TreeItem {
     const commit = this.shown;
+    if (group === "delta") {
+      const since = this.delta?.since;
+      const files = this.delta?.files ?? [];
+      const item = new vscode.TreeItem(
+        "Since your review",
+        files.length ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None,
+      );
+      item.iconPath = icon(since?.up_to_date ? "pass" : "git-compare", since?.up_to_date ? "testing.iconPassed" : undefined);
+      item.description = since?.up_to_date
+        ? `nothing new — you reviewed patchset ${since.current_patch_set}`
+        : `patchset ${since?.patch_set} → ${since?.current_patch_set} · ${plural(files.length, "file")}${since?.rebased ? " · rebased" : ""}`;
+      item.tooltip = since?.rebased
+        ? "The change was rebased since your review. Only files the change touches are listed; inside them, edits that came in from underneath show too."
+        : "What the author changed after the patchset you last voted or commented on.";
+      return item;
+    }
     if (group === "files") {
       const files = this.diff?.files ?? [];
       const item = new vscode.TreeItem("Files", vscode.TreeItemCollapsibleState.Expanded);
@@ -295,15 +319,16 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     return item;
   }
 
-  private fileItem(file: FileChange): vscode.TreeItem {
+  private fileItem(file: FileChange, diff: Diff): vscode.TreeItem {
     const item = new vscode.TreeItem(path.posix.basename(file.path));
+    item.id = `${diff === this.delta ? "delta" : "files"}/${file.path}`;
     const dir = path.posix.dirname(file.path);
     const counts = file.insertions === null ? "binary" : `+${file.insertions} −${file.deletions}`;
     item.description = `${dir === "." ? "" : `${dir} · `}${file.status} ${counts}`;
     item.tooltip = file.old_path ? `${file.old_path} → ${file.path}` : file.path;
     item.resourceUri = vscode.Uri.file(path.join(this.model.repo, file.path));
     item.iconPath = vscode.ThemeIcon.File;
-    item.command = { command: "ger.openDiff", title: "Open Diff", arguments: [file] };
+    item.command = { command: "ger.openDiff", title: "Open Diff", arguments: [file, diff] };
     return item;
   }
 
@@ -352,16 +377,16 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   // --- Opening things ---------------------------------------------------------------
 
   /** The diff of one file: parent on the left, the change on the right. */
-  async openDiff(file: FileChange): Promise<void> {
-    const diff = this.diff;
-    if (!diff) {
+  async openDiff(file: FileChange, diff: Diff | undefined = this.diff): Promise<void> {
+    if (!diff || diff.base === null) {
       return;
     }
     const left = fileUri(diff.base, file.old_path ?? file.path);
     // The commit you are standing on diffs against the real file, so you can edit in place.
     const editable = this.target?.local && this.model.stack?.head === diff.commit && file.status !== "D";
     const right = editable ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
-    const title = `${path.posix.basename(file.path)} (${diff.commit.slice(0, 8)})`;
+    const range = diff.since ? `patchset ${diff.since.patch_set} ↔ ${diff.since.current_patch_set}` : diff.commit.slice(0, 8);
+    const title = `${path.posix.basename(file.path)} (${range})`;
     await vscode.commands.executeCommand("vscode.diff", left, right, title);
   }
 

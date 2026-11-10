@@ -145,6 +145,14 @@ The files a change touched against its first parent: `commit`, `base`, `subject`
 `local_commit` and `files` (`path`, `status`, `old_path`, `insertions`, `deletions`). A change
 that is not in the repository is fetched from `gerrit.remote` first.
 
+With `since=reviewed` the answer is the **review delta** instead: the current patchset against
+the newest one you posted a vote or comment on. `since=<n>` compares with patchset `n`. The
+shape is the same — `base` is the reviewed patchset's commit, so `/file` serves both sides —
+plus `since`: `patch_set`, `current_patch_set`, `up_to_date` and `rebased`. `patch_set` is
+`null` (and `files` empty) when you have not reviewed the change. When the patchsets sit on
+different parents, `rebased` is true and `files` holds only files the change touches; inside
+those, edits that came in from underneath still show.
+
 ### `GET /file?rev=<commit>&path=<path>`
 
 `content` of a file at a commit id from `/diff`; `null` when the file is not there (added or

@@ -472,7 +472,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
-| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent) and `file_text` |
+| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
+| `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (current patchset against the one you reviewed) |
 | `core/reorder.py` | Reordering the local stack, all or nothing: `reorder_stack`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
 | `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |

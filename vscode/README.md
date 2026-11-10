@@ -30,6 +30,8 @@ with a count appears when chains had activity since you last looked. Click to op
 **Change** — select any change or commit
 
 - What it needs, in words, with its votes.
+- **Since your review**: on someone else's change you already reviewed, the files that changed
+  between the patchset you voted or commented on and the current one — click for that diff.
 - **Files**: click for a diff against the parent. The commit you are standing on diffs against
   the real file, so you can fix things in the diff editor.
 - **Comments**: unresolved first. Click to jump to the line; `Alt+F9` / `Shift+Alt+F9` step

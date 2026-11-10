@@ -34,6 +34,7 @@ from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, section_
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import fetch_patchset, find_review
+from gerrit_workflow_tools.core.review_delta import load_review_delta
 from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
@@ -236,9 +237,32 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     return {"commits": commits}
 
 
+def _review_delta(ctx: Context, req: Request, rev: str) -> dict[str, Any]:
+    since = None if req.one("since") == "reviewed" else req.number("since")
+    delta = load_review_delta(ctx.service, ctx.cwd, rev, since=since)
+    return {
+        "commit": delta.commit,
+        "base": delta.base,
+        "local_commit": False,
+        "files": [asdict(change) for change in delta.files],
+        "since": {
+            "patch_set": delta.reviewed_patch_set,
+            "current_patch_set": delta.current_patch_set,
+            "up_to_date": delta.up_to_date,
+            "rebased": delta.rebased,
+        },
+    }
+
+
 def diff(ctx: Context, req: Request) -> dict[str, Any]:
-    """The files one change touched, against its first parent. Fetches the patchset when it is not here."""
+    """The files one change touched, against its first parent. Fetches the patchset when it is not here.
+
+    With ``since=reviewed`` (or ``since=<patchset>``) it is the **review delta** instead: the
+    current patchset against the one you last reviewed.
+    """
     rev = safe_rev(req.one("rev"))
+    if req.one("since"):
+        return _review_delta(ctx, req, rev)
     branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
     [target] = resolve_show_targets(ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch)
     sha = target.row.sha

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,19 +71,24 @@ def _numstat(fields: list[str]) -> dict[str, tuple[int | None, int | None]]:
     return counts
 
 
+def diff_between(cwd: Path | str | None, base: str, commit: str, paths: Sequence[str] = ()) -> list[FileChange]:
+    """The files that differ from *base* to *commit*, renames detected; only *paths* when given."""
+    limit = ("--", *paths) if paths else ()
+    listed = git("diff", "--name-status", *_DIFF_FLAGS, base, commit, *limit, cwd=cwd).stdout.split("\0")
+    counts = _numstat(git("diff", "--numstat", *_DIFF_FLAGS, base, commit, *limit, cwd=cwd).stdout.split("\0"))
+    return [
+        FileChange(path, letter, old_path, *counts.get(path, (None, None)))
+        for letter, path, old_path in _name_status(listed)
+    ]
+
+
 def commit_diff(cwd: Path | str | None, rev: str) -> CommitDiff:
     """The files *rev* changed against its first parent, renames detected."""
     commit = commit_sha_or_none(cwd, rev)
     if commit is None:
         raise UnknownRevisionError(f"unknown revision {rev!r}")
     base = commit_sha_or_none(cwd, f"{commit}^") or EMPTY_TREE
-    listed = git("diff", "--name-status", *_DIFF_FLAGS, base, commit, cwd=cwd).stdout.split("\0")
-    counts = _numstat(git("diff", "--numstat", *_DIFF_FLAGS, base, commit, cwd=cwd).stdout.split("\0"))
-    files = [
-        FileChange(path, letter, old_path, *counts.get(path, (None, None)))
-        for letter, path, old_path in _name_status(listed)
-    ]
-    return CommitDiff(commit=commit, base=base, files=files)
+    return CommitDiff(commit=commit, base=base, files=diff_between(cwd, base, commit))
 
 
 def file_text(cwd: Path | str | None, rev: str, path: str) -> str | None:

@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { CommentChain, FileChange } from "./api";
+import { CommentChain, Diff, FileChange } from "./api";
 import { ChangeView, FILE_SCHEME, Location, Node as ChangeNode } from "./changeView";
 import { CommentThreads } from "./comments";
 import { plural } from "./format";
@@ -237,7 +237,7 @@ export function activate(context: vscode.ExtensionContext): void {
     "ger.push": () => runInTerminal(repo, "push"),
     "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
     "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
-    "ger.openDiff": (file: FileChange) => changeView.openDiff(file),
+    "ger.openDiff": (file: FileChange, diff?: Diff) => changeView.openDiff(file, diff),
     "ger.openLocation": (location: Location) => changeView.openLocation(location),
     "ger.nextComment": () => threads.step(1),
     "ger.prevComment": () => threads.step(-1),

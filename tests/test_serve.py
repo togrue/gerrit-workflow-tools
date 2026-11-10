@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, reorder_stack
 from gerrit_workflow_tools.core.review_checkout import changes_ref
+from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit
 from gerrit_workflow_tools.server.api import GerApi
 from gerrit_workflow_tools.server.httpd import GerHttpServer, failure_response
@@ -239,6 +240,51 @@ def test_diff_fetches_a_change_that_is_not_in_the_local_stack(stack_repo: Path) 
     diff = _get(GerApi(stack_repo, gerrit=store), "/diff", rev="change:102")
     assert (diff["commit"], diff["local_commit"]) == (rows[2].sha, False)
     assert [f["path"] for f in diff["files"]] == ["c.txt"]
+
+
+def test_diff_since_reviewed_is_the_current_patchset_against_the_one_you_voted_on(stack_repo: Path) -> None:
+    store, keys, rows = _gerrit(stack_repo)
+    # The author amends the top change after your review of patchset 1, and uploads patchset 2.
+    (stack_repo / "d.txt").write_text("file d.txt\naddressed your comment\n", encoding="utf-8")
+    git("commit", "-qa", "--amend", "--no-edit", cwd=stack_repo)
+    amended = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    git("update-ref", changes_ref(103, 1), rows[3].sha, cwd=stack_repo)
+    git("update-ref", changes_ref(103, 2), amended, cwd=stack_repo)
+    store.upload_patchset(keys[3], amended, 2)
+    mine = {"author": {"_account_id": 1000}, "_revision_number": 1, "message": "Patch Set 1: Code-Review-1"}
+    theirs = {"author": {"_account_id": 2}, "_revision_number": 2, "message": "Uploaded patch set 2."}
+    store.set_messages(keys[3], [mine, theirs])
+    git("reset", "-q", "--hard", "main", cwd=stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+
+    delta = _get(api, "/diff", rev="change:103", since="reviewed")
+    assert delta["since"] == {"patch_set": 1, "current_patch_set": 2, "up_to_date": False, "rebased": False}
+    assert (delta["base"], delta["commit"]) == (rows[3].sha, amended)
+    # d.txt is new in the change, but only modified since your review.
+    assert delta["files"] == [{"path": "d.txt", "status": "M", "old_path": None, "insertions": 1, "deletions": 0}]
+    assert _get(api, "/file", rev=delta["base"], path="d.txt")["content"] == "file d.txt\n"
+
+    # Once you have posted on patchset 2 there is nothing new; a change you never touched says so.
+    store.set_messages(keys[3], [mine, theirs, {**mine, "_revision_number": 2}])
+    assert _get(api, "/diff", rev="change:103", since="reviewed")["since"]["up_to_date"] is True
+    never = _get(api, "/diff", rev="change:102", since="reviewed")
+    assert (never["since"]["patch_set"], never["files"], never["base"]) == (None, [], None)
+
+
+def test_a_rebased_patchset_is_compared_only_in_the_files_the_change_touches(stack_repo: Path) -> None:
+    rows = stack_rows_mb_to_head(stack_repo)
+    old = rows[3].sha
+    # Patchset 2: the same change, moved onto a parent that also edited another file.
+    git("reset", "-q", "--hard", rows[2].sha, cwd=stack_repo)
+    (stack_repo / "a.txt").write_text("upstream edit\n", encoding="utf-8")
+    git("commit", "-qam", "Upstream edit", cwd=stack_repo)
+    git("cherry-pick", old, cwd=stack_repo)
+    (stack_repo / "d.txt").write_text("file d.txt\nfollow-up\n", encoding="utf-8")
+    git("commit", "-qa", "--amend", "--no-edit", cwd=stack_repo)
+    new = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    rebased, files = patchset_delta_files(stack_repo, old, new)
+    assert rebased is True
+    assert [f.path for f in files] == ["d.txt"], "a.txt changed underneath, not in the change"
 
 
 @pytest.mark.parametrize("query", [{"rev": "--output=x"}, {}])

@@ -187,10 +187,13 @@ export interface FileChange {
 
 export interface Diff {
   commit: string;
-  base: string;
-  subject: string;
+  /** Null only in a review delta with nothing to compare against. */
+  base: string | null;
+  subject?: string;
   local_commit: boolean;
   files: FileChange[];
+  /** Present in a review delta: the patchset you last reviewed against the current one. */
+  since?: { patch_set: number | null; current_patch_set: number; up_to_date: boolean; rebased: boolean };
 }
 
 export interface ReviewState {
@@ -285,6 +288,11 @@ export class GerClient {
 
   diff(rev: string): Promise<Diff> {
     return this.call("GET", "/diff", { rev });
+  }
+
+  /** What changed since the patchset you last reviewed. */
+  reviewDelta(rev: string): Promise<Diff> {
+    return this.call("GET", "/diff", { rev, since: "reviewed" });
   }
 
   async file(rev: string, path: string): Promise<string | null> {
