@@ -48,7 +48,11 @@ cli_common.py     shared CLI runtime: ExitCode, run_cli_command, init_cli_runtim
 core/             the domain: stack, changeish resolution, attention, CI, reviewers
 core/gerrit/      talking to Gerrit: the GerritRest seam, GerritService, SQLite cache
 render/           shared output formatting
+server/           ger serve: HTTP in, core call, JSON out (a peer of the cli_ layer)
 ```
+
+`vscode/` at the repository root is the VS Code extension, a client of `ger serve` with its
+own build (`npm`). It holds no Gerrit logic: a field it needs is added to core and served.
 
 Everything two commands could share is shared: argument parsing, the runtime
 bootstrap, exit-code mapping, output formatting, and the domain model itself. A command

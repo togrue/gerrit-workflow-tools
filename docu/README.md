@@ -33,6 +33,7 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 | [adr/](adr/) | Architecture decision records — decisions and, more importantly, why the obvious alternative was rejected |
 | [spec/exit-codes.md](spec/exit-codes.md) | Exit-code contract shared by every command |
 | [spec/commands/](spec/commands/) | One spec per shipped `ger` command |
+| [spec/commands/serve.md](spec/commands/serve.md) | `ger serve`: the local HTTP service behind the VS Code extension in `vscode/` |
 | [spec/ci-content.md](spec/ci-content.md) | Design: **CI content** behind **CI links** (`ger ci`, opt-in `ger show --ci`) |
 | [gerrit-ci-strategies.md](gerrit-ci-strategies.md) | Custom **CI strategies** / **CI content providers**; copyable samples in [`example/hooks/`](../example/hooks/) |
 

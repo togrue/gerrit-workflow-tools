@@ -1,0 +1,110 @@
+"""CLI for ``ger serve``: the local HTTP service editor integrations talk to (spec: ``docu/spec/commands/serve.md``)."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import secrets
+import sys
+import threading
+from typing import BinaryIO
+
+from gerrit_workflow_tools.cli_common import (
+    ExitCode,
+    add_verbose_and_debug_log_args,
+    init_cli_runtime,
+    run_cli_command,
+)
+from gerrit_workflow_tools.core.ci_http import CiHttp
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.git_state import repo_toplevel
+from gerrit_workflow_tools.server.api import PREFIX, GerApi
+from gerrit_workflow_tools.server.httpd import GerHttpServer
+
+
+def _port(raw: str) -> int:
+    if not raw.isdigit() or not 0 <= int(raw) <= 65535:
+        raise argparse.ArgumentTypeError(f"not a port: {raw!r}")
+    return int(raw)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line parser for ``ger serve``."""
+    p = argparse.ArgumentParser(
+        prog="ger serve",
+        description=(
+            "Serve this repository's review state as JSON over HTTP on 127.0.0.1, for editor integrations. "
+            "Prints one JSON line with the URL and the access token, then serves until interrupted."
+        ),
+    )
+    p.add_argument("--port", type=_port, default=0, metavar="N", help="Listen on port N (default: any free port).")
+    p.add_argument(
+        "--exit-with-stdin",
+        action="store_true",
+        help="Stop when stdin closes, so the service ends with the process that started it.",
+    )
+    add_verbose_and_debug_log_args(p, debug_log_help="Log requests, git and Gerrit calls to stderr.")
+    return p
+
+
+def _take_stdin() -> BinaryIO:
+    """The starter's end of stdin, for this process alone; fd 0 becomes the null device.
+
+    Every git child would otherwise inherit the pipe being watched. On Windows a child then
+    hangs at startup, because a read is pending on that pipe; anywhere, a child could eat it.
+    """
+    try:
+        fd = sys.stdin.fileno()
+    except (AttributeError, OSError, ValueError):
+        return sys.stdin.buffer  # not a real file (a test's stand-in): nothing to inherit
+    watched = os.fdopen(os.dup(fd), "rb", buffering=0)
+    null = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null, fd)
+    os.close(null)
+    return watched
+
+
+def _stop_when_stdin_closes(server: GerHttpServer) -> None:
+    stdin = _take_stdin()
+
+    def watch() -> None:
+        try:
+            while stdin.read(4096):
+                pass
+        except (OSError, ValueError):
+            pass
+        server.shutdown()
+
+    threading.Thread(target=watch, name="ger-serve-stdin", daemon=True).start()
+
+
+def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> int:
+    """Serve until interrupted; the first stdout line is ``{"url", "token", …}``."""
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit, ci_http=ci_http))
+
+
+def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp | None) -> int:
+    args = _build_parser().parse_args(argv)
+    cwd, _settings, _highlighter = init_cli_runtime(args)
+    top = repo_toplevel(cwd)
+    if top is None:
+        raise GitError("not inside a git worktree")
+    token = secrets.token_urlsafe(32)
+    server = GerHttpServer(GerApi(cwd, gerrit=gerrit, ci_http=ci_http), token=token, port=args.port)
+    try:
+        hello = {"url": server.url, "api": PREFIX, "token": token, "repo": str(top), "pid": os.getpid()}
+        print(json.dumps(hello), flush=True)
+        if args.exit_with_stdin:
+            _stop_when_stdin_closes(server)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return int(ExitCode.OK)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

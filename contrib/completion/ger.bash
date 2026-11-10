@@ -299,7 +299,7 @@ _ger_show() {
 _ger() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "${COMP_CWORD:-0}" -eq 1 ]; then
-        __gwt_flags "$cur" bash-completion cache change-id changeid ci comment config edit fetch-api fix inbox log push rebase reply resolve restack review reword setup sha show stack
+        __gwt_flags "$cur" bash-completion cache change-id changeid ci comment config edit fetch-api fix inbox log push rebase reply resolve restack review reword serve setup sha show stack
         return
     fi
     local sub="${COMP_WORDS[1]}"
@@ -321,6 +321,7 @@ _ger() {
         resolve) _ger_resolve ;;
         review) _ger_review ;;
         reword) _ger_reword ;;
+        serve) _ger_serve ;;
         setup) _ger_setup ;;
         sha) _ger_sha ;;
         show) _ger_show ;;

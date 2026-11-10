@@ -1,11 +1,13 @@
-"""JSON payloads for **review chains** (``ger inbox``) and the **review state** (``ger review``)."""
+"""JSON payloads for **review chains**, the **headline** (``ger inbox``, ``ger serve``) and the **review state**."""
 
 from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime
 
-from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain
+from gerrit_workflow_tools.core.attention import Attention
+from gerrit_workflow_tools.core.inbox import Headline
+from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
 
 
@@ -58,3 +60,31 @@ def review_state_json(state: ReviewState, *, chain: list[int] | None, url: str |
     """The review state, flat: the reviewed patchset's fields beside where and how it is checked out."""
     flat = {**asdict(state.change), **{k: v for k, v in asdict(state).items() if k != "change"}}
     return {**flat, "branch": state.branch, "chain": chain, "url": url}
+
+
+def _headline_text(headline: Headline) -> str:
+    member, chain = headline.member, headline.chain
+    what = f"{member.number}: {member.subject}"
+    if headline.reason == Attention.CI_FAILED:
+        return f"CI failed on {what}"
+    if headline.reason == Attention.UNRESOLVED_COMMENTS:
+        count = member.comments_unresolved
+        return f"{count} unresolved comment{'' if count == 1 else 's'} on {what}"
+    if headline.reason == Attention.REVIEW_ISSUES:
+        return f"Negative vote on {what}"
+    return f"{chain.owner_name} has waited {format_age(chain.unreviewed_age_seconds)} for your review of {what}"
+
+
+def headline_json(headline: Headline | None) -> dict[str, object] | None:
+    """The **headline**: which change of which chain, why, and a sentence saying so."""
+    if headline is None:
+        return None
+    return {
+        "section": headline.section,
+        "reason": headline.reason,
+        "chain": headline.chain.key,
+        "number": headline.member.number,
+        "subject": headline.member.subject,
+        "url": headline.member.url,
+        "text": _headline_text(headline),
+    }

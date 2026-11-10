@@ -99,8 +99,12 @@ Time since the last activity on a **review chain**: `now − max(updated)` over 
 _Avoid_: using this for "how long since I reviewed"
 
 **Inbox section**:
-One Gerrit query plus the **review chains** assembled from it. `ger inbox` currently ships **to review** (open chains where you are a reviewer). *Waiting on others* is planned.
-_Avoid_: inbox tab, queue (unqualified)
+One Gerrit query plus the **review chains** assembled from it. Two exist: **to review** (open chains where you are a reviewer) and **outgoing** (open chains you own). `ger inbox` prints *to review*; `ger serve` serves both.
+_Avoid_: inbox tab, queue (unqualified), incoming (for *to review*)
+
+**Headline**:
+The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain, then unresolved comments, then a negative vote; with none of those, the *to review* chain with the largest **unreviewed age**. What an editor's status bar shows.
+_Avoid_: top issue, main alert, status (unqualified)
 
 **Reviewer strategy**:
 How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace reviewers on every change; CC stays).
@@ -143,7 +147,7 @@ One normalized, fingerprintable failure or diagnostic extracted from **CI conten
 _Avoid_: error (unqualified), log line, failure (the Checks name alone)
 
 **Introduced findings**:
-**CI findings** on a change that are not present on its parent’s findings. A planned follow-up for richer edit-attention stops; not part of the first `ger ci` / `ger show` slice.
+**CI findings** on a change that are not present on its parent’s findings, compared by fingerprint along a chain. Unknown — not empty — where the parent's findings cannot be had. Served by `ger serve`; not yet part of `ger ci` / `ger show` or of edit-attention stops.
 _Avoid_: new errors, delta failures, regression set
 
 ### Reviewing and comments

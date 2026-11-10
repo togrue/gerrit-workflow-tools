@@ -13,7 +13,7 @@ Jenkins provider in :mod:`~gerrit_workflow_tools.core.ci_jenkins`.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -162,6 +162,28 @@ class CiContent:
     def failed(self) -> bool:
         """The content could not be fetched or parsed."""
         return self.provenance.error is not None
+
+
+def introduced_fingerprints(per_commit: Sequence[Sequence[CiContent] | None]) -> list[frozenset[str] | None]:
+    """**Introduced findings** for each commit of a chain, base first: fingerprints its parent lacks.
+
+    An entry is the **CI content** of one commit's failed **CI links** (``[]``: CI is not
+    failing), or ``None`` when its CI state is not known (not on Gerrit, or changed since CI
+    ran). The base's parent is the target branch, taken as clean. The answer is ``None``
+    where it cannot be told: the commit's own state is unknown, or its parent's is, or a
+    parent link could not be fetched.
+    """
+    introduced: list[frozenset[str] | None] = []
+    parent: frozenset[str] | None = frozenset()
+    for contents in per_commit:
+        if contents is None:
+            introduced.append(None)
+            parent = None
+            continue
+        own = frozenset(f.fingerprint for content in contents if not content.failed for f in content.findings)
+        introduced.append(own - parent if parent is not None else None)
+        parent = None if any(content.failed for content in contents) else own
+    return introduced
 
 
 @dataclass(frozen=True)
