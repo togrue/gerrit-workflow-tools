@@ -38,7 +38,7 @@ Do not merge the layers: auth and console URL shape are host properties; link di
 
 **Built-in Jenkins.** A built-in provider implements the seam for Jenkins consoles. It is a replaceable adapter (fetch + ordered finders), not a concept in the domain model and not entangled with core types beyond **CI content** / **CI finding**. Custom providers may live under the existing `.ger/ci/` registry domain as an additional callable beside link extraction.
 
-**Provider contract** (`CiContentProvider`): an object with `id`, `matches(url) -> bool`, `cache_key(url) -> str` and `fetch(link, ctx) -> CiFetched`. `ctx` carries the HTTP seam (`ctx.http.get_text(url, headers=…)`) and the host's credential. Export them as `CONTENT_PROVIDERS = [...]` from `.ger/ci/registry.py` (local tier, then global); they are tried in order before the built-in Jenkins provider. Every tier's list is used, since providers match by URL, not by `gerrit.project`. A provider that raises becomes an error on that link's provenance. Template: [gerrit-ci-strategies.md § CI content providers](../gerrit-ci-strategies.md#ci-content-providers).
+**Provider contract** (`CiContentProvider`): an object with `id`, `matches(url) -> bool`, `cache_key(url) -> str` and `fetch(link, ctx) -> CiFetched`. `ctx` carries the HTTP seam (`ctx.http.get_text(url, headers=…)`) and the host's credential. Export them as `CONTENT_PROVIDERS = [...]` from `.ger/ci/registry.py` (local tier, then global); they are tried in order before the built-in Jenkins provider. Every tier's list is used, since providers match by URL, not by `gerrit.project`. A provider that raises becomes an error on that link's provenance. Template: [gerrit-ci-strategies.md § CI content providers](../gerrit-ci-strategies.md#ci-content-providers). Copyable example: [`example/hooks/ci/`](../../example/hooks/ci/).
 
 The built-in Jenkins provider claims any `…/job/<name>[/job/<name>…]/<build>/…` URL, reads `api/json` (running? display name) and then `consoleText`.
 
@@ -185,6 +185,7 @@ ger ci [options] [CHANGEISH…]
 ## See also
 
 - [gerrit-ci-strategies.md](../gerrit-ci-strategies.md) — **CI links** today
+- [`example/hooks/ci/`](../../example/hooks/ci/) — copyable custom strategy + content provider
 - [spec/commands/show.md](commands/show.md) — current `ger show`
 - [SPEC.md](../SPEC.md) — command registry / planned commands
 - [commands/ci.md](commands/ci.md) — `ger ci` options, output, exit codes

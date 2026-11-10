@@ -23,7 +23,7 @@ PKG_DIR = REPO / "src" / "gerrit_workflow_tools"
 
 def _living_docs() -> list[Path]:
     docs = [REPO / name for name in ("AGENTS.md", "CLAUDE.md", "CONTEXT.md", "README.md")]
-    for root in ("docu", "tests", "contrib"):
+    for root in ("docu", "tests", "contrib", "example"):
         docs += sorted((REPO / root).rglob("*.md"))
     return [p for p in docs if p.is_file() and "docu/gerrit/" not in p.relative_to(REPO).as_posix()]
 
@@ -87,13 +87,13 @@ def test_relative_links_resolve() -> None:
 
 _CODE_TEXT = "\n".join(
     p.read_text(encoding="utf-8", errors="ignore")
-    for root in ("src", "tests", "contrib", "scripts")
+    for root in ("src", "tests", "contrib", "example", "scripts")
     for p in (REPO / root).rglob("*")
     if p.is_file() and p.suffix in {".py", ".sh", ".bash", ""} and "__pycache__" not in p.parts
 )
 _REPO_FILES = {
     _rel(p)
-    for root in ("src", "tests", "docu", "scripts", "contrib", ".github")
+    for root in ("src", "tests", "docu", "scripts", "contrib", "example", ".github")
     for p in (REPO / root).rglob("*")
     if "__pycache__" not in p.parts
 } | {p.name for p in REPO.iterdir()}
