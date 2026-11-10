@@ -21,6 +21,7 @@
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "test": "tsc -p . && node --test \"out/test/**/*.test.js\"",
+    "e2e": "tsc -p . && node out/test/e2e/run.js",
     "package": "npx --yes @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
@@ -42,6 +43,11 @@
           "default": 120,
           "minimum": 15,
           "description": "How often the overview is refreshed in the background."
+        },
+        "ger.notify": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when something new becomes the most important change (the status bar headline)."
         },
         "ger.agentCommand": {
           "type": "string",
@@ -135,6 +141,7 @@
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
         { "command": "ger.markSeen", "when": "view == ger.overview", "group": "navigation@2" },
         { "command": "ger.agentWalk", "when": "view == ger.stack", "group": "navigation@0" },
+        { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
         { "command": "ger.push", "when": "view == ger.stack", "group": "navigation@1" },
         { "command": "ger.prevComment", "when": "view == ger.change", "group": "navigation@1" },
         { "command": "ger.nextComment", "when": "view == ger.change", "group": "navigation@2" },

@@ -1,7 +1,7 @@
 // Unresolved comment chains of the shown change as editor comment threads, with draft replies.
-// Threads sit on the working-tree files, so they are shown for local stack commits only.
+// For a local stack commit they sit on your files; for any other change, on the commit's own
+// documents — the right-hand side of its diffs.
 
-import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain } from "./api";
@@ -33,7 +33,7 @@ export class CommentThreads implements vscode.Disposable {
     this.anchors.clear();
     this.cursor = -1;
     const target = this.view.target;
-    if (!target?.local) {
+    if (!target) {
       return;
     }
     for (const chain of this.view.unresolved()) {
@@ -43,7 +43,7 @@ export class CommentThreads implements vscode.Disposable {
       const line = Math.max(0, (chain.line ?? 1) - 1);
       const first = chain.start_line ? Math.max(0, chain.start_line - 1) : line;
       const thread = this.controller.createCommentThread(
-        vscode.Uri.file(path.join(this.model.repo, chain.path)),
+        this.view.locationUri(chain.path),
         new vscode.Range(first, 0, line, 0),
         chain.comments.map((comment) => ({
           body: new vscode.MarkdownString(comment.message),

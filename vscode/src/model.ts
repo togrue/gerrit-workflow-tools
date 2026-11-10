@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 
-import { GerApiError, GerClient, Overview, Stack, isStack } from "./api";
+import { GerApiError, GerClient, Headline, Overview, Stack, isStack } from "./api";
 import { Seen, chainsWithActivity, rememberSeen } from "./format";
 import { GerProcess } from "./server";
 
@@ -38,6 +38,10 @@ export class Model implements vscode.Disposable {
 
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
+  private readonly news = new vscode.EventEmitter<Headline>();
+  /** Fires when a refresh brings a headline that was not the headline before. Not on the first load. */
+  readonly onDidGetNewHeadline = this.news.event;
+  private lastHeadline: string | undefined;
   private refreshing: Promise<void> | undefined;
 
   constructor(
@@ -67,8 +71,15 @@ export class Model implements vscode.Disposable {
   private async load(fromGerrit: boolean): Promise<void> {
     try {
       const client = await this.client();
+      const first = this.overview === undefined;
       this.overview = await client.overview(fromGerrit);
       this.failure = undefined;
+      const headline = this.overview.headline ?? undefined;
+      const key = headline ? `${headline.reason}:${headline.number}` : undefined;
+      if (!first && headline && key !== this.lastHeadline) {
+        this.news.fire(headline);
+      }
+      this.lastHeadline = key;
       const seen = rememberSeen(this.overview, this.state.get<Seen>(SEEN_KEY, {}));
       this.active = chainsWithActivity(this.overview, seen);
       await this.state.update(SEEN_KEY, seen);
@@ -102,6 +113,7 @@ export class Model implements vscode.Disposable {
 
   dispose(): void {
     this.changed.dispose();
+    this.news.dispose();
     this.process.stop();
   }
 }

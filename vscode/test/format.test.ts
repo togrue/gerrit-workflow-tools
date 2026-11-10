@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Chain, Overview } from "../src/api";
-import { age, chainDescription, chainsWithActivity, moved, rememberSeen, severity, vote } from "../src/format";
+import { age, chainDescription, chainsWithActivity, fileState, moved, rememberSeen, sentence, severity, vote, votes } from "../src/format";
 
 function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): Chain {
   return {
@@ -41,8 +41,10 @@ test("votes and ages read like ger's own output", () => {
   assert.equal(vote("V", -1), "V-1");
   assert.equal(vote("V", null), "V·");
   assert.deepEqual([age(59), age(12 * 60), age(47 * 3600), age(3 * 86400)], ["0m", "12m", "47h", "3d"]);
-  assert.equal(chainDescription(chain("k", ""), "to-review"), "alice · 2 changes · V+1 CR· 💬2 · waiting 3d · active 4h ago");
-  assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 CR· 💬2 · active 4h ago");
+  assert.equal(chainDescription(chain("k", ""), "to-review"), "alice · 2 changes · V+1 💬2 · waiting 3d · active 4h ago");
+  assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 💬2 · active 4h ago");
+  assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 0 }), "no votes");
+  assert.deepEqual([fileState("A"), fileState("R"), sentence("unresolved comments")], ["added", "renamed", "Unresolved comments"]);
 });
 
 test("activity is what moved since the chain was last seen", () => {

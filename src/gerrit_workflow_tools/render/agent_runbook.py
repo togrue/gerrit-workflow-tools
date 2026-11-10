@@ -104,8 +104,11 @@ def runbook_markdown(stops: Sequence[RunbookStop], *, branch: str | None) -> str
     for index, stop in enumerate(work, start=1):
         lines += _stop_section(index, stop)
     if waiting:
-        lines += ["## Not yours: waiting for a human", ""]
-        lines += [*(f"- {stop.commit.short_sha} {stop.commit.summary}" for stop in waiting), ""]
+        lines += ["## No step for these commits", ""]
+        for stop in waiting:
+            why = "its comments are left for a human" if stop.held else "its CI findings are fixed in an earlier commit"
+            lines.append(f"- {stop.commit.short_sha} {stop.commit.summary} — {why}")
+        lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 

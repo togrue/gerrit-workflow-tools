@@ -48,12 +48,30 @@ export function vote(label: string, value: number | null): string {
   return `${label}${value > 0 ? "+" : ""}${value}`;
 }
 
+/** The votes that exist and the unresolved comments, e.g. `V+1 CR-1 💬2`; `no votes` when there is nothing. */
 export function votes(item: { verified: number | null; code_review: number | null; comments_unresolved: number }): string {
-  const parts = [vote("V", item.verified), vote("CR", item.code_review)];
+  const parts: string[] = [];
+  if (item.verified !== null && item.verified !== undefined) {
+    parts.push(vote("V", item.verified));
+  }
+  if (item.code_review !== null && item.code_review !== undefined) {
+    parts.push(vote("CR", item.code_review));
+  }
   if (item.comments_unresolved > 0) {
     parts.push(`💬${item.comments_unresolved}`);
   }
-  return parts.join(" ");
+  return parts.join(" ") || "no votes";
+}
+
+const FILE_STATES: Record<string, string> = { A: "added", M: "modified", D: "deleted", R: "renamed", C: "copied", T: "type changed" };
+
+/** Git's status letter in a word. */
+export function fileState(letter: string): string {
+  return FILE_STATES[letter] ?? letter;
+}
+
+export function sentence(text: string): string {
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
 }
 
 /** Compact age: `12m`, `4h`, `3d` — the same steps `ger inbox` prints. */

@@ -1,0 +1,134 @@
+// Runs inside a real VS Code (see run.ts): activates the extension against fake_ger.py and walks
+// every view the way a user would expand it. Asserts the essentials and writes what the views
+// showed to GER_E2E_OUT, so a change in what users see is a visible diff.
+
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as vscode from "vscode";
+
+import type { ExtensionApi } from "../../src/extension";
+
+type Provider<T> = vscode.TreeDataProvider<T>;
+
+function text(value: string | vscode.TreeItemLabel | boolean | undefined): string {
+  return typeof value === "string" ? value : typeof value === "object" ? value.label : "";
+}
+
+/** The tree as indented lines: `label — description  [contextValue]`. */
+async function dump<T>(provider: Provider<T>, node?: T, depth = 0): Promise<string[]> {
+  const lines: string[] = [];
+  for (const child of (await provider.getChildren(node)) ?? []) {
+    const item = await provider.getTreeItem(child);
+    const description = text(item.description);
+    const context = item.contextValue ? `  [${item.contextValue}]` : "";
+    lines.push(`${"  ".repeat(depth)}${text(item.label)}${description ? ` — ${description}` : ""}${context}`);
+    lines.push(...(await dump(provider, child, depth + 1)));
+  }
+  return lines;
+}
+
+async function find<T>(provider: Provider<T>, wanted: string, node?: T): Promise<T | undefined> {
+  for (const child of (await provider.getChildren(node)) ?? []) {
+    if (text((await provider.getTreeItem(child)).label) === wanted) {
+      return child;
+    }
+    const below = await find(provider, wanted, child);
+    if (below) {
+      return below;
+    }
+  }
+  return undefined;
+}
+
+export async function run(): Promise<void> {
+  const out: string[] = [];
+  const section = (title: string, lines: string[]) => out.push(`## ${title}`, ...lines, "");
+  try {
+    const extension = vscode.extensions.getExtension<ExtensionApi>("gerrit-workflow-tools.ger-vscode");
+    assert.ok(extension, "the extension is installed in the development host");
+    const api = await extension.activate();
+    assert.ok(api, "the extension activated on the workspace folder");
+    await api.model.refresh();
+    assert.equal(api.model.failure, undefined, "ger serve started and answered");
+
+    // Every command the manifest offers is registered.
+    const declared: string[] = extension.packageJSON.contributes.commands.map((c: { command: string }) => c.command);
+    const registered = new Set(await vscode.commands.getCommands(true));
+    assert.deepEqual(declared.filter((command) => !registered.has(command)), []);
+
+    section("Status bar", [api.model.overview?.headline?.text ?? "(no headline)"]);
+    const overview = await dump(api.overviewView);
+    section("Review chains", overview);
+    assert.ok(overview.some((line) => line.startsWith("CI failed on 102")), "the headline leads the overview");
+    assert.ok(overview.some((line) => line.startsWith("Outgoing")) && overview.some((line) => line.startsWith("To review")));
+
+    const stack = await dump(api.stackView);
+    section("Local stack", stack);
+    assert.equal(stack.length, 4);
+    assert.match(stack[0], /^Cleanup after experiment — HEAD/, "newest first, HEAD marked");
+
+    // A commit of yours with comments: files, both comment chains, no CI group.
+    const commented = await find(api.stackView, "Extract command routing");
+    assert.ok(commented);
+    await vscode.commands.executeCommand("ger.openChange", commented);
+    section("Change: your commit with comments", await dump(api.changeView));
+    assert.equal(api.changeView.unresolved().length, 2);
+    assert.deepEqual(api.changeView.diff?.files.map((f) => f.path), ["b.txt"]);
+
+    // Stepping to a comment opens the file at its line, and the editor shows the thread.
+    await vscode.commands.executeCommand("ger.nextComment");
+    const editor = vscode.window.activeTextEditor;
+    assert.equal(path.basename(editor?.document.fileName ?? ""), "b.txt");
+    assert.equal(editor?.selection.active.line, 0);
+
+    // Clicking a file opens a diff, parent on the left.
+    await vscode.commands.executeCommand("ger.openDiff", api.changeView.diff?.files[0], api.changeView.diff);
+    const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    assert.ok(tab?.input instanceof vscode.TabInputTextDiff, "a diff editor is open");
+    assert.equal((tab.input as vscode.TabInputTextDiff).original.scheme, "ger-file");
+    section("Diff tab", [tab.label]);
+
+    // A commit with failed CI: the CI group fetches findings and marks what it introduced.
+    const failing = await find(api.stackView, "test! temporary experiment");
+    await vscode.commands.executeCommand("ger.openChange", failing);
+    const change = await dump(api.changeView);
+    section("Change: your commit with failed CI", change);
+    assert.ok(change.some((line) => line.includes("introduced here")), "introduced findings are marked");
+
+    // Someone else's change: a chain of one is the change itself, nothing to expand.
+    const theirs = await find(api.overviewView, "Add retry to the uploader");
+    assert.ok(theirs);
+    assert.deepEqual(await dump(api.overviewView, theirs), []);
+    await vscode.commands.executeCommand("ger.openChange", theirs);
+    assert.equal(api.changeView.target?.number, 900);
+    // (The fake Gerrit only knows change 900 as a query row, so its detail is an error here.)
+
+    // Keeping a comment for yourself shows on the thread and stays out of the agent runbook.
+    await vscode.commands.executeCommand("ger.openChange", commented);
+    const design = await find(api.changeView, "Is this the right design?");
+    await vscode.commands.executeCommand("ger.hold", design);
+    const client = await api.model.client();
+    const runbook = await client.runbook();
+    section("Change: one comment kept for you", await dump(api.changeView));
+    section("Agent runbook", runbook.markdown.split("\n"));
+    assert.deepEqual([runbook.totals.comments, runbook.totals.held], [1, 1]);
+
+    // A rewrite gives the commits new ids; the shown change follows by Change-Id.
+    const before = api.model.stack?.commits.map((c) => c.sha) ?? [];
+    api.model.setStack(await client.rewrite([before[1], before[0], before[2], before[3]]));
+    await api.model.refresh();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    section("Local stack after moving a commit", await dump(api.stackView));
+    assert.equal(api.changeView.shown?.summary, "Extract command routing");
+    assert.notEqual(api.changeView.target?.rev, before[1]);
+  } catch (error) {
+    out.push("## FAILED", error instanceof Error ? (error.stack ?? error.message) : String(error), "");
+    throw error;
+  } finally {
+    const target = process.env.GER_E2E_OUT;
+    if (target) {
+      fs.writeFileSync(target, out.join("\n"), "utf8");
+    }
+  }
+}

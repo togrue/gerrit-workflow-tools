@@ -65,7 +65,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
         ? chains.map((chain) => ({ kind: "chain", chain, section: node.section }))
         : [{ kind: "info", text: node.section.name === "to-review" ? "Nothing to review" : "No open changes" }];
     }
-    if (node.kind === "chain") {
+    if (node.kind === "chain" && node.chain.members.length > 1) {
       // Base first is push order; the list reads top-down like `git log`, newest first.
       return [...node.chain.members].reverse().map((member) => ({ kind: "member", member, chain: node.chain }));
     }
@@ -130,8 +130,16 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
 
   private chainItem(chain: Chain, section: Section): vscode.TreeItem {
     const active = this.model.active.has(chain.key);
-    const item = new vscode.TreeItem(chain.top.subject, vscode.TreeItemCollapsibleState.Collapsed);
+    const single = chain.members.length === 1;
+    const item = new vscode.TreeItem(
+      chain.top.subject,
+      single ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed,
+    );
     item.id = `${section.name}/${chain.key}`;
+    if (single) {
+      // Nothing to expand: the row is the change.
+      item.command = { command: "ger.openChange", title: "Show Change", arguments: [memberTarget(chain.members[0], chain)] };
+    }
     item.description = `${active ? "● new activity · " : ""}${chainDescription(chain, section.name)}`;
     // To review, a clean chain is what wants you; outgoing, a clean chain is waiting on others.
     const state = severity(chain.attention_reasons);
@@ -148,7 +156,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       lines.push("Part of this chain sits on an older patchset of its parent.");
     }
     item.tooltip = new vscode.MarkdownString(lines.join("\n\n"));
-    item.contextValue = `ger.chain${chain.top.url ? ".url" : ""}`;
+    item.contextValue = `${single ? "ger.change" : "ger.chain"}${chain.top.url ? ".url" : ""}`;
     return item;
   }
 

@@ -229,7 +229,7 @@ def test_agent_runbook_walks_the_commits_that_need_edits_and_keeps_holds_away(st
     assert "`ger reply c1 --done`" in text and "ger reply c2" not in text
     assert "rename this" in text.split("### Left for a human")[0]
     assert "is this the right design?" in text.split("### Left for a human")[1]
-    assert "## Not yours: waiting for a human" in text and "Never publish anything" in text
+    assert "its CI findings are fixed in an earlier commit" in text and "Never publish anything" in text
 
     # Narrowed to one commit, introduced findings are still judged against the whole stack.
     only = _get(api, "/agent/runbook", rev=rows[3].sha)

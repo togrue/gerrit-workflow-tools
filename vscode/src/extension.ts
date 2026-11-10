@@ -96,10 +96,18 @@ function agentBrief(repo: string, rev: string): Promise<string> {
   });
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+/** What the extension hands to its end-to-end tests. */
+export interface ExtensionApi {
+  model: Model;
+  overviewView: OverviewView;
+  stackView: StackView;
+  changeView: ChangeView;
+}
+
+export function activate(context: vscode.ExtensionContext): ExtensionApi | undefined {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
-    return;
+    return undefined;
   }
   const repo = folder.uri.fsPath;
   const log = vscode.window.createOutputChannel("ger");
@@ -123,6 +131,26 @@ export function activate(context: vscode.ExtensionContext): void {
     stackTree.description = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
+  });
+  // A rewrite or an amend gives your commits new ids: follow the shown one by its Change-Id.
+  model.onDidChange(() => {
+    const target = changeView.target;
+    const stack = model.stack;
+    if (!target?.local || !stack || stack.commits.some((c) => c.sha === target.rev)) {
+      return;
+    }
+    const changeId = changeView.shown?.change_id;
+    const moved = changeId ? stack.commits.find((c) => c.change_id === changeId) : undefined;
+    if (moved) {
+      void changeView.open({ ...target, rev: moved.sha, title: moved.summary });
+    } else {
+      changeView.close();
+    }
+  });
+  model.onDidGetNewHeadline(async (headline) => {
+    if (setting("notify", true) && (await vscode.window.showInformationMessage(headline.text, "Open")) === "Open") {
+      await vscode.commands.executeCommand("ger.openHeadline");
+    }
   });
   changeView.onDidLoad(() => {
     changeTree.title = changeView.target?.number ? `Change ${changeView.target.number}` : "Change";
@@ -339,6 +367,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => clearInterval(poll) },
   );
   void model.refresh();
+  return { model, overviewView, stackView, changeView };
 }
 
 export function deactivate(): void {

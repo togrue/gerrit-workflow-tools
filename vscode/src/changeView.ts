@@ -5,7 +5,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CiContent, CiFinding, Comment, CommentChain, Diff, FileChange, ShownCommit } from "./api";
-import { plural, reasonWords, severity, votes } from "./format";
+import { fileState, plural, reasonWords, sentence, severity, votes } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
 
@@ -64,17 +64,26 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     }
     this.target = target;
     this.ci = undefined;
-    try {
-      const client = await this.model.client();
-      const [commits, diff, delta] = await Promise.all([
-        client.show([target.rev], { comments: "all", context: 3 }),
-        client.diff(target.rev).catch(() => undefined),
-        target.local ? undefined : client.reviewDelta(target.rev).catch(() => undefined),
-      ]);
-      [this.shown, this.diff, this.delta, this.problem] = [commits[0], diff, delta, undefined];
-    } catch (error) {
-      [this.shown, this.diff, this.delta, this.problem] = [undefined, undefined, undefined, describeError(error)];
-    }
+    await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
+      try {
+        const client = await this.model.client();
+        const [commits, diff, delta] = await Promise.all([
+          client.show([target.rev], { comments: "all", context: 3 }),
+          client.diff(target.rev).catch(() => undefined),
+          target.local ? undefined : client.reviewDelta(target.rev).catch(() => undefined),
+        ]);
+        [this.shown, this.diff, this.delta, this.problem] = [commits[0], diff, delta, undefined];
+      } catch (error) {
+        [this.shown, this.diff, this.delta, this.problem] = [undefined, undefined, undefined, describeError(error)];
+      }
+    });
+    this.changed.fire();
+    this.loaded.fire();
+  }
+
+  /** Show nothing: the change that was shown is gone. */
+  close(): void {
+    [this.target, this.shown, this.diff, this.delta, this.problem, this.ci] = [undefined, undefined, undefined, undefined, undefined, undefined];
     this.changed.fire();
     this.loaded.fire();
   }
@@ -114,7 +123,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       return this.groupChildren(node.group);
     }
     if (node.kind === "thread") {
-      return node.chain.comments.map((comment) => ({ kind: "comment", comment, chain: node.chain }));
+      return node.chain.comments.slice(1).map((comment) => ({ kind: "comment", comment, chain: node.chain }));
     }
     if (node.kind === "link") {
       const introduced = (await this.loadCi()).introduced;
@@ -150,7 +159,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     const nodes: Node[] = [
       {
         kind: "info",
-        text: reasonWords(commit.attention_reasons) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
+        text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
         detail: commit.pushed ? votes(commit) : "not on Gerrit",
         icon: severityIcon(state),
         tooltip: commit.summary,
@@ -324,7 +333,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     item.id = `${diff === this.delta ? "delta" : "files"}/${file.path}`;
     const dir = path.posix.dirname(file.path);
     const counts = file.insertions === null ? "binary" : `+${file.insertions} −${file.deletions}`;
-    item.description = `${dir === "." ? "" : `${dir} · `}${file.status} ${counts}`;
+    item.description = `${dir === "." ? "" : `${dir} · `}${fileState(file.status)} ${counts}`;
     item.tooltip = file.old_path ? `${file.old_path} → ${file.path}` : file.path;
     item.resourceUri = vscode.Uri.file(path.join(this.model.repo, file.path));
     item.iconPath = vscode.ThemeIcon.File;
@@ -333,13 +342,18 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   }
 
   private threadItem(chain: CommentChain): vscode.TreeItem {
-    const last = chain.comments.at(-1);
-    const where = NOT_FILES.includes(chain.path) ? "Change" : `${path.posix.basename(chain.path)}${chain.line ? `:${chain.line}` : ""}`;
-    const item = new vscode.TreeItem(where, vscode.TreeItemCollapsibleState.Collapsed);
+    const first = chain.comments[0];
+    const where = NOT_FILES.includes(chain.path) ? "whole change" : `${path.posix.basename(chain.path)}${chain.line ? `:${chain.line}` : ""}`;
+    const replies = chain.comments.length - 1;
+    const item = new vscode.TreeItem(
+      first?.message.split("\n")[0] ?? where,
+      replies ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+    );
     item.id = `thread/${chain.root_id}`;
     const answered = !chain.resolved && chain.resolved_after_publish;
     const held = chain.held && !chain.resolved;
-    item.description = `${held ? "[kept for you] " : ""}${answered ? "[draft resolves] " : ""}${last?.message.split("\n")[0] ?? ""}`;
+    const notes = [held ? "kept for you" : "", answered ? "your draft resolves it" : "", where, first?.author ?? "", replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : ""];
+    item.description = notes.filter(Boolean).join(" · ");
     item.iconPath = chain.resolved
       ? icon("pass", "disabledForeground")
       : answered
@@ -393,16 +407,18 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     await vscode.commands.executeCommand("vscode.diff", left, right, title);
   }
 
-  /** Open where a comment or a CI finding points: your file for a local commit, the commit's otherwise. */
+  /** The document a path of the shown change lives in: your file for a local commit, the commit's otherwise. */
+  locationUri(file: string): vscode.Uri {
+    const commit = this.diff?.commit ?? this.shown?.sha;
+    return this.target?.local || !commit ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
+  }
+
+  /** Open where a comment or a CI finding points. */
   async openLocation(location: Location): Promise<void> {
     if (NOT_FILES.includes(location.path)) {
       return;
     }
-    const commit = this.diff?.commit ?? this.shown?.sha;
-    const uri =
-      this.target?.local || !commit
-        ? vscode.Uri.file(path.join(this.model.repo, location.path))
-        : fileUri(commit, location.path);
+    const uri = this.locationUri(location.path);
     const line = Math.max(0, (location.line ?? 1) - 1);
     try {
       await vscode.window.showTextDocument(uri, { selection: new vscode.Range(line, 0, line, 0), preview: true });

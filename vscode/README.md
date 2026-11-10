@@ -68,6 +68,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 |---------|---------|--|
 | `ger.executable` | `ger` | How to run ger, e.g. `uv run ger`. |
 | `ger.pollSeconds` | `120` | Background refresh. Also refreshes when the window regains focus. |
+| `ger.notify` | `true` | Notify when something new becomes the most important change. |
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, e.g. `claude "Follow the runbook in {brief}"`. |
 
 ## Requirements
@@ -82,7 +83,13 @@ cd vscode
 npm install
 npm run compile     # or: npm run watch
 npm test            # unit tests of the pure parts (formatting, activity, reorder math)
+npm run e2e         # the extension inside a real VS Code, against a fixture repo and a fake Gerrit
 ```
+
+`npm run e2e` starts your installed VS Code (or `VSCODE_EXE`) with a throwaway profile, opens
+a generated four-commit repository, and has the extension start the real `ger serve` over the
+test suite's fake Gerrit (`test/e2e/fake_ger.py`). It walks every view, steps to a comment,
+opens a diff, fetches CI findings, and prints what the views showed. Needs `uv`.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
 open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere.
