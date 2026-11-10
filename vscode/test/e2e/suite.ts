@@ -132,8 +132,8 @@ export async function run(): Promise<void> {
     await api.model.refresh();
     const blocked = await dump(api.stackView);
     section("Local stack with a move that would conflict", blocked);
-    assert.match(blocked[0], /^Rework d\.txt .*\.downx$/, "the arrow down is replaced by the blocked marker");
-    assert.match(blocked[1], /^Cleanup after experiment .*\.upx\.down$/);
+    assert.match(blocked[0], /^Rework d\.txt .*\.downx\]$/, "the arrow down is replaced by the blocked marker");
+    assert.match(blocked[1], /^Cleanup after experiment .*\.upx\.down\]$/);
     assert.ok(blocked.slice(2).every((line) => !/x\b/.test(line.split("[")[1] ?? "")));
   } catch (error) {
     out.push("## FAILED", error instanceof Error ? (error.stack ?? error.message) : String(error), "");
