@@ -3,7 +3,7 @@
 import * as vscode from "vscode";
 
 import { StackCommit, StackStep } from "./api";
-import { commitDescription, moved, reasonWords, severity } from "./format";
+import { blockedMove, commitDescription, moved, reasonWords, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
 
@@ -62,6 +62,9 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     const commit = node.commit;
     const commits = this.commits();
     const index = commits.findIndex((c) => c.sha === commit.sha);
+    const [below, above] = [commits[index - 1], commits[index + 1]];
+    const upConflict = above && this.model.swapConflict(commit.sha, above.sha);
+    const downConflict = below && this.model.swapConflict(below.sha, commit.sha);
     const item = new vscode.TreeItem(commit.summary);
     item.id = commit.sha;
     item.description = `${commit.is_head ? "HEAD · " : ""}${commitDescription(commit)}`;
@@ -72,11 +75,14 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
         reasonWords(commit.attention_reasons) || "no open issues",
         commit.held_back ? "Held back by the ready boundary: `ger push` will not send it." : "",
         commit.reviewers.length ? `Reviewers: ${commit.reviewers.join(", ")}` : "",
+        upConflict ? blockedMove(commit.summary, above.summary, upConflict) : "",
+        downConflict ? blockedMove(commit.summary, below.summary, downConflict) : "",
       ]
         .filter(Boolean)
         .join("\n\n"),
     );
-    const flags = [commit.gerrit_url ? ".url" : "", index < commits.length - 1 ? ".up" : "", index > 0 ? ".down" : ""];
+    // `.upx` / `.downx`: the neighbour is there, but the two would conflict in each other's place.
+    const flags = [commit.gerrit_url ? ".url" : "", above ? (upConflict ? ".upx" : ".up") : "", below ? (downConflict ? ".downx" : ".down") : ""];
     item.contextValue = `ger.commit${flags.join("")}`;
     item.command = { command: "ger.openChange", title: "Show Change", arguments: [commitTarget(commit)] };
     return item;
@@ -114,6 +120,17 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     const order = moved(shas, shas.indexOf(node.commit.sha), step);
     if (order) {
       await this.rewrite(order, "Stack reordered.");
+    }
+  }
+
+  /** Say why a commit cannot move a place later (`+1`) or earlier (`-1`). */
+  explainBlocked(node: Node | undefined, step: number): void {
+    const commits = this.commits();
+    const index = node?.kind === "commit" ? commits.findIndex((c) => c.sha === node.commit.sha) : -1;
+    const [commit, other] = [commits[index], commits[index + step]];
+    const conflict = commit && other && (step > 0 ? this.model.swapConflict(commit.sha, other.sha) : this.model.swapConflict(other.sha, commit.sha));
+    if (conflict) {
+      void vscode.window.showInformationMessage(`${blockedMove(commit.summary, other.summary, conflict)} Nothing was changed.`);
     }
   }
 

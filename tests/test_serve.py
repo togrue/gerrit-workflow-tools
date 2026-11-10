@@ -10,6 +10,7 @@ import threading
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_serve import main as serve_main
+from gerrit_workflow_tools.core import reorder
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.config import Settings
@@ -24,6 +26,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
+from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, first_conflict, swap_conflicts
 from gerrit_workflow_tools.core.review_checkout import changes_ref
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit
@@ -417,12 +420,56 @@ def test_a_reorder_that_conflicts_leaves_the_branch_as_it_was(stack_repo: Path) 
     head = git_out("rev-parse", "HEAD", cwd=stack_repo)
     # The rewrite needs the commit that created a.txt below it.
     order = [rows[4].sha, *(row.sha for row in rows[:4])]
-    with pytest.raises(ReorderRefusal, match="does not apply in its new place"):
+    reflog = git_out("reflog", cwd=stack_repo)
+    with pytest.raises(ReorderRefusal, match=r"Rewrite a.txt.* does not apply in its new place \(conflict in a.txt\)"):
         reorder_stack(stack_repo, order, settings=settings)
+    assert git_out("reflog", cwd=stack_repo) == reflog, "found out without starting a rebase"
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head
     assert git_out("branch", "--show-current", cwd=stack_repo) == "feature"
     assert not rebase_in_progress(stack_repo)
     assert failure_response(ReorderRefusal("x"))[0] == 409
+
+
+def test_a_conflict_the_preview_cannot_see_aborts_the_rebase(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object) -> None:
+        raise PreviewUnavailable("old git")
+
+    monkeypatch.setattr(reorder, "first_conflict", unavailable)
+    (stack_repo / "a.txt").write_text("rewritten\n", encoding="utf-8")
+    git("commit", "-qam", "Rewrite a.txt\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    with pytest.raises(ReorderRefusal, match=r"Rewrite a\.txt.* does not apply in its new place;"):
+        reorder_stack(stack_repo, [rows[4].sha, *(r.sha for r in rows[:4])], settings=Settings.from_cwd(stack_repo))
+    assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head and not rebase_in_progress(stack_repo)
+
+
+def test_stack_moves_tells_which_neighbours_cannot_swap_without_touching_anything(stack_repo: Path) -> None:
+    (stack_repo / "d.txt").write_text("reworked\n", encoding="utf-8")
+    git("commit", "-qam", "Rework d.txt\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    store, _keys, _rows = _gerrit(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    reflog = git_out("reflog", cwd=stack_repo)
+    moves = _get(GerApi(stack_repo, gerrit=store), "/stack/moves")
+    assert moves["available"] and moves["head"] == rows[4].sha
+    assert [(swap["lower"], swap["upper"]) for swap in moves["swaps"]] == [
+        (lower.sha, upper.sha) for lower, upper in pairwise(rows)
+    ]
+    # Only the commit that reworks d.txt cannot go below the one that adds it.
+    assert [swap["conflict"] for swap in moves["swaps"][:3]] == [None, None, None]
+    assert moves["swaps"][3]["conflict"] == {"sha": rows[4].sha, "summary": "Rework d.txt", "files": ["d.txt"]}
+    assert git_out("reflog", cwd=stack_repo) == reflog and not git_out("status", "--porcelain", cwd=stack_repo)
+
+
+def test_stack_moves_follows_a_swap_whose_result_differs_through_the_rest_of_the_stack(stack_repo: Path) -> None:
+    rows = stack_rows_mb_to_head(stack_repo)
+    base = git_out("rev-parse", "main", cwd=stack_repo)
+    # Dropping the commit that adds c.txt is clean; moving the top one to the bottom too.
+    assert first_conflict(stack_repo, base, [rows[0], rows[1], rows[3]], rows) is None
+    assert first_conflict(stack_repo, base, [rows[3], rows[0], rows[1], rows[2]], rows) is None
+    assert swap_conflicts(stack_repo, base, rows) == [None, None, None]
+    with pytest.raises(PreviewUnavailable):
+        first_conflict(stack_repo, "0" * 40, [rows[1]], rows)
 
 
 def test_reorder_refuses_a_stale_order_and_a_dirty_worktree(stack_repo: Path) -> None:

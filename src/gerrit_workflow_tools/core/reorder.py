@@ -1,7 +1,8 @@
 """Rewriting the **local stack**: reorder, fold or drop its commits — or nothing at all.
 
-All or nothing: a rewrite that conflicts is aborted, so the branch is either as asked or
-exactly as it was. Runs ``git rebase -i`` with this module as the sequence editor
+All or nothing: a rewrite that would conflict is refused before anything is touched (see
+:mod:`reorder_preview`), and one that conflicts anyway is aborted, so the branch is either
+as asked or exactly as it was. Runs ``git rebase -i`` with this module as the sequence editor
 (``python -m gerrit_workflow_tools.core.reorder``), which only writes the prepared todo.
 
 Folding never merges two commit messages: a message with two **Change-Id** footers is not a
@@ -22,6 +23,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, rebase_in_progress
+from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 
 
@@ -93,6 +95,19 @@ def _resolve_steps(stack: Sequence[Commit], steps: Sequence[StackStep]) -> list[
     return resolved
 
 
+def _does_not_apply(commit: Commit | None, files: Sequence[str] = ()) -> ReorderRefusal:
+    where = f'"{commit.subject}" ({commit.short_sha})' if commit else "a commit"
+    conflict = f" (conflict in {', '.join(files)})" if files else ""
+    return ReorderRefusal(f"{where} does not apply in its new place{conflict}; the stack was left as it was")
+
+
+def _preview(cwd: Path | str, base: str, picks: Sequence[Commit], stack: Sequence[Commit]) -> PickConflict | None:
+    try:
+        return first_conflict(cwd, base, picks, stack)
+    except PreviewUnavailable:
+        return None  # an older git: the rebase below finds out, and is aborted
+
+
 def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Settings) -> StackRewrite:
     """Rewrite the local stack of the checked-out branch as *steps* say (oldest first).
 
@@ -105,6 +120,9 @@ def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Sett
     if [(c.sha, action) for c, action in resolved] == [(c.sha, "pick") for c in snapshot.commits]:
         return StackRewrite(list(snapshot.commits), head)
     _refuse_unless_ready(cwd, snapshot.upstream_tip)
+    kept = [commit for commit, action in resolved if action != "drop"]
+    if conflict := _preview(cwd, snapshot.upstream_tip, kept, snapshot.commits):
+        raise _does_not_apply(conflict.commit, conflict.files)
 
     with tempfile.TemporaryDirectory(prefix="ger-reorder-") as tmp:
         todo = Path(tmp) / "todo"
@@ -118,9 +136,7 @@ def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Sett
     if done.returncode != 0:
         stopped_at = git("rev-parse", "-q", "--verify", "REBASE_HEAD", cwd=cwd, check=False).stdout.strip()
         git("rebase", "--abort", cwd=cwd, check=False)
-        culprit = next((c for c, _ in resolved if c.sha == stopped_at), None)
-        where = f'"{culprit.subject}" ({culprit.short_sha})' if culprit else "a commit"
-        raise ReorderRefusal(f"{where} does not apply in its new place; the stack was left as it was")
+        raise _does_not_apply(next((c for c, _ in resolved if c.sha == stopped_at), None))
     return StackRewrite(list(get_stack_snapshot(cwd, first_parent=True, settings=settings).commits), head)
 
 

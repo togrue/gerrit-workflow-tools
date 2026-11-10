@@ -315,6 +315,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     "ger.push": () => runInTerminal(repo, "push"),
     "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
     "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
+    "ger.stack.moveUpBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, 1),
+    "ger.stack.moveDownBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, -1),
     "ger.stack.squash": (node: Parameters<StackView["move"]>[0]) => stackView.fold(node, false),
     "ger.stack.squashTakeMessage": (node: Parameters<StackView["move"]>[0]) => stackView.fold(node, true),
     "ger.stack.drop": (node: Parameters<StackView["move"]>[0]) => stackView.drop(node),

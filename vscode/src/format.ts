@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, Overview, StackCommit } from "./api";
+import { Chain, MoveConflict, Overview, StackCommit, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -138,6 +138,27 @@ export function rememberSeen(overview: Overview | undefined, seen: Seen, mark: I
     }
   }
   return next;
+}
+
+/** Swaps that would conflict, by `swapKey`. */
+export function blockedSwaps(moves: StackMoves | undefined): Map<string, MoveConflict> {
+  const blocked = new Map<string, MoveConflict>();
+  for (const swap of moves?.swaps ?? []) {
+    if (swap.conflict) {
+      blocked.set(swapKey(swap.lower, swap.upper), swap.conflict);
+    }
+  }
+  return blocked;
+}
+
+export function swapKey(lower: string, upper: string): string {
+  return `${lower}:${upper}`;
+}
+
+/** Why `moving` cannot change places with `other`, as one sentence. */
+export function blockedMove(moving: string, other: string, conflict: MoveConflict): string {
+  const files = conflict.files.length ? ` in ${conflict.files.join(", ")}` : "";
+  return `"${moving}" cannot change places with "${other}": "${conflict.summary}" would conflict${files}.`;
 }
 
 /** `commits` (oldest first) with the one at `index` moved by `step` places; undefined when it cannot move. */

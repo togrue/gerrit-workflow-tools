@@ -24,7 +24,9 @@ with a count appears when chains had activity since you last looked. Click to op
 - The commits above your upstream, newest first, each with patchset state, votes, unresolved
   comments, and whether `ger push` would hold it back.
 - **Reorder by drag and drop**, or with the arrows on a row. All or nothing: if a commit does
-  not apply in its new place, the branch is left exactly as it was and you are told which commit.
+  not apply in its new place, nothing is touched and you are told which commit and which files.
+- **Conflict preview**: where two neighbours cannot swap places, the arrow is replaced by a
+  blocked marker; click it (or hover the row) to see which commit would conflict in which files.
 - **Squash into the commit below** (keeping either message — never both, so there is always
   exactly one Change-Id) and **drop**, from a commit's context menu. Every rewrite offers
   **Undo** right after.

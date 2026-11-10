@@ -475,6 +475,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (current patchset against the one you reviewed) |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/reorder_preview.py` | Whether a rewrite would conflict, simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `PickConflict`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
 | `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
@@ -527,7 +528,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1` |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
-| `server/views.py` | Read endpoints: health, overview, stack, chain, show, diff, file, review, agent runbook; `error_json` |
+| `server/views.py` | Read endpoints: health, overview, stack, stack moves (conflict preview), chain, show, diff, file, review, agent runbook; `error_json` |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite and its undo |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
 

@@ -110,6 +110,21 @@ export interface Stack {
   commits: StackCommit[];
 }
 
+/** Why two neighbours of the local stack cannot swap places. */
+export interface MoveConflict {
+  sha: string;
+  summary: string;
+  files: string[];
+}
+
+/** The conflict preview: one entry per adjacent pair of the stack, oldest first. */
+export interface StackMoves {
+  head: string | null;
+  /** False when this git cannot simulate the moves: nothing is known. */
+  available: boolean;
+  swaps: { lower: string; upper: string; conflict: MoveConflict | null }[];
+}
+
 export interface Overview {
   host: string;
   generated?: string;
@@ -344,6 +359,11 @@ export class GerClient {
 
   hold(rootId: string, held: boolean): Promise<{ holds: string[] }> {
     return this.call("POST", "/comments/hold", undefined, { root_id: rootId, held });
+  }
+
+  /** Which neighbours of the local stack can swap places. Touches nothing. */
+  moves(): Promise<StackMoves> {
+    return this.call("GET", "/stack/moves");
   }
 
   /** Rewrite the local stack; `steps` are oldest first. All or nothing. */

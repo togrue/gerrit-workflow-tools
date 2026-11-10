@@ -30,6 +30,7 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/health", views.health),
     ("GET", "/overview", views.overview),
     ("GET", "/stack", views.stack),
+    ("GET", "/stack/moves", views.stack_moves),
     ("GET", "/chains/([^/]+)", views.chain),
     ("GET", "/show", views.show),
     ("GET", "/diff", views.diff),

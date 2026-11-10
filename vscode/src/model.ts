@@ -2,8 +2,8 @@
 
 import * as vscode from "vscode";
 
-import { GerApiError, GerClient, Headline, Overview, Stack, isStack } from "./api";
-import { Seen, chainsWithActivity, rememberSeen } from "./format";
+import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, isStack } from "./api";
+import { Seen, blockedSwaps, chainsWithActivity, rememberSeen, swapKey } from "./format";
 import { GerProcess } from "./server";
 
 const SEEN_KEY = "ger.seen";
@@ -42,6 +42,9 @@ export class Model implements vscode.Disposable {
   /** Fires when a refresh brings a headline that was not the headline before. Not on the first load. */
   readonly onDidGetNewHeadline = this.news.event;
   private lastHeadline: string | undefined;
+  /** Neighbours of the local stack that cannot swap places, for the stack whose head is `movesHead`. */
+  private blocked = new Map<string, MoveConflict>();
+  movesHead: string | null | undefined;
   private refreshing: Promise<void> | undefined;
 
   constructor(
@@ -88,6 +91,31 @@ export class Model implements vscode.Disposable {
     }
     await vscode.commands.executeCommand("setContext", "ger.ready", this.overview !== undefined);
     this.changed.fire();
+    await this.loadMoves();
+  }
+
+  /** The conflict preview for the stack as it is now. Best effort: without it every move is offered. */
+  private async loadMoves(): Promise<void> {
+    const head = this.stack?.head;
+    if (head === this.movesHead) {
+      return;
+    }
+    try {
+      const moves = head ? await (await this.client()).moves() : undefined;
+      if (this.stack?.head !== head) {
+        return; // the stack moved on meanwhile: the next load asks again
+      }
+      this.blocked = blockedSwaps(moves);
+      this.movesHead = head;
+    } catch {
+      this.blocked = new Map();
+    }
+    this.changed.fire();
+  }
+
+  /** Why the stack commits `lower` and `upper` (neighbours) cannot swap places, if they cannot. */
+  swapConflict(lower: string | null, upper: string | null): MoveConflict | undefined {
+    return lower && upper && this.stack?.head === this.movesHead ? this.blocked.get(swapKey(lower, upper)) : undefined;
   }
 
   /** The local stack changed here (a reorder): show it without waiting for Gerrit. */
@@ -95,6 +123,7 @@ export class Model implements vscode.Disposable {
     if (this.overview) {
       this.overview = { ...this.overview, local: stack };
       this.changed.fire();
+      void this.loadMoves();
     }
   }
 

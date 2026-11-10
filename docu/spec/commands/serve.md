@@ -114,6 +114,18 @@ The **annotated stack** of the working branch: `ger log --json`, plus per commit
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`.
 
+### `GET /stack/moves`
+
+The conflict preview for reordering: which neighbours of the local stack can swap places.
+Nothing is touched — no rebase starts, the worktree and the branch stay as they are.
+
+- `head` — the stack this answer is for.
+- `swaps` — one entry per adjacent pair, oldest first: `lower`, `upper` (commit ids) and
+  `conflict`: `null` when the two can swap, else `sha` and `summary` of the first commit
+  that would not apply, and the `files` it conflicts in.
+- `available` — `false` (with `reason`, and no `swaps`) when this git cannot simulate the
+  moves; it takes git 2.40. Nothing is known then, and a rewrite still finds out.
+
 ### `GET /chains/<number>`
 
 The **review chain** an open change sits in, base to top, in the `ger inbox --json` chain shape.
@@ -223,7 +235,9 @@ is `REFUSED` and the reflog is the way back.
 
 It is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted changes,
 a rebase is in progress, HEAD is detached, the stack contains a merge, or a commit does not
-apply in its new place (the rebase is aborted and the message names the commit).
+apply in its new place. The last is found out before anything is touched, with the same
+simulation as `GET /stack/moves`, and the message names the commit and the files it
+conflicts in. Where git is too old for that, the rebase is tried and aborted.
 
 ---
 

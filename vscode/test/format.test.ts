@@ -2,7 +2,21 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Chain, Overview } from "../src/api";
-import { age, chainDescription, chainsWithActivity, fileState, moved, rememberSeen, sentence, severity, vote, votes } from "../src/format";
+import {
+  age,
+  blockedMove,
+  blockedSwaps,
+  chainDescription,
+  chainsWithActivity,
+  fileState,
+  moved,
+  rememberSeen,
+  sentence,
+  severity,
+  swapKey,
+  vote,
+  votes,
+} from "../src/format";
 
 function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): Chain {
   return {
@@ -67,4 +81,20 @@ test("moving a commit keeps every commit exactly once", () => {
   assert.deepEqual(moved(["a", "b", "c"], 2, -1), ["a", "c", "b"]);
   assert.equal(moved(["a", "b", "c"], 2, 1), undefined);
   assert.equal(moved(["a", "b", "c"], 0, -1), undefined);
+});
+
+test("the conflict preview blocks only the swaps that would conflict", () => {
+  const conflict = { sha: "c", summary: "Rework d.txt", files: ["d.txt"] };
+  const blocked = blockedSwaps({
+    head: "c",
+    available: true,
+    swaps: [
+      { lower: "a", upper: "b", conflict: null },
+      { lower: "b", upper: "c", conflict },
+    ],
+  });
+  assert.equal(blocked.get(swapKey("a", "b")), undefined);
+  assert.equal(blocked.get(swapKey("b", "c")), conflict);
+  assert.equal(blockedSwaps(undefined).size, 0);
+  assert.equal(blockedMove("Add d.txt", "Rework d.txt", conflict), '"Add d.txt" cannot change places with "Rework d.txt": "Rework d.txt" would conflict in d.txt.');
 });

@@ -3,6 +3,7 @@
 // showed to GER_E2E_OUT, so a change in what users see is a visible diff.
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -122,6 +123,18 @@ export async function run(): Promise<void> {
     section("Local stack after moving a commit", await dump(api.stackView));
     assert.equal(api.changeView.shown?.summary, "Extract command routing");
     assert.notEqual(api.changeView.target?.rev, before[1]);
+
+    // The conflict preview: a commit that reworks d.txt cannot go below the one that adds it.
+    assert.ok(!(await dump(api.stackView)).some((line) => /\.(up|down)x/.test(line)), "four independent commits: every move is offered");
+    const repo = vscode.workspace.workspaceFolders?.[0].uri.fsPath ?? "";
+    fs.writeFileSync(path.join(repo, "d.txt"), "reworked\n", "utf8");
+    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qam", "Rework d.txt"], { cwd: repo });
+    await api.model.refresh();
+    const blocked = await dump(api.stackView);
+    section("Local stack with a move that would conflict", blocked);
+    assert.match(blocked[0], /^Rework d\.txt .*\.downx$/, "the arrow down is replaced by the blocked marker");
+    assert.match(blocked[1], /^Cleanup after experiment .*\.upx\.down$/);
+    assert.ok(blocked.slice(2).every((line) => !/x\b/.test(line.split("[")[1] ?? "")));
   } catch (error) {
     out.push("## FAILED", error instanceof Error ? (error.stack ?? error.message) : String(error), "");
     throw error;
