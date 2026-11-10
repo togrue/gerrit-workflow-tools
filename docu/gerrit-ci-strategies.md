@@ -43,8 +43,9 @@ Registry paths and tier resolution: [Configuration.md](Configuration.md#extensio
 Use `STRATEGIES` keyed by exact `gerrit.project`. For prefix matching across many
 repos, `get_strategy(project)` is also supported (one factory, same signature).
 
-Copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) only when you need
-customization — the example rewrites console URLs to test reports.
+Copy [`example/hooks/ci/`](../example/hooks/ci/) only when you need customization —
+the example rewrites console URLs to test reports and registers a sample
+**CI content provider**.
 
 ---
 
@@ -136,11 +137,14 @@ CONTENT_PROVIDERS = [BuildsProvider()]
 Jenkins needs nothing: the built-in provider handles any `…/job/<name>/<n>/…` URL. Set
 `ger.ciCredential.<host>` to `user:apitoken` when the console needs a login.
 
+A full copyable registry (link rewrite + this provider shape) lives in
+[`example/hooks/ci/`](../example/hooks/ci/).
+
 ---
 
 ## See also
 
 - [Configuration.md](Configuration.md) — registry paths and resolution order
-- [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) — testReport URL example
+- [`example/hooks/ci/`](../example/hooks/ci/) — copyable CI strategy + content provider
 - [spec/commands/log.md](spec/commands/log.md) — `ci_links` JSON field
 - [spec/ci-content.md](spec/ci-content.md) — fetch/parse behind CI links

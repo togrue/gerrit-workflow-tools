@@ -185,7 +185,7 @@ Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same 
 | Attention | `attention/` | Override attention reasons (`STRATEGIES` / `get_strategy`) and optional chain blocking (`CHAIN_BLOCK_STRATEGIES` / `get_chain_block_strategy`). |
 | Reviewers | `reviewers/` | Default push reviewers when CLI/branch config does not. Callable: `default_reviewers(*, branch, commits, settings) -> list[str]`. |
 
-**Example (CI):** built-in behaviour needs no registry. Copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` only for custom URL transforms — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md).
+**Example (CI):** built-in behaviour needs no registry. Copy [`example/hooks/ci/`](../example/hooks/ci/) to `.ger/ci/` only for custom URL transforms or a custom **CI content provider** — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md) and [example/hooks/](../example/hooks/).
 
 With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` allows). JSON includes `ci_links` alongside `ci_failures` (names only).
 
@@ -195,4 +195,4 @@ With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` all
 
 - [SPEC.md](SPEC.md) — specification index
 - [`ger push`](spec/commands/push.md), [`ger log`](spec/commands/log.md) — command specs
-- [`contrib/ger-ci-example`](../contrib/ger-ci-example/) — sample Jenkins → console strategy
+- [`example/hooks/`](../example/hooks/) — copyable `.ger` registry examples (CI strategy + content provider)

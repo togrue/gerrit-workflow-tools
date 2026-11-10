@@ -96,3 +96,4 @@ With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_line
 - [ci-content.md](../ci-content.md) — design: providers, findings, caching, credentials
 - [`ger show`](show.md) — `--ci` attaches the same findings (soft failures)
 - [gerrit-ci-strategies.md](../../gerrit-ci-strategies.md) — where CI links come from, custom providers
+- [`example/hooks/ci/`](../../../example/hooks/ci/) — copyable custom strategy + content provider
