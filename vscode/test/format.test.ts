@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { Chain, Overview } from "../src/api";
+import { age, chainDescription, chainsWithActivity, moved, rememberSeen, severity, vote } from "../src/format";
+
+function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): Chain {
+  return {
+    key,
+    top: { number: 1, change_id: "I1", subject: "s", url: null },
+    project: "p",
+    branch: "main",
+    owner: { name: "alice", email: null },
+    depth: 2,
+    wait_age_seconds: 4 * 3600,
+    unreviewed_age_seconds: 3 * 86400,
+    last_activity: lastActivity,
+    verified: 1,
+    code_review: null,
+    comments_unresolved: 2,
+    attention_reasons: [],
+    partial_chain: false,
+    members: [],
+    ...extra,
+  };
+}
+
+function overview(...chains: Chain[]): Overview {
+  return { host: "g", sections: [{ name: "to-review", query: "", summary: {}, chains }], local: { error: { code: "GIT", message: "" } } };
+}
+
+test("severity takes the most urgent reason", () => {
+  assert.equal(severity(["awaiting-review", "ci-failed", "unresolved-comments"]), "error");
+  assert.equal(severity(["awaiting-review", "unresolved-comments"]), "warning");
+  assert.equal(severity(["not-pushed"]), "pending");
+  assert.equal(severity([]), "ok");
+});
+
+test("votes and ages read like ger's own output", () => {
+  assert.equal(vote("CR", 2), "CR+2");
+  assert.equal(vote("V", -1), "V-1");
+  assert.equal(vote("V", null), "V·");
+  assert.deepEqual([age(59), age(12 * 60), age(47 * 3600), age(3 * 86400)], ["0m", "12m", "47h", "3d"]);
+  assert.equal(chainDescription(chain("k", ""), "to-review"), "alice · 2 changes · V+1 CR· 💬2 · waiting 3d · active 4h ago");
+  assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 CR· 💬2 · active 4h ago");
+});
+
+test("activity is what moved since the chain was last seen", () => {
+  const first = overview(chain("a", "2026-11-09T10:00:00Z"), chain("b", "2026-11-09T10:00:00Z"));
+  // First sight is not news.
+  const seen = rememberSeen(first, {});
+  assert.equal(chainsWithActivity(first, seen).size, 0);
+
+  const later = overview(chain("a", "2026-11-09T12:00:00Z"), chain("b", "2026-11-09T10:00:00Z"));
+  const kept = rememberSeen(later, seen);
+  assert.deepEqual([...chainsWithActivity(later, kept)], ["a"]);
+  // Looking at the chain clears it; a chain that left the inbox is forgotten.
+  const marked = rememberSeen(later, kept, ["a"]);
+  assert.equal(chainsWithActivity(later, marked).size, 0);
+  assert.deepEqual(Object.keys(rememberSeen(overview(chain("b", "x")), marked)), ["b"]);
+});
+
+test("moving a commit keeps every commit exactly once", () => {
+  assert.deepEqual(moved(["a", "b", "c"], 0, 1), ["b", "a", "c"]);
+  assert.deepEqual(moved(["a", "b", "c"], 2, -1), ["a", "c", "b"]);
+  assert.equal(moved(["a", "b", "c"], 2, 1), undefined);
+  assert.equal(moved(["a", "b", "c"], 0, -1), undefined);
+});

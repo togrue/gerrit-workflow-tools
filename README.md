@@ -45,6 +45,12 @@ For PATH details, bash completion, the Change-Id hook, branch settings, and veri
 
 Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user.
 
+### VS Code
+
+`ger serve` is a local HTTP service over the same core; the extension in [`vscode/`](vscode/README.md)
+uses it to show your review chains, the local stack, comments, diffs and CI findings in the editor,
+and to reorder the stack by drag and drop. API: [docu/spec/commands/serve.md](docu/spec/commands/serve.md).
+
 ### Testing
 
 Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in).

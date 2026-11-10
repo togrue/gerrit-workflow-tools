@@ -1,0 +1,153 @@
+{
+  "name": "ger-vscode",
+  "displayName": "ger — Gerrit stacked reviews",
+  "description": "Your Gerrit review chains, the local stack, comments, diffs and CI findings, next to your code. A client of `ger serve`.",
+  "version": "0.1.0",
+  "publisher": "gerrit-workflow-tools",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:.git"
+  ],
+  "main": "./out/src/extension.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "test": "tsc -p . && node --test \"out/test/**/*.test.js\"",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.85.0",
+    "typescript": "^5.4.0"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "ger",
+      "properties": {
+        "ger.executable": {
+          "type": "string",
+          "default": "ger",
+          "description": "Command that runs ger, e.g. `ger` or `uv run ger`. The extension starts `<command> serve` in the workspace folder."
+        },
+        "ger.pollSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 15,
+          "description": "How often the overview is refreshed in the background."
+        },
+        "ger.agentCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Terminal command that hands a change to a coding agent. `{rev}` is replaced by the commit or change, `{brief}` by the path of a Markdown file holding its unresolved comments and CI findings. Example: `claude \"Fix the review comments and CI failures described in {brief}\"`. Empty: the brief is copied to the clipboard instead."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ger",
+          "title": "Gerrit",
+          "icon": "media/ger.svg"
+        }
+      ]
+    },
+    "views": {
+      "ger": [
+        {
+          "id": "ger.overview",
+          "name": "Review chains"
+        },
+        {
+          "id": "ger.stack",
+          "name": "Local stack"
+        },
+        {
+          "id": "ger.change",
+          "name": "Change"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ger.overview",
+        "contents": "Waiting for `ger serve`…\n[Retry](command:ger.refresh)\n[Show log](command:ger.showLog)",
+        "when": "!ger.ready"
+      },
+      {
+        "view": "ger.change",
+        "contents": "Select a change in *Review chains* or a commit in *Local stack* to see its files, comments and CI findings."
+      }
+    ],
+    "commands": [
+      { "command": "ger.refresh", "title": "Refresh from Gerrit", "category": "ger", "icon": "$(refresh)" },
+      { "command": "ger.showLog", "title": "Show Log", "category": "ger" },
+      { "command": "ger.openHeadline", "title": "Open the Most Important Change", "category": "ger" },
+      { "command": "ger.markSeen", "title": "Mark All Activity as Seen", "category": "ger", "icon": "$(check-all)" },
+      { "command": "ger.openChange", "title": "Show Change", "category": "ger" },
+      { "command": "ger.openInGerrit", "title": "Open in Gerrit", "category": "ger", "icon": "$(link-external)" },
+      { "command": "ger.checkout", "title": "Check Out", "category": "ger", "icon": "$(git-branch)" },
+      { "command": "ger.reviewDone", "title": "Leave Review Checkout", "category": "ger" },
+      { "command": "ger.push", "title": "Push to Gerrit…", "category": "ger", "icon": "$(cloud-upload)" },
+      { "command": "ger.stack.moveUp", "title": "Move Later in the Stack", "category": "ger", "icon": "$(arrow-up)" },
+      { "command": "ger.stack.moveDown", "title": "Move Earlier in the Stack", "category": "ger", "icon": "$(arrow-down)" },
+      { "command": "ger.openDiff", "title": "Open Diff", "category": "ger" },
+      { "command": "ger.openLocation", "title": "Go to Location", "category": "ger" },
+      { "command": "ger.nextComment", "title": "Next Unresolved Comment", "category": "ger", "icon": "$(arrow-down)" },
+      { "command": "ger.prevComment", "title": "Previous Unresolved Comment", "category": "ger", "icon": "$(arrow-up)" },
+      { "command": "ger.reply", "title": "Reply (Draft)…", "category": "ger", "icon": "$(reply)" },
+      { "command": "ger.replyDone", "title": "Reply Done and Resolve (Draft)", "category": "ger", "icon": "$(check)" },
+      { "command": "ger.thread.reply", "title": "Save Draft Reply", "category": "ger" },
+      { "command": "ger.thread.resolve", "title": "Save Draft and Resolve", "category": "ger" },
+      { "command": "ger.agentBrief", "title": "Hand to Agent (Comments and CI Findings)", "category": "ger", "icon": "$(hubot)" }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "ger.openChange", "when": "false" },
+        { "command": "ger.openDiff", "when": "false" },
+        { "command": "ger.openLocation", "when": "false" },
+        { "command": "ger.stack.moveUp", "when": "false" },
+        { "command": "ger.stack.moveDown", "when": "false" },
+        { "command": "ger.reply", "when": "false" },
+        { "command": "ger.replyDone", "when": "false" },
+        { "command": "ger.thread.reply", "when": "false" },
+        { "command": "ger.thread.resolve", "when": "false" }
+      ],
+      "view/title": [
+        { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
+        { "command": "ger.markSeen", "when": "view == ger.overview", "group": "navigation@2" },
+        { "command": "ger.push", "when": "view == ger.stack", "group": "navigation@1" },
+        { "command": "ger.prevComment", "when": "view == ger.change", "group": "navigation@1" },
+        { "command": "ger.nextComment", "when": "view == ger.change", "group": "navigation@2" },
+        { "command": "ger.agentBrief", "when": "view == ger.change", "group": "navigation@3" },
+        { "command": "ger.checkout", "when": "view == ger.change", "group": "navigation@4" },
+        { "command": "ger.openInGerrit", "when": "view == ger.change", "group": "navigation@5" },
+        { "command": "ger.reviewDone", "when": "view == ger.change" }
+      ],
+      "view/item/context": [
+        { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.(change|commit)/", "group": "inline@1" },
+        { "command": "ger.openInGerrit", "when": "viewItem =~ /^ger\\.(change|commit|chain)/ && viewItem =~ /\\.url/", "group": "inline@2" },
+        { "command": "ger.stack.moveUp", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.up/", "group": "inline@3" },
+        { "command": "ger.stack.moveDown", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.down/", "group": "inline@4" },
+        { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.(change|commit)/", "group": "1_ger@1" },
+        { "command": "ger.reply", "when": "viewItem =~ /^ger\\.thread/", "group": "inline@1" },
+        { "command": "ger.replyDone", "when": "viewItem =~ /^ger\\.thread\\.open/", "group": "inline@2" }
+      ],
+      "comments/commentThread/context": [
+        { "command": "ger.thread.reply", "when": "commentController == ger", "group": "inline@1" },
+        { "command": "ger.thread.resolve", "when": "commentController == ger && commentThread == open", "group": "inline@2" }
+      ]
+    },
+    "keybindings": [
+      { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready" },
+      { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready" }
+    ]
+  }
+}

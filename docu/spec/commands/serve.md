@@ -5,7 +5,7 @@
 | **Status** | **First slice** — the endpoints below; no push, vote or publish over HTTP, no event stream |
 | **Module** | `src/gerrit_workflow_tools/cli_serve.py`, `src/gerrit_workflow_tools/server/` |
 | **Requires** | A git worktree, `gerrit.webUrl`, credentials |
-| **Client** | The VS Code extension in `vscode/` |
+| **Client** | The VS Code extension in [`vscode/`](../../../vscode/README.md) |
 
 A local HTTP service over the same core the commands use, so an editor can show review state
 without parsing terminal output. Every endpoint is *parse request → call core → JSON*, like a
