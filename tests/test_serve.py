@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
-from gerrit_workflow_tools.core.reorder import ReorderRefusal, reorder_stack
+from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
 from gerrit_workflow_tools.core.review_checkout import changes_ref
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit
@@ -318,12 +318,54 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
 def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) -> None:
     store, _keys, rows = _gerrit(stack_repo)
     order = [rows[1].sha, rows[0].sha[:10], rows[3].sha, rows[2].sha]
-    stack = _post(GerApi(stack_repo, gerrit=store), "/stack/reorder", {"order": order})
+    api = GerApi(stack_repo, gerrit=store)
+    stack = _post(api, "/stack/rewrite", {"steps": order})
     after = stack_rows_mb_to_head(stack_repo)
     assert [c.subject for c in after] == [rows[i].subject for i in (1, 0, 3, 2)]
     assert [c.change_id for c in after] == [rows[i].change_id for i in (1, 0, 3, 2)]
     assert [c["sha"] for c in stack["commits"]] == [c.sha for c in after]
     assert not rebase_in_progress(stack_repo)
+
+
+def test_rewrite_folds_and_drops_without_ever_merging_two_change_ids(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    before = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    steps = [
+        rows[0].sha,
+        {"sha": rows[1].sha, "action": "fixup"},  # into rows[0], whose message stays
+        {"sha": rows[2].sha, "action": "drop"},
+        rows[3].sha,
+    ]
+    stack = _post(api, "/stack/rewrite", {"steps": steps})
+    after = stack_rows_mb_to_head(stack_repo)
+    assert [(c.subject, c.change_id) for c in after] == [(rows[i].subject, rows[i].change_id) for i in (0, 3)]
+    assert git_out("show", "--format=", "--name-only", after[0].sha, cwd=stack_repo).split() == ["a.txt", "b.txt"]
+    assert not (stack_repo / "c.txt").exists(), "the dropped commit's file is gone"
+    assert stack["previous_head"] == before
+
+    # Folding upwards-in-message: the folded commit's message, and so its Change-Id, wins.
+    stack = _post(
+        api, "/stack/rewrite", {"steps": [after[0].sha, {"sha": after[1].sha, "action": "fixup-take-message"}]}
+    )
+    [only] = stack_rows_mb_to_head(stack_repo)
+    assert (only.subject, only.change_id) == (rows[3].subject, rows[3].change_id)
+    assert only.body.count("Change-Id:") == 1
+
+    # Undo takes exactly that rewrite back, and only while the branch is still where it left it.
+    _post(api, "/stack/undo", {"head": stack["head"], "previous_head": stack["previous_head"]})
+    assert [c.sha for c in stack_rows_mb_to_head(stack_repo)] == [c.sha for c in after]
+    with pytest.raises(ReorderRefusal, match="has moved since the rewrite"):
+        _post(api, "/stack/undo", {"head": stack["head"], "previous_head": before})
+
+
+def test_rewrite_refuses_to_fold_the_lowest_commit(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    steps = [StackStep(rows[0].sha, "fixup"), *(StackStep(row.sha) for row in rows[1:])]
+    with pytest.raises(ReorderRefusal, match="nothing below to fold it into"):
+        rewrite_stack(stack_repo, steps, settings=Settings.from_cwd(stack_repo))
+    with pytest.raises(BadRequest):
+        _post(GerApi(stack_repo, gerrit=store), "/stack/rewrite", {"steps": [{"sha": rows[0].sha, "action": "squash"}]})
 
 
 def test_a_reorder_that_conflicts_leaves_the_branch_as_it_was(stack_repo: Path) -> None:
@@ -405,9 +447,9 @@ def test_http_maps_failures_to_statuses_and_shared_codes(served: GerHttpServer) 
     )
     status, body = _http(served, f"{V1}/show?rev=nosuchrev")
     assert (status, body["error"]["code"]) == (404, "NOT_FOUND")
-    status, body = _http(served, f"{V1}/stack/reorder", data=b'{"order": "abc"}')
+    status, body = _http(served, f"{V1}/stack/rewrite", data=b'{"steps": "abc"}')
     assert (status, body["error"]["code"]) == (400, "USAGE")
-    status, body = _http(served, f"{V1}/stack/reorder", data=b"not json")
+    status, body = _http(served, f"{V1}/stack/rewrite", data=b"not json")
     assert (status, body["error"]["code"]) == (400, "USAGE")
     assert failure_response(NoRoute("x"))[0] == 404
     assert failure_response(RuntimeError("bug"))[1]["error"]["code"] == "INTERNAL"

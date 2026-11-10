@@ -173,13 +173,30 @@ The **review state**, as `ger review --status --json`, under `review`; `null` wh
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
-| `/stack/reorder` | `order`: commit ids, oldest first | Reorder the local stack. Answers the new `/stack`. |
+| `/stack/rewrite` | `steps`, oldest first | Reorder, fold or drop commits of the local stack. Answers the new `/stack` plus `previous_head`. |
+| `/stack/undo` | `head`, `previous_head` | Take that rewrite back. |
 
-### Reordering is all or nothing
+### Rewriting the stack is all or nothing
 
-`order` must name every commit of the local stack exactly once (full or abbreviated ids).
-The stack is rewritten with one non-interactive rebase; **Change-Ids** travel with their
-commits, so Gerrit sees the same changes in a new order after the next push.
+`steps` must name every commit of the local stack exactly once (full or abbreviated ids),
+in the order wanted. A step is a commit id — the commit is kept — or `{sha, action}`:
+
+| `action` | The commit is |
+|----------|---------------|
+| `pick` | kept |
+| `fixup` | folded into the commit below it; that commit's message stays |
+| `fixup-take-message` | folded into the commit below it; this commit's message replaces the other |
+| `drop` | removed |
+
+The stack is rewritten with one non-interactive rebase. **Change-Ids** travel with their
+commits, so Gerrit sees the same changes in a new order after the next push. Folding never
+joins two messages — a message with two **Change-Id** footers is not a Gerrit change — so
+one of the two changes lives on and the other is left open on Gerrit for you to abandon, as
+is the change of a dropped commit.
+
+`/stack/undo` puts the branch back on `previous_head`, keeping uncommitted edits. It works
+only while the branch is still on `head`, where the rewrite left it; after a new commit it
+is `REFUSED` and the reflog is the way back.
 
 It is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted changes,
 a rebase is in progress, HEAD is detached, the stack contains a merge, or a commit does not

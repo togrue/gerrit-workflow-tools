@@ -38,7 +38,8 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("POST", "/review/open", actions.review_open),
     ("POST", "/review/done", actions.review_done),
     ("POST", "/comments/reply", actions.reply),
-    ("POST", "/stack/reorder", actions.reorder),
+    ("POST", "/stack/rewrite", actions.rewrite),
+    ("POST", "/stack/undo", actions.undo),
 )
 
 _REFRESH_ENV = "GER_CACHE_REFRESH"

@@ -25,6 +25,9 @@ with a count appears when chains had activity since you last looked. Click to op
   comments, and whether `ger push` would hold it back.
 - **Reorder by drag and drop**, or with the arrows on a row. All or nothing: if a commit does
   not apply in its new place, the branch is left exactly as it was and you are told which commit.
+- **Squash into the commit below** (keeping either message — never both, so there is always
+  exactly one Change-Id) and **drop**, from a commit's context menu. Every rewrite offers
+  **Undo** right after.
 - Push (`ger push` in a terminal, where it can ask you).
 
 **Change** — select any change or commit

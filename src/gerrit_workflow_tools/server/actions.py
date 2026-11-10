@@ -1,4 +1,4 @@
-"""Endpoints of ``ger serve`` that change something: the review checkout, draft replies, the stack order.
+"""Endpoints of ``ger serve`` that change something: the review checkout, draft replies, the local stack.
 
 None of them publishes to Gerrit: replies are drafts, and publishing stays with ``ger push`` /
 ``ger review --vote``, in front of a human. Spec: docu/spec/commands/serve.md.
@@ -13,7 +13,7 @@ from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-from gerrit_workflow_tools.core.reorder import reorder_stack
+from gerrit_workflow_tools.core.reorder import STEP_ACTIONS, StackStep, rewrite_stack, undo_rewrite
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
     ReviewUsageError,
@@ -89,10 +89,32 @@ def reply(ctx: Context, req: Request) -> dict[str, Any]:
     return {"change": match.change, "root_id": match.chain.root_id, "reply": asdict(saved)}
 
 
-def reorder(ctx: Context, req: Request) -> dict[str, Any]:
-    """Put the local stack into ``order`` (commit ids, oldest first), all or nothing; answers the new stack."""
-    order = req.body_field("order", list, required=True)
-    if not all(isinstance(item, str) for item in order):
-        raise BadRequest("order must be a list of commit ids")
-    reorder_stack(ctx.cwd, order, settings=ctx.settings)
+def _steps(raw: list[Any]) -> list[StackStep]:
+    steps: list[StackStep] = []
+    for item in raw:
+        if isinstance(item, str):
+            steps.append(StackStep(item))
+            continue
+        sha, action = (item.get("sha"), item.get("action", "pick")) if isinstance(item, dict) else (None, None)
+        if not isinstance(sha, str) or action not in STEP_ACTIONS:
+            raise BadRequest(f"a step is a commit id or {{sha, action}} with action one of {', '.join(STEP_ACTIONS)}")
+        steps.append(StackStep(sha, action))
+    return steps
+
+
+def rewrite(ctx: Context, req: Request) -> dict[str, Any]:
+    """Rewrite the local stack as ``steps`` say (oldest first), all or nothing; answers the new stack.
+
+    A step is a commit id (kept) or ``{sha, action}``. ``previous_head`` in the answer is
+    what ``/stack/undo`` takes back.
+    """
+    done = rewrite_stack(ctx.cwd, _steps(req.body_field("steps", list, required=True)), settings=ctx.settings)
+    return {**views.stack(ctx, Request()), "previous_head": done.previous_head}
+
+
+def undo(ctx: Context, req: Request) -> dict[str, Any]:
+    """Take a rewrite back: ``head`` (the stack's head after it) returns to ``previous_head``."""
+    head = safe_rev(req.body_field("head", str, required=True), "head")
+    previous = safe_rev(req.body_field("previous_head", str, required=True), "previous_head")
+    undo_rewrite(ctx.cwd, head, previous)
     return views.stack(ctx, Request())

@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 
-import { StackCommit } from "./api";
+import { StackCommit, StackStep } from "./api";
 import { commitDescription, moved, reasonWords, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
@@ -102,7 +102,7 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     const shown = [...this.commits()].reverse().map((c) => c.sha);
     const rest = shown.filter((sha) => !dragged.includes(sha));
     rest.splice(rest.indexOf(target.commit.sha), 0, ...shown.filter((sha) => dragged.includes(sha)));
-    await this.reorder(rest.reverse());
+    await this.rewrite(rest.reverse(), "Stack reordered.");
   }
 
   /** Move one commit a place later (`+1`) or earlier (`-1`) in the stack. */
@@ -113,21 +113,60 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     const shas = this.commits().map((c) => c.sha);
     const order = moved(shas, shas.indexOf(node.commit.sha), step);
     if (order) {
-      await this.reorder(order);
+      await this.rewrite(order, "Stack reordered.");
     }
   }
 
-  private async reorder(order: string[]): Promise<void> {
+  /** Fold a commit into the one below it. One message survives whole, and with it its Change-Id. */
+  async fold(node: Node | undefined, takeMessage: boolean): Promise<void> {
+    const commits = this.commits();
+    const index = node?.kind === "commit" ? commits.findIndex((c) => c.sha === node.commit.sha) : -1;
+    if (index < 1) {
+      return;
+    }
+    const [below, folded] = [commits[index - 1], commits[index]];
+    const [kept, gone] = takeMessage ? [folded, below] : [below, folded];
+    const action = takeMessage ? "fixup-take-message" : "fixup";
+    const steps = commits.map((c): StackStep => (c.sha === folded.sha ? { sha: c.sha, action } : c.sha));
+    const orphan = gone.pushed ? ` The Gerrit change of "${gone.summary}" stays open: abandon it there.` : "";
+    await this.rewrite(steps, `Squashed into "${kept.summary}".${orphan}`);
+  }
+
+  async drop(node: Node | undefined): Promise<void> {
+    if (node?.kind !== "commit") {
+      return;
+    }
+    const commit = node.commit;
+    const detail = commit.pushed
+      ? "Its change stays open on Gerrit until you abandon it there. You can undo the drop right after."
+      : "It was never pushed: after the drop it exists only in the reflog. You can undo the drop right after.";
+    const answer = await vscode.window.showWarningMessage(`Drop "${commit.summary}" from the stack?`, { modal: true, detail }, "Drop");
+    if (answer !== "Drop") {
+      return;
+    }
+    const steps = this.commits().map((c): StackStep => (c.sha === commit.sha ? { sha: c.sha, action: "drop" } : c.sha));
+    await this.rewrite(steps, `Dropped "${commit.summary}".`);
+  }
+
+  private async rewrite(steps: StackStep[], done: string): Promise<void> {
     try {
-      await vscode.window.withProgress({ location: { viewId: "ger.stack" }, title: "Reordering the stack" }, async () => {
-        const client = await this.model.client();
-        this.model.setStack(await client.reorder(order));
-      });
-      void vscode.window.setStatusBarMessage("$(check) Stack reordered. Push to update Gerrit.", 6000);
+      const client = await this.model.client();
+      const stack = await vscode.window.withProgress({ location: { viewId: "ger.stack" }, title: "Rewriting the stack" }, () =>
+        client.rewrite(steps),
+      );
+      this.model.setStack(stack);
+      void this.model.refresh();
+      if (stack.head && stack.head !== stack.previous_head) {
+        const undo = await vscode.window.showInformationMessage(`${done} Push to update Gerrit.`, "Undo");
+        if (undo && stack.head) {
+          this.model.setStack(await client.undo(stack.head, stack.previous_head));
+          void this.model.refresh();
+        }
+      }
     } catch (error) {
       // All or nothing on the server: a refusal means the branch is exactly as it was.
-      void vscode.window.showWarningMessage(`Stack not reordered: ${describeError(error)}`);
+      void vscode.window.showWarningMessage(`Stack left as it was: ${describeError(error)}`);
+      void this.model.refresh();
     }
-    void this.model.refresh();
   }
 }

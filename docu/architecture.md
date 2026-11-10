@@ -474,7 +474,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (current patchset against the one you reviewed) |
-| `core/reorder.py` | Reordering the local stack, all or nothing: `reorder_stack`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
 | `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
@@ -526,7 +526,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1` |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
 | `server/views.py` | Read endpoints: health, overview, stack, chain, show, diff, file, review; `error_json` |
-| `server/actions.py` | Endpoints that change something: review checkout, draft reply, stack reorder |
+| `server/actions.py` | Endpoints that change something: review checkout, draft reply, stack rewrite and its undo |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
 
 ---

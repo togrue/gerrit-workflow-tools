@@ -205,6 +205,9 @@ export interface ReviewState {
   branch: string;
 }
 
+/** A commit id (kept as it is), or what to do with it: fold into the commit below, or drop. */
+export type StackStep = string | { sha: string; action: "pick" | "fixup" | "fixup-take-message" | "drop" };
+
 export interface ShowOptions {
   stack?: boolean;
   chain?: boolean;
@@ -315,8 +318,13 @@ export class GerClient {
     return this.call("POST", "/comments/reply", undefined, { rev, comment_id: commentId, message, resolved });
   }
 
-  /** Reorder the local stack; `order` is oldest first. All or nothing. */
-  reorder(order: string[]): Promise<Stack> {
-    return this.call("POST", "/stack/reorder", undefined, { order });
+  /** Rewrite the local stack; `steps` are oldest first. All or nothing. */
+  rewrite(steps: StackStep[]): Promise<Stack & { previous_head: string }> {
+    return this.call("POST", "/stack/rewrite", undefined, { steps });
+  }
+
+  /** Take a rewrite back, while the branch is still where it left it. */
+  undo(head: string, previousHead: string): Promise<Stack> {
+    return this.call("POST", "/stack/undo", undefined, { head, previous_head: previousHead });
   }
 }
