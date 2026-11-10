@@ -46,8 +46,21 @@ with a count appears when chains had activity since you last looked. Click to op
   jump to its file and line.
 - **Check out**: someone else's change opens as a review checkout (`ger review`); your own
   commit starts `ger edit` on it.
-- **Hand to agent**: collects the unresolved comments and CI findings as Markdown
-  (`ger show --ai`). Copied to the clipboard, or passed to the command in `ger.agentCommand`.
+- **Hand to agent**: for one commit, the same runbook as below, narrowed to it.
+
+**Fix Stack with Agent** (robot icon on *Local stack*)
+
+One run for the whole attention walk. The service writes a runbook: for each commit that needs
+edits, the comments to address and the CI findings to fix there, plus the rules — amend in
+place, reply "Done" as a draft, never push or publish. You see the runbook and a count before
+anything starts; then it goes to the command in `ger.agentCommand`, in a terminal where
+publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to the clipboard.
+
+- A comment that needs your decision, not a fix: **Keep for Me** on it (person icon). The
+  runbook lists it as left for a human, and a commit with nothing else is skipped.
+- CI findings a commit only inherits from the one below are not handed out twice.
+- Afterwards the stack view shows the amended commits; you review, then `ger push` sends the
+  patchsets and publishes the draft replies.
 
 ## Settings
 
@@ -55,7 +68,7 @@ with a count appears when chains had activity since you last looked. Click to op
 |---------|---------|--|
 | `ger.executable` | `ger` | How to run ger, e.g. `uv run ger`. |
 | `ger.pollSeconds` | `120` | Background refresh. Also refreshes when the window regains focus. |
-| `ger.agentCommand` | empty | Terminal command for *Hand to agent*; `{rev}` and `{brief}` are filled in. |
+| `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, e.g. `claude "Follow the runbook in {brief}"`. |
 
 ## Requirements
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from gerrit_workflow_tools.core.agent_runbook import set_hold
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
@@ -87,6 +88,13 @@ def reply(ctx: Context, req: Request) -> dict[str, Any]:
         match.change, match.chain, message, unresolved=None if resolved is None else not resolved
     )
     return {"change": match.change, "root_id": match.chain.root_id, "reply": asdict(saved)}
+
+
+def hold(ctx: Context, req: Request) -> dict[str, Any]:
+    """Put a comment chain on **hold** (keep it from the agent runbook), or release it. Local only."""
+    root_id = req.body_field("root_id", str, required=True)
+    held = req.body_field("held", bool, required=True)
+    return {"root_id": root_id, "held": held, "holds": sorted(set_hold(ctx.cwd, root_id, held))}
 
 
 def _steps(raw: list[Any]) -> list[StackStep]:

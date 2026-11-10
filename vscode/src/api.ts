@@ -140,6 +140,8 @@ export interface CommentChain {
   resolved: boolean;
   resolved_after_publish: boolean;
   outdated: boolean;
+  /** On hold: you keep this chain for yourself, the agent runbook leaves it alone. */
+  held: boolean;
   comments: Comment[];
 }
 
@@ -203,6 +205,23 @@ export interface ReviewState {
   staged: boolean;
   worktree: string;
   branch: string;
+}
+
+/** The attention walk as work for an agent: Markdown to follow, and what is in it. */
+export interface Runbook {
+  branch: string | null;
+  commits: {
+    sha: string;
+    short_sha: string;
+    summary: string;
+    comments: number;
+    held: number;
+    findings: number;
+    inherited: number;
+    agent_work: boolean;
+  }[];
+  totals: { commits: number; comments: number; held: number; findings: number };
+  markdown: string;
 }
 
 /** A commit id (kept as it is), or what to do with it: fold into the commit below, or drop. */
@@ -316,6 +335,15 @@ export class GerClient {
 
   reply(rev: string, commentId: string, message: string, resolved?: boolean): Promise<{ root_id: string }> {
     return this.call("POST", "/comments/reply", undefined, { rev, comment_id: commentId, message, resolved });
+  }
+
+  /** The agent runbook for the local stack, or for one of its commits. Fetches CI logs. */
+  runbook(rev?: string): Promise<Runbook> {
+    return this.call("GET", "/agent/runbook", { rev });
+  }
+
+  hold(rootId: string, held: boolean): Promise<{ holds: string[] }> {
+    return this.call("POST", "/comments/hold", undefined, { root_id: rootId, held });
   }
 
   /** Rewrite the local stack; `steps` are oldest first. All or nothing. */

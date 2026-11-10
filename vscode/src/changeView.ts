@@ -338,16 +338,19 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     const item = new vscode.TreeItem(where, vscode.TreeItemCollapsibleState.Collapsed);
     item.id = `thread/${chain.root_id}`;
     const answered = !chain.resolved && chain.resolved_after_publish;
-    item.description = `${answered ? "[draft resolves] " : ""}${last?.message.split("\n")[0] ?? ""}`;
+    const held = chain.held && !chain.resolved;
+    item.description = `${held ? "[kept for you] " : ""}${answered ? "[draft resolves] " : ""}${last?.message.split("\n")[0] ?? ""}`;
     item.iconPath = chain.resolved
       ? icon("pass", "disabledForeground")
       : answered
         ? icon("edit", "testing.iconPassed")
-        : icon("comment-unresolved", "list.warningForeground");
+        : held
+          ? icon("person", "list.warningForeground")
+          : icon("comment-unresolved", "list.warningForeground");
     item.tooltip = new vscode.MarkdownString(
       chain.comments.map((c) => `**${c.author ?? "you"}** ${c.state === "published" ? "" : `_(${c.state})_`}\n\n${c.message}`).join("\n\n---\n\n"),
     );
-    item.contextValue = chain.resolved ? "ger.thread.resolved" : "ger.thread.open";
+    item.contextValue = chain.resolved ? "ger.thread.resolved" : `ger.thread.open${chain.held ? ".held" : ".free"}`;
     const location: Location = { path: chain.path, line: chain.line };
     item.command = { command: "ger.openLocation", title: "Go to Comment", arguments: [location] };
     return item;

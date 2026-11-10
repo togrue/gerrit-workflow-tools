@@ -35,9 +35,11 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/diff", views.diff),
     ("GET", "/file", views.file),
     ("GET", "/review", views.review),
+    ("GET", "/agent/runbook", views.agent_runbook),
     ("POST", "/review/open", actions.review_open),
     ("POST", "/review/done", actions.review_done),
     ("POST", "/comments/reply", actions.reply),
+    ("POST", "/comments/hold", actions.hold),
     ("POST", "/stack/rewrite", actions.rewrite),
     ("POST", "/stack/undo", actions.undo),
 )

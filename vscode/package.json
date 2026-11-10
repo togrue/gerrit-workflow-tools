@@ -46,7 +46,7 @@
         "ger.agentCommand": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Terminal command that hands a change to a coding agent. `{rev}` is replaced by the commit or change, `{brief}` by the path of a Markdown file holding its unresolved comments and CI findings. Example: `claude \"Fix the review comments and CI failures described in {brief}\"`. Empty: the brief is copied to the clipboard instead."
+          "markdownDescription": "Terminal command that starts a coding agent. `{brief}` is replaced by the path of a Markdown runbook (what to fix in which commit, and the rules), `{rev}` by the commit when it is about one. Example: `claude \"Fix the review comments and CI failures described in {brief}\"`. Empty: the brief is copied to the clipboard instead."
         }
       }
     },
@@ -109,7 +109,10 @@
       { "command": "ger.replyDone", "title": "Reply Done and Resolve (Draft)", "category": "ger", "icon": "$(check)" },
       { "command": "ger.thread.reply", "title": "Save Draft Reply", "category": "ger" },
       { "command": "ger.thread.resolve", "title": "Save Draft and Resolve", "category": "ger" },
-      { "command": "ger.agentBrief", "title": "Hand to Agent (Comments and CI Findings)", "category": "ger", "icon": "$(hubot)" }
+      { "command": "ger.agentBrief", "title": "Hand to Agent (Comments and CI Findings)", "category": "ger", "icon": "$(hubot)" },
+      { "command": "ger.agentWalk", "title": "Fix Stack with Agent…", "category": "ger", "icon": "$(hubot)" },
+      { "command": "ger.hold", "title": "Keep for Me (Not for the Agent)", "category": "ger", "icon": "$(person)" },
+      { "command": "ger.release", "title": "Let the Agent Handle It", "category": "ger", "icon": "$(hubot)" }
     ],
     "menus": {
       "commandPalette": [
@@ -122,6 +125,8 @@
         { "command": "ger.stack.squashTakeMessage", "when": "false" },
         { "command": "ger.stack.drop", "when": "false" },
         { "command": "ger.reply", "when": "false" },
+        { "command": "ger.hold", "when": "false" },
+        { "command": "ger.release", "when": "false" },
         { "command": "ger.replyDone", "when": "false" },
         { "command": "ger.thread.reply", "when": "false" },
         { "command": "ger.thread.resolve", "when": "false" }
@@ -129,6 +134,7 @@
       "view/title": [
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
         { "command": "ger.markSeen", "when": "view == ger.overview", "group": "navigation@2" },
+        { "command": "ger.agentWalk", "when": "view == ger.stack", "group": "navigation@0" },
         { "command": "ger.push", "when": "view == ger.stack", "group": "navigation@1" },
         { "command": "ger.prevComment", "when": "view == ger.change", "group": "navigation@1" },
         { "command": "ger.nextComment", "when": "view == ger.change", "group": "navigation@2" },
@@ -147,7 +153,9 @@
         { "command": "ger.stack.squashTakeMessage", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.down/", "group": "2_stack@2" },
         { "command": "ger.stack.drop", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/", "group": "2_stack@3" },
         { "command": "ger.reply", "when": "viewItem =~ /^ger\\.thread/", "group": "inline@1" },
-        { "command": "ger.replyDone", "when": "viewItem =~ /^ger\\.thread\\.open/", "group": "inline@2" }
+        { "command": "ger.replyDone", "when": "viewItem =~ /^ger\\.thread\\.open/", "group": "inline@2" },
+        { "command": "ger.hold", "when": "viewItem =~ /^ger\\.thread\\.open\\.free/", "group": "inline@3" },
+        { "command": "ger.release", "when": "viewItem =~ /^ger\\.thread\\.open\\.held/", "group": "inline@3" }
       ],
       "comments/commentThread/context": [
         { "command": "ger.thread.reply", "when": "commentController == ger", "group": "inline@1" },

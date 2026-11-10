@@ -19,7 +19,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
@@ -263,6 +263,16 @@ class ShownCommit:
     """Gerrit and local comment chains, as selected."""
     ci_contents: list[CiContent] | None
     """**CI content** per failed **CI link**; ``None`` when it was not asked for."""
+
+    @property
+    def ci_verdict_contents(self) -> list[CiContent] | None:
+        """:attr:`ci_contents` when Gerrit's CI verdict is about this very commit, else ``None``.
+
+        A commit that is not on Gerrit, or is ahead of the patchset CI ran on, has no known CI state.
+        """
+        if not self.commit.pushed or self.commit.patchset_status == PatchsetStatus.NEWER:
+            return None
+        return self.ci_contents
 
 
 def load_shown_commits(

@@ -168,6 +168,14 @@ _Avoid_: current review (unqualified), session
 What changed in a change since the patchset you last reviewed — the newest one you posted a vote or comment on. After a rebase it is narrowed to the files the change touches. Nothing to do with **unreviewed age**, which is a clock.
 _Avoid_: interdiff, patchset diff (unqualified), what's new
 
+**Agent runbook**:
+The **attention walk** written down as work an agent can do unattended: per commit needing edit attention, the comment chains to address and the **CI findings** to fix there, with the rules (amend in place, reply as draft, never publish). Inherited findings and **holds** are named but excluded.
+_Avoid_: agent prompt, brief (for the whole walk), task list
+
+**Hold**:
+A comment chain you keep for yourself because it needs a decision, not a fix. The **agent runbook** lists it as left for a human. Local to the repository; not a **comment state** and not Gerrit state.
+_Avoid_: needs-human flag, skip list, ignore
+
 **Comment state**:
 Where a comment is in its life: **note** (local, private, never uploaded), **local draft** (local, meant for Gerrit), **draft** (on Gerrit, visible only to you), **published**. "Private" is not a comment state: in Gerrit it names a kind of *change*.
 _Avoid_: private comment, pending comment, unsent comment

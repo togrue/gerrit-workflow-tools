@@ -12,17 +12,17 @@ from typing import Any
 
 from gerrit_workflow_tools import __version__
 from gerrit_workflow_tools.cli_common import failure_exit
+from gerrit_workflow_tools.core.agent_runbook import load_holds, plan_runbook
 from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
 from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_attention
-from gerrit_workflow_tools.core.ci_content import CiContent, introduced_fingerprints
+from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
 from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, commit_diff, file_text
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
-from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus
-from gerrit_workflow_tools.core.gerrit_show import ShownCommit, load_shown_commits, resolve_show_targets
+from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
@@ -36,6 +36,7 @@ from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import fetch_patchset, find_review
 from gerrit_workflow_tools.core.review_delta import load_review_delta
 from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
+from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
@@ -184,14 +185,6 @@ def chain(ctx: Context, req: Request) -> dict[str, Any]:
     return chain_json(found)
 
 
-def _ci_state(item: ShownCommit) -> list[CiContent] | None:
-    """The commit's CI content when Gerrit's CI verdict is about this commit, else ``None``."""
-    commit = item.commit
-    if not commit.pushed or commit.patchset_status == PatchsetStatus.NEWER:
-        return None
-    return item.ci_contents
-
-
 def show(ctx: Context, req: Request) -> dict[str, Any]:
     """Overlay, comment chains and (``ci=1``) CI content per target: ``ger show`` as JSON.
 
@@ -218,7 +211,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         ci=ctx.ci() if req.flag("ci") else None,
     )
     is_chain = req.flag("ci") and (req.flag("stack") or req.flag("chain"))
-    introduced = introduced_fingerprints([_ci_state(item) for item in shown]) if is_chain else None
+    introduced = introduced_fingerprints([item.ci_verdict_contents for item in shown]) if is_chain else None
+    holds = load_holds(ctx.cwd)
     commits = []
     for index, item in enumerate(shown):
         payload = commit_json_payload(
@@ -229,6 +223,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             ci_content=item.ci_contents,
         )
         payload["short_sha"] = item.commit.short_sha
+        for chain_payload in payload["comment_chains"]:  # type: ignore[attr-defined]
+            chain_payload["held"] = chain_payload["root_id"] in holds
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if introduced is not None:
             found = introduced[index]
@@ -289,6 +285,19 @@ def file(ctx: Context, req: Request) -> dict[str, Any]:
         raise BadRequest("path is missing or not a repository path")
     content = None if rev == EMPTY_TREE else file_text(ctx.cwd, rev, path)
     return {"rev": rev, "path": path, "content": content}
+
+
+def agent_runbook(ctx: Context, req: Request) -> dict[str, Any]:
+    """The **agent runbook** for the local stack's attention walk: Markdown, and its counts.
+
+    ``rev`` (a commit id or Change-Id of the stack) narrows it to one commit. Fetches CI content.
+    """
+    only = req.one("rev")
+    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    targets = resolve_show_targets(ctx.cwd, [], ctx.service.rest, settings=ctx.settings, stack=True, branch=branch)
+    shown = load_shown_commits(targets, service=ctx.service, context_padding=3, ci=ctx.ci()) if targets else []
+    stops = plan_runbook(shown, load_holds(ctx.cwd), only=safe_rev(only) if only else None)
+    return runbook_json(stops, branch=checked_out_branch_name(ctx.cwd))
 
 
 def review(ctx: Context, _req: Request) -> dict[str, Any]:

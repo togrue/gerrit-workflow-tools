@@ -183,8 +183,58 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
+  /** Put the runbook in front of the user, then start the agent on it or copy it. */
+  const runAgent = async (rev: string | undefined) => {
+    try {
+      const client = await model.client();
+      const runbook = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "Collecting comments and CI findings" },
+        () => client.runbook(rev),
+      );
+      const { commits, comments, findings, held } = runbook.totals;
+      const kept = held ? ` ${plural(held, "comment")} kept for you.` : "";
+      if (!commits) {
+        void vscode.window.showInformationMessage(`Nothing here for an agent.${kept}`);
+        return;
+      }
+      const file = path.join(os.tmpdir(), `ger-runbook-${Date.now()}.md`);
+      await fs.writeFile(file, runbook.markdown, "utf8");
+      await vscode.commands.executeCommand("markdown.showPreview", vscode.Uri.file(file));
+      const template = setting("agentCommand", "").trim();
+      const start = template ? "Start Agent" : "Copy Runbook";
+      const summary = `${plural(commits, "commit")}: ${plural(comments, "comment")} and ${plural(findings, "CI finding")} for the agent.${kept}`;
+      const detail = "The agent amends the commits and writes draft replies. Nothing is pushed or published: you review and run ger push.";
+      if ((await vscode.window.showInformationMessage(summary, { modal: true, detail }, start)) !== start) {
+        return;
+      }
+      if (!template) {
+        await vscode.env.clipboard.writeText(runbook.markdown);
+        void vscode.window.showInformationMessage("Runbook copied. Set `ger.agentCommand` to start your agent from here.");
+        return;
+      }
+      // GER_NO_PUBLISH makes ger refuse to publish drafts, whatever the agent decides to try.
+      const term = vscode.window.createTerminal({ name: "ger agent", cwd: repo, env: { GER_NO_PUBLISH: "1" } });
+      term.show(true);
+      term.sendText(template.replaceAll("{rev}", rev ?? "").replaceAll("{brief}", file));
+    } catch (error) {
+      void vscode.window.showWarningMessage(`Nothing handed over: ${describeError(error)}`);
+    }
+  };
+
+  const setHold = async (arg: unknown, held: boolean) => {
+    const chain = threadOf(arg);
+    if (chain) {
+      await (await model.client()).hold(chain.root_id, held);
+      await changeView.open();
+    }
+  };
+
   const handToAgent = async (target: ChangeTarget | undefined) => {
     if (!target) {
+      return;
+    }
+    if (target.local) {
+      await runAgent(target.rev);
       return;
     }
     try {
@@ -255,6 +305,9 @@ export function activate(context: vscode.ExtensionContext): void {
     "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply, undefined),
     "ger.thread.resolve": (reply: vscode.CommentReply) => threads.replyInThread(reply, true),
     "ger.agentBrief": (arg: unknown) => handToAgent(targetOf(arg)),
+    "ger.agentWalk": () => runAgent(undefined),
+    "ger.hold": (arg: unknown) => setHold(arg, true),
+    "ger.release": (arg: unknown) => setHold(arg, false),
   };
   for (const [name, run] of Object.entries(commands)) {
     context.subscriptions.push(vscode.commands.registerCommand(name, run as (...args: unknown[]) => unknown));

@@ -158,6 +158,28 @@ those, edits that came in from underneath still show.
 `content` of a file at a commit id from `/diff`; `null` when the file is not there (added or
 deleted on that side).
 
+### `GET /agent/runbook`
+
+The **agent runbook**: the attention walk over the local stack as work an agent can do
+unattended. Fetches **CI content**. `rev` (a commit id or Change-Id of the stack) narrows it
+to one commit.
+
+- `markdown` — the rules (never publish, never add commits, leave holds alone), the loop per
+  commit (`ger edit <Change-Id>`, fix, amend, continue, `ger reply … --done`), then one section
+  per commit with the comment chains to address and the findings to fix.
+- `commits` — per commit needing edit attention: `comments`, `held`, `findings`, `inherited`,
+  `ci_unread`, `agent_work`.
+- `totals` — `commits` (with work for an agent), `comments`, `held`, `findings`.
+
+Two things are kept from the agent. A comment chain on **hold** is listed as left for a human.
+A finding a commit merely inherits is listed as such and not to be fixed there; where the
+origin cannot be told, the finding counts as to fix. A commit with nothing but holds and
+inherited findings is not a step: it is listed as waiting for a human.
+
+Commits are named by **Change-Id**, because their ids change as the commits below are amended.
+
+In `GET /show`, every comment chain carries `held`.
+
 ### `GET /review`
 
 The **review state**, as `ger review --status --json`, under `review`; `null` when none.
@@ -173,6 +195,7 @@ The **review state**, as `ger review --status --json`, under `review`; `null` wh
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
+| `/comments/hold` | `root_id`, `held` | Put a comment chain on **hold**, or release it. Local: nothing goes to Gerrit. |
 | `/stack/rewrite` | `steps`, oldest first | Reorder, fold or drop commits of the local stack. Answers the new `/stack` plus `previous_head`. |
 | `/stack/undo` | `head`, `previous_head` | Take that rewrite back. |
 

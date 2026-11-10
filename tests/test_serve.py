@@ -196,6 +196,47 @@ def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) ->
     assert "ci_introduced" not in _get(api, "/show", rev="HEAD", ci="1")["commits"][0]
 
 
+def test_agent_runbook_walks_the_commits_that_need_edits_and_keeps_holds_away(stack_repo: Path) -> None:
+    # Two comments on the second commit; the same build fails on the two top commits.
+    overrides = [{}, {"unresolved_comment_count": 2}, {"verified": -1}, {"verified": -1}]
+    store, keys, rows = _gerrit(stack_repo, overrides)
+    comments = [
+        {"id": "c1", "line": 1, "message": "rename this", "unresolved": True, "patch_set": 1},
+        {"id": "c2", "line": 1, "message": "is this the right design?", "unresolved": True, "patch_set": 1},
+    ]
+    store.set_comments(keys[1], {"b.txt": comments})
+    api = GerApi(stack_repo, gerrit=store, ci_http=FakeCiHttp(jenkins_build()))
+
+    # A design question is not for an agent: put it on hold.
+    assert _post(api, "/comments/hold", {"root_id": "c2", "held": True})["holds"] == ["c2"]
+    chains = _get(api, "/show", rev=rows[1].sha)["commits"][0]["comment_chains"]
+    assert {chain["root_id"]: chain["held"] for chain in chains} == {"c1": False, "c2": True}
+
+    runbook = _get(api, "/agent/runbook")
+    by_sha = {commit["sha"]: commit for commit in runbook["commits"]}
+    assert list(by_sha) == [rows[1].sha, rows[2].sha, rows[3].sha], "only commits that need edits, oldest first"
+    assert (by_sha[rows[1].sha]["comments"], by_sha[rows[1].sha]["held"]) == (1, 1)
+    # The findings are the lower commit's to fix; the upper one only inherits them.
+    assert by_sha[rows[2].sha]["findings"] > 0 and by_sha[rows[2].sha]["inherited"] == 0
+    assert (by_sha[rows[3].sha]["findings"], by_sha[rows[3].sha]["agent_work"]) == (0, False)
+    assert by_sha[rows[3].sha]["inherited"] == by_sha[rows[2].sha]["findings"]
+    assert runbook["totals"]["commits"] == 2 and runbook["totals"]["held"] == 1
+
+    text = runbook["markdown"]
+    # Commits are named by Change-Id: their ids change as the ones below are amended.
+    assert f"`ger edit {rows[1].change_id}`" in text and f"`ger edit {rows[2].change_id}`" in text
+    assert f"`ger edit {rows[3].change_id}`" not in text
+    assert "`ger reply c1 --done`" in text and "ger reply c2" not in text
+    assert "rename this" in text.split("### Left for a human")[0]
+    assert "is this the right design?" in text.split("### Left for a human")[1]
+    assert "## Not yours: waiting for a human" in text and "Never publish anything" in text
+
+    # Narrowed to one commit, introduced findings are still judged against the whole stack.
+    only = _get(api, "/agent/runbook", rev=rows[3].sha)
+    assert [(c["sha"], c["findings"]) for c in only["commits"]] == [(rows[3].sha, 0)]
+    assert _post(api, "/comments/hold", {"root_id": "c2", "held": False})["holds"] == []
+
+
 def _content(*messages: str, error: str | None = None) -> CiContent:
     link = CiLink(label="jenkins", url="https://ci.example/1", source="message")
     findings = [CiFinding(tool="pytest", kind="failed", message=message) for message in messages]
