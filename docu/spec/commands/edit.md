@@ -39,7 +39,7 @@ A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` qu
 | `--cursor-history` | Print recent walk events from `.git/ger/attention-history.jsonl` and exit |
 | `--set-cursor CHANGEISH` | Set the cursor without starting a rebase |
 | `--reword` / `--edit` / `--drop` | Override action (mutually exclusive per command) |
-| `--debug-log`, `-v` | Standard helpers |
+| `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 ---
 

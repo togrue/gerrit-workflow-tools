@@ -1127,3 +1127,25 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
     assert code == 0, err
     assert "About to push commits:" in out
     assert "skipping remote rebase check" in err.lower()
+
+
+def test_gpush_ready_is_the_way_back_from_wip(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--ready"], monkeypatch)
+    assert code == 0
+    assert ":refs/for/main%ready" in out
+
+    with pytest.raises(SystemExit) as caught:
+        run_cli(stack_repo, gpush_main, ["--dry-run", "--ready", "--wip"], monkeypatch)
+    assert caught.value.code == ExitCode.USAGE
+
+
+@pytest.mark.parametrize("command", ["push", "fix", "edit", "rebase", "sha"])
+def test_a_verbose_flag_that_does_nothing_is_accepted_but_not_advertised(
+    command: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.bash_completion_generator import render_bash_completion_script
+    from gerrit_workflow_tools.cli_ger import main as ger_main
+
+    _code, out, _err = run_cli(stack_repo, ger_main, [command, "--help"], monkeypatch, catch_sys_exit=True)
+    assert "--verbose" not in out
+    assert "currently no effect" not in render_bash_completion_script()

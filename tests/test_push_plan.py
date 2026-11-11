@@ -43,3 +43,16 @@ def test_revise_keeps_the_commit_list_and_refreshes_the_credential_gap() -> None
 def test_push_refspec_omits_reviewers_for_lazy() -> None:
     options = PushOptions(("alice",), ReviewerStrategy.LAZY, topic="my-series", wip=True)
     assert push_refspec("abc", "main", options) == "abc:refs/for/main%wip,topic=my-series"
+
+
+def test_ready_rides_on_the_refspec_and_survives_an_options_line_without_wip() -> None:
+    commits = (Commit("a" * 40, "aaaaaaa", "subj", "", "I" + "ab" * 20),)
+    plan = _plan(commits, PushOptions((), ReviewerStrategy.PUSH, ready=True))
+    settings = Settings.from_map({})
+    assert push_refspec("abc", "main", plan.options) == "abc:refs/for/main%ready"
+
+    kept = revise(plan, PushOptions(("alice",), ReviewerStrategy.PUSH, topic="t"), settings=settings)
+    dropped = revise(plan, PushOptions((), ReviewerStrategy.PUSH, wip=True), settings=settings)
+
+    assert kept.options.ready
+    assert not dropped.options.ready

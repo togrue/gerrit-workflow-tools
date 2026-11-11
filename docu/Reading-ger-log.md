@@ -119,7 +119,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `outdated patchset` | Gerrit has a newer patch set than this commit |
 | `review issues` | A negative Code-Review vote |
 | `chain blocked` | An earlier commit in the stack keeps this one from being submitted |
-| `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review` |
+| `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review`. `ger push --ready` marks the changes ready again; the summary line counts them and says so |
 | `private` | Change is private on Gerrit. Information only, not an attention reason |
 | `submittable` | Gerrit reports submittable and no blocking issues above |
 | `abandoned` | Change abandoned on Gerrit |
@@ -154,6 +154,7 @@ summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4
 | `CI` | Count of commits with failed Verified / CI |
 | `comments` | Count of commits with unresolved comments |
 | `on-gerrit` | Count of commits that exist on Gerrit |
+| `WIP` | Count of work-in-progress changes, followed by ``ready them with `ger push --ready` `` |
 
 Only non-zero categories after `ready` are shown.
 

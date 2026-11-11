@@ -123,6 +123,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,
+        verbose_help="Also fetch each change's CI pipelines (Checks) and list them under the commit.",
         debug_log_help="Log Gerrit resolution to stderr.",
     )
     return p

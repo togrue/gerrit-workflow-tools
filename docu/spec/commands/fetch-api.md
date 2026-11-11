@@ -29,7 +29,7 @@ A space or other character a URL cannot carry is percent-encoded. A full URL or 
 | Option | Description |
 |--------|-------------|
 | `--compact` | Single-line JSON |
-| `--debug-log`, `-v` | Standard helpers |
+| `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 ---
 

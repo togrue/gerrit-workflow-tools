@@ -37,10 +37,11 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 | `--reviewer-strategy` | `push` \| `lazy` \| `overwrite` (see below) |
 | `--topic NAME` | Magic ref `%topic=…`. A comma is refused: it separates push options |
 | `--wip` | Magic ref `%wip` |
+| `--ready` | Magic ref `%ready`: mark the changes ready for review again, the way back from `--wip`. Mutually exclusive with `--wip`. The interactive options line cannot say it, so a typed line keeps it unless the line asks for `wip`; the status line shows `WIP: no (--ready)` |
 | `--private` | Magic ref `%private` |
 | `--branch NAME` | Push a different local branch than current |
 | `--no-rebase-check` | Skip fetch/linear-on-remote check (`gerrit.push.remotePolicy`) |
-| `--color`, `--debug-log`, `-v` | Standard CLI helpers (`-v` reserved, no extra effect today) |
+| `--color`, `--debug-log` | Standard CLI helpers. `-v` is accepted and does nothing, so it is not shown in help or completion |
 | `--follow-merges` | Include merge commits in stack range |
 
 ---

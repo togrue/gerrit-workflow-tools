@@ -64,7 +64,7 @@ def _collect_flags_and_choices(parser: argparse.ArgumentParser) -> tuple[list[st
     flags: list[str] = []
     prev_choices: dict[str, list[str]] = {}
     for action in parser._actions:
-        if not action.option_strings:
+        if not action.option_strings or action.help == argparse.SUPPRESS:
             continue
         _append_unique(flags, list(action.option_strings))
         if action.choices is None or not _takes_value(action):

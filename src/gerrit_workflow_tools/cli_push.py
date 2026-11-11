@@ -128,16 +128,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Gerrit change topic (magic ref %%topic=…; sent on push for every reviewer strategy).",
     )
-    parser.add_argument(
-        "--wip",
-        action="store_true",
-        help="Mark change(s) work-in-progress (magic ref %%wip; sent on push for every reviewer strategy).",
-    )
-    parser.add_argument(
-        "--private",
-        action="store_true",
-        help="Mark change(s) private (magic ref %%private; sent on push for every reviewer strategy).",
-    )
+    state = parser.add_mutually_exclusive_group()
+    for group, flag, what in (
+        (state, "--wip", "work-in-progress (magic ref %%wip"),
+        (state, "--ready", "ready for review, the way back from --wip (magic ref %%ready"),
+        (parser, "--private", "private (magic ref %%private"),
+    ):
+        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; sent with every strategy).")
     add_verbose_and_debug_log_args(
         parser,
         debug_log_help="Log git commands and push steps to stderr.",
@@ -159,6 +156,7 @@ def _gerrit_flags_set(args: argparse.Namespace) -> bool:
         or args.reviewers
         or args.topic is not None
         or args.wip
+        or args.ready
         or args.private
         or args.reviewer_strategy is not None
     )
@@ -231,7 +229,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
     if _gerrit_flags_set(args):
         print(
-            "warning: --until, --all, --reviewers, --topic, --wip, --private, "
+            "warning: --until, --all, --reviewers, --topic, --wip, --ready, --private, "
             "and --reviewer-strategy apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
@@ -342,6 +340,7 @@ def _push_gerrit(
         strategy=args.reviewer_strategy,
         topic=args.topic,
         wip=bool(args.wip),
+        ready_for_review=bool(args.ready),
         private=bool(args.private),
         no_rebase_check=bool(args.no_rebase_check),
         show_attributes=defaults["show_attributes"],

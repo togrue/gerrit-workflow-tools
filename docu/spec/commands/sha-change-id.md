@@ -33,7 +33,7 @@ ger sha -n / --next-attention [CHANGEISH]
 | `--short` | Abbreviated SHA |
 | `--subject` | Short SHA + subject |
 | `--json` | `{"change_id", "sha", "subject"}` |
-| `--debug-log`, `-v` | Standard helpers |
+| `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Default range (Change-Id lookup): configured Gerrit stack window, else upstream..HEAD, else merge-base..HEAD.
 
@@ -70,7 +70,7 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range 
 | `--start-at-remote` | Use `upstream_tip..END` stack window |
 | `--check` | Validate **all** commits in the current local stack (`upstream_tip..HEAD`): every commit must have a valid Change-Id footer, and no Change-Id may appear on more than one commit |
 | `--fix` | Assign missing Change-Ids on last message line (message-only rewrite via `commit-tree`) |
-| `--color`, `--debug-log`, `-v` | Standard helpers |
+| `--color`, `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 `--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`.
 

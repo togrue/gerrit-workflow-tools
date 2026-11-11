@@ -19,6 +19,8 @@ class PushOptions:
     strategy: ReviewerStrategy
     topic: str | None = None
     wip: bool = False
+    ready: bool = False
+    """Mark the changes ready for review (``%ready``), the way back from :attr:`wip`."""
     private: bool = False
     publish_comments: bool | None = None
     """Your drafts on the updated changes: ``True`` publish them, ``False`` keep them (overriding
@@ -33,12 +35,15 @@ def refspec_option_segments(
     private: bool,
     topic: str | None,
     publish_comments: bool | None = None,
+    ready: bool = False,
 ) -> list[str]:
     parts: list[str] = []
     if strategy == ReviewerStrategy.PUSH:
         parts.extend(f"r={name}" for name in reviewers)
     if wip:
         parts.append("wip")
+    if ready:
+        parts.append("ready")
     if private:
         parts.append("private")
     if topic:
@@ -54,6 +59,7 @@ def push_refspec(tip: str, push_branch: str, options: PushOptions) -> str:
         reviewers=options.reviewers,
         strategy=options.strategy,
         wip=options.wip,
+        ready=options.ready,
         private=options.private,
         topic=options.topic,
         publish_comments=options.publish_comments,

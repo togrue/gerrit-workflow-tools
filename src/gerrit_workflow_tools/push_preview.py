@@ -134,7 +134,7 @@ def print_plan_status(plan: PushPlan) -> None:
         ("Target", color_text(f"refs/for/{plan.push_branch}", ANSI_GREEN)),
         ("Reviewers", color_text(", ".join(options.reviewers), ANSI_LIGHT_GREEN) if options.reviewers else none),
         ("Topic", color_text(options.topic, ANSI_CYAN) if options.topic else none),
-        ("WIP", _yes_no(options.wip)),
+        ("WIP", color_text("no (--ready)", ANSI_GREEN) if options.ready else _yes_no(options.wip)),
         ("Private", _yes_no(options.private)),
     ]
     if options.strategy != ReviewerStrategy.PUSH:
@@ -206,6 +206,8 @@ def _assignment_attributes_fragment(plan: PushPlan, reviewers_assigned: tuple[st
     parts.extend(f"r={name}" for name in reviewers_assigned)
     if plan.options.wip:
         parts.append("wip")
+    if plan.options.ready:
+        parts.append("ready")
     if plan.options.private:
         parts.append("private")
     return ",".join(parts)

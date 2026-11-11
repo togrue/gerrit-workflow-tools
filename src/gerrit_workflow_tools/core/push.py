@@ -97,8 +97,12 @@ def run_git_push(cmd: list[str], cwd: Path | str | None) -> Any:
 
 
 def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushPlan:
-    """Take new push options; the decision about drafts is not one of them and is kept."""
-    options = replace(options, publish_comments=plan.options.publish_comments)
+    """Take new push options; the drafts decision and ``--ready`` (the options line says neither) are kept.
+
+    A line asking for WIP drops ``--ready``: the two contradict each other.
+    """
+    ready = plan.options.ready and not options.wip
+    options = replace(options, publish_comments=plan.options.publish_comments, ready=ready)
     return replace(
         plan,
         options=options,
@@ -152,6 +156,7 @@ def prepare(
     strategy: str | None = None,
     topic: str | None = None,
     wip: bool = False,
+    ready_for_review: bool = False,
     private: bool = False,
     no_rebase_check: bool = False,
     show_attributes: bool = False,
@@ -181,6 +186,7 @@ def prepare(
         strategy=ReviewerStrategy(strategy or ReviewerStrategy.PUSH.value),
         topic=topic,
         wip=wip,
+        ready=ready_for_review,
         private=private,
     )
     ready = _ready(
@@ -248,6 +254,7 @@ def _skipped_options_warning(plan: PushPlan) -> str | None:
     sent = {
         "topic": options.topic,
         "WIP": options.wip,
+        "ready": options.ready,
         "private": options.private,
         "reviewers": options.reviewers and options.strategy == ReviewerStrategy.PUSH,
     }

@@ -64,6 +64,7 @@ def _build_summary(commits: list[LogCommit]) -> dict[str, int]:
         "ci-failures": 0,
         Attention.UNRESOLVED_COMMENTS: 0,
         "on-gerrit": 0,
+        Attention.WIP: 0,
     }
     for c in commits:
         if c.pushed and Attention.CI_FAILED in c.attention_reasons:
@@ -72,6 +73,8 @@ def _build_summary(commits: list[LogCommit]) -> dict[str, int]:
             counts[Attention.UNRESOLVED_COMMENTS] += 1
         if c.pushed:
             counts["on-gerrit"] += 1
+        if Attention.WIP in c.attention_reasons:
+            counts[Attention.WIP] += 1
     return counts
 
 
@@ -86,9 +89,12 @@ def _format_summary_dashboard_line(
         ("CI ", summary.get("ci-failures", 0), ANSI_RED),
         ("comments ", summary.get(Attention.UNRESOLVED_COMMENTS, 0), ANSI_YELLOW),
         ("on-gerrit ", summary.get("on-gerrit", 0), ANSI_CYAN),
+        ("WIP ", summary.get(Attention.WIP, 0), ANSI_YELLOW),
     ):
         if count:
             stats.append(color_stat(label, count, color))
+    if summary.get(Attention.WIP):
+        stats.append(color_text("ready them with `ger push --ready`", ANSI_DIM))
     return f"{color_text('summary:', f'{ANSI_BOLD}{ANSI_CYAN}')} {color_text(' · ', ANSI_DIM).join(stats)}"
 
 

@@ -40,7 +40,7 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 | `--onto-remote` | Rebase onto fetched `refs/remotes/<gerrit.remote>/<target>` tip |
 | `--no-onto-remote` | Force merge-base behavior (overrides `gerrit.rebaseOntoRemote`) |
 | `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
-| `--debug-log`, `-v` | Standard helpers |
+| `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Editor: enricher delegates to `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`.
 

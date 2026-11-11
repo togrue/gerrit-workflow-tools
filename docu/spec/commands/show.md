@@ -44,7 +44,8 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | `--json` | JSON payload |
 | `--format {human,markdown}` | Output format (default: human) |
 | `--ai` | Alias for `--format markdown` |
-| `--color`, `--hyperlinks`, `--debug-log`, `-v` | Standard helpers (`--hyperlinks`: `always` \| `auto` \| `never`) |
+| `--color`, `--hyperlinks`, `--debug-log` | Standard helpers (`--hyperlinks`: `always` \| `auto` \| `never`) |
+| `-v` | Also fetch each change's CI pipelines (Checks) and list them under the commit |
 
 `--json`, `--format`, and `--ai` are mutually exclusive.
 

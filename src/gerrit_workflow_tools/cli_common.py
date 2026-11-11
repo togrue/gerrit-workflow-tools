@@ -5,8 +5,8 @@ Help text style (``help=`` on parsers and arguments):
 - Imperative mood, sentence case, and end each string with a period (consistent).
 - When a flag only affects package logging, phrase it as "Log … to stderr".
 - Shared flag text lives in ``HELP_*`` constants in this module; CLIs should use them.
-- Use :func:`add_verbose_and_debug_log_args` for ``-v``/``--verbose`` (placeholder) and
-  ``--debug-log`` (diagnostic logging to stderr); do not use ``--verbose`` for logging.
+- Use :func:`add_verbose_and_debug_log_args` for ``-v``/``--verbose`` and ``--debug-log``
+  (diagnostic logging to stderr); do not use ``--verbose`` for logging.
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ _T = TypeVar("_T")
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."
-HELP_VERBOSE_PLACEHOLDER = "Reserved for richer command output in a future release (currently no effect)."
 HELP_DEBUG_LOG = (
     "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, Gerrit API "
     "response bodies, and a high-level request timing summary)."
@@ -263,11 +262,12 @@ def add_verbose_and_debug_log_args(
 ) -> None:
     """Register ``-v``/``--verbose`` and ``--debug-log``.
 
-    Pass *verbose_help* when a command uses ``--verbose`` for richer output instead of
-    the package-wide placeholder text. With *verbose_count*, ``-v`` may be repeated
-    (e.g. ``-vv``); ``args.verbose`` is an ``int`` (0 when omitted).
+    Pass *verbose_help* when a command uses ``--verbose`` for richer output. Without it
+    ``-v`` does nothing, so it is accepted (scripts may pass it) but not advertised: no help
+    line, no completion. With *verbose_count*, ``-v`` may be repeated (e.g. ``-vv``);
+    ``args.verbose`` is an ``int`` (0 when omitted).
     """
-    v_help = verbose_help or HELP_VERBOSE_PLACEHOLDER
+    v_help = verbose_help or argparse.SUPPRESS
     parser.add_argument(
         "-v",
         "--verbose",
