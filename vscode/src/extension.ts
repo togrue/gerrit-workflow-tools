@@ -23,27 +23,42 @@ import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
-import { chooseRepo, gitDirs, repoNote } from "./workspace";
+import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
 
 const VIEWS = ["ger.overview", "ger.stack", "ger.change"];
 
 /**
  * No workspace folder is in a git checkout. Every command is still there and says so, rather
  * than "command not found"; the views stay empty, and their welcome text offers Open Folder.
+ * Adding a folder that is in a checkout starts the extension then, without a reload.
  */
 function activateWithoutRepo(context: vscode.ExtensionContext, log: vscode.OutputChannel): void {
   log.appendLine("No workspace folder is in a git checkout: nothing to serve.");
+  const waiting: vscode.Disposable[] = [];
   void vscode.commands.executeCommand("setContext", "ger.state", "no-repo");
   const declared: { command: string }[] = context.extension.packageJSON.contributes.commands;
   const missing = () => ui().message("info", "Open a folder with a Gerrit checkout first: ger works on the git repository of a workspace folder.", {}, []);
   for (const { command } of declared) {
-    context.subscriptions.push(vscode.commands.registerCommand(command, command === "ger.showLog" ? () => log.show() : missing));
+    waiting.push(vscode.commands.registerCommand(command, command === "ger.showLog" ? () => log.show() : missing));
   }
   const empty: vscode.TreeDataProvider<never> = { getChildren: () => [], getTreeItem: (node) => node };
   for (const view of VIEWS) {
-    context.subscriptions.push(vscode.window.registerTreeDataProvider(view, empty));
+    waiting.push(vscode.window.registerTreeDataProvider(view, empty));
   }
+  waiting.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      const choice = repoChoice();
+      if (choice) {
+        // The placeholders make room for the real commands and views.
+        waiting.forEach((item) => item.dispose());
+        start(context, log, choice);
+      }
+    }),
+  );
+  context.subscriptions.push(...waiting);
 }
+
+const repoChoice = () => chooseRepo((vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath));
 
 /** What the extension hands to its end-to-end tests. */
 export interface ExtensionApi {
@@ -61,11 +76,15 @@ export interface ExtensionApi {
 export function activate(context: vscode.ExtensionContext): ExtensionApi | undefined {
   const log = vscode.window.createOutputChannel("ger");
   context.subscriptions.push(log);
-  const choice = chooseRepo((vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath));
+  const choice = repoChoice();
   if (!choice) {
     activateWithoutRepo(context, log);
     return undefined;
   }
+  return start(context, log, choice);
+}
+
+function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choice: RepoChoice): ExtensionApi {
   const repo = choice.repo;
   const note = repoNote(choice);
   log.appendLine(note ?? `Repository: ${repo}`);

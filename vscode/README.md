@@ -147,7 +147,7 @@ When something is missing, the *Review chains* view says what and offers the nex
 
 | The view says | Next step |
 |---------------|-----------|
-| Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** |
+| Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** (a folder you add later starts ger without a reload) |
 | The program that runs ger was not found | **Open Settings** on `ger.executable`, then **Retry** |
 | This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
 | `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
