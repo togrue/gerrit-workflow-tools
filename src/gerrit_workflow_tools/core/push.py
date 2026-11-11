@@ -39,6 +39,7 @@ from gerrit_workflow_tools.core.push_unchanged import (
     UnchangedChange,
     apply_updates,
     planned_updates,
+    unreached_options_warning,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
@@ -276,7 +277,15 @@ def execute(
     updates = state_updates(plan)
     failures = apply_updates(GerritService.from_cwd(cwd, settings=settings, rest=gerrit), updates) if updates else []
     failed_updates = {failure.update for failure in failures}
-    note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), _unreached_options_warning(plan, rejected))))
+    note = "\n".join(
+        filter(
+            None,
+            (
+                _update_last_pushed(cwd, plan),
+                unreached_options_warning(plan.options, plan.unchanged, rejected=rejected),
+            ),
+        )
+    )
     failed = bool(error) or bool(failures) or (reviewers is not None and not reviewers.ok)
     return replace(
         captured,
@@ -286,19 +295,6 @@ def execute(
         warning=note or None,
         updated=tuple(update for update in updates if update not in failed_updates),
         update_failures=tuple(failures),
-    )
-
-
-def _unreached_options_warning(plan: PushPlan, rejected: bool) -> str | None:
-    """Gerrit took no new patch set and ger could not read the changes, so options set nothing."""
-    options = plan.options
-    pushed_reviewers = bool(options.reviewers) and options.strategy == ReviewerStrategy.PUSH
-    asked = bool(options.topic) or options.wip or options.ready or options.private or pushed_reviewers
-    if not rejected or plan.unchanged or not asked:
-        return None
-    return (
-        "warning: push options not applied: Gerrit already has these commits, and without Gerrit's "
-        "view of the changes ger cannot set them over REST (check gerrit.user and gerrit.token)"
     )
 
 

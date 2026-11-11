@@ -86,6 +86,20 @@ def _missing_reviewers(options: PushOptions, change: UnchangedChange) -> tuple[s
     return tuple(name for name in options.reviewers if name.casefold() not in present)
 
 
+def unreached_options_warning(
+    options: PushOptions, unchanged: Sequence[UnchangedChange], *, rejected: bool
+) -> str | None:
+    """Gerrit took no new patch set and ger could not read the changes, so options set nothing."""
+    pushed_reviewers = bool(options.reviewers) and options.strategy == ReviewerStrategy.PUSH
+    asked = bool(options.topic) or options.wip or options.ready or options.private or pushed_reviewers
+    if not rejected or unchanged or not asked:
+        return None
+    return (
+        "warning: push options not applied: Gerrit already has these commits, and without Gerrit's "
+        "view of the changes ger cannot set them over REST (check gerrit.user and gerrit.token)"
+    )
+
+
 def apply_updates(service: GerritService, updates: Sequence[StateUpdate]) -> list[StateUpdateFailure]:
     """Send *updates*; the cached state of every change touched is dropped, failed or not."""
     failures: list[StateUpdateFailure] = []
