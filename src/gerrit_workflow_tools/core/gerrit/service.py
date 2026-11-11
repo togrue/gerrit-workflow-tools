@@ -12,7 +12,6 @@ from typing import Any
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_SECONDS, GerritCache
-from gerrit_workflow_tools.core.gerrit.change_queries import batch_load_changes_by_commit
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi
@@ -24,12 +23,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     self_account_id as account_id_of_self,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.review_chain import (
-    INBOX_QUERY_OPTIONS,
-    ReviewChain,
-    assemble_review_chains,
-    missing_parent_shas,
-)
+from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains, missing_parent_shas
 
 
 logger = logging.getLogger(__name__)
@@ -109,6 +103,21 @@ class GerritService:
         """Configured Gerrit web base."""
 
         return self.rest.web_base
+
+    def self_account_id(self) -> int | None:
+        """The calling user's account id, or ``None`` when Gerrit will not say.
+
+        Asked once per user and host and then remembered: an account id never changes, and
+        every inbox load and review delta needs it.
+        """
+        user = self.settings.get("gerrit.user") or ""
+        known = None if self.refresh else self.cache.account_id(user)
+        if known is not None:
+            return known
+        asked = account_id_of_self(self.rest)
+        if asked is not None:
+            self.cache.set_account_id(user, asked)
+        return asked
 
     def stack_context(self) -> StackContext:
         """The stack context for this service (memoised by :func:`resolve_stack_context`)."""
@@ -211,19 +220,18 @@ class GerritService:
         """Query Gerrit and assemble **review chains**. Never resolves stack context.
 
         The inbox is scoped to a Gerrit host, not a working directory: this path
-        must not call :func:`resolve_stack_context`. Live query, then one batched
-        ``commit:<sha>`` follow-up for parents missing from the result set.
+        must not call :func:`resolve_stack_context`. Gerrit is always asked what matches
+        (:meth:`ChangeApi.query`: a light listing, details from the cache where current),
+        then once more, batched, for parents missing from the result set.
         """
         moment = now if now is not None else datetime.now(timezone.utc)
-        queried = self.rest.query_changes(query, n=500, options=list(INBOX_QUERY_OPTIONS))
-        rows = [ChangeView.from_payload(row) for row in queried if isinstance(row, dict)]
-        account_id = self_account_id if self_account_id is not None else account_id_of_self(self.rest)
+        rows = [ChangeView.from_payload(row) for row in self.changes.query(query)]
+        account_id = self_account_id if self_account_id is not None else self.self_account_id()
         parent_shas = missing_parent_shas(rows)
         follow_up_rows: list[ChangeView] = []
         unmatched: set[str] = set()
         if parent_shas:
-            fetched = batch_load_changes_by_commit(self.rest, parent_shas, options=list(INBOX_QUERY_OPTIONS))
-            follow_up_rows = [ChangeView.from_payload(payload) for payload in fetched.values()]
+            follow_up_rows = [ChangeView.from_payload(payload) for payload in self.changes.by_commit(parent_shas)]
             current_shas = {change.current_revision for change in follow_up_rows if change.current_revision}
             for sha in parent_shas:
                 # A parent found only as an older patch set: the chain is partial.

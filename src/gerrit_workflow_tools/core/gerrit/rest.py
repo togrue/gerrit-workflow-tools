@@ -249,12 +249,18 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
     )
 
 
-# Options for batch stack queries and single-change resolution:
-# labels + submittable + revisions in one round trip (no separate /detail call).
+# The one detail shape of a change, for every query and for the cache: labels, submittable,
+# every revision, and the current commit with its parents (review chains follow them), in one
+# round trip (no separate /detail call).
 LOG_QUERY_OPTIONS = (
     "DETAILED_LABELS",
     "DETAILED_ACCOUNTS",
     "SUBMITTABLE",
     "CURRENT_REVISION",
     "ALL_REVISIONS",
+    "CURRENT_COMMIT",
 )
+
+# What a listing asks for when the details may already be cached: the freshness token comes
+# with every ChangeInfo, and without the diffstat Gerrit does not have to open the commits.
+LIGHT_QUERY_OPTIONS = ("SKIP_DIFFSTAT",)

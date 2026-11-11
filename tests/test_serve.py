@@ -179,6 +179,7 @@ def test_headline_falls_back_to_the_longest_waiting_review(stack_repo: Path) -> 
     store, keys, _rows = _gerrit(stack_repo)
     settings = Settings.from_cwd(stack_repo)
     waiting = dict(store.get_change(keys[0]), owner={"name": "alice", "_account_id": 2})
+    store.add_change(waiting)  # the change is alice's on Gerrit, not only in the query's answer
     store.stub_query(build_to_review_query(settings, projects=[], include_unready=False), [waiting])
     store.stub_query(DEFAULT_OUTGOING_QUERY, [])
     headline = _get(GerApi(stack_repo, gerrit=store), "/overview")["headline"]

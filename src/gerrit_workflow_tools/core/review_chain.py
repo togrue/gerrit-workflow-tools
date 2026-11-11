@@ -19,15 +19,6 @@ from gerrit_workflow_tools.core.attention import Attention, ci_failed
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 
 
-# Query options that give parent SHAs, votes (with dates), and owner names.
-INBOX_QUERY_OPTIONS = (
-    "DETAILED_LABELS",
-    "CURRENT_REVISION",
-    "CURRENT_COMMIT",
-    "DETAILED_ACCOUNTS",
-    "SUBMITTABLE",
-)
-
 _OPEN_STATUSES = frozenset({"NEW", ""})
 
 

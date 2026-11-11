@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.commit_diff import FileChange, commit_diff, diff_between
-from gerrit_workflow_tools.core.gerrit.rest import self_account_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_patchset
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
@@ -80,7 +79,7 @@ def load_review_delta(
     current, _url = resolve_patchset(service, cwd, changeish, None)
     reviewed = since
     if reviewed is None:
-        reviewed = last_reviewed_patch_set(service.rest.get_messages(current.key), self_account_id(service.rest))
+        reviewed = last_reviewed_patch_set(service.rest.get_messages(current.key), service.self_account_id())
     if reviewed is None or reviewed >= current.patch_set:
         return ReviewDelta(
             current_patch_set=current.patch_set,

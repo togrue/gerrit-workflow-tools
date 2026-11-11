@@ -43,5 +43,6 @@ A ChangeInfo probe row must carry `meta_rev_id` or the comment-count fields. The
 Gerrit 3.10 / 3.13 query path does. Hosts that omit all three fall back to `updated` alone
 and can still miss a same-second resolve.
 
-Expired-trust `ger log` on a certified stack is one `since:` query plus one probe for the
-ids the delta did not re-issue, not a delta alone.
+Expired-trust `ger log` on a certified stack was one `since:` query plus one probe for the
+ids the delta did not re-issue, not a delta alone. The delta is gone since
+[ADR-0013](0013-gerrit-is-asked-lightly-and-only-for-what-moved.md): the probe alone answers.

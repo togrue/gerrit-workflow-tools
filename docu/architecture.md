@@ -505,11 +505,11 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError` and `GerritUnavailableError` (Gerrit could not be asked at all), change-id path encoding, `parallel_map`, `self_account_id` |
 | `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth` |
-| `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe, `since:` delta |
+| `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
-| `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache, footer lookups, reviewer writes |
+| `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
-| `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
+| `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet; `reconcile` decides from freshness tokens which rows are current; remembered host facts (capabilities, account id, settled commits) |
 | `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, the comments context key, avatar stripping, follow-up payloads read back; `CacheInfo` (row counts) |
 | `core/gerrit/event_source.py` | Where the **event stream** comes from: the `EventSource` seam, `SshEventSource` (the one place ssh runs), `discover_ssh_target` (host, port, user from what ger already knows) |
 | `core/gerrit/event_stream.py` | Following the **event stream**: `EventStream` (one reader, reconnect, capped backoff, `StreamStatus`), `parse_event`, and what an event means (`apply_event`: drop that change's cached rows, ADR-0012) |

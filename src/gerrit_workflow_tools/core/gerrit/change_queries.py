@@ -321,31 +321,6 @@ def probe_changes_updated(client: GerritRest, refs: list[str]) -> dict[str, str]
     return {key: token for key, payload in aliased.items() if (token := change_freshness_key(payload))}
 
 
-def delta_changes_since(
-    client: GerritRest,
-    project: str,
-    since: str,
-    *,
-    n: int = 500,
-) -> tuple[list[dict[str, Any]], bool]:
-    """Return ChangeInfo rows with ``updated`` at or after *since* in *project*.
-
-    Returns ``(rows, complete)``. ``complete`` is ``False`` when the last row carries
-    ``_more_changes`` — the caller must fall back to a ref-scoped batch rather than
-    treat the result as exhaustive.
-    """
-
-    query = f'project:{project} since:"{since}"'
-    try:
-        rows = client.query_changes(query, n=n, options=list(LOG_QUERY_OPTIONS))
-    except GerritUnavailableError:
-        raise
-    except GerritApiError as error:
-        logger.warning("delta query failed for project:%s since:%s: %s", project, since, error)
-        return [], False
-    return rows, not (rows and rows[-1].get("_more_changes"))
-
-
 def batch_load_change_details(client: GerritRest, refs: list[str]) -> dict[str, dict[str, Any]]:
     """Map Gerrit ``id`` to ChangeInfo using project-scoped Change-Id OR chunks.
 

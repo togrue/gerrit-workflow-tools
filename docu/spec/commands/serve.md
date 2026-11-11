@@ -63,7 +63,8 @@ dropping that memo and taking a fresh **Settings** snapshot, so an answer always
 repository as it is now. A slow request (first CI log fetch) delays the next one.
 
 Gerrit data is served through the **trust window**, as for any command; add `refresh=1` to a
-request to bypass it, like `ger --refresh`.
+request to bypass it, like `ger --refresh`. What a poll of `/overview` and `/stack` costs the
+Gerrit server: [Server-load.md](../../Server-load.md).
 
 ---
 

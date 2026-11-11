@@ -18,7 +18,7 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git, git_out
-from tests.change_store import ChangeStore
+from tests.change_store import ChangeStore, RecordedCall
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
@@ -237,14 +237,15 @@ def test_log_warm_second_run_no_reviewer_follow_ups(stack_repo: Path, monkeypatc
     assert store.calls_to("list_change_reviewers") == []
 
 
-def test_log_warm_expired_trust_uses_delta_then_probe(
+def test_log_after_the_trust_window_is_one_probe_and_then_nothing(
     stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """After trust window expires, a certified stack deltas ``since:`` then probes the rest.
+    """Past the trust window an unchanged stack costs Gerrit one light query, naming the stack's changes.
 
-    ``since:`` only sees ``updated``. Ids the delta did not return still need a
-    ``meta_rev_id`` probe so same-second comment resolves are not sticky.
+    Never a query over the project (``since:``): on a busy project that returns everybody's
+    changes in full to learn nothing the probe does not say (ADR-0013). The probe's answer
+    is trusted for the next window like a fetch, so a second command right after asks nothing.
     """
     import gerrit_workflow_tools.core.gerrit.cache as cache_mod
 
@@ -258,21 +259,22 @@ def test_log_warm_expired_trust_uses_delta_then_probe(
     clock = {"t": 1000}
     monkeypatch.setattr(cache_mod, "_now", lambda: clock["t"])
 
-    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
-    assert code in (0, 1), err
-    cold_queries = list(store.queries())
-    assert len(cold_queries) == 1
+    def log_calls() -> list[RecordedCall]:
+        before = len(store.calls)
+        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        assert code in (0, 1), err
+        return store.calls[before:]
+
+    assert len(log_calls()) == 1
 
     clock["t"] = 1020
-    after_cold = len(store.calls)
-    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
-    assert code in (0, 1), err
-    warm_queries = store.queries()[len(cold_queries) :]
-    assert len(warm_queries) == 2, warm_queries
-    assert 'since:"' in warm_queries[0], warm_queries[0]
-    assert "change:" in warm_queries[1], warm_queries[1]
-    assert store.calls_to("list_change_reviewers") == []
-    assert len(store.calls) - after_cold == 2
+    (probe,) = log_calls()
+    assert probe.method == "query_changes"
+    assert "change:" in probe.args[0] and "since:" not in probe.args[0], probe.args[0]
+    assert probe.kwargs.get("options") == ["SKIP_DIFFSTAT"], probe
+
+    clock["t"] = 1029
+    assert log_calls() == []
 
 
 def test_fix_change_id_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

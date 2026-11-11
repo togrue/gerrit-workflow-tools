@@ -12,7 +12,7 @@ from functools import partial
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import parallel_map, self_account_id
+from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain
 
@@ -118,7 +118,7 @@ def load_inbox(
         TO_REVIEW: build_to_review_query(settings, projects=names, include_unready=include_unready),
         OUTGOING: with_project_filter(DEFAULT_OUTGOING_QUERY, names or list(settings.inbox_projects)),
     }
-    account = self_account_id(service.rest)
+    account = service.self_account_id()
     fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
     to_review, outgoing = parallel_map(partial(fetch, query) for query in queries.values())
     cap = limit if limit is not None else settings.inbox_limit

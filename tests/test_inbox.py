@@ -422,3 +422,72 @@ def test_inbox_rejects_a_non_positive_limit(limit: str, stack_repo: Path, monkey
     code, _out, err = run_cli(stack_repo, inbox_main, ["--limit", limit], monkeypatch, catch_sys_exit=True)
     assert code == ExitCode.USAGE
     assert "--limit" in err
+
+
+# --- What a listing costs Gerrit (ADR-0013) ----------------------------------------------
+
+
+def _listing_calls(service: GerritService, store: ChangeStore) -> list[tuple[str, Any]]:
+    """Fetch the to-review chains once; the Gerrit calls that took, as ``(method, query or argument)``."""
+    before = len(store.calls)
+    service.fetch_review_chains(TO_REVIEW_QUERY)
+    return [(call.method, call.args[0] if call.args else None) for call in store.calls[before:]]
+
+
+def _waiting(number: int, sha: str, parent: str) -> dict[str, Any]:
+    return _change(
+        number=number,
+        sha=sha,
+        parent=parent,
+        subject=f"change {number}",
+        updated="2026-08-18 08:00:00.000000000",
+        attention_since="2026-08-17 12:00:00.000000000",
+    )
+
+
+def test_a_listing_asked_again_is_one_light_query(tmp_path: Path) -> None:
+    """Polled while nothing happens: Gerrit says what matches, the details come from the cache.
+
+    Not asked again: who you are, and the commit the chain sits on (history, never a change).
+    """
+    store = _store(_waiting(1, "aaa", "history"), _waiting(2, "bbb", "aaa"))
+    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    first = _listing_calls(service, store)
+    assert ("get_account", "self") in first
+    assert any(method == "query_changes" and "commit:history" in query for method, query in first)
+
+    assert _listing_calls(service, store) == [("query_changes", TO_REVIEW_QUERY)]
+    assert store.calls[-1].kwargs["options"] == ["SKIP_DIFFSTAT"]
+    assert [member.number for member in service.fetch_review_chains(TO_REVIEW_QUERY)[0].members] == [1, 2]
+
+
+def test_a_listing_fetches_details_only_for_the_change_that_moved(tmp_path: Path) -> None:
+    one, two = _waiting(1, "aaa", "history"), _waiting(2, "bbb", "aaa")
+    store = _store(one, two)
+    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    _listing_calls(service, store)
+
+    moved = dict(two, updated="2026-08-18 09:00:00.000000000", subject="change 2, reworded")
+    store.add_change(moved)
+    store.stub_query(TO_REVIEW_QUERY, [one, moved])
+    assert _listing_calls(service, store) == [("query_changes", TO_REVIEW_QUERY), ("query_changes", "change:2")]
+    assert service.fetch_review_chains(TO_REVIEW_QUERY)[0].top.subject == "change 2, reworded"
+
+
+def test_an_open_parent_outside_the_listing_is_asked_about_every_time(tmp_path: Path) -> None:
+    """It is someone's open change: it can get a new patchset, so only history is remembered as settled."""
+    parent, child = _waiting(1, "aaa", "history"), _waiting(2, "bbb", "aaa")
+    store = _store(parent, child, stub=[child])
+    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    _listing_calls(service, store)
+    again = _listing_calls(service, store)
+    assert again == [("query_changes", TO_REVIEW_QUERY), ("query_changes", "commit:aaa")]
+
+
+def test_refresh_asks_for_everything_again(tmp_path: Path) -> None:
+    store = _store(_waiting(1, "aaa", "history"))
+    settings = Settings.from_map({})
+    _listing_calls(GerritService.from_cwd(tmp_path, rest=store, settings=settings), store)
+    fresh = _listing_calls(GerritService.from_cwd(tmp_path, rest=store, settings=settings, refresh=True), store)
+    # The listing, its details, who you are, and the commit below the chain.
+    assert sorted(method for method, _ in fresh) == ["get_account", "query_changes", "query_changes", "query_changes"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from collections.abc import Callable, Sized
+from collections.abc import Callable, Iterable, Mapping, Sized
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -15,7 +15,6 @@ from gerrit_workflow_tools.core.gerrit.cache_rows import (
     decode_checks,
     decode_comments,
     footer_of_triplet,
-    max_updated,
     payload_number,
     payload_triplet,
     payload_updated,
@@ -25,14 +24,16 @@ from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_r
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
+DEFAULT_SETTLED_COMMIT_TTL_SECONDS = 24 * 60 * 60
 
 _CAPABILITY_PREFIX = "capability:"
+_ACCOUNT_PREFIX = "account:"
 
-_DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "scope_state")
+_DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "settled_commits")
 # Follow-up tables and the columns that key one row.
 _FOLLOW_UP_KEYS = {"comments": ("change_id", "context_key"), "checks": ("change_id",)}
 
@@ -42,15 +43,7 @@ _T = TypeVar("_T")
 @dataclass(frozen=True)
 class _ChangeRow:
     payload: dict[str, Any]
-    updated: str | None
-    fetched_at: int
-    certified_gen: int | None
-
-
-@dataclass(frozen=True)
-class _ScopeState:
-    watermark: str
-    generation: int
+    verified_at: int
 
 
 def _now() -> int:
@@ -103,7 +96,7 @@ class GerritCache:
 
     @staticmethod
     def _drop_tables(conn: sqlite3.Connection) -> None:
-        for table in (*_DATA_TABLES, "meta", "accounts"):  # accounts is retired; dropped on schema reset
+        for table in (*_DATA_TABLES, "meta", "accounts", "scope_state"):  # the last two are retired
             conn.execute(f"DROP TABLE IF EXISTS {table}")
 
     @staticmethod
@@ -116,8 +109,7 @@ class GerritCache:
               number         INTEGER,
               payload        TEXT NOT NULL,
               updated        TEXT,
-              fetched_at     INTEGER NOT NULL,
-              certified_gen  INTEGER
+              fetched_at     INTEGER NOT NULL
             )
             """
         )
@@ -127,17 +119,16 @@ class GerritCache:
         )
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS scope_state (
-              scope_key   TEXT PRIMARY KEY,
-              watermark   TEXT NOT NULL,
-              generation  INTEGER NOT NULL
+            CREATE TABLE IF NOT EXISTS missing_changes (
+              change_id   TEXT PRIMARY KEY,
+              checked_at  INTEGER NOT NULL
             )
             """
         )
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS missing_changes (
-              change_id   TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS settled_commits (
+              sha         TEXT PRIMARY KEY,
               checked_at  INTEGER NOT NULL
             )
             """
@@ -179,13 +170,13 @@ class GerritCache:
         with self._connect() as conn:
             for table in _DATA_TABLES:
                 conn.execute(f"DELETE FROM {table}")
-            conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{_CAPABILITY_PREFIX}%",))
+            for prefix in (_CAPABILITY_PREFIX, _ACCOUNT_PREFIX):
+                conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{prefix}%",))
 
-    def capability(self, name: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> bool | None:
-        """Whether this host supports *name*, or ``None`` when unknown or stale."""
-
+    def _host_fact(self, key: str, ttl_seconds: int) -> Any:
+        """A fact about the host that rarely changes, or ``None`` when unknown or older than *ttl_seconds*."""
         with self._connect() as conn:
-            raw = self._meta_get(conn, f"{_CAPABILITY_PREFIX}{name}")
+            raw = self._meta_get(conn, key)
         if not raw:
             return None
         try:
@@ -194,15 +185,29 @@ class GerritCache:
             checked_at = int(record["at"])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             return None
-        if not isinstance(value, bool) or _now() - checked_at >= ttl_seconds:
-            return None
-        return value
+        return value if _now() - checked_at < ttl_seconds else None
+
+    def _set_host_fact(self, key: str, value: Any) -> None:
+        with self._connect() as conn:
+            self._meta_set(conn, key, _json_dumps({"value": value, "at": _now()}))
+
+    def capability(self, name: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> bool | None:
+        """Whether this host supports *name*, or ``None`` when unknown or stale."""
+        value = self._host_fact(f"{_CAPABILITY_PREFIX}{name}", ttl_seconds)
+        return value if isinstance(value, bool) else None
 
     def set_capability(self, name: str, value: bool) -> None:
         """Record whether this host supports *name*."""
+        self._set_host_fact(f"{_CAPABILITY_PREFIX}{name}", value)
 
-        with self._connect() as conn:
-            self._meta_set(conn, f"{_CAPABILITY_PREFIX}{name}", _json_dumps({"value": value, "at": _now()}))
+    def account_id(self, user: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> int | None:
+        """The account id Gerrit gave *user* (the configured ``gerrit.user``), or ``None`` when unknown or stale."""
+        value = self._host_fact(f"{_ACCOUNT_PREFIX}{user}", ttl_seconds)
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    def set_account_id(self, user: str, account_id: int) -> None:
+        """Record the account id of *user*: it never changes, so nobody needs to ask on every run."""
+        self._set_host_fact(f"{_ACCOUNT_PREFIX}{user}", account_id)
 
     def info(self) -> CacheInfo:
         """Return row counts for cache administration."""
@@ -221,7 +226,7 @@ class GerritCache:
         with self._connect() as conn:
             rows = conn.execute(
                 f"""
-                SELECT change_id, payload, updated, fetched_at, certified_gen
+                SELECT change_id, payload, fetched_at
                 FROM changes WHERE change_id IN ({_placeholders(triplets)})
                 """,
                 triplets,
@@ -229,40 +234,16 @@ class GerritCache:
         for row in rows:
             payload = json.loads(str(row["payload"]))
             if isinstance(payload, dict):
-                certified = row["certified_gen"]
-                out[str(row["change_id"])] = _ChangeRow(
-                    payload=payload,
-                    updated=row["updated"] if isinstance(row["updated"], str) else None,
-                    fetched_at=int(row["fetched_at"]),
-                    certified_gen=int(certified) if certified is not None else None,
-                )
+                out[str(row["change_id"])] = _ChangeRow(payload=payload, verified_at=int(row["fetched_at"]))
         return out
 
-    def _get_scope_state(self, conn: sqlite3.Connection, scope_key: str) -> _ScopeState | None:
-        row = conn.execute(
-            "SELECT watermark, generation FROM scope_state WHERE scope_key = ?",
-            (scope_key,),
-        ).fetchone()
-        if row is None:
-            return None
-        return _ScopeState(watermark=str(row["watermark"]), generation=int(row["generation"]))
-
-    def _set_scope_state(self, conn: sqlite3.Connection, scope_key: str, watermark: str, generation: int) -> None:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO scope_state(scope_key, watermark, generation)
-            VALUES (?, ?, ?)
-            """,
-            (scope_key, watermark, generation),
-        )
-
-    def _stamp_certified_gen(self, conn: sqlite3.Connection, triplets: list[str], generation: int) -> None:
-        if not triplets:
-            return
-        conn.execute(
-            f"UPDATE changes SET certified_gen = ? WHERE change_id IN ({_placeholders(triplets)})",
-            [generation, *triplets],
-        )
+    def _mark_verified(self, conn: sqlite3.Connection, triplets: list[str]) -> None:
+        """Gerrit just confirmed these rows are current: their trust window starts again."""
+        if triplets:
+            conn.execute(
+                f"UPDATE changes SET fetched_at = ? WHERE change_id IN ({_placeholders(triplets)})",
+                [_now(), *triplets],
+            )
 
     def _missing_is_fresh(self, conn: sqlite3.Connection, footer_id: str, *, ttl_seconds: int) -> bool:
         row = conn.execute(
@@ -315,13 +296,16 @@ class GerritCache:
         *,
         probe_updated: Callable[[list[str]], dict[str, str]],
         fetch_changes: Callable[[list[str]], dict[str, dict[str, Any]]],
-        fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]] | None = None,
-        scope_key: str | None = None,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         missing_ttl_seconds: int = DEFAULT_MISSING_CHANGE_TTL_SECONDS,
         refresh: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Load ChangeInfo payloads keyed by Gerrit triplet ``id``.
+
+        A row inside its trust window is served as it is. Past it, one probe asks Gerrit for
+        the freshness tokens of those rows: a row whose token did not move is served and its
+        trust window starts again, the others are fetched. So an unchanged stack costs one
+        light request, and nothing at all for the next *trust_window_seconds*.
 
         Database connections are never held across Gerrit network calls.
         """
@@ -343,125 +327,77 @@ class GerritCache:
                     ):
                         continue
                     fetch_ids.append(triplet)
-                elif not refresh and now - row.fetched_at < trust_window_seconds:
+                elif not refresh and now - row.verified_at < trust_window_seconds:
                     out[triplet] = row.payload
                 else:
                     probe_ids.append(triplet)
 
-        # ``since:`` only sees ``ChangeInfo.updated``. A comment resolve in the same
-        # second leaves that timestamp unchanged, so the delta is empty (or names
-        # some other change). Those requested ids still need the meta_rev_id probe.
-        if fetch_delta is not None and scope_key is not None and not refresh and not fetch_ids and probe_ids:
-            covered = self._try_delta(triplets, rows, fetch_delta, scope_key, out)
-            if covered is not None:
-                probe_ids = [triplet for triplet in probe_ids if triplet not in covered]
-                if not probe_ids:
-                    return out
-
-        did_network = False
         if probe_ids:
-            did_network = True
-            updated_by_id = probe_updated(probe_ids)
-            for triplet in probe_ids:
-                row = rows[triplet]
-                remote_token = updated_by_id.get(triplet)
-                if remote_token is None:
-                    payload_id = row.payload.get("id")
-                    if isinstance(payload_id, str):
-                        remote_token = updated_by_id.get(payload_id)
-                cached_key = change_freshness_key(row.payload)
-                if cached_key and remote_token == cached_key:
-                    out[triplet] = row.payload
-                else:
-                    fetch_ids.append(triplet)
+            tokens = probe_updated(probe_ids)
+            # Gerrit answers under its own id, which is not always the key that was asked for.
+            asked = {key: tokens.get(key) or tokens.get(payload_triplet(rows[key].payload) or "") for key in probe_ids}
+            current, moved = self.reconcile(asked)
+            out.update(current)
+            fetch_ids.extend(moved)
 
-        aliased: dict[str, dict[str, Any]] = {}
         if fetch_ids:
-            did_network = True
-            fetched = fetch_changes(fetch_ids)
-            aliased = alias_batch_fetch_results(fetch_ids, fetched)
+            aliased = alias_batch_fetch_results(fetch_ids, fetch_changes(fetch_ids))
             for ref in fetch_ids:
                 if ref in aliased:
                     out[ref] = aliased[ref]
-
-        if fetch_ids or (scope_key and not refresh and out and did_network):
             with self._connect() as conn:
-                if fetch_ids:
-                    self.upsert_changes(aliased, conn=conn)
-                    for ref in fetch_ids:
-                        footer = footer_of_triplet(ref)
-                        if ref in aliased:
-                            self._clear_missing(conn, footer)
-                        else:
-                            self._mark_missing(conn, footer)
-                if scope_key and not refresh and out and did_network:
-                    self._maybe_certify_scope(conn, scope_key, triplets, out)
+                self.upsert_changes(aliased, conn=conn)
+                for ref in fetch_ids:
+                    footer = footer_of_triplet(ref)
+                    if ref in aliased:
+                        self._clear_missing(conn, footer)
+                    else:
+                        self._mark_missing(conn, footer)
 
         return out
 
-    def _try_delta(
-        self,
-        triplets: list[str],
-        rows: dict[str, _ChangeRow],
-        fetch_delta: Callable[[str], tuple[list[dict[str, Any]], bool]],
-        scope_key: str,
-        out: dict[str, dict[str, Any]],
-    ) -> set[str] | None:
-        """Apply a ``since:`` delta when every requested row is certified under *scope_key*.
+    def reconcile(self, tokens: Mapping[str, str | None]) -> tuple[dict[str, dict[str, Any]], list[str]]:
+        """Split cache keys by whether the cached row still carries Gerrit's freshness token.
 
-        Returns the Gerrit ids the delta actually returned, or ``None`` when the
-        delta cannot answer (uncertified rows, incomplete page). An empty set means
-        the query succeeded but ``updated`` did not move — the caller must still probe
-        those ids. Network I/O runs with no open SQLite connection.
+        *tokens* is what Gerrit just said: key to :func:`change_freshness_key`. Returns the
+        payloads of the rows that are current, whose trust window starts again, and the keys
+        to fetch: rows that moved, and rows the cache does not have.
         """
+        rows = self._lookup_changes(list(tokens))
+        current: dict[str, dict[str, Any]] = {}
+        moved: list[str] = []
+        for key, token in tokens.items():
+            row = rows.get(key)
+            if row is not None and token and token == change_freshness_key(row.payload):
+                current[key] = row.payload
+            else:
+                moved.append(key)
+        if current:
+            with self._connect() as conn:
+                self._mark_verified(conn, list(current))
+        return current, moved
 
+    def settled_commits(
+        self, shas: Iterable[str], *, ttl_seconds: int = DEFAULT_SETTLED_COMMIT_TTL_SECONDS
+    ) -> set[str]:
+        """Those of *shas* recently found to be no open change: history a review chain sits on."""
+        wanted = list(shas)
+        if not wanted:
+            return set()
         with self._connect() as conn:
-            state = self._get_scope_state(conn, scope_key)
-        if state is None or not state.watermark:
-            return None
-        for triplet in triplets:
-            row = rows.get(triplet)
-            if row is None or row.certified_gen != state.generation:
-                return None
+            rows = conn.execute(
+                f"SELECT sha FROM settled_commits WHERE checked_at > ? AND sha IN ({_placeholders(wanted)})",
+                [_now() - ttl_seconds, *wanted],
+            ).fetchall()
+        return {str(row["sha"]) for row in rows}
 
-        delta_rows, complete = fetch_delta(state.watermark)
-        if not complete:
-            return None
-
-        new_watermark = max_updated(delta_rows, floor=state.watermark)
-        new_gen = state.generation + 1
+    def settle_commits(self, shas: Iterable[str]) -> None:
+        """Record that Gerrit has no open change for *shas* (merged, or never a change)."""
+        now = _now()
         with self._connect() as conn:
-            if delta_rows:
-                self.upsert_changes(delta_rows, conn=conn)
-            self._set_scope_state(conn, scope_key, new_watermark, new_gen)
-            self._stamp_certified_gen(conn, triplets, new_gen)
-
-        covered = {tid for payload in delta_rows if (tid := payload_triplet(payload))}
-        fresh = self._lookup_changes(triplets)
-        for triplet in triplets:
-            row = fresh.get(triplet)
-            if row is not None:
-                out[triplet] = row.payload
-        return covered
-
-    def _maybe_certify_scope(
-        self,
-        conn: sqlite3.Connection,
-        scope_key: str,
-        triplets: list[str],
-        out: dict[str, dict[str, Any]],
-    ) -> None:
-        present = [triplet for triplet in triplets if triplet in out]
-        if not present:
-            return
-        state = self._get_scope_state(conn, scope_key) or _ScopeState(watermark="", generation=0)
-        payloads = [out[triplet] for triplet in present]
-        new_watermark = max_updated(payloads, floor=state.watermark)
-        if not new_watermark:
-            return
-        new_gen = state.generation + 1
-        self._set_scope_state(conn, scope_key, new_watermark, new_gen)
-        self._stamp_certified_gen(conn, present, new_gen)
+            conn.executemany(
+                "INSERT OR REPLACE INTO settled_commits(sha, checked_at) VALUES (?, ?)", [(sha, now) for sha in shas]
+            )
 
     def upsert_changes(
         self,
@@ -486,8 +422,8 @@ class GerritCache:
             for key, payload in stored
         ]
         insert = """
-            INSERT OR REPLACE INTO changes(change_id, number, payload, updated, fetched_at, certified_gen)
-            VALUES (?, ?, ?, ?, ?, NULL)
+            INSERT OR REPLACE INTO changes(change_id, number, payload, updated, fetched_at)
+            VALUES (?, ?, ?, ?, ?)
         """
         if conn is not None:
             conn.executemany(insert, rows)

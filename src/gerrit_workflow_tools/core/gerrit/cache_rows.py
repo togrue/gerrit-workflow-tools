@@ -63,16 +63,6 @@ def decode_checks(payload: Any) -> tuple[list[dict[str, Any]], list[dict[str, An
     return dict_rows(payload.get("checks")), dict_rows(payload.get("messages"))
 
 
-def max_updated(payloads: list[dict[str, Any]], *, floor: str = "") -> str:
-    """The newest ``updated`` among *payloads*, never older than *floor*."""
-    best = floor
-    for payload in payloads:
-        updated = payload_updated(payload)
-        if updated and updated > best:
-            best = updated
-    return best
-
-
 def comments_context_key(context_padding: int | None) -> str:
     """Cache discriminator for comment payloads with or without source context."""
 

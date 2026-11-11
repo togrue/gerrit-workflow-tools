@@ -20,6 +20,7 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 | [Reading-ger-log.md](Reading-ger-log.md) | Columns, tokens, attention hints, summary line |
 | [Configuration.md](Configuration.md) | All `gerrit.*` and `branch.*` git config keys |
 | [Completion.md](Completion.md) | Bash tab completion install |
+| [Server-load.md](Server-load.md) | What each command asks of the Gerrit server, and how to read that off the server's log |
 
 ---
 

@@ -40,11 +40,11 @@ Distinct from the **local stack**, which is defined purely locally (`upstream_ti
 
 Derived from the query result, not from per-change relation calls:
 
-1. Query with `o=CURRENT_REVISION&o=CURRENT_COMMIT` (plus labels and accounts), giving each change's current revision SHA and its parent SHAs.
+1. Ask Gerrit what matches, lightly (`o=SKIP_DIFFSTAT`); the details of each change (current revision SHA, parent SHAs, labels, accounts) come from the cache when its freshness token did not move, and are fetched for the others ([ADR-0013](../../adr/0013-gerrit-is-asked-lightly-and-only-for-what-moved.md)).
 2. Link child → parent by matching a parent SHA to another change's current revision.
 3. Parent SHAs not present in the result set are collected and resolved with **one batched follow-up query** (`commit:<sha> OR commit:<sha> …`) through `GerritService.fetch_review_chains`.
 
-This keeps assembly at two round trips regardless of chain count. A follow-up that finds the parent commit on a *non-current* patch set (a hole in the current-revision chain) flags `partial-chain` in JSON. A parent that does not exist as any open change is the ground the chain sits on, not a gap.
+This keeps assembly at a few round trips regardless of chain count: one light request while nothing changes. A parent found to be merged, or no change at all, is remembered for a day and not asked about again. A follow-up that finds the parent commit on a *non-current* patch set (a hole in the current-revision chain) flags `partial-chain` in JSON. A parent that does not exist as any open change is the ground the chain sits on, not a gap.
 
 ### Ready
 
