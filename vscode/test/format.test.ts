@@ -8,6 +8,7 @@ import {
   blockedSwaps,
   chainDescription,
   chainsWithActivity,
+  commentLocation,
   droppedOn,
   fileState,
   moved,
@@ -80,6 +81,12 @@ test("activity is what moved since the chain was last seen", () => {
 test("moving a commit keeps every commit exactly once", () => {
   assert.deepEqual(moved(["a", "b", "c"], 0, 1), ["b", "a", "c"]);
   assert.deepEqual(moved(["a", "b", "c"], 2, -1), ["a", "c", "b"]);
+});
+
+test("a new comment's location is the file, a line or a range, lines from 1", () => {
+  assert.equal(commentLocation("a.py"), "a.py");
+  assert.equal(commentLocation("a.py", { start: 4, end: 4 }), "a.py:4");
+  assert.equal(commentLocation("a.py", { start: 7, end: 4 }), "a.py:4-7");
 });
 
 test("a dropped commit takes the place of the one it lands on, in either direction", () => {

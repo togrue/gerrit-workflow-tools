@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 
-import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, isStack } from "./api";
+import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, rememberSeen, swapKey } from "./format";
 import { GerProcess } from "./server";
 
@@ -45,6 +45,8 @@ export class Model implements vscode.Disposable {
   /** Neighbours of the local stack that cannot swap places, for the stack whose head is `movesHead`. */
   private blocked = new Map<string, MoveConflict>();
   movesHead: string | null | undefined;
+  /** What to offer as upstream while the branch has none (and so no stack to show). */
+  upstreamChoice: UpstreamChoice | undefined;
   private refreshing: Promise<void> | undefined;
 
   constructor(
@@ -91,7 +93,24 @@ export class Model implements vscode.Disposable {
     }
     await vscode.commands.executeCommand("setContext", "ger.ready", this.overview !== undefined);
     this.changed.fire();
+    await this.loadUpstreamChoice();
     await this.loadMoves();
+  }
+
+  /** Without an upstream there is no stack to show: fetch what to suggest, so the view can offer it in one click. */
+  private async loadUpstreamChoice(): Promise<void> {
+    const local = this.overview?.local;
+    const needed = local !== undefined && "error" in local && local.needs_upstream === true;
+    if (!needed) {
+      this.upstreamChoice = undefined;
+      return;
+    }
+    try {
+      this.upstreamChoice = await (await this.client()).upstream();
+    } catch {
+      this.upstreamChoice = undefined;
+    }
+    this.changed.fire();
   }
 
   /** The conflict preview for the stack as it is now. Best effort: without it every move is offered. */

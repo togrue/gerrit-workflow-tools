@@ -366,7 +366,6 @@ TOO_MANY_BASELINE = {
     "core/gerrit/change_view.py": 1,
     "core/gerrit/service.py": 1,
     "core/gerrit_change_status.py": 1,
-    "core/git_state.py": 1,
     "core/ready_calc.py": 1,
     "core/review_chain.py": 6,
     "push_input_line.py": 3,

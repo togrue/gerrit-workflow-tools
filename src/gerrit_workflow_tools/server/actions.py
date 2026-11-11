@@ -11,9 +11,13 @@ from typing import Any
 
 from gerrit_workflow_tools.core.agent_runbook import set_hold
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.comment_anchor import LocationError
+from gerrit_workflow_tools.core.comment_target import resolve_comment_target
+from gerrit_workflow_tools.core.comment_write import default_state, locate, write_comment
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, resolve_working_branch
 from gerrit_workflow_tools.core.reorder import STEP_ACTIONS, StackStep, rewrite_stack, undo_rewrite
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
@@ -23,7 +27,9 @@ from gerrit_workflow_tools.core.review_checkout import (
     open_review,
 )
 from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
+from gerrit_workflow_tools.core.upstream import set_branch_upstream
 from gerrit_workflow_tools.render.review_json import review_state_json
+from gerrit_workflow_tools.render.show_json import written_comment_json
 from gerrit_workflow_tools.server import views
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
@@ -126,3 +132,47 @@ def undo(ctx: Context, req: Request) -> dict[str, Any]:
     previous = safe_rev(req.body_field("previous_head", str, required=True), "previous_head")
     undo_rewrite(ctx.cwd, head, previous)
     return views.stack(ctx, Request())
+
+
+def set_upstream(ctx: Context, req: Request) -> dict[str, Any]:
+    """Make ``upstream`` (a remote-tracking branch, ``origin/main``) the upstream of the working branch.
+
+    Answers ``branch`` and its new ``upstream``; ``GET /stack`` can show the stack from then on.
+    """
+    upstream = safe_rev(req.body_field("upstream", str, required=True).strip(), "upstream")
+    branch = checked_out_branch_name(ctx.cwd)
+    if branch is None:
+        raise BadRequest("HEAD is detached: there is no branch to give an upstream")
+    set_branch_upstream(ctx.cwd, branch, upstream)
+    return {"branch": branch, "upstream": upstream}
+
+
+_NEW_COMMENT_STATES: tuple[CommentState, ...] = ("draft", "local-draft", "note")
+
+
+def new_comment(ctx: Context, req: Request) -> dict[str, Any]:
+    """Start a comment chain (``ger comment``): a draft on Gerrit, a local draft or a note.
+
+    Body: ``rev`` (the change), ``location`` (``PATH``, ``PATH:LINE``, ``PATH:START-END`` or
+    ``PATH:L.C-L.C``, lines from 1), ``message``, and optional ``state`` (default as
+    ``ger comment``: a draft where Gerrit has the change, else a local draft) and ``resolved``.
+    """
+    rev = safe_rev(req.body_field("rev", str, required=True))
+    message = req.body_field("message", str, required=True).strip()
+    state = req.body_field("state", str)
+    if not message:
+        raise BadRequest("message is empty")
+    if state is not None and state not in _NEW_COMMENT_STATES:
+        raise BadRequest(f"state must be one of {', '.join(_NEW_COMMENT_STATES)}")
+    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    target = resolve_comment_target(ctx.service, ctx.cwd, rev, branch=branch)
+    try:
+        location = locate(ctx.cwd, req.body_field("location", str, required=True), target)
+    except LocationError as error:
+        raise BadRequest(str(error)) from error
+    chosen: CommentState = default_state(target, gerrit=True)
+    for known in _NEW_COMMENT_STATES:
+        chosen = known if state == known else chosen
+    resolved = bool(req.body_field("resolved", bool))
+    written = write_comment(ctx.cwd, ctx.service, target, location, message, state=chosen, unresolved=not resolved)
+    return written_comment_json(written)

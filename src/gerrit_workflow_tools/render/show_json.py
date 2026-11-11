@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.comment_write import WrittenComment
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
     LogCommit,
@@ -121,4 +122,22 @@ def commit_json_payload(
         "local_commit": is_local,
         "resolution": resolution.to_json_dict(),  # type: ignore[attr-defined]
         **ci_payload,
+    }
+
+
+def written_comment_json(written: WrittenComment) -> dict[str, object]:
+    """A comment chain just started (``ger comment --json``, ``POST /comments/new``)."""
+    location = written.location
+    return {
+        "action": "created",
+        "change": written.change,
+        "commit": written.commit,
+        "path": location.path,
+        "line": location.line,
+        "range": location.range.as_gerrit() if location.range else None,
+        "state": written.state,
+        "id": written.id,
+        "patch_set": written.patch_set,
+        "unresolved": written.unresolved,
+        "url": written.url,
     }

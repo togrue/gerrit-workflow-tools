@@ -9,7 +9,9 @@ import { ChangeTarget, Model, describeError } from "./model";
 
 const MIME = "application/vnd.code.tree.ger.stack";
 
-type Node = { kind: "commit"; commit: StackCommit } | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon };
+type Node =
+  | { kind: "commit"; commit: StackCommit }
+  | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon; tooltip?: string; command?: vscode.Command };
 
 export function commitTarget(commit: StackCommit): ChangeTarget {
   return { rev: commit.sha, title: commit.summary, url: commit.gerrit_url, local: true };
@@ -40,7 +42,13 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
       return [];
     }
     if ("error" in local) {
-      return [{ kind: "info", text: local.error.message, icon: icon("warning", "list.warningForeground") }];
+      const warning = icon("warning", "list.warningForeground");
+      if (local.needs_upstream) {
+        const branch = this.model.upstreamChoice?.branch ?? "This branch";
+        const why = `${branch} has no upstream, so ger cannot tell where your stack starts`;
+        return [{ kind: "info", text: why, tooltip: local.error.message, icon: warning }, ...this.upstreamRows()];
+      }
+      return [{ kind: "info", text: local.error.message.split("\n")[0], tooltip: local.error.message, icon: warning }];
     }
     const nodes: Node[] = [];
     if (local.rebase_in_progress) {
@@ -52,11 +60,36 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     return nodes.concat([...local.commits].reverse().map((commit) => ({ kind: "commit", commit })));
   }
 
+  /** The branch has no upstream, so no stack: offer the suggested one in one click, or a choice. */
+  private upstreamRows(): Node[] {
+    const choice = this.model.upstreamChoice;
+    const rows: Node[] = [];
+    if (choice?.suggested) {
+      rows.push({
+        kind: "info",
+        text: `Track ${choice.suggested}`,
+        detail: choice.why ?? undefined,
+        tooltip: `Make ${choice.suggested} the upstream of ${choice.branch}: the stack is the commits above it, and push goes to its branch on Gerrit.`,
+        icon: icon("git-branch"),
+        command: { command: "ger.setUpstream", title: "Track", arguments: [choice.suggested] },
+      });
+    }
+    rows.push({
+      kind: "info",
+      text: choice?.suggested ? "Choose another upstream branch…" : "Choose an upstream branch…",
+      icon: icon("list-selection"),
+      command: { command: "ger.setUpstream", title: "Choose" },
+    });
+    return rows;
+  }
+
   getTreeItem(node: Node): vscode.TreeItem {
     if (node.kind === "info") {
       const item = new vscode.TreeItem(node.text);
       item.description = node.detail;
       item.iconPath = node.icon;
+      item.tooltip = node.tooltip;
+      item.command = node.command;
       return item;
     }
     const commit = node.commit;

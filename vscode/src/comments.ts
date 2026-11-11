@@ -2,11 +2,19 @@
 // For a local stack commit they sit on your files; for any other change, on the commit's own
 // documents — the right-hand side of its diffs.
 
+import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { CommentChain } from "./api";
-import { ChangeView } from "./changeView";
+import { CommentChain, NewCommentState } from "./api";
+import { ChangeView, FILE_SCHEME } from "./changeView";
+import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
+
+const SAVED: Record<NewCommentState, string> = {
+  draft: "Draft saved on Gerrit, visible only to you. Publish it with ger push.",
+  "local-draft": "Local draft saved here. It goes to Gerrit once the commit is pushed.",
+  note: "Private note saved here. It never leaves this repository.",
+};
 
 interface Anchor {
   rev: string;
@@ -24,6 +32,58 @@ export class CommentThreads implements vscode.Disposable {
     private readonly reveal: (chain: CommentChain) => void,
   ) {
     view.onDidLoad(() => this.rebuild());
+    // The "+" in the gutter: on the shown change's own lines, where a line number means the same to Gerrit.
+    this.controller.commentingRangeProvider = {
+      provideCommentingRanges: (document) =>
+        this.pathOf(document.uri) === undefined ? [] : [new vscode.Range(0, 0, Math.max(0, document.lineCount - 1), 0)],
+    };
+    this.controller.options = {
+      prompt: "Comment on the shown change",
+      placeHolder: "A draft on Gerrit, a local draft where Gerrit does not have this commit, or a private note",
+    };
+  }
+
+  /**
+   * The repository path of `uri` when it shows the shown change's lines: the right side of its
+   * diffs, or your own file when the shown commit is HEAD. Elsewhere a line number would point
+   * at other text, so no new comment starts there.
+   */
+  private pathOf(uri: vscode.Uri): string | undefined {
+    const [target, shown] = [this.view.target, this.view.shown];
+    const commit = this.view.diff?.commit ?? shown?.sha;
+    if (!target || !commit) {
+      return undefined;
+    }
+    if (uri.scheme === FILE_SCHEME) {
+      return uri.query === commit ? uri.path.slice(1) : undefined;
+    }
+    if (uri.scheme === "file" && target.local && this.model.stack?.head === commit) {
+      const relative = path.relative(this.model.repo, uri.fsPath);
+      return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative.split(path.sep).join("/") : undefined;
+    }
+    return undefined;
+  }
+
+  /** Start a chain from a new thread's comment box: a draft on Gerrit, a local draft, or a private note. */
+  async saveNew(reply: vscode.CommentReply, state: NewCommentState): Promise<void> {
+    const target = this.view.target;
+    const file = this.pathOf(reply.thread.uri);
+    const text = reply.text.trim();
+    if (!target || file === undefined || !text) {
+      return;
+    }
+    const range = reply.thread.range as vscode.Range | undefined;
+    const location = commentLocation(file, range && { start: range.start.line + 1, end: range.end.line + 1 });
+    try {
+      const client = await this.model.client();
+      await client.newComment(target.rev, location, text, state);
+      reply.thread.dispose(); // the saved chain comes back with the reload, in its place
+      void vscode.window.setStatusBarMessage(`$(check) ${SAVED[state]}`, 6000);
+      await this.view.open();
+    } catch (error) {
+      // The box stays open with the text, to try again or save it another way.
+      void vscode.window.showErrorMessage(`Comment not saved: ${describeError(error)}`);
+    }
   }
 
   private rebuild(): void {

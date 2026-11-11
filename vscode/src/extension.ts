@@ -102,6 +102,7 @@ export interface ExtensionApi {
   overviewView: OverviewView;
   stackView: StackView;
   changeView: ChangeView;
+  threads: CommentThreads;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi | undefined {
@@ -178,6 +179,39 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     await changeView.open(target);
     if (target.chainKey) {
       await model.markSeen([target.chainKey]);
+    }
+  };
+
+  /** Give the working branch an upstream: `upstream` directly, else picked from the suggestion and the remote branches. */
+  const setUpstream = async (upstream?: string) => {
+    try {
+      const client = await model.client();
+      let chosen = typeof upstream === "string" ? upstream : undefined;
+      if (!chosen) {
+        const choice = await client.upstream();
+        if (!choice.branch) {
+          void vscode.window.showWarningMessage("HEAD is detached: check out a branch to give it an upstream.");
+          return;
+        }
+        const items = choice.candidates.map((name): vscode.QuickPickItem => ({
+          label: name,
+          description: name === choice.suggested ? `$(star-full) suggested: ${choice.why ?? ""}` : name === choice.upstream ? "current" : undefined,
+        }));
+        const picked = await vscode.window.showQuickPick(items, {
+          title: `Upstream for ${choice.branch}`,
+          placeHolder: "The local stack is the commits above it; ger push goes to its branch on Gerrit",
+          matchOnDescription: true,
+        });
+        chosen = picked?.label;
+      }
+      if (!chosen) {
+        return;
+      }
+      const done = await client.setUpstream(chosen);
+      void vscode.window.setStatusBarMessage(`$(check) ${done.branch} now tracks ${done.upstream}`, 6000);
+      await model.refresh();
+    } catch (error) {
+      void vscode.window.showWarningMessage(`Upstream not set: ${describeError(error)}`);
     }
   };
 
@@ -316,6 +350,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     },
     "ger.checkout": (arg: unknown) => checkout(targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(targetOf(arg)),
+    "ger.setUpstream": (upstream?: unknown) => setUpstream(typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": async () => {
       try {
         const done = await (await model.client()).reviewDone();
@@ -344,6 +379,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       const chain = threadOf(arg);
       return chain ? threads.replyToChain(chain, true, "Done") : undefined;
     },
+    "ger.comment.saveDraft": (reply: vscode.CommentReply) => threads.saveNew(reply, "draft"),
+    "ger.comment.saveLocalDraft": (reply: vscode.CommentReply) => threads.saveNew(reply, "local-draft"),
+    "ger.comment.saveNote": (reply: vscode.CommentReply) => threads.saveNew(reply, "note"),
     "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply, undefined),
     "ger.thread.resolve": (reply: vscode.CommentReply) => threads.replyInThread(reply, true),
     "ger.agentBrief": (arg: unknown) => handToAgent(targetOf(arg)),
@@ -381,7 +419,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     { dispose: () => clearInterval(poll) },
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView };
+  return { model, overviewView, stackView, changeView, threads };
 }
 
 export function deactivate(): void {

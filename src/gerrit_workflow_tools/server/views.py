@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, res
 from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_attention
 from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
+from gerrit_workflow_tools.core.comment_write import new_comment_state
 from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, commit_diff, file_text
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
@@ -39,6 +40,7 @@ from gerrit_workflow_tools.core.review_checkout import fetch_patchset, find_revi
 from gerrit_workflow_tools.core.review_delta import load_review_delta
 from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
+from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
@@ -149,6 +151,21 @@ def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
     return answer
 
 
+def stack_upstream(ctx: Context, _req: Request) -> dict[str, Any]:
+    """The working branch's upstream, and which to offer when it has none: the best guess first."""
+    branch = checked_out_branch_name(ctx.cwd)
+    if branch is None:
+        return {"branch": None, "upstream": None, "suggested": None, "why": None, "candidates": []}
+    choice = upstream_choice(ctx.cwd, branch, settings=ctx.settings)
+    return {
+        "branch": branch,
+        "upstream": choice.current,
+        "suggested": choice.suggested,
+        "why": choice.why,
+        "candidates": choice.candidates,
+    }
+
+
 def _soft(load: Any, ctx: Context, req: Request) -> dict[str, Any]:
     """*load*'s answer, or ``{"error": …}`` for a known failure: one broken half must not hide the other."""
     try:
@@ -184,6 +201,9 @@ def overview(ctx: Context, req: Request) -> dict[str, Any]:
     local stack fail separately: either may be ``{"error": …}`` while the other is shown.
     """
     local = _soft(stack, ctx, req)
+    if "error" in local:
+        branch = checked_out_branch_name(ctx.cwd)
+        local["needs_upstream"] = branch is not None and not branch_has_upstream(ctx.cwd, branch)
     inbox = _soft(_inbox, ctx, req)
     sha_by_change = {
         norm_change_id(c["change_id"]): c["sha"] for c in local.get("commits", []) if c.get("change_id") and c["sha"]
@@ -248,6 +268,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             ci_content=item.ci_contents,
         )
         payload["short_sha"] = item.commit.short_sha
+        payload["new_comment"] = new_comment_state(item.commit, is_local=item.target.is_local_commit)
         for chain_payload in payload["comment_chains"]:  # type: ignore[attr-defined]
             chain_payload["held"] = chain_payload["root_id"] in holds
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))

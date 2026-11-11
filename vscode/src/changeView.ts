@@ -79,6 +79,8 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
         [this.shown, this.diff, this.delta, this.problem] = [undefined, undefined, undefined, describeError(error)];
       }
     });
+    // Which save button a new comment box offers: "Save Draft" or "Save Local Draft" (plus "Save Private Note").
+    void vscode.commands.executeCommand("setContext", "ger.newComment", this.shown?.new_comment ?? "none");
     this.changed.fire();
     this.loaded.fire();
   }
@@ -87,6 +89,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   close(): void {
     [this.target, this.shown, this.diff, this.delta, this.problem, this.ci] = [undefined, undefined, undefined, undefined, undefined, undefined];
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", false);
+    void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
     this.changed.fire();
     this.loaded.fire();
   }

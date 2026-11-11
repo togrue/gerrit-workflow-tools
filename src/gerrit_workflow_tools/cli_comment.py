@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.local_comments import LocalCommentStore
 from gerrit_workflow_tools.core.review_checkout import load_state
 from gerrit_workflow_tools.render.comments import first_line
+from gerrit_workflow_tools.render.show_json import written_comment_json
 
 
 _LABELS: dict[str, str] = {"note": "note", "local-draft": "local draft", "draft": "draft"}
@@ -109,23 +110,6 @@ def _state(args: argparse.Namespace, target: CommentTarget, service: GerritServi
     if args.local:
         return "local-draft"
     return default_state(target, gerrit=service is not None)
-
-
-def _payload(written: WrittenComment) -> dict[str, object]:
-    location = written.location
-    return {
-        "action": "created",
-        "change": written.change,
-        "commit": written.commit,
-        "path": location.path,
-        "line": location.line,
-        "range": location.range.as_gerrit() if location.range else None,
-        "state": written.state,
-        "id": written.id,
-        "patch_set": written.patch_set,
-        "unresolved": written.unresolved,
-        "url": written.url,
-    }
 
 
 def _line(written: WrittenComment) -> str:
@@ -213,7 +197,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     written = write_comment(
         cwd, service, target, location, message, state=_state(args, target, service), unresolved=not args.resolved
     )
-    _emit(_payload(written), _line(written), as_json=args.json_)
+    _emit(written_comment_json(written), _line(written), as_json=args.json_)
     return int(ExitCode.OK)
 
 

@@ -32,6 +32,10 @@ with a count appears when chains had activity since you last looked. Click to op
   exactly one Change-Id) and **drop**, from a commit's context menu. Every rewrite offers
   **Undo** right after.
 - Push (`ger push` in a terminal, where it can ask you).
+- **No upstream** (typical after checking a change out from Gerrit's download commands): the
+  view says so and offers **Track origin/…** in one click — the branch it was created from, else
+  the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
+  *Set Upstream Branch…* in the view's `…` menu.
 
 **Change** — select any change or commit
 
@@ -44,6 +48,12 @@ with a count appears when chains had activity since you last looked. Click to op
   through the unresolved ones. For a local commit they also appear as comment threads in the
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later by
   `ger push` or `ger review --vote`.
+- **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
+  the shown commit is HEAD — and click **+**. Save it as:
+  - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published;
+  - **Local draft**, when Gerrit does not (never pushed, or amended since): kept here, in
+    `refs/ger/comments`, for when the commit is pushed;
+  - **Private note**, always: kept here and never uploaded.
 - **CI**: opened on demand (it downloads build logs). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.

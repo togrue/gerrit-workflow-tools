@@ -22,7 +22,12 @@ from gerrit_workflow_tools.core.comment_anchor import (
 from gerrit_workflow_tools.core.comment_target import CommentTarget
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentState, gerrit_inline_comment_url
+from gerrit_workflow_tools.core.gerrit_change_status import (
+    CommentState,
+    LogCommit,
+    PatchsetStatus,
+    gerrit_inline_comment_url,
+)
 from gerrit_workflow_tools.core.local_comments import LocalCommentStore, new_comment
 
 
@@ -93,3 +98,19 @@ def write_comment(
     )
     LocalCommentStore(cwd).add(comment)
     return WrittenComment(state, comment.id, target.key, target.commit, comment.anchor.location, None, unresolved, None)
+
+
+_PATCHSETS_GERRIT_HAS = frozenset({PatchsetStatus.ACTIVE, PatchsetStatus.OUTDATED})
+
+
+def new_comment_state(commit: LogCommit, *, is_local: bool) -> CommentState:
+    """What a new comment on *commit* becomes by default (:func:`default_state`), from the overlay alone.
+
+    A draft when Gerrit has this very commit as a patchset (or, for a change that is only on
+    Gerrit, its current one); a local draft when it was never pushed or was rewritten here.
+    """
+    if not commit.pushed:
+        return "local-draft"
+    if not is_local or commit.patchset_status in _PATCHSETS_GERRIT_HAS:
+        return "draft"
+    return "local-draft"

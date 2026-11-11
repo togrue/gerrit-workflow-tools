@@ -8,11 +8,10 @@ import pytest
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import is_detached_head
+from gerrit_workflow_tools.core.upstream import branch_has_upstream, read_recent_upstream_abbrevs
 from gerrit_workflow_tools.core.upstream_interactive import (
-    branch_has_upstream,
     ensure_branch_upstream_interactive,
     prompt_upstream_abbrev_interactive,
-    read_recent_upstream_abbrevs,
     require_branch_upstream,
 )
 

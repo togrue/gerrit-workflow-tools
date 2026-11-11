@@ -49,7 +49,7 @@ flowchart TB
   subgraph core [Core domain — core/]
     stack[stack.py · ready_calc.py · change_id.py]
     status[annotated_stack.py · gerrit_change_status.py · attention.py · comment_chains.py]
-    config[config.py · git_state.py · upstream_interactive.py]
+    config[config.py · git_state.py · upstream.py · upstream_interactive.py]
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
     push_core[push.py · push_reviewers.py · gerrit_show.py]
@@ -159,7 +159,7 @@ flowchart LR
 
 `git_state.py` answers what the repository currently looks like — branch, HEAD, rebase state, upstream, and the Gerrit push destination. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
-`upstream_interactive.py` prompts the user when a branch lacks `@{upstream}` — used by log, push, edit, rebase, change-id, sha.
+`upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` prompts with that suggestion when a branch lacks `@{upstream}` — used by log, push, edit, rebase, change-id, sha. `ger serve` offers the same suggestion through `GET /stack/upstream`.
 
 ---
 
@@ -484,6 +484,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
+| `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |
 | `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)

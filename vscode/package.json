@@ -118,6 +118,10 @@
       { "command": "ger.replyDone", "title": "Reply Done and Resolve (Draft)", "category": "ger", "icon": "$(check)" },
       { "command": "ger.thread.reply", "title": "Save Draft Reply", "category": "ger" },
       { "command": "ger.thread.resolve", "title": "Save Draft and Resolve", "category": "ger" },
+      { "command": "ger.comment.saveDraft", "title": "Save Draft (on Gerrit, only you see it)", "category": "ger" },
+      { "command": "ger.comment.saveLocalDraft", "title": "Save Local Draft (not on Gerrit yet)", "category": "ger" },
+      { "command": "ger.comment.saveNote", "title": "Save Private Note (never uploaded)", "category": "ger" },
+      { "command": "ger.setUpstream", "title": "Set Upstream Branch…", "category": "ger", "icon": "$(git-branch)" },
       { "command": "ger.agentBrief", "title": "Hand to Agent (Comments and CI Findings)", "category": "ger", "icon": "$(hubot)" },
       { "command": "ger.agentWalk", "title": "Fix Stack with Agent…", "category": "ger", "icon": "$(hubot)" },
       { "command": "ger.hold", "title": "Keep for Me (Not for the Agent)", "category": "ger", "icon": "$(person)" },
@@ -140,7 +144,10 @@
         { "command": "ger.release", "when": "false" },
         { "command": "ger.replyDone", "when": "false" },
         { "command": "ger.thread.reply", "when": "false" },
-        { "command": "ger.thread.resolve", "when": "false" }
+        { "command": "ger.thread.resolve", "when": "false" },
+        { "command": "ger.comment.saveDraft", "when": "false" },
+        { "command": "ger.comment.saveLocalDraft", "when": "false" },
+        { "command": "ger.comment.saveNote", "when": "false" }
       ],
       "view/title": [
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
@@ -148,6 +155,7 @@
         { "command": "ger.agentWalk", "when": "view == ger.stack", "group": "navigation@0" },
         { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
         { "command": "ger.push", "when": "view == ger.stack", "group": "navigation@1" },
+        { "command": "ger.setUpstream", "when": "view == ger.stack", "group": "1_branch@1" },
         { "command": "ger.prevComment", "when": "view == ger.change", "group": "navigation@1" },
         { "command": "ger.nextComment", "when": "view == ger.change", "group": "navigation@2" },
         { "command": "ger.agentBrief", "when": "view == ger.change", "group": "navigation@3" },
@@ -174,8 +182,11 @@
         { "command": "ger.release", "when": "viewItem =~ /^ger\\.thread\\.open\\.held/", "group": "inline@3" }
       ],
       "comments/commentThread/context": [
-        { "command": "ger.thread.reply", "when": "commentController == ger", "group": "inline@1" },
-        { "command": "ger.thread.resolve", "when": "commentController == ger && commentThread == open", "group": "inline@2" }
+        { "command": "ger.thread.reply", "when": "commentController == ger && !commentThreadIsEmpty", "group": "inline@1" },
+        { "command": "ger.thread.resolve", "when": "commentController == ger && commentThread == open && !commentThreadIsEmpty", "group": "inline@2" },
+        { "command": "ger.comment.saveDraft", "when": "commentController == ger && commentThreadIsEmpty && ger.newComment == draft", "group": "inline@1" },
+        { "command": "ger.comment.saveLocalDraft", "when": "commentController == ger && commentThreadIsEmpty && ger.newComment == local-draft", "group": "inline@1" },
+        { "command": "ger.comment.saveNote", "when": "commentController == ger && commentThreadIsEmpty", "group": "inline@2" }
       ]
     },
     "keybindings": [

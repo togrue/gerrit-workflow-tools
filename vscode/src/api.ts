@@ -132,8 +132,21 @@ export interface Overview {
   sections?: Section[];
   /** Set instead of `sections` when the inbox could not be loaded. */
   error?: ApiError;
-  local: Stack | { error: ApiError };
+  /** `needs_upstream`: the stack could not be shown because the branch has no upstream. */
+  local: Stack | { error: ApiError; needs_upstream?: boolean };
 }
+
+/** The working branch's upstream, and which to offer: the best guess first. */
+export interface UpstreamChoice {
+  branch: string | null;
+  upstream: string | null;
+  suggested: string | null;
+  why: string | null;
+  candidates: string[];
+}
+
+/** What a new comment becomes: a draft on Gerrit, or kept here (a local draft or a private note). */
+export type NewCommentState = "draft" | "local-draft" | "note";
 
 export interface Comment {
   path: string;
@@ -192,6 +205,8 @@ export interface ShownCommit extends CommitStatus {
   ci_content?: CiContent[];
   /** Fingerprints of the findings this change introduced; null when that cannot be told. */
   ci_introduced?: string[] | null;
+  /** What a new comment on it becomes by default: a draft where Gerrit has this commit, else a local draft. */
+  new_comment?: "draft" | "local-draft";
 }
 
 export interface FileChange {
@@ -355,6 +370,21 @@ export class GerClient {
   /** The agent runbook for the local stack, or for one of its commits. Fetches CI logs. */
   runbook(rev?: string): Promise<Runbook> {
     return this.call("GET", "/agent/runbook", { rev });
+  }
+
+  /** Start a comment chain at `location` (`path`, `path:line`, `path:start-end`, lines from 1). */
+  newComment(rev: string, location: string, message: string, state: NewCommentState): Promise<{ state: NewCommentState; id: string | null }> {
+    return this.call("POST", "/comments/new", undefined, { rev, location, message, state });
+  }
+
+  /** The working branch's upstream and the one to suggest. */
+  upstream(): Promise<UpstreamChoice> {
+    return this.call("GET", "/stack/upstream");
+  }
+
+  /** Set the working branch's upstream (a remote-tracking branch, `origin/main`). */
+  setUpstream(upstream: string): Promise<{ branch: string; upstream: string }> {
+    return this.call("POST", "/stack/upstream", undefined, { upstream });
   }
 
   hold(rootId: string, held: boolean): Promise<{ holds: string[] }> {

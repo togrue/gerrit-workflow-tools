@@ -173,6 +173,15 @@ export function moved<T>(commits: readonly T[], index: number, step: number): T[
   return next;
 }
 
+/** A LOCATION for `ger comment`: the file, one line, or a range of lines (from 1). */
+export function commentLocation(file: string, lines?: { start: number; end: number }): string {
+  if (!lines) {
+    return file;
+  }
+  const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
+  return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
+}
+
 /**
  * `commits` (oldest first) after `dragged` is dropped on `target`: it takes the target's place,
  * whichever way it travelled, so dropping on the neighbour below swaps the two. No target (the

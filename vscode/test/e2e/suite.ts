@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { fileUri } from "../../src/changeView";
 import type { ExtensionApi } from "../../src/extension";
 
 type Provider<T> = vscode.TreeDataProvider<T>;
@@ -115,6 +116,19 @@ export async function run(): Promise<void> {
     section("Agent runbook", runbook.markdown.split("\n"));
     assert.deepEqual([runbook.totals.comments, runbook.totals.held], [1, 1]);
 
+    // New comments, as the "+" in the gutter starts them: the box's text and the thread's place.
+    const reply = (uri: vscode.Uri, line: number, text: string): vscode.CommentReply => ({
+      thread: { uri, range: new vscode.Range(line, 0, line, 0), dispose: () => undefined } as unknown as vscode.CommentThread,
+      text,
+    });
+    const states = () => api.changeView.unresolved().flatMap((chain) => chain.comments.map((c) => `${c.state}: ${c.message}`));
+    // Gerrit has this very commit: a new comment is a draft there.
+    await vscode.commands.executeCommand("ger.openChange", await find(api.stackView, "Extract command routing"));
+    assert.equal(api.changeView.shown?.new_comment, "draft");
+    const routed = api.changeView.diff?.commit ?? "";
+    await api.threads.saveNew(reply(fileUri(routed, "b.txt"), 0, "Typo here."), "draft");
+    assert.ok(states().includes("draft: Typo here."), "the draft comes back in its chain");
+
     // A rewrite gives the commits new ids; the shown change follows by Change-Id.
     const before = api.model.stack?.commits.map((c) => c.sha) ?? [];
     api.model.setStack(await client.rewrite([before[1], before[0], before[2], before[3]]));
@@ -160,6 +174,29 @@ export async function run(): Promise<void> {
     }
     section("Local stack after dropping a commit on the one below it", await dump(api.stackView));
     assert.deepEqual(shown().slice(1, 3), [below, "Cleanup after experiment"]);
+
+    // New comments where Gerrit does not have the commit as it is now.
+    // Rewritten by the drop above, so Gerrit has not got it: a local draft, and a private note.
+    await vscode.commands.executeCommand("ger.openChange", await row("Cleanup after experiment"));
+    assert.equal(api.changeView.shown?.new_comment, "local-draft");
+    const cleanup = api.changeView.diff?.commit ?? "";
+    const file = api.changeView.diff?.files[0]?.path ?? "";
+    await api.threads.saveNew(reply(fileUri(cleanup, file), 0, "Explain why."), "local-draft");
+    await api.threads.saveNew(reply(fileUri(cleanup, file), 0, "Ask Alice."), "note");
+    section("Change: new comments on a commit Gerrit does not have", await dump(api.changeView));
+    assert.ok(states().includes("local-draft: Explain why.") && states().includes("note: Ask Alice."));
+
+    // A branch without an upstream: the stack view offers the suggested one in one click.
+    execFileSync("git", ["branch", "--unset-upstream"], { cwd: repo });
+    await api.model.refresh();
+    const unset = await dump(api.stackView);
+    section("Local stack of a branch without upstream", unset);
+    assert.match(unset[0], /^feature has no upstream, so ger cannot tell where your stack starts/);
+    assert.match(unset[1], /^Track origin\/\S+ — /, "the suggestion, with why, in one click");
+    assert.match(unset[2], /^Choose another upstream branch/);
+    await vscode.commands.executeCommand("ger.setUpstream", "origin/main");
+    const tracked = await dump(api.stackView);
+    assert.ok(tracked.length >= 4 && tracked.every((line) => !line.startsWith("Track ")), "the stack is back");
   } catch (error) {
     out.push("## FAILED", error instanceof Error ? (error.stack ?? error.message) : String(error), "");
     throw error;

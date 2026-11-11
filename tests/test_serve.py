@@ -22,7 +22,7 @@ from gerrit_workflow_tools.core import reorder, reorder_preview
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
@@ -590,3 +590,70 @@ def test_serve_prints_where_it_listens_and_stops_with_stdin(stack_repo: Path, mo
     hello = json.loads(out.splitlines()[0])
     assert hello["url"].startswith("http://127.0.0.1:") and hello["api"] == V1
     assert len(hello["token"]) >= 32 and Path(hello["repo"]) == stack_repo
+
+
+# --- Upstream and new comments -----------------------------------------------------
+
+
+def test_a_branch_without_upstream_says_so_and_gets_one_suggested(stack_repo: Path) -> None:
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    git("branch", "--unset-upstream", cwd=stack_repo)
+    local = _get(api, "/overview")["local"]
+    assert "error" in local and local["needs_upstream"] is True
+    choice = _get(api, "/stack/upstream")
+    assert (choice["branch"], choice["upstream"]) == ("feature", None)
+    # The template fetched its own branches: origin/feature is where feature is.
+    assert (choice["suggested"], choice["why"]) == ("origin/feature", "nearest: 0 ahead, 0 behind")
+    assert choice["candidates"][0] == "origin/feature" and "origin/main" in choice["candidates"]
+
+    assert _post(api, "/stack/upstream", {"upstream": "origin/main"}) == {
+        "branch": "feature",
+        "upstream": "origin/main",
+    }
+    local = _get(api, "/overview")["local"]
+    assert "error" not in local and len(local["commits"]) == 4
+    assert _get(api, "/stack/upstream")["upstream"] == "origin/main"
+    with pytest.raises(UnknownRevisionError, match="not a remote-tracking branch"):
+        _post(api, "/stack/upstream", {"upstream": "origin/nowhere"})
+
+
+def test_the_branch_a_branch_was_created_from_beats_the_nearest(stack_repo: Path) -> None:
+    api = GerApi(stack_repo, gerrit=_gerrit(stack_repo)[0])
+    git("checkout", "-q", "--no-track", "-b", "topic", "origin/main", cwd=stack_repo)
+    git("reset", "-q", "--hard", "feature", cwd=stack_repo)
+    choice = _get(api, "/stack/upstream")
+    assert (choice["branch"], choice["upstream"]) == ("topic", None)
+    assert (choice["suggested"], choice["why"]) == ("origin/main", "the branch was created from it")
+
+
+def test_new_comments_go_to_gerrit_as_drafts_or_stay_here_as_notes(stack_repo: Path) -> None:
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    draft = _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:1", "message": "Why?"})
+    assert _get(api, "/show", rev="HEAD")["commits"][0]["new_comment"] == "draft"
+    assert (draft["state"], draft["path"], draft["line"], draft["unresolved"]) == ("draft", "d.txt", 1, True)
+    [call] = store.calls_to("put_draft")
+    assert call.args[2]["message"] == "Why?" and call.args[2]["line"] == 1
+
+    note = _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt", "message": "mine", "state": "note"})
+    assert (note["state"], note["patch_set"], note["url"]) == ("note", None, None)
+    assert len(store.calls_to("put_draft")) == 1, "a note never reaches Gerrit"
+    [commit] = _get(api, "/show", rev="HEAD", comments="all")["commits"]
+    states = sorted(c["state"] for chain in commit["comment_chains"] for c in chain["comments"])
+    assert states == ["draft", "note"]
+
+
+def test_a_commit_gerrit_does_not_have_gets_a_local_draft(stack_repo: Path) -> None:
+    store, _keys, _rows = _gerrit(stack_repo)
+    (stack_repo / "d.txt").write_text("reworked\n", encoding="utf-8")
+    git("commit", "-qam", "Rework d.txt\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    assert _get(api, "/show", rev="HEAD")["commits"][0]["new_comment"] == "local-draft"
+    local = _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:1", "message": "later", "resolved": True})
+    assert (local["state"], local["unresolved"], local["patch_set"]) == ("local-draft", False, None)
+    assert store.calls_to("put_draft") == []
+    with pytest.raises(BadRequest, match=r"past the end|line"):
+        _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:99", "message": "x"})
+    with pytest.raises(BadRequest, match="state must be one of"):
+        _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:1", "message": "x", "state": "published"})

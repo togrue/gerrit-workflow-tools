@@ -3,16 +3,19 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import pytest
+
+from gerrit_workflow_tools.core import upstream
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
     head_is_linear_on_remote_gerrit_target,
-    infer_nearest_remote_tracking_branch,
     rebase_in_progress_branch,
     resolve_rebase_onto_remote_ref,
     resolve_working_branch,
 )
+from gerrit_workflow_tools.core.upstream import infer_nearest_remote_tracking_branch
 from tests.helpers import write_rebase_head
 
 
@@ -161,3 +164,28 @@ def test_infer_nearest_remote_tracking_branch_without_remotes(tmp_path: Path) ->
     git("add", "f", cwd=repo)
     git("commit", "-m", "init", cwd=repo)
     assert infer_nearest_remote_tracking_branch(repo, settings=Settings.from_cwd(repo)) is None
+
+
+def test_nearest_remote_branch_is_the_same_on_a_git_without_ahead_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "r3"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    (repo / "f").write_text("1\n", encoding="utf-8")
+    git("add", "f", cwd=repo)
+    git("commit", "-m", "init", cwd=repo)
+    git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=repo)
+    (repo / "f").write_text("2\n", encoding="utf-8")
+    git("commit", "-am", "two", cwd=repo)
+    git("update-ref", "refs/remotes/origin/release", "HEAD", cwd=repo)
+    git("checkout", "-q", "-b", "feature", "main", cwd=repo)
+    git("reset", "-q", "--hard", "HEAD~1", cwd=repo)
+    (repo / "g").write_text("x\n", encoding="utf-8")
+    git("add", "g", cwd=repo)
+    git("commit", "-m", "feat", cwd=repo)
+    settings = Settings.from_cwd(repo)
+    batched = infer_nearest_remote_tracking_branch(repo, settings=settings)
+    assert batched == ("origin/main", 1, 1, 0)
+    monkeypatch.setattr(upstream, "_divergence_at_once", lambda *_args: None)
+    assert infer_nearest_remote_tracking_branch(repo, settings=settings) == batched

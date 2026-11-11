@@ -102,7 +102,8 @@ Everything the first screen needs, in one call.
 - `generated`, `host`.
 
 The inbox and the local stack fail separately. Either may be `{"error": {…}}` while the other
-is shown: a branch without an upstream still shows your inbox.
+is shown: a branch without an upstream still shows your inbox. A failed `local` carries
+`needs_upstream`: `true` when the branch has no upstream, which `POST /stack/upstream` fixes.
 
 *Activity* is the client's to track: every chain carries `last_activity`, and a client that
 remembers what it showed last knows which chains moved.
@@ -130,6 +131,18 @@ Cost: a fixed handful of git calls, whatever the stack's length — every pair's
 one batched `git merge-tree --stdin`. A git whose `merge-tree` cannot take that batch gets
 the same answer from one `merge-tree` per pick, which grows with the stack.
 
+### `GET /stack/upstream`
+
+The working branch's upstream, and what to offer when it has none — `ger` cannot show a
+local stack without one. `branch` (`null` on a detached HEAD), `upstream` (now, or `null`),
+`suggested` and `why`, and `candidates`: the suggestion first, then upstreams you picked
+before, then every remote-tracking branch, at most 200.
+
+The suggestion is the branch of the Gerrit remote the branch was created from, as its reflog
+tells (`git checkout -b topic origin/main`); else the remote branch nearest to it, by commits
+ahead plus behind. Two git calls: all remote branches are measured by one `for-each-ref`
+(git 2.41; older git measures them one by one).
+
 ### `GET /chains/<number>`
 
 The **review chain** an open change sits in, base to top, in the `ger inbox --json` chain shape.
@@ -138,6 +151,10 @@ The **review chain** an open change sits in, base to top, in the `ger inbox --js
 
 `ger show --json` for one or more targets: overlay state, `comment_chains`, and with `ci=1` the
 `ci_content` of each failed **CI link**.
+
+Each commit also says what a new comment on it becomes by default, in `new_comment`: `draft`
+when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else
+`local-draft` — never pushed, or rewritten here since. A `note` is always possible.
 
 | Parameter | Meaning |
 |-----------|---------|
@@ -211,9 +228,11 @@ The **review state**, as `ger review --status --json`, under `review`; `null` wh
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
+| `/comments/new` | `rev`, `location`, `message`, optional `state`, `resolved` | `ger comment`: start a chain. `location` is `PATH`, `PATH:LINE`, `PATH:START-END` or `PATH:L.C-L.C`, lines from 1. `state`: `draft` (on Gerrit), `local-draft` or `note` (both only here); the default is a draft where Gerrit has the change, else a local draft. Answers `ger comment --json`. |
 | `/comments/hold` | `root_id`, `held` | Put a comment chain on **hold**, or release it. Local: nothing goes to Gerrit. |
 | `/stack/rewrite` | `steps`, oldest first | Reorder, fold or drop commits of the local stack. Answers the new `/stack` plus `previous_head`. |
 | `/stack/undo` | `head`, `previous_head` | Take that rewrite back. |
+| `/stack/upstream` | `upstream` (a remote-tracking branch, `origin/main`) | Set it as the working branch's upstream, and remember it for next time. Answers `branch` and `upstream`. |
 
 ### Rewriting the stack is all or nothing
 
