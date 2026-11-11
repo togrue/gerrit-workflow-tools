@@ -128,3 +128,25 @@ def test_push_hotfix_branch_is_isolated(
 
     n_topic = len(open_changes_on_branch(gerrit_admin_session, proj, topic))
     assert n_topic == 1
+
+
+def test_push_ready_reaches_changes_gerrit_already_has(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--wip`` then ``--ready`` with nothing new: the way back from WIP goes over REST."""
+    topic = f"rdy_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(gerrit_integration_context, tmp_path, topic)
+    build_linear_chain(repo, ["feat: first commit", "feat: second commit"])
+    code, _out, err = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check", "--wip"], monkeypatch)
+    assert code == 0, err
+    proj = gerrit_integration_context.project_verified
+    assert all(row.get("work_in_progress") for row in open_changes_on_branch(gerrit_admin_session, proj, topic))
+
+    code, out, err = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check", "--ready"], monkeypatch)
+
+    assert code == 0, err
+    assert "nothing to push" in out and out.count("  ready") >= 2
+    assert not any(row.get("work_in_progress") for row in open_changes_on_branch(gerrit_admin_session, proj, topic))

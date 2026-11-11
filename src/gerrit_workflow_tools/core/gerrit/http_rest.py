@@ -303,16 +303,21 @@ class HttpGerritRest:
         self._request_json(_change_path(change_id, "/topic"), method="PUT", json_body={"topic": topic or ""})
 
     def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
-        """Mark *change_id* work-in-progress when *on*, otherwise ready for review."""
+        """Mark *change_id* work-in-progress when *on*, otherwise ready for review.
+
+        Gerrit answers ``200 OK`` with a bare JSON string or no body, not an object.
+        """
         path = _change_path(change_id, "/wip" if on else "/ready")
-        return self._request_dict("set WIP", path, method="POST", json_body={})
+        answer = self._request_json(path, method="POST", json_body={})
+        return answer if isinstance(answer, dict) else {}
 
     def set_private(self, change_id: str, on: bool) -> dict[str, Any]:
-        """Mark *change_id* private when *on*, otherwise remove the private flag."""
+        """Mark *change_id* private when *on*, otherwise remove the private flag (answers as for WIP)."""
         path = _change_path(change_id, "/private")
-        if on:
-            return self._request_dict("set private", path, method="POST", json_body={})
-        return self._request_dict("set private", path, method="DELETE")
+        answer = (
+            self._request_json(path, method="POST", json_body={}) if on else self._request_json(path, method="DELETE")
+        )
+        return answer if isinstance(answer, dict) else {}
 
     def get_comments(
         self,

@@ -119,14 +119,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
             "overwrite (REST: replace reviewers on each change; CC stays). Requires credentials for lazy/overwrite. "
-            "Topic/WIP/private always use magic ref options (see --topic / --wip / --private)."
+            "Changes Gerrit already has at that commit get topic/WIP/ready/private/reviewers over REST."
         ),
     )
     parser.add_argument(
         "--topic",
         metavar="NAME",
         default=None,
-        help="Gerrit change topic (magic ref %%topic=…; sent on push for every reviewer strategy).",
+        help="Gerrit change topic (magic ref %%topic=…; REST where Gerrit already has the commit).",
     )
     state = parser.add_mutually_exclusive_group()
     for group, flag, what in (
@@ -134,7 +134,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         (state, "--ready", "ready for review, the way back from --wip (magic ref %%ready"),
         (parser, "--private", "private (magic ref %%private"),
     ):
-        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; sent with every strategy).")
+        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
     add_verbose_and_debug_log_args(
         parser,
         debug_log_help="Log git commands and push steps to stderr.",

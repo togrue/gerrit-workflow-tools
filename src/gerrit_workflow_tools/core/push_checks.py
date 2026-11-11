@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 )
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
+from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.stack import Commit
 
@@ -80,8 +81,8 @@ class ExistingChanges(NamedTuple):
     """What Gerrit already holds for the commits about to be pushed."""
 
     warnings: tuple[str, ...] = ()
-    unchanged: tuple[str, ...] = ()
-    """Short SHAs that already are their change's current patchset."""
+    unchanged: tuple[UnchangedChange, ...] = ()
+    """Commits that already are their change's current patchset, with that change's state."""
     drafts: tuple[tuple[str, int], ...] = ()
     """``(short SHA, count)`` of your unpublished drafts, for commits whose change has any."""
     gerrit_unavailable: bool = False
@@ -113,7 +114,7 @@ def check_existing_changes(
     except (ValueError, GerritApiError, ChangeResolutionError):
         return ExistingChanges()
     warnings: list[str] = []
-    unchanged: list[str] = []
+    unchanged: list[UnchangedChange] = []
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
     for commit in commits:
@@ -124,7 +125,7 @@ def check_existing_changes(
                 "restore it on Gerrit or drop the commit"
             )
         elif view is not None and view.current_revision == commit.sha.lower():
-            unchanged.append(commit.short_sha)
+            unchanged.append(UnchangedChange.of(commit, triplets[commit.sha], view))
     return ExistingChanges(tuple(warnings), tuple(unchanged), drafts)
 
 

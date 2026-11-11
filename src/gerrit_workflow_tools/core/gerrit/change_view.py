@@ -214,6 +214,7 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     freshness: str | None = None
     work_in_progress: bool = False
     private: bool = False
+    topic: str | None = None
 
     def contradicts(self, parsed: Changeish) -> str | None:
         """Why this change is not the one *parsed* addressed, or ``None`` when it is."""
@@ -267,6 +268,7 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             freshness=change_freshness_key(payload),
             work_in_progress=payload.get("work_in_progress") is True,
             private=payload.get("is_private") is True,
+            topic=_str(payload.get("topic")) or None,
         )
 
     @property

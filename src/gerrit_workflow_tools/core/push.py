@@ -33,6 +33,13 @@ from gerrit_workflow_tools.core.push_reviewers import (
     needs_rest_assignment,
     push_marks,
 )
+from gerrit_workflow_tools.core.push_unchanged import (
+    StateUpdate,
+    StateUpdateFailure,
+    UnchangedChange,
+    apply_updates,
+    planned_updates,
+)
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
@@ -61,8 +68,8 @@ class PushPlan:
     credential_error: str | None
     warnings: tuple[str, ...]
     update_last_pushed: bool
-    unchanged: tuple[str, ...] = ()
-    """Short SHAs Gerrit already has as current patchsets: push options do not reach them."""
+    unchanged: tuple[UnchangedChange, ...] = ()
+    """Commits Gerrit already has as current patchsets: push options reach them over REST."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
 
@@ -82,6 +89,9 @@ class PushResult:
     error_message: str | None = None
     reviewers: ReviewerApplyResult | None = None
     warning: str | None = None
+    updated: tuple[StateUpdate, ...] = ()
+    """What was set over REST on changes Gerrit already had at that commit."""
+    update_failures: tuple[StateUpdateFailure, ...] = ()
 
 
 def push_argv(plan: PushPlan) -> list[str]:
@@ -110,11 +120,21 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
     )
 
 
+def unchanged_short_shas(plan: PushPlan) -> set[str]:
+    return {change.commit.short_sha for change in plan.unchanged}
+
+
+def state_updates(plan: PushPlan) -> tuple[StateUpdate, ...]:
+    """What *plan* sets over REST on the changes Gerrit already has at that commit."""
+    return planned_updates(plan.options, plan.unchanged)
+
+
 def publishable_drafts(plan: PushPlan) -> int:
     """Drafts this push would publish if asked: on changes it updates, while the guard allows it."""
     if publish_blocked():
         return 0
-    return sum(count for sha, count in plan.drafts.items() if sha not in plan.unchanged)
+    unchanged = unchanged_short_shas(plan)
+    return sum(count for sha, count in plan.drafts.items() if sha not in unchanged)
 
 
 def publish_drafts_with(plan: PushPlan, publish: bool) -> PushPlan:
@@ -243,25 +263,33 @@ def execute(
         captured = PushResult(returncode=0, stdout="nothing to push: Gerrit already has these commits")
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
-    note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), _skipped_options_warning(plan)))) or None
-    failed = bool(error) or (reviewers is not None and not reviewers.ok)
-    return replace(captured, returncode=int(failed), error_message=error, reviewers=reviewers, warning=note)
+    updates = state_updates(plan)
+    failures = apply_updates(GerritService.from_cwd(cwd, settings=settings, rest=gerrit), updates) if updates else []
+    failed_updates = {failure.update for failure in failures}
+    note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), _unreached_options_warning(plan, rejected))))
+    failed = bool(error) or bool(failures) or (reviewers is not None and not reviewers.ok)
+    return replace(
+        captured,
+        returncode=int(failed),
+        error_message=error,
+        reviewers=reviewers,
+        warning=note or None,
+        updated=tuple(update for update in updates if update not in failed_updates),
+        update_failures=tuple(failures),
+    )
 
 
-def _skipped_options_warning(plan: PushPlan) -> str | None:
-    """Gerrit applies push options only to new patchsets, so say which commits missed them."""
+def _unreached_options_warning(plan: PushPlan, rejected: bool) -> str | None:
+    """Gerrit took no new patch set and ger could not read the changes, so options set nothing."""
     options = plan.options
-    sent = {
-        "topic": options.topic,
-        "WIP": options.wip,
-        "ready": options.ready,
-        "private": options.private,
-        "reviewers": options.reviewers and options.strategy == ReviewerStrategy.PUSH,
-    }
-    names = [name for name, on in sent.items() if on]
-    if not plan.unchanged or not names:
+    pushed_reviewers = bool(options.reviewers) and options.strategy == ReviewerStrategy.PUSH
+    asked = bool(options.topic) or options.wip or options.ready or options.private or pushed_reviewers
+    if not rejected or plan.unchanged or not asked:
         return None
-    return f"warning: {', '.join(names)} not applied to unchanged commits: {', '.join(plan.unchanged)}"
+    return (
+        "warning: push options not applied: Gerrit already has these commits, and without Gerrit's "
+        "view of the changes ger cannot set them over REST (check gerrit.user and gerrit.token)"
+    )
 
 
 def _forget_pushed_changes(cwd: Path, plan: PushPlan, *, settings: Settings, gerrit: GerritRest | None) -> None:

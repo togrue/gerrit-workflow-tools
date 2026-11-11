@@ -502,16 +502,79 @@ def test_gpush_names_a_fixup_commit_as_the_boundary(stack_repo: Path, monkeypatc
     assert "no Change-Id" not in out
 
 
-def test_gpush_says_which_commits_missed_the_push_options(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = commits_in_range(stack_repo, "main..feature")[:2]
-    details = build_details_by_change_id(rows[:1])
-    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+def _rejected_as_unchanged(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    rejected = "! [remote rejected] tip -> refs/for/main (no new changes)\n"
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=rejected))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    return mock_run
 
-    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--topic", "t"], monkeypatch, gerrit=ChangeStore(details))
+
+def test_gpush_ready_reaches_changes_gerrit_already_has_and_log_agrees(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger log`` advertises ``ger push --ready`` for WIP changes; it must work when nothing is new."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"work_in_progress": True}] * 2))
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
+    assert "ready them with `ger push --ready`" in out
+    _rejected_as_unchanged(monkeypatch)
+
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y", "--ready", rows[1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert "nothing to push" in out
+    assert [call.args[1] for call in store.calls_to("set_wip")] == [False, False]
+    assert all(f"set {row.short_sha}" in out and "ready" in out for row in rows)
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
+    assert "WIP" not in out.split("summary:")[-1]
+
+
+def test_gpush_preview_names_what_it_sets_over_rest(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows[:1]))
+
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--wip", "--topic", "t"], monkeypatch, gerrit=store)
 
     assert code == 0
-    assert f"warning: topic not applied to unchanged commits: {rows[0].short_sha}" in err
+    assert "set over REST" in out
+    assert f"{rows[0].short_sha}  # {rows[0].subject}  wip,topic=t" in out
+    assert rows[1].short_sha not in out.split("set over REST")[1].split("Branch")[0]
+    assert not store.calls_to("set_wip") and not store.calls_to("set_topic")
+
+
+def test_gpush_sets_only_what_differs_and_nothing_without_options(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{}, {"work_in_progress": True}]))
+    _rejected_as_unchanged(monkeypatch)
+
+    code, _out, _err = run_cli(stack_repo, gpush_main, ["-y", rows[1].sha], monkeypatch, gerrit=store)
+    assert code == 0
+    writes = ("set_wip", "set_topic", "set_private", "set_reviewers_batch")
+    assert not any(store.calls_to(name) for name in writes)
+
+    code, out, _err = run_cli(stack_repo, gpush_main, ["-y", "--wip", rows[1].sha], monkeypatch, gerrit=store)
+    assert code == 0
+    assert len(store.calls_to("set_wip")) == 1 and f"set {rows[0].short_sha}" in out
+
+
+def test_gpush_a_failed_rest_update_is_a_warning_and_exit_1(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _RejectsTopic(ChangeStore):
+        def set_topic(self, change_id: str, topic: str | None) -> None:
+            raise GerritApiError("Gerrit HTTP 403")
+
+    rows = commits_in_range(stack_repo, "main..feature")[:1]
+    _rejected_as_unchanged(monkeypatch)
+    code, _out, err = run_cli(
+        stack_repo,
+        gpush_main,
+        ["-y", "--topic", "t", rows[0].sha],
+        monkeypatch,
+        gerrit=_RejectsTopic(build_details_by_change_id(rows)),
+    )
+    assert code == 1
+    assert f"warning: could not set {rows[0].short_sha}" in err and "Gerrit HTTP 403" in err
 
 
 def test_gpush_refuses_a_comma_in_the_topic(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

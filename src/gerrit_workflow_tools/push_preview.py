@@ -23,9 +23,18 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
-from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, PushResult, push_argv, revise
+from gerrit_workflow_tools.core.push import (
+    PushBoundary,
+    PushPlan,
+    PushResult,
+    push_argv,
+    revise,
+    state_updates,
+    unchanged_short_shas,
+)
 from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
+from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
@@ -118,7 +127,18 @@ def print_gpush_preview(plan: PushPlan, commit_lines: list[str], *, summary_high
     print(color_text("About to push commits:", f"{ANSI_BOLD}{ANSI_CYAN}"))
     for line in commit_lines:
         print(line)
+    updates = state_updates(plan)
+    if updates:
+        print(color_text("Gerrit already has these at that commit; set over REST instead:", ANSI_DIM))
+        for update in updates:
+            print(f"    {_update_line(update, summary_highlighter)}")
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
+
+
+def _update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | None = None) -> str:
+    commit = update.change.commit
+    subject = summary_highlighter.highlight(commit.subject, sha=commit.sha) if summary_highlighter else commit.subject
+    return f"{color_short_sha(commit.short_sha.ljust(8))}{color_text(' # ', ANSI_DIM)}{subject}  {update.describe()}"
 
 
 def print_plan_status(plan: PushPlan) -> None:
@@ -139,7 +159,8 @@ def print_plan_status(plan: PushPlan) -> None:
     ]
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
-    stuck = [sha for sha in plan.drafts if sha in plan.unchanged]
+    unchanged = unchanged_short_shas(plan)
+    stuck = [sha for sha in plan.drafts if sha in unchanged]
     updated = sum(count for sha, count in plan.drafts.items() if sha not in stuck)
     if updated:
         decision = "publish" if options.publish_comments else "keep"
@@ -235,6 +256,10 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
             print(f"{issue.level}: {issue.message}", file=sys.stderr)
         if result.reviewers.outcomes:
             print_assignment_report(plan, result.reviewers.outcomes)
+    for update in result.updated:
+        print(f"set {_update_line(update)}")
+    for failure in result.update_failures:
+        print(f"warning: could not set {_update_line(failure.update)}: {failure.error}", file=sys.stderr)
     if result.warning:
         print(result.warning, file=sys.stderr)
 
