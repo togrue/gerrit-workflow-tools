@@ -6,6 +6,7 @@ import { StackCommit, StackStep } from "./api";
 import { blockedMove, commitDescription, droppedOn, moved, reasonWords, sentence, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
+import { commitRowContext } from "./rows";
 import { ui } from "./ui";
 
 const MIME = "application/vnd.code.tree.ger.stack";
@@ -47,7 +48,8 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
       if (local.needs_upstream) {
         const branch = this.model.upstreamChoice?.branch ?? "This branch";
         const why = `${branch} has no upstream, so ger cannot tell where your stack starts`;
-        return [{ kind: "info", text: why, tooltip: local.error.message, icon: warning }, ...this.upstreamRows()];
+        const tip = `${local.error.message}\n\n\`ger checkout\` (Check Out to Work On) sets the upstream when it creates the branch.`;
+        return [{ kind: "info", text: why, tooltip: tip, icon: warning }, ...this.upstreamRows()];
       }
       return [{ kind: "info", text: local.error.message.split("\n")[0], tooltip: local.error.message, icon: warning }];
     }
@@ -115,9 +117,12 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
         .filter(Boolean)
         .join("\n\n"),
     );
-    // `.upx` / `.downx`: the neighbour is there, but the two would conflict in each other's place.
-    const flags = [commit.gerrit_url ? ".url" : "", above ? (upConflict ? ".upx" : ".up") : "", below ? (downConflict ? ".downx" : ".down") : ""];
-    item.contextValue = `ger.commit${flags.join("")}`;
+    // `upx` / `downx`: the neighbour is there, but the two would conflict in each other's place.
+    item.contextValue = commitRowContext({
+      url: Boolean(commit.gerrit_url),
+      up: above ? (upConflict ? "upx" : "up") : undefined,
+      down: below ? (downConflict ? "downx" : "down") : undefined,
+    });
     item.command = { command: "ger.openChange", title: "Show Change", arguments: [commitTarget(commit)] };
     return item;
   }

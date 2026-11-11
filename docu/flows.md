@@ -28,7 +28,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Step | CLI | Extension | Tests | Status |
 |------|-----|-----------|-------|--------|
 | Open the chain | `ger inbox`, `ger show CHANGEISH` | click a chain, *Show Change* | `tests/test_inbox.py`, `tests/test_show.py` | ships |
-| Check out one commit, in the review worktree | `ger review CHANGEISH` | *Check Out for Review* | `tests/test_review.py` | ships |
+| Check out one commit, in the review worktree | `ger review CHANGEISH` | *Review in Worktree* | `tests/test_review.py` | ships |
 | Walk up and down the chain | `ger review --next`, `ger review --prev` | click another chain member | `tests/test_review.py`, `tests/test_review_chain.py` | ships |
 | Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff* | `tests/test_review.py` | ships |
 | What changed since the patchset you reviewed | — | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_serve.py` | **gap** in the CLI |
@@ -44,6 +44,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Step | CLI | Extension | Tests | Status |
 |------|-----|-----------|-------|--------|
 | Find the commits that need attention | `ger log`, `ger show --first-attention` | *Local stack* view, *Open the Most Important Change* | `tests/test_log.py`, `tests/test_attention_agreement.py` | ships |
+| Work on a change that exists only on Gerrit | `ger checkout CHANGEISH` (a `change-<n>` branch tracking the target branch) | *Check Out to Work On* | `tests/test_checkout.py` | ships |
 | Edit a commit: stop a rebase at it | `ger edit REV`, `ger edit --first-attention-commit`, `ger edit -n` | *Edit Commit Here* | `tests/test_edit.py`, `tests/test_edit_attention.py` | ships |
 | See the CI failures of this commit | `ger ci REV`, `ger show --ci REV` | *CI* group in the *Change* view | `tests/test_ci.py` | ships |
 | Diff the local commit against the patchset CI checked | — | — | — | **gap** |
@@ -83,7 +84,8 @@ A **gap** names the work that would close it.
 | `ger.markSeen` | **gap** | inbox watermark |
 | `ger.openChange` | `ger show CHANGEISH` | |
 | `ger.openInGerrit` | `ger show CHANGEISH` | prints the Gerrit URL |
-| `ger.checkout` | `ger review CHANGEISH` | |
+| `ger.review` | `ger review CHANGEISH` | |
+| `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
 | `ger.push` | `ger push` | |

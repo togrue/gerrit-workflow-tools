@@ -8,6 +8,7 @@ import { CiContent, CiFinding, Comment, CommentChain, Diff, FileChange, ShownCom
 import { commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
+import { threadRowContext } from "./rows";
 import { ui } from "./ui";
 
 export const FILE_SCHEME = "ger-file";
@@ -90,7 +91,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     const generation = ++this.generation;
     this.target = target;
     this.ci = undefined;
-    // The title bar offers "Edit Commit" for your own stack commit, "Check Out for Review" otherwise.
+    // The title bar offers "Edit Commit" for your own stack commit, "Review in Worktree" and "Check Out to Work On" otherwise.
     void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
     const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
@@ -419,7 +420,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       chain.comments.map((c) => `**${c.author ?? "you"}** ${c.state === "published" ? "" : `_(${c.state})_`}\n\n${c.message}`).join("\n\n---\n\n"),
     );
     // Your own unpublished chain: nobody to reply to, nothing for the agent to keep from.
-    item.contextValue = mine ? "ger.mine" : chain.resolved ? "ger.thread.resolved" : `ger.thread.open${chain.held ? ".held" : ".free"}`;
+    item.contextValue = threadRowContext({ mine: Boolean(mine), resolved: chain.resolved, held: Boolean(chain.held) });
     const location: Location = { path: chain.path, line: chain.line };
     item.command = { command: "ger.openLocation", title: "Go to Comment", arguments: [location] };
     return item;

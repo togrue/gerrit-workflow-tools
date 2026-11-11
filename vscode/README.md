@@ -32,8 +32,8 @@ with a count appears when chains had activity since you last looked. Click to op
   exactly one Change-Id) and **drop**, from a commit's context menu. Every rewrite offers
   **Undo** right after.
 - Push (`ger push` in a new terminal of its own, where it can ask you).
-- **No upstream** (typical after checking a change out from Gerrit's download commands): the
-  view says so and offers **Track origin/…** in one click — the branch it was created from, else
+- **No upstream** (typical after checking a change out with Gerrit's download commands; `ger
+  checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
   the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
   *Set Upstream Branch…* in the view's `…` menu.
 
@@ -59,14 +59,23 @@ with a count appears when chains had activity since you last looked. Click to op
 - **CI**: opened on demand (it downloads build logs). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
-- **Check Out for Review** (pull-request icon, changes on Gerrit): `ger review` fetches the
-  change into the review worktree (or a `change-<n>` branch here, when the git config key
-  `ger.reviewCheckout` says `branch`) and offers to open that worktree in a new window. Your
-  own stack is not touched.
-- **Edit Commit Here** (pencil icon, your local stack commits): `ger edit` runs in this checkout,
-  in a new terminal: an interactive rebase that stops at the commit, so you amend it in place and
-  `git rebase --continue`. No worktree, nothing fetched.
-- **Hand to agent**: for one commit, the same runbook as below, narrowed to it.
+- **Review in Worktree** (pull-request icon, changes that are not in your stack): `ger review`
+  fetches the change into the review worktree (or a `change-<n>` branch here, when the git config
+  key `ger.reviewCheckout` says `branch`) and offers to open that worktree in a new window. Your
+  own stack is not touched. For reading someone's work.
+- **Check Out to Work On** (download icon, changes that are not in your stack): `ger checkout` in
+  a new terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
+  the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it
+  changes anything (update a branch you already have to the newest patchset?), which is why it runs
+  in a terminal. The views catch up at the next refresh: press *Refresh from Gerrit* when it is done.
+  For changing a change of yours that exists only on Gerrit, or taking over a colleague's.
+- **Edit Commit Here** (pencil icon, your local stack commits, also where they appear in *Review
+  chains*): `ger edit` runs in this checkout, in a new terminal: an interactive rebase that stops
+  at the commit, so you amend it in place and `git rebase --continue`. No worktree, nothing fetched.
+- **Hand to Agent**: for one commit, the same runbook as below, narrowed to it. For a change that
+  is not in your checkout it is a brief (the change's comments and CI findings) the agent can read
+  but not act on, since the change is not checked out; the dialog says so and offers *Check Out to
+  Work On* instead.
 
 **Fix Stack with Agent** (robot icon on *Local stack*)
 
@@ -177,7 +186,7 @@ printed.
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
 | `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
-| `src/review.ts` | Check Out for Review, Leave Review Checkout, Edit Commit Here. |
+| `src/review.ts` | Review in Worktree, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |
 | `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal. |

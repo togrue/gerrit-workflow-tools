@@ -7,6 +7,7 @@ import { Chain, Headline, Member, Section } from "./api";
 import { chainDescription, plural, reasonWords, severity, votes } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model } from "./model";
+import { changeRowContext } from "./rows";
 
 type Node =
   | { kind: "headline"; headline: Headline }
@@ -19,6 +20,11 @@ const SECTION_TITLES: Record<string, string> = { "to-review": "To review", outgo
 
 function memberRev(member: Member): string {
   return member.local_sha ?? `change:${member.number}`;
+}
+
+/** The change a chain row stands for: its top one. */
+function chainTop(chain: Chain): Member | undefined {
+  return chain.members.find((m) => m.number === chain.top.number) ?? chain.members.at(-1);
 }
 
 export function memberTarget(member: Member, chain: Chain): ChangeTarget {
@@ -156,7 +162,8 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       lines.push("Part of this chain sits on an older patchset of its parent.");
     }
     item.tooltip = new vscode.MarkdownString(lines.join("\n\n"));
-    item.contextValue = `${single ? "ger.change" : "ger.chain"}${chain.top.url ? ".url" : ""}`;
+    const top = chainTop(chain);
+    item.contextValue = changeRowContext({ kind: single ? "change" : "chain", url: Boolean(chain.top.url), local: Boolean(top?.local_sha) });
     return item;
   }
 
@@ -166,7 +173,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     item.description = `${member.number} · ${votes(member)}${member.local_sha ? " · local" : ""}`;
     item.iconPath = severityIcon(severity(member.attention_reasons));
     item.tooltip = reasonWords(member.attention_reasons) || "no open issues";
-    item.contextValue = `ger.change${member.url ? ".url" : ""}`;
+    item.contextValue = changeRowContext({ kind: "change", url: Boolean(member.url), local: member.local_sha !== null });
     item.command = { command: "ger.openChange", title: "Show Change", arguments: [memberTarget(member, chain)] };
     return item;
   }
@@ -177,7 +184,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       return memberTarget(node.member, node.chain);
     }
     if (node?.kind === "chain") {
-      const top = node.chain.members.find((m) => m.number === node.chain.top.number) ?? node.chain.members.at(-1);
+      const top = chainTop(node.chain);
       return top ? memberTarget(top, node.chain) : undefined;
     }
     return undefined;

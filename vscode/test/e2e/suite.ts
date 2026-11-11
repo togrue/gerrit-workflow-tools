@@ -216,14 +216,31 @@ export async function run(): Promise<void> {
     await press("Inline Open in Gerrit on change 900", "The browser opens change 900 on Gerrit.", exec("ger.openInGerrit", theirs));
     await press(
       "Right-click change 900 › Hand to Agent",
-      "As for your own commits: the comments and CI findings of 900 open as a preview, and a dialog offers to copy them (no agent command is set).",
+      "The comments and CI findings of 900 open as a preview, and a dialog offers to copy them (no agent command is set). It says truthfully that 900 is not checked out, so the agent can only read the brief; it does not promise amended commits.",
       exec("ger.agentBrief", theirs),
       [{ button: "Copy to Clipboard" }],
     );
     await press(
-      "Inline Check Out for Review on change 900",
-      "Progress while it fetches; then where change 900 is checked out, with a button to open that worktree in a new window.",
+      "Right-click change 900 › Hand to Agent › Check Out to Work On",
+      "The same dialog offers to check 900 out to work on instead; pressing it starts ger checkout in a terminal, as the agent could not change a change that is not checked out.",
+      exec("ger.agentBrief", theirs),
+      [{ button: "Check Out to Work On" }],
+    );
+    await press(
+      "Inline Check Out to Work On on change 900",
+      "ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. Nothing else changes until you refresh.",
       exec("ger.checkout", theirs),
+    );
+    const mine = api.overviewView.getChildren(await chainRow("Cleanup after experiment"))[0]; // 103, the newest of the chain
+    await press(
+      "Inline Edit Commit Here on change 103, a local commit in Review chains",
+      "Your own commit is edited where it is: ger edit runs in the terminal, and the status bar says what to do once it stops (not a review checkout, not a notification).",
+      exec("ger.stack.edit", mine),
+    );
+    await press(
+      "Inline Review in Worktree on change 900",
+      "Progress while it fetches; then where change 900 is checked out, with a button to open that worktree in a new window.",
+      exec("ger.review", theirs),
       [{ button: "Open Review Worktree" }],
     );
     await press("Change › … › Leave Review Checkout", "The review checkout of 900 is closed, and a notification says so.", exec("ger.reviewDone"));

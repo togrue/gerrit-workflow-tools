@@ -15,7 +15,7 @@ import { gerProgram, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
-import { checkout, editCommit, leaveReview } from "./review";
+import { checkout, editCommit, leaveReview, review } from "./review";
 import { GerProcess } from "./server";
 import { StackView } from "./stackView";
 import { statusBar } from "./statusBar";
@@ -162,6 +162,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       const url = targetOf(arg)?.url ?? changeView.shown?.gerrit_url;
       return url ? ui().openExternal(vscode.Uri.parse(url)) : undefined;
     },
+    "ger.review": (arg: unknown) => review(model, targetOf(arg)),
     "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),

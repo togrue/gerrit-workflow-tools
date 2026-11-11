@@ -1,4 +1,5 @@
-// Checking a change out: someone's change for review (`ger review`), or your own commit to edit (`ger edit`).
+// Getting a change in front of you: someone's change for review (`ger review`), a change to
+// work on (`ger checkout`), or your own commit to edit (`ger edit`).
 
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -14,11 +15,15 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
   }
   runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
-  void ui().message("info", `Started \`ger edit\` in the terminal. Once the rebase stops at "${target.title}", amend it, then run \`git rebase --continue\`.`, {}, []);
+  ui().status(`ger edit runs in the terminal: once the rebase stops at "${target.title}", amend it, then git rebase --continue`, 12000);
 }
 
-/** Someone's change on Gerrit: `ger review` checks it out for review (the review worktree by default). */
-export async function checkout(model: Model, target: ChangeTarget | undefined): Promise<void> {
+/**
+ * A change that exists only on Gerrit, to work on: `ger checkout` puts it on a branch here that
+ * tracks its target branch, so it is your local stack. It may ask (update to the newest patchset?),
+ * so it runs in a terminal; the views catch up at the next refresh (the terminal does not say when it ends).
+ */
+export function checkout(model: Model, target: ChangeTarget | undefined): void {
   if (!target) {
     return;
   }
@@ -26,17 +31,26 @@ export async function checkout(model: Model, target: ChangeTarget | undefined): 
     editCommit(model, target); // already in your stack: nothing to fetch, edit it where it is
     return;
   }
+  runInTerminal(model.repo, ["checkout", target.rev]);
+  ui().status(`ger checkout ${target.rev} runs in the terminal: it may ask before it changes anything`, 12000);
+}
+
+/** Someone's change on Gerrit: `ger review` checks it out for review (the review worktree by default). */
+export async function review(model: Model, target: ChangeTarget | undefined): Promise<void> {
+  if (!target) {
+    return;
+  }
   try {
     const client = await model.client();
-    const review = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
+    const opened = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
       client.reviewOpen(target.number ?? target.rev),
     );
-    const where = vscode.Uri.file(review.worktree);
-    const inPlace = path.resolve(review.worktree) === path.resolve(model.repo);
+    const where = vscode.Uri.file(opened.worktree);
+    const inPlace = path.resolve(opened.worktree) === path.resolve(model.repo);
     const open = inPlace ? undefined : "Open Review Worktree";
     const picked = await ui().message(
       "info",
-      `Change ${review.number} (patchset ${review.patch_set}) is checked out${review.staged ? ", staged," : ""} on ${review.branch}${inPlace ? "" : ` in ${review.worktree}`}.`,
+      `Change ${opened.number} (patchset ${opened.patch_set}) is checked out${opened.staged ? ", staged," : ""} on ${opened.branch}${inPlace ? "" : ` in ${opened.worktree}`}.`,
       {},
       open ? [open] : [],
     );
@@ -45,7 +59,7 @@ export async function checkout(model: Model, target: ChangeTarget | undefined): 
       await ui().openFolder(where);
     }
   } catch (error) {
-    void ui().message("warning", `Not checked out: ${describeError(error)}`, {}, []);
+    void ui().message("warning", `Not checked out for review: ${describeError(error)}`, {}, []);
   }
 }
 

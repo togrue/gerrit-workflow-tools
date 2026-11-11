@@ -9,17 +9,31 @@ import * as vscode from "vscode";
 import { setting } from "./config";
 import { plural } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
+import { checkout } from "./review";
 import { ui } from "./ui";
 
-/** Put what goes to the agent in front of the user, then start the agent on it or copy it. */
-async function handOver(repo: string, markdown: string, name: string, summary: string, rev: string | undefined): Promise<void> {
+/** What the dialog says when the agent could not change the code: the change is not checked out here. */
+const BRIEF_ONLY =
+  "This change is not checked out here, so the agent starts on your current branch and can only read the brief: its comments and CI findings. To have it amend the change, check it out to work on it first, then hand the commit over. Nothing is pushed or published.";
+const AMENDS = "The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.";
+const CHECKOUT_FIRST = "Check Out to Work On";
+
+/**
+ * Put what goes to the agent in front of the user, then start the agent on it or copy it.
+ * `checkoutFirst` is given for a change that is not in this checkout: the dialog then offers to check it out instead.
+ */
+async function handOver(repo: string, markdown: string, name: string, summary: string, rev: string | undefined, checkoutFirst?: () => void): Promise<void> {
   const file = path.join(os.tmpdir(), name);
   await fs.writeFile(file, markdown, "utf8");
   await vscode.commands.executeCommand("markdown.showPreview", vscode.Uri.file(file));
   const template = setting("agentCommand", "").trim();
   const start = template ? "Start Agent" : "Copy to Clipboard";
-  const detail = "The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.";
-  if ((await ui().message("info", summary, { modal: true, detail }, [start])) !== start) {
+  const answer = await ui().message("info", summary, { modal: true, detail: checkoutFirst ? BRIEF_ONLY : AMENDS }, checkoutFirst ? [start, CHECKOUT_FIRST] : [start]);
+  if (answer === CHECKOUT_FIRST) {
+    checkoutFirst?.();
+    return;
+  }
+  if (answer !== start) {
     return;
   }
   if (!template) {
@@ -66,7 +80,7 @@ export async function handToAgent(model: Model, target: ChangeTarget | undefined
     );
     const brief = shown?.markdown ?? "";
     const name = `ger-brief-${target.rev.replace(/[^\w.-]/g, "_").slice(0, 40)}.md`;
-    await handOver(model.repo, brief, name, `The comments and CI findings of ${target.title}, for the agent.`, target.rev);
+    await handOver(model.repo, brief, name, `The comments and CI findings of ${target.title}, as a brief for the agent.`, target.rev, () => checkout(model, target));
   } catch (error) {
     void ui().message("warning", `Nothing handed over: ${describeError(error)}`, {}, []);
   }
