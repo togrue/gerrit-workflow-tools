@@ -124,6 +124,11 @@ def test_log_git_and_rest_do_not_scale_with_stack_size(
     """Doubling the stack must not double git or REST round-trips."""
     counts: list[tuple[int, int, int]] = []
     for n in (5, 20):
+        # Both stacks share Change-Ids and the web base, so a shared cache would hand the
+        # second run the first run's rows. Those name the first repo's commits, which differ
+        # whenever the two stacks were committed in different seconds: ger log then checks
+        # each one locally. Each run gets a cold cache of its own.
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / f"cache{n}"))
         repo = _make_linear_stack(tmp_path / f"n{n}", n)
         rows = stack_rows_mb_to_head(repo)
         assert len(rows) == n
