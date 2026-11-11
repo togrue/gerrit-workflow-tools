@@ -504,7 +504,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
-| `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, avatar stripping, follow-up payloads read back |
+| `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, the comments context key, avatar stripping, follow-up payloads read back; `CacheInfo` (row counts) |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
 | `core/gerrit/change_resolution.py` | Changeish resolution: narrowing a changeish to one change, and to a local stack commit |
 | `core/gerrit/resolution.py` | The resolution model: `Resolution`, `SelectedChange`, `ChangeAmbiguousError`, resolution notes |

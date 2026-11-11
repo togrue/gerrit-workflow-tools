@@ -1,4 +1,4 @@
-"""What a Gerrit cache row holds: the ChangeInfo fields it is keyed on, and follow-up payloads read back.
+"""What a Gerrit cache row holds: the keys and ChangeInfo fields it is stored under, payloads read back.
 
 Pure functions over payloads, no SQLite: :mod:`gerrit_workflow_tools.core.gerrit.cache` stores and
 serves the rows.
@@ -6,6 +6,8 @@ serves the rows.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -69,3 +71,22 @@ def max_updated(payloads: list[dict[str, Any]], *, floor: str = "") -> str:
         if updated and updated > best:
             best = updated
     return best
+
+
+def comments_context_key(context_padding: int | None) -> str:
+    """Cache discriminator for comment payloads with or without source context."""
+
+    if context_padding is None:
+        return ""
+    return f"p{context_padding}"
+
+
+@dataclass(frozen=True)
+class CacheInfo:
+    """Small summary for cache administration commands."""
+
+    path: Path
+    host: str
+    changes: int
+    comments: int
+    checks: int

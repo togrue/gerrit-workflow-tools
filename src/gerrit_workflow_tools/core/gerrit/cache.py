@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from gerrit_workflow_tools.core.gerrit.cache_rows import (
+    CacheInfo,
     decode_checks,
     decode_comments,
     footer_of_triplet,
@@ -36,25 +37,6 @@ _DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "scope_state
 _FOLLOW_UP_KEYS = {"comments": ("change_id", "context_key"), "checks": ("change_id",)}
 
 _T = TypeVar("_T")
-
-
-def comments_context_key(context_padding: int | None) -> str:
-    """Cache discriminator for comment payloads with or without source context."""
-
-    if context_padding is None:
-        return ""
-    return f"p{context_padding}"
-
-
-@dataclass(frozen=True)
-class CacheInfo:
-    """Small summary for cache administration commands."""
-
-    path: Path
-    host: str
-    changes: int
-    comments: int
-    checks: int
 
 
 @dataclass(frozen=True)

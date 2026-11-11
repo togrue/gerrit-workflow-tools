@@ -9,7 +9,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, collect_comment_chains
-from gerrit_workflow_tools.core.gerrit.cache import comments_context_key
+from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
