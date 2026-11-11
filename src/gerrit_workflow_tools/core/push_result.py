@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,6 +40,19 @@ class PushResult:
 
 def push_rejected_no_new_changes(stdout: str, stderr: str) -> bool:
     return "no new changes" in f"{stdout}{stderr}".lower()
+
+
+_REMOTE_REJECTED = re.compile(r"\[remote rejected\][^\n(]*\((.*?)\)[ \t]*(?:\n|$)", re.S)
+
+
+def gerrit_rejection(stderr: str) -> str | None:
+    """One line with Gerrit's reason for refusing the push, from git's ``! [remote rejected] … (reason)``.
+
+    The reason's lines are joined by ``; ``. ``None`` when git reports no rejection by Gerrit.
+    """
+    match = _REMOTE_REJECTED.search(stderr)
+    lines = [line.strip() for line in match.group(1).splitlines() if line.strip()] if match else []
+    return f"error: Gerrit rejected the push: {'; '.join(lines)}" if lines else None
 
 
 def result_of(proc: Any) -> PushResult:

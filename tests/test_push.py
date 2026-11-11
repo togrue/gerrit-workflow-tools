@@ -487,6 +487,28 @@ def test_gpush_with_nothing_new_says_so_and_succeeds(stack_repo: Path, monkeypat
     assert "remote rejected" not in err
 
 
+def test_gpush_rejected_by_gerrit_keeps_gits_output_and_adds_gerrits_reason(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git's own lines pass through untouched; one ger line after them says why; git's exit code is kept."""
+    rejected = (
+        " ! [remote rejected] tip -> refs/for/main (Account 'nosuch' not found\n"
+        "nosuch does not identify a registered user or group)\n"
+        "error: failed to push some refs to 'ssh://g.example.test/proj'\n"
+    )
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=rejected))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--reviewers", "nosuch"], monkeypatch)
+
+    assert code == 1
+    assert err.endswith(
+        rejected + "error: Gerrit rejected the push: Account 'nosuch' not found; "
+        "nosuch does not identify a registered user or group\n"
+    )
+    assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
+
+
 def test_gpush_warns_about_a_commit_on_an_abandoned_change(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = commits_in_range(stack_repo, "main..feature")
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "ABANDONED"}])

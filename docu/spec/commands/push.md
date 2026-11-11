@@ -147,7 +147,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | `4` | `REV` names a Change-Id that more than one stack commit carries |
 | `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as an error with Gerrit's reason) |
 | `6` | The branch has no upstream: the same message and hint as `ger log` |
-| other | `git push` exit code |
+| other | `git push` exit code, passed through as [exit-codes.md](../exit-codes.md#what-is-not-remapped) records. When Gerrit rejects the push (`! [remote rejected] … (reason)`, exit `1` from git), git's output is printed untouched and ger adds one line after it with Gerrit's reason, its lines joined by `; `: `error: Gerrit rejected the push: Account 'nosuch' not found; nosuch does not identify a registered user or group` |
 
 ---
 

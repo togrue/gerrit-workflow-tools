@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.git_state import (
 )
 from gerrit_workflow_tools.core.push_checks import check_existing_changes, git_or_none, rebase_check
 from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
-from gerrit_workflow_tools.core.push_result import PushResult, push_rejected_no_new_changes, result_of
+from gerrit_workflow_tools.core.push_result import PushResult, gerrit_rejection, push_rejected_no_new_changes, result_of
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
@@ -260,8 +260,8 @@ def execute(
     sent = bool(sent_commits(plan))  # else Gerrit says "no new changes": not run
     captured = result_of(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0)
     rejected = not sent or push_rejected_no_new_changes(captured.stdout, captured.stderr)
-    if captured.returncode != 0 and not rejected:
-        return captured
+    if captured.returncode != 0 and not rejected:  # git's code passes through (spec/exit-codes.md)
+        return replace(captured, error_message=gerrit_rejection(captured.stderr))
     if rejected:
         captured = PushResult(returncode=0, nothing_sent=True)
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
