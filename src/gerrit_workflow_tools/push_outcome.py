@@ -6,7 +6,8 @@ import sys
 from collections.abc import Sequence
 
 from gerrit_workflow_tools.cli_style import color_short_sha
-from gerrit_workflow_tools.core.push import PushPlan, PushResult
+from gerrit_workflow_tools.core.push import PushPlan
+from gerrit_workflow_tools.core.push_result import PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
 from gerrit_workflow_tools.push_preview import update_line

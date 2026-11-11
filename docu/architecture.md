@@ -486,6 +486,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reorder_preview.py` | Whether a rewrite would conflict, simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `PickConflict`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
+| `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, and the warning when none could be read |
 | `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, the remote rebase check, what Gerrit already holds |

@@ -25,7 +25,6 @@ from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_pu
 from gerrit_workflow_tools.core.push import (
     PushPlan,
     PushRefusal,
-    PushResult,
     changes_nothing,
     execute,
     prepare,
@@ -35,6 +34,7 @@ from gerrit_workflow_tools.core.push import (
     push_argv,
 )
 from gerrit_workflow_tools.core.push_checks import resolve_push_branch
+from gerrit_workflow_tools.core.push_result import PushResult
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal

@@ -439,7 +439,7 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
 
 
 def test_git_push_rejected_no_new_changes_detects_gerrit_message() -> None:
-    from gerrit_workflow_tools.core.push import push_rejected_no_new_changes
+    from gerrit_workflow_tools.core.push_result import push_rejected_no_new_changes
 
     rejected = "! [remote rejected] deadbeef -> refs/for/main (no new changes)\n"
     assert push_rejected_no_new_changes("", rejected)

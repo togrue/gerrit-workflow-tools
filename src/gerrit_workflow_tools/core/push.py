@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.git_state import (
 )
 from gerrit_workflow_tools.core.push_checks import check_existing_changes, git_or_none, rebase_check
 from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
+from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult, push_rejected_no_new_changes, result_of
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
@@ -35,7 +36,6 @@ from gerrit_workflow_tools.core.push_reviewers import (
 )
 from gerrit_workflow_tools.core.push_unchanged import (
     StateUpdate,
-    StateUpdateFailure,
     UnchangedChange,
     all_unchanged,
     apply_updates,
@@ -84,30 +84,8 @@ class PushRefusal:
     warnings: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class PushResult:
-    returncode: int
-    stdout: str = ""
-    stderr: str = ""
-    error_message: str | None = None
-    reviewers: ReviewerApplyResult | None = None
-    warning: str | None = None
-    updated: tuple[StateUpdate, ...] = ()
-    """What was set over REST on changes Gerrit already had at that commit."""
-    update_failures: tuple[StateUpdateFailure, ...] = ()
-
-    @property
-    def gerrit_failed(self) -> bool:
-        """Gerrit refused what the push sets over REST: reviewers, or options on changes it already had."""
-        return bool(self.update_failures) or (self.reviewers is not None and not self.reviewers.ok)
-
-
 def push_argv(plan: PushPlan) -> list[str]:
     return ["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, plan.options)]
-
-
-def push_rejected_no_new_changes(stdout: str, stderr: str) -> bool:
-    return "no new changes" in f"{stdout}{stderr}".lower()
 
 
 def run_git_push(cmd: list[str], cwd: Path | str | None) -> Any:
@@ -126,9 +104,6 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
         options=options,
         credential_error=credential_error(options.strategy, options.reviewers, settings),
     )
-
-
-NOTHING_TO_PUSH = "nothing to push: Gerrit already has these commits"
 
 
 def changes_nothing(plan: PushPlan) -> bool:
@@ -276,9 +251,9 @@ def execute(
     gerrit: GerritRest | None = None,
 ) -> PushResult:
     if not isinstance(plan, PushPlan):
-        return _captured(run_git_push(list(plan), cwd))
+        return result_of(run_git_push(list(plan), cwd))
     sent = not all_unchanged(plan.commits, plan.unchanged)  # else Gerrit says "no new changes": not run
-    captured = _captured(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0, NOTHING_TO_PUSH)
+    captured = result_of(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0, NOTHING_TO_PUSH)
     rejected = not sent or push_rejected_no_new_changes(captured.stdout, captured.stderr)
     if captured.returncode != 0 and not rejected:
         return captured
@@ -379,19 +354,3 @@ def _update_last_pushed(cwd: Path, plan: PushPlan) -> str | None:
     except GitError as exc:
         return f"warning: could not update {marker}: {exc}"
     return None
-
-
-def _captured(proc: Any) -> PushResult:
-    return PushResult(
-        returncode=int(proc.returncode),
-        stdout=_text(getattr(proc, "stdout", "")),
-        stderr=_text(getattr(proc, "stderr", "")),
-    )
-
-
-def _text(value: object) -> str:
-    if isinstance(value, str):
-        return value
-    if isinstance(value, bytes):
-        return value.decode(errors="replace")
-    return ""
