@@ -15,14 +15,31 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
     build_triplet,
     resolve_stack_context,
 )
-from gerrit_workflow_tools.core.git_run import GitError, git, git_out
-from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
+from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
+from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target, resolve_working_branch
 from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
 from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
 from gerrit_workflow_tools.core.stack import Commit
 
 
 _REBASE_HINT = "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."
+
+
+def resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Settings) -> str:
+    """Return the local branch ``ger push`` operates on."""
+    if branch_arg:
+        try:
+            git_out("rev-parse", "--verify", branch_arg, cwd=cwd)
+        except GitError as exc:
+            raise UnknownRevisionError(f"branch {branch_arg!r} not found") from exc
+        return branch_arg
+    branch = resolve_working_branch(cwd, settings=settings)
+    if branch is None:
+        raise GitError(
+            "ger push requires a branch (detached HEAD with no local branch at this commit). "
+            "Check out a branch first, or pass --branch."
+        )
+    return branch
 
 
 def git_or_none(cwd: Path, *args: str) -> str | None:

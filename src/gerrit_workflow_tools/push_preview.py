@@ -1,4 +1,4 @@
-"""What ``ger push`` shows and asks: commit list, boundary notice, status line, confirmation, assignments."""
+"""What ``ger push`` shows and asks: commit list, boundary notice, status line, confirmation."""
 
 from __future__ import annotations
 
@@ -26,14 +26,13 @@ from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushBoundary,
     PushPlan,
-    PushResult,
     push_argv,
     revise,
     state_updates,
     unchanged_short_shas,
 )
 from gerrit_workflow_tools.core.push_options import PushOptions
-from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
+from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
@@ -131,11 +130,12 @@ def print_gpush_preview(plan: PushPlan, commit_lines: list[str], *, summary_high
     if updates:
         print(color_text("Gerrit already has these at that commit; set over REST instead:", ANSI_DIM))
         for update in updates:
-            print(f"    {_update_line(update, summary_highlighter)}")
+            print(f"    {update_line(update, summary_highlighter)}")
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
 
 
-def _update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | None = None) -> str:
+def update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | None = None) -> str:
+    """``<sha> # <subject>  <what is set>``: one change Gerrit already has, and what a push sets on it."""
     commit = update.change.commit
     subject = summary_highlighter.highlight(commit.subject, sha=commit.sha) if summary_highlighter else commit.subject
     return f"{color_short_sha(commit.short_sha.ljust(8))}{color_text(' # ', ANSI_DIM)}{subject}  {update.describe()}"
@@ -214,54 +214,6 @@ def print_dry_run(plan: PushPlan) -> None:
             file=sys.stderr,
         )
     print("[dry-run] not executing push", file=sys.stderr)
-
-
-def _escape_topic_for_assignment_report(topic: str) -> str:
-    return topic.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def _assignment_attributes_fragment(plan: PushPlan, reviewers_assigned: tuple[str, ...]) -> str:
-    parts: list[str] = []
-    if plan.options.topic:
-        parts.append(f'topic="{_escape_topic_for_assignment_report(plan.options.topic)}"')
-    parts.extend(f"r={name}" for name in reviewers_assigned)
-    if plan.options.wip:
-        parts.append("wip")
-    if plan.options.ready:
-        parts.append("ready")
-    if plan.options.private:
-        parts.append("private")
-    return ",".join(parts)
-
-
-def print_assignment_report(plan: PushPlan, outcomes: list[ReviewerApplyChangeOutcome]) -> None:
-    by_cid = {commit.change_id: (commit.sha, commit.subject) for commit in plan.commits if commit.change_id}
-    for outcome in outcomes:
-        row = by_cid.get(outcome.change_id)
-        if row is None:
-            continue
-        sha, subject = row
-        frag = _assignment_attributes_fragment(plan, outcome.reviewers_assigned)
-        if not frag:
-            continue
-        print(f"{sha} {subject} assigned {frag}")
-
-
-def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
-    """What happened after ``git push``: errors, reviewer assignments, warnings."""
-    if result.error_message:
-        print(result.error_message, file=sys.stderr)
-    if result.reviewers is not None and plan is not None:
-        for issue in result.reviewers.issues:
-            print(f"{issue.level}: {issue.message}", file=sys.stderr)
-        if result.reviewers.outcomes:
-            print_assignment_report(plan, result.reviewers.outcomes)
-    for update in result.updated:
-        print(f"set {_update_line(update)}")
-    for failure in result.update_failures:
-        print(f"warning: could not set {_update_line(failure.update)}: {failure.error}", file=sys.stderr)
-    if result.warning:
-        print(result.warning, file=sys.stderr)
 
 
 def prompt_save_reviewers() -> bool:

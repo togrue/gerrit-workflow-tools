@@ -19,13 +19,7 @@ from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
-from gerrit_workflow_tools.core.git_state import (
-    checked_out_branch_name,
-    ger_push_mode,
-    is_detached_head,
-    resolve_working_branch,
-)
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode, is_detached_head
 from gerrit_workflow_tools.core.push import (
     PushPlan,
     PushRefusal,
@@ -37,10 +31,12 @@ from gerrit_workflow_tools.core.push import (
     publishable_drafts,
     push_argv,
 )
+from gerrit_workflow_tools.core.push_checks import resolve_push_branch
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.push_outcome import print_push_outcome
 from gerrit_workflow_tools.push_preview import (
     apply_interactive_line,
     ask_push_action,
@@ -50,7 +46,6 @@ from gerrit_workflow_tools.push_preview import (
     print_dry_run,
     print_gpush_preview,
     print_plan_status,
-    print_push_outcome,
     print_ready_boundary_notice,
     prompt_initial_options,
 )
@@ -198,23 +193,6 @@ def _print_refusal(
 def _require_confirmable(args: argparse.Namespace) -> None:
     if not (stdin_is_terminal() or args.yes):
         raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
-
-
-def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Settings) -> str:
-    """Return the local branch ``ger push`` operates on."""
-    if branch_arg:
-        try:
-            git_out("rev-parse", "--verify", branch_arg, cwd=cwd)
-        except GitError as exc:
-            raise UnknownRevisionError(f"branch {branch_arg!r} not found") from exc
-        return branch_arg
-    branch = resolve_working_branch(cwd, settings=settings)
-    if branch is None:
-        raise GitError(
-            "ger push requires a branch (detached HEAD with no local branch at this commit). "
-            "Check out a branch first, or pass --branch."
-        )
-    return branch
 
 
 def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, settings: Settings) -> int:
@@ -391,7 +369,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         raise UsageError("-i requires an interactive terminal (stdin is not a TTY)")
 
     detached = is_detached_head(cwd)
-    branch = _resolve_push_branch(cwd, args.branch, settings=settings)
+    branch = resolve_push_branch(cwd, args.branch, settings=settings)
     mode = ger_push_mode(cwd, branch, settings=settings)
     if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):

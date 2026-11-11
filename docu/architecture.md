@@ -488,7 +488,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST |
-| `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
+| `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
@@ -531,7 +531,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/review_json.py` | JSON for **review chains** (`chain_json`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
 | `render/ci_content.py` | **CI content** projections: JSON, human and Markdown, grouped by CI link label |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns, and the highlighter for a branch's stack |
-| `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question, what it assigned |
+| `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question |
+| `push_outcome.py` | What `ger push` reports once `git push` ran: errors, what it assigned, what it set over REST |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |
 | `push_options_history.py` | Push-options history per Gerrit host and project, and Up/Down recall |
