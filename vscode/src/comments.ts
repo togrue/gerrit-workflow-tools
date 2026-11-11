@@ -5,16 +5,22 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { CommentChain, NewCommentState } from "./api";
+import { Comment, CommentChain, NewCommentState } from "./api";
 import { ChangeView, FILE_SCHEME } from "./changeView";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
+import { ui } from "./ui";
 
 const SAVED: Record<NewCommentState, string> = {
   draft: "Draft saved on Gerrit, visible only to you. Publish it with ger push.",
   "local-draft": "Local draft saved here. It goes to Gerrit once the commit is pushed.",
   note: "Private note saved here. It never leaves this repository.",
 };
+
+/** Your unpublished reply in `chain`: a chain holds at most one. */
+function yourDraft(chain: CommentChain): Comment | undefined {
+  return chain.comments.slice(1).find((comment) => comment.state === "draft");
+}
 
 interface Anchor {
   rev: string;
@@ -78,11 +84,11 @@ export class CommentThreads implements vscode.Disposable {
       const client = await this.model.client();
       await client.newComment(target.rev, location, text, state);
       reply.thread.dispose(); // the saved chain comes back with the reload, in its place
-      void vscode.window.setStatusBarMessage(`$(check) ${SAVED[state]}`, 6000);
+      ui().status(`$(check) ${SAVED[state]}`, 6000);
       await this.view.open();
     } catch (error) {
       // The box stays open with the text, to try again or save it another way.
-      void vscode.window.showErrorMessage(`Comment not saved: ${describeError(error)}`);
+      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
     }
   }
 
@@ -96,7 +102,7 @@ export class CommentThreads implements vscode.Disposable {
     if (!target) {
       return;
     }
-    for (const chain of this.view.unresolved()) {
+    for (const chain of this.view.openChains()) {
       if (chain.path.startsWith("/")) {
         continue; // commit message and patchset-level chains have no line in a file
       }
@@ -112,9 +118,17 @@ export class CommentThreads implements vscode.Disposable {
           label: comment.state === "published" ? undefined : comment.state,
         })),
       );
-      thread.label = chain.resolved_after_publish ? "Gerrit — your draft resolves this" : "Gerrit — unresolved";
+      const root = chain.comments[0]?.state;
+      thread.label =
+        root === "note"
+          ? "Your private note"
+          : root !== "published"
+            ? "Your new comment (not published yet)"
+            : chain.resolved_after_publish
+              ? "Gerrit — your draft resolves this"
+              : "Gerrit — unresolved";
       thread.contextValue = "open";
-      thread.canReply = true;
+      thread.canReply = root === "published"; // a reply answers someone on Gerrit
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
       this.anchors.set(thread, { rev: target.rev, chain });
     }
@@ -124,7 +138,7 @@ export class CommentThreads implements vscode.Disposable {
   async step(direction: 1 | -1): Promise<void> {
     const chains = this.view.unresolved();
     if (!chains.length) {
-      void vscode.window.setStatusBarMessage("$(pass) No unresolved comments on this change", 4000);
+      ui().status("$(pass) No unresolved comments on this change", 4000);
       return;
     }
     this.cursor = (this.cursor + direction + chains.length) % chains.length;
@@ -135,29 +149,50 @@ export class CommentThreads implements vscode.Disposable {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
     }
-    void vscode.window.setStatusBarMessage(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
+    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
   }
 
-  /** Save a draft reply from the thread's reply box. */
+  /** The editor thread that shows `chain`, if the shown change has one. */
+  threadOf(chain: CommentChain): vscode.CommentThread | undefined {
+    for (const [thread, anchor] of this.anchors) {
+      if (anchor.chain.root_id === chain.root_id) {
+        return thread;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Save a draft reply from the thread's reply box. A chain holds one draft of yours: what you
+   * type here is added to it, not put in its place.
+   */
   async replyInThread(reply: vscode.CommentReply, resolved: boolean | undefined): Promise<void> {
     const anchor = this.anchors.get(reply.thread);
     if (!anchor || !reply.text.trim()) {
       return;
     }
-    await this.save(anchor.chain, reply.text, resolved);
+    const draft = yourDraft(anchor.chain);
+    await this.save(anchor.chain, draft ? `${draft.message}\n\n${reply.text.trim()}` : reply.text, resolved);
   }
 
-  /** Ask for a reply to `chain` (or take `message`) and save it as a draft. */
-  async replyToChain(chain: CommentChain, resolved: boolean | undefined, message?: string): Promise<void> {
-    const text =
-      message ??
-      (await vscode.window.showInputBox({
-        title: `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${chain.path}${chain.line ? `:${chain.line}` : ""}`,
-        prompt: "Saved as a draft on Gerrit. Drafts are published with `ger push` or `ger review --vote`.",
-        placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
-      }));
+  /**
+   * Ask for a reply to `chain` and save it as a draft. With a draft of yours there already, the
+   * box opens on its text to edit. `done` resolves the chain: with no draft yet it writes "Done",
+   * else it keeps what you wrote.
+   */
+  async replyToChain(chain: CommentChain, done: boolean): Promise<void> {
+    const draft = yourDraft(chain);
+    const where = `${chain.path}${chain.line ? `:${chain.line}` : ""}`;
+    const text = done
+      ? (draft?.message ?? "Done")
+      : await ui().input({
+          title: draft ? `Edit your draft reply — ${where}` : `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${where}`,
+          prompt: "Saved as a draft on Gerrit. Drafts are published with `ger push` or `ger review --vote`.",
+          placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
+          value: draft?.message,
+        });
     if (text?.trim()) {
-      await this.save(chain, text, resolved);
+      await this.save(chain, text, done ? true : undefined);
     }
   }
 
@@ -169,11 +204,12 @@ export class CommentThreads implements vscode.Disposable {
     }
     try {
       const client = await this.model.client();
-      await client.reply(target.rev, anchorId, message.trim(), resolved);
-      void vscode.window.setStatusBarMessage("$(check) Draft saved. Publish it with ger push.", 6000);
+      const saved = await client.reply(target.rev, anchorId, message.trim(), resolved);
+      const what = saved.reply.action === "updated" ? "Draft updated" : "Draft saved";
+      ui().status(`$(check) ${what}${resolved ? ", resolving the comment" : ""}. Publish it with ger push.`, 6000);
       await this.view.open();
     } catch (error) {
-      void vscode.window.showErrorMessage(`Draft not saved: ${describeError(error)}`);
+      void ui().message("error", `Draft not saved: ${describeError(error)}`, {}, []);
     }
   }
 

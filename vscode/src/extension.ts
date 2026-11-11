@@ -14,6 +14,7 @@ import { ChangeTarget, Model, describeError } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { GerProcess } from "./server";
 import { StackView } from "./stackView";
+import { Ui, ui, useUi } from "./ui";
 
 function setting<T>(name: string, fallback: T): T {
   return vscode.workspace.getConfiguration("ger").get<T>(name, fallback);
@@ -23,16 +24,9 @@ function executable(): string {
   return setting("executable", "ger").trim() || "ger";
 }
 
-function terminal(repo: string): vscode.Terminal {
-  const existing = vscode.window.terminals.find((t) => t.name === "ger" && t.exitStatus === undefined);
-  const term = existing ?? vscode.window.createTerminal({ name: "ger", cwd: repo });
-  term.show(true);
-  return term;
-}
-
 /** Run a ger command that needs a human in front of it (it prompts, or opens an editor). */
 function runInTerminal(repo: string, args: string): void {
-  terminal(repo).sendText(`${executable()} ${args}`);
+  ui().terminal({ name: "ger", cwd: repo, reuse: true }, `${executable()} ${args}`);
 }
 
 function statusBar(model: Model): vscode.StatusBarItem {
@@ -103,6 +97,8 @@ export interface ExtensionApi {
   stackView: StackView;
   changeView: ChangeView;
   threads: CommentThreads;
+  /** Replace what talks to the user, for the end-to-end suite. */
+  useUi(next: Ui): void;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi | undefined {
@@ -134,10 +130,25 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
   // A rewrite or an amend gives your commits new ids: follow the shown one by its Change-Id.
+  // When it goes (folded or dropped), remember it: an Undo brings it back, and the view with it.
+  let lost: { target: ChangeTarget; changeId: string } | undefined;
   model.onDidChange(() => {
     const target = changeView.target;
     const stack = model.stack;
-    if (!target?.local || !stack || stack.commits.some((c) => c.sha === target.rev)) {
+    if (!stack) {
+      return;
+    }
+    if (!target && lost) {
+      const changeId = lost.changeId;
+      const back = stack.commits.find((c) => c.change_id === changeId);
+      if (back) {
+        const reopen = { ...lost.target, rev: back.sha, title: back.summary };
+        lost = undefined;
+        void changeView.open(reopen);
+      }
+      return;
+    }
+    if (!target?.local || stack.commits.some((c) => c.sha === target.rev)) {
       return;
     }
     const changeId = changeView.shown?.change_id;
@@ -145,16 +156,18 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     if (moved) {
       void changeView.open({ ...target, rev: moved.sha, title: moved.summary });
     } else {
+      lost = changeId ? { target, changeId } : undefined;
       changeView.close();
     }
   });
   model.onDidGetNewHeadline(async (headline) => {
-    if (setting("notify", true) && (await vscode.window.showInformationMessage(headline.text, "Open")) === "Open") {
+    if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
       await vscode.commands.executeCommand("ger.openHeadline");
     }
   });
   changeView.onDidLoad(() => {
-    changeTree.title = changeView.target?.number ? `Change ${changeView.target.number}` : "Change";
+    const number = changeView.shown?.number ?? changeView.target?.number;
+    changeTree.title = number ? `Change ${number}` : "Change";
     changeTree.description = changeView.shown?.summary ?? changeView.target?.title;
   });
 
@@ -176,6 +189,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       return;
     }
     await vscode.commands.executeCommand("ger.change.focus");
+    lost = undefined; // you chose what to look at
     await changeView.open(target);
     if (target.chainKey) {
       await model.markSeen([target.chainKey]);
@@ -190,14 +204,17 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       if (!chosen) {
         const choice = await client.upstream();
         if (!choice.branch) {
-          void vscode.window.showWarningMessage("HEAD is detached: check out a branch to give it an upstream.");
+          void ui().message("warning", "HEAD is detached: check out a branch to give it an upstream.", {}, []);
           return;
         }
         const items = choice.candidates.map((name): vscode.QuickPickItem => ({
           label: name,
-          description: name === choice.suggested ? `$(star-full) suggested: ${choice.why ?? ""}` : name === choice.upstream ? "current" : undefined,
+          description:
+            [name === choice.upstream ? "current" : "", name === choice.suggested ? `$(star-full) suggested: ${choice.why ?? ""}` : ""]
+              .filter(Boolean)
+              .join(" · ") || undefined,
         }));
-        const picked = await vscode.window.showQuickPick(items, {
+        const picked = await ui().pick(items, {
           title: `Upstream for ${choice.branch}`,
           placeHolder: "The local stack is the commits above it; ger push goes to its branch on Gerrit",
           matchOnDescription: true,
@@ -208,10 +225,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
         return;
       }
       const done = await client.setUpstream(chosen);
-      void vscode.window.setStatusBarMessage(`$(check) ${done.branch} now tracks ${done.upstream}`, 6000);
+      ui().status(`$(check) ${done.branch} now tracks ${done.upstream}`, 6000);
       await model.refresh();
     } catch (error) {
-      void vscode.window.showWarningMessage(`Upstream not set: ${describeError(error)}`);
+      void ui().message("warning", `Upstream not set: ${describeError(error)}`, {}, []);
     }
   };
 
@@ -221,9 +238,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       return;
     }
     runInTerminal(repo, `edit ${target.rev}`);
-    void vscode.window.showInformationMessage(
-      `Rebase stopped at "${target.title}" in this checkout: amend it, then \`git rebase --continue\`.`,
-    );
+    // It runs in the terminal: say what to do once it stopped, not that it already has.
+    void ui().message("info", `Started \`ger edit\` in the terminal. Once the rebase stops at "${target.title}", amend it, then run \`git rebase --continue\`.`, {}, []);
   };
 
   /** Someone's change on Gerrit: `ger review` checks it out for review (the review worktree by default). */
@@ -237,60 +253,62 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     }
     try {
       const client = await model.client();
-      const review = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `Checking out ${target.title}` },
-        () => client.reviewOpen(target.number ?? target.rev),
+      const review = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
+        client.reviewOpen(target.number ?? target.rev),
       );
       const where = vscode.Uri.file(review.worktree);
       const inPlace = path.resolve(review.worktree) === path.resolve(repo);
       const open = inPlace ? undefined : "Open Review Worktree";
-      const picked = await vscode.window.showInformationMessage(
+      const picked = await ui().message(
+        "info",
         `Change ${review.number} (patchset ${review.patch_set}) is checked out${review.staged ? ", staged," : ""} on ${review.branch}${inPlace ? "" : ` in ${review.worktree}`}.`,
-        ...(open ? [open] : []),
+        {},
+        open ? [open] : [],
       );
+      void model.refresh(); // a review is open now: the Change view offers to leave it
       if (picked) {
-        await vscode.commands.executeCommand("vscode.openFolder", where, { forceNewWindow: true });
+        await ui().openFolder(where);
       }
     } catch (error) {
-      void vscode.window.showWarningMessage(`Not checked out: ${describeError(error)}`);
+      void ui().message("warning", `Not checked out: ${describeError(error)}`, {}, []);
     }
   };
 
-  /** Put the runbook in front of the user, then start the agent on it or copy it. */
+  /** Put what goes to the agent in front of the user, then start the agent on it or copy it. */
+  const handOver = async (markdown: string, name: string, summary: string, rev: string | undefined) => {
+    const file = path.join(os.tmpdir(), name);
+    await fs.writeFile(file, markdown, "utf8");
+    await vscode.commands.executeCommand("markdown.showPreview", vscode.Uri.file(file));
+    const template = setting("agentCommand", "").trim();
+    const start = template ? "Start Agent" : "Copy to Clipboard";
+    const detail = "The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.";
+    if ((await ui().message("info", summary, { modal: true, detail }, [start])) !== start) {
+      return;
+    }
+    if (!template) {
+      await ui().copy(markdown);
+      void ui().message("info", "Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.", {}, []);
+      return;
+    }
+    // GER_NO_PUBLISH makes ger refuse to publish drafts, whatever the agent decides to try.
+    ui().terminal({ name: "ger agent", cwd: repo, env: { GER_NO_PUBLISH: "1" } }, template.replaceAll("{rev}", rev ?? "").replaceAll("{brief}", file));
+  };
+
+  /** The runbook for the local stack, or one of its commits, handed to the agent. */
   const runAgent = async (rev: string | undefined) => {
     try {
       const client = await model.client();
-      const runbook = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "Collecting comments and CI findings" },
-        () => client.runbook(rev),
-      );
+      const runbook = await ui().progress(vscode.ProgressLocation.Notification, "Collecting comments and CI findings", () => client.runbook(rev));
       const { commits, comments, findings, held } = runbook.totals;
       const kept = held ? ` ${plural(held, "comment")} kept for you.` : "";
       if (!commits) {
-        void vscode.window.showInformationMessage(`Nothing here for an agent.${kept}`);
+        void ui().message("info", `Nothing here for an agent.${kept}`, {}, []);
         return;
       }
-      const file = path.join(os.tmpdir(), `ger-runbook-${Date.now()}.md`);
-      await fs.writeFile(file, runbook.markdown, "utf8");
-      await vscode.commands.executeCommand("markdown.showPreview", vscode.Uri.file(file));
-      const template = setting("agentCommand", "").trim();
-      const start = template ? "Start Agent" : "Copy Runbook";
       const summary = `${plural(commits, "commit")}: ${plural(comments, "comment")} and ${plural(findings, "CI finding")} for the agent.${kept}`;
-      const detail = "The agent amends the commits and writes draft replies. Nothing is pushed or published: you review and run ger push.";
-      if ((await vscode.window.showInformationMessage(summary, { modal: true, detail }, start)) !== start) {
-        return;
-      }
-      if (!template) {
-        await vscode.env.clipboard.writeText(runbook.markdown);
-        void vscode.window.showInformationMessage("Runbook copied. Set `ger.agentCommand` to start your agent from here.");
-        return;
-      }
-      // GER_NO_PUBLISH makes ger refuse to publish drafts, whatever the agent decides to try.
-      const term = vscode.window.createTerminal({ name: "ger agent", cwd: repo, env: { GER_NO_PUBLISH: "1" } });
-      term.show(true);
-      term.sendText(template.replaceAll("{rev}", rev ?? "").replaceAll("{brief}", file));
+      await handOver(runbook.markdown, `ger-runbook-${Date.now()}.md`, summary, rev);
     } catch (error) {
-      void vscode.window.showWarningMessage(`Nothing handed over: ${describeError(error)}`);
+      void ui().message("warning", `Nothing handed over: ${describeError(error)}`, {}, []);
     }
   };
 
@@ -311,21 +329,11 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       return;
     }
     try {
-      const brief = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "Collecting comments and CI findings" },
-        () => agentBrief(repo, target.rev),
-      );
-      const template = setting("agentCommand", "").trim();
-      if (!template) {
-        await vscode.env.clipboard.writeText(brief);
-        void vscode.window.showInformationMessage("Comments and CI findings copied. Paste them into your agent, or set `ger.agentCommand` to start it from here.");
-        return;
-      }
-      const file = path.join(os.tmpdir(), `ger-brief-${target.rev.replace(/[^\w.-]/g, "_").slice(0, 40)}.md`);
-      await fs.writeFile(file, brief, "utf8");
-      terminal(repo).sendText(template.replaceAll("{rev}", target.rev).replaceAll("{brief}", file));
+      const brief = await ui().progress(vscode.ProgressLocation.Notification, "Collecting comments and CI findings", () => agentBrief(repo, target.rev));
+      const name = `ger-brief-${target.rev.replace(/[^\w.-]/g, "_").slice(0, 40)}.md`;
+      await handOver(brief, name, `The comments and CI findings of ${target.title}, for the agent.`, target.rev);
     } catch (error) {
-      void vscode.window.showWarningMessage(`Nothing to hand over: ${describeError(error)}`);
+      void ui().message("warning", `Nothing handed over: ${describeError(error)}`, {}, []);
     }
   };
 
@@ -346,17 +354,23 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     "ger.openChange": (arg: unknown) => openChange(targetOf(arg)),
     "ger.openInGerrit": (arg: unknown) => {
       const url = targetOf(arg)?.url ?? changeView.shown?.gerrit_url;
-      return url ? vscode.env.openExternal(vscode.Uri.parse(url)) : undefined;
+      return url ? ui().openExternal(vscode.Uri.parse(url)) : undefined;
     },
     "ger.checkout": (arg: unknown) => checkout(targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": async () => {
       try {
-        const done = await (await model.client()).reviewDone();
-        void vscode.window.showInformationMessage(`Left the review of change ${done.done}.`);
+        const client = await model.client();
+        if (!(await client.review())) {
+          void ui().message("info", "No review checkout is open here.", {}, []);
+          return;
+        }
+        const done = await client.reviewDone();
+        void ui().message("info", `Left the review of change ${done.done}.`, {}, []);
+        void model.refresh();
       } catch (error) {
-        void vscode.window.showWarningMessage(describeError(error));
+        void ui().message("warning", describeError(error), {}, []);
       }
     },
     "ger.push": () => runInTerminal(repo, "push"),
@@ -373,11 +387,11 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     "ger.prevComment": () => threads.step(-1),
     "ger.reply": (arg: unknown) => {
       const chain = threadOf(arg);
-      return chain ? threads.replyToChain(chain, undefined) : undefined;
+      return chain ? threads.replyToChain(chain, false) : undefined;
     },
     "ger.replyDone": (arg: unknown) => {
       const chain = threadOf(arg);
-      return chain ? threads.replyToChain(chain, true, "Done") : undefined;
+      return chain ? threads.replyToChain(chain, true) : undefined;
     },
     "ger.comment.saveDraft": (reply: vscode.CommentReply) => threads.saveNew(reply, "draft"),
     "ger.comment.saveLocalDraft": (reply: vscode.CommentReply) => threads.saveNew(reply, "local-draft"),
@@ -419,7 +433,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     { dispose: () => clearInterval(poll) },
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView, threads };
+  return { model, overviewView, stackView, changeView, threads, useUi };
 }
 
 export function deactivate(): void {

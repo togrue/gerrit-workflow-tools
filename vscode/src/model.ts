@@ -48,6 +48,8 @@ export class Model implements vscode.Disposable {
   /** What to offer as upstream while the branch has none (and so no stack to show). */
   upstreamChoice: UpstreamChoice | undefined;
   private refreshing: Promise<void> | undefined;
+  private again: Promise<void> | undefined;
+  private againFromGerrit = false;
 
   constructor(
     private readonly process: GerProcess,
@@ -69,8 +71,16 @@ export class Model implements vscode.Disposable {
       this.refreshing = this.load(fromGerrit).finally(() => {
         this.refreshing = undefined;
       });
+      return this.refreshing;
     }
-    return this.refreshing;
+    // The load under way may have started before what this refresh is for: one more after it.
+    this.againFromGerrit ||= fromGerrit;
+    this.again ??= this.refreshing.then(() => {
+      const fresh = this.againFromGerrit;
+      [this.again, this.againFromGerrit] = [undefined, false];
+      return this.refresh(fresh);
+    });
+    return this.again;
   }
 
   private async load(fromGerrit: boolean): Promise<void> {
@@ -79,6 +89,9 @@ export class Model implements vscode.Disposable {
       const first = this.overview === undefined;
       this.overview = await client.overview(fromGerrit);
       this.failure = undefined;
+      // Leave Review Checkout is offered only while there is one to leave.
+      const review = await client.review().catch(() => null);
+      void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       const headline = this.overview.headline ?? undefined;
       const key = headline ? `${headline.reason}:${headline.number}` : undefined;
       if (!first && headline && key !== this.lastHeadline) {

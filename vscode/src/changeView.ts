@@ -5,9 +5,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CiContent, CiFinding, Comment, CommentChain, Diff, FileChange, ShownCommit } from "./api";
-import { fileState, plural, reasonWords, sentence, severity, votes } from "./format";
+import { commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
+import { ui } from "./ui";
 
 export const FILE_SCHEME = "ger-file";
 const NOT_FILES = ["/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST"];
@@ -33,6 +34,13 @@ export function fileUri(rev: string, file: string): vscode.Uri {
   return vscode.Uri.from({ scheme: FILE_SCHEME, path: `/${file}`, query: rev });
 }
 
+/** A chain you started and have not published: a draft, a local draft or a private note. */
+function isYours(chain: CommentChain): boolean {
+  return (chain.comments[0]?.state ?? "published") !== "published";
+}
+
+const YOURS: Record<string, string> = { note: "your private note", "local-draft": "your local draft", draft: "your draft" };
+
 interface CiState {
   contents: CiContent[];
   introduced: Set<string> | null;
@@ -54,19 +62,37 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   private ci: Promise<CiState> | undefined;
   private readonly groups = new Map<Group, Node>();
   private threads: Node[] = [];
+  /** Counts opens and closes: a load that finishes after a later one started is dropped. */
+  private generation = 0;
+  private loading: Promise<void> = Promise.resolve();
 
   constructor(private readonly model: Model) {}
 
+  /** Resolves once no load is under way: for the end-to-end suite, which reads the view after each press. */
+  async idle(): Promise<void> {
+    let seen: Promise<void> | undefined;
+    while (seen !== this.loading) {
+      seen = this.loading;
+      await seen;
+    }
+  }
+
   /** Show `target`; with no argument, reload the change that is shown. */
-  async open(target: ChangeTarget | undefined = this.target): Promise<void> {
+  open(target: ChangeTarget | undefined = this.target): Promise<void> {
+    this.loading = this.load(target);
+    return this.loading;
+  }
+
+  private async load(target: ChangeTarget | undefined): Promise<void> {
     if (!target) {
       return;
     }
+    const generation = ++this.generation;
     this.target = target;
     this.ci = undefined;
     // The title bar offers "Edit Commit" for your own stack commit, "Check Out for Review" otherwise.
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
-    await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
+    const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
       try {
         const client = await this.model.client();
         const [commits, diff, delta] = await Promise.all([
@@ -74,11 +100,15 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
           client.diff(target.rev).catch(() => undefined),
           target.local ? undefined : client.reviewDelta(target.rev).catch(() => undefined),
         ]);
-        [this.shown, this.diff, this.delta, this.problem] = [commits[0], diff, delta, undefined];
+        return [commits[0], diff, delta, undefined] as const;
       } catch (error) {
-        [this.shown, this.diff, this.delta, this.problem] = [undefined, undefined, undefined, describeError(error)];
+        return [undefined, undefined, undefined, describeError(error)] as const;
       }
     });
+    if (generation !== this.generation) {
+      return; // a later open (or a close) owns the view now
+    }
+    [this.shown, this.diff, this.delta, this.problem] = loaded;
     // Which save button a new comment box offers: "Save Draft" or "Save Local Draft" (plus "Save Private Note").
     void vscode.commands.executeCommand("setContext", "ger.newComment", this.shown?.new_comment ?? "none");
     this.changed.fire();
@@ -87,6 +117,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
 
   /** Show nothing: the change that was shown is gone. */
   close(): void {
+    this.generation += 1;
     [this.target, this.shown, this.diff, this.delta, this.problem, this.ci] = [undefined, undefined, undefined, undefined, undefined, undefined];
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", false);
     void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
@@ -101,8 +132,14 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     return chains.sort((a, b) => open(a) - open(b) || a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0));
   }
 
-  unresolved(): CommentChain[] {
+  /** Every chain still open, your own new comments and private notes included. */
+  openChains(): CommentChain[] {
     return this.chains().filter((chain) => !chain.resolved);
+  }
+
+  /** Feedback to address: open chains somebody started on Gerrit. Not your drafts or notes. */
+  unresolved(): CommentChain[] {
+    return this.openChains().filter((chain) => !isYours(chain));
   }
 
   threadNode(chain: CommentChain): Node | undefined {
@@ -166,7 +203,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       {
         kind: "info",
         text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
-        detail: commit.pushed ? votes(commit) : "not on Gerrit",
+        detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
         icon: severityIcon(state),
         tooltip: commit.summary,
       },
@@ -175,7 +212,10 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       nodes.push({
         kind: "info",
         text: "This commit is ahead of Gerrit",
-        detail: "votes and CI are about the pushed patchset and are hidden until you push",
+        // Only rebased, Gerrit keeps the votes on the push; with new code it may not.
+        detail: commit.last_pushed_votes
+          ? "its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push"
+          : "only rebased: the votes stay when you push",
         icon: icon("history", "list.warningForeground"),
       });
     } else if (commit.patchset_status === "outdated") {
@@ -319,13 +359,16 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       return item;
     }
     if (group === "comments") {
+      const chains = commit?.comment_chains ?? [];
       const open = this.unresolved().length;
-      const total = commit?.comment_chains.length ?? 0;
+      const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
+      const yours = chains.length - fromGerrit;
       const item = new vscode.TreeItem(
         "Comments",
-        open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+        open || yours ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
       );
-      item.description = total ? `${open} unresolved of ${total}` : "none";
+      const parts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
+      item.description = parts.filter(Boolean).join(" · ") || "none";
       return item;
     }
     const item = new vscode.TreeItem("CI", vscode.TreeItemCollapsibleState.Collapsed);
@@ -356,21 +399,25 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
       replies ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
     );
     item.id = `thread/${chain.root_id}`;
+    const mine = isYours(chain) ? YOURS[first?.state ?? ""] : undefined;
     const answered = !chain.resolved && chain.resolved_after_publish;
     const held = chain.held && !chain.resolved;
-    const notes = [held ? "kept for you" : "", answered ? "your draft resolves it" : "", where, first?.author ?? "", replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : ""];
+    const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", where, mine ? "" : (first?.author ?? ""), replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : ""];
     item.description = notes.filter(Boolean).join(" · ");
-    item.iconPath = chain.resolved
-      ? icon("pass", "disabledForeground")
-      : answered
-        ? icon("edit", "testing.iconPassed")
-        : held
-          ? icon("person", "list.warningForeground")
-          : icon("comment-unresolved", "list.warningForeground");
+    item.iconPath = mine
+      ? icon(first?.state === "note" ? "note" : "edit")
+      : chain.resolved
+        ? icon("pass", "disabledForeground")
+        : answered
+          ? icon("edit", "testing.iconPassed")
+          : held
+            ? icon("person", "list.warningForeground")
+            : icon("comment-unresolved", "list.warningForeground");
     item.tooltip = new vscode.MarkdownString(
       chain.comments.map((c) => `**${c.author ?? "you"}** ${c.state === "published" ? "" : `_(${c.state})_`}\n\n${c.message}`).join("\n\n---\n\n"),
     );
-    item.contextValue = chain.resolved ? "ger.thread.resolved" : `ger.thread.open${chain.held ? ".held" : ".free"}`;
+    // Your own unpublished chain: nobody to reply to, nothing for the agent to keep from.
+    item.contextValue = mine ? "ger.mine" : chain.resolved ? "ger.thread.resolved" : `ger.thread.open${chain.held ? ".held" : ".free"}`;
     const location: Location = { path: chain.path, line: chain.line };
     item.command = { command: "ger.openLocation", title: "Go to Comment", arguments: [location] };
     return item;
@@ -429,7 +476,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     try {
       await vscode.window.showTextDocument(uri, { selection: new vscode.Range(line, 0, line, 0), preview: true });
     } catch (error) {
-      void vscode.window.showWarningMessage(`Cannot open ${location.path}: ${describeError(error)}`);
+      void ui().message("warning", `Cannot open ${location.path}: ${describeError(error)}`, {}, []);
     }
   }
 }

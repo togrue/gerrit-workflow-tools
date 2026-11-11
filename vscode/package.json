@@ -107,8 +107,8 @@
       { "command": "ger.stack.moveDown", "title": "Move Earlier in the Stack", "category": "ger", "icon": "$(arrow-down)" },
       { "command": "ger.stack.moveUpBlocked", "title": "Moving Later Would Conflict (Why?)", "category": "ger", "icon": "$(circle-slash)" },
       { "command": "ger.stack.moveDownBlocked", "title": "Moving Earlier Would Conflict (Why?)", "category": "ger", "icon": "$(circle-slash)" },
-      { "command": "ger.stack.squash", "title": "Squash into Commit Below (Keep Its Message)", "category": "ger" },
-      { "command": "ger.stack.squashTakeMessage", "title": "Squash into Commit Below (Keep This Message)", "category": "ger" },
+      { "command": "ger.stack.squash", "title": "Squash into Commit Below", "category": "ger" },
+      { "command": "ger.stack.squashTakeMessage", "title": "Squash into Commit Below, Keeping This Message", "category": "ger" },
       { "command": "ger.stack.drop", "title": "Drop Commit…", "category": "ger" },
       { "command": "ger.openDiff", "title": "Open Diff", "category": "ger" },
       { "command": "ger.openLocation", "title": "Go to Location", "category": "ger" },
@@ -162,7 +162,7 @@
         { "command": "ger.checkout", "when": "view == ger.change && !ger.changeIsLocal", "group": "navigation@4" },
         { "command": "ger.stack.edit", "when": "view == ger.change && ger.changeIsLocal", "group": "navigation@4" },
         { "command": "ger.openInGerrit", "when": "view == ger.change", "group": "navigation@5" },
-        { "command": "ger.reviewDone", "when": "view == ger.change" }
+        { "command": "ger.reviewDone", "when": "view == ger.change && ger.reviewOpen" }
       ],
       "view/item/context": [
         { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.change/", "group": "inline@1" },

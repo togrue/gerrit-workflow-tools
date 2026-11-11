@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, MoveConflict, Overview, StackCommit, StackMoves } from "./api";
+import { Chain, CommitStatus, MoveConflict, Overview, StackCommit, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -63,6 +63,19 @@ export function votes(item: { verified: number | null; code_review: number | nul
   return parts.join(" ") || "no votes";
 }
 
+/**
+ * A commit's votes. When its code moved on from the pushed patchset, that patchset's votes,
+ * marked as such: Gerrit may not keep them for the next push.
+ */
+export function commitVotes(commit: CommitStatus): string {
+  const last = commit.last_pushed_votes;
+  if (!last || (last.verified === null && last.code_review === null)) {
+    return votes(commit);
+  }
+  const comments = commit.comments_unresolved > 0 ? ` 💬${commit.comments_unresolved}` : "";
+  return `last pushed ${votes({ ...last, comments_unresolved: 0 })}${comments}`;
+}
+
 const FILE_STATES: Record<string, string> = { A: "added", M: "modified", D: "deleted", R: "renamed", C: "copied", T: "type changed" };
 
 /** Git's status letter in a word. */
@@ -100,7 +113,7 @@ export function chainDescription(chain: Chain, section: string): string {
 
 export function commitDescription(commit: StackCommit): string {
   const parts = [commit.short_sha];
-  parts.push(commit.pushed ? votes(commit) : "not on Gerrit");
+  parts.push(commit.pushed ? commitVotes(commit) : "not on Gerrit");
   if (commit.patchset_status === "newer") {
     parts.push("ahead of Gerrit");
   }

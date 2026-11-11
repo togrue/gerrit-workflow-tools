@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Chain, Overview } from "../src/api";
+import { Chain, CommitStatus, Overview } from "../src/api";
 import {
   age,
   blockedMove,
@@ -9,6 +9,7 @@ import {
   chainDescription,
   chainsWithActivity,
   commentLocation,
+  commitVotes,
   droppedOn,
   fileState,
   moved,
@@ -117,4 +118,13 @@ test("the conflict preview blocks only the swaps that would conflict", () => {
   assert.equal(blocked.get(swapKey("b", "c")), conflict);
   assert.equal(blockedSwaps(undefined).size, 0);
   assert.equal(blockedMove("Add d.txt", "Rework d.txt", conflict), '"Add d.txt" cannot change places with "Rework d.txt": "Rework d.txt" would conflict in d.txt.');
+});
+
+test("a commit whose code moved on shows the pushed votes as last pushed; a rebased one its own", () => {
+  const base = { verified: null, code_review: null, comments_unresolved: 2, last_pushed_votes: { verified: -1, code_review: 2 } };
+  assert.equal(commitVotes(base as unknown as CommitStatus), "last pushed V-1 CR+2 💬2");
+  const rebased = { ...base, verified: -1, code_review: 2, last_pushed_votes: null };
+  assert.equal(commitVotes(rebased as unknown as CommitStatus), "V-1 CR+2 💬2");
+  const never = { ...base, last_pushed_votes: { verified: null, code_review: null } };
+  assert.equal(commitVotes(never as unknown as CommitStatus), "💬2");
 });

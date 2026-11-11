@@ -3,9 +3,10 @@
 import * as vscode from "vscode";
 
 import { StackCommit, StackStep } from "./api";
-import { blockedMove, commitDescription, droppedOn, moved, reasonWords, severity } from "./format";
+import { blockedMove, commitDescription, droppedOn, moved, reasonWords, sentence, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
+import { ui } from "./ui";
 
 const MIME = "application/vnd.code.tree.ger.stack";
 
@@ -14,7 +15,7 @@ type Node =
   | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon; tooltip?: string; command?: vscode.Command };
 
 export function commitTarget(commit: StackCommit): ChangeTarget {
-  return { rev: commit.sha, title: commit.summary, url: commit.gerrit_url, local: true };
+  return { rev: commit.sha, title: commit.summary, number: commit.number ?? undefined, url: commit.gerrit_url, local: true };
 }
 
 export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDragAndDropController<Node> {
@@ -138,6 +139,13 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     if (dragged.length !== 1 || target?.kind === "info") {
       return;
     }
+    // Onto its neighbour is a swap: when the conflict preview already knows it fails, say so at once.
+    const shas = this.commits().map((c) => c.sha);
+    const [from, to] = [shas.indexOf(dragged[0]), target ? shas.indexOf(target.commit.sha) : 0];
+    const draggedNode = this.commits()[from];
+    if (draggedNode && Math.abs(to - from) === 1 && this.explainBlocked({ kind: "commit", commit: draggedNode }, to - from)) {
+      return;
+    }
     // The dragged commit takes the target's place, up or down; empty space under the list is the bottom.
     const order = droppedOn(
       this.commits().map((c) => c.sha),
@@ -161,15 +169,16 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     }
   }
 
-  /** Say why a commit cannot move a place later (`+1`) or earlier (`-1`). */
-  explainBlocked(node: Node | undefined, step: number): void {
+  /** Say why a commit cannot move a place later (`+1`) or earlier (`-1`); false when it can. */
+  explainBlocked(node: Node | undefined, step: number): boolean {
     const commits = this.commits();
     const index = node?.kind === "commit" ? commits.findIndex((c) => c.sha === node.commit.sha) : -1;
     const [commit, other] = [commits[index], commits[index + step]];
     const conflict = commit && other && (step > 0 ? this.model.swapConflict(commit.sha, other.sha) : this.model.swapConflict(other.sha, commit.sha));
     if (conflict) {
-      void vscode.window.showInformationMessage(`${blockedMove(commit.summary, other.summary, conflict)} Nothing was changed.`);
+      void ui().message("info", `${blockedMove(commit.summary, other.summary, conflict)} Nothing was changed.`, {}, []);
     }
+    return Boolean(conflict);
   }
 
   /** Fold a commit into the one below it. One message survives whole, and with it its Change-Id. */
@@ -195,7 +204,7 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     const detail = commit.pushed
       ? "Its change stays open on Gerrit until you abandon it there. You can undo the drop right after."
       : "It was never pushed: after the drop it exists only in the reflog. You can undo the drop right after.";
-    const answer = await vscode.window.showWarningMessage(`Drop "${commit.summary}" from the stack?`, { modal: true, detail }, "Drop");
+    const answer = await ui().message("warning", `Drop "${commit.summary}" from the stack?`, { modal: true, detail }, ["Drop"]);
     if (answer !== "Drop") {
       return;
     }
@@ -204,15 +213,17 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
   }
 
   private async rewrite(steps: StackStep[], done: string): Promise<void> {
+    const before = this.commits();
     try {
       const client = await this.model.client();
-      const stack = await vscode.window.withProgress({ location: { viewId: "ger.stack" }, title: "Rewriting the stack" }, () =>
-        client.rewrite(steps),
-      );
+      const stack = await ui().progress({ viewId: "ger.stack" }, "Rewriting the stack", () => client.rewrite(steps));
       this.model.setStack(stack);
       void this.model.refresh();
       if (stack.head && stack.head !== stack.previous_head) {
-        const undo = await vscode.window.showInformationMessage(`${done} Push to update Gerrit.`, "Undo");
+        // Only commits Gerrit has seen and that got new ids need a push; a commit never pushed does not.
+        const kept = new Set(stack.commits.map((c) => c.sha));
+        const push = before.some((c) => c.pushed && !kept.has(c.sha)) ? " Push to update Gerrit." : "";
+        const undo = await ui().message("info", `${done}${push}`, {}, ["Undo"]);
         if (undo && stack.head) {
           this.model.setStack(await client.undo(stack.head, stack.previous_head));
           void this.model.refresh();
@@ -220,7 +231,8 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
       }
     } catch (error) {
       // All or nothing on the server: a refusal means the branch is exactly as it was.
-      void vscode.window.showWarningMessage(`Stack left as it was: ${describeError(error)}`);
+      const reason = describeError(error);
+      void ui().message("warning", /left as it was/.test(reason) ? sentence(reason) : `Stack left as it was: ${reason}`, {}, []);
       void this.model.refresh();
     }
   }

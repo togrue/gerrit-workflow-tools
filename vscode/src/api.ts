@@ -85,6 +85,10 @@ export interface CommitStatus {
   ci_failures: string[];
   ci_links: CiLink[];
   gerrit_url: string | null;
+  /** The Gerrit change number; null before the first push. */
+  number: number | null;
+  /** The pushed patchset's votes while this commit is ahead of it with other code (its own votes are then null). */
+  last_pushed_votes: { verified: number | null; code_review: number | null } | null;
   submittable: boolean;
   work_in_progress: boolean;
   attention_reasons: string[];
@@ -363,7 +367,13 @@ export class GerClient {
     return this.call("POST", "/review/done", undefined, {});
   }
 
-  reply(rev: string, commentId: string, message: string, resolved?: boolean): Promise<{ root_id: string }> {
+  /** Your draft reply to a chain: created, or the one you had there updated. */
+  reply(
+    rev: string,
+    commentId: string,
+    message: string,
+    resolved?: boolean,
+  ): Promise<{ root_id: string; reply: { action: "created" | "updated"; replaced_message: string | null } }> {
     return this.call("POST", "/comments/reply", undefined, { rev, comment_id: commentId, message, resolved });
   }
 
