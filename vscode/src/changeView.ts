@@ -91,6 +91,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     this.target = target;
     this.ci = undefined;
     // The title bar offers "Edit Commit" for your own stack commit, "Check Out for Review" otherwise.
+    void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
     const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
       try {
@@ -119,6 +120,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
   close(): void {
     this.generation += 1;
     [this.target, this.shown, this.diff, this.delta, this.problem, this.ci] = [undefined, undefined, undefined, undefined, undefined, undefined];
+    void vscode.commands.executeCommand("setContext", "ger.changeShown", false);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", false);
     void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
     this.changed.fire();

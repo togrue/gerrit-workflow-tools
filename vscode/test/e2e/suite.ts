@@ -274,24 +274,24 @@ export async function run(): Promise<void> {
       exec("ger.release", await threadRow(/^Is this the right design/)),
     );
     await press(
-      "Inline Reply (Draft)… on \"Please rename this.\"",
+      "Inline Reply as Draft… on \"Please rename this.\"",
       "An input box asks for the reply; after Enter the draft shows under the thread and the status bar says it was saved.",
       exec("ger.reply", await threadRow(/^Please rename this/)),
       [{ type: "Renamed it." }],
     );
     await press(
-      "Inline Reply (Draft)… on \"Please rename this.\" again",
+      "Inline Reply as Draft… on \"Please rename this.\" again",
       "The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.",
       exec("ger.reply", await threadRow(/^Please rename this/)),
       [{ type: "Renamed it to route()." }],
     );
     await press(
-      "Inline Reply Done and Resolve on \"Is this the right design?\"",
+      "Inline Reply Done and Resolve as Draft on \"Is this the right design?\"",
       "A \"Done\" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.",
       exec("ger.replyDone", await threadRow(/^Is this the right design/)),
     );
     await press(
-      "Inline Reply Done and Resolve on \"Please rename this.\", which has your draft",
+      "Inline Reply Done and Resolve as Draft on \"Please rename this.\", which has your draft",
       "Your draft stays as you wrote it and now resolves the thread.",
       exec("ger.replyDone", await threadRow(/^Please rename this/)),
     );
@@ -353,7 +353,7 @@ export async function run(): Promise<void> {
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qam", "Rework d.txt"], { cwd: repo });
     });
     await press(
-      "Inline ⊘ (Moving Earlier Would Conflict) on \"Rework d.txt\"",
+      "Inline ⊘ (Show Why It Cannot Move Earlier) on \"Rework d.txt\"",
       "It says which commit it would conflict with, and that nothing changed.",
       exec("ger.stack.moveDownBlocked", await stackRow("Rework d.txt")),
     );

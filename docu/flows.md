@@ -28,13 +28,13 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Step | CLI | Extension | Tests | Status |
 |------|-----|-----------|-------|--------|
 | Open the chain | `ger inbox`, `ger show CHANGEISH` | click a chain, *Show Change* | `tests/test_inbox.py`, `tests/test_show.py` | ships |
-| Check out one commit, in the review worktree | `ger review CHANGEISH` | *Check Out for Review (Review Worktree)* | `tests/test_review.py` | ships |
+| Check out one commit, in the review worktree | `ger review CHANGEISH` | *Check Out for Review* | `tests/test_review.py` | ships |
 | Walk up and down the chain | `ger review --next`, `ger review --prev` | click another chain member | `tests/test_review.py`, `tests/test_review_chain.py` | ships |
 | Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff* | `tests/test_review.py` | ships |
 | What changed since the patchset you reviewed | — | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_serve.py` | **gap** in the CLI |
 | Read the comment chains | `ger show --comments all` | editor comment threads, *Next Unresolved Comment* | `tests/test_show.py`, `tests/test_show_comments_render.py` | ships |
 | Comment on a line or range | `ger comment PATH:LINE -m MSG` | "+" in the editor gutter, *Save Draft* | `tests/test_comment.py` | ships |
-| Reply to a chain | `ger reply CHAIN -m MSG`, `--done` | *Reply (Draft)…*, *Reply Done and Resolve* | `tests/test_reply.py` | ships |
+| Reply to a chain | `ger reply CHAIN -m MSG`, `--done` | *Reply as Draft…*, *Reply Done and Resolve as Draft* | `tests/test_reply.py` | ships |
 | Send comments and vote | `ger review --vote CR+1 -m MSG` | runs in the terminal | `tests/test_review.py` | ships |
 | Leave the review | `ger review --done` | *Leave Review Checkout* | `tests/test_review.py` | ships |
 | An agent reviews: at most Code-Review+1, and says what it would really give | `GER_NO_PUBLISH=1` stops publishing altogether | — | — | **gap**: no agent vote policy in core |
@@ -48,7 +48,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | See the CI failures of this commit | `ger ci REV`, `ger show --ci REV` | *CI* group in the *Change* view | `tests/test_ci.py` | ships |
 | Diff the local commit against the patchset CI checked | — | — | — | **gap** |
 | Step to the next issue, comments and CI findings alike | `ger show -n` (next commit with attention) | *Next Unresolved Comment* (comments only) | `tests/test_attention_cursor.py` | partial: no single walk over comments and findings |
-| Reply to comments | `ger reply CHAIN -m MSG` | *Reply (Draft)…*, editor threads | `tests/test_reply.py` | ships |
+| Reply to comments | `ger reply CHAIN -m MSG` | *Reply as Draft…*, editor threads | `tests/test_reply.py` | ships |
 | Add a private comment | `ger comment --note`, `ger comment --local` | *Save Private Note*, *Save Local Draft* | `tests/test_comment.py`, `tests/test_local_comments.py` | ships |
 | Remove a private comment | `ger comment --discard` | — | `tests/test_comment.py` | partial: CLI only |
 | Fold a fix into a stack commit | `ger fix CHANGEISH` | — | `tests/test_fix.py` | ships |

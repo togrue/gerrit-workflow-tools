@@ -315,7 +315,7 @@ notification (info): Copied. Paste it into your agent, or set `ger.agentCommand`
 - change |   Is this the right design? — kept for you · b.txt:1 · Bob Architect  [ger.thread.open.held]
 ```
 
-## 22. Inline Reply (Draft)… on "Please rename this."
+## 22. Inline Reply as Draft… on "Please rename this."
 
 **Expect:** An input box asks for the reply; after Enter the draft shows under the thread and the status bar says it was saved.
 
@@ -331,7 +331,7 @@ status bar message: $(check) Draft saved. Publish it with ger push.
 - change |   Please rename this. — b.txt:1 · Alice Reviewer  [ger.thread.open.free]
 ```
 
-## 23. Inline Reply (Draft)… on "Please rename this." again
+## 23. Inline Reply as Draft… on "Please rename this." again
 
 **Expect:** The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.
 
@@ -347,7 +347,7 @@ status bar message: $(check) Draft updated. Publish it with ger push.
 - change |     you — [draft] Renamed it.
 ```
 
-## 24. Inline Reply Done and Resolve on "Is this the right design?"
+## 24. Inline Reply Done and Resolve as Draft on "Is this the right design?"
 
 **Expect:** A "Done" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.
 
@@ -359,7 +359,7 @@ status bar message: $(check) Draft saved, resolving the comment. Publish it with
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [ger.thread.open.free]
 ```
 
-## 25. Inline Reply Done and Resolve on "Please rename this.", which has your draft
+## 25. Inline Reply Done and Resolve as Draft on "Please rename this.", which has your draft
 
 **Expect:** Your draft stays as you wrote it and now resolves the thread.
 
@@ -521,7 +521,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - stack  | Cleanup after experiment — HEAD · <sha> · V-1 CR+2 · ahead of Gerrit · held back  [ger.commit.url.down]
 ```
 
-## 36. Inline ⊘ (Moving Earlier Would Conflict) on "Rework d.txt"
+## 36. Inline ⊘ (Show Why It Cannot Move Earlier) on "Rework d.txt"
 
 **Expect:** It says which commit it would conflict with, and that nothing changed.
 
