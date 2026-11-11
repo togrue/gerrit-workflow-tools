@@ -153,6 +153,10 @@ class ChangeStore:
         """
         self._stubbed_queries[query] = rows
 
+    def add_change(self, payload: dict[str, Any]) -> None:
+        """Seed one more ChangeInfo, keyed by its Gerrit ``id``."""
+        self._changes[payload["id"]] = payload
+
     def set_comments(self, change_ref: str, file_map: dict[str, list[dict[str, Any]]]) -> None:
         """Seed inline comments for one change."""
         self._comments[self._payload_id(change_ref)] = file_map

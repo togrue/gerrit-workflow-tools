@@ -105,8 +105,19 @@ npm run e2e         # the extension inside a real VS Code, against a fixture rep
 
 `npm run e2e` starts your installed VS Code (or `VSCODE_EXE`) with a throwaway profile, opens
 a generated four-commit repository, and has the extension start the real `ger serve` over the
-test suite's fake Gerrit (`test/e2e/fake_ger.py`). It walks every view, steps to a comment,
-opens a diff, fetches CI findings, and prints what the views showed. Needs `uv`.
+test suite's fake Gerrit (`test/e2e/fake_ger.py`). Your git config and ger's cache and config
+are kept out. Needs `uv`.
+
+The suite presses every button in turn. Everything the extension says or does outside its
+views (notifications, dialogs, pickers, input boxes, the status bar, terminals, the clipboard,
+the browser) goes through one seam, `src/ui.ts`, which the suite replaces with a scripted user
+(`test/e2e/scriptedUi.ts`) that answers each prompt and writes it down. For each press,
+`test/e2e/transcript.golden.md` holds what a user expects, what the extension said and did,
+and how the views changed. An **Expect** line says what a user would expect from that press;
+where one behaviour is clearly what users expect, the extension does that, and only open
+design questions go to a decision. A run whose transcript differs fails and prints the diff: judge each
+changed step against its **Expect** line, then accept it with `npm run e2e -- --update`. Set
+`GER_E2E_SCREENS=<file>` to also get the full screen before and after every press.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
 open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere.
@@ -124,6 +135,7 @@ anything it printed.
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
+| `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
 | `src/extension.ts` | Wiring: commands, status bar, polling. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's

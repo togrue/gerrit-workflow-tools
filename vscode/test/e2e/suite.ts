@@ -1,15 +1,20 @@
-// Runs inside a real VS Code (see run.ts): activates the extension against fake_ger.py and walks
-// every view the way a user would expand it. Asserts the essentials and writes what the views
-// showed to GER_E2E_OUT, so a change in what users see is a visible diff.
+// Runs inside a real VS Code (see run.ts): activates the extension against fake_ger.py and
+// presses every button a user can press, in an order a user might. For each press it writes
+// down what the user expects, what the extension said and did (through the scripted Ui), and
+// how the views changed. That transcript goes to GER_E2E_OUT; run.ts compares it with the
+// golden file, so any change in behaviour is a visible diff to judge against the expectation.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import type { CommentChain } from "../../src/api";
 import { fileUri } from "../../src/changeView";
 import type { ExtensionApi } from "../../src/extension";
+import { Answer, ScriptedUi, lineDiff } from "./scriptedUi";
 
 type Provider<T> = vscode.TreeDataProvider<T>;
 
@@ -30,9 +35,10 @@ async function dump<T>(provider: Provider<T>, node?: T, depth = 0): Promise<stri
   return lines;
 }
 
-async function find<T>(provider: Provider<T>, wanted: string, node?: T): Promise<T | undefined> {
+async function find<T>(provider: Provider<T>, wanted: string | RegExp, node?: T): Promise<T | undefined> {
   for (const child of (await provider.getChildren(node)) ?? []) {
-    if (text((await provider.getTreeItem(child)).label) === wanted) {
+    const label = text((await provider.getTreeItem(child)).label);
+    if (typeof wanted === "string" ? label === wanted : wanted.test(label)) {
       return child;
     }
     const below = await find(provider, wanted, child);
@@ -43,14 +49,39 @@ async function find<T>(provider: Provider<T>, wanted: string, node?: T): Promise
   return undefined;
 }
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** What stays the same from run to run: no commit ids, temp paths or ages. */
+function normalizer(repo: string): (line: string) => string {
+  const roots = [repo, repo.replaceAll("\\", "/"), os.tmpdir(), os.tmpdir().replaceAll("\\", "/")];
+  // The fake stands in for `ger`: show the command a user would see run.
+  const executable = vscode.workspace.getConfiguration("ger").get<string>("executable", "ger");
+  return (line) => {
+    let out = line.split(executable).join("ger");
+    for (const [i, root] of roots.entries()) {
+      out = out.split(root).join(i < 2 ? "<repo>" : "<tmp>");
+      out = out.split(root.toLowerCase()).join(i < 2 ? "<repo>" : "<tmp>");
+    }
+    return out
+      .replace(/ger-(runbook|brief)-[\w.-]+\.md/g, "ger-$1-<id>.md")
+      .replace(/<tmp>[\\/]ger-e2e-\w+[\\/]repo/g, "<repo>")
+      .replace(/\b[0-9a-f]{7,40}\b/g, "<sha>")
+      .replace(/\b\d+[mhd]\b/g, "<age>");
+  };
+}
+
 export async function run(): Promise<void> {
   const out: string[] = [];
-  const section = (title: string, lines: string[]) => out.push(`## ${title}`, ...lines, "");
+  const repo = vscode.workspace.workspaceFolders?.[0].uri.fsPath ?? "";
+  const normalize = normalizer(repo);
+  const ui = new ScriptedUi(normalize);
+  const problems: string[] = [];
   try {
     const extension = vscode.extensions.getExtension<ExtensionApi>("gerrit-workflow-tools.ger-vscode");
     assert.ok(extension, "the extension is installed in the development host");
     const api = await extension.activate();
     assert.ok(api, "the extension activated on the workspace folder");
+    api.useUi(ui);
     await api.model.refresh();
     assert.equal(api.model.failure, undefined, "ger serve started and answered");
 
@@ -59,146 +90,327 @@ export async function run(): Promise<void> {
     const registered = new Set(await vscode.commands.getCommands(true));
     assert.deepEqual(declared.filter((command) => !registered.has(command)), []);
 
-    section("Status bar", [api.model.overview?.headline?.text ?? "(no headline)"]);
-    const overview = await dump(api.overviewView);
-    section("Review chains", overview);
-    assert.ok(overview.some((line) => line.startsWith("CI failed on 102")), "the headline leads the overview");
-    assert.ok(overview.some((line) => line.startsWith("Outgoing")) && overview.some((line) => line.startsWith("To review")));
+    const editor = (): string => {
+      const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      if (!tab) {
+        return "(none)";
+      }
+      const input = tab.input;
+      const kind =
+        input instanceof vscode.TabInputTextDiff
+          ? `diff, ${input.original.scheme} ↔ ${input.modified.scheme}`
+          : input instanceof vscode.TabInputText
+            ? input.uri.scheme
+            : "webview";
+      const active = vscode.window.activeTextEditor;
+      const line = active && input instanceof vscode.TabInputText && active.document.uri.toString() === input.uri.toString() ? `, line ${active.selection.active.line + 1}` : "";
+      return `${tab.label} (${kind}${line})`;
+    };
+    const status = (): string => {
+      const headline = api.model.overview?.headline?.text ?? "nothing needs you";
+      return `${headline}${api.model.active.size ? `  🔔 ${api.model.active.size}` : ""}`;
+    };
+    /** Everything a user could see, one line each, prefixed by where it is. */
+    const screen = async (): Promise<string[]> => {
+      const shown = api.changeView.target;
+      return [
+        `status bar | ${status()}`,
+        ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
+        ...(await dump(api.stackView)).map((line) => `stack  | ${line}`),
+        `change | title: ${shown ? `${shown.number ? `Change ${shown.number}` : "Change"} — ${api.changeView.shown?.summary ?? shown.title}` : "(nothing shown)"}`,
+        ...(await dump(api.changeView)).map((line) => `change | ${line}`),
+        `editor | ${editor()}`,
+      ].map(normalize);
+    };
+    /** Let follow-up refreshes and the conflict preview land. */
+    const settle = async () => {
+      await wait(300);
+      await api.model.refresh();
+      await wait(300);
+      await api.changeView.idle();
+    };
 
-    const stack = await dump(api.stackView);
-    section("Local stack", stack);
-    assert.equal(stack.length, 4);
-    assert.match(stack[0], /^Cleanup after experiment — HEAD/, "newest first, HEAD marked");
+    let step = 0;
+    let before = await screen();
+    out.push("# What a user sees and gets, button by button", "", "## On start", "", "```", ...before, "```", "");
 
-    // A commit of yours with comments: files, both comment chains, no CI group.
-    const commented = await find(api.stackView, "Extract command routing");
-    assert.ok(commented);
-    await vscode.commands.executeCommand("ger.openChange", commented);
-    section("Change: your commit with comments", await dump(api.changeView));
-    assert.equal(api.changeView.unresolved().length, 2);
-    assert.deepEqual(api.changeView.diff?.files.map((f) => f.path), ["b.txt"]);
+    /** Press one button: write the expectation, what was said and done, and what changed on screen. */
+    const press = async (button: string, expect: string, action: () => unknown, answers: Answer[] = []) => {
+      step += 1;
+      ui.script(answers);
+      let threw: string | undefined;
+      try {
+        await action();
+      } catch (error) {
+        threw = error instanceof Error ? error.message : String(error);
+      }
+      await settle();
+      const after = await screen();
+      const said = ui.drain();
+      const changed = lineDiff(before, after);
+      if (process.env.GER_E2E_SCREENS) {
+        // Full screens, for when a diff alone does not explain a step.
+        fs.appendFileSync(process.env.GER_E2E_SCREENS, [`## ${step} before`, ...before, `## ${step} after`, ...after, ""].join("\n"));
+      }
+      before = after;
+      out.push(`## ${step}. ${button}`, "", `**Expect:** ${expect}`, "", "```");
+      out.push(...(said.lines.length ? said.lines : ["(nothing said or done outside the views)"]));
+      if (threw) {
+        out.push(`!! the command threw: ${normalize(threw)}`);
+      }
+      out.push("--- on screen:", ...(changed.length ? changed : ["(no change)"]), "```", "");
+      problems.push(...said.problems.map((problem) => `${step}. ${button}: ${problem}`));
+    };
+    /** Something the user does outside the extension (a commit in the terminal). */
+    const meanwhile = async (what: string, action: () => unknown, expect?: string) => {
+      await action();
+      await settle();
+      const after = await screen();
+      out.push(`## Meanwhile: ${what}`, "", ...(expect ? [`**Expect:** ${expect}`, ""] : []), "```", ...lineDiff(before, after), "```", "");
+      before = after;
+    };
 
-    // Stepping to a comment opens the file at its line, and the editor shows the thread.
-    await vscode.commands.executeCommand("ger.nextComment");
-    const editor = vscode.window.activeTextEditor;
-    assert.equal(path.basename(editor?.document.fileName ?? ""), "b.txt");
-    assert.equal(editor?.selection.active.line, 0);
-
-    // Clicking a file opens a diff, parent on the left.
-    await vscode.commands.executeCommand("ger.openDiff", api.changeView.diff?.files[0], api.changeView.diff);
-    const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-    assert.ok(tab?.input instanceof vscode.TabInputTextDiff, "a diff editor is open");
-    assert.equal((tab.input as vscode.TabInputTextDiff).original.scheme, "ger-file");
-    section("Diff tab", [tab.label]);
-
-    // A commit with failed CI: the CI group fetches findings and marks what it introduced.
-    const failing = await find(api.stackView, "test! temporary experiment");
-    await vscode.commands.executeCommand("ger.openChange", failing);
-    const change = await dump(api.changeView);
-    section("Change: your commit with failed CI", change);
-    assert.ok(change.some((line) => line.includes("introduced here")), "introduced findings are marked");
-
-    // Someone else's change: a chain of one is the change itself, nothing to expand.
-    const theirs = await find(api.overviewView, "Add retry to the uploader");
-    assert.ok(theirs);
-    assert.deepEqual(await dump(api.overviewView, theirs), []);
-    await vscode.commands.executeCommand("ger.openChange", theirs);
-    assert.equal(api.changeView.target?.number, 900);
-    // (The fake Gerrit only knows change 900 as a query row, so its detail is an error here.)
-
-    // Keeping a comment for yourself shows on the thread and stays out of the agent runbook.
-    await vscode.commands.executeCommand("ger.openChange", commented);
-    const design = await find(api.changeView, "Is this the right design?");
-    await vscode.commands.executeCommand("ger.hold", design);
-    const client = await api.model.client();
-    const runbook = await client.runbook();
-    section("Change: one comment kept for you", await dump(api.changeView));
-    section("Agent runbook", runbook.markdown.split("\n"));
-    assert.deepEqual([runbook.totals.comments, runbook.totals.held], [1, 1]);
-
-    // New comments, as the "+" in the gutter starts them: the box's text and the thread's place.
-    const reply = (uri: vscode.Uri, line: number, text: string): vscode.CommentReply => ({
-      thread: { uri, range: new vscode.Range(line, 0, line, 0), dispose: () => undefined } as unknown as vscode.CommentThread,
-      text,
-    });
-    const states = () => api.changeView.unresolved().flatMap((chain) => chain.comments.map((c) => `${c.state}: ${c.message}`));
-    // Gerrit has this very commit: a new comment is a draft there.
-    await vscode.commands.executeCommand("ger.openChange", await find(api.stackView, "Extract command routing"));
-    assert.equal(api.changeView.shown?.new_comment, "draft");
-    const routed = api.changeView.diff?.commit ?? "";
-    await api.threads.saveNew(reply(fileUri(routed, "b.txt"), 0, "Typo here."), "draft");
-    assert.ok(states().includes("draft: Typo here."), "the draft comes back in its chain");
-
-    // A rewrite gives the commits new ids; the shown change follows by Change-Id.
-    const before = api.model.stack?.commits.map((c) => c.sha) ?? [];
-    api.model.setStack(await client.rewrite([before[1], before[0], before[2], before[3]]));
-    await api.model.refresh();
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    section("Local stack after moving a commit", await dump(api.stackView));
-    assert.equal(api.changeView.shown?.summary, "Extract command routing");
-    assert.notEqual(api.changeView.target?.rev, before[1]);
-
-    // The conflict preview: a commit that reworks d.txt cannot go below the one that adds it.
-    assert.ok(!(await dump(api.stackView)).some((line) => /\.(up|down)x/.test(line)), "four independent commits: every move is offered");
-    const repo = vscode.workspace.workspaceFolders?.[0].uri.fsPath ?? "";
-    fs.writeFileSync(path.join(repo, "d.txt"), "reworked\n", "utf8");
-    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qam", "Rework d.txt"], { cwd: repo });
-    await api.model.refresh();
-    const blocked = await dump(api.stackView);
-    section("Local stack with a move that would conflict", blocked);
-    assert.match(blocked[0], /^Rework d\.txt .*\.downx\]$/, "the arrow down is replaced by the blocked marker");
-    assert.match(blocked[1], /^Cleanup after experiment .*\.upx\.down\]$/);
-    assert.ok(blocked.slice(2).every((line) => !/x\b/.test(line.split("[")[1] ?? "")));
-
-    // Drag and drop: the dragged commit takes the place of the one it lands on, downwards too.
-    const shown = () => [...(api.model.stack?.commits ?? [])].reverse().map((c) => c.summary);
-    const row = async (summary: string) => {
-      const found = await find(api.stackView, summary);
-      assert.ok(found, summary);
+    const stackRow = async (summary: string) => {
+      const row = await find(api.stackView, summary);
+      assert.ok(row, `stack row "${summary}"`);
+      return row;
+    };
+    const chainRow = async (subject: string) => {
+      const row = await find(api.overviewView, subject);
+      assert.ok(row, `overview row "${subject}"`);
+      return row;
+    };
+    const threadRow = async (first: RegExp) => {
+      const row = await find(api.changeView, first);
+      assert.ok(row, `thread ${first}`);
+      return row;
+    };
+    const chain = (first: RegExp): CommentChain => {
+      const found = api.changeView.chains().find((c) => first.test(c.comments[0]?.message ?? ""));
+      assert.ok(found, `chain ${first}`);
       return found;
     };
+    const exec = (command: string, ...args: unknown[]) => () => vscode.commands.executeCommand(command, ...args);
+
+    // --- The overview -------------------------------------------------------------
+    await press("Click the status bar item", "The Change view opens on the change the status bar names (CI failed on 102).", exec("ger.openHeadline"));
+    await press("Review chains › Mark All Activity as Seen", "Every \"● new activity\" marker goes; nothing else changes.", exec("ger.markSeen"));
+    await press("Review chains › Refresh from Gerrit", "The views reload from Gerrit. With nothing new there, nothing changes.", exec("ger.refresh"));
+    const theirs = await chainRow("Add retry to the uploader");
+    await press(
+      "Click \"Add retry to the uploader\" under To review",
+      "The Change view shows change 900: what it needs from you, its files, its comments.",
+      exec("ger.openChange", theirs),
+    );
+    await press("Inline Open in Gerrit on change 900", "The browser opens change 900 on Gerrit.", exec("ger.openInGerrit", theirs));
+    await press(
+      "Right-click change 900 › Hand to Agent",
+      "As for your own commits: the comments and CI findings of 900 open as a preview, and a dialog offers to copy them (no agent command is set).",
+      exec("ger.agentBrief", theirs),
+      [{ button: "Copy to Clipboard" }],
+    );
+    await press(
+      "Inline Check Out for Review on change 900",
+      "Progress while it fetches; then where change 900 is checked out, with a button to open that worktree in a new window.",
+      exec("ger.checkout", theirs),
+      [{ button: "Open Review Worktree" }],
+    );
+    await press("Change › … › Leave Review Checkout", "The review checkout of 900 is closed, and a notification says so.", exec("ger.reviewDone"));
+    await press(
+      "Command palette › ger: Leave Review Checkout, with none open",
+      "It says there is no review checkout to leave (the Change view menu no longer offers it).",
+      exec("ger.reviewDone"),
+    );
+
+    // --- Your commit with comments ----------------------------------------------------
+    await press(
+      "Click \"Extract command routing\" in Local stack",
+      "The Change view is titled Change 101 and shows b.txt under Files and both unresolved comments.",
+      exec("ger.openChange", await stackRow("Extract command routing")),
+    );
+    await press("Change › Next Unresolved Comment (Alt+F9)", "b.txt opens at line 1, the first thread expands, the status bar says Comment 1 of 2.", exec("ger.nextComment"));
+    await press("Next Unresolved Comment again", "The second thread: Comment 2 of 2.", exec("ger.nextComment"));
+    await press("Next Unresolved Comment a third time", "It wraps around to Comment 1 of 2.", exec("ger.nextComment"));
+    await press("Change › Previous Unresolved Comment", "Back to Comment 2 of 2.", exec("ger.prevComment"));
+    await press(
+      "Click b.txt under Files",
+      "A diff opens: the parent on the left, the commit on the right.",
+      exec("ger.openDiff", api.changeView.diff?.files[0], api.changeView.diff),
+    );
+    await press(
+      "Inline Keep for Me on \"Is this the right design?\"",
+      "The thread is marked as kept for you; the agent will leave it alone.",
+      exec("ger.hold", await threadRow(/^Is this the right design/)),
+    );
+    await press(
+      "Local stack › Fix Stack with Agent…",
+      "The runbook opens as a preview; a dialog counts what the agent gets, without the comment kept for you; Copy to Clipboard copies it.",
+      exec("ger.agentWalk"),
+      [{ button: "Copy to Clipboard" }],
+    );
+    await press(
+      "Inline Let the Agent Handle It on \"Is this the right design?\"",
+      "The thread is no longer marked as kept for you.",
+      exec("ger.release", await threadRow(/^Is this the right design/)),
+    );
+    await press(
+      "Inline Reply (Draft)… on \"Please rename this.\"",
+      "An input box asks for the reply; after Enter the draft shows under the thread and the status bar says it was saved.",
+      exec("ger.reply", await threadRow(/^Please rename this/)),
+      [{ type: "Renamed it." }],
+    );
+    await press(
+      "Inline Reply (Draft)… on \"Please rename this.\" again",
+      "The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.",
+      exec("ger.reply", await threadRow(/^Please rename this/)),
+      [{ type: "Renamed it to route()." }],
+    );
+    await press(
+      "Inline Reply Done and Resolve on \"Is this the right design?\"",
+      "A \"Done\" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.",
+      exec("ger.replyDone", await threadRow(/^Is this the right design/)),
+    );
+    await press(
+      "Inline Reply Done and Resolve on \"Please rename this.\", which has your draft",
+      "Your draft stays as you wrote it and now resolves the thread.",
+      exec("ger.replyDone", await threadRow(/^Please rename this/)),
+    );
+    const rename = api.threads.threadOf(chain(/^Please rename this/));
+    await press(
+      "Type in the editor thread of \"Please rename this.\" › Save Draft Reply",
+      "What you type is added to your draft reply there, after what it already says; the status bar says the draft was updated.",
+      exec("ger.thread.reply", { thread: rename, text: "And updated the callers." }),
+    );
+    const commit = api.changeView.diff?.commit ?? "";
+    const newThread = { uri: fileUri(commit, "b.txt"), range: new vscode.Range(0, 0, 0, 0), dispose: () => undefined };
+    const save = api.changeView.shown?.new_comment === "local-draft" ? "ger.comment.saveLocalDraft" : "ger.comment.saveDraft";
+    await press(
+      `"+" on line 1 of b.txt in the diff › ${save === "ger.comment.saveDraft" ? "Save Draft" : "Save Local Draft"}`,
+      "The comment is saved as a draft and appears as a thread marked as your draft; it is not counted as unresolved feedback.",
+      exec(save, { thread: newThread, text: "Should this be configurable?" }),
+    );
+    await press(
+      "\"+\" on line 1 of b.txt in the diff › Save Private Note",
+      "The note is saved in this repository only and appears marked as your private note; it is not counted as unresolved feedback.",
+      exec("ger.comment.saveNote", { thread: { ...newThread }, text: "Remember to check the docs." }),
+    );
+    await press(
+      "Change › Edit Commit Here",
+      "ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.",
+      exec("ger.stack.edit"),
+    );
+    await press("Change › Open in Gerrit", "The browser opens change 101 on Gerrit.", exec("ger.openInGerrit"));
+
+    // --- A commit with failed CI ------------------------------------------------------
+    const failing = await stackRow("test! temporary experiment");
+    await press(
+      "Click \"test! temporary experiment\" in Local stack",
+      "The Change view says CI failed; the CI group lists the findings, the ones this commit introduced first.",
+      exec("ger.openChange", failing),
+    );
+    await press(
+      "Right-click it › Hand to Agent › Cancel",
+      "A runbook for this one commit and a dialog to start or copy it; Cancel does nothing more.",
+      exec("ger.agentBrief", failing),
+      [{ dismiss: true }],
+    );
+
+    // --- Rewriting the stack ----------------------------------------------------------
+    await press("Local stack › Push to Gerrit…", "ger push runs in a terminal, which shows what it will push and asks first.", exec("ger.push"));
+    await press(
+      "Inline ↑ on \"Refactor parser init\"",
+      "It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.",
+      exec("ger.stack.moveUp", await stackRow("Refactor parser init")),
+    );
+    await press(
+      "Inline ↓ on \"Refactor parser init\", then Undo",
+      "It swaps back with the commit below; Undo puts the stack back as it was before this move.",
+      exec("ger.stack.moveDown", await stackRow("Refactor parser init")),
+      [{ button: "Undo" }],
+    );
+    await meanwhile("you commit a rework of d.txt in the terminal", () => {
+      fs.writeFileSync(path.join(repo, "d.txt"), "reworked\n", "utf8");
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qam", "Rework d.txt"], { cwd: repo });
+    });
+    await press(
+      "Inline ⊘ (Moving Earlier Would Conflict) on \"Rework d.txt\"",
+      "It says which commit it would conflict with, and that nothing changed.",
+      exec("ger.stack.moveDownBlocked", await stackRow("Rework d.txt")),
+    );
     const dragged = async (summary: string) => {
       const data = new vscode.DataTransfer();
-      api.stackView.handleDrag([await row(summary)], data);
+      api.stackView.handleDrag([await stackRow(summary)], data);
       return data;
     };
-    const head = api.model.stack?.head;
-    // Onto the commit it would conflict with: refused before anything is touched.
-    await api.stackView.handleDrop(await row("Cleanup after experiment"), await dragged("Rework d.txt"));
-    assert.equal(api.model.stack?.head, head, "a drop that would conflict leaves the stack as it was");
-    const below = shown()[2];
-    // Not awaited: the rewrite then waits on its Undo notification.
-    void api.stackView.handleDrop(await row(below), await dragged("Cleanup after experiment"));
-    for (let tries = 0; tries < 50 && shown()[2] !== "Cleanup after experiment"; tries++) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    {
+      const [target, data] = [await stackRow("Cleanup after experiment"), await dragged("Rework d.txt")];
+      await press("Drag \"Rework d.txt\" onto \"Cleanup after experiment\"", "Refused before anything is touched, saying why; the stack stays as it was.", () =>
+        api.stackView.handleDrop(target, data),
+      );
     }
-    section("Local stack after dropping a commit on the one below it", await dump(api.stackView));
-    assert.deepEqual(shown().slice(1, 3), [below, "Cleanup after experiment"]);
+    {
+      const [target, data] = [await stackRow("Extract command routing"), await dragged("Cleanup after experiment")];
+      await press(
+        "Drag \"Cleanup after experiment\" onto \"Extract command routing\"",
+        "It takes that commit's place, and the commits between move up one; Undo is offered.",
+        () => api.stackView.handleDrop(target, data),
+      );
+    }
+    await press(
+      "Right-click \"Rework d.txt\" › Squash into Commit Below, then Undo",
+      "It folds into the commit below, keeping that commit's message; Undo brings it back.",
+      exec("ger.stack.squash", await stackRow("Rework d.txt")),
+      [{ button: "Undo" }],
+    );
+    await press(
+      "Right-click \"Rework d.txt\" › Squash into Commit Below, Keeping This Message, then Undo",
+      "Folds, keeping this commit's message, with a note that the Gerrit change of the one below stays open; Undo brings both back, and the Change view shows again what it showed.",
+      exec("ger.stack.squashTakeMessage", await stackRow("Rework d.txt")),
+      [{ button: "Undo" }],
+    );
+    await press(
+      "Right-click \"Rework d.txt\" › Drop Commit… › Cancel",
+      "A dialog asks to confirm; Cancel leaves everything as it was.",
+      exec("ger.stack.drop", await stackRow("Rework d.txt")),
+      [{ dismiss: true }],
+    );
+    await press(
+      "Right-click \"Rework d.txt\" › Drop Commit… › Drop, then Undo",
+      "The commit goes; Undo brings it back. It was never pushed, so there is nothing to push.",
+      exec("ger.stack.drop", await stackRow("Rework d.txt")),
+      [{ button: "Drop" }, { button: "Undo" }],
+    );
+    await press(
+      "Right-click \"Rework d.txt\" › Drop Commit… › Drop",
+      "The commit is gone from the stack and from the checkout; nothing to push, as Gerrit never had it.",
+      exec("ger.stack.drop", await stackRow("Rework d.txt")),
+      [{ button: "Drop" }],
+    );
 
-    // New comments where Gerrit does not have the commit as it is now.
-    // Rewritten by the drop above, so Gerrit has not got it: a local draft, and a private note.
-    await vscode.commands.executeCommand("ger.openChange", await row("Cleanup after experiment"));
-    assert.equal(api.changeView.shown?.new_comment, "local-draft");
-    const cleanup = api.changeView.diff?.commit ?? "";
-    const file = api.changeView.diff?.files[0]?.path ?? "";
-    await api.threads.saveNew(reply(fileUri(cleanup, file), 0, "Explain why."), "local-draft");
-    await api.threads.saveNew(reply(fileUri(cleanup, file), 0, "Ask Alice."), "note");
-    section("Change: new comments on a commit Gerrit does not have", await dump(api.changeView));
-    assert.ok(states().includes("local-draft: Explain why.") && states().includes("note: Ask Alice."));
+    await meanwhile(
+      "you change the code of the top commit and amend it",
+      () => {
+        fs.writeFileSync(path.join(repo, "c.txt"), "file c.txt, reworked\n", "utf8");
+        execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "--amend", "--no-edit", "-a"], { cwd: repo });
+      },
+      "Its votes now show as the last pushed patchset's (Gerrit may not keep them for this code); the Change view follows the commit and says so.",
+    );
 
-    // A branch without an upstream: the stack view offers the suggested one in one click.
-    execFileSync("git", ["branch", "--unset-upstream"], { cwd: repo });
-    await api.model.refresh();
-    const unset = await dump(api.stackView);
-    section("Local stack of a branch without upstream", unset);
-    assert.match(unset[0], /^feature has no upstream, so ger cannot tell where your stack starts/);
-    assert.match(unset[1], /^Track origin\/\S+ — /, "the suggestion, with why, in one click");
-    assert.match(unset[2], /^Choose another upstream branch/);
-    await vscode.commands.executeCommand("ger.setUpstream", "origin/main");
-    const tracked = await dump(api.stackView);
-    assert.ok(tracked.length >= 4 && tracked.every((line) => !line.startsWith("Track ")), "the stack is back");
+    // --- The branch -------------------------------------------------------------------
+    await press(
+      "Local stack › … › Set Upstream Branch… › Escape",
+      "A picker lists the branches it could track, the current one marked; Escape changes nothing.",
+      exec("ger.setUpstream"),
+      [{ dismiss: true }],
+    );
+
+    out.push("## At the end", "", "```", ...before, "```", "");
+    if (problems.length) {
+      out.push("## The script and the extension disagreed", "", ...problems.map((p) => `- ${p}`), "");
+    }
+    assert.deepEqual(problems, [], "every scripted answer met the prompt it was meant for");
   } catch (error) {
-    out.push("## FAILED", error instanceof Error ? (error.stack ?? error.message) : String(error), "");
+    out.push("## FAILED", "", "```", error instanceof Error ? (error.stack ?? error.message) : String(error), "```", "");
     throw error;
   } finally {
     const target = process.env.GER_E2E_OUT;

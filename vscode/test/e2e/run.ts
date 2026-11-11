@@ -4,6 +4,10 @@
 // Uses its own profile and extensions directory, so your VS Code is not touched. Needs `uv`
 // (to run fake_ger.py with the project's Python) and a VS Code executable: VSCODE_EXE, or the
 // usual install locations.
+//
+// The suite writes a transcript: for every button it presses, what a user expects, what the
+// extension said and did, and how the views changed. It must match transcript.golden.md; on a
+// difference the run fails and prints the diff. `npm run e2e -- --update` accepts the new one.
 
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -13,6 +17,7 @@ import * as path from "node:path";
 const extensionDir = path.resolve(__dirname, "..", "..", "..");
 const projectDir = path.resolve(extensionDir, "..");
 const fakeGer = path.join(extensionDir, "test", "e2e", "fake_ger.py");
+const golden = path.join(extensionDir, "test", "e2e", "transcript.golden.md");
 
 function codeExecutable(): string {
   const candidates = [
@@ -33,10 +38,22 @@ function main(): number {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ger-e2e-"));
   const repo = path.join(work, "repo");
   const profile = path.join(work, "profile");
-  const report = path.join(work, "views.md");
+  const report = path.join(work, "transcript.md");
   const fake = `uv run --project "${projectDir}" python "${fakeGer}"`;
 
-  const made = spawnSync(`${fake} --make-repo "${repo}"`, { shell: true, stdio: "inherit" });
+  // Your own git config and ger's cache and config stay out: no Gerrit settings, tokens or
+  // recent upstreams of yours, and no cached change from an earlier run with other commit ids.
+  const gitconfig = path.join(work, "gitconfig");
+  fs.writeFileSync(gitconfig, "");
+  const hermetic: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: gitconfig,
+    GIT_CONFIG_NOSYSTEM: "1",
+    XDG_CACHE_HOME: path.join(work, "cache"),
+    XDG_CONFIG_HOME: path.join(work, "config"),
+  };
+
+  const made = spawnSync(`${fake} --make-repo "${repo}"`, { shell: true, stdio: "inherit", env: hermetic });
   if (made.status !== 0) {
     throw new Error("could not create the fixture repository");
   }
@@ -44,7 +61,7 @@ function main(): number {
   const settings = { "ger.executable": fake, "ger.pollSeconds": 3600, "security.workspace.trust.enabled": false };
   fs.writeFileSync(path.join(profile, "User", "settings.json"), JSON.stringify(settings));
 
-  const env: NodeJS.ProcessEnv = { ...process.env, GER_E2E_OUT: report };
+  const env: NodeJS.ProcessEnv = { ...hermetic, GER_E2E_OUT: report };
   delete env.ELECTRON_RUN_AS_NODE; // set when started from VS Code's own terminal; it would run Code as plain Node
   const ran = spawnSync(
     codeExecutable(),
@@ -61,11 +78,32 @@ function main(): number {
     ],
     { env, stdio: "inherit", timeout: 180_000 },
   );
-  if (fs.existsSync(report)) {
-    console.log(`\n${fs.readFileSync(report, "utf8")}`);
+  if (ran.status !== 0) {
+    if (fs.existsSync(report)) {
+      console.log(`\n${fs.readFileSync(report, "utf8")}`);
+    }
+    console.log(`e2e: FAILED (exit ${ran.status ?? ran.signal})`);
+    return ran.status ?? 1;
   }
-  console.log(ran.status === 0 ? "e2e: passed" : `e2e: FAILED (exit ${ran.status ?? ran.signal})`);
-  return ran.status ?? 1;
+  return compare(report);
+}
+
+/** The transcript against the golden one: the same, or a diff to judge (and `--update` to accept). */
+function compare(report: string): number {
+  const transcript = fs.readFileSync(report, "utf8");
+  if (process.argv.includes("--update")) {
+    fs.writeFileSync(golden, transcript, "utf8");
+    console.log(`e2e: passed; transcript written to ${golden}`);
+    return 0;
+  }
+  if (fs.existsSync(golden) && fs.readFileSync(golden, "utf8") === transcript) {
+    console.log("e2e: passed; the transcript matches transcript.golden.md");
+    return 0;
+  }
+  spawnSync("git", ["diff", "--no-index", "--no-color", golden, report], { stdio: "inherit" });
+  console.log(`e2e: FAILED: the transcript differs from transcript.golden.md (new one: ${report}).`);
+  console.log("Check each changed step against its Expect line; if the new behaviour is right: npm run e2e -- --update");
+  return 1;
 }
 
 process.exit(main());
