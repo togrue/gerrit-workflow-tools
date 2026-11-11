@@ -160,7 +160,9 @@ matches **more than one** open Gerrit change:
    (rare — e.g. an abandoned change plus a new one), prefer **open/active** over
    `ABANDONED`/`MERGED`. If that still leaves more than one, **stop and list the
    candidates** (each with its number and triplet) so the next invocation can be
-   exact. This is a resolution error (exit code for ambiguity), not a silent pick.
+   exact. This is a resolution error (exit code for ambiguity), not a silent pick:
+
+   > `error: ambiguous Change-Id: matches changes on other branches (not 'main'): change:120045 (proj~release-2.1~I8f3c…, NEW), change:119870 (proj~release-2.0~I8f3c…, NEW). Name one by its change: number or triplet`
 4. **None on the target branch?** If the Change-Id matches only changes on *other*
    branches:
    - **Read-only overlay** commands (`ger log`, `ger show HEAD`) treat the local

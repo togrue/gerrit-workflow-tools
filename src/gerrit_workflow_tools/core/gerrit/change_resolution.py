@@ -56,7 +56,8 @@ class ChangeAmbiguousError(ChangeResolutionError):
     """Multiple Gerrit changes matched after narrowing."""
 
     def __init__(self, message: str, *, alternatives: list[SelectedChange]) -> None:
-        super().__init__(message)
+        listed = ", ".join(f"change:{alt.number} ({alt.triplet}, {alt.status})" for alt in alternatives)
+        super().__init__(f"{message}: {listed}. Name one by its change: number or triplet" if listed else message)
         self.alternatives = alternatives
 
 
@@ -452,8 +453,7 @@ def format_resolution_note(resolution: Resolution) -> str | None:
     else:
         detail = f"using #{selected.number} on {selected.branch!r}"
 
-    cid = selected.change_id
     return (
-        f"note: Change-Id {cid} matches {total} change(s) (branches: {branches}); "
+        f"note: Change-Id {selected.change_id} matches {total} change(s) (branches: {branches}); "
         f"{detail}. Override with a triplet or change: number."
     )
