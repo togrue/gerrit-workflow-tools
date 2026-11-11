@@ -101,7 +101,9 @@ def _report(plan: CheckoutPlan, result: CheckoutResult, url: str | None) -> None
         verb = "moved" if old and old > patchset.patch_set else "updated"  # back to an older patchset
         print(f"{verb} {branch} {f'from patchset {old} ' if old else ''}to {change}{rebased}")
     elif plan.state is LocalState.SAME:
-        print(f"{'already on' if result.unchanged else 'switched to'} {branch}: it has {change}")
+        above = len(plan.local.above) if plan.local else 0  # the branch tip, where HEAD is now
+        where_it_is = f"{change} is {above} commit(s) below HEAD" if above else f"it has {change}"
+        print(f"{'already on' if result.unchanged else 'switched to'} {branch}: {where_it_is}")
     elif plan.state is LocalState.PUSHED:
         old = plan.local.patch_set if plan.local else None
         print(f"{where} {branch}, left at patchset {old} (Gerrit has patchset {patchset.patch_set})")

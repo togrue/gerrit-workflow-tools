@@ -80,7 +80,7 @@ checked out change 1234 patchset 4 "Extract command routing" on change-1234
   https://host/c/proj/+/1234
 ```
 
-The first line is one of: `checked out … on <branch>`, `updated <branch> from patchset 3 to change 1234 patchset 4 "…", rebased the 2 commit(s) above it`, `switched to <branch>: it has …` (`already on <branch>: …`), `switched to <branch>, left at patchset 3 (Gerrit has patchset 4)`, `switched to <branch>, left as it is: your version differs from patchset 4`.
+The first line is one of: `checked out … on <branch>`, `updated <branch> from patchset 3 to change 1234 patchset 4 "…", rebased the 2 commit(s) above it`, `switched to <branch>: it has …` (`already on <branch>: …`; when the change sits below the branch tip, `already on <branch>: change 1234 patchset 4 "…" is 2 commit(s) below HEAD`, and HEAD stays where it is), `switched to <branch>, left at patchset 3 (Gerrit has patchset 4)`, `switched to <branch>, left as it is: your version differs from patchset 4`.
 
 ---
 

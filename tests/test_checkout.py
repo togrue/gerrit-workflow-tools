@@ -100,10 +100,13 @@ def test_an_identical_local_version_is_switched_to(
     git("switch", "-q", "main", cwd=stack_repo)
     code, out, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
     assert code == ExitCode.OK, err
-    assert "switched to feature: it has change 102 patchset 1" in out
+    assert 'switched to feature: change 102 patchset 1 "subj" is 1 commit(s) below HEAD' in out
     assert _on(stack_repo) == ("feature", gerrit.shas[3])
     code, out, _ = _checkout(stack_repo, gerrit, ["change:102"], monkeypatch)
-    assert code == ExitCode.OK and "already on feature" in out
+    assert code == ExitCode.OK and 'already on feature: change 102 patchset 1 "subj" is 1 commit(s) below HEAD' in out
+    assert _on(stack_repo) == ("feature", gerrit.shas[3]), "HEAD stays where it was"
+    code, out, _ = _checkout(stack_repo, gerrit, ["change:103"], monkeypatch)
+    assert code == ExitCode.OK and "already on feature: it has change 103 patchset 1" in out
     assert git_out("branch", "--list", "change-*", cwd=stack_repo) == ""
 
 
@@ -120,7 +123,8 @@ def test_an_older_patchset_is_updated_and_the_commits_above_it_rebased(
     assert _upstream(stack_repo, "feature") == "origin/main"
     # Updated, it is the patchset Gerrit has: the next checkout just says so.
     code, out, _ = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
-    assert code == ExitCode.OK and "already on feature: it has change 102 patchset 2" in out
+    assert code == ExitCode.OK and "already on feature: change 102 patchset 2" in out
+    assert "is 1 commit(s) below HEAD" in out
 
 
 def test_no_update_switches_to_the_older_patchset_unchanged(
