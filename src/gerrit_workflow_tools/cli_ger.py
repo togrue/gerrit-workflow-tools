@@ -28,6 +28,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_ci:main",
     ),
     "cache": ("Inspect or clear the local Gerrit API cache.", "gerrit_workflow_tools.cli_cache:main"),
+    "checkout": (
+        "Check a change out on a branch tracking its target branch, or update its local version.",
+        "gerrit_workflow_tools.cli_checkout:main",
+    ),
     "comment": (
         "Start a comment chain on a line or range of a change, as a draft.",
         "gerrit_workflow_tools.cli_comment:main",

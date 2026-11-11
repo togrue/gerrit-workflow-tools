@@ -15,6 +15,7 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 - You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`).
 - You want **branch-local Gerrit settings** (target branch, reviewers via `branch.*` git config) and **push** commands that understand your stack (`ger push`).
 - You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger fix`, `ger rebase`).
+- You **pick up a change** from another machine or a colleague, or a new patchset of it: `ger checkout 1234` puts it on a branch tracking its target branch, or updates the copy you already have.
 - You **review other people's chains** from your editor: find them (`ger inbox`), check one out in a review worktree (`ger review`), comment, and vote (`ger comment`, `ger review --vote`).
 - You **work through review comments and CI failures** on your own stack, or hand that to an agent (`ger show`, `ger ci`, `ger reply`, private notes with `ger comment --note`).
 - You want all of that in **VS Code** too: the extension in [`vscode/`](vscode/README.md) does it through `ger serve`.

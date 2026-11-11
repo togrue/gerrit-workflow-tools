@@ -68,6 +68,7 @@ ger inbox                # chains waiting on your review
 ger show <ref>           # one change, full comments
 ger ci                   # why CI failed: findings from the CI logs
 ger push                 # push ready prefix
+ger checkout <change>    # work on a change from Gerrit (or update your copy of it)
 
 ger review <change>      # check out someone's change in the review worktree
 ger comment app.py:42 -m "..."   # comment on a line (a draft until you send it)

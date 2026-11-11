@@ -7,10 +7,10 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | Code | Name | Meaning |
 |------|------|---------|
 | `0` | `OK` | Success |
-| `1` | `ATTENTION` | Ran fine, but something wants you: unresolved comments, failed CI, or you declined a prompt. **Not a failure.** |
+| `1` | `ATTENTION` | Ran fine, but something wants you: unresolved comments, failed CI, you declined a prompt, or ger will not go on without you because your edits or commits are in the way (`ger review`, `ger checkout`). **Not a failure.** |
 | `2` | `USAGE` | The command cannot run as asked: bad arguments, an invalid input format, an unknown command (`ger lgo` suggests `log`), or a state it refuses to start from and that you fix before running it again: no terminal for a required prompt (pass `-y`), nothing staged (`ger fix`), a rebase in progress or uncommitted changes under a history rewrite (`ger edit`, `ger reword`, `ger rebase`). Also what argparse itself exits with. Raised as `core.usage.UsageError` |
 | `3` | `NOT_FOUND` | A changeish, Change-Id or git revision resolved to nothing |
-| `4` | `AMBIGUOUS` | Several candidates survived narrowing; `--json` lists them under `alternatives` |
+| `4` | `AMBIGUOUS` | Several candidates survived narrowing; the message lists them as `change:N (triplet, status)`, `--json` under `alternatives` |
 | `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable. Never reported as `NOT_FOUND`: only Gerrit's own 404 means "no such change". A command that can still show local state (`ger log`, `ger show`) shows it, with the Gerrit state unknown, then exits `5` |
 | `6` | `CONFIG` | Required git configuration is missing (`gerrit.webUrl`, credentials, or the branch's upstream when no prompt can set it; declining the prompt is `1`) |
 | `7` | `GIT` | A git command failed, or the command runs outside a git repository (`error: not a git repository`, checked once in `init_cli_runtime`; `ger inbox`, `setup`, `config`, `cache` and `fetch-api` run anywhere) |

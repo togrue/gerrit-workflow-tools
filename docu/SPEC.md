@@ -59,6 +59,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger reword` | [spec/commands/edit.md](spec/commands/edit.md) |
 | `ger fix` | [spec/commands/fix.md](spec/commands/fix.md) |
 | `ger rebase` | [spec/commands/rebase.md](spec/commands/rebase.md) |
+| `ger checkout` | [spec/commands/checkout.md](spec/commands/checkout.md) |
 | `ger resolve` | [spec/commands/resolve.md](spec/commands/resolve.md) |
 | `ger sha` | [spec/commands/sha-change-id.md](spec/commands/sha-change-id.md) |
 | `ger change-id` | [spec/commands/sha-change-id.md](spec/commands/sha-change-id.md#ger-change-id) |

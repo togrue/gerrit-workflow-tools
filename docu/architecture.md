@@ -413,6 +413,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_reply.py` | `ger reply` |
 | `cli_comment.py` | `ger comment` |
 | `cli_review.py` | `ger review` |
+| `cli_checkout.py` | `ger checkout`: the update question and what it says |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |
@@ -456,6 +457,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, and the **headline** (`pick_headline`) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
 | `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
+| `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), and doing it (`apply_checkout`, rebasing the commits above an updated version) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |

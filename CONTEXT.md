@@ -156,6 +156,10 @@ _Avoid_: new errors, delta failures, regression set
 Where `ger review` checks a change out: the **review worktree** (one reusable worktree beside the main one, the default) or **in place** (the current worktree). Set by `ger.reviewCheckout`. Either way the change sits on a `change-<number>` branch.
 _Avoid_: review clone, sandbox
 
+**Local version**:
+A commit carrying a change's **Change-Id** on a local branch, above `gerrit.remote` — your copy of the change. It *is* a patchset (Gerrit has its commit), is *another* patchset (pushed once, since updated), or holds edits Gerrit never had. `ger checkout` switches to it, updates it, or refuses to overwrite it accordingly. A branch pushing to another **target branch** holds a cherry-pick, not a local version.
+_Avoid_: local copy, local change, working copy
+
 **Staged review**:
 A review checkout with HEAD detached at the change's parent and the change's diff in the index, so every git tool shows the commit as staged changes. The `change-<number>` branch stays on the change.
 _Avoid_: soft reset mode, diff mode

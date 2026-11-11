@@ -1,7 +1,8 @@
 """One Gerrit patchset: which one a changeish names, and fetching it from ``gerrit.remote``.
 
 Every command that brings a change's commit into the repository starts here: ``ger review``
-checks it out to review, ``ger serve`` diffs it, the **review delta** compares two of them.
+checks it out to review, ``ger checkout`` to work on it, ``ger serve`` diffs it, the
+**review delta** compares two of them.
 """
 
 from __future__ import annotations
@@ -60,6 +61,11 @@ class ResolvedChange:
             target_branch=view.branch,
         )
 
+    def patch_set_of(self, commit: str) -> int | None:
+        """Which patchset of the change *commit* is; ``None`` when Gerrit never had it as one."""
+        revision = self.view.revisions.get(commit)
+        return revision.number if revision is not None else None
+
 
 def changes_ref(number: int, patch_set: int) -> str:
     """Gerrit's ``refs/changes/NN/<number>/<patchset>`` ref."""
@@ -93,9 +99,15 @@ def resolve_patchset(
     return change.patchset(patch_set), change.view.url(service.web_base)
 
 
-def fetch_patchset(cwd: Path | str, remote: str, patchset: GerritPatchset) -> None:
-    """Fetch *patchset* from *remote* by its ``refs/changes/…`` ref; it must bring the patchset's commit."""
+def fetch_patchset(cwd: Path | str, remote: str, patchset: GerritPatchset, *, with_target_branch: bool = False) -> None:
+    """Fetch *patchset* from *remote* by its ``refs/changes/…`` ref; it must bring the patchset's commit.
+
+    *with_target_branch* also brings the change's target branch up to date in the same fetch,
+    as ``refs/remotes/<remote>/<target>``: the upstream a branch holding the change tracks.
+    """
     ref = changes_ref(patchset.number, patchset.patch_set)
-    git("fetch", "-q", remote, ref, cwd=cwd)
+    target = patchset.target_branch
+    tracking = [f"+refs/heads/{target}:refs/remotes/{remote}/{target}"] if with_target_branch else []
+    git("fetch", "-q", remote, ref, *tracking, cwd=cwd)
     if commit_sha_or_none(cwd, patchset.commit) is None:
         raise GitError(f"fetching {ref} did not bring {patchset.commit[:12]}")
