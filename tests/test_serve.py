@@ -439,8 +439,23 @@ def test_a_conflict_the_preview_cannot_see_aborts_the_rebase(stack_repo: Path, m
     git("commit", "-qam", "Rewrite a.txt\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     head = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    with pytest.raises(ReorderRefusal, match=r"Rewrite a\.txt.* does not apply in its new place;"):
+    with pytest.raises(
+        ReorderRefusal, match=r"Rewrite a\.txt.* does not apply in its new place \(conflict in a\.txt\);"
+    ):
         reorder_stack(stack_repo, [rows[4].sha, *(r.sha for r in rows[:4])], settings=Settings.from_cwd(stack_repo))
+    assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head and not rebase_in_progress(stack_repo)
+
+
+def test_a_rebase_git_refuses_says_why_instead_of_blaming_a_conflict(stack_repo: Path) -> None:
+    hook = stack_repo / ".git" / "hooks" / "pre-rebase"
+    hook.write_text("#!/bin/sh\necho 'error: rebasing is blocked by a hook' >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    rows = stack_rows_mb_to_head(stack_repo)
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    with pytest.raises(ReorderRefusal, match=r"^git rebase failed: .*blocked by a hook; the stack was left as it was$"):
+        reorder_stack(
+            stack_repo, [rows[1].sha, rows[0].sha, *(r.sha for r in rows[2:])], settings=Settings.from_cwd(stack_repo)
+        )
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head and not rebase_in_progress(stack_repo)
 
 

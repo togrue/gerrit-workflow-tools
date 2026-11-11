@@ -101,6 +101,13 @@ def _does_not_apply(commit: Commit | None, files: Sequence[str] = ()) -> Reorder
     return ReorderRefusal(f"{where} does not apply in its new place{conflict}; the stack was left as it was")
 
 
+def _git_reason(output: str | None) -> str:
+    """The line of git's output that says why: its first ``fatal:`` or ``error:``, else its last line."""
+    lines = [line.strip() for line in (output or "").splitlines() if line.strip()]
+    reason = next((line for line in lines if line.startswith(("fatal:", "error:"))), lines[-1] if lines else "")
+    return reason or "no reason given"
+
+
 def _preview(cwd: Path | str, base: str, picks: Sequence[Commit], stack: Sequence[Commit]) -> PickConflict | None:
     try:
         return first_conflict(cwd, base, picks, stack)
@@ -135,8 +142,14 @@ def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Sett
         done = git("rebase", "-i", "--no-autosquash", snapshot.upstream_tip, cwd=cwd, env=env, check=False)
     if done.returncode != 0:
         stopped_at = git("rev-parse", "-q", "--verify", "REBASE_HEAD", cwd=cwd, check=False).stdout.strip()
+        conflicted = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout.split()
         git("rebase", "--abort", cwd=cwd, check=False)
-        raise _does_not_apply(next((c for c, _ in resolved if c.sha == stopped_at), None))
+        if not conflicted:
+            # Not a conflict: git refused for a reason of its own (a hook, no committer identity).
+            raise ReorderRefusal(
+                f"git rebase failed: {_git_reason(done.stderr or done.stdout)}; the stack was left as it was"
+            )
+        raise _does_not_apply(next((c for c, _ in resolved if c.sha == stopped_at), None), conflicted)
     return StackRewrite(list(get_stack_snapshot(cwd, first_parent=True, settings=settings).commits), head)
 
 
