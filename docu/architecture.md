@@ -301,7 +301,7 @@ sequenceDiagram
   end
 ```
 
-`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)); the prompts it calls (`-i`, the options line, the save-reviewers question) live in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push.py`.
+`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)); the prompts it calls (`-i`, the options line, the save-reviewers question) live in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push_options.py`.
 
 ---
 
@@ -479,7 +479,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/reorder_preview.py` | Whether a rewrite would conflict, simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `PickConflict`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
-| `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
+| `core/push.py` | Push plan and push refusal: prepare, revise, execute |
+| `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |

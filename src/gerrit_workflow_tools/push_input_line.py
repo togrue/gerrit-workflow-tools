@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from gerrit_workflow_tools.core.push import refspec_option_segments
+from gerrit_workflow_tools.core.push_options import refspec_option_segments
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy as ReviewerStrategyEnum
 
 

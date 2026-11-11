@@ -23,7 +23,8 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
-from gerrit_workflow_tools.core.push import PushBoundary, PushOptions, PushPlan, push_argv, revise
+from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, push_argv, revise
+from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run

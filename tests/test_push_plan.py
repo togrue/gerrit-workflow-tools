@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.push import PushBoundary, PushOptions, PushPlan, push_refspec, revise
+from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, revise
+from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.stack import Commit
 

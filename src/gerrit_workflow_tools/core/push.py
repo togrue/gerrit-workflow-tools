@@ -8,7 +8,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
@@ -24,6 +23,7 @@ from gerrit_workflow_tools.core.git_state import (
     resolve_upstream_parsed,
 )
 from gerrit_workflow_tools.core.push_checks import check_existing_changes, git_or_none, rebase_check
+from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
@@ -37,18 +37,6 @@ from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.core.usage import UsageError
-
-
-@dataclass(frozen=True)
-class PushOptions:
-    reviewers: tuple[str, ...]
-    strategy: ReviewerStrategy
-    topic: str | None = None
-    wip: bool = False
-    private: bool = False
-    publish_comments: bool | None = None
-    """Your drafts on the updated changes: ``True`` publish them, ``False`` keep them (overriding
-    an account preference that publishes on push), ``None`` say nothing (there are none)."""
 
 
 @dataclass(frozen=True)
@@ -94,44 +82,6 @@ class PushResult:
     error_message: str | None = None
     reviewers: ReviewerApplyResult | None = None
     warning: str | None = None
-
-
-def refspec_option_segments(
-    *,
-    reviewers: Sequence[str],
-    strategy: ReviewerStrategy,
-    wip: bool,
-    private: bool,
-    topic: str | None,
-    publish_comments: bool | None = None,
-) -> list[str]:
-    parts: list[str] = []
-    if strategy == ReviewerStrategy.PUSH:
-        parts.extend(f"r={name}" for name in reviewers)
-    if wip:
-        parts.append("wip")
-    if private:
-        parts.append("private")
-    if topic:
-        parts.append(f"topic={quote(topic, safe='')}")
-    if publish_comments is not None:
-        parts.append("publish-comments" if publish_comments else "no-publish-comments")
-    return parts
-
-
-def push_refspec(tip: str, push_branch: str, options: PushOptions) -> str:
-    ref = f"{tip}:refs/for/{push_branch}"
-    parts = refspec_option_segments(
-        reviewers=options.reviewers,
-        strategy=options.strategy,
-        wip=options.wip,
-        private=options.private,
-        topic=options.topic,
-        publish_comments=options.publish_comments,
-    )
-    if parts:
-        ref += "%" + ",".join(parts)
-    return ref
 
 
 def push_argv(plan: PushPlan) -> list[str]:
