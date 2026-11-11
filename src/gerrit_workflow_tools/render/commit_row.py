@@ -324,6 +324,15 @@ def oneline_body(
     return base
 
 
+def attention_summary(commit: LogCommit) -> str:
+    """One line on what *commit* needs: its attention reasons, else whether Gerrit has it."""
+    if commit.attention_reasons:
+        return "attention: " + ", ".join(commit.attention_reasons)
+    if not commit.pushed:
+        return "not on Gerrit"
+    return "ok"
+
+
 def show_headline(commit: LogCommit) -> str:
     """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
     sha = color_short_sha(commit.short_sha)

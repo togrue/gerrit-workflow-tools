@@ -32,14 +32,14 @@ from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_s
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
-from gerrit_workflow_tools.render.ci_content import format_ci_section_human, format_ci_section_markdown
+from gerrit_workflow_tools.render.ci_content import format_ci_section_human
 from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
     format_unresolved_section_human,
-    format_unresolved_section_markdown,
 )
-from gerrit_workflow_tools.render.commit_row import continuation_lines, show_headline
+from gerrit_workflow_tools.render.commit_row import attention_summary, continuation_lines, show_headline
 from gerrit_workflow_tools.render.show_json import commit_json_payload
+from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.wrap import wrap_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -161,7 +161,7 @@ def _emit_human_commit(
 ) -> None:
     print(show_headline(commit))
     if commit.attention_reasons:
-        print(color_text(_attention_summary(commit), ANSI_DIM))
+        print(color_text(attention_summary(commit), ANSI_DIM))
 
     body = ""
     if is_local and commit.sha:
@@ -209,41 +209,6 @@ def _emit_brief_commit(commit: LogCommit, *, comments: CommentSelection) -> None
     print(show_headline(commit))
     print(f"    {commit.summary}")
     print(color_text(empty_comments_message(comments), ANSI_DIM))
-
-
-def _attention_summary(commit: LogCommit) -> str:
-    if commit.attention_reasons:
-        return "attention: " + ", ".join(commit.attention_reasons)
-    if not commit.pushed:
-        return "not on Gerrit"
-    return "ok"
-
-
-def _emit_markdown_commit(
-    commit: LogCommit,
-    *,
-    chains: list[CommentChain],
-    ci_contents: list[CiContent] | None,
-    comments: CommentSelection,
-) -> None:
-    short = commit.short_sha or (commit.sha[:8] if commit.sha else "????????")
-    summary = commit.summary or ""
-    print(f"## {short} — {summary}")
-    print(f"- {_attention_summary(commit)}")
-    if commit.gerrit_url:
-        print(f"- Gerrit: {commit.gerrit_url}")
-    print()
-    for line in format_unresolved_section_markdown(
-        chains,
-        commit.gerrit_url,
-        pushed=commit.pushed,
-        comments=comments,
-    ):
-        print(line)
-    if ci_contents:
-        print()
-        for line in format_ci_section_markdown(ci_contents):
-            print(line)
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> int:
@@ -340,7 +305,8 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             )
         else:
             if out_fmt == "markdown":
-                _emit_markdown_commit(commit, chains=chains, ci_contents=ci_contents, comments=args.comments)
+                for line in commit_markdown(commit, chains=chains, ci_contents=ci_contents, comments=args.comments):
+                    print(line)
                 print()
                 continue
             if resolved is not targets[0]:

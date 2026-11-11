@@ -515,6 +515,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts |
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
+| `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
 | `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
 | `render/agent_runbook.py` | The agent runbook as Markdown (`runbook_markdown`) and JSON (`runbook_json`) |
 | `render/review_json.py` | JSON for **review chains** (`chain_json`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
