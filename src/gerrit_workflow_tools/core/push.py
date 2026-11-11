@@ -288,13 +288,14 @@ def execute(
 
 
 def _forget_pushed_changes(cwd: Path, plan: PushPlan, *, settings: Settings, gerrit: GerritRest | None) -> None:
-    """Drop what the cache knows about the pushed changes, "no such change" verdicts included.
+    """Drop what the cache knows about the changes this push sent, "no such change" verdicts included.
 
-    A failure here must not turn a successful push into a failed one.
+    Only those: a commit Gerrit already had did not move, and what is set on it over REST
+    drops it by itself. A failure here must not turn a successful push into a failed one.
     """
     with contextlib.suppress(ValueError, OSError, sqlite3.Error, ChangeResolutionError):
         web_base = gerrit.web_base if gerrit is not None else resolve_gerrit_web_base(settings)
-        refs = change_refs_for_commits(cwd, plan.commits, settings=settings)
+        refs = change_refs_for_commits(cwd, sent_commits(plan), settings=settings)
         GerritCache.for_web_base(web_base).invalidate_changes(refs)
 
 
