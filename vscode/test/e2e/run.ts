@@ -79,7 +79,7 @@ function main(): number {
       "--skip-release-notes",
       "--disable-updates",
     ],
-    { env, stdio: "inherit", timeout: 180_000 },
+    { env, stdio: "inherit", timeout: 300_000 },
   );
   if (ran.status !== 0) {
     if (fs.existsSync(report)) {

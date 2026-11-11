@@ -238,8 +238,8 @@ export async function run(): Promise<void> {
       exec("ger.stack.edit", mine),
     );
     await press(
-      "Inline Review in Worktree on change 900",
-      "Progress while it fetches; then where change 900 is checked out, with a button to open that worktree in a new window.",
+      "Inline Review Change on change 900",
+      "Progress while it fetches; then where change 900 is checked out for review (the review worktree, as ger.reviewCheckout is not set), with a button to open that worktree in a new window.",
       exec("ger.review", theirs),
       [{ button: "Open Review Worktree" }],
     );
@@ -457,10 +457,11 @@ export async function run(): Promise<void> {
       // blank the views the way a refresh you asked for does.
       const down = process.env.GER_E2E_DOWN ?? "";
       const note = async (what: string, expect: string, action: () => Promise<void>) => {
+        ui.script([]);
         await action();
         await wait(300);
         const after = await screen();
-        out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", "```", ...lineDiff(before, after), "```", "");
+        out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", "```", ...ui.drain().lines, ...lineDiff(before, after), "```", "");
         before = after;
       };
       fs.writeFileSync(down, "");
@@ -473,14 +474,27 @@ export async function run(): Promise<void> {
           assert.ok(api.model.stale, "the model knows its overview is old");
         },
       );
+      await note(
+        "you press Refresh while ger serve is still gone",
+        "The views keep the last answer, marked out of date; a notification says why it is still out of date, and nothing is cleared.",
+        async () => {
+          await vscode.commands.executeCommand("ger.refresh");
+          assert.ok(api.model.stale, "the model still knows its overview is old");
+          assert.ok(api.model.overview, "the last overview was kept");
+        },
+      );
       fs.rmSync(down);
       await note(
         "ger serve can start again, and the next background refresh works",
-        "The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository); its event stream is followed again.",
+        "The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository, so the amended top commit is no longer ahead of it); its event stream is followed again.",
         async () => {
           // From Gerrit: the cache of the service that went away would otherwise be served or not, by timing.
           await api.model.refresh({ background: true, fromGerrit: true });
           assert.equal(api.model.stale, undefined);
+          // The stack's own annotations are served from the cache for its trust window (10 s): without this wait they
+          // would catch up in whichever later step first refreshes, and the transcript would depend on timing.
+          await wait(10_500);
+          await api.model.refresh({ background: true });
           assert.ok(await until(() => api.events.live), "the event stream is followed again");
         },
       );
@@ -509,6 +523,21 @@ export async function run(): Promise<void> {
       await api.changeView.idle();
       const after = await screen();
       out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", "```", ...(refreshed ? [] : ["!! the views did not refresh by themselves"]), ...lineDiff(before, after), "```", "");
+      before = after;
+    }
+
+    // --- Local git -----------------------------------------------------------------------
+    {
+      const what = "you commit in the terminal, with no click and no focus change";
+      const expect = "Within a second or two Local stack shows the new commit on top (not yet on Gerrit); nothing is said, as you did it yourself.";
+      fs.writeFileSync(path.join(repo, "e.txt"), "from the terminal\n", "utf8");
+      execFileSync("git", ["add", "e.txt"], { cwd: repo });
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "Add e.txt"], { cwd: repo });
+      const refreshed = await until(() => api.model.stack?.commits.some((c) => c.summary === "Add e.txt") ?? false);
+      await wait(300);
+      await api.changeView.idle();
+      const after = await screen();
+      out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", "```", ...(refreshed ? [] : ["!! Local stack did not follow the repository by itself"]), ...lineDiff(before, after), "```", "");
       before = after;
     }
 

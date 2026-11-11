@@ -9,10 +9,10 @@ events | live
 chains | CI failed on 102: test! temporary experiment
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-chains |     Cleanup after experiment — 103 · V-1 CR+2 · local  [ger.change.url.local]
-chains |     test! temporary experiment — 102 · V-1 CR+2 · local  [ger.change.url.local]
-chains |     Extract command routing — 101 · V+1 CR+2 💬2 · local  [ger.change.url.local]
-chains |     Refactor parser init — 100 · V+1 CR+2 · local  [ger.change.url.local]
+chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
+chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 chains | To review — 1 chain
 chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
 stack  | Cleanup after experiment — HEAD · <sha> · V-1 CR+2 · held back  [ger.commit.url.down]
@@ -148,13 +148,13 @@ status bar message: ger edit runs in the terminal: once the rebase stops at "103
 (no change)
 ```
 
-## 10. Inline Review in Worktree on change 900
+## 10. Inline Review Change on change 900
 
-**Expect:** Progress while it fetches; then where change 900 is checked out, with a button to open that worktree in a new window.
+**Expect:** Progress while it fetches; then where change 900 is checked out for review (the review worktree, as ger.reviewCheckout is not set), with a button to open that worktree in a new window.
 
 ```
 progress (notification): Checking out 900: Add retry to the uploader
-notification (info): Change 900 (patchset 1) is checked out, staged, on change-900 in <repo>-review.  [Open Review Worktree]
+notification (info): Change 900 (patchset 1) is checked out for review on change-900 in <repo>-review, with its changes staged.  [Open Review Worktree]
     → pressed "Open Review Worktree"
 new VS Code window on: <repo>-review
 --- on screen:
@@ -197,10 +197,10 @@ notification (info): No review checkout is open here.
 - chains | CI failed on 102: test! temporary experiment
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-- chains |     Cleanup after experiment — 103 · V-1 CR+2 · local  [ger.change.url.local]
-- chains |     test! temporary experiment — 102 · V-1 CR+2 · local  [ger.change.url.local]
-- chains |     Extract command routing — 101 · V+1 CR+2 💬2 · local  [ger.change.url.local]
-- chains |     Refactor parser init — 100 · V+1 CR+2 · local  [ger.change.url.local]
+- chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
+- chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 - chains | To review — 1 chain
 - chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
 - stack  | Cleanup after experiment — HEAD · <sha> · V-1 CR+2 · held back  [ger.commit.url.down]
@@ -232,10 +232,10 @@ progress (notification): Restarting ger serve
 + chains | CI failed on 102: test! temporary experiment
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-+ chains |     Cleanup after experiment — 103 · V-1 CR+2 · local  [ger.change.url.local]
-+ chains |     test! temporary experiment — 102 · V-1 CR+2 · local  [ger.change.url.local]
-+ chains |     Extract command routing — 101 · V+1 CR+2 💬2 · local  [ger.change.url.local]
-+ chains |     Refactor parser init — 100 · V+1 CR+2 · local  [ger.change.url.local]
++ chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
++ chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 + chains | To review — 1 chain
 + chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
 + stack  | Cleanup after experiment — HEAD · <sha> · V-1 CR+2 · held back  [ger.commit.url.down]
@@ -709,9 +709,18 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 - events | live
 ```
 
+## Meanwhile: you press Refresh while ger serve is still gone
+
+**Expect:** The views keep the last answer, marked out of date; a notification says why it is still out of date, and nothing is cleared.
+
+```
+progress (notification): Restarting ger serve
+notification (warning): Still out of date: fake ger: down for this test
+```
+
 ## Meanwhile: ger serve can start again, and the next background refresh works
 
-**Expect:** The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository); its event stream is followed again.
+**Expect:** The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository, so the amended top commit is no longer ahead of it); its event stream is followed again.
 
 ```
 + status bar | $(error) CI failed on 102: Refactor parser init
@@ -721,13 +730,21 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 - events | (not said)
 - chains | CI failed on 102: test! temporary experiment
 + chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-+ chains |     test! temporary experiment — 103 · V-1 CR+2 · local  [ger.change.url.local]
-+ chains |     Refactor parser init — 102 · V-1 CR+2 · local  [ger.change.url.local]
++ chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-- chains |     Cleanup after experiment — 103 · V-1 CR+2 · local  [ger.change.url.local]
-- chains |     test! temporary experiment — 102 · V-1 CR+2 · local  [ger.change.url.local]
-+ chains |     Cleanup after experiment — 100 · V+1 CR+2 · local  [ger.change.url.local]
-- chains |     Refactor parser init — 100 · V+1 CR+2 · local  [ger.change.url.local]
+- chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ stack  | test! temporary experiment — HEAD · <sha> · V-1 CR+2 · held back  [ger.commit.url.down]
++ stack  | Refactor parser init — <sha> · V-1 CR+2  [ger.commit.url.up.down]
++ stack  | Extract command routing — <sha> · V+1 CR+2 💬2  [ger.commit.url.up.down]
++ stack  | Cleanup after experiment — <sha> · V+1 CR+2  [ger.commit.url.up]
+- stack  | test! temporary experiment — HEAD · <sha> · last pushed V-1 CR+2 · ahead of Gerrit · held back  [ger.commit.url.down]
+- stack  | Refactor parser init — <sha> · V+1 CR+2 · ahead of Gerrit  [ger.commit.url.up.down]
+- stack  | Extract command routing — <sha> · V+1 CR+2 💬2 · ahead of Gerrit  [ger.commit.url.up.down]
+- stack  | Cleanup after experiment — <sha> · V-1 CR+2 · ahead of Gerrit  [ger.commit.url.up]
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -743,6 +760,16 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 - chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
 ```
 
+## Meanwhile: you commit in the terminal, with no click and no focus change
+
+**Expect:** Within a second or two Local stack shows the new commit on top (not yet on Gerrit); nothing is said, as you did it yourself.
+
+```
++ stack  | Add e.txt — HEAD · <sha> · not on Gerrit · held back  [ger.commit.down]
++ stack  | test! temporary experiment — <sha> · V-1 CR+2 · held back  [ger.commit.url.up.down]
+- stack  | test! temporary experiment — HEAD · <sha> · V-1 CR+2 · held back  [ger.commit.url.down]
+```
+
 ## At the end
 
 ```
@@ -752,16 +779,17 @@ events | live
 chains | CI failed on 102: Refactor parser init
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-chains |     test! temporary experiment — 103 · V-1 CR+2 · local  [ger.change.url.local]
-chains |     Refactor parser init — 102 · V-1 CR+2 · local  [ger.change.url.local]
-chains |     Extract command routing — 101 · V+1 CR+2 💬2 · local  [ger.change.url.local]
-chains |     Cleanup after experiment — 100 · V+1 CR+2 · local  [ger.change.url.local]
+chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
+chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 chains | To review — 1 chain · 1 with comments
 chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
-stack  | test! temporary experiment — HEAD · <sha> · last pushed V-1 CR+2 · ahead of Gerrit · held back  [ger.commit.url.down]
-stack  | Refactor parser init — <sha> · V+1 CR+2 · ahead of Gerrit  [ger.commit.url.up.down]
-stack  | Extract command routing — <sha> · V+1 CR+2 💬2 · ahead of Gerrit  [ger.commit.url.up.down]
-stack  | Cleanup after experiment — <sha> · V-1 CR+2 · ahead of Gerrit  [ger.commit.url.up]
+stack  | Add e.txt — HEAD · <sha> · not on Gerrit · held back  [ger.commit.down]
+stack  | test! temporary experiment — <sha> · V-1 CR+2 · held back  [ger.commit.url.up.down]
+stack  | Refactor parser init — <sha> · V-1 CR+2  [ger.commit.url.up.down]
+stack  | Extract command routing — <sha> · V+1 CR+2 💬2  [ger.commit.url.up.down]
+stack  | Cleanup after experiment — <sha> · V+1 CR+2  [ger.commit.url.up]
 change | title: Change 102 — test! temporary experiment
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
