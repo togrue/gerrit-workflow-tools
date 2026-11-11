@@ -78,7 +78,7 @@ Gerrit applies magic-ref options only to the changes a push gives a new patch se
 | `--topic` | `PUT /changes/{id}/topic` |
 | `--reviewers` (strategy `push`) | the reviewer batch, for the named reviewers not yet on the change; `lazy` / `overwrite` reach every change anyway |
 
-The preview (and `--dry-run`) lists them under `Gerrit already has these at that commit; set over REST instead:` as `<sha> # <subject>  ready,topic=x`; after the push each one prints `set <sha> # <subject>  …`. A failed update is a warning naming the commit, and the exit code is `1`, as for reviewers. Without Gerrit's view of the changes (no credentials) nothing can be set, and a `no new changes` push says so. The cached state of every updated change is dropped. A push without these options makes no extra call. Hashtags are not a `ger push` option.
+The preview (and `--dry-run`) lists them under `Gerrit already has these at that commit; set over REST instead:` as `<sha> # <subject>  ready,topic=x`; after the push each one prints `set <sha> # <subject>  …`. A failed update is a warning naming the commit and ending in Gerrit's own reason; the same failure on several commits is one line naming them all (`warning: could not set r=nosuchuser on 2 commits (abc1234, def5678): Gerrit HTTP 400: nosuchuser does not identify a registered user or group`). The exit code is `5` (`GERRIT`), as for reviewers. Without Gerrit's view of the changes (no credentials) nothing can be set, and a `no new changes` push says so. The cached state of every updated change is dropped. A push without these options makes no extra call. Hashtags are not a `ger push` option.
 
 Interactive push line (`push_input_prompt`) can set strategy keywords; see module `push_input_line.py`.
 
@@ -134,10 +134,10 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | Code | Meaning |
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
-| `1` | Push succeeded, but `lazy` / `overwrite` could not apply reviewers, or an option could not be set over REST on a change Gerrit already had (printed as a warning) |
 | `1` | Nothing to push (empty ready prefix), or you declined the upstream prompt |
 | `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` is not a commit, or not in the local stack |
+| `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as a warning with Gerrit's reason) |
 | `6` | The branch has no upstream: the same message and hint as `ger log` |
 | other | `git push` exit code |
 

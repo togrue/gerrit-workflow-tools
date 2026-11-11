@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -17,11 +19,13 @@ _T = TypeVar("_T")
 
 
 class GerritApiError(RuntimeError):
-    """Gerrit HTTP or JSON error."""
+    """Gerrit HTTP or JSON error, said on one line. An HTTP error ends in Gerrit's own reason."""
 
-    def __init__(self, message: str, *, status: int | None = None) -> None:
+    def __init__(self, message: str, *, status: int | None = None, reason: str | None = None) -> None:
         super().__init__(message)
         self.status = status
+        self.reason = reason
+        """What Gerrit's response body said (``x does not identify a registered user``), when it said."""
 
 
 class GerritUnavailableError(GerritApiError):
@@ -31,6 +35,32 @@ class GerritUnavailableError(GerritApiError):
     read it as "not found" or "not pushed", and retrying change by change cannot help.
     The message is the whole story, written for the user.
     """
+
+
+def _error_texts(value: Any) -> list[str]:
+    """Every ``error`` string in a Gerrit JSON error body (``ReviewResult`` has one per reviewer)."""
+    if isinstance(value, dict):
+        own = [value["error"]] if isinstance(value.get("error"), str) else []
+        return own + [text for item in value.values() for text in _error_texts(item)]
+    if isinstance(value, list):
+        return [text for item in value for text in _error_texts(item)]
+    return []
+
+
+def gerrit_error_reason(body: str, status_phrase: str) -> str:
+    """Gerrit's own reason for a failed request, on one line: its response body, else *status_phrase*.
+
+    Gerrit says most errors in plain text (``nosuchuser does not identify a registered user``);
+    a JSON body says them in ``error`` fields.
+    """
+    text = body.strip().removeprefix(")]}'").strip()  # Gerrit's anti-XSSI prefix on JSON
+    if text[:1] in ("{", "["):
+        with contextlib.suppress(json.JSONDecodeError):
+            text = "; ".join(dict.fromkeys(_error_texts(json.loads(text))))
+    text = " ".join(text.split())
+    if not text:
+        return status_phrase
+    return text if len(text) <= 300 else f"{text[:297]}..."
 
 
 def norm_change_id(change_id: str) -> str:

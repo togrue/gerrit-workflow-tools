@@ -94,6 +94,11 @@ class PushResult:
     """What was set over REST on changes Gerrit already had at that commit."""
     update_failures: tuple[StateUpdateFailure, ...] = ()
 
+    @property
+    def gerrit_failed(self) -> bool:
+        """Gerrit refused what the push sets over REST: reviewers, or options on changes it already had."""
+        return bool(self.update_failures) or (self.reviewers is not None and not self.reviewers.ok)
+
 
 def push_argv(plan: PushPlan) -> list[str]:
     return ["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, plan.options)]

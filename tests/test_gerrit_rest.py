@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 from typing import Any
 from unittest.mock import MagicMock
+from urllib.error import HTTPError
 from urllib.parse import quote
 
 import pytest
@@ -454,3 +456,32 @@ def test_get_related_asks_for_the_relation_chain_of_one_patchset() -> None:
     client, calls = _capturing_client()
     client.get_related("proj~main~I" + "c" * 40, 3)
     assert calls == [("GET", f"changes/proj~main~I{'c' * 40}/revisions/3/related", None)]
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (b"nosuchuser does not identify\na registered user\n", "nosuchuser does not identify a registered user"),
+        (
+            b')]}\'\n{"reviewers": {"nosuchuser": {"input": "nosuchuser", "error": "nosuchuser is not a user"},'
+            b' "alice": {"input": "alice"}}}',
+            "nosuchuser is not a user",
+        ),
+        (b"", "Bad Request"),
+    ],
+)
+def test_an_http_error_says_gerrits_own_reason_on_one_line(
+    body: bytes, reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.core.gerrit import http_rest
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    def _urlopen(request: Any, **_kwargs: object) -> Any:
+        raise HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(http_rest, "urlopen", _urlopen)
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    with pytest.raises(GerritApiError) as caught:
+        client.set_reviewers_batch("p~main~I" + "a" * 40, reviewers=["nosuchuser"])
+    assert str(caught.value) == f"Gerrit HTTP 400: {reason}"
+    assert (caught.value.status, caught.value.reason) == (400, reason)

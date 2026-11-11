@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     GerritUnavailableError,
     change_id_for_gerrit_rest_path,
     encode_gerrit_path_segment,
+    gerrit_error_reason,
     resolve_gerrit_web_base,
 )
 
@@ -60,6 +61,13 @@ def _strip_magic_json_prefix(raw: str) -> str:
         if nl != -1:
             return s[nl + 1 :]
     return raw
+
+
+def _error_body(error: HTTPError) -> str:
+    try:
+        return error.read().decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return ""
 
 
 def _why_unreachable(error: OSError) -> str:
@@ -171,10 +179,9 @@ class HttpGerritRest:
                     "check gerrit.user and gerrit.token, or run `ger setup`",
                     status=e.code,
                 ) from e
-            raise GerritApiError(
-                f"Gerrit HTTP {e.code} for {url}: {e.reason}",
-                status=e.code,
-            ) from e
+            reason = gerrit_error_reason(_error_body(e), str(e.reason))
+            logger.info("%s %s -> HTTP %s: %s", method, url, e.code, reason)
+            raise GerritApiError(f"Gerrit HTTP {e.code}: {reason}", status=e.code, reason=reason) from e
         except (URLError, OSError) as e:
             raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({_why_unreachable(e)})") from e
         finally:

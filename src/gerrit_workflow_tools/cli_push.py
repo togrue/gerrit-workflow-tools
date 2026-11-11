@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
+    ExitCode,
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
@@ -171,7 +172,7 @@ def _emit_push_output(result: PushResult) -> None:
 def _finish_push(result: PushResult, plan: PushPlan | None) -> int:
     _emit_push_output(result)
     print_push_outcome(result, plan)
-    return result.returncode
+    return int(ExitCode.GERRIT) if result.gerrit_failed else result.returncode
 
 
 def _print_refusal(

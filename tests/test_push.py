@@ -560,7 +560,9 @@ def test_gpush_sets_only_what_differs_and_nothing_without_options(
     assert len(store.calls_to("set_wip")) == 1 and f"set {rows[0].short_sha}" in out
 
 
-def test_gpush_a_failed_rest_update_is_a_warning_and_exit_1(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_a_failed_rest_update_is_a_warning_and_exit_gerrit(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class _RejectsTopic(ChangeStore):
         def set_topic(self, change_id: str, topic: str | None) -> None:
             raise GerritApiError("Gerrit HTTP 403")
@@ -574,8 +576,32 @@ def test_gpush_a_failed_rest_update_is_a_warning_and_exit_1(stack_repo: Path, mo
         monkeypatch,
         gerrit=_RejectsTopic(build_details_by_change_id(rows)),
     )
-    assert code == 1
+    assert code == ExitCode.GERRIT
     assert f"warning: could not set {rows[0].short_sha}" in err and "Gerrit HTTP 403" in err
+
+
+def test_gpush_an_unknown_reviewer_is_said_once_with_gerrits_reason(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same refusal on every unchanged commit is one line naming them, and the Gerrit exit code."""
+    reason = "Gerrit HTTP 400: nosuchuser does not identify a registered user or group"
+
+    class _UnknownReviewer(ChangeStore):
+        def set_reviewers_batch(self, change_id: str, **_kw: object) -> dict[str, object]:
+            raise GerritApiError(reason, status=400)
+
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    _rejected_as_unchanged(monkeypatch)
+    store = _UnknownReviewer(build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []}] * 2))
+    code, _out, err = run_cli(
+        stack_repo, gpush_main, ["-y", "--reviewers", "nosuchuser", rows[1].sha], monkeypatch, gerrit=store
+    )
+
+    assert code == ExitCode.GERRIT
+    warnings = [line for line in err.splitlines() if line.startswith("warning:")]
+    assert warnings == [
+        f"warning: could not set r=nosuchuser on 2 commits ({rows[0].short_sha}, {rows[1].short_sha}): {reason}"
+    ]
 
 
 def test_gpush_refuses_a_comma_in_the_topic(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -623,7 +649,7 @@ def test_gpush_reviewer_failure_is_a_warning_and_still_records_the_push(
         gerrit=_RejectsAdds(details),
     )
 
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.GERRIT
     assert "warning: pushed, but could not update reviewers" in err
     assert "error:" not in err
     assert ref_exists(stack_repo, "refs/heads/lastPush/feature")
