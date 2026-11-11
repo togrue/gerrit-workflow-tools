@@ -84,6 +84,16 @@ def grant_registered_users_branch_create(session: GerritHttpSession, project: st
     )
 
 
+def block_review_uploads(session: GerritHttpSession, project: str, branch: str) -> None:
+    """Forbid registered users to upload changes for *branch* (``refs/for/refs/heads/<branch>``)."""
+    enc = quote(project, safe="")
+    rule = {"rules": {"global:Registered-Users": {"action": "BLOCK"}}}
+    session.post_json(
+        f"projects/{enc}/access",
+        body={"add": {f"refs/for/refs/heads/{branch}": {"permissions": {"push": rule}}}},
+    )
+
+
 def list_branches(session: GerritHttpSession, project: str) -> list[dict[str, object]]:
     enc = quote(project, safe="")
     data = session.get_json(f"projects/{enc}/branches/")
