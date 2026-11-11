@@ -614,9 +614,12 @@ def test_a_branch_without_upstream_says_so_and_gets_one_suggested(stack_repo: Pa
     store, _keys, _rows = _gerrit(stack_repo)
     api = GerApi(stack_repo, gerrit=store)
     git("branch", "--unset-upstream", cwd=stack_repo)
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main", cwd=stack_repo)
     local = _get(api, "/overview")["local"]
     assert "error" in local and local["needs_upstream"] is True
     choice = _get(api, "/stack/upstream")
+    # The remote's HEAD is no branch to track (git abbreviates it to plain `origin`).
+    assert not {"origin", "origin/HEAD"} & set(choice["candidates"])
     assert (choice["branch"], choice["upstream"]) == ("feature", None)
     # The template fetched its own branches: origin/feature is where feature is.
     assert (choice["suggested"], choice["why"]) == ("origin/feature", "nearest: 0 ahead, 0 behind")

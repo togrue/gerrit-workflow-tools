@@ -153,7 +153,8 @@ def append_recent_upstream_abbrev(cwd: Path | str | None, abbrev: str) -> None:
 
 
 def _remote_tracking_ref_abbrevs(cwd: Path | str | None) -> list[str]:
-    p = git("for-each-ref", "--format=%(refname:short)", "refs/remotes/", cwd=cwd, check=False)
+    # Not `refname:short`: it shortens `origin/HEAD` to `origin`, which then looks like a branch.
+    p = git("for-each-ref", "--format=%(refname:lstrip=2)", "refs/remotes/", cwd=cwd, check=False)
     if p.returncode != 0:
         return []
     return _dedupe_preserve_order(
