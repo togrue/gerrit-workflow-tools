@@ -509,7 +509,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
-| `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet; `reconcile` decides from freshness tokens which rows are current; remembered host facts (capabilities, account id, settled commits) |
+| `core/gerrit/cache.py` | `GerritCache`: SQLite persistence of ChangeInfo keyed by triplet; the trust window (`load_changes`), `reconcile` (which rows are current, from freshness tokens), invalidation |
+| `core/gerrit/cache_follow_ups.py` | `FollowUpCache` (mixed into `GerritCache`): a change's comments and Checks rows, valid while its freshness token stands; `DEFAULT_CHANGE_TRUST_WINDOW_SECONDS` |
+| `core/gerrit/cache_facts.py` | `RememberedFacts` (mixed into `GerritCache`): host capabilities, the user's account id, settled commits, each with its lifetime |
 | `core/gerrit/cache_schema.py` | The cache's tables and `SCHEMA_VERSION`: a version change drops and recreates them, there are no migrations |
 | `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, the comments context key, avatar stripping, follow-up payloads read back; `CacheInfo` (row counts) |
 | `core/gerrit/event_source.py` | Where the **event stream** comes from: the `EventSource` seam, `SshEventSource` (the one place ssh runs), `discover_ssh_target` (host, port, user from what ger already knows) |

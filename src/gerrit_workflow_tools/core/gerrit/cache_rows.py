@@ -6,9 +6,15 @@ serves the rows.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+def json_dumps(value: Any) -> str:
+    """*value* as the compact, key-sorted JSON a row stores."""
+    return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
 def strip_avatars(value: Any) -> Any:

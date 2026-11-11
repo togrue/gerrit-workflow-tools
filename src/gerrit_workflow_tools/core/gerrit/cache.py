@@ -5,38 +5,40 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from collections.abc import Callable, Iterable, Mapping, Sized
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
+from gerrit_workflow_tools.core.gerrit.cache_facts import FACT_PREFIXES, RememberedFacts
+from gerrit_workflow_tools.core.gerrit.cache_follow_ups import (
+    DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
+    FOLLOW_UP_KEYS,
+    FollowUpCache,
+)
 from gerrit_workflow_tools.core.gerrit.cache_rows import (
     CacheInfo,
-    decode_checks,
-    decode_comments,
     footer_of_triplet,
+    json_dumps,
     payload_number,
     payload_triplet,
     payload_updated,
     strip_avatars,
 )
-from gerrit_workflow_tools.core.gerrit.cache_schema import DATA_TABLES, SCHEMA_VERSION, create_tables, drop_tables
+from gerrit_workflow_tools.core.gerrit.cache_schema import (
+    DATA_TABLES,
+    SCHEMA_VERSION,
+    create_tables,
+    drop_tables,
+    meta_get,
+    meta_set,
+    placeholders,
+)
 from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, change_freshness_key
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 
 
-DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
-DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
-DEFAULT_SETTLED_COMMIT_TTL_SECONDS = 24 * 60 * 60
-
-_CAPABILITY_PREFIX = "capability:"
-_ACCOUNT_PREFIX = "account:"
-
-# Follow-up tables and the columns that key one row.
-_FOLLOW_UP_KEYS = {"comments": ("change_id", "context_key"), "checks": ("change_id",)}
-
-_T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
@@ -49,15 +51,7 @@ def _now() -> int:
     return int(time.time())
 
 
-def _placeholders(values: Sized) -> str:
-    return ",".join("?" * len(values))
-
-
-def _json_dumps(value: Any) -> str:
-    return json.dumps(value, separators=(",", ":"), sort_keys=True)
-
-
-class GerritCache:
+class GerritCache(FollowUpCache, RememberedFacts):
     """Shared SQLite cache for one Gerrit remote."""
 
     def __init__(self, path: Path, *, web_base: str, host: str | None = None) -> None:
@@ -82,69 +76,27 @@ class GerritCache:
         conn.execute("PRAGMA busy_timeout=2000")
         return conn
 
+    def _clock(self) -> int:
+        return _now()
+
     def _init_db(self) -> None:
         with self._connect() as conn:
             create_tables(conn)
-            version = self._meta_get(conn, "schema_version")
+            version = meta_get(conn, "schema_version")
             if version and version != SCHEMA_VERSION:
                 drop_tables(conn)
             create_tables(conn)
-            self._meta_set(conn, "schema_version", SCHEMA_VERSION)
-            self._meta_set(conn, "host", self.host)
-            self._meta_set(conn, "web_base", self.web_base)
-
-    @staticmethod
-    def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
-        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
-        return str(row["value"]) if row else None
-
-    @staticmethod
-    def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
-        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, value))
+            meta_set(conn, "schema_version", SCHEMA_VERSION)
+            meta_set(conn, "host", self.host)
+            meta_set(conn, "web_base", self.web_base)
 
     def clear(self) -> None:
         """Delete all cached API payloads while keeping schema metadata."""
         with self._connect() as conn:
             for table in DATA_TABLES:
                 conn.execute(f"DELETE FROM {table}")
-            for prefix in (_CAPABILITY_PREFIX, _ACCOUNT_PREFIX):
+            for prefix in FACT_PREFIXES:
                 conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{prefix}%",))
-
-    def _host_fact(self, key: str, ttl_seconds: int) -> Any:
-        """A fact about the host that rarely changes, or ``None`` when unknown or older than *ttl_seconds*."""
-        with self._connect() as conn:
-            raw = self._meta_get(conn, key)
-        if not raw:
-            return None
-        try:
-            record = json.loads(raw)
-            value = record["value"]
-            checked_at = int(record["at"])
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            return None
-        return value if _now() - checked_at < ttl_seconds else None
-
-    def _set_host_fact(self, key: str, value: Any) -> None:
-        with self._connect() as conn:
-            self._meta_set(conn, key, _json_dumps({"value": value, "at": _now()}))
-
-    def capability(self, name: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> bool | None:
-        """Whether this host supports *name*, or ``None`` when unknown or stale."""
-        value = self._host_fact(f"{_CAPABILITY_PREFIX}{name}", ttl_seconds)
-        return value if isinstance(value, bool) else None
-
-    def set_capability(self, name: str, value: bool) -> None:
-        """Record whether this host supports *name*."""
-        self._set_host_fact(f"{_CAPABILITY_PREFIX}{name}", value)
-
-    def account_id(self, user: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> int | None:
-        """The account id Gerrit gave *user* (the configured ``gerrit.user``), or ``None`` when unknown or stale."""
-        value = self._host_fact(f"{_ACCOUNT_PREFIX}{user}", ttl_seconds)
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-    def set_account_id(self, user: str, account_id: int) -> None:
-        """Record the account id of *user*: it never changes, so nobody needs to ask on every run."""
-        self._set_host_fact(f"{_ACCOUNT_PREFIX}{user}", account_id)
 
     def info(self) -> CacheInfo:
         """Return row counts for cache administration."""
@@ -164,7 +116,7 @@ class GerritCache:
             rows = conn.execute(
                 f"""
                 SELECT change_id, payload, fetched_at
-                FROM changes WHERE change_id IN ({_placeholders(triplets)})
+                FROM changes WHERE change_id IN ({placeholders(triplets)})
                 """,
                 triplets,
             ).fetchall()
@@ -178,7 +130,7 @@ class GerritCache:
         """Gerrit just confirmed these rows are current: their trust window starts again."""
         if triplets:
             conn.execute(
-                f"UPDATE changes SET fetched_at = ? WHERE change_id IN ({_placeholders(triplets)})",
+                f"UPDATE changes SET fetched_at = ? WHERE change_id IN ({placeholders(triplets)})",
                 [_now(), *triplets],
             )
 
@@ -209,7 +161,7 @@ class GerritCache:
             rows = conn.execute(
                 f"""
                 SELECT payload FROM changes
-                WHERE json_extract(payload, '$.change_id') IN ({_placeholders(unique)})
+                WHERE json_extract(payload, '$.change_id') IN ({placeholders(unique)})
                 """,
                 unique,
             ).fetchall()
@@ -314,28 +266,6 @@ class GerritCache:
                 self._mark_verified(conn, list(current))
         return current, moved
 
-    def settled_commits(
-        self, shas: Iterable[str], *, ttl_seconds: int = DEFAULT_SETTLED_COMMIT_TTL_SECONDS
-    ) -> set[str]:
-        """Those of *shas* recently found to be no open change: history a review chain sits on."""
-        wanted = list(shas)
-        if not wanted:
-            return set()
-        with self._connect() as conn:
-            rows = conn.execute(
-                f"SELECT sha FROM settled_commits WHERE checked_at > ? AND sha IN ({_placeholders(wanted)})",
-                [_now() - ttl_seconds, *wanted],
-            ).fetchall()
-        return {str(row["sha"]) for row in rows}
-
-    def settle_commits(self, shas: Iterable[str]) -> None:
-        """Record that Gerrit has no open change for *shas* (merged, or never a change)."""
-        now = _now()
-        with self._connect() as conn:
-            conn.executemany(
-                "INSERT OR REPLACE INTO settled_commits(sha, checked_at) VALUES (?, ?)", [(sha, now) for sha in shas]
-            )
-
     def upsert_changes(
         self,
         changes: dict[str, dict[str, Any]] | list[dict[str, Any]],
@@ -355,7 +285,7 @@ class GerritCache:
         now = _now()
         stored = [(key, strip_avatars(payload)) for key, payload in keyed.items()]
         rows = [
-            (key, payload_number(payload), _json_dumps(payload), payload_updated(payload), now)
+            (key, payload_number(payload), json_dumps(payload), payload_updated(payload), now)
             for key, payload in stored
         ]
         insert = """
@@ -373,8 +303,8 @@ class GerritCache:
         if not triplets:
             return
         with self._connect() as conn:
-            for table in ("changes", *_FOLLOW_UP_KEYS):
-                conn.execute(f"DELETE FROM {table} WHERE change_id IN ({_placeholders(triplets)})", triplets)
+            for table in ("changes", *FOLLOW_UP_KEYS):
+                conn.execute(f"DELETE FROM {table} WHERE change_id IN ({placeholders(triplets)})", triplets)
             for triplet in triplets:
                 self._clear_missing(conn, footer_of_triplet(triplet))
 
@@ -389,119 +319,3 @@ class GerritCache:
             cleared = conn.execute("DELETE FROM missing_changes WHERE change_id = ?", (change_id or "",)).rowcount
         self.invalidate_changes(keys)
         return bool(keys) or cleared > 0
-
-    def _load_follow_up(
-        self,
-        table: str,
-        key: tuple[str, ...],
-        *,
-        decode: Callable[[Any], _T | None],
-        fetch: Callable[[], _T],
-        store: Callable[[_T], None],
-        change_updated: str | None,
-        trust_window_seconds: int,
-        refresh: bool,
-    ) -> _T:
-        """Serve one follow-up row only while it is provably current, else fetch and store it."""
-        where = " AND ".join(f"{column} = ?" for column in _FOLLOW_UP_KEYS[table])
-        with self._connect() as conn:
-            raw = conn.execute(f"SELECT payload, fetched_at, change_updated FROM {table} WHERE {where}", key).fetchone()
-        if raw and not refresh:
-            cached = decode(json.loads(str(raw["payload"])))
-            # The freshness token decides when there is one; otherwise only the trust window can.
-            if change_updated is not None:
-                current = raw["change_updated"] == change_updated
-            else:
-                current = _now() - int(raw["fetched_at"]) < trust_window_seconds
-            if cached is not None and current:
-                return cached
-        fresh = fetch()
-        store(fresh)
-        return fresh
-
-    def _store_follow_up(self, table: str, key: tuple[str, ...], payload: Any, change_updated: str | None) -> None:
-        columns = (*_FOLLOW_UP_KEYS[table], "payload", "fetched_at", "change_updated")
-        with self._connect() as conn:
-            conn.execute(
-                f"INSERT OR REPLACE INTO {table}({','.join(columns)}) VALUES ({_placeholders(columns)})",
-                (*key, _json_dumps(payload), _now(), change_updated),
-            )
-
-    def load_comments(
-        self,
-        triplet: str,
-        *,
-        fetch_comments: Callable[[str], dict[str, list[dict[str, Any]]]],
-        change_updated: str | None = None,
-        trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-        refresh: bool = False,
-        context_key: str = "",
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Load comment payloads keyed by the change freshness token and context variant.
-
-        When *change_updated* is supplied, it is the validity key (``meta_rev_id`` or
-        the ``updated``+counts fallback). A changed key refetches even inside the trust
-        window. Without a key, the trust window alone applies.
-
-        *context_key* distinguishes ``GET …/comments`` from the same path with
-        ``enable-context`` / ``context-padding``. Those payloads must not share a row.
-        """
-
-        return self._load_follow_up(
-            "comments",
-            (triplet, context_key),
-            decode=decode_comments,
-            fetch=lambda: fetch_comments(triplet),
-            store=lambda payload: self.upsert_comments(
-                triplet, payload, change_updated=change_updated, context_key=context_key
-            ),
-            change_updated=change_updated,
-            trust_window_seconds=trust_window_seconds,
-            refresh=refresh,
-        )
-
-    def upsert_comments(
-        self,
-        triplet: str,
-        payload: dict[str, list[dict[str, Any]]],
-        *,
-        change_updated: str | None = None,
-        context_key: str = "",
-    ) -> None:
-        """Store comments for one change and context variant."""
-
-        self._store_follow_up("comments", (triplet, context_key), payload, change_updated)
-
-    def load_checks(
-        self,
-        triplet: str,
-        *,
-        fetch_checks: Callable[[str], tuple[list[dict[str, Any]], list[dict[str, Any]]]],
-        change_updated: str | None = None,
-        trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-        refresh: bool = False,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Load Checks-plugin rows and messages keyed by the change freshness token."""
-
-        return self._load_follow_up(
-            "checks",
-            (triplet,),
-            decode=decode_checks,
-            fetch=lambda: fetch_checks(triplet),
-            store=lambda rows: self.upsert_checks(triplet, *rows, change_updated=change_updated),
-            change_updated=change_updated,
-            trust_window_seconds=trust_window_seconds,
-            refresh=refresh,
-        )
-
-    def upsert_checks(
-        self,
-        triplet: str,
-        checks: list[dict[str, Any]],
-        messages: list[dict[str, Any]],
-        *,
-        change_updated: str | None = None,
-    ) -> None:
-        """Store checks and messages for one change."""
-
-        self._store_follow_up("checks", (triplet,), {"checks": checks, "messages": messages}, change_updated)

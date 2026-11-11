@@ -8,6 +8,7 @@ on first use. There are no migrations.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sized
 
 
 SCHEMA_VERSION = "5"
@@ -79,3 +80,19 @@ def create_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+
+def placeholders(values: Sized) -> str:
+    """``?,?,?`` for an ``IN (...)`` over *values*."""
+    return ",".join("?" * len(values))
+
+
+def meta_get(conn: sqlite3.Connection, key: str) -> str | None:
+    """The value stored under *key* in ``meta``, or ``None``."""
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return str(row["value"]) if row else None
+
+
+def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Store *value* under *key* in ``meta``."""
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, value))
