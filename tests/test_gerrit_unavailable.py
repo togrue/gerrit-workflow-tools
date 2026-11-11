@@ -141,12 +141,24 @@ def test_unresolvable_revision_reads_the_same_in_every_command(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A bare number is a git rev by design; every command says so the same way, and hints."""
+    from gerrit_workflow_tools.cli_edit import main_reword
     from gerrit_workflow_tools.cli_fix import main as fix_main
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.cli_resolve import main as resolve_main
 
     _configure(stack_repo)
     expected = "error: cannot resolve '801': no commit by that name; did you mean change:801?"
-    for main_fn in (show_main, edit_main, fix_main):
-        code, _out, err = run_cli(stack_repo, main_fn, ["801"], monkeypatch)
+    for main_fn, argv in (
+        (show_main, ["801"]),
+        (edit_main, ["801"]),
+        (main_reword, ["801"]),
+        (fix_main, ["801"]),
+        (rebase_main, ["801"]),
+        (resolve_main, ["801"]),
+        (log_main, ["801"]),
+        (push_main, ["--dry-run", "801"]),
+    ):
+        code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch)
         assert (code, err.strip()) == (ExitCode.NOT_FOUND, expected), main_fn.__module__
 
 

@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.core.call_trace import record_call
+from gerrit_workflow_tools.core.changeish import unresolved_rev_message
 
 
 logger = logging.getLogger(__name__)
@@ -73,11 +74,12 @@ def is_unknown_revision(stderr: str) -> bool:
 
 
 def unknown_revision_error(cwd: Path | str | None, stderr: str, returncode: int) -> UnknownRevisionError:
-    """An error naming the side of a range git could not resolve, without git's ``--`` hint."""
+    """An error naming the side of a range git could not resolve, in the words every command uses."""
     match = _NAMED_REVISION_RE.search(stderr)
     name = match.group(1) if match else ""
     missing = [part for part in re.split(r"\.{2,3}", name) if part and commit_sha_or_none(cwd, part) is None]
-    return UnknownRevisionError(f"unknown revision {missing[0] if missing else name!r}", returncode=returncode)
+    rev = (missing[0] if missing else name).split("@{")[0] or name
+    return UnknownRevisionError(unresolved_rev_message(rev), returncode=returncode)
 
 
 def _clear_semantic_snapshots() -> None:

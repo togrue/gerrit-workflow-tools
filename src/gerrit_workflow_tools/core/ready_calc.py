@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.change_id import ChangeIdRow, first_change_id_boundary
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.change_resolution import local_commit_sha
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
     find_ready_boundary_via_registry,
@@ -165,7 +165,7 @@ def compute_ready(
 
     until_sha: str | None = None
     if until:
-        until_sha = git_out("rev-parse", until.strip(), cwd=cwd)
+        until_sha = local_commit_sha(cwd, until.strip())
         if until_sha not in shas:
             raise ChangeResolutionError(f"commit {until_sha[:8]} is not in the current local stack")
 

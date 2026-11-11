@@ -964,4 +964,4 @@ def test_log_says_when_a_rebase_is_stopped(stack_repo: Path, monkeypatch: pytest
 def test_log_names_the_unknown_side_of_a_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, log_main, ["nosuch..HEAD"], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert err.strip() == "error: unknown revision 'nosuch'"
+    assert err.strip() == "error: cannot resolve 'nosuch': no commit by that name"
