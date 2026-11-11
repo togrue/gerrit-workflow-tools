@@ -40,7 +40,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-from gerrit_workflow_tools.core.rebase_state import rebase_in_progress, unmerged_paths
+from gerrit_workflow_tools.core.rebase_state import edit_stop_next_step, rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.status_fmt import attention_text
@@ -209,6 +209,7 @@ def _resolve_target(
     return target.sha, target.change_id, mode
 
 
+_WALK_ON = "ger edit -n"
 _VERBS = {"edit": "editing", "reword": "rewording", "drop": "dropping"}
 _WALK = {"first": "oldest needing attention", "next": "next needing attention", "resume": "attention walk"}
 
@@ -221,7 +222,7 @@ def _continue_stopped_rebase(cwd: Path) -> int:
     cannot start.
     """
     print("continuing the rebase", file=sys.stderr)
-    code = continue_rebase(cwd, continue_with="ger edit -n")
+    code = continue_rebase(cwd, walk_on=_WALK_ON)
     if not rebase_in_progress(cwd):
         if code == 0:
             print("rebase finished", file=sys.stderr)
@@ -292,7 +293,7 @@ def _run_interactive_stack_rebase(
         rebase_fork,
         sequence_editor="rebase_sequence_editor",
         env=env,
-        continue_with="ger edit -n" if cursor_change_id and cursor_action != "set" else "git rebase --continue",
+        walk_on=_WALK_ON if cursor_change_id and cursor_action != "set" else None,
     )
     # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
@@ -300,7 +301,7 @@ def _run_interactive_stack_rebase(
     if returncode == 0 and rebase_in_progress(cwd):
         subject = git_out("log", "-1", "--format=%s", full, cwd=cwd)
         print(f"stopped at {short} {subject}", file=sys.stderr)
-        print("next: amend it, then `ger edit -n`", file=sys.stderr)
+        print(f"next: {edit_stop_next_step(_WALK_ON)}", file=sys.stderr)
     elif returncode == 0 and action == "drop":
         print(f"dropped {git_out('log', '-1', '--format=%h %s', full, cwd=cwd)}", file=sys.stderr)
         print(

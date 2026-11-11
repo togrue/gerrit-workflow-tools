@@ -270,7 +270,10 @@ def test_gedit_says_where_it_stopped_and_what_comes_next(stack_repo: Path, monke
 
     assert code == 0
     assert f"stopped at {rows[0].short_sha} {rows[0].subject}" in err
-    assert "then `ger edit -n`" in err
+    assert err.rstrip().endswith(
+        "next: amend it, then `git rebase --continue` to finish; "
+        "`ger edit -n` finishes and goes on to the next commit needing attention"
+    )
 
 
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -377,7 +380,10 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
     code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
     assert code == 0, err
     assert rebase_in_progress(stack_repo)
-    assert "then `ger edit -n`" in err
+    assert err.rstrip().endswith(
+        "next: amend it, then `git rebase --continue` to finish; "
+        "`ger edit -n` finishes and goes on to the next commit needing attention"
+    )
 
     code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
     assert code == 0, err

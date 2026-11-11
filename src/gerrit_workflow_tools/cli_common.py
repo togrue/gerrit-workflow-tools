@@ -368,29 +368,29 @@ def run_interactive_rebase(
     *,
     sequence_editor: str,
     env: dict[str, str],
-    continue_with: str = "git rebase --continue",
+    walk_on: str | None = None,
     autosquash: bool | None = False,
 ) -> int:
     """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code.
 
     *autosquash* ``False`` keeps every ``fixup!`` commit where it is whatever ``rebase.autosquash``
     says, ``True`` folds them, ``None`` leaves it to git config. A stop on a conflict ends with the
-    shared next step, naming *continue_with* as the way on.
+    shared next step, naming *walk_on* as the way on to the next attention stop.
     """
     env = {**env, "GIT_SEQUENCE_EDITOR": module_editor_command(f"gerrit_workflow_tools.{sequence_editor}")}
     squash = [] if autosquash is None else ["--autosquash" if autosquash else "--no-autosquash"]
     code = git("rebase", "-i", *squash, base, cwd=cwd, env=env, check=False, capture=False).returncode
-    _print_conflict_next_step(cwd, continue_with)
+    _print_conflict_next_step(cwd, walk_on)
     return code
 
 
-def continue_rebase(cwd: Path, *, continue_with: str = "git rebase --continue") -> int:
+def continue_rebase(cwd: Path, *, walk_on: str | None = None) -> int:
     """``git rebase --continue``; return git's exit code. Output goes to the terminal."""
     code = git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode
-    _print_conflict_next_step(cwd, continue_with)
+    _print_conflict_next_step(cwd, walk_on)
     return code
 
 
-def _print_conflict_next_step(cwd: Path, continue_with: str) -> None:
-    if step := conflict_next_step(cwd, continue_with=continue_with):
+def _print_conflict_next_step(cwd: Path, walk_on: str | None) -> None:
+    if step := conflict_next_step(cwd, walk_on=walk_on):
         print(f"next: {step}", file=sys.stderr)

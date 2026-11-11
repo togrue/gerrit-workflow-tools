@@ -33,11 +33,17 @@ def unmerged_paths(cwd: Path | str | None) -> list[str]:
     return [line for line in out.splitlines() if line.strip()]
 
 
-def conflict_next_step(cwd: Path | str | None, *, continue_with: str = "git rebase --continue") -> str | None:
+def _walks_on(walk_on: str | None) -> str:
+    """How *walk_on* differs from ``git rebase --continue``: it also goes on to the next attention stop."""
+    return f"; `{walk_on}` finishes and goes on to the next commit needing attention" if walk_on else ""
+
+
+def conflict_next_step(cwd: Path | str | None, *, walk_on: str | None = None) -> str | None:
     """The one next step after a rebase stopped on a conflict, or ``None`` when none is stopped on one.
 
     Every ger command that starts or continues a rebase prints this when it stops on a conflict,
-    and every command that must not run on a conflicted index refuses with it.
+    and every command that must not run on a conflicted index refuses with it. ``git rebase
+    --continue`` finishes; *walk_on* names the command that also walks on, where a walk is underway.
     """
     paths = unmerged_paths(cwd)
     if not paths:
@@ -45,9 +51,14 @@ def conflict_next_step(cwd: Path | str | None, *, continue_with: str = "git reba
     if not rebase_in_progress(cwd):
         return f"resolve the conflicts in {', '.join(paths)} and `git add` them, then finish the merge or pick"
     return (
-        f"resolve the conflicts in {', '.join(paths)}, `git add` them, then `{continue_with}`; "
-        "`git rebase --abort` goes back to where the rebase started"
+        f"resolve the conflicts in {', '.join(paths)}, `git add` them, then `git rebase --continue` to finish"
+        f"{_walks_on(walk_on)}; `git rebase --abort` goes back to where the rebase started"
     )
+
+
+def edit_stop_next_step(walk_on: str) -> str:
+    """The next step at a commit an edit stopped on: amend, then finish, or finish and walk on with *walk_on*."""
+    return f"amend it, then `git rebase --continue` to finish{_walks_on(walk_on)}"
 
 
 def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
