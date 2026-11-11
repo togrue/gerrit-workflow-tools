@@ -57,7 +57,7 @@ class FollowUpCache:
             if change_updated is not None:
                 current = raw["change_updated"] == change_updated
             else:
-                current = self._clock() - int(raw["fetched_at"]) < trust_window_seconds
+                current = 0 <= self._clock() - int(raw["fetched_at"]) < trust_window_seconds
             if cached is not None and current:
                 return cached
         fresh = fetch()

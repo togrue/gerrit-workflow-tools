@@ -49,7 +49,7 @@ class RememberedFacts:
             checked_at = int(record["at"])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             return None
-        return value if self._clock() - checked_at < ttl_seconds else None
+        return value if 0 <= self._clock() - checked_at < ttl_seconds else None
 
     def _set_host_fact(self, key: str, value: Any) -> None:
         with self._connect() as conn:

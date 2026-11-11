@@ -437,25 +437,50 @@ def test_upsert_changes_strips_avatars(tmp_path: Path) -> None:
     assert owner.get("username") == "alice"
 
 
-def test_missing_change_negative_cache_skips_refetch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pure-unknown batch: a recent miss stays absent without re-querying Gerrit."""
+def test_no_such_change_is_trusted_for_the_trust_window_and_no_longer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unpushed stack is not asked about each time, but a push from elsewhere shows as soon as a change would."""
     triplet = "proj~main~Innnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
     cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1000)
+    clock = {"t": 1000}
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: clock["t"])
+    pushed: dict[str, dict[str, Any]] = {}
+    asked: list[int] = []
 
     def fetch(_ids: list[str]) -> dict[str, dict[str, Any]]:
-        return {}
+        asked.append(clock["t"])
+        return dict(pushed)
 
-    cache.load_changes([triplet], probe_updated=lambda _ids: {}, fetch_changes=fetch, missing_ttl_seconds=60)
-    calls = {"n": 0}
+    def load() -> dict[str, dict[str, Any]]:
+        return cache.load_changes(
+            [triplet], probe_updated=lambda _ids: {}, fetch_changes=fetch, trust_window_seconds=10
+        )
 
-    def fetch_again(_ids: list[str]) -> dict[str, dict[str, Any]]:
-        calls["n"] += 1
-        return {}
+    assert load() == {}
+    pushed[triplet] = _change(triplet, number=7)  # somebody runs a plain `git push`
+    clock["t"] = 1009
+    assert load() == {}
+    clock["t"] = 1010
+    assert triplet in load()
+    assert asked == [1000, 1010]
 
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1030)
-    cache.load_changes([triplet], probe_updated=lambda _ids: {}, fetch_changes=fetch_again, missing_ttl_seconds=60)
-    assert calls["n"] == 0
+
+def test_a_clock_set_back_does_not_stretch_the_trust_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A row stamped in the future is not trusted until that time comes: it is checked now."""
+    triplet = "proj~main~Icccccccccccccccccccccccccccccccccccccccc"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 5000)
+    cache.upsert_changes([_change(triplet, updated="u1")])
+    probed: list[list[str]] = []
+
+    def probe(ids: list[str]) -> dict[str, str]:
+        probed.append(ids)
+        return {triplet: "u1"}
+
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: 1400)  # an hour earlier
+    cache.load_changes([triplet], probe_updated=probe, fetch_changes=lambda _ids: {}, trust_window_seconds=10)
+    assert probed == [[triplet]]
 
 
 def test_missing_ttl_does_not_stick_beside_cached_siblings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -474,7 +499,6 @@ def test_missing_ttl_does_not_stick_beside_cached_siblings(tmp_path: Path, monke
         [was_missing],
         probe_updated=lambda _ids: {},
         fetch_changes=lambda _ids: {},
-        missing_ttl_seconds=60,
     )
     cache.upsert_changes([_change(known, number=1)])
 
@@ -489,7 +513,6 @@ def test_missing_ttl_does_not_stick_beside_cached_siblings(tmp_path: Path, monke
         [known, was_missing],
         probe_updated=lambda _ids: {},
         fetch_changes=fetch,
-        missing_ttl_seconds=60,
         trust_window_seconds=10,
     )
 

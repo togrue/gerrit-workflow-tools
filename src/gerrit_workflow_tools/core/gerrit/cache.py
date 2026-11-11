@@ -38,9 +38,6 @@ from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_r
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 
 
-DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
-
-
 @dataclass(frozen=True)
 class _ChangeRow:
     payload: dict[str, Any]
@@ -49,6 +46,11 @@ class _ChangeRow:
 
 def _now() -> int:
     return int(time.time())
+
+
+def _within(checked_at: int, seconds: int) -> bool:
+    """Whether *checked_at* is at most *seconds* ago. A time in the future (the clock was set back) is not."""
+    return 0 <= _now() - checked_at < seconds
 
 
 class GerritCache(FollowUpCache, RememberedFacts):
@@ -139,7 +141,7 @@ class GerritCache(FollowUpCache, RememberedFacts):
             "SELECT checked_at FROM missing_changes WHERE change_id = ?",
             (footer_id,),
         ).fetchone()
-        return row is not None and _now() - int(row["checked_at"]) < ttl_seconds
+        return row is not None and _within(int(row["checked_at"]), ttl_seconds)
 
     def _mark_missing(self, conn: sqlite3.Connection, footer_id: str) -> None:
         conn.execute(
@@ -186,7 +188,6 @@ class GerritCache(FollowUpCache, RememberedFacts):
         probe_updated: Callable[[list[str]], dict[str, str]],
         fetch_changes: Callable[[list[str]], dict[str, dict[str, Any]]],
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-        missing_ttl_seconds: int = DEFAULT_MISSING_CHANGE_TTL_SECONDS,
         refresh: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Load ChangeInfo payloads keyed by Gerrit triplet ``id``.
@@ -196,6 +197,10 @@ class GerritCache(FollowUpCache, RememberedFacts):
         trust window starts again, the others are fetched. So an unchanged stack costs one
         light request, and nothing at all for the next *trust_window_seconds*.
 
+        "Gerrit has no such change" is trusted for the same window and no longer, so a change
+        pushed from elsewhere (plain ``git push``, another clone) shows as soon as a changed
+        one would.
+
         The probe also names the same Change-Ids on other branches (**siblings**). One that is
         new or moved is fetched too, so what the cache says about siblings is as current as
         the stack, not as old as the last time a stack change happened to move.
@@ -203,7 +208,6 @@ class GerritCache(FollowUpCache, RememberedFacts):
         Database connections are never held across Gerrit network calls.
         """
         rows = self._lookup_changes(triplets)
-        now = _now()
         out: dict[str, dict[str, Any]] = {}
         probe_ids: list[str] = []
         fetch_ids: list[str] = []
@@ -216,11 +220,11 @@ class GerritCache(FollowUpCache, RememberedFacts):
                     if (
                         not refresh
                         and not any_cached
-                        and self._missing_is_fresh(conn, footer_of_triplet(triplet), ttl_seconds=missing_ttl_seconds)
+                        and self._missing_is_fresh(conn, footer_of_triplet(triplet), ttl_seconds=trust_window_seconds)
                     ):
                         continue
                     fetch_ids.append(triplet)
-                elif not refresh and now - row.verified_at < trust_window_seconds:
+                elif not refresh and _within(row.verified_at, trust_window_seconds):
                     out[triplet] = row.payload
                 else:
                     probe_ids.append(triplet)
