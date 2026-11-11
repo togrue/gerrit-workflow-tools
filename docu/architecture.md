@@ -504,6 +504,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth` |
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe, `since:` delta |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
+| `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache, footer lookups, reviewer writes |
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
 | `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, the comments context key, avatar stripping, follow-up payloads read back; `CacheInfo` (row counts) |
