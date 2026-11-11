@@ -2,7 +2,7 @@
 
 Your Gerrit review chains, your local stack, comments, diffs and CI findings — next to the code.
 
-The extension has no Gerrit logic of its own. It starts `ger serve` in the workspace folder and
+The extension has no Gerrit logic of its own. It starts `ger serve` in the git checkout of your workspace folder and
 shows what that says, so it always agrees with `ger log`, `ger show` and `ger inbox`. The API
 contract is [docu/spec/commands/serve.md](../docu/spec/commands/serve.md).
 
@@ -93,6 +93,20 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 `ger` on the `PATH` (or `ger.executable` set), and a repository where `ger log` works:
 `gerrit.webUrl`, credentials (`ger setup`) and an upstream for the branch.
 
+The folder can be the checkout, a folder inside it, or a worktree. With several workspace
+folders, the first one in a git checkout is used; the log and the status bar tooltip name it.
+
+When something is missing, the *Review chains* view says what and offers the next step:
+
+| The view says | Next step |
+|---------------|-----------|
+| Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** |
+| The program that runs ger was not found | **Open Settings** on `ger.executable`, then **Retry** |
+| This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
+| `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
+
+A branch without an upstream still shows your review chains; *Local stack* offers to track one.
+
 ## Build and run
 
 ```bash
@@ -122,8 +136,8 @@ changed step against its **Expect** line, then accept it with `npm run e2e -- --
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
 open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere.
 
-If the views stay empty, run **ger: Show Log**: it shows how `ger serve` was started and
-anything it printed.
+**ger: Show Log** shows which repository is used, how `ger serve` was started, and anything it
+printed.
 
 ## Layout
 
@@ -140,7 +154,8 @@ anything it printed.
 | `src/review.ts` | Check Out for Review, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |
-| `src/config.ts`, `src/launch.ts` | The `ger.*` settings; how ger is started in a terminal. |
+| `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal. |
+| `src/workspace.ts`, `src/state.ts` | Which checkout is served; the state the views' welcome texts follow (`ger.state`). |
 | `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
 | `src/extension.ts` | Wiring: views, commands, polling. |
 

@@ -108,15 +108,14 @@ export async function run(): Promise<void> {
       const line = active && input instanceof vscode.TabInputText && active.document.uri.toString() === input.uri.toString() ? `, line ${active.selection.active.line + 1}` : "";
       return `${tab.label} (${kind}${line})`;
     };
-    const status = (): string => {
-      const headline = api.model.overview?.headline?.text ?? "nothing needs you";
-      return `${headline}${api.model.active.size ? `  🔔 ${api.model.active.size}` : ""}`;
-    };
+    // The status bar item as shown, its icons as `$(name)`; and the state the Gerrit views' welcome text follows.
+    const status = (): string => api.statusItem.text;
     /** Everything a user could see, one line each, prefixed by where it is. */
     const screen = async (): Promise<string[]> => {
       const shown = api.changeView.target;
       return [
         `status bar | ${status()}`,
+        `state  | ${api.model.state}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
         ...(await dump(api.stackView)).map((line) => `stack  | ${line}`),
         `change | title: ${shown ? `${shown.number ? `Change ${shown.number}` : "Change"} — ${api.changeView.shown?.summary ?? shown.title}` : "(nothing shown)"}`,
@@ -222,6 +221,20 @@ export async function run(): Promise<void> {
       "Command palette › ger: Leave Review Checkout, with none open",
       "It says there is no review checkout to leave (the Change view menu no longer offers it).",
       exec("ger.reviewDone"),
+    );
+
+    // --- When ger cannot start ---------------------------------------------------------
+    const settings = vscode.workspace.getConfiguration("ger");
+    const executable = settings.get<string>("executable");
+    await press(
+      "Settings › ger.executable set to a program that is not installed",
+      "ger serve restarts with it and cannot start: the Gerrit views go empty and their welcome text says the program was not found, with Open Settings and Retry; the status bar shows a warning.",
+      () => settings.update("executable", "ger-not-installed", vscode.ConfigurationTarget.Global),
+    );
+    await press(
+      "Settings › ger.executable set back",
+      "ger serve starts again at once, without a reload, and the views show what they showed before.",
+      () => settings.update("executable", executable, vscode.ConfigurationTarget.Global),
     );
 
     // --- Your commit with comments ----------------------------------------------------

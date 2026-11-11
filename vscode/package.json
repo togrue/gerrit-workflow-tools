@@ -84,8 +84,33 @@
     "viewsWelcome": [
       {
         "view": "ger.overview",
-        "contents": "Waiting for `ger serve`…\n[Retry](command:ger.refresh)\n[Show log](command:ger.showLog)",
-        "when": "!ger.ready"
+        "contents": "Open a folder with a Gerrit checkout to see your review chains and your local stack.\n[Open Folder](command:workbench.action.files.openFolder)",
+        "when": "workbenchState == empty"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "None of the folders in this window is in a git checkout. Open the folder of a Gerrit checkout.\n[Open Folder](command:workbench.action.files.openFolder)",
+        "when": "workbenchState != empty && ger.state == no-repo"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "Starting `ger serve`…\n[Show Log](command:ger.showLog)",
+        "when": "ger.state == starting"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "The program that runs ger was not found. Install ger, or set **ger.executable** to how to run it (for example `uv run ger`).\n[Open Settings](command:workbench.action.openSettings?%5B%22ger.executable%22%5D)\n[Retry](command:ger.refresh)",
+        "when": "ger.state == no-executable"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "This repository is not set up for Gerrit yet: ger needs its web address (`gerrit.webUrl`) and your credentials, and `ger setup` asks for them.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
+        "when": "ger.state == setup"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "`ger serve` stopped or failed. The log says why.\n[Retry](command:ger.refresh)\n[Show Log](command:ger.showLog)",
+        "when": "ger.state == failed"
       },
       {
         "view": "ger.change",
@@ -103,6 +128,7 @@
       { "command": "ger.stack.edit", "title": "Edit Commit Here (Rebase Stops at It)", "category": "ger", "icon": "$(edit)" },
       { "command": "ger.reviewDone", "title": "Leave Review Checkout", "category": "ger" },
       { "command": "ger.push", "title": "Push to Gerrit…", "category": "ger", "icon": "$(cloud-upload)" },
+      { "command": "ger.setup", "title": "Set Up Gerrit Access (ger setup)…", "category": "ger" },
       { "command": "ger.stack.moveUp", "title": "Move Later in the Stack", "category": "ger", "icon": "$(arrow-up)" },
       { "command": "ger.stack.moveDown", "title": "Move Earlier in the Stack", "category": "ger", "icon": "$(arrow-down)" },
       { "command": "ger.stack.moveUpBlocked", "title": "Moving Later Would Conflict (Why?)", "category": "ger", "icon": "$(circle-slash)" },

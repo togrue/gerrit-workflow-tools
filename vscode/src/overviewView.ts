@@ -75,7 +75,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   private roots(): Node[] {
     const overview = this.model.overview;
     if (!overview) {
-      return this.model.failure ? [{ kind: "info", text: this.model.failure, icon: icon("error", "list.errorForeground") }] : [];
+      return []; // the welcome text for the model's state says why, and what to do
     }
     if (overview.error) {
       return [{ kind: "info", text: overview.error.message, icon: icon("error", "list.errorForeground") }];

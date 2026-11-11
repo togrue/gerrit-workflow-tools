@@ -1,4 +1,5 @@
-// Wires the views, the status bar and the commands to one `ger serve` per workspace folder.
+// Wires the views, the status bar and the commands to one `ger serve`, for the first workspace
+// folder in a git checkout.
 
 import * as vscode from "vscode";
 
@@ -18,6 +19,27 @@ import { StackView } from "./stackView";
 import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
+import { chooseRepo, repoNote } from "./workspace";
+
+const VIEWS = ["ger.overview", "ger.stack", "ger.change"];
+
+/**
+ * No workspace folder is in a git checkout. Every command is still there and says so, rather
+ * than "command not found"; the views stay empty, and their welcome text offers Open Folder.
+ */
+function activateWithoutRepo(context: vscode.ExtensionContext, log: vscode.OutputChannel): void {
+  log.appendLine("No workspace folder is in a git checkout: nothing to serve.");
+  void vscode.commands.executeCommand("setContext", "ger.state", "no-repo");
+  const declared: { command: string }[] = context.extension.packageJSON.contributes.commands;
+  const missing = () => ui().message("info", "Open a folder with a Gerrit checkout first: ger works on the git repository of a workspace folder.", {}, []);
+  for (const { command } of declared) {
+    context.subscriptions.push(vscode.commands.registerCommand(command, command === "ger.showLog" ? () => log.show() : missing));
+  }
+  const empty: vscode.TreeDataProvider<never> = { getChildren: () => [], getTreeItem: (node) => node };
+  for (const view of VIEWS) {
+    context.subscriptions.push(vscode.window.registerTreeDataProvider(view, empty));
+  }
+}
 
 /** What the extension hands to its end-to-end tests. */
 export interface ExtensionApi {
@@ -26,17 +48,23 @@ export interface ExtensionApi {
   stackView: StackView;
   changeView: ChangeView;
   threads: CommentThreads;
+  statusItem: vscode.StatusBarItem;
   /** Replace what talks to the user, for the end-to-end suite. */
   useUi(next: Ui): void;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi | undefined {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) {
+  const log = vscode.window.createOutputChannel("ger");
+  context.subscriptions.push(log);
+  const choice = chooseRepo((vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath));
+  if (!choice) {
+    activateWithoutRepo(context, log);
     return undefined;
   }
-  const repo = folder.uri.fsPath;
-  const log = vscode.window.createOutputChannel("ger");
+  const repo = choice.repo;
+  const note = repoNote(choice);
+  log.appendLine(note ?? `Repository: ${repo}`);
+  void vscode.commands.executeCommand("setContext", "ger.state", "starting");
   const model = new Model(new GerProcess(repo, gerProgram, (line) => log.appendLine(line)), context.workspaceState, repo);
   const overviewView = new OverviewView(model);
   const stackView = new StackView(model);
@@ -127,6 +155,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
     "ger.push": () => runInTerminal(repo, ["push"]),
+    "ger.setup": () => runInTerminal(repo, ["setup"]),
     "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
     "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
     "ger.stack.moveUpBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, 1),
@@ -165,16 +194,16 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     provideTextDocumentContent: async (uri) => (await (await model.client()).file(uri.query, uri.path.slice(1))) ?? "",
   };
 
+  const statusItem = statusBar(model, note);
   const poll = setInterval(() => void model.refresh(), Math.max(15, setting("pollSeconds", 120)) * 1000);
   context.subscriptions.push(
     model,
-    log,
     overviewTree,
     stackTree,
     changeTree,
     threads,
     follower,
-    statusBar(model),
+    statusItem,
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
     // Coming back to the window is when the stack has most likely changed underneath.
     vscode.window.onDidChangeWindowState((state) => (state.focused ? void model.refresh() : undefined)),
@@ -187,7 +216,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     { dispose: () => clearInterval(poll) },
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView, threads, useUi };
+  return { model, overviewView, stackView, changeView, threads, statusItem, useUi };
 }
 
 export function deactivate(): void {

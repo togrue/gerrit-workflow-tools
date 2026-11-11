@@ -87,6 +87,7 @@ A **gap** names the work that would close it.
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
 | `ger.push` | `ger push` | |
+| `ger.setup` | `ger setup` | runs in a terminal; offered when the checkout lacks Gerrit settings |
 | `ger.stack.moveUp` | **gap** | `ger rebase` reorders interactively only |
 | `ger.stack.moveDown` | **gap** | `ger rebase` reorders interactively only |
 | `ger.stack.moveUpBlocked` | **gap** | no conflict preview on the CLI |

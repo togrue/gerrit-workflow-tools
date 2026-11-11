@@ -5,7 +5,8 @@ import * as vscode from "vscode";
 import { plural } from "./format";
 import { Model } from "./model";
 
-export function statusBar(model: Model): vscode.StatusBarItem {
+/** `note` says which repository it is about, when the window has several folders. */
+export function statusBar(model: Model, note: string | undefined): vscode.StatusBarItem {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   item.command = "ger.openHeadline";
   const render = () => {
@@ -41,6 +42,9 @@ export function statusBar(model: Model): vscode.StatusBarItem {
         tooltip.appendMarkdown(`$(bell-dot) New activity on ${plural(model.active.size, "chain")}\n\n`);
       }
       tooltip.appendMarkdown(headline ? "Click to open it." : "Click to open the overview.");
+    }
+    if (note) {
+      tooltip.appendMarkdown("\n\n").appendText(note);
     }
     item.tooltip = tooltip;
     item.show();

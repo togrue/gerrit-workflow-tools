@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, rememberSeen, swapKey } from "./format";
 import { GerProcess } from "./server";
+import { GerState, failureState } from "./state";
 
 const SEEN_KEY = "ger.seen";
 
@@ -33,6 +34,8 @@ export class Model implements vscode.Disposable {
   overview: Overview | undefined;
   /** Why there is no overview: the service did not start, or did not answer. */
   failure: string | undefined;
+  /** What the views can show; their welcome texts follow it as the `ger.state` context key. */
+  state: GerState = "starting";
   /** Keys of chains with activity since they were last seen. */
   active = new Set<string>();
 
@@ -53,7 +56,7 @@ export class Model implements vscode.Disposable {
 
   constructor(
     private readonly process: GerProcess,
-    private readonly state: vscode.Memento,
+    private readonly memento: vscode.Memento,
     readonly repo: string,
   ) {}
 
@@ -98,13 +101,16 @@ export class Model implements vscode.Disposable {
         this.news.fire(headline);
       }
       this.lastHeadline = key;
-      const seen = rememberSeen(this.overview, this.state.get<Seen>(SEEN_KEY, {}));
+      const seen = rememberSeen(this.overview, this.memento.get<Seen>(SEEN_KEY, {}));
       this.active = chainsWithActivity(this.overview, seen);
-      await this.state.update(SEEN_KEY, seen);
+      await this.memento.update(SEEN_KEY, seen);
+      await this.setState("ready");
     } catch (error) {
+      // What was shown may be stale now: the views say what went wrong and what to do instead.
       this.failure = describeError(error);
+      this.overview = undefined;
+      await this.setState(failureState(error));
     }
-    await vscode.commands.executeCommand("setContext", "ger.ready", this.overview !== undefined);
     this.changed.fire();
     await this.loadUpstreamChoice();
     await this.loadMoves();
@@ -162,14 +168,25 @@ export class Model implements vscode.Disposable {
   /** Forget the activity marker of `keys`, or of every chain. */
   async markSeen(keys?: Iterable<string>): Promise<void> {
     const mark = keys ?? this.active;
-    const seen = rememberSeen(this.overview, this.state.get<Seen>(SEEN_KEY, {}), mark);
-    await this.state.update(SEEN_KEY, seen);
+    const seen = rememberSeen(this.overview, this.memento.get<Seen>(SEEN_KEY, {}), mark);
+    await this.memento.update(SEEN_KEY, seen);
     this.active = chainsWithActivity(this.overview, seen);
     this.changed.fire();
   }
 
+  private async setState(state: GerState): Promise<void> {
+    this.state = state;
+    await vscode.commands.executeCommand("setContext", "ger.state", state);
+    await vscode.commands.executeCommand("setContext", "ger.ready", state === "ready");
+  }
+
+  /** Stop `ger serve`; the next refresh starts it again. */
   restart(): void {
     this.process.stop();
+    if (this.state !== "ready") {
+      void this.setState("starting");
+      this.changed.fire();
+    }
   }
 
   dispose(): void {
