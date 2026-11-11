@@ -635,6 +635,24 @@ def test_serve_prints_where_it_listens_and_stops_with_stdin(stack_repo: Path, mo
     assert len(hello["token"]) >= 32 and Path(hello["repo"]) == stack_repo
 
 
+def test_serve_outside_a_git_checkout_says_why_in_its_one_json_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    code, out, _err = run_cli(tmp_path, serve_main, ["--exit-with-stdin"], monkeypatch)
+    assert code == ExitCode.GIT
+    assert json.loads(out.splitlines()[0]) == {"error": {"code": "GIT", "message": "not inside a git worktree"}}
+
+
+def test_a_checkout_without_gerrit_settings_answers_config(tmp_path: Path) -> None:
+    git("init", "-q", cwd=tmp_path)
+    with pytest.raises(Exception) as raised:
+        GerApi(tmp_path).handle("GET", f"{V1}/overview")
+    status, body = failure_response(raised.value)
+    assert (status, body["error"]["code"]) == (500, "CONFIG")
+    assert "gerrit.webUrl" in body["error"]["message"]
+
+
 # --- Upstream and new comments -----------------------------------------------------
 
 

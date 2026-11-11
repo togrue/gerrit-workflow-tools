@@ -8,11 +8,13 @@ import os
 import secrets
 import sys
 import threading
+from pathlib import Path
 from typing import BinaryIO
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
+    failure_exit,
     init_cli_runtime,
     run_cli_command,
 )
@@ -22,6 +24,7 @@ from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.server.api import PREFIX, GerApi
 from gerrit_workflow_tools.server.httpd import GerHttpServer
+from gerrit_workflow_tools.server.views import error_json
 
 
 def _port(raw: str) -> int:
@@ -81,20 +84,36 @@ def _stop_when_stdin_closes(server: GerHttpServer) -> None:
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> int:
-    """Serve until interrupted; the first stdout line is ``{"url", "token", …}``."""
+    """Serve until interrupted; the first stdout line is ``{"url", "token", …}``, or ``{"error": …}``."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit, ci_http=ci_http))
+
+
+def _start(
+    args: argparse.Namespace, *, gerrit: GerritRest | None, ci_http: CiHttp | None
+) -> tuple[GerHttpServer, Path]:
+    """The server, bound and ready, and the repository it serves.
+
+    A known failure is also the one JSON line a client reads, in the shape a request's failure
+    has, so it can tell "not in a git checkout" from a crash without reading stderr.
+    """
+    try:
+        cwd, _settings, _highlighter = init_cli_runtime(args)
+        top = repo_toplevel(cwd)
+        if top is None:
+            raise GitError("not inside a git worktree")
+        api = GerApi(cwd, gerrit=gerrit, ci_http=ci_http)
+        return GerHttpServer(api, token=secrets.token_urlsafe(32), port=args.port), top
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        if failure_exit(error) is not None:
+            print(json.dumps({"error": error_json(error)}), flush=True)
+        raise
 
 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp | None) -> int:
     args = _build_parser().parse_args(argv)
-    cwd, _settings, _highlighter = init_cli_runtime(args)
-    top = repo_toplevel(cwd)
-    if top is None:
-        raise GitError("not inside a git worktree")
-    token = secrets.token_urlsafe(32)
-    server = GerHttpServer(GerApi(cwd, gerrit=gerrit, ci_http=ci_http), token=token, port=args.port)
+    server, top = _start(args, gerrit=gerrit, ci_http=ci_http)
     try:
-        hello = {"url": server.url, "api": PREFIX, "token": token, "repo": str(top), "pid": os.getpid()}
+        hello = {"url": server.url, "api": PREFIX, "token": server.token, "repo": str(top), "pid": os.getpid()}
         print(json.dumps(hello), flush=True)
         if args.exit_with_stdin:
             _stop_when_stdin_closes(server)

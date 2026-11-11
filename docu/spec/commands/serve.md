@@ -30,6 +30,17 @@ until interrupted:
 {"url": "http://127.0.0.1:53817", "api": "/api/v1", "token": "…", "repo": "/work/repo", "pid": 4242}
 ```
 
+When it cannot serve, that line is the reason instead, in the shape of a request's failure
+([Errors](#errors)), and it exits with the matching code. Outside a git checkout:
+
+```json
+{"error": {"code": "GIT", "message": "not inside a git worktree"}}
+```
+
+A client tells these from a crash (no JSON line at all) without reading stderr. A missing
+`gerrit.webUrl` is not one of them: the service starts, and its requests fail with `CONFIG`
+until it is set (`ger setup`).
+
 | Option | Meaning |
 |--------|---------|
 | `--port N` | Listen on port `N`. Default: any free port (read it from the JSON line). |
