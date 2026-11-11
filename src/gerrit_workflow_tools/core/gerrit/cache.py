@@ -10,6 +10,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
+from gerrit_workflow_tools.core.gerrit.cache_rows import (
+    decode_checks,
+    decode_comments,
+    footer_of_triplet,
+    max_updated,
+    payload_number,
+    payload_triplet,
+    payload_updated,
+    strip_avatars,
+)
 from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, change_freshness_key
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 
@@ -71,60 +81,6 @@ def _placeholders(values: Sized) -> str:
 
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
-
-
-def _strip_avatars(value: Any) -> Any:
-    """Drop avatar URL arrays from ChangeInfo payloads before persistence."""
-
-    if isinstance(value, dict):
-        return {key: _strip_avatars(item) for key, item in value.items() if key != "avatars"}
-    if isinstance(value, list):
-        return [_strip_avatars(item) for item in value]
-    return value
-
-
-def _footer_from_triplet(triplet: str) -> str:
-    return triplet.rsplit("~", 1)[-1]
-
-
-def _payload_triplet(payload: dict[str, Any]) -> str | None:
-    raw = payload.get("id")
-    return raw if isinstance(raw, str) and raw else None
-
-
-def _payload_updated(payload: dict[str, Any]) -> str | None:
-    raw = payload.get("updated")
-    return raw if isinstance(raw, str) else None
-
-
-def _payload_number(payload: dict[str, Any]) -> int | None:
-    raw = payload.get("_number")
-    return raw if isinstance(raw, int) else None
-
-
-def _dict_rows(raw: Any) -> list[dict[str, Any]]:
-    return [row for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
-
-
-def _decode_comments(payload: Any) -> dict[str, list[dict[str, Any]]] | None:
-    if not isinstance(payload, dict):
-        return None
-    return {str(path): _dict_rows(rows) for path, rows in payload.items() if isinstance(rows, list)}
-
-
-def _decode_checks(payload: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
-    if not isinstance(payload, dict):
-        return None
-    return _dict_rows(payload.get("checks")), _dict_rows(payload.get("messages"))
-
-
-def _max_updated(payloads: list[dict[str, Any]], *, floor: str = "") -> str:
-    best = floor
-    for payload in payloads:
-        updated = _payload_updated(payload)
-        if updated and updated > best:
-            best = updated
-    return best
 
 
 class GerritCache:
@@ -401,7 +357,7 @@ class GerritCache:
                     if (
                         not refresh
                         and not any_cached
-                        and self._missing_is_fresh(conn, _footer_from_triplet(triplet), ttl_seconds=missing_ttl_seconds)
+                        and self._missing_is_fresh(conn, footer_of_triplet(triplet), ttl_seconds=missing_ttl_seconds)
                     ):
                         continue
                     fetch_ids.append(triplet)
@@ -451,7 +407,7 @@ class GerritCache:
                 if fetch_ids:
                     self.upsert_changes(aliased, conn=conn)
                     for ref in fetch_ids:
-                        footer = _footer_from_triplet(ref)
+                        footer = footer_of_triplet(ref)
                         if ref in aliased:
                             self._clear_missing(conn, footer)
                         else:
@@ -490,7 +446,7 @@ class GerritCache:
         if not complete:
             return None
 
-        new_watermark = _max_updated(delta_rows, floor=state.watermark)
+        new_watermark = max_updated(delta_rows, floor=state.watermark)
         new_gen = state.generation + 1
         with self._connect() as conn:
             if delta_rows:
@@ -498,7 +454,7 @@ class GerritCache:
             self._set_scope_state(conn, scope_key, new_watermark, new_gen)
             self._stamp_certified_gen(conn, triplets, new_gen)
 
-        covered = {tid for payload in delta_rows if (tid := _payload_triplet(payload))}
+        covered = {tid for payload in delta_rows if (tid := payload_triplet(payload))}
         fresh = self._lookup_changes(triplets)
         for triplet in triplets:
             row = fresh.get(triplet)
@@ -518,7 +474,7 @@ class GerritCache:
             return
         state = self._get_scope_state(conn, scope_key) or _ScopeState(watermark="", generation=0)
         payloads = [out[triplet] for triplet in present]
-        new_watermark = _max_updated(payloads, floor=state.watermark)
+        new_watermark = max_updated(payloads, floor=state.watermark)
         if not new_watermark:
             return
         new_gen = state.generation + 1
@@ -538,13 +494,13 @@ class GerritCache:
         for cache_key, payload in pairs:
             if isinstance(payload, dict):
                 keyed[cache_key] = payload
-                keyed[_payload_triplet(payload)] = payload
+                keyed[payload_triplet(payload)] = payload
         keyed.pop(None, None)
 
         now = _now()
-        stored = [(key, _strip_avatars(payload)) for key, payload in keyed.items()]
+        stored = [(key, strip_avatars(payload)) for key, payload in keyed.items()]
         rows = [
-            (key, _payload_number(payload), _json_dumps(payload), _payload_updated(payload), now)
+            (key, payload_number(payload), _json_dumps(payload), payload_updated(payload), now)
             for key, payload in stored
         ]
         insert = """
@@ -565,7 +521,7 @@ class GerritCache:
             for table in ("changes", *_FOLLOW_UP_KEYS):
                 conn.execute(f"DELETE FROM {table} WHERE change_id IN ({_placeholders(triplets)})", triplets)
             for triplet in triplets:
-                self._clear_missing(conn, _footer_from_triplet(triplet))
+                self._clear_missing(conn, footer_of_triplet(triplet))
 
     def _load_follow_up(
         self,
@@ -627,7 +583,7 @@ class GerritCache:
         return self._load_follow_up(
             "comments",
             (triplet, context_key),
-            decode=_decode_comments,
+            decode=decode_comments,
             fetch=lambda: fetch_comments(triplet),
             store=lambda payload: self.upsert_comments(
                 triplet, payload, change_updated=change_updated, context_key=context_key
@@ -663,7 +619,7 @@ class GerritCache:
         return self._load_follow_up(
             "checks",
             (triplet,),
-            decode=_decode_checks,
+            decode=decode_checks,
             fetch=lambda: fetch_checks(triplet),
             store=lambda rows: self.upsert_checks(triplet, *rows, change_updated=change_updated),
             change_updated=change_updated,

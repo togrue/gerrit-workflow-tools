@@ -1,0 +1,71 @@
+"""What a Gerrit cache row holds: the ChangeInfo fields it is keyed on, and follow-up payloads read back.
+
+Pure functions over payloads, no SQLite: :mod:`gerrit_workflow_tools.core.gerrit.cache` stores and
+serves the rows.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def strip_avatars(value: Any) -> Any:
+    """Drop avatar URL arrays from ChangeInfo payloads before persistence."""
+
+    if isinstance(value, dict):
+        return {key: strip_avatars(item) for key, item in value.items() if key != "avatars"}
+    if isinstance(value, list):
+        return [strip_avatars(item) for item in value]
+    return value
+
+
+def footer_of_triplet(triplet: str) -> str:
+    """The last ``~`` segment of a cache key: the Change-Id of a triplet, the number of ``project~N``."""
+    return triplet.rsplit("~", 1)[-1]
+
+
+def payload_triplet(payload: dict[str, Any]) -> str | None:
+    """Gerrit's ``id`` of a ChangeInfo, or ``None``."""
+    raw = payload.get("id")
+    return raw if isinstance(raw, str) and raw else None
+
+
+def payload_updated(payload: dict[str, Any]) -> str | None:
+    """``updated`` of a ChangeInfo, or ``None``."""
+    raw = payload.get("updated")
+    return raw if isinstance(raw, str) else None
+
+
+def payload_number(payload: dict[str, Any]) -> int | None:
+    """``_number`` of a ChangeInfo, or ``None``."""
+    raw = payload.get("_number")
+    return raw if isinstance(raw, int) else None
+
+
+def dict_rows(raw: Any) -> list[dict[str, Any]]:
+    """The object rows of a JSON list; anything else reads as no rows."""
+    return [row for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+
+
+def decode_comments(payload: Any) -> dict[str, list[dict[str, Any]]] | None:
+    """A stored comments row as ``{path: [comment, ...]}``, or ``None`` when it is not one."""
+    if not isinstance(payload, dict):
+        return None
+    return {str(path): dict_rows(rows) for path, rows in payload.items() if isinstance(rows, list)}
+
+
+def decode_checks(payload: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
+    """A stored checks row as ``(checks, messages)``, or ``None`` when it is not one."""
+    if not isinstance(payload, dict):
+        return None
+    return dict_rows(payload.get("checks")), dict_rows(payload.get("messages"))
+
+
+def max_updated(payloads: list[dict[str, Any]], *, floor: str = "") -> str:
+    """The newest ``updated`` among *payloads*, never older than *floor*."""
+    best = floor
+    for payload in payloads:
+        updated = payload_updated(payload)
+        if updated and updated > best:
+            best = updated
+    return best
