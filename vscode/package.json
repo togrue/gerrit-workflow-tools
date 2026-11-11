@@ -14,7 +14,8 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:.git"
+    "workspaceContains:.git",
+    "onStartupFinished"
   ],
   "main": "./out/src/extension.js",
   "scripts": {
@@ -270,8 +271,8 @@
       ]
     },
     "keybindings": [
-      { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready" },
-      { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready" }
+      { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" },
+      { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" }
     ]
   }
 }

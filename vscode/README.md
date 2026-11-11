@@ -44,8 +44,10 @@ with a count appears when chains had activity since you last looked. Click to op
   between the patchset you voted or commented on and the current one — click for that diff.
 - **Files**: click for a diff against the parent. The commit you are standing on diffs against
   the real file, so you can fix things in the diff editor.
-- **Comments**: unresolved first. Click to jump to the line; `Alt+F9` / `Shift+Alt+F9` step
-  through the unresolved ones. For a local commit they also appear as comment threads in the
+- **Comments**: unresolved first. Click to jump to the line; *Next / Previous Unresolved Comment* (the arrows in the view's title bar) step
+  through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
+  diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
+  walks the open file. For a local commit they also appear as comment threads in the
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later by
   `ger push` or `ger review --vote`.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
@@ -115,7 +117,7 @@ views fill.
 `ger` on the `PATH` (or `ger.executable` set), and a repository where `ger log` works:
 `gerrit.webUrl`, credentials (`ger setup`) and an upstream for the branch.
 
-The folder can be the checkout, a folder inside it, or a worktree. With several workspace
+The folder can be the checkout, a folder inside it, or a worktree. The extension starts with the editor (after startup has finished), so the status bar item is there for a sub-folder of a checkout too; without a git checkout it starts nothing. With several workspace
 folders, the first one in a git checkout is used; the log and the status bar tooltip name it.
 
 When something is missing, the *Review chains* view says what and offers the next step:
