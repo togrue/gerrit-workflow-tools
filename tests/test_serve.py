@@ -641,7 +641,8 @@ def test_serve_outside_a_git_checkout_says_why_in_its_one_json_line(
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     code, out, _err = run_cli(tmp_path, serve_main, ["--exit-with-stdin"], monkeypatch)
     assert code == ExitCode.GIT
-    assert json.loads(out.splitlines()[0]) == {"error": {"code": "GIT", "message": "not inside a git worktree"}}
+    error = json.loads(out.splitlines()[0])["error"]
+    assert error == {"code": "GIT", "message": "not a git repository; run ger inside a clone"}
 
 
 def test_a_checkout_without_gerrit_settings_answers_config(tmp_path: Path) -> None:

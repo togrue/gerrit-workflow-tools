@@ -34,7 +34,7 @@ When it cannot serve, that line is the reason instead, in the shape of a request
 ([Errors](#errors)), and it exits with the matching code. Outside a git checkout:
 
 ```json
-{"error": {"code": "GIT", "message": "not inside a git worktree"}}
+{"error": {"code": "GIT", "message": "not a git repository; run ger inside a clone"}}
 ```
 
 A client tells these from a crash (no JSON line at all) without reading stderr. A missing
