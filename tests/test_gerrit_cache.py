@@ -534,3 +534,27 @@ def test_load_checks_serves_cache_while_change_updated_is_unchanged(tmp_path: Pa
 
     assert calls == ["proj~main~I1"]
     assert first == second
+
+
+def test_invalidating_a_change_drops_it_under_every_key_it_is_stored_under(tmp_path: Path) -> None:
+    """A write names the change by the key it has at hand; the copy under Gerrit's own id must not survive it."""
+    asked_as = "my/proj~main~Ieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    gerrit_id = "my%2Fproj~main~Ieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    other = "my/proj~main~Iffffffffffffffffffffffffffffffffffffffff"
+    cache = GerritCache(tmp_path / "c.db", web_base="https://g.example")
+    cache.upsert_changes({asked_as: _change(gerrit_id, number=41), other: _change(other, number=42)})
+    cache.upsert_comments(gerrit_id, {"a.txt": []}, change_updated="u1")
+    assert set(cache._lookup_changes([asked_as, gerrit_id])) == {asked_as, gerrit_id}
+
+    cache.invalidate_changes([asked_as])
+
+    assert cache._lookup_changes([asked_as, gerrit_id]) == {}
+    assert set(cache._lookup_changes([other])) == {other}
+    fetched: list[str] = []
+
+    def fetch_comments(key: str) -> dict[str, list[dict[str, Any]]]:
+        fetched.append(key)
+        return {}
+
+    cache.load_comments(gerrit_id, fetch_comments=fetch_comments, change_updated="u1")
+    assert fetched == [gerrit_id]

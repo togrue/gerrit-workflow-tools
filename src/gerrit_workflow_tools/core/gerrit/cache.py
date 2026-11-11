@@ -310,12 +310,25 @@ class GerritCache(FollowUpCache, RememberedFacts):
                 connection.executemany(insert, rows)
 
     def invalidate_changes(self, triplets: list[str]) -> None:
-        """Drop cached change, comment, checks and "no such change" rows for *triplets*."""
+        """Drop cached change, comment, checks and "no such change" rows for *triplets*.
+
+        A change is stored under the key it was asked for and under Gerrit's own id. Both go,
+        so no copy of it outlives the write that made it stale.
+        """
         if not triplets:
             return
         with self._connect() as conn:
+            aliases = conn.execute(
+                f"""
+                SELECT change_id FROM changes WHERE number IN (
+                  SELECT number FROM changes WHERE number IS NOT NULL AND change_id IN ({placeholders(triplets)})
+                )
+                """,
+                triplets,
+            ).fetchall()
+            keys = list(dict.fromkeys([*triplets, *(str(row[0]) for row in aliases)]))
             for table in ("changes", *FOLLOW_UP_KEYS):
-                conn.execute(f"DELETE FROM {table} WHERE change_id IN ({placeholders(triplets)})", triplets)
+                conn.execute(f"DELETE FROM {table} WHERE change_id IN ({placeholders(keys)})", keys)
             for triplet in triplets:
                 self._clear_missing(conn, footer_of_triplet(triplet))
 
