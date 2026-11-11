@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
+    changeish_help,
     init_cli_runtime,
     output_format,
     print_resolution_note,
@@ -78,10 +79,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "revs",
         nargs="*",
         metavar="REV",
-        help=(
-            "Changeish, or A..B / A...B range with changeish endpoints "
-            "(default: HEAD when neither REV nor --stack is given)."
-        ),
+        help=changeish_help("A commit or change, or an A..B / A...B range of them (default: HEAD)"),
     )
     p.add_argument(
         "--stack",

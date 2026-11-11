@@ -49,7 +49,7 @@ def test_resolve_by_short_sha(stack_repo, monkeypatch):
 
 def test_resolve_unknown_change_id(stack_repo, monkeypatch):
     monkeypatch.chdir(stack_repo)
-    with pytest.raises(ChangeResolutionError, match="no commit in current stack"):
+    with pytest.raises(ChangeResolutionError, match="no commit in the local stack has that Change-Id"):
         _resolve(stack_repo, "I" + "f" * 40)
 
 
@@ -71,7 +71,7 @@ def test_require_in_stack_rejects_a_commit_below_the_stack(stack_repo, monkeypat
     """
     monkeypatch.chdir(stack_repo)
     upstream_tip = git_out("rev-parse", "@{upstream}", cwd=stack_repo)
-    with pytest.raises(ChangeResolutionError, match="not in the current local stack"):
+    with pytest.raises(ChangeResolutionError, match="is not in the local stack"):
         _resolve(stack_repo, upstream_tip, require_in_stack=True)
 
 

@@ -16,7 +16,7 @@ Create a **fixup** commit: `git commit --fixup=<target>`.
 ger fix [options] REF_OR_CHANGE
 ```
 
-`REF_OR_CHANGE` — commit-ish, `refs/changes/…`, numeric change id, or Change-Id (`I…`).
+`REF_OR_CHANGE` — a commit in the current stack, named by any changeish: git revision (a bare number is one), `change:<n>`, `refs/changes/…`, or Change-Id (`I…`).
 
 ### Change resolution
 

@@ -64,6 +64,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
+from gerrit_workflow_tools.core.changeish import no_commit_with_change_id_message
 from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
@@ -182,7 +183,7 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
                 matches.append((c.sha, c.short_sha, c.subject))
 
         if not matches:
-            print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)
+            print(f"error: {no_commit_with_change_id_message(args.change_id)}", file=sys.stderr)
             return int(ExitCode.NOT_FOUND)
 
         if len(matches) > 1 and not args.all_commits:

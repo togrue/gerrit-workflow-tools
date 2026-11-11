@@ -13,7 +13,9 @@ from gerrit_workflow_tools.core.changeish import (
     Changeish,
     ChangeishKind,
     address_problem,
+    not_in_stack_message,
     parse,
+    unresolved_change_message,
     unresolved_rev_message,
 )
 from gerrit_workflow_tools.core.config import Settings
@@ -144,14 +146,14 @@ def local_commit_sha(cwd: Path | str | None, rev: str) -> str:
     return sha
 
 
-def _fetch_change_row(client: GerritRest, change_key: str) -> dict[str, Any]:
+def _fetch_change_row(client: GerritRest, change_key: str, raw: str) -> dict[str, Any]:
     """Only Gerrit's 404 means "not found"; any other failure is Gerrit's and says so."""
     try:
         return client.get_change(change_key)
     except GerritApiError as e:
         if e.status != 404:
             raise
-        raise ChangeResolutionError(f"Gerrit change not found: {change_key!r}") from e
+        raise ChangeResolutionError(unresolved_change_message(raw)) from e
 
 
 def _fetch_single_from_query(client: GerritRest, query: str) -> dict[str, Any]:
@@ -233,7 +235,7 @@ def _fetch_unique_row(parsed: Changeish, client: GerritRest, *, web_base: str | 
     if problem := address_problem(parsed, web_base=web_base):
         raise ChangeResolutionError(problem)
     if parsed.kind == "triplet":
-        return _fetch_change_row(client, parsed.raw)
+        return _fetch_change_row(client, parsed.raw, parsed.raw)
 
     if parsed.kind == "query":
         if not parsed.query:
@@ -245,7 +247,7 @@ def _fetch_unique_row(parsed: Changeish, client: GerritRest, *, web_base: str | 
         raise ChangeResolutionError(f"invalid change number: {parsed.raw!r}")
     if number is None:
         raise ChangeResolutionError(f"cannot parse Gerrit change number from URL: {parsed.raw!r}")
-    row = _fetch_change_row(client, number)
+    row = _fetch_change_row(client, number, parsed.raw)
     if problem := ChangeView.from_payload(row).contradicts(parsed):
         raise ChangeResolutionError(problem)
     return row
@@ -310,19 +312,12 @@ class StackCommit:
 
 
 def _stack_commit(
-    cwd: Path | str | None,
-    branch: str | None,
-    sha: str,
-    *,
-    require_in_stack: bool,
-    resolution: Resolution | None = None,
+    cwd: Path | str | None, branch: str | None, raw: str, sha: str, *, require_in_stack: bool
 ) -> StackCommit:
-    """Wrap *sha*, optionally insisting it is one of the **local stack**'s commits."""
-    if require_in_stack:
-        snap = get_stack_snapshot(cwd, branch)
-        if sha not in {c.sha for c in snap.commits}:
-            raise ChangeResolutionError(f"commit {sha[:8]} is not in the current local stack")
-    return StackCommit(sha=sha, resolution=resolution)
+    """Wrap *sha*, which *raw* named, optionally insisting it is one of the **local stack**'s commits."""
+    if require_in_stack and sha not in {c.sha for c in get_stack_snapshot(cwd, branch).commits}:
+        raise ChangeResolutionError(not_in_stack_message(raw, sha))
+    return StackCommit(sha=sha)
 
 
 def resolve_to_stack_sha(
@@ -352,14 +347,14 @@ def resolve_to_stack_sha(
 
     if parsed.kind == "git-rev":
         sha = local_commit_sha(cwd, parsed.raw)
-        return _stack_commit(cwd, branch, sha, require_in_stack=require_in_stack)
+        return _stack_commit(cwd, branch, parsed.raw, sha, require_in_stack=require_in_stack)
 
     if parsed.kind == "change-ref":
         # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a
         # ref the repository can resolve on its own would be a round trip for nothing.
         local = commit_sha_or_none(cwd, parsed.raw)
         if local is not None:
-            return _stack_commit(cwd, branch, local, require_in_stack=require_in_stack)
+            return _stack_commit(cwd, branch, parsed.raw, local, require_in_stack=require_in_stack)
 
     # A Change-Id or triplet already carries the id, so the stack can be searched offline.
     # The remaining kinds address a change by number, so Gerrit has to name the id first.
@@ -372,7 +367,7 @@ def resolve_to_stack_sha(
             parsed.raw, client=client_factory(), cwd=cwd, settings=settings, branch=branch, explicit_target=True
         )
         if resolution.selected is None:
-            raise ChangeResolutionError(f"no Gerrit change resolved for {parsed.raw!r}")
+            raise ChangeResolutionError(unresolved_change_message(parsed.raw))
         change_id = resolution.selected.change_id
 
     # Searching the stack for the Change-Id already guarantees membership, so this path needs
@@ -383,7 +378,7 @@ def resolve_to_stack_sha(
     want = norm_change_id(change_id)
     matches = [c for c in snap.commits if c.change_id and norm_change_id(c.change_id) == want]
     if not matches:
-        raise ChangeResolutionError(f"no commit in current stack with Change-Id {change_id}")
+        raise ChangeResolutionError(not_in_stack_message(parsed.raw))
     if len(matches) > 1:
         shorts = [c.short_sha for c in matches]
         raise ChangeAmbiguousError(

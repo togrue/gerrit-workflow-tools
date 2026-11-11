@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.change_id import ChangeIdRow, first_change_id_boundary
+from gerrit_workflow_tools.core.changeish import not_in_stack_message
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import local_commit_sha
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
@@ -167,7 +168,7 @@ def compute_ready(
     if until:
         until_sha = local_commit_sha(cwd, until.strip())
         if until_sha not in shas:
-            raise ChangeResolutionError(f"commit {until_sha[:8]} is not in the current local stack")
+            raise ChangeResolutionError(not_in_stack_message(until.strip(), until_sha))
 
     if all_commits:
         strategy = BoundaryResult(block_index=None, reason="ignored (--all)")

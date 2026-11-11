@@ -72,7 +72,7 @@ request to bypass it, like `ger --refresh`.
 A failure answers with a status and one shape:
 
 ```json
-{"error": {"code": "NOT_FOUND", "message": "no matching Gerrit change for 'change:9'"}}
+{"error": {"code": "NOT_FOUND", "message": "cannot resolve 'change:9': Gerrit has no such change"}}
 ```
 
 `code` is the name of the shared exit code ([exit-codes.md](../exit-codes.md)) the same failure

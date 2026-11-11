@@ -14,6 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     add_json_arg,
     add_verbose_and_debug_log_args,
     ask_choice,
+    changeish_help,
     confirm,
     init_cli_runtime,
     run_cli_command,
@@ -63,7 +64,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "Walk its review chain and publish your drafts with a vote."
         ),
     )
-    p.add_argument("changeish", nargs="?", metavar="CHANGEISH", help="The change to review (number, URL, triplet).")
+    p.add_argument(
+        "changeish", nargs="?", metavar="CHANGEISH", help=changeish_help("The change to review", change_only=True)
+    )
     p.add_argument("--patchset", type=int, default=None, metavar="N", help="Review patchset N (default: current).")
     walk = p.add_mutually_exclusive_group()
     walk.add_argument("--next", action="store_true", help="Review the change above in its review chain.")

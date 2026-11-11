@@ -102,11 +102,28 @@ it as follows.
 
 ### 2.2 Disambiguation rules
 
-- A **bare integer** (`120045`) is a **git revision**, never a change number. To
-  mean the change, write `change:120045`. When no commit has that name, every command
-  says so the same way and points there: `cannot resolve '120045': no commit by that
-  name; did you mean change:120045?` (exit `3`). An `I…` token that is not a valid
-  Change-Id gets `…, and no Change-Id either (I plus 40 hex digits)`.
+- A **bare integer** (`120045`) is a **git revision**, never a change number, wherever the
+  argument names a commit first: `ger show`, `ger edit`, `ger reword`, `ger fix`, `ger rebase`,
+  `ger push`, `ger resolve`, `ger ci`. To mean the change, write `change:120045`. When no
+  commit has that name, every command says so the same way and points there: `cannot resolve
+  '120045': no commit by that name; did you mean change:120045?` (exit `3`). An `I…` token
+  that is not a valid Change-Id gets `…, and no Change-Id either (I plus 40 hex digits)`.
+- Where the argument can only ever be a Gerrit change — `ger checkout CHANGEISH` and
+  `ger review CHANGEISH` — a bare integer **is** the change number: nobody checks out or
+  reviews a commit by an all-digit SHA. One place decides it, `gerrit_patchset.resolve_change`.
+  Every command's help says which of the two its argument is, from one shared wording
+  (`cli_common.changeish_help`).
+- **Not found reads the same everywhere**: `cannot resolve '<input>': <what is missing>`, with
+  exactly these endings, all from `core/changeish.py` (exit `3`):
+
+  | Ending | When |
+  |--------|------|
+  | `no commit by that name` (+ the `change:` hint for digits) | a git revision names no commit |
+  | `Gerrit has no such change` | a change number, triplet, URL or `refs/changes/…` ref: Gerrit answered 404 |
+  | `no Gerrit change has that Change-Id` | a Change-Id Gerrit has no change for |
+  | `commit <sha> is not in the local stack` | `ger edit` / `reword` / `fix` / `push REV`: the commit exists, outside the stack |
+  | `no commit in the local stack has that Change-Id` | the same commands, for a Change-Id or change |
+  | `no commit has that Change-Id` | `ger sha`, which searches commits rather than the stack |
 - A **triplet**, **change number**, **change ref**, and **URL** each identify
   **exactly one** Gerrit change. No ambiguity is possible; if the change does not
   exist, that is a not-found error, not an ambiguity error.

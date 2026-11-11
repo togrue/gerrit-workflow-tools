@@ -114,7 +114,7 @@ def test_ger_fix_change_id_needs_no_gerrit_config(stack_repo: Path, monkeypatch:
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
     assert "gerrit.webUrl" not in err
 
 
@@ -130,7 +130,7 @@ def test_ger_fix_change_not_on_stack_is_an_error(stack_repo: Path, monkeypatch: 
     git("add", "c.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch, gerrit=ChangeStore(details))
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
     assert "fetch" not in err.lower()
 
 

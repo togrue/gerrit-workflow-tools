@@ -9,6 +9,7 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
+    changeish_help,
     confirm,
     init_cli_runtime,
     print_note,
@@ -43,7 +44,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "so ger log and ger push work on it. A local version of the change is switched to, or updated."
         ),
     )
-    p.add_argument("changeish", metavar="CHANGEISH", help="The change (number, URL, triplet, Change-Id).")
+    p.add_argument("changeish", metavar="CHANGEISH", help=changeish_help("The change", change_only=True))
     p.add_argument("--patchset", type=int, default=None, metavar="N", help="Check out patchset N (default: current).")
     p.add_argument(
         "-b",

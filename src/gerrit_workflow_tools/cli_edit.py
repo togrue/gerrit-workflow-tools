@@ -18,6 +18,7 @@ from gerrit_workflow_tools.cli_attention import (
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
+    changeish_help,
     continue_rebase,
     init_cli_runtime,
     require_history_rewrite,
@@ -71,7 +72,7 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
         "rev",
         nargs="?",
         metavar="REV",
-        help="Git ref or Change-Id (I…); must be in the current stack. Optional with attention targeting.",
+        help=changeish_help("The commit, in the current stack; optional with attention targeting"),
     )
     p.add_argument(
         "--first-attention-commit",

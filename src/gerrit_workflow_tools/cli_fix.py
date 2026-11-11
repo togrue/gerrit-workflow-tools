@@ -13,6 +13,7 @@ from gerrit_workflow_tools.cli_common import (
     add_json_arg,
     add_verbose_and_debug_log_args,
     ask_choice,
+    changeish_help,
     init_cli_runtime,
     print_resolution_note,
     run_cli_command,
@@ -91,8 +92,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger fix",
         description=(
-            "Create a fixup commit (``git commit --fixup``) targeting a local ref, a ``refs/changes/…`` ref, "
-            "or a Gerrit change (numeric id or Change-Id). "
+            "Create a fixup commit (``git commit --fixup``) for a commit in the current stack. "
             "By default only **staged** changes are committed; use ``-a`` to include all modifications to "
             "tracked files. When the index is empty and stdin is a TTY, you are prompted to stage "
             "tracked modifications (with an option to show the diff)."
@@ -101,10 +101,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "target",
         metavar="REF_OR_CHANGE",
-        help=(
-            "Commit-ish (branch, SHA, HEAD~n, …), a Gerrit ``refs/changes/AA/NNNNN/PS`` ref, "
-            "``change:<n>`` for a numeric change id, or a Change-Id (I…)."
-        ),
+        help=changeish_help("The commit to fix, in the current stack"),
     )
     p.add_argument(
         "-a",

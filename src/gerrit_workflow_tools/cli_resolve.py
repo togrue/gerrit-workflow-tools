@@ -10,10 +10,12 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_json_arg,
     add_verbose_and_debug_log_args,
+    changeish_help,
     init_cli_runtime,
     print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.core.changeish import unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
@@ -35,10 +37,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "changeish",
         metavar="CHANGEISH",
-        help=(
-            "Git ref, Change-Id (I…), triplet (project~branch~I…), change: number, "
-            "refs/changes/… ref, Gerrit URL, or q: search query."
-        ),
+        help=changeish_help("What to resolve; also q:<search query>"),
     )
     add_json_arg(p)
     add_color_args(p)
@@ -78,7 +77,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         explicit_target=True,
     )
     if resolution.selected is None and resolution.kind == "change-id":
-        raise ChangeResolutionError(f"Gerrit change not found for {args.changeish!r}")
+        raise ChangeResolutionError(unresolved_change_message(args.changeish))
 
     print_resolution_note(resolution)
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gerrit_workflow_tools.core.annotated_stack import annotate
-from gerrit_workflow_tools.core.changeish import unresolved_rev_message
+from gerrit_workflow_tools.core.changeish import unresolved_change_message, unresolved_rev_message
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, merge_chains
@@ -103,7 +103,7 @@ def resolve_show_commit_row(
         return ShowCommitResolution(row=row, is_local_commit=True, resolution=resolution)
 
     if resolution.selected is None:
-        raise ChangeResolutionError(f"no matching Gerrit change for {raw_arg!r}")
+        raise ChangeResolutionError(unresolved_change_message(raw_arg))
 
     local = _stack_commit_for(cwd, resolution.selected.change_id, branch=branch, settings=settings)
     if local is not None:

@@ -48,6 +48,49 @@ def test_every_command_exits_the_same_way_on_an_unknown_revision(
     assert code == ExitCode.NOT_FOUND
 
 
+_NO_ID = "I" + "0" * 40
+
+
+@pytest.mark.parametrize(
+    ("command", "argv", "message"),
+    [
+        ("show", ["change:99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
+        ("resolve", ["change:99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
+        ("checkout", ["change:99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
+        ("checkout", ["99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
+        ("fix", ["change:99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
+        ("show", [_NO_ID], f"cannot resolve '{_NO_ID}': no Gerrit change has that Change-Id"),
+        ("resolve", [_NO_ID], f"cannot resolve '{_NO_ID}': no Gerrit change has that Change-Id"),
+        ("checkout", [_NO_ID], f"cannot resolve '{_NO_ID}': no Gerrit change has that Change-Id"),
+        ("fix", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit in the local stack has that Change-Id"),
+        ("edit", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit in the local stack has that Change-Id"),
+        ("sha", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit has that Change-Id"),
+        ("show", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
+        ("fix", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
+        ("edit", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
+    ],
+)
+def test_not_found_reads_the_same_in_every_command(
+    command: str, argv: list[str], message: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One family of not-found wordings: ``cannot resolve '<input>': <what is missing>``."""
+    from gerrit_workflow_tools import cli_checkout, cli_edit, cli_fix, cli_sha
+
+    mains = {
+        "show": gshow_main,
+        "resolve": resolve_main,
+        "checkout": cli_checkout.main,
+        "fix": cli_fix.main,
+        "edit": cli_edit.main,
+        "sha": cli_sha.main,
+    }
+    _configure_web(stack_repo)
+    gerrit = None if command == "sha" else ChangeStore({})
+    code, _out, err = run_cli(stack_repo, mains[command], argv, monkeypatch, gerrit=gerrit)
+    assert code == ExitCode.NOT_FOUND
+    assert err.strip() == f"error: {message}"
+
+
 def _configure_web(repo: Path) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
 

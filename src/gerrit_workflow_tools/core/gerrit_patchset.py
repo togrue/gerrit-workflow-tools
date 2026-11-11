@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.changeish import parse as parse_changeish
+from gerrit_workflow_tools.core.changeish import parse as parse_changeish, unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import Resolution, resolve_changeish
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -84,7 +84,7 @@ def resolve_change(service: GerritService, cwd: Path | str, changeish: str) -> R
         changeish, client=service.rest, cwd=cwd, settings=service.settings, branch=branch, explicit_target=True
     )
     if resolution.selected is None:
-        raise ChangeResolutionError(f"{changeish!r} names no Gerrit change")
+        raise ChangeResolutionError(unresolved_change_message(changeish))
     view = ChangeView.from_payload(service.rest.get_change(resolution.selected.triplet))
     # A triplet, never Gerrit's `id`: real servers send the compact project~number form.
     key = build_triplet(view.project, view.branch, view.change_id) if view.project else resolution.selected.triplet

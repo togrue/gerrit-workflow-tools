@@ -279,7 +279,7 @@ def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: 
 
     code, _out, err = run_cli(stack_repo, gedit_main, ["I" + "f" * 40], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
 
 
 def test_gedit_ambiguous_change_id_exits_ambiguous(dup_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -299,7 +299,7 @@ def test_gedit_rejects_a_commit_below_the_stack(stack_repo: Path, monkeypatch: p
     upstream_tip = git_out("rev-parse", "@{upstream}", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, gedit_main, [upstream_tip], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "not in the current local stack" in err
+    assert "is not in the local stack" in err
 
 
 def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -307,7 +307,7 @@ def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytes
 
     code, _out, err = run_cli(stack_repo, greword_main, ["I" + "f" * 40], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
 
 
 def test_gedit_next_runs_show_only_when_edit_next_show_is_set(

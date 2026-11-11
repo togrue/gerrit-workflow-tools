@@ -204,6 +204,20 @@ def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+_CHANGEISH_FORMS = "Change-Id (I…), change:<n>, triplet, refs/changes/… ref or Gerrit URL"
+
+
+def changeish_help(what: str, *, change_only: bool = False) -> str:
+    """Help for a **changeish** argument; one wording, so every command tells the same truth.
+
+    *change_only* is for arguments that can only ever name a Gerrit change (``ger checkout``,
+    ``ger review``): a bare number is then that change. Everywhere else it is a git revision first.
+    """
+    if change_only:
+        return f"{what}: a change number, {_CHANGEISH_FORMS}."
+    return f"{what}: a git revision (a bare number too: write change:<n> for a change), {_CHANGEISH_FORMS}."
+
+
 def add_json_arg(parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGroup) -> None:
     """Register ``--json``, read back as ``args.json_``."""
     parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)

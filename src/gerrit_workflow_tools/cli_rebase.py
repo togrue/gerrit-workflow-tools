@@ -8,6 +8,7 @@ import logging
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
+    changeish_help,
     init_cli_runtime,
     print_resolution_note,
     require_history_rewrite,
@@ -39,9 +40,8 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="REV",
         nargs="?",
         default=None,
-        help=(
-            "Base commit, Change-Id (I…), or git ref to rebase from "
-            "(default: merge base with the target branch). Not with --onto-remote."
+        help=changeish_help(
+            "The base to rebase from (default: the merge base with the target; not with --onto-remote)"
         ),
     )
     p.add_argument(
