@@ -148,5 +148,6 @@ def test_push_ready_reaches_changes_gerrit_already_has(
     code, out, err = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check", "--ready"], monkeypatch)
 
     assert code == 0, err
-    assert "nothing to push" in out and out.count("  ready") >= 2
+    assert "nothing to push" not in out and "About to push" not in out, out
+    assert "No new commits to push; set on Gerrit:" in out and out.count("  ready") >= 2
     assert not any(row.get("work_in_progress") for row in open_changes_on_branch(gerrit_admin_session, proj, topic))

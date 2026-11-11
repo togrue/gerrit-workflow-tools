@@ -126,11 +126,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Gerrit change topic (magic ref %%topic=…; REST where Gerrit already has the commit).",
     )
-    state = parser.add_mutually_exclusive_group()
+    state, private = parser.add_mutually_exclusive_group(), parser.add_mutually_exclusive_group()
     for group, flag, what in (
         (state, "--wip", "work-in-progress (magic ref %%wip"),
         (state, "--ready", "ready for review, the way back from --wip (magic ref %%ready"),
-        (parser, "--private", "private (magic ref %%private"),
+        (private, "--private", "private (magic ref %%private"),
+        (private, "--no-private", "not private, the way back from --private (magic ref %%remove-private"),
     ):
         group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
     add_verbose_and_debug_log_args(
@@ -156,6 +157,7 @@ def _gerrit_flags_set(args: argparse.Namespace) -> bool:
         or args.wip
         or args.ready
         or args.private
+        or args.no_private
         or args.reviewer_strategy is not None
     )
 
@@ -202,7 +204,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
     if _gerrit_flags_set(args):
         print(
-            "warning: --until, --all, --reviewers, --topic, --wip, --ready, --private, "
+            "warning: --until, --all, --reviewers, --topic, --wip, --ready, --private, --no-private "
             "and --reviewer-strategy apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
@@ -316,6 +318,7 @@ def _push_gerrit(
         wip=bool(args.wip),
         ready_for_review=bool(args.ready),
         private=bool(args.private),
+        remove_private=bool(args.no_private),
         no_rebase_check=bool(args.no_rebase_check),
         show_attributes=defaults["show_attributes"],
         update_last_pushed=defaults["last_pushed_branch"],

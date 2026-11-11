@@ -39,6 +39,7 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 | `--wip` | Magic ref `%wip` |
 | `--ready` | Magic ref `%ready`: mark the changes ready for review again, the way back from `--wip`. Mutually exclusive with `--wip`. The interactive options line cannot say it, so a typed line keeps it unless the line asks for `wip`; the status line shows `WIP: no (--ready)` |
 | `--private` | Magic ref `%private` |
+| `--no-private` | Magic ref `%remove-private`: make the changes public again, the way back from `--private`. Mutually exclusive with `--private`. As with `--ready`, a typed options line keeps it unless the line asks for `private`; the status line shows `Private: no (--no-private)` |
 | `--branch NAME` | Push a different local branch than current |
 | `--no-rebase-check` | Skip fetch/linear-on-remote check (`gerrit.push.remotePolicy`) |
 | `--color`, `--debug-log` | Standard CLI helpers. `-v` is accepted and does nothing, so it is not shown in help or completion |
@@ -65,7 +66,7 @@ No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --se
 | `lazy` | REST: add reviewers only where none assigned |
 | `overwrite` | REST: replace reviewers per change; CC accounts stay |
 
-`lazy` / `overwrite` may run REST assignment after push when git reports no new changes. Topic/WIP/ready/private use magic ref options for all strategies.
+`lazy` / `overwrite` may run REST assignment after push when git reports no new changes. Topic/WIP/ready/private/remove-private use magic ref options for all strategies.
 
 ### Changes Gerrit already has at that commit
 
@@ -74,7 +75,7 @@ Gerrit applies magic-ref options only to the changes a push gives a new patch se
 | Option | REST call, only where the change differs |
 |--------|------------------------------------------|
 | `--wip` / `--ready` | `POST /changes/{id}/wip` / `POST /changes/{id}/ready` |
-| `--private` | `POST /changes/{id}/private` (never clears it) |
+| `--private` / `--no-private` | `POST /changes/{id}/private` / `DELETE /changes/{id}/private` |
 | `--topic` | `PUT /changes/{id}/topic` |
 | `--reviewers` (strategy `push`) | the reviewer batch, for the named reviewers not yet on the change; `lazy` / `overwrite` reach every change anyway |
 

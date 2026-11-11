@@ -92,12 +92,14 @@ def run_git_push(cmd: list[str], cwd: Path | str | None) -> Any:
 
 
 def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushPlan:
-    """Take new push options; the drafts decision and ``--ready`` (the options line says neither) are kept.
+    """Take new push options; the drafts decision, ``--ready`` and ``--no-private`` (the options line says
+    none of them) are kept.
 
-    A line asking for WIP drops ``--ready``: the two contradict each other.
+    A line asking for WIP drops ``--ready``, one asking for private drops ``--no-private``: each pair contradicts.
     """
     ready = plan.options.ready and not options.wip
-    options = replace(options, publish_comments=plan.options.publish_comments, ready=ready)
+    public = plan.options.remove_private and not options.private
+    options = replace(options, publish_comments=plan.options.publish_comments, ready=ready, remove_private=public)
     return replace(
         plan,
         options=options,
@@ -176,6 +178,7 @@ def prepare(
     wip: bool = False,
     ready_for_review: bool = False,
     private: bool = False,
+    remove_private: bool = False,
     no_rebase_check: bool = False,
     show_attributes: bool = False,
     update_last_pushed: bool = True,
@@ -210,6 +213,7 @@ def prepare(
         wip=wip,
         ready=ready_for_review,
         private=private,
+        remove_private=remove_private,
     )
     ready = _ready(
         cwd,

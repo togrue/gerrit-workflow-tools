@@ -46,7 +46,7 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--reviewer-strategy" in out
     assert "--topic" in out
     assert "--wip" in out
-    assert "--private" in out
+    assert "--private" in out and "--no-private" in out
     scrubbed = out.replace("--reviewers", "").replace("--reviewer-strategy", "")
     assert "--reviewer" not in scrubbed
     assert "--no-rebase-check" in out
@@ -1326,6 +1326,33 @@ def test_gpush_ready_is_the_way_back_from_wip(stack_repo: Path, monkeypatch: pyt
     with pytest.raises(SystemExit) as caught:
         run_cli(stack_repo, gpush_main, ["--dry-run", "--ready", "--wip"], monkeypatch)
     assert caught.value.code == ExitCode.USAGE
+
+
+def test_gpush_no_private_is_the_way_back_from_private(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--no-private"], monkeypatch)
+    assert code == 0
+    assert ":refs/for/main%remove-private" in out
+    assert "Private no (--no-private)" in re.sub(r"\[[0-9;]*m", "", out)
+
+    with pytest.raises(SystemExit) as caught:
+        run_cli(stack_repo, gpush_main, ["--dry-run", "--private", "--no-private"], monkeypatch)
+    assert caught.value.code == ExitCode.USAGE
+
+
+def test_gpush_no_private_reaches_private_changes_gerrit_already_has(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"private": True}, {}]))
+    mock_run = _rejected_as_unchanged(monkeypatch)
+
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y", "--no-private", rows[1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert [call.args[1] for call in store.calls_to("set_private")] == [False]
+    assert f"set {rows[0].short_sha}  # {rows[0].subject}  remove-private" in out
+    assert rows[1].short_sha not in out.split("set on Gerrit:")[1]
+    mock_run.assert_not_called()
 
 
 @pytest.mark.parametrize("command", ["push", "fix", "edit", "rebase", "sha"])

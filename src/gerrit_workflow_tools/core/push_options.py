@@ -22,6 +22,8 @@ class PushOptions:
     ready: bool = False
     """Mark the changes ready for review (``%ready``), the way back from :attr:`wip`."""
     private: bool = False
+    remove_private: bool = False
+    """Make the changes public again (``%remove-private``), the way back from :attr:`private`."""
     publish_comments: bool | None = None
     """Your drafts on the updated changes: ``True`` publish them, ``False`` keep them (overriding
     an account preference that publishes on push), ``None`` say nothing (there are none)."""
@@ -36,6 +38,7 @@ def refspec_option_segments(
     topic: str | None,
     publish_comments: bool | None = None,
     ready: bool = False,
+    remove_private: bool = False,
 ) -> list[str]:
     parts: list[str] = []
     if strategy == ReviewerStrategy.PUSH:
@@ -46,6 +49,8 @@ def refspec_option_segments(
         parts.append("ready")
     if private:
         parts.append("private")
+    if remove_private:
+        parts.append("remove-private")
     if topic:
         parts.append(f"topic={quote(topic, safe='')}")
     if publish_comments is not None:
@@ -61,6 +66,7 @@ def push_refspec(tip: str, push_branch: str, options: PushOptions) -> str:
         wip=options.wip,
         ready=options.ready,
         private=options.private,
+        remove_private=options.remove_private,
         topic=options.topic,
         publish_comments=options.publish_comments,
     )

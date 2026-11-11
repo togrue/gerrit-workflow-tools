@@ -3,7 +3,7 @@
 Gerrit applies magic-ref options (``%wip``, ``%ready``, ``%topic=…``, ``%r=…``) only to the
 changes a push gives a new patch set. For a commit that already is its change's current
 patch set, a push changes nothing, so ``ger push`` sets the same state through the change's
-REST endpoints instead: ``POST …/wip`` / ``…/ready``, ``POST …/private``, ``PUT …/topic`` and
+REST endpoints instead: ``POST …/wip`` / ``…/ready``, ``POST`` / ``DELETE …/private``, ``PUT …/topic`` and
 the reviewer batch. Only what differs from the change's current state is sent, so a push
 without these options makes no extra call.
 """
@@ -45,14 +45,14 @@ class StateUpdate:
 
     change: UnchangedChange
     wip: bool | None = None
-    private: bool = False
+    private: bool | None = None
     topic: str | None = None
     reviewers: tuple[str, ...] = ()
 
     def describe(self) -> str:
-        """The update in push-option words: ``ready``, ``wip``, ``private``, ``topic=x``, ``r=alice``."""
+        """The update in push-option words: ``wip``, ``ready``, ``private``, ``remove-private``, ``topic=x``…"""
         parts = [] if self.wip is None else ["wip" if self.wip else "ready"]
-        parts += ["private"] if self.private else []
+        parts += [] if self.private is None else ["private" if self.private else "remove-private"]
         parts += [f"topic={self.topic}"] if self.topic else []
         parts += [f"r={name}" for name in self.reviewers]
         return ",".join(parts)
@@ -69,7 +69,8 @@ def planned_updates(options: PushOptions, unchanged: Sequence[UnchangedChange]) 
     updates: list[StateUpdate] = []
     for change in unchanged:
         wip = True if options.wip and not change.wip else False if options.ready and change.wip else None
-        private = options.private and not change.private
+        private = True if options.private and not change.private else None
+        private = False if options.remove_private and change.private else private
         topic = options.topic if options.topic and options.topic != change.topic else None
         reviewers = _missing_reviewers(options, change)
         update = StateUpdate(change, wip=wip, private=private, topic=topic, reviewers=reviewers)
@@ -91,7 +92,8 @@ def unreached_options_warning(
 ) -> str | None:
     """Gerrit took no new patch set and ger could not read the changes, so options set nothing."""
     pushed_reviewers = bool(options.reviewers) and options.strategy == ReviewerStrategy.PUSH
-    asked = bool(options.topic) or options.wip or options.ready or options.private or pushed_reviewers
+    states = (options.wip, options.ready, options.private, options.remove_private)
+    asked = bool(options.topic) or any(states) or pushed_reviewers
     if not rejected or unchanged or not asked:
         return None
     return (
@@ -108,8 +110,8 @@ def apply_updates(service: GerritService, updates: Sequence[StateUpdate]) -> lis
         try:
             if update.wip is not None:
                 service.rest.set_wip(triplet, update.wip)
-            if update.private:
-                service.rest.set_private(triplet, True)
+            if update.private is not None:
+                service.rest.set_private(triplet, update.private)
             if update.topic:
                 service.rest.set_topic(triplet, update.topic)
             if update.reviewers:

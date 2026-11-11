@@ -198,7 +198,7 @@ _ger_push() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -i --branch --dry-run --no-rebase-check -y --yes --publish-comments --all --color --hyperlinks --follow-merges --reviewers --reviewer-strategy --topic --wip --ready --private --debug-log
+        __gwt_flags "$cur" -h --help -i --branch --dry-run --no-rebase-check -y --yes --publish-comments --all --color --hyperlinks --follow-merges --reviewers --reviewer-strategy --topic --wip --ready --private --no-private --debug-log
         return
     fi
     case "$prev" in

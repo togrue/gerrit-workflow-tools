@@ -103,6 +103,22 @@ def test_private_push_with_topic_and_reviewers_lands_on_gerrit_and_in_log(
     assert all(row["private"] for row in log_commits_by_change_id(repo, monkeypatch).values())
 
 
+def test_no_private_makes_a_private_stack_gerrit_already_has_public(
+    tmp_path: Path,
+    gerrit_integration_context: GerritIntegrationContext,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--private``, then ``--no-private`` with nothing new: the way back from private goes over REST."""
+    repo, _branch, triplets = _pushed_stack(gerrit_integration_context, tmp_path, monkeypatch, "public", "--private")
+    assert [change_detail(gerrit_admin_session, t).get("is_private") for t in triplets] == [True, True]
+
+    out, _err = ger_push(repo, monkeypatch, "--no-private")
+
+    assert "No new commits to push; set on Gerrit:" in out and out.count("  remove-private") >= 2, out
+    assert [change_detail(gerrit_admin_session, t).get("is_private") for t in triplets] == [None, None]
+
+
 def test_a_web_edit_and_a_gerrit_rebase_show_as_outdated_and_push_keeps_them(
     tmp_path: Path,
     gerrit_integration_context: GerritIntegrationContext,
@@ -169,15 +185,16 @@ def test_an_unknown_reviewer_says_gerrits_reason_once(
     nobody = f"nosuch_{secrets.token_hex(3)}"
     argv = ["--yes", "--no-rebase-check", "--reviewers", nobody]
 
-    code, _out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
-    warnings = [line for line in err.splitlines() if line.startswith("warning: could not set")]
+    code, out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
+    errors = [line for line in err.splitlines() if line.startswith("error: could not set")]
+    reason = f"Account '{nobody}' not found; {nobody} does not identify a registered user or group"
     assert code == 5, err
-    assert len(warnings) == 1 and f"r={nobody} on 2 commits" in warnings[0], err
-    assert warnings[0].endswith(
-        f"Gerrit HTTP 400: Account '{nobody}' not found; {nobody} does not identify a registered user or group"
-    ), err
+    assert len(errors) == 1 and f"r={nobody} on 2 commits" in errors[0], err
+    assert errors[0].endswith(f"Gerrit HTTP 400: {reason}"), err
+    assert "warning:" not in err and "nothing to push" not in out, (out, err)
 
-    # A new commit carries the reviewer as %r=: git push relays Gerrit's own refusal.
+    # A new commit carries the reviewer as %r=: git push relays Gerrit's own refusal, ger says it in one line.
     build_linear_chain(repo, ["nosuch new"])
     code, _out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
-    assert code != 0 and nobody in err, err
+    assert code == 1 and "[remote rejected]" in err, err  # git push's exit code passes through
+    assert err.rstrip().splitlines()[-1] == f"error: Gerrit rejected the push: {reason}", err

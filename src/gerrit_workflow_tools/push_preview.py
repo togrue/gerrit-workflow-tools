@@ -172,7 +172,10 @@ def print_plan_status(plan: PushPlan) -> None:
         ("Reviewers", color_text(", ".join(options.reviewers), ANSI_LIGHT_GREEN) if options.reviewers else none),
         ("Topic", color_text(options.topic, ANSI_CYAN) if options.topic else none),
         ("WIP", color_text("no (--ready)", ANSI_GREEN) if options.ready else _yes_no(options.wip)),
-        ("Private", _yes_no(options.private)),
+        (
+            "Private",
+            color_text("no (--no-private)", ANSI_GREEN) if options.remove_private else _yes_no(options.private),
+        ),
     ]
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))

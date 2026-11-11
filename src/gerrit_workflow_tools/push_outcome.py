@@ -28,6 +28,8 @@ def _assignment_attributes_fragment(plan: PushPlan, reviewers_assigned: tuple[st
         parts.append("ready")
     if plan.options.private:
         parts.append("private")
+    if plan.options.remove_private:
+        parts.append("remove-private")
     return ",".join(parts)
 
 
