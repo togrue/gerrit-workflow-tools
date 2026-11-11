@@ -18,7 +18,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_serve import main as serve_main
-from gerrit_workflow_tools.core import reorder
+from gerrit_workflow_tools.core import reorder, reorder_preview
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.config import Settings
@@ -26,7 +26,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
-from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, first_conflict, swap_conflicts
+from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict, swap_conflicts
 from gerrit_workflow_tools.core.review_checkout import changes_ref
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit
@@ -470,6 +470,45 @@ def test_stack_moves_follows_a_swap_whose_result_differs_through_the_rest_of_the
     assert swap_conflicts(stack_repo, base, rows) == [None, None, None]
     with pytest.raises(PreviewUnavailable):
         first_conflict(stack_repo, "0" * 40, [rows[1]], rows)
+
+
+def _linear(repo: Path, contents: list[str]) -> tuple[str, list[Commit]]:
+    """A repository whose ``f.txt`` takes each of *contents* in turn: the first is the base."""
+    git("init", "-q", cwd=repo)
+    for key, value in (("user.email", "t@t"), ("user.name", "t"), ("core.autocrlf", "false")):
+        git("config", key, value, cwd=repo)
+    commits = []
+    for index, text in enumerate(contents):
+        (repo / "f.txt").write_text(text, encoding="utf-8")
+        git("add", "f.txt", cwd=repo)
+        git("commit", "-qm", f"step {index}", cwd=repo)
+        sha = git_out("rev-parse", "HEAD", cwd=repo)
+        commits.append(Commit(sha=sha, short_sha=sha[:7], subject=f"step {index}", body="", change_id=None))
+    return commits[0].sha, commits[1:]
+
+
+def test_a_swap_that_changes_the_content_is_followed_up_the_stack(tmp_path: Path) -> None:
+    # step 2 reverts step 1: swapped, the pair leaves "y" where "x" was, and step 3 no longer applies.
+    base, stack = _linear(tmp_path, ["x\n", "y\n", "x\n", "z\n", "z\nmore\n"])
+    swaps = swap_conflicts(tmp_path, base, stack)
+    assert swaps[0] == PickConflict(stack[2], ("f.txt",))
+    assert swaps == [
+        first_conflict(tmp_path, base, [*stack[:i], stack[i + 1], stack[i], *stack[i + 2 :]], stack)
+        for i in range(len(stack) - 1)
+    ]
+
+
+def test_a_git_that_cannot_batch_the_preview_gets_the_same_answer(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (stack_repo / "d.txt").write_text("reworked\n", encoding="utf-8")
+    git("commit", "-qam", "Rework d.txt\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    base = git_out("rev-parse", "main", cwd=stack_repo)
+    batched = swap_conflicts(stack_repo, base, rows)
+    monkeypatch.setattr(reorder_preview, "_picks_at_once", lambda *_args: None)
+    assert swap_conflicts(stack_repo, base, rows) == batched
+    assert batched[3] == PickConflict(rows[4], ("d.txt",))
 
 
 def test_reorder_refuses_a_stale_order_and_a_dirty_worktree(stack_repo: Path) -> None:

@@ -126,6 +126,10 @@ Nothing is touched — no rebase starts, the worktree and the branch stay as the
 - `available` — `false` (with `reason`, and no `swaps`) when this git cannot simulate the
   moves; it takes git 2.40. Nothing is known then, and a rewrite still finds out.
 
+Cost: a fixed handful of git calls, whatever the stack's length — every pair's merges go to
+one batched `git merge-tree --stdin`. A git whose `merge-tree` cannot take that batch gets
+the same answer from one `merge-tree` per pick, which grows with the stack.
+
 ### `GET /chains/<number>`
 
 The **review chain** an open change sits in, base to top, in the `ger inbox --json` chain shape.
