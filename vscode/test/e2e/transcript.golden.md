@@ -5,6 +5,7 @@
 ```
 status bar | $(error) CI failed on 102: test! temporary experiment
 state  | ready
+events | live
 chains | CI failed on 102: test! temporary experiment
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
@@ -152,8 +153,10 @@ notification (info): No review checkout is open here.
 --- on screen:
 + status bar | $(warning) ger
 + state  | no-executable
++ events | (not said)
 - status bar | $(error) CI failed on 102: test! temporary experiment
 - state  | ready
+- events | live
 - chains | CI failed on 102: test! temporary experiment
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
@@ -188,6 +191,7 @@ progress (notification): Restarting ger serve
 --- on screen:
 + status bar | $(error) CI failed on 102: test! temporary experiment
 + state  | ready
++ events | live
 + chains | CI failed on 102: test! temporary experiment
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
@@ -203,6 +207,7 @@ progress (notification): Restarting ger serve
 + stack  | Refactor parser init — <sha> · V+1 CR+2  [ger.commit.url.up]
 - status bar | $(warning) ger
 - state  | no-executable
+- events | (not said)
 ```
 
 ## 13. Click "Extract command routing" in Local stack
@@ -656,11 +661,25 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 (no change)
 ```
 
+## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
+
+**Expect:** With no click and no poll, Review chains shows the new unresolved comment on 900 within a few seconds; nothing is said.
+
+```
++ status bar | $(error) CI failed on 102: test! temporary experiment  $(bell-dot) 1
+- status bar | $(error) CI failed on 102: test! temporary experiment
++ chains | To review — 1 chain · 1 with comments
++ chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
+- chains | To review — 1 chain
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+```
+
 ## At the end
 
 ```
-status bar | $(error) CI failed on 102: test! temporary experiment
+status bar | $(error) CI failed on 102: test! temporary experiment  $(bell-dot) 1
 state  | ready
+events | live
 chains | CI failed on 102: test! temporary experiment
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
@@ -668,8 +687,8 @@ chains |     Cleanup after experiment — 103 · V-1 CR+2 · local  [ger.change.
 chains |     test! temporary experiment — 102 · V-1 CR+2 · local  [ger.change.url]
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 · local  [ger.change.url]
 chains |     Refactor parser init — 100 · V+1 CR+2 · local  [ger.change.url]
-chains | To review — 1 chain
-chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+chains | To review — 1 chain · 1 with comments
+chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
 stack  | test! temporary experiment — HEAD · <sha> · last pushed V-1 CR+2 · ahead of Gerrit · held back  [ger.commit.url.down]
 stack  | Refactor parser init — <sha> · V+1 CR+2 · ahead of Gerrit  [ger.commit.url.up.down]
 stack  | Extract command routing — <sha> · V+1 CR+2 💬2 · ahead of Gerrit  [ger.commit.url.up.down]

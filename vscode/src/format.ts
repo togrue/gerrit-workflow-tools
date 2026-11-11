@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, CommitStatus, MoveConflict, Overview, StackCommit, StackMoves } from "./api";
+import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, StackCommit, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -95,6 +95,24 @@ export function age(seconds: number): string {
   }
   const hours = Math.floor(minutes / 60);
   return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+}
+
+/** Gerrit's event stream can still bring news: worth asking `GET /activity` again. */
+export function eventsMayCome(events: EventsStatus | undefined): boolean {
+  return events !== undefined && ["connecting", "live", "retrying"].includes(events.state);
+}
+
+/** How the views stay current, in words, for the status bar tooltip and the log. */
+export function refreshMode(events: EventsStatus | undefined, pollSeconds: number): string {
+  if (events?.state === "live") {
+    return `Following Gerrit's event stream${events.source ? ` (${events.source})` : ""}: views refresh when something happens.`;
+  }
+  const every = `Refreshing every ${age(pollSeconds)}`;
+  if (!events || events.state === "connecting") {
+    return `${every}.`;
+  }
+  const why = events.reason ? `: ${events.reason.replace(/\.$/, "")}` : "";
+  return events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}.` : `${every}; no Gerrit event stream${why}.`;
 }
 
 export function plural(count: number, noun: string): string {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Chain, CommitStatus, Overview } from "../src/api";
+import { Chain, CommitStatus, EventsStatus, Overview } from "../src/api";
 import {
   age,
   blockedMove,
@@ -11,8 +11,10 @@ import {
   commentLocation,
   commitVotes,
   droppedOn,
+  eventsMayCome,
   fileState,
   moved,
+  refreshMode,
   rememberSeen,
   sentence,
   severity,
@@ -127,4 +129,18 @@ test("a commit whose code moved on shows the pushed votes as last pushed; a reba
   assert.equal(commitVotes(rebased as unknown as CommitStatus), "V-1 CR+2 💬2");
   const never = { ...base, last_pushed_votes: { verified: null, code_review: null } };
   assert.equal(commitVotes(never as unknown as CommitStatus), "💬2");
+});
+
+test("the tooltip says whether events or the poll keep the views current, and why", () => {
+  const status = (state: EventsStatus["state"], reason: string | null = null): EventsStatus => ({ state, reason, source: "ssh://me@g:29418" });
+  assert.equal(refreshMode(status("live"), 900), "Following Gerrit's event stream (ssh://me@g:29418): views refresh when something happens.");
+  assert.equal(refreshMode(undefined, 120), "Refreshing every 2m.");
+  assert.equal(refreshMode(status("connecting"), 120), "Refreshing every 2m.");
+  assert.equal(refreshMode(status("unavailable", "Permission denied (publickey)."), 120), "Refreshing every 2m; no Gerrit event stream: Permission denied (publickey).");
+  assert.equal(refreshMode(status("retrying", "Connection closed"), 120), "Refreshing every 2m while Gerrit's event stream is down: Connection closed.");
+  assert.deepEqual(
+    (["off", "connecting", "live", "retrying", "unavailable"] as const).map((state) => eventsMayCome(status(state))),
+    [false, true, true, true, false],
+  );
+  assert.equal(eventsMayCome(undefined), false);
 });

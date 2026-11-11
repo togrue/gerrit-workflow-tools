@@ -2,11 +2,13 @@
 
 import * as vscode from "vscode";
 
-import { plural } from "./format";
+import { EventFollower } from "./events";
+import { plural, refreshMode } from "./format";
 import { Model } from "./model";
+import { pollSeconds } from "./poller";
 
 /** `note` says which repository it is about, when the window has several folders. */
-export function statusBar(model: Model, note: string | undefined): vscode.StatusBarItem {
+export function statusBar(model: Model, events: EventFollower, note: string | undefined): vscode.StatusBarItem {
   const item = vscode.window.createStatusBarItem("ger.headline", vscode.StatusBarAlignment.Left, 50);
   // How it is listed where status bar items are hidden or shown.
   item.name = "Gerrit Headline";
@@ -50,6 +52,8 @@ export function statusBar(model: Model, note: string | undefined): vscode.Status
         tooltip.appendMarkdown(`$(bell-dot) New activity on ${plural(model.active.size, "chain")}\n\n`);
       }
       tooltip.appendMarkdown(headline ? "Click to open it." : "Click to open the overview.");
+      // How the views stay current: unobtrusive, only here and in the log.
+      tooltip.appendMarkdown("\n\n").appendText(refreshMode(events.events, pollSeconds(events.live)));
     }
     if (note) {
       tooltip.appendMarkdown("\n\n").appendText(note);
@@ -59,6 +63,7 @@ export function statusBar(model: Model, note: string | undefined): vscode.Status
     item.show();
   };
   model.onDidChange(render);
+  events.onDidChange(render);
   render();
   return item;
 }

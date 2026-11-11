@@ -3,6 +3,9 @@
     fake_ger.py --make-repo DIR     create the fixture repository (a four-commit local stack)
     fake_ger.py serve [options]     what the extension starts: cli_serve over a ChangeStore
 
+With GER_E2E_EVENTS naming a file, that file is Gerrit's event stream: each line the suite
+appends is one event, and its ``_fake`` part says how the fake Gerrit changed first.
+
 The Gerrit side is the test suite's own: the stack is one outgoing review chain with two
 unresolved comments on its second change and a failing build on the two top ones; change 900
 from somebody else waits for review. Its commit is in the fixture under refs/changes/00/900/1,
@@ -11,8 +14,13 @@ where `ger review` fetches it from (the remote is the repository itself).
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import threading
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -53,8 +61,61 @@ def make_repo(path: Path) -> None:
     git("switch", "-q", "feature", cwd=path)
 
 
-def fake_gerrit(repo: Path) -> ChangeStore:
-    """The Gerrit the fixture repository talks to."""
+class FileEvents:
+    """Gerrit's event stream as the suite writes it: lines appended to a file, read from where it ends now."""
+
+    description = "ssh://e2e@gerrit.example:29418"
+
+    def __init__(self, path: Path, store: ChangeStore, changes: dict[int, dict[str, Any]]) -> None:
+        self._path = path
+        self._store = store
+        self._changes = changes
+
+    def connect(self) -> TailedFile:
+        return TailedFile(self._path, self._apply)
+
+    def _apply(self, fake: dict[str, Any]) -> None:
+        change = self._changes[fake["number"]]
+        change.update(fake.get("update", {}))
+        if "comments" in fake:
+            self._store.set_comments(change["id"], fake["comments"])
+
+
+class TailedFile:
+    """One connection: a first line at once (live without the grace period), then what is appended."""
+
+    def __init__(self, path: Path, apply: Any) -> None:
+        self._path = path
+        self._apply = apply
+        self._offset = path.stat().st_size if path.exists() else 0
+        self._closed = threading.Event()
+
+    def lines(self) -> Iterator[str]:
+        yield json.dumps({"type": "ger-e2e-connected"})
+        pending = ""
+        while not self._closed.wait(0.05):
+            with self._path.open(encoding="utf-8") as stream:
+                stream.seek(self._offset)
+                chunk = stream.read()
+                self._offset = stream.tell()
+            pending += chunk
+            *complete, pending = pending.split("\n")
+            for line in complete:
+                event = json.loads(line)
+                fake = event.pop("_fake", None)
+                if fake:
+                    self._apply(fake)
+                yield json.dumps(event)
+
+    def failure(self) -> str:
+        return "closed"
+
+    def close(self) -> None:
+        self._closed.set()
+
+
+def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
+    """The Gerrit the fixture repository talks to, and its changes an event may change."""
     overrides = [{}, {"unresolved_comment_count": 2}, {"verified": -1}, {"verified": -1}]
     store, keys, _rows = _gerrit(repo, overrides)
     store.set_comments(
@@ -106,7 +167,7 @@ def fake_gerrit(repo: Path) -> ChangeStore:
             ]
         },
     )
-    return store
+    return store, {900: theirs}
 
 
 if __name__ == "__main__":
@@ -114,5 +175,8 @@ if __name__ == "__main__":
         make_repo(Path(sys.argv[2]))
         raise SystemExit(0)
     if sys.argv[1:2] == ["serve"]:
-        raise SystemExit(serve_main(sys.argv[2:], gerrit=fake_gerrit(Path.cwd()), ci_http=FakeCiHttp(jenkins_build())))
+        store, changes = fake_gerrit(Path.cwd())
+        events_file = os.environ.get("GER_E2E_EVENTS")
+        events = FileEvents(Path(events_file), store, changes) if events_file else None
+        raise SystemExit(serve_main(sys.argv[2:], gerrit=store, ci_http=FakeCiHttp(jenkins_build()), events=events))
     raise SystemExit("usage: fake_ger.py (--make-repo DIR | serve [options])")

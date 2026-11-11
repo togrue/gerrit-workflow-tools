@@ -8,6 +8,7 @@ import { CommentChain, Diff, FileChange } from "./api";
 import { ChangeView, FILE_SCHEME, Location, Node as ChangeNode } from "./changeView";
 import { CommentThreads } from "./comments";
 import { setting } from "./config";
+import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
 import { gerProgram, runInTerminal } from "./launch";
@@ -50,6 +51,7 @@ export interface ExtensionApi {
   changeView: ChangeView;
   threads: CommentThreads;
   statusItem: vscode.StatusBarItem;
+  events: EventFollower;
   /** Replace what talks to the user, for the end-to-end suite. */
   useUi(next: Ui): void;
 }
@@ -204,7 +206,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     provideTextDocumentContent: async (uri) => (await (await model.client()).file(uri.query, uri.path.slice(1))) ?? "",
   };
 
-  const statusItem = statusBar(model, note);
+  // Gerrit's event stream, when ger serve has one: a refresh on news, and only a slow poll.
+  const events = new EventFollower(model, () => void model.refresh({ background: true }), (line) => log.appendLine(line));
+  const statusItem = statusBar(model, events, note);
   context.subscriptions.push(
     model,
     overviewTree,
@@ -216,7 +220,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
-    new Poller(() => void model.refresh({ background: true })),
+    events,
+    new Poller(() => void model.refresh({ background: true }), events),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ger.executable")) {
         model.restart();
@@ -225,7 +230,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     }),
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView, threads, statusItem, useUi };
+  return { model, overviewView, stackView, changeView, threads, statusItem, events, useUi };
 }
 
 export function deactivate(): void {

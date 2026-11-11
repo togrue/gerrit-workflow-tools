@@ -60,7 +60,7 @@
           "minimum": 15,
           "scope": "window",
           "order": 3,
-          "markdownDescription": "How often, in seconds, the views refresh in the background while the window has focus. They also refresh when the window regains focus."
+          "markdownDescription": "How often, in seconds, the views refresh in the background while the window has focus. They also refresh when the window regains focus. While `ger serve` follows Gerrit's event stream, the views refresh when something happens, and this poll slows to every 15 minutes (or this, when longer)."
         },
         "ger.notify": {
           "type": "boolean",

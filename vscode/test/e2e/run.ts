@@ -61,7 +61,10 @@ function main(): number {
   const settings = { "ger.executable": fake, "ger.pollSeconds": 3600, "security.workspace.trust.enabled": false };
   fs.writeFileSync(path.join(profile, "User", "settings.json"), JSON.stringify(settings));
 
-  const env: NodeJS.ProcessEnv = { ...hermetic, GER_E2E_OUT: report };
+  // Gerrit's event stream for fake_ger.py: the suite appends an event, the fake reads it.
+  const events = path.join(work, "events.jsonl");
+  fs.writeFileSync(events, "");
+  const env: NodeJS.ProcessEnv = { ...hermetic, GER_E2E_OUT: report, GER_E2E_EVENTS: events };
   delete env.ELECTRON_RUN_AS_NODE; // set when started from VS Code's own terminal; it would run Code as plain Node
   const ran = spawnSync(
     codeExecutable(),

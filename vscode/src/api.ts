@@ -14,6 +14,21 @@ export interface ApiError {
   message: string;
 }
 
+/** Where Gerrit's event stream is, as `ger serve` follows it. */
+export interface EventsStatus {
+  state: "off" | "connecting" | "live" | "retrying" | "unavailable";
+  /** Why it is not live; null while it is. */
+  reason: string | null;
+  /** `ssh://user@host:port`, or null when there is nothing to connect to. */
+  source: string | null;
+}
+
+/** The activity sequence: it goes up whenever a view should look again. */
+export interface Activity {
+  activity: number;
+  events: EventsStatus;
+}
+
 export interface Member {
   number: number;
   change_id: string;
@@ -311,7 +326,7 @@ export class GerClient {
     return `${this.hello.url}${this.hello.api}${path}${tail ? `?${tail}` : ""}`;
   }
 
-  private async call<T>(method: "GET" | "POST", path: string, params?: Params, body?: unknown): Promise<T> {
+  private async call<T>(method: "GET" | "POST", path: string, params?: Params, body?: unknown, signal?: AbortSignal): Promise<T> {
     const headers: Record<string, string> = { Authorization: `Bearer ${this.hello.token}` };
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
@@ -320,6 +335,7 @@ export class GerClient {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
     const payload = (await response.json()) as { error?: ApiError } & T;
     if (!response.ok) {
@@ -329,8 +345,13 @@ export class GerClient {
     return payload;
   }
 
-  health(): Promise<{ name: string; version: string; api: number; repo: string | null; branch: string | null }> {
+  health(): Promise<{ name: string; version: string; api: number; repo: string | null; branch: string | null } & Activity> {
     return this.call("GET", "/health");
+  }
+
+  /** The activity sequence once it moves past `since`, or after `wait` seconds; at once without `since`. */
+  activity(since: number | undefined, wait: number, signal?: AbortSignal): Promise<Activity> {
+    return this.call("GET", "/activity", { since, wait: since === undefined ? undefined : wait }, undefined, signal);
   }
 
   overview(refresh = false): Promise<Overview> {

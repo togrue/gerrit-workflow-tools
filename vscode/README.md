@@ -86,8 +86,19 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 |---------|---------|--|
 | `ger.executable` | `ger` | How to run ger: a program on the `PATH`, a path to it, or a command line such as `uv run ger` (quote a path with blanks). |
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
-| `ger.pollSeconds` | `120` | Background refresh while the window has focus; a change applies at once. It also refreshes when the window regains focus. |
+| `ger.pollSeconds` | `120` | Background refresh while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
+
+**Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
+stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the
+views refresh a second after review activity happens — a new patchset, comment, vote, reviewer,
+merge — instead of at the next poll, and the poll drops to a 15-minute safety net. When it
+cannot (HTTP only, no key, no capability, the connection dropped), nothing changes: the views
+poll every `ger.pollSeconds` as before, and no notification says so. The status bar tooltip
+says which of the two is keeping the views current, and why; the log (**Show Log**) has one line
+per change. Configure it with the git keys `ger.eventStream` (`auto`, `on`, `off`) and
+`ger.eventStreamHost` / `Port` / `User`:
+[docu/Configuration.md](../docu/Configuration.md#ger-serve--gereventstream).
 
 These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `gerrit.webUrl` and
 the rest) is git configuration, the same for the extension and the command line: see

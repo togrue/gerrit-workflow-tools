@@ -52,6 +52,14 @@ async function find<T>(provider: Provider<T>, wanted: string | RegExp, node?: T)
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Whether `condition` came true within `ms`. */
+async function until(condition: () => boolean, ms = 15_000): Promise<boolean> {
+  for (const deadline = Date.now() + ms; !condition() && Date.now() < deadline; ) {
+    await wait(100);
+  }
+  return condition();
+}
+
 /** What stays the same from run to run: no commit ids, temp paths or ages. */
 function normalizer(repo: string): (line: string) => string {
   const roots = [repo, repo.replaceAll("\\", "/"), os.tmpdir(), os.tmpdir().replaceAll("\\", "/")];
@@ -86,6 +94,7 @@ export async function run(): Promise<void> {
     api.useUi(ui);
     await api.model.refresh();
     assert.equal(api.model.failure, undefined, "ger serve started and answered");
+    assert.ok(await until(() => api.events.live), "fake_ger.py's event stream is live");
 
     // Every command the manifest offers is registered.
     const declared: string[] = extension.packageJSON.contributes.commands.map((c: { command: string }) => c.command);
@@ -116,6 +125,7 @@ export async function run(): Promise<void> {
       return [
         `status bar | ${status()}`,
         `state  | ${api.model.state}`,
+        `events | ${api.events.events?.state ?? "(not said)"}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
         ...(await dump(api.stackView)).map((line) => `stack  | ${line}`),
         `change | title: ${shown ? `${shown.number ? `Change ${shown.number}` : "Change"} — ${api.changeView.shown?.summary ?? shown.title}` : "(nothing shown)"}`,
@@ -423,6 +433,32 @@ export async function run(): Promise<void> {
       exec("ger.setUpstream"),
       [{ dismiss: true }],
     );
+
+    // --- News from Gerrit ----------------------------------------------------------------
+    {
+      const what = "a reviewer comments on change 900 on Gerrit, and its event stream says so";
+      const expect = "With no click and no poll, Review chains shows the new unresolved comment on 900 within a few seconds; nothing is said.";
+      const comment = (id: string, message: string) => ({ id, line: 1, message, unresolved: true, patch_set: 1, author: { name: "Bob Architect" } });
+      const event = {
+        type: "comment-added",
+        change: { project: "testproj", branch: "main", id: "I" + (900).toString(16).padStart(40, "0"), number: 900, owner: { username: "alice" } },
+        author: { username: "bob" },
+        comment: "Patch Set 1:\n\n(1 comment)",
+        _fake: {
+          number: 900,
+          update: { unresolved_comment_count: 2, updated: "2026-11-10 09:00:00.000000000" },
+          comments: { "uploader.txt": [comment("c900", "Should it back off between retries?"), comment("c901", "And cap the delay.")] },
+        },
+      };
+      const comments = () => api.model.overview?.sections?.find((s) => s.name === "to-review")?.chains[0]?.comments_unresolved;
+      fs.appendFileSync(process.env.GER_E2E_EVENTS ?? "", `${JSON.stringify(event)}\n`);
+      const refreshed = await until(() => comments() === 2);
+      await wait(300);
+      await api.changeView.idle();
+      const after = await screen();
+      out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", "```", ...(refreshed ? [] : ["!! the views did not refresh by themselves"]), ...lineDiff(before, after), "```", "");
+      before = after;
+    }
 
     out.push("## At the end", "", "```", ...before, "```", "");
     if (problems.length) {
