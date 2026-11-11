@@ -201,6 +201,10 @@ export class Model implements vscode.Disposable {
     this.state = state;
     await vscode.commands.executeCommand("setContext", "ger.state", state);
     await vscode.commands.executeCommand("setContext", "ger.ready", state === "ready");
+    if (state !== "ready") {
+      // Derived from the service: with no service there is nothing to leave.
+      await vscode.commands.executeCommand("setContext", "ger.reviewOpen", false);
+    }
   }
 
   /** Stop `ger serve`; the next refresh starts it again. */

@@ -134,7 +134,28 @@
       },
       {
         "view": "ger.change",
-        "contents": "Select a change in *Review chains* or a commit in *Local stack* to see its files, comments and CI findings."
+        "contents": "Select a change in *Review chains* or a commit in *Local stack* to see its files, comments and CI findings.",
+        "when": "ger.ready"
+      },
+      {
+        "view": "ger.change",
+        "contents": "Starting `ger serve`…",
+        "when": "ger.state == starting"
+      },
+      {
+        "view": "ger.change",
+        "contents": "A change shows here once ger runs. *Review chains* says what is missing and what to do next.\n[Show Review Chains](command:ger.overview.focus)",
+        "when": "ger.state =~ /^(no-repo|untrusted|no-executable|setup|failed)$/"
+      },
+      {
+        "view": "ger.stack",
+        "contents": "Starting `ger serve`…",
+        "when": "ger.state == starting"
+      },
+      {
+        "view": "ger.stack",
+        "contents": "Your local stack shows here once ger runs. *Review chains* says what is missing and what to do next.\n[Show Review Chains](command:ger.overview.focus)",
+        "when": "ger.state =~ /^(no-repo|untrusted|no-executable|setup|failed)$/"
       }
     ],
     "commands": [
@@ -180,7 +201,7 @@
         { "command": "ger.openInGerrit", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.checkout", "when": "ger.ready && ger.changeShown && !ger.changeIsLocal" },
         { "command": "ger.stack.edit", "when": "ger.ready && ger.changeShown && ger.changeIsLocal" },
-        { "command": "ger.reviewDone", "when": "ger.ready" },
+        { "command": "ger.reviewDone", "when": "ger.ready && ger.reviewOpen" },
         { "command": "ger.push", "when": "ger.ready" },
         { "command": "ger.setup", "when": "ger.state != no-repo" },
         { "command": "ger.nextComment", "when": "ger.ready && ger.changeShown" },
@@ -210,18 +231,18 @@
       ],
       "view/title": [
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
-        { "command": "ger.markSeen", "when": "view == ger.overview", "group": "navigation@2" },
-        { "command": "ger.agentWalk", "when": "view == ger.stack", "group": "navigation@0" },
+        { "command": "ger.markSeen", "when": "view == ger.overview && ger.ready", "group": "navigation@2" },
+        { "command": "ger.agentWalk", "when": "view == ger.stack && ger.ready", "group": "navigation@0" },
         { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
-        { "command": "ger.push", "when": "view == ger.stack", "group": "navigation@1" },
-        { "command": "ger.setUpstream", "when": "view == ger.stack", "group": "1_branch@1" },
-        { "command": "ger.prevComment", "when": "view == ger.change", "group": "navigation@1" },
-        { "command": "ger.nextComment", "when": "view == ger.change", "group": "navigation@2" },
-        { "command": "ger.agentBrief", "when": "view == ger.change", "group": "navigation@3" },
-        { "command": "ger.checkout", "when": "view == ger.change && !ger.changeIsLocal", "group": "navigation@4" },
-        { "command": "ger.stack.edit", "when": "view == ger.change && ger.changeIsLocal", "group": "navigation@4" },
-        { "command": "ger.openInGerrit", "when": "view == ger.change", "group": "navigation@5" },
-        { "command": "ger.reviewDone", "when": "view == ger.change && ger.reviewOpen" }
+        { "command": "ger.push", "when": "view == ger.stack && ger.ready", "group": "navigation@1" },
+        { "command": "ger.setUpstream", "when": "view == ger.stack && ger.ready", "group": "1_branch@1" },
+        { "command": "ger.prevComment", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@1" },
+        { "command": "ger.nextComment", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@2" },
+        { "command": "ger.agentBrief", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@3" },
+        { "command": "ger.checkout", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "navigation@4" },
+        { "command": "ger.stack.edit", "when": "view == ger.change && ger.ready && ger.changeShown && ger.changeIsLocal", "group": "navigation@4" },
+        { "command": "ger.openInGerrit", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@5" },
+        { "command": "ger.reviewDone", "when": "view == ger.change && ger.ready && ger.reviewOpen" }
       ],
       "view/item/context": [
         { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.change/", "group": "inline@1" },

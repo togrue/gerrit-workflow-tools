@@ -127,6 +127,8 @@ When something is missing, the *Review chains* view says what and offers the nex
 | This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
 | `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
 
+*Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running.
+
 A branch without an upstream still shows your review chains; *Local stack* offers to track one.
 
 ## Build and run
