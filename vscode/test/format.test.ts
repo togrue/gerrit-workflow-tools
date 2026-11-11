@@ -15,6 +15,7 @@ import {
   fileState,
   moved,
   refreshMode,
+  reviewOpened,
   rememberSeen,
   sentence,
   severity,
@@ -147,4 +148,13 @@ test("the tooltip says whether events or the poll keep the views current, and wh
     [false, true, true, true, false],
   );
   assert.equal(eventsMayCome(undefined), false);
+});
+
+test("a review checkout says where the change is: the review worktree, or this checkout switched", () => {
+  const review = { number: 900, patch_set: 2, branch: "change-900", worktree: "/r-review", staged: true };
+  assert.equal(reviewOpened(review, false), "Change 900 (patchset 2) is checked out for review on change-900 in /r-review, with its changes staged.");
+  assert.equal(
+    reviewOpened({ ...review, staged: false }, true),
+    "Change 900 (patchset 2) is checked out for review: this checkout was switched to change-900. Leave Review Checkout switches back.",
+  );
 });

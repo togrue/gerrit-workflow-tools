@@ -91,7 +91,7 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     const generation = ++this.generation;
     this.target = target;
     this.ci = undefined;
-    // The title bar offers "Edit Commit" for your own stack commit, "Review in Worktree" and "Check Out to Work On" otherwise.
+    // The title bar offers "Edit Commit" for your own stack commit, "Review Change" and "Check Out to Work On" otherwise.
     void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
     const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {

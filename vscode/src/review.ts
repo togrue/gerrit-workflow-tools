@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { runInTerminal } from "./launch";
+import { reviewOpened } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
 import { ui } from "./ui";
 
@@ -35,7 +36,7 @@ export function checkout(model: Model, target: ChangeTarget | undefined): void {
   ui().status(`ger checkout ${target.rev} runs in the terminal: it may ask before it changes anything`, 12000);
 }
 
-/** Someone's change on Gerrit: `ger review` checks it out for review (the review worktree by default). */
+/** Someone's change on Gerrit: `ger review` checks it out for review: in the review worktree, or here when `ger.reviewCheckout` says `branch`. */
 export async function review(model: Model, target: ChangeTarget | undefined): Promise<void> {
   if (!target) {
     return;
@@ -50,7 +51,7 @@ export async function review(model: Model, target: ChangeTarget | undefined): Pr
     const open = inPlace ? undefined : "Open Review Worktree";
     const picked = await ui().message(
       "info",
-      `Change ${opened.number} (patchset ${opened.patch_set}) is checked out${opened.staged ? ", staged," : ""} on ${opened.branch}${inPlace ? "" : ` in ${opened.worktree}`}.`,
+      reviewOpened(opened, inPlace),
       {},
       open ? [open] : [],
     );

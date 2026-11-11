@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, StackCommit, StackMoves } from "./api";
+import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState, StackCommit, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -115,6 +115,15 @@ export function refreshMode(events: EventsStatus | undefined, pollSeconds: numbe
   }
   const why = events.reason ? `: ${events.reason.replace(/\.$/, "")}` : "";
   return `${events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}.` : `${every}; no Gerrit event stream${why}.`}${local}`;
+}
+
+/** What `ger review` did, in words. `inPlace`: it switched this checkout instead of using the review worktree. */
+export function reviewOpened(review: Pick<ReviewState, "number" | "patch_set" | "branch" | "worktree" | "staged">, inPlace: boolean): string {
+  const change = `Change ${review.number} (patchset ${review.patch_set}) is checked out for review`;
+  const staged = review.staged ? ", with its changes staged" : "";
+  return inPlace
+    ? `${change}: this checkout was switched to ${review.branch}${staged}. Leave Review Checkout switches back.`
+    : `${change} on ${review.branch} in ${review.worktree}${staged}.`;
 }
 
 export function plural(count: number, noun: string): string {

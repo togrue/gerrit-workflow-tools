@@ -28,7 +28,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Step | CLI | Extension | Tests | Status |
 |------|-----|-----------|-------|--------|
 | Open the chain | `ger inbox`, `ger show CHANGEISH` | click a chain, *Show Change* | `tests/test_inbox.py`, `tests/test_show.py` | ships |
-| Check out one commit, in the review worktree | `ger review CHANGEISH` | *Review in Worktree* | `tests/test_review.py` | ships |
+| Check out one commit for review (in the review worktree by default) | `ger review CHANGEISH` | *Review Change* | `tests/test_review.py` | ships |
 | Walk up and down the chain | `ger review --next`, `ger review --prev` | click another chain member | `tests/test_review.py`, `tests/test_review_chain.py` | ships |
 | Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff* | `tests/test_review.py` | ships |
 | What changed since the patchset you reviewed | — | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_serve.py` | **gap** in the CLI |

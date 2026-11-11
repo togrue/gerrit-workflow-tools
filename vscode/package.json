@@ -166,7 +166,7 @@
       { "command": "ger.markSeen", "title": "Mark All Activity as Seen", "category": "ger", "icon": "$(check-all)" },
       { "command": "ger.openChange", "title": "Show Change", "category": "ger" },
       { "command": "ger.openInGerrit", "title": "Open in Gerrit", "category": "ger", "icon": "$(link-external)" },
-      { "command": "ger.review", "title": "Review in Worktree", "category": "ger", "icon": "$(git-pull-request)" },
+      { "command": "ger.review", "title": "Review Change", "category": "ger", "icon": "$(git-pull-request)" },
       { "command": "ger.checkout", "title": "Check Out to Work On", "category": "ger", "icon": "$(cloud-download)" },
       { "command": "ger.stack.edit", "title": "Edit Commit Here", "category": "ger", "icon": "$(edit)" },
       { "command": "ger.reviewDone", "title": "Leave Review Checkout", "category": "ger" },

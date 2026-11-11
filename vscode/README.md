@@ -66,10 +66,11 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - **CI**: opened on demand (it downloads build logs). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
-- **Review in Worktree** (pull-request icon, changes that are not in your stack): `ger review`
-  fetches the change into the review worktree (or a `change-<n>` branch here, when the git config
-  key `ger.reviewCheckout` says `branch`) and offers to open that worktree in a new window. Your
-  own stack is not touched. For reading someone's work.
+- **Review Change** (pull-request icon, changes that are not in your stack): `ger review`
+  fetches the change into the review worktree and offers to open that worktree in a new window; your
+  own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
+  this checkout to a `change-<n>` branch instead, the message says so, and *Leave Review Checkout*
+  switches back. For reading someone's work.
 - **Check Out to Work On** (download icon, changes that are not in your stack): `ger checkout` in
   a new terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
   the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it
@@ -200,7 +201,7 @@ printed.
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
 | `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
-| `src/review.ts` | Review in Worktree, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
+| `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |
 | `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal. |
