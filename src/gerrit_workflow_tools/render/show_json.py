@@ -92,6 +92,12 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
             for pipe in commit.ci_pipelines
         ],
         "gerrit_url": commit.gerrit_url,
+        "number": commit.number,
+        "last_pushed_votes": (
+            {"verified": commit.last_pushed_votes[0], "code_review": commit.last_pushed_votes[1]}
+            if commit.last_pushed_votes
+            else None
+        ),
         "submittable": commit.submittable,
         "work_in_progress": commit.wip,
         "private": commit.private,

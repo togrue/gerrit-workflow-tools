@@ -115,6 +115,8 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert second["comments_unresolved"] == 2 and second["needs_edit"] is True
     assert "unresolved-comments" in second["attention_reasons"]
     assert second["gerrit_url"] == f"{WEB}/c/testproj/+/101"
+    assert [c["number"] for c in stack["commits"]] == [100, 101, 102, 103]
+    assert [c["last_pushed_votes"] for c in stack["commits"]] == [None] * 4, "in step with Gerrit: votes are current"
 
 
 def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_repo: Path) -> None:
@@ -369,6 +371,16 @@ def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) 
     assert [c.change_id for c in after] == [rows[i].change_id for i in (1, 0, 3, 2)]
     assert [c["sha"] for c in stack["commits"]] == [c.sha for c in after]
     assert not rebase_in_progress(stack_repo)
+    # Only reordered: each commit's own code is the same, so its votes stay (Gerrit carries them over).
+    moved = _get(api, "/stack")["commits"]
+    assert {(c["patchset_status"], c["code_review"], c["last_pushed_votes"]) for c in moved} == {("newer", 2, None)}
+    # New code in the top commit: its votes are about the pushed patchset, served as that.
+    (stack_repo / "more.txt").write_text("more code\n", encoding="utf-8")
+    git("add", "-A", cwd=stack_repo)
+    git("commit", "-q", "--amend", "--no-edit", cwd=stack_repo)
+    top = _get(api, "/stack")["commits"][-1]
+    assert (top["patchset_status"], top["verified"], top["code_review"]) == ("newer", None, None)
+    assert top["last_pushed_votes"] == {"verified": 1, "code_review": 2}
 
 
 def test_rewrite_folds_and_drops_without_ever_merging_two_change_ids(stack_repo: Path) -> None:

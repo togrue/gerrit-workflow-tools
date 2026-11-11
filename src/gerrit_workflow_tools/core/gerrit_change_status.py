@@ -141,6 +141,13 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     ci_links: list[CiLink] = field(default_factory=list)
     ci_pipelines: list[CiPipeline] = field(default_factory=list)
     gerrit_url: str | None = None
+    number: int | None = None  # the Gerrit change number, once pushed
+    last_pushed_votes: tuple[int | None, int | None] | None = None
+    """(Verified, Code-Review) on the pushed patchset while this commit is ahead of it with other code.
+
+    Shown for orientation only: Gerrit may not copy them to the patchset a push creates. A
+    commit that is only rebased (same patch-id) keeps its votes in ``verified``/``code_review``.
+    """
     submittable: bool = False
     attention_reasons: list[str] = field(default_factory=list)
     change_status: str | None = None  # raw Gerrit ``status`` (e.g. NEW, MERGED)
@@ -300,7 +307,11 @@ def build_log_commit(
 
     # Votes and submittability belong to the patch set on Gerrit, not to a commit it has not seen.
     newer = ps == PatchsetStatus.NEWER
-    if newer:
+    # Unless the commit's own code is the same (only rebased): Gerrit carries the votes over
+    # on such a push, so they stay. Two git calls, and only for commits ahead of Gerrit.
+    same_code = newer and compute_merged_equivalent(sha, change, Path.cwd() if cwd is None else Path(cwd)) is True
+    votes_moved_on = newer and not same_code
+    if votes_moved_on:
         needed.discard("checks")
 
     return (
@@ -312,10 +323,12 @@ def build_log_commit(
             pushed=True,
             abandoned=st == "ABANDONED",
             patchset_status=ps,
-            verified=None if newer else change.verified,
-            code_review=None if newer else change.code_review,
+            verified=None if votes_moved_on else change.verified,
+            code_review=None if votes_moved_on else change.code_review,
             comments_unresolved=change.unresolved_comments or 0,
             gerrit_url=change.url(web_base),
+            number=change.number,
+            last_pushed_votes=(change.verified, change.code_review) if votes_moved_on else None,
             submittable=change.submittable and not newer,
             change_status=change.status,
             merged_equivalent=merged_eq,
