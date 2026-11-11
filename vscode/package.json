@@ -4,7 +4,12 @@
   "description": "Your Gerrit review chains, the local stack, comments, diffs and CI findings, next to your code. A client of `ger serve`.",
   "version": "0.1.0",
   "publisher": "gerrit-workflow-tools",
-  "license": "SEE LICENSE IN ../LICENSE",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/togrue/gerrit-workflow-tools",
+    "directory": "vscode"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.85.0"
@@ -120,7 +125,7 @@
       },
       {
         "view": "ger.overview",
-        "contents": "The program that runs ger was not found. Install ger, or set **ger.executable** to how to run it (for example `uv run ger`, or the full path of the program).\n[Open Settings](command:workbench.action.openSettings?%5B%22ger.executable%22%5D)\n[Retry](command:ger.refresh)",
+        "contents": "The program that runs ger was not found. Install it (in a terminal, with uv or pipx), then press Retry.\n[Install ger](command:ger.installCli)\n[Retry](command:ger.refresh)\nAlready installed? Set **ger.executable** to how to run it (for example `uv run ger`, or the full path of the program).\n[Open Settings](command:workbench.action.openSettings?%5B%22ger.executable%22%5D)",
         "when": "ger.state == no-executable"
       },
       {
@@ -172,6 +177,7 @@
       { "command": "ger.reviewDone", "title": "Leave Review Checkout", "category": "ger" },
       { "command": "ger.push", "title": "Push to Gerrit…", "category": "ger", "icon": "$(cloud-upload)" },
       { "command": "ger.setup", "title": "Set Up Gerrit Access (ger setup)…", "category": "ger" },
+      { "command": "ger.installCli", "title": "Install ger…", "category": "ger" },
       { "command": "ger.stack.moveUp", "title": "Move Later in the Stack", "category": "ger", "icon": "$(arrow-up)" },
       { "command": "ger.stack.moveDown", "title": "Move Earlier in the Stack", "category": "ger", "icon": "$(arrow-down)" },
       { "command": "ger.stack.moveUpBlocked", "title": "Show Why It Cannot Move Later", "category": "ger", "icon": "$(circle-slash)" },
@@ -207,6 +213,7 @@
         { "command": "ger.reviewDone", "when": "ger.ready && ger.reviewOpen" },
         { "command": "ger.push", "when": "ger.ready" },
         { "command": "ger.setup", "when": "ger.state != no-repo" },
+        { "command": "ger.installCli", "when": "ger.state == no-executable" },
         { "command": "ger.nextComment", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.prevComment", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.setUpstream", "when": "ger.ready" },

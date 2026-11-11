@@ -28,21 +28,34 @@ Each commit carries a footer **Change-Id** (`I…`), but Gerrit's unique key for
 
 ## Install
 
-From a clone of this repo:
+One command, no clone. It needs git, Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) (or pipx):
 
 ```bash
-pip install --user .
-# or:  pipx install .
+uv tool install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
+# or:  pipx install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
 ```
 
-Ensure the install directory is on `PATH`, then configure Gerrit:
+Then, once per machine:
 
 ```bash
-ger setup
-ger --help
+ger setup             # asks for your Gerrit address and credentials
+ger vscode install    # optional: the VS Code extension that came with this ger
 ```
 
-For PATH details, bash completion, the Change-Id hook, branch settings, and verification: **[Getting started](docu/Getting-Started.md)**.
+To update, run the install command again with `--force`, then `ger vscode install` again.
+
+**Starting from VS Code instead:** install [`ger-vscode.vsix`](https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger-vscode.vsix) (*Extensions: Install from VSIX…*). Its *Review chains* view offers **Install ger** when ger is missing, and **Run ger setup** after that.
+
+If `ger` is not found afterwards, `uv tool update-shell` (or `pipx ensurepath`) puts its directory on `PATH`. Bash completion, the Change-Id hook, branch settings, and verification: **[Getting started](docu/Getting-Started.md)**.
+
+<details>
+<summary>Other ways to install</summary>
+
+- The development version: `uv tool install git+https://github.com/togrue/gerrit-workflow-tools`. It carries no extension; build that with `npm run package` in `vscode/`.
+- From a clone: `uv tool install .` or `pipx install .`
+- A release built locally: `python scripts/build_release.py` writes the same files a release publishes to `dist/release/`.
+
+</details>
 
 <details>
 <summary><strong>Development</strong></summary>

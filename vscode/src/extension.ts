@@ -11,7 +11,7 @@ import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { gerProgram, runInTerminal } from "./launch";
+import { gerProgram, installGer, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
@@ -196,6 +196,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.reviewDone": () => leaveReview(model),
     "ger.push": () => runInTerminal(repo, ["push"]),
     "ger.setup": () => runInTerminal(repo, ["setup"]),
+    "ger.installCli": () => installGer(repo, context.extension.packageJSON),
     "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
     "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
     "ger.stack.moveUpBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, 1),

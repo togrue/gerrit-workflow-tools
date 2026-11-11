@@ -10,7 +10,7 @@ First-run checklist for using **`ger`** in a Gerrit repository. Complete these s
 
 | Requirement | Why |
 |-------------|-----|
-| Python 3.11+ (see project `pyproject.toml`) | Runs the `ger` CLI |
+| Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) or pipx | Runs and installs the `ger` CLI |
 | A Git clone of a Gerrit-backed repo | `ger` reads git history and config from the current directory |
 | Gerrit HTTPS URL and API credentials | REST calls for review state (`ger log`, `ger show`, `ger push` preview) |
 | `commit-msg` hook | Gerrit Change-Ids on new commits |
@@ -20,21 +20,27 @@ First-run checklist for using **`ger`** in a Gerrit repository. Complete these s
 
 ## 1. Install `ger`
 
-From the [project README](../README.md#install):
+One command, no clone (more ways: [project README](../README.md#install)):
 
 ```bash
-pip install --user .
-# or:  pipx install .
-# or:  uv pip install --user .
+uv tool install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
+# or:  pipx install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
 ```
 
-Ensure the install directory is on `PATH` (e.g. `~/.local/bin` on Linux/macOS). Verify:
+Verify:
 
 ```bash
 ger --help
 ```
 
-Optional but recommended: [bash completion](Completion.md) — `ger bash-completion --install`.
+Not found? uv and pipx put `ger` in `~/.local/bin`; `uv tool update-shell` (or `pipx ensurepath`) adds that to `PATH` for new terminals.
+
+Optional:
+
+- The VS Code extension that matches this ger: `ger vscode install` ([spec](spec/commands/vscode.md)).
+- [Bash completion](Completion.md): `ger bash-completion --install`.
+
+To update, run the install command again with `--force`, then `ger vscode install` again.
 
 ---
 

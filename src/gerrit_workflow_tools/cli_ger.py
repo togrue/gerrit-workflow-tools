@@ -78,6 +78,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "Interactively configure gerrit.webUrl, user, and token in git config.",
         "gerrit_workflow_tools.cli_setup:main",
     ),
+    "vscode": (
+        "Install the VS Code extension that came with this ger.",
+        "gerrit_workflow_tools.cli_vscode:main",
+    ),
     "sha": ("Resolve a Change-Id to a commit SHA.", "gerrit_workflow_tools.cli_sha:main"),
     "show": ("One commit vs Gerrit (status and unresolved comments).", "gerrit_workflow_tools.cli_show:main"),
 }

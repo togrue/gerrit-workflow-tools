@@ -6,7 +6,7 @@ Bash tab-completes `ger` and its subcommands via a bundled `ger.bash` script; ru
 
 ## Quick setup
 
-After `pip install`, run:
+After installing ger, run:
 
 ```bash
 ger bash-completion

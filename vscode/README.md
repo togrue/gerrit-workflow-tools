@@ -135,6 +135,16 @@ either run its own code. `ger.executable` and `ger.agentCommand` are read only f
 settings there, never from the repository's `.vscode/settings.json`. Trust the folder and the
 views fill.
 
+## Install
+
+With ger already installed, one command installs the extension that came with it (and updates it after you update ger):
+
+```bash
+ger vscode install    # --editor cursor (or code-insiders, codium) for another editor
+```
+
+Without ger: install [`ger-vscode.vsix`](https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger-vscode.vsix) with *Extensions: Install from VSIX…*, open your repository, and press **Install ger** in the *Review chains* view. That installs the ger release with the extension's version in a terminal, using uv or pipx; **Retry** then starts it, also when your editor's `PATH` is from before the install.
+
 ## Requirements
 
 `ger` on the `PATH` (or `ger.executable` set), and a repository where `ger log` works:
@@ -148,7 +158,7 @@ When something is missing, the *Review chains* view says what and offers the nex
 | The view says | Next step |
 |---------------|-----------|
 | Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** (a folder you add later starts ger without a reload) |
-| The program that runs ger was not found | **Open Settings** on `ger.executable`, then **Retry** |
+| The program that runs ger was not found | **Install ger** (in a terminal, with uv or pipx), then **Retry**; or **Open Settings** on `ger.executable` when it is installed somewhere else |
 | This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
 | `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
 
@@ -183,7 +193,7 @@ changed step against its **Expect** line, then accept it with `npm run e2e -- --
 `GER_E2E_SCREENS=<file>` to also get the full screen before and after every press.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
-open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere.
+open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere; a release (`python scripts/build_release.py` in the repository root) builds it into ger, for `ger vscode install`.
 
 **ger: Show Log** shows which repository is used, how `ger serve` was started, and anything it
 printed.

@@ -1,3 +1,5 @@
 node_modules/
 out/
 *.vsix
+# Copied in by scripts/build_release.py so the package carries it
+LICENSE

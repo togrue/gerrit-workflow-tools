@@ -1,0 +1,50 @@
+name: Release
+
+# Pushing a tag v<version> publishes that version: ger (with the VS Code extension inside) and
+# the extension alone. The install commands in README.md download from the latest release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests
+        run: uv run pytest -q
+
+      - name: Extension tests
+        working-directory: vscode
+        run: npm ci --no-audit --no-fund && npm test
+
+      - name: Build the release
+        run: uv run python scripts/build_release.py --tag "$GITHUB_REF_NAME"
+
+      - name: The built ger installs and carries the extension
+        run: |
+          uv tool install dist/release/ger.tar.gz
+          ger --help
+          # `true` stands in for the editor: this fails (exit 2) when no extension is inside.
+          ger vscode install --editor true
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/release/* --verify-tag --generate-notes

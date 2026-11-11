@@ -264,6 +264,11 @@ export async function run(): Promise<void> {
       exec("ger.refresh"),
     );
     await press(
+      "Review chains › Install ger",
+      "A terminal opens and installs the ger release with this extension's version, with uv (the suite needs uv, so it is there); nothing else changes until Retry.",
+      exec("ger.installCli"),
+    );
+    await press(
       "Settings › ger.executable set back",
       "ger serve starts again at once, without a reload, and the views show what they showed before.",
       () => settings.update("executable", executable, vscode.ConfigurationTarget.Global),

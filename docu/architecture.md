@@ -429,6 +429,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_cache.py` | `ger cache` |
 | `cli_fetch_api.py` | `ger fetch-api` (debug) |
 | `cli_bash_completion.py` | `ger bash-completion` |
+| `cli_vscode.py` | `ger vscode install`: put the bundled VS Code extension into the editor |
 
 ### Core domain (`core/`)
 
@@ -440,7 +441,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
-| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules |
+| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program |
+| `core/editor_extension.py` | The VS Code extension a release ships: where it is (`bundled_extension`), the editor's CLI (`find_editor_cli`), installing it, and release download addresses (`release_url`) |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/rebase_state.py` | A rebase underway: whether one is, the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`) and the one next step after a conflict (`conflict_next_step`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |

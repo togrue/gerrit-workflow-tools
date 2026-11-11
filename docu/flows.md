@@ -90,6 +90,7 @@ A **gap** names the work that would close it.
 | `ger.reviewDone` | `ger review --done` | |
 | `ger.push` | `ger push` | |
 | `ger.setup` | `ger setup` | runs in a terminal; offered when the checkout lacks Gerrit settings |
+| `ger.installCli` | `ger vscode install` is the same step from the other side | installs the ger release with the extension's version, in a terminal (uv or pipx); offered when ger is not found |
 | `ger.stack.moveUp` | **gap** | `ger rebase` reorders interactively only |
 | `ger.stack.moveDown` | **gap** | `ger rebase` reorders interactively only |
 | `ger.stack.moveUpBlocked` | **gap** | no conflict preview on the CLI |
