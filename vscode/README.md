@@ -31,7 +31,7 @@ with a count appears when chains had activity since you last looked. Click to op
 - **Squash into the commit below** (keeping either message — never both, so there is always
   exactly one Change-Id) and **drop**, from a commit's context menu. Every rewrite offers
   **Undo** right after.
-- Push (`ger push` in a terminal, where it can ask you).
+- Push (`ger push` in a new terminal of its own, where it can ask you).
 - **No upstream** (typical after checking a change out from Gerrit's download commands): the
   view says so and offers **Track origin/…** in one click — the branch it was created from, else
   the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
@@ -58,10 +58,11 @@ with a count appears when chains had activity since you last looked. Click to op
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
 - **Check Out for Review** (pull-request icon, changes on Gerrit): `ger review` fetches the
-  change into the review worktree (or a `change-<n>` branch here, per `ger.reviewCheckout`) and
-  offers to open that worktree in a new window. Your own stack is not touched.
+  change into the review worktree (or a `change-<n>` branch here, when the git config key
+  `ger.reviewCheckout` says `branch`) and offers to open that worktree in a new window. Your
+  own stack is not touched.
 - **Edit Commit Here** (pencil icon, your local stack commits): `ger edit` runs in this checkout,
-  in a terminal: an interactive rebase that stops at the commit, so you amend it in place and
+  in a new terminal: an interactive rebase that stops at the commit, so you amend it in place and
   `git rebase --continue`. No worktree, nothing fetched.
 - **Hand to agent**: for one commit, the same runbook as below, narrowed to it.
 
@@ -87,6 +88,10 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
 | `ger.pollSeconds` | `120` | Background refresh while the window has focus; a change applies at once. It also refreshes when the window regains focus. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
+
+These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `gerrit.webUrl` and
+the rest) is git configuration, the same for the extension and the command line: see
+[docu/Configuration.md](../docu/Configuration.md).
 
 **Workspace trust.** In Restricted Mode the extension starts nothing: ger runs git and the
 program in `ger.executable` in the repository, and a repository you do not trust could make
