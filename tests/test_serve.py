@@ -37,7 +37,7 @@ from gerrit_workflow_tools.server.request import BadRequest, NoRoute
 from tests.change_store import ChangeStore
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
-from tests.conftest import run_cli
+from tests.conftest import json_stdout, run_cli
 
 
 WEB = "https://g.example"
@@ -118,6 +118,41 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert second["gerrit_url"] == f"{WEB}/c/testproj/+/101"
     assert [c["number"] for c in stack["commits"]] == [100, 101, 102, 103]
     assert [c["last_pushed_votes"] for c in stack["commits"]] == [None] * 4, "in step with Gerrit: votes are current"
+
+
+def test_refresh_rereads_the_local_stack_inside_the_trust_window(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``?refresh=1`` (the extension's Refresh) and ``ger --refresh log`` distrust the cache (ADR-0001)."""
+    from gerrit_workflow_tools.cli_ger import main as ger_main
+
+    store, keys, rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+
+    def _cr(payload: dict[str, Any]) -> list[Any]:
+        return [commit["code_review"] for commit in payload["commits"]]
+
+    def _vote(index: int, value: int) -> None:
+        """A vote on Gerrit, which moves the change's ``updated`` (what the refresh probe compares)."""
+        [voted] = build_details_by_change_id(rows[index : index + 1], per_index_overrides=[{"cr": value}]).values()
+        stamp = f"2026-11-09 10:0{index + 1}:00.000000000"
+        store.add_change({**store.get_change(keys[index]), "labels": voted["labels"], "updated": stamp})
+
+    _get(api, "/overview")
+    _vote(0, -2)
+    assert _cr(_get(api, "/stack"))[0] == 2, "inside the trust window the cache answers"
+    assert _cr(_get(api, "/overview", refresh="1")["local"])[0] == -2
+
+    _vote(1, -1)
+    assert _cr(_get(api, "/stack"))[1] == 2
+    assert _cr(_get(api, "/stack", refresh="1"))[1] == -1
+
+    _vote(2, -1)
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest.from_settings", lambda _s: store)
+    _code, out, _err = run_cli(stack_repo, ger_main, ["log", "--json"], monkeypatch)
+    assert [c["code_review"] for c in json_stdout(out)["commits"]][:3] == [-2, -1, 2]
+    _code, out, _err = run_cli(stack_repo, ger_main, ["--refresh", "log", "--json"], monkeypatch)
+    assert [c["code_review"] for c in json_stdout(out)["commits"]][:3] == [-2, -1, -1]
 
 
 def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_repo: Path) -> None:
