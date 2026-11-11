@@ -451,6 +451,40 @@ export async function run(): Promise<void> {
       [{ dismiss: true }],
     );
 
+    // --- A failure nobody asked for ------------------------------------------------------
+    {
+      // Not through `press`/`meanwhile`: they refresh on their own (as a user would), which would fail the same way and
+      // blank the views the way a refresh you asked for does.
+      const down = process.env.GER_E2E_DOWN ?? "";
+      const note = async (what: string, expect: string, action: () => Promise<void>) => {
+        await action();
+        await wait(300);
+        const after = await screen();
+        out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", "```", ...lineDiff(before, after), "```", "");
+        before = after;
+      };
+      fs.writeFileSync(down, "");
+      await note(
+        "a background refresh finds ger serve gone and cannot start it again",
+        "Nothing is said and the views keep what they showed; the status bar item gets a warning mark, its tooltip says the answer is out of date, and Review chains is labelled so.",
+        async () => {
+          (api.model as unknown as { process: { stop(): void } }).process.stop();
+          await api.model.refresh({ background: true });
+          assert.ok(api.model.stale, "the model knows its overview is old");
+        },
+      );
+      fs.rmSync(down);
+      await note(
+        "ger serve can start again, and the next background refresh works",
+        "The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository); its event stream is followed again.",
+        async () => {
+          await api.model.refresh({ background: true });
+          assert.equal(api.model.stale, undefined);
+          assert.ok(await until(() => api.events.live), "the event stream is followed again");
+        },
+      );
+    }
+
     // --- News from Gerrit ----------------------------------------------------------------
     {
       const what = "a reviewer comments on change 900 on Gerrit, and its event stream says so";

@@ -31,3 +31,8 @@ export function failureState(error: unknown): GerState {
   // Before serving, GIT is the only reason it gives: this is not a git checkout.
   return error instanceof ServeFailed && code === "GIT" ? "no-repo" : "failed";
 }
+
+/** States only you can end (install ger, run `ger setup`, trust the folder, open a repository): polling them again would only restart `ger serve` to fail again. */
+export function waitsForYou(state: GerState): boolean {
+  return state === "no-executable" || state === "setup" || state === "untrusted" || state === "no-repo";
+}

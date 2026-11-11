@@ -18,6 +18,7 @@ import { Poller } from "./poller";
 import { checkout, editCommit, leaveReview, review } from "./review";
 import { GerProcess } from "./server";
 import { StackView } from "./stackView";
+import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
@@ -87,8 +88,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     const stack = model.stack;
     stackTree.description = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
+    overviewTree.description = model.stale ? "out of date" : undefined;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
+  let pausedLogged = false;
   const follower = new ShownCommitFollower(model, changeView);
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
@@ -136,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
 
   const commands: Record<string, (...args: never[]) => unknown> = {
     "ger.refresh": async () => {
-      if (model.failure) {
+      if (model.failure || model.stale) {
         // It failed: Retry starts ger serve afresh, and says so.
         await ui().progress(vscode.ProgressLocation.Notification, "Restarting ger serve", () => {
           model.restart();
@@ -222,7 +225,15 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
     events,
-    new Poller(() => void model.refresh({ background: true }), events),
+    new Poller(() => void model.refresh({ background: true }), events, () => {
+      // Not again and again: ger serve would start and fail each tick. Regaining focus, Retry and a changed setting still try.
+      const paused = waitsForYou(model.state);
+      if (paused && !pausedLogged) {
+        log.appendLine(`Background refresh paused: ${model.failure ?? model.state}. Retry, or fix the setting, to try again.`);
+      }
+      pausedLogged = paused;
+      return paused;
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ger.executable")) {
         model.restart();

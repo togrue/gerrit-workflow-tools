@@ -22,16 +22,21 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
     if (!overview) {
       const untrusted = model.state === "untrusted";
       const why = untrusted ? "ger starts once you trust this folder." : (model.failure ?? "Starting ger serve…");
-      item.text = untrusted ? "$(shield) ger" : model.failure ? "$(warning) ger" : "$(sync~spin) ger";
+      item.text = untrusted ? "$(shield) Gerrit" : model.failure ? "$(warning) Gerrit" : "$(sync~spin) Gerrit";
       tooltip.appendText(why);
-      label = `ger: ${why}`;
+      label = `Gerrit: ${why}`;
       item.backgroundColor = undefined;
     } else {
       const headline = overview.headline;
       const text = headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
       const glyph = !headline ? "$(pass)" : headline.reason === "ci-failed" ? "$(error)" : headline.section === "to-review" ? "$(eye)" : "$(comment-unresolved)";
-      item.text = `${glyph} ${text.length > 60 ? `${text.slice(0, 59)}…` : text}${news}`;
-      label = `Gerrit: ${text}${model.active.size ? `. New activity on ${plural(model.active.size, "chain")}` : ""}`;
+      // Out of date: the last refresh failed, and this is the answer before it.
+      const old = model.stale ? " $(warning)" : "";
+      item.text = `${glyph} ${text.length > 60 ? `${text.slice(0, 59)}…` : text}${news}${old}`;
+      label = `Gerrit: ${text}${model.active.size ? `. New activity on ${plural(model.active.size, "chain")}` : ""}${model.stale ? ". Out of date: the last refresh failed" : ""}`;
+      if (model.stale) {
+        tooltip.appendMarkdown("$(warning) ").appendText(`Out of date: the last refresh failed (${model.stale}). This is the last answer; the next refresh that works replaces it.`).appendMarkdown("\n\n");
+      }
       item.backgroundColor = headline?.reason === "ci-failed" ? new vscode.ThemeColor("statusBarItem.errorBackground") : undefined;
       for (const section of overview.sections ?? []) {
         const title = section.name === "outgoing" ? "Outgoing" : "To review";

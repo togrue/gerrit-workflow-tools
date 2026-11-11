@@ -44,6 +44,12 @@ export class Model implements vscode.Disposable {
   overview: Overview | undefined;
   /** Why there is no overview: the service did not start, or did not answer. */
   failure: string | undefined;
+  /**
+   * Why the overview shown is out of date: a refresh nobody asked for (a timer, an event) failed, and
+   * the last overview stays rather than blanking the views. Cleared by the next refresh that works.
+   * Permanent states (no program, no setup, untrusted, no repository) do clear the overview.
+   */
+  stale: string | undefined;
   /** What the views can show; their welcome texts follow it as the `ger.state` context key. */
   state: GerState = "starting";
   /** Keys of chains with activity since they were last seen. */
@@ -114,6 +120,7 @@ export class Model implements vscode.Disposable {
       const first = this.overview === undefined;
       this.overview = await client.overview(fromGerrit);
       this.failure = undefined;
+      this.stale = undefined;
       // Leave Review Checkout is offered only while there is one to leave.
       const review = await client.review().catch(() => null);
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
@@ -129,10 +136,17 @@ export class Model implements vscode.Disposable {
       await this.memento.update(SEEN_KEY, seen);
       await this.setState("ready");
     } catch (error) {
-      // What was shown may be stale now: the views say what went wrong and what to do instead.
-      this.failure = describeError(error);
-      this.overview = undefined;
-      await this.setState(failureState(error));
+      const state = failureState(error);
+      if (background && state === "failed" && this.overview) {
+        // A hiccup: what was shown is still the best there is. Say it is old; the next refresh that works clears it.
+        this.stale = describeError(error);
+      } else {
+        // What was shown may be wrong now: the views say what went wrong and what to do instead.
+        this.failure = describeError(error);
+        this.stale = undefined;
+        this.overview = undefined;
+        await this.setState(state);
+      }
     }
     this.changed.fire();
     await this.loadUpstreamChoice();

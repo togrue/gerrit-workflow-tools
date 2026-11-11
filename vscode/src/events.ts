@@ -42,7 +42,8 @@ export class EventFollower implements vscode.Disposable {
   }
 
   private async follow(): Promise<void> {
-    if (this.disposed || this.model.state !== "ready" || this.following) {
+    // A stale model has a service that failed to answer: the refresh that works restarts the follow.
+    if (this.disposed || this.model.state !== "ready" || this.model.stale || this.following) {
       return;
     }
     let client: GerClient | undefined;

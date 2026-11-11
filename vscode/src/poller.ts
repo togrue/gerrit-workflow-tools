@@ -1,5 +1,5 @@
 // Background refresh: every `ger.pollSeconds` while the window has focus, and when it regains
-// focus. A changed setting applies at once, without a reload. While Gerrit's event stream is
+// focus (not while only the user can fix what is wrong). A changed setting applies at once, without a reload. While Gerrit's event stream is
 // live the events bring the news, and the poll is only a slow safety net.
 
 import * as vscode from "vscode";
@@ -24,6 +24,8 @@ export class Poller implements vscode.Disposable {
   constructor(
     private readonly refresh: () => void,
     private readonly events: EventFollower,
+    /** Whether the timer should skip this tick: there is nothing a refresh could fix until the user acts. */
+    private readonly paused: () => boolean = () => false,
   ) {
     this.subscriptions = [
       // Coming back to the window is when the stack has most likely changed underneath.
@@ -42,7 +44,7 @@ export class Poller implements vscode.Disposable {
     clearInterval(this.timer);
     this.seconds = seconds;
     // Unfocused, nobody is looking: the refresh on focus catches up.
-    this.timer = setInterval(() => (vscode.window.state.focused ? this.refresh() : undefined), seconds * 1000);
+    this.timer = setInterval(() => (vscode.window.state.focused && !this.paused() ? this.refresh() : undefined), seconds * 1000);
   }
 
   dispose(): void {

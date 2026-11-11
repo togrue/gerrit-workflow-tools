@@ -4,7 +4,8 @@
     fake_ger.py serve [options]     what the extension starts: cli_serve over a ChangeStore
 
 With GER_E2E_EVENTS naming a file, that file is Gerrit's event stream: each line the suite
-appends is one event, and its ``_fake`` part says how the fake Gerrit changed first.
+appends is one event, and its ``_fake`` part says how the fake Gerrit changed first. While the file
+GER_E2E_DOWN names exists, ``serve`` fails to start.
 
 The Gerrit side is the test suite's own: the stack is one outgoing review chain with two
 unresolved comments on its second change and a failing build on the two top ones; change 900
@@ -175,6 +176,10 @@ if __name__ == "__main__":
         make_repo(Path(sys.argv[2]))
         raise SystemExit(0)
     if sys.argv[1:2] == ["serve"]:
+        down = os.environ.get("GER_E2E_DOWN")
+        if down and Path(down).exists():  # the suite makes `ger serve` fail to start, as after a crash
+            print("fake ger: down for this test", file=sys.stderr)
+            raise SystemExit(1)
         store, changes = fake_gerrit(Path.cwd())
         events_file = os.environ.get("GER_E2E_EVENTS")
         events = FileEvents(Path(events_file), store, changes) if events_file else None
