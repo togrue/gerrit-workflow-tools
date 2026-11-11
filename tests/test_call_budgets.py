@@ -315,3 +315,41 @@ def test_fix_change_id_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pyte
     assert code == 0, err
     assert store.calls == []
     assert run.call_count <= _FIX_GIT_BUDGET
+
+
+def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Past the trust window ``ger show HEAD`` sends one changes query, and none when run again at once.
+
+    The Change-Id lookup already says whether the cached change moved, so the stack's own
+    probe is not sent after it; and its answer is kept for the trust window like a change.
+    """
+    import gerrit_workflow_tools.core.gerrit.cache as cache_mod
+
+    _configure_web(stack_repo)
+    details = build_details_by_change_id(stack_rows_mb_to_head(stack_repo))
+    for idx, payload in enumerate(details.values()):
+        payload["updated"] = f"2024-01-01 10:00:{idx:02d}.000000000"
+    store = ChangeStore(details)
+    clock = {"t": 1000}
+    monkeypatch.setattr(cache_mod, "_now", lambda: clock["t"])
+
+    def queries(main: object, argv: list[str]) -> list[RecordedCall]:
+        before = len(store.calls)
+        code, _out, err = run_cli(stack_repo, main, argv, monkeypatch, gerrit=store)  # type: ignore[arg-type]
+        assert code in (0, 1), err
+        return [call for call in store.calls[before:] if call.method == "query_changes"]
+
+    queries(log_main, ["--color=never"])
+
+    clock["t"] = 1020
+    (lookup,) = queries(show_main, ["HEAD", "--color=never"])
+    assert lookup.args[0].startswith("change:I"), lookup.args[0]
+
+    clock["t"] = 1025
+    assert queries(show_main, ["HEAD", "--color=never"]) == []
+    assert queries(resolve_main, ["HEAD"]) == []
+
+    clock["t"] = 1040
+    assert len(queries(resolve_main, ["HEAD"])) == 1

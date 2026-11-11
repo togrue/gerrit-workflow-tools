@@ -246,6 +246,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         settings=settings,
         stack=args.stack,
         branch=branch,
+        changes=service.changes,
     )
     if not targets:
         raise ChangeResolutionError("no commits to show")

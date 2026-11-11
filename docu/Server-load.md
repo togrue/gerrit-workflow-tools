@@ -23,6 +23,8 @@ Less asking must not mean older answers. What bounds each thing:
 |--------------|------------------|
 | A change of your stack: votes, patchsets, status, comment counts | the trust window (10 s); past it Gerrit confirms or replaces it |
 | "Not on Gerrit" for a commit | the trust window, also when the change was pushed from elsewhere |
+| Which changes carry a Change-Id (what `ger show`, `ger ci`, `ger resolve` name) | the trust window |
+| A change you name to act on (`ger review`, `ger checkout`, a vote, a diff in the editor) | asked every time |
 | The same Change-Id on another branch (a **sibling**) | as the stack: checked with the same request |
 | What a listing contains (`ger inbox`, *Review chains*) | asked every time |
 | Details of a listed change | exact: taken from the cache only when Gerrit's freshness token is unchanged |
@@ -59,7 +61,8 @@ For a stack of eight changes, nothing changed on Gerrit, as a Gerrit 3.10 logged
 | `ger log` again within 10 s | 0 |
 | `ger log` later | 1 light |
 | `ger edit -n`, `ger push --dry-run` after a `ger log` | 0 to 2 (drafts are always asked) |
-| `ger show REV` | 3: where the Change-Id exists, comments (only when the change moved), drafts |
+| `ger show REV` | 2: which changes carry the Change-Id, and your drafts; comments the first time and when the change moved. Again within 10 s: 1 (drafts) |
+| `ger review N`, `ger checkout N` | 1 for the change, read once and always asked |
 | `ger inbox` | 1 light |
 | Editor poll (`ger serve`: overview and stack) | 2 to 3 light, every `ger.pollSeconds` while the window has focus; with Gerrit's event stream live, every 15 minutes |
 

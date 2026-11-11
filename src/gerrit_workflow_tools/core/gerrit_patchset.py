@@ -83,12 +83,19 @@ def resolve_change(service: GerritService, cwd: Path | str, changeish: str) -> R
     if changeish.isdigit():
         changeish = f"change:{changeish}"
     branch = resolve_working_branch(cwd, settings=service.settings)
+    changes = service.changes.exact()  # a patchset to act on: as Gerrit has it now, asked once
     resolution = resolve_changeish(
-        changeish, client=service.rest, cwd=cwd, settings=service.settings, branch=branch, explicit_target=True
+        changeish,
+        client=service.rest,
+        cwd=cwd,
+        settings=service.settings,
+        branch=branch,
+        explicit_target=True,
+        changes=changes,
     )
     if resolution.selected is None:
         raise ChangeResolutionError(unresolved_change_message(changeish))
-    view = ChangeView.from_payload(service.rest.get_change(resolution.selected.triplet))
+    view = ChangeView.from_payload(changes.get(resolution.selected.triplet))
     # A triplet, never Gerrit's `id`: real servers send the compact project~number form.
     key = build_triplet(view.project, view.branch, view.change_id) if view.project else resolution.selected.triplet
     return ResolvedChange(view=view, key=key, resolution=resolution, wanted=parse_changeish(changeish).patchset)

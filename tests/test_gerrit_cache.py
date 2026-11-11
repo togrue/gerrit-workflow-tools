@@ -558,3 +558,36 @@ def test_invalidating_a_change_drops_it_under_every_key_it_is_stored_under(tmp_p
 
     cache.load_comments(gerrit_id, fetch_comments=fetch_comments, change_updated="u1")
     assert fetched == [gerrit_id]
+
+
+def test_who_carries_a_change_id_is_remembered_for_the_trust_window_and_dropped_by_a_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gerrit_workflow_tools.core.gerrit.cache as cache_mod
+
+    clock = {"t": 1000}
+    monkeypatch.setattr(cache_mod, "_now", lambda: clock["t"])
+    cache = GerritCache(tmp_path / "cache.sqlite3", web_base="https://g.example")
+    cid = "I" + "a" * 40
+    row = {"id": f"p~main~{cid}", "_number": 7, "project": "p", "branch": "main", "change_id": cid}
+
+    assert cache.carrying(cid, trust_window_seconds=10) is None
+    cache.remember_carrying(cid, [row])
+    cache.remember_carrying("I" + "b" * 40, [])
+    assert cache.carrying(cid, trust_window_seconds=10) == [row]
+    assert cache.carrying("I" + "b" * 40, trust_window_seconds=10) == []  # "nobody" is an answer too
+
+    clock["t"] = 1010
+    assert cache.carrying(cid, trust_window_seconds=10) is None
+
+    cache.remember_carrying(cid, [row])
+    cache.invalidate_changes([f"p~main~{cid}"])
+    assert cache.carrying(cid, trust_window_seconds=10) is None
+
+    cache.remember_carrying(cid, [row])
+    cache.forget_change(7, cid)
+    assert cache.carrying(cid, trust_window_seconds=10) is None
+
+    cache.remember_carrying(cid, [row])
+    cache.clear()
+    assert cache.carrying(cid, trust_window_seconds=10) is None

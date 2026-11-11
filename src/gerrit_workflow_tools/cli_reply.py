@@ -159,7 +159,9 @@ def _gerrit_changes(
     Also returns a phrase naming where they came from, for messages.
     """
     stack = not revs and branch is not None
-    targets = resolve_show_targets(cwd, revs, service.rest, settings=service.settings, stack=stack, branch=branch)
+    targets = resolve_show_targets(
+        cwd, revs, service.rest, settings=service.settings, stack=stack, branch=branch, changes=service.changes
+    )
     commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
     found: dict[str, _Change] = {}
     for target, commit in zip(targets, commits, strict=True):

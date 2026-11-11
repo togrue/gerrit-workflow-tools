@@ -139,7 +139,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         return int(ExitCode.ATTENTION)
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    targets = resolve_show_targets(cwd, args.revs, service.rest, settings=settings, stack=args.stack, branch=branch)
+    targets = resolve_show_targets(
+        cwd, args.revs, service.rest, settings=settings, stack=args.stack, branch=branch, changes=service.changes
+    )
     if not targets:
         raise ChangeResolutionError("no commits to inspect")
     for resolved in targets:

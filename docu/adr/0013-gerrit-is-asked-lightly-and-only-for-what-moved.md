@@ -34,6 +34,11 @@ for what the cache does not have current.**
   week), and commits that are no open change, so the ground a review chain sits on is not
   looked up on every poll: a merged change for a week, a commit Gerrit shows no change for
   only a quarter of an hour, because it may be a change the user cannot see yet.
+- Naming a commit (`ger show`, `ger ci`, `ger resolve`) asks which changes carry its Change-Id
+  (`ChangeApi.carrying`). That is a light request too: it confirms the cached change, so no
+  probe follows it, and its answer is kept for the trust window. Naming a change to act on
+  (`ger review`, `ger checkout`, a vote) goes through `ChangeApi.exact()`: always asked, read
+  once, details from the cache only when the answer shows they are current.
 - The `since:` delta, its watermark and the per-scope certification are removed.
 
 Measured on Gerrit 3.10 with an eight-change stack (requests as the server logged them):

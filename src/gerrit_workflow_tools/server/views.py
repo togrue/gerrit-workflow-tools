@@ -243,7 +243,13 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     revs = [safe_rev(rev) for rev in req.many("rev")]
     branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
     targets = resolve_show_targets(
-        ctx.cwd, revs, ctx.service.rest, settings=ctx.settings, stack=req.flag("stack"), branch=branch
+        ctx.cwd,
+        revs,
+        ctx.service.rest,
+        settings=ctx.settings,
+        stack=req.flag("stack"),
+        branch=branch,
+        changes=ctx.service.changes,
     )
     if not targets:
         raise ChangeResolutionError("no commits to show")
@@ -314,7 +320,9 @@ def diff(ctx: Context, req: Request) -> dict[str, Any]:
     if req.one("since"):
         return _review_delta(ctx, req, rev)
     branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
-    [target] = resolve_show_targets(ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch)
+    [target] = resolve_show_targets(
+        ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
+    )
     sha = target.row.sha
     if not sha or commit_sha_or_none(ctx.cwd, sha) is None:
         patchset, _url = resolve_patchset(ctx.service, ctx.cwd, rev, None)
@@ -348,7 +356,9 @@ def agent_runbook(ctx: Context, req: Request) -> dict[str, Any]:
     """
     only = req.one("rev")
     branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
-    targets = resolve_show_targets(ctx.cwd, [], ctx.service.rest, settings=ctx.settings, stack=True, branch=branch)
+    targets = resolve_show_targets(
+        ctx.cwd, [], ctx.service.rest, settings=ctx.settings, stack=True, branch=branch, changes=ctx.service.changes
+    )
     shown = load_shown_commits(targets, service=ctx.service, context_padding=3, ci=ctx.ci()) if targets else []
     stops = plan_runbook(shown, load_holds(ctx.cwd), only=safe_rev(only) if only else None)
     return runbook_json(stops, branch=checked_out_branch_name(ctx.cwd))

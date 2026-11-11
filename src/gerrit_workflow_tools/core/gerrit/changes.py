@@ -20,7 +20,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     change_id_for_gerrit_rest_path,
     parallel_map,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
+from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet
 
 
 if TYPE_CHECKING:
@@ -34,8 +34,20 @@ _FETCH_BY_NUMBER_LIMIT = 25
 class ChangeApi:
     """Cache-aware ChangeInfo operations."""
 
-    def __init__(self, service: GerritService) -> None:
+    def __init__(self, service: GerritService, *, exact: bool = False) -> None:
         self._service = service
+        self._exact = exact
+        # What Gerrit said to this exact view: nothing is asked twice while it is in use.
+        self._seen: dict[str, dict[str, Any]] = {}
+
+    def exact(self) -> ChangeApi:
+        """A view for naming a change to act on (check out, vote on, diff): nothing older than itself counts.
+
+        Reading a stack tolerates the trust window; fetching a patchset somebody just said
+        they uploaded does not. This view asks Gerrit every time, and still takes details
+        from the cache when the answer shows the cached row is the current one.
+        """
+        return ChangeApi(self._service, exact=True)
 
     def find_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Return already-known ChangeInfo rows grouped by footer Change-Id, across all branches.
@@ -67,6 +79,52 @@ class ChangeApi:
             trust_window_seconds=service.trust_window_seconds,
             refresh=service.refresh,
         )
+
+    def carrying(self, change_id: str) -> list[dict[str, Any]]:
+        """The changes carrying Change-Id *change_id*, on any project and branch, as plain ChangeInfo rows.
+
+        The lookup every changeish goes through. Its answer is kept for the trust window, like
+        a change, so naming the same commit twice in a row asks once. It is also a light
+        request like any other: a cached change whose freshness token it confirms needs no
+        probe of its own afterwards.
+        """
+        service = self._service
+        if not service.refresh and not self._exact:
+            known = service.cache.carrying(change_id, trust_window_seconds=service.trust_window_seconds)
+            if known is not None:
+                return known
+        rows = dict_rows(service.rest.query_changes(f"change:{change_id}", options=list(LIGHT_QUERY_OPTIONS)))
+        tokens: dict[str, str | None] = {}
+        for row in rows:
+            token = change_freshness_key(row)
+            # Under Gerrit's id, and under the triplet a stack asks for (not the same on every server).
+            keys = (payload_triplet(row), build_triplet(str(row.get("project")), str(row.get("branch")), change_id))
+            tokens.update({key: token for key in keys if key})
+        current, _moved = service.cache.reconcile(tokens)
+        if self._exact:
+            self._seen.update(current)
+        service.cache.remember_carrying(change_id, rows)
+        return rows
+
+    def get(self, ref: str) -> dict[str, Any]:
+        """The details of the one change *ref* names (triplet, Gerrit id or number).
+
+        From the cache while Gerrit confirmed that row inside the trust window (an
+        :meth:`exact` view: confirmed it to this view); else asked for, and kept. Gerrit's 404
+        for an unknown change passes through.
+        """
+        service = self._service
+        if self._exact:
+            known = self._seen.get(ref)
+        else:
+            known = service.cache.trusted_change(ref, trust_window_seconds=service.trust_window_seconds)
+        if known is not None and not service.refresh:
+            return known
+        payload = service.rest.get_change(ref)
+        service.cache.upsert_changes({ref: payload})
+        if self._exact:
+            self._seen.update({key: payload for key in (ref, payload_triplet(payload)) if key})
+        return payload
 
     def query(self, query: str, *, n: int = 500) -> list[dict[str, Any]]:
         """ChangeInfo payloads matching *query*, in Gerrit's order, each with its full details.

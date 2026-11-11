@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit.cache_follow_ups import (
 )
 from gerrit_workflow_tools.core.gerrit.cache_rows import (
     CacheInfo,
+    dict_rows,
     footer_of_triplet,
     json_dumps,
     payload_number,
@@ -46,6 +47,12 @@ class _ChangeRow:
 
 def _now() -> int:
     return int(time.time())
+
+
+# ``meta`` keys holding Gerrit's answer to "which changes carry this Change-Id".
+_LOOKUP_PREFIX = "lookup:"
+# An answer this old is of no use to anyone and is dropped with the next one stored.
+_LOOKUP_KEPT_SECONDS = 60 * 60
 
 
 def _within(checked_at: int, seconds: int) -> bool:
@@ -97,7 +104,7 @@ class GerritCache(FollowUpCache, RememberedFacts):
         with self._connect() as conn:
             for table in DATA_TABLES:
                 conn.execute(f"DELETE FROM {table}")
-            for prefix in FACT_PREFIXES:
+            for prefix in (*FACT_PREFIXES, _LOOKUP_PREFIX):
                 conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{prefix}%",))
 
     def info(self) -> CacheInfo:
@@ -151,6 +158,34 @@ class GerritCache(FollowUpCache, RememberedFacts):
 
     def _clear_missing(self, conn: sqlite3.Connection, footer_id: str) -> None:
         conn.execute("DELETE FROM missing_changes WHERE change_id = ?", (footer_id,))
+
+    def trusted_change(self, key: str, *, trust_window_seconds: int) -> dict[str, Any] | None:
+        """The payload cached under *key* while it is inside its trust window, else ``None``."""
+        row = self._lookup_changes([key]).get(key)
+        return row.payload if row is not None and _within(row.verified_at, trust_window_seconds) else None
+
+    def carrying(self, change_id: str, *, trust_window_seconds: int) -> list[dict[str, Any]] | None:
+        """Gerrit's last answer to "which changes carry *change_id*", while it is inside the trust window."""
+        with self._connect() as conn:
+            raw = meta_get(conn, _LOOKUP_PREFIX + change_id.lower())
+        stored = json.loads(raw) if raw else None
+        if not isinstance(stored, dict) or not _within(int(stored.get("at", 0)), trust_window_seconds):
+            return None
+        return dict_rows(stored.get("rows"))
+
+    def remember_carrying(self, change_id: str, rows: list[dict[str, Any]]) -> None:
+        """Keep Gerrit's answer to "which changes carry *change_id*" (ChangeInfo rows, possibly none)."""
+        now = _now()
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM meta WHERE key LIKE ? AND json_extract(value, '$.at') < ?",
+                (f"{_LOOKUP_PREFIX}%", now - _LOOKUP_KEPT_SECONDS),
+            )
+            answer = {"at": now, "rows": [strip_avatars(row) for row in rows]}
+            meta_set(conn, _LOOKUP_PREFIX + change_id.lower(), json_dumps(answer))
+
+    def _forget_carrying(self, conn: sqlite3.Connection, change_id: str) -> None:
+        conn.execute("DELETE FROM meta WHERE key = ?", (_LOOKUP_PREFIX + change_id.lower(),))
 
     def find_payloads_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Return cached ChangeInfo rows grouped by footer ``change_id`` (local only)."""
@@ -313,7 +348,8 @@ class GerritCache(FollowUpCache, RememberedFacts):
         """Drop cached change, comment, checks and "no such change" rows for *triplets*.
 
         A change is stored under the key it was asked for and under Gerrit's own id. Both go,
-        so no copy of it outlives the write that made it stale.
+        and so does what was remembered about who carries its Change-Id, so no copy of it
+        outlives the write that made it stale.
         """
         if not triplets:
             return
@@ -331,6 +367,8 @@ class GerritCache(FollowUpCache, RememberedFacts):
                 conn.execute(f"DELETE FROM {table} WHERE change_id IN ({placeholders(keys)})", keys)
             for triplet in triplets:
                 self._clear_missing(conn, footer_of_triplet(triplet))
+            for key in keys:
+                self._forget_carrying(conn, footer_of_triplet(key))
 
     def forget_change(self, number: int, change_id: str | None = None) -> bool:
         """Drop every row cached for change *number*, under any key, and a "no such change" for *change_id*.
@@ -341,5 +379,6 @@ class GerritCache(FollowUpCache, RememberedFacts):
         with self._connect() as conn:
             keys = [str(row[0]) for row in conn.execute("SELECT change_id FROM changes WHERE number = ?", (number,))]
             cleared = conn.execute("DELETE FROM missing_changes WHERE change_id = ?", (change_id or "",)).rowcount
+            self._forget_carrying(conn, change_id or "")
         self.invalidate_changes(keys)
         return bool(keys) or cleared > 0

@@ -84,7 +84,9 @@ def reply(ctx: Context, req: Request) -> dict[str, Any]:
     if not message:
         raise BadRequest("message is empty")
     branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
-    [target] = resolve_show_targets(ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch)
+    [target] = resolve_show_targets(
+        ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
+    )
     [commit] = annotate([target.row], service=ctx.service, cwd=ctx.cwd).require_gerrit()
     key = gerrit_rest_key(commit, target.resolution, ctx.service)
     matches = ctx.service.comments.find_chain({key: commit.freshness}, comment_id) if commit.pushed and key else []

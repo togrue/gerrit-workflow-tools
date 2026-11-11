@@ -269,3 +269,14 @@ def test_a_new_patchset_replaces_the_one_the_review_fetched(
     assert code == ExitCode.OK, err
     assert json_stdout(out)["patch_set"] == 2
     assert git_out("rev-parse", "change-102", cwd=_worktree(stack_repo)) == ps2
+
+
+def test_naming_a_change_to_review_reads_it_from_gerrit_once(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger review 102`` asks for the change once, and asks again the next time: a patchset is never guessed."""
+    store, _keys, _shas = gerrit
+    assert _review(stack_repo, store, ["102"], monkeypatch)[0] == ExitCode.OK
+    assert len(store.calls_to("get_change")) == 1
+    assert _review(stack_repo, store, ["102"], monkeypatch)[0] == ExitCode.OK
+    assert len(store.calls_to("get_change")) == 2

@@ -451,7 +451,9 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     assert code == 0
     data = json_stdout(out)
     assert data["sha"] == sha
-    assert any(call.kwargs.get("options") == list(LOG_QUERY_OPTIONS) for call in store.calls_to("query_changes"))
+    # The details come from one request that asks for the current revision, not from the bare lookup.
+    detailed = [c for c in store.calls_to("query_changes") if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
+    assert len(detailed) + len(store.calls_to("get_change")) == 1
 
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

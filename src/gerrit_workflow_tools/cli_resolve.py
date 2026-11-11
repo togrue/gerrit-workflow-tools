@@ -75,6 +75,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         cwd=cwd,
         settings=settings,
         explicit_target=True,
+        changes=service.changes,
     )
     if resolution.selected is None and resolution.kind == "change-id":
         raise ChangeResolutionError(unresolved_change_message(args.changeish))

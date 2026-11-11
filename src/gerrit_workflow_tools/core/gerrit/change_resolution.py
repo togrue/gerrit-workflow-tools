@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.changeish import (
@@ -48,6 +48,10 @@ from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
 
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
+
+
 # The changeish grammar lives in core.changeish; this module decides what a parsed changeish
 # *means*. ChangeishKind is re-exported because Resolution.kind is part of the JSON contract; the
 # resolution model (core.gerrit.resolution) is re-exported so callers keep one import.
@@ -83,10 +87,10 @@ def local_commit_sha(cwd: Path | str | None, rev: str) -> str:
     return sha
 
 
-def _fetch_change_row(client: GerritRest, change_key: str, raw: str) -> dict[str, Any]:
+def _fetch_change_row(get_change: Callable[[str], dict[str, Any]], change_key: str, raw: str) -> dict[str, Any]:
     """Only Gerrit's 404 means "not found"; any other failure is Gerrit's and says so."""
     try:
-        return client.get_change(change_key)
+        return get_change(change_key)
     except GerritApiError as e:
         if e.status != 404:
             raise
@@ -101,7 +105,9 @@ def _fetch_single_from_query(client: GerritRest, query: str) -> dict[str, Any]:
         raise ChangeResolutionError(str(e)) from e
 
 
-def _fetch_unique_row(parsed: Changeish, client: GerritRest, *, web_base: str | None) -> dict[str, Any]:
+def _fetch_unique_row(
+    parsed: Changeish, client: GerritRest, get_change: Callable[[str], dict[str, Any]], *, web_base: str | None
+) -> dict[str, Any]:
     """Fetch the one ChangeInfo a directly-addressed changeish names.
 
     Triplet, change number, ``refs/changes/…`` ref, URL and query all name exactly one change
@@ -110,7 +116,7 @@ def _fetch_unique_row(parsed: Changeish, client: GerritRest, *, web_base: str | 
     if problem := address_problem(parsed, web_base=web_base):
         raise ChangeResolutionError(problem)
     if parsed.kind == "triplet":
-        return _fetch_change_row(client, parsed.raw, parsed.raw)
+        return _fetch_change_row(get_change, parsed.raw, parsed.raw)
 
     if parsed.kind == "query":
         if not parsed.query:
@@ -122,7 +128,7 @@ def _fetch_unique_row(parsed: Changeish, client: GerritRest, *, web_base: str | 
         raise ChangeResolutionError(f"invalid change number: {parsed.raw!r}")
     if number is None:
         raise ChangeResolutionError(f"cannot parse Gerrit change number from URL: {parsed.raw!r}")
-    row = _fetch_change_row(client, number, parsed.raw)
+    row = _fetch_change_row(get_change, number, parsed.raw)
     if problem := ChangeView.from_payload(row).contradicts(parsed):
         raise ChangeResolutionError(problem)
     return row
@@ -136,8 +142,12 @@ def resolve_changeish(
     settings: Settings,
     branch: str | None = None,
     explicit_target: bool = False,
+    changes: ChangeApi | None = None,
 ) -> Resolution:
     """Resolve *ref* to a :class:`Resolution` using stack context and Gerrit.
+
+    With *changes* (a service's :class:`ChangeApi`) Gerrit is asked through the cache: what
+    was just learned is not asked again, and what is learned here serves the next read.
 
     ``local_sha`` is the commit a git rev names, else the **local stack** commit carrying the
     selected change's Change-Id, however that change was addressed — provided that commit pushes
@@ -147,7 +157,13 @@ def resolve_changeish(
     ``ger resolve`` cannot disagree on it.
     """
     resolution = _resolve_on_gerrit(
-        ref, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=explicit_target
+        ref,
+        client=client,
+        cwd=cwd,
+        settings=settings,
+        branch=branch,
+        explicit_target=explicit_target,
+        changes=changes,
     )
     selected = resolution.selected
     if resolution.local_sha is not None or selected is None:
@@ -189,6 +205,7 @@ def _resolve_on_gerrit(
     settings: Settings,
     branch: str | None,
     explicit_target: bool,
+    changes: ChangeApi | None,
 ) -> Resolution:
     """:func:`resolve_changeish` before the local stack is searched for a Gerrit-side changeish."""
     parsed = parse_changeish(ref)
@@ -205,7 +222,10 @@ def _resolve_on_gerrit(
 
     if change_id is not None and parsed.kind in ("git-rev", "change-id"):
         try:
-            rows = client.query_changes(f"change:{change_id}", options=list(LIGHT_QUERY_OPTIONS))
+            if changes is not None:
+                rows = changes.carrying(change_id)
+            else:
+                rows = client.query_changes(f"change:{change_id}", options=list(LIGHT_QUERY_OPTIONS))
         except GerritUnavailableError:  # A local commit still shows; the overlay reports why.
             if parsed.kind != "git-rev":
                 raise
@@ -220,7 +240,8 @@ def _resolve_on_gerrit(
             raise
         return narrow_matches(resolution, rows, push_branch=stack.push_branch, explicit_target=explicit_target)
 
-    row = _fetch_unique_row(parsed, client, web_base=settings.gerrit_web_url or client.web_base)
+    get_change = changes.get if changes is not None else client.get_change
+    row = _fetch_unique_row(parsed, client, get_change, web_base=settings.gerrit_web_url or client.web_base)
     resolution.selected = SelectedChange.from_change_row(row)
     resolution.selected_reason = "unique"
     return resolution

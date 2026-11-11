@@ -49,7 +49,9 @@ def resolve_comment_target(
     branch: str | None,
 ) -> CommentTarget:
     """The target for *changeish* (``HEAD`` when ``None``), in the full changeish grammar."""
-    resolved = resolve_show_commit_row(cwd, changeish or "HEAD", service.rest, settings=service.settings, branch=branch)
+    resolved = resolve_show_commit_row(
+        cwd, changeish or "HEAD", service.rest, settings=service.settings, branch=branch, changes=service.changes
+    )
     row = resolved.row
     change_id = row.valid_change_id
     if not change_id:
