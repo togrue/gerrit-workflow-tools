@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -18,12 +17,16 @@ from gerrit_workflow_tools.cli_checkout import main as ger_checkout_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
-from tests.cli_gerrit_mocks import head_change_id
 from tests.conftest import run_cli
 from tests.helpers import force_zero_change_trust_window
 from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
-from tests.integration.integration_helpers import open_changes_on_branch, prepare_clone_at_branch, prepare_topic_repo
+from tests.integration.integration_helpers import (
+    open_changes_on_branch,
+    prepare_clone_at_branch,
+    prepare_topic_repo,
+    push_sibling_changes,
+)
 from tests.integration.repo_builder import build_linear_chain
 
 
@@ -93,12 +96,6 @@ def test_checkout_a_pushed_change_then_pick_up_its_new_patchset(
     assert git_out("log", "-1", "--format=%s", cwd=taker) == "my follow-up"
 
 
-def _change_on(session: GerritHttpSession, project: str, branch: str, change_id: str) -> dict[str, Any]:
-    rows = session.get_json("changes/", params=[("q", f"project:{project} branch:{branch} change:{change_id}")])
-    assert isinstance(rows, list) and len(rows) == 1, rows
-    return dict(rows[0])
-
-
 def test_same_change_id_on_two_target_branches(
     tmp_path: Path,
     gerrit_integration_context: GerritIntegrationContext,
@@ -110,18 +107,8 @@ def test_same_change_id_on_two_target_branches(
     force_zero_change_trust_window(monkeypatch)
 
     # One commit pushed to main, and cherry-picked to dev: one Change-Id, two changes.
-    author = prepare_clone_at_branch(ctx, tmp_path, "main", "co_author")
-    git("checkout", "-q", "-b", "co_main", "origin/main", cwd=author)
-    build_linear_chain(author, [f"checkout backport {secrets.token_hex(4)}"])
-    cid, sha = head_change_id(author), git_out("rev-parse", "HEAD", cwd=author)
-    assert run_cli(author, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)[0] == 0
-    git("checkout", "-q", "-b", "co_dev", "origin/dev", cwd=author)
-    git("cherry-pick", sha, cwd=author)
-    assert run_cli(author, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)[0] == 0
-    on_main, on_dev = (
-        _change_on(gerrit_admin_session, proj, "main", cid),
-        _change_on(gerrit_admin_session, proj, "dev", cid),
-    )
+    siblings = push_sibling_changes(ctx, tmp_path, monkeypatch, workdir="co_author")
+    cid, on_main, on_dev = siblings.change_id, siblings.main, siblings.dev
 
     # From a branch pushing to neither, the bare Change-Id is ambiguous; both are listed.
     side = prepare_topic_repo(ctx, tmp_path, f"checkout_side_{secrets.token_hex(4)}")

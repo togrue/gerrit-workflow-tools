@@ -25,17 +25,17 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
-from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_run import git
 from tests.cli_gerrit_mocks import head_change_id
 from tests.conftest import run_cli
 from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.gerrit_http import GerritHttpSession
 from tests.integration.integration_helpers import (
     open_changes_on_branch,
-    prepare_clone_at_branch,
     prepare_topic_repo,
+    push_sibling_changes,
 )
-from tests.integration.repo_builder import build_linear_chain, install_commit_msg_hook
+from tests.integration.repo_builder import build_linear_chain
 
 
 def _configure_gerrit_project(repo, project: str) -> None:
@@ -47,47 +47,6 @@ def _clear_gerrit_cache(repo: Path) -> None:
 
     web = resolve_gerrit_web_base(Settings.from_cwd(repo))
     GerritCache.for_web_base(web).clear()
-
-
-def _push_shared_change_to_main_and_dev(
-    ctx: GerritIntegrationContext,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[Path, str, dict[str, Any]]:
-    """Push one commit to ``main`` and cherry-pick it to ``dev`` (same Change-Id)."""
-    repo = prepare_clone_at_branch(ctx, tmp_path, "main", "res_wk")
-    _configure_gerrit_project(repo, ctx.project_verified)
-    git("checkout", "-b", "feat_main", cwd=repo)
-    git("config", "branch.feat_main.gerritTarget", "main", cwd=repo)
-    git("branch", "--set-upstream-to", "origin/main", "feat_main", cwd=repo)
-    install_commit_msg_hook(repo, http_base=ctx.http_base)
-    build_linear_chain(repo, ["cross-branch resolution"])
-    cid = head_change_id(repo)
-    sha = git_out("rev-parse", "HEAD", cwd=repo).strip()
-
-    code, _out, err = run_cli(
-        repo,
-        ger_push_main,
-        ["--yes", "--no-rebase-check"],
-        monkeypatch,
-    )
-    assert code == 0, err
-
-    git("checkout", "dev", cwd=repo)
-    git("checkout", "-b", "feat_dev", cwd=repo)
-    git("config", "branch.feat_dev.gerritTarget", "dev", cwd=repo)
-    git("branch", "--set-upstream-to", "origin/dev", "feat_dev", cwd=repo)
-    git("cherry-pick", sha, cwd=repo)
-    code2, _out2, err2 = run_cli(
-        repo,
-        ger_push_main,
-        ["--yes", "--no-rebase-check"],
-        monkeypatch,
-    )
-    assert code2 == 0, err2
-
-    git("checkout", "feat_main", cwd=repo)
-    return repo, cid, {"branch": "dev", "repo": repo}
 
 
 def _change_on_branch(session: GerritHttpSession, project: str, branch: str, change_id: str) -> dict:
@@ -107,16 +66,12 @@ def _change_on_branch(session: GerritHttpSession, project: str, branch: str, cha
 def test_cross_branch_change_id_log_show_resolve_agree(
     tmp_path: Path,
     gerrit_integration_context: GerritIntegrationContext,
-    gerrit_admin_session: GerritHttpSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Same Change-Id on main and dev: resolve/show JSON agree; log overlays target branch."""
-    ctx = gerrit_integration_context
-    proj = ctx.project_verified
-    main_repo, cid, dev_ctx = _push_shared_change_to_main_and_dev(ctx, tmp_path, monkeypatch)
-
-    main_change = _change_on_branch(gerrit_admin_session, proj, "main", cid)
-    dev_change = _change_on_branch(gerrit_admin_session, proj, "dev", cid)
+    siblings = push_sibling_changes(gerrit_integration_context, tmp_path, monkeypatch)
+    main_repo = dev_repo = siblings.repo
+    cid, main_change, dev_change = siblings.change_id, siblings.main, siblings.dev
     assert main_change["_number"] != dev_change["_number"]
 
     stack = resolve_stack_context(main_repo, settings=Settings.from_cwd(main_repo))
@@ -148,7 +103,6 @@ def test_cross_branch_change_id_log_show_resolve_agree(
     assert "~" in selected_triplet
     assert cid in selected_triplet or selected_triplet == str(main_change.get("id"))
 
-    dev_repo = dev_ctx["repo"]
     git("checkout", "feat_dev", cwd=dev_repo)
     _clear_gerrit_cache(dev_repo)
     code_log_dev, out_log_dev, elog_dev = run_cli(dev_repo, ger_log_main, ["--json", "--color", "never"], monkeypatch)

@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import re
+import secrets
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
-from gerrit_workflow_tools.core.git_run import GitError, git
+import pytest
+
+from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit, reviewer_accounts_from_change_info
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
+from tests.conftest import run_cli
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.gerrit_seed import configure_ger_git_repo, set_origin_url
 from tests.integration.profile import phase
-from tests.integration.repo_builder import install_commit_msg_hook, prepare_worktree_clone
+from tests.integration.repo_builder import build_linear_chain, install_commit_msg_hook, prepare_worktree_clone
 
 
 @dataclass(frozen=True)
@@ -315,6 +323,110 @@ def _prepare_topic_repo_impl(
         branch=topic,
     )
     return dest
+
+
+def run_ger(
+    repo: Path, main_fn: Callable[..., int], argv: list[str], monkeypatch: pytest.MonkeyPatch
+) -> tuple[int, str, str]:
+    """Run a ``ger`` command in *repo* against the real Gerrit; ``(code, stdout, stderr)``."""
+    return run_cli(repo, main_fn, argv, monkeypatch, catch_sys_exit=True)
+
+
+def ger_json(repo: Path, main_fn: Callable[..., int], argv: list[str], monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Run ``ger <command> --json …`` and parse stdout; attention (exit 1) is not a failure."""
+    code, out, err = run_ger(repo, main_fn, ["--json", *argv], monkeypatch)
+    assert code in (0, 1), f"exit {code}: {err}"
+    return json.loads(out)
+
+
+def ger_push(repo: Path, monkeypatch: pytest.MonkeyPatch, *argv: str) -> tuple[str, str]:
+    """``ger push --yes --no-rebase-check …`` that must succeed; ``(stdout, stderr)``."""
+    from gerrit_workflow_tools.cli_push import main as ger_push_main  # pylint: disable=import-outside-toplevel
+
+    code, out, err = run_ger(repo, ger_push_main, ["--yes", "--no-rebase-check", *argv], monkeypatch)
+    assert code == 0, f"ger push exited {code}: {out}\n{err}"
+    return out, err
+
+
+def log_commits_by_change_id(repo: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, Any]]:
+    """``ger log --json`` commits keyed by Change-Id."""
+    from gerrit_workflow_tools.cli_log import main as ger_log_main  # pylint: disable=import-outside-toplevel
+
+    commits = ger_json(repo, ger_log_main, [], monkeypatch)["commits"]
+    return {c["change_id"]: c for c in commits if c.get("change_id")}
+
+
+def change_detail(session: GerritHttpSession, change: str) -> dict[str, Any]:
+    """``GET changes/<change>`` with the current revision, labels and reviewers."""
+    params = [("o", o) for o in ("CURRENT_REVISION", "DETAILED_LABELS", "DETAILED_ACCOUNTS")]
+    return dict(session.get_json(f"changes/{quote_change_id(change)}", params=params))
+
+
+def current_patchset(session: GerritHttpSession, change: str) -> int:
+    """The current patchset number of *change* (a triplet, number or unique Change-Id)."""
+    detail = change_detail(session, change)
+    return int(detail["revisions"][detail["current_revision"]]["_number"])
+
+
+def submit_change(session: GerritHttpSession, change: str) -> None:
+    """Approve and submit *change* as the session's user (Code-Review+2 is all the project needs)."""
+    enc = quote_change_id(change)
+    session.post_json(f"changes/{enc}/revisions/current/review", body={"labels": {"Code-Review": 2}})
+    session.post_json(f"changes/{enc}/submit", body={})
+
+
+def publish_web_edit(session: GerritHttpSession, change: str, path: str, content: str) -> None:
+    """Edit *path* in Gerrit's web editor and publish it: a new patchset no clone has."""
+    enc = quote_change_id(change)
+    data = base64.b64encode(content.encode()).decode()
+    session.put_json(f"changes/{enc}/edit/{quote(path, safe='')}", body={"binary_content": f"data:;base64,{data}"})
+    session.post_json(f"changes/{enc}/edit:publish", body={"notify": "NONE"})
+
+
+def rebase_change_on_gerrit(session: GerritHttpSession, change: str) -> None:
+    """Press Gerrit's Rebase button: the change moves onto its parent's current patchset."""
+    session.post_json(f"changes/{quote_change_id(change)}/rebase", body={})
+
+
+@dataclass(frozen=True)
+class SiblingChanges:
+    """One commit pushed to ``main`` and cherry-picked to ``dev``: one Change-Id, two changes.
+
+    *repo* has ``feat_main`` (pushing to main) and ``feat_dev`` (pushing to dev), each holding
+    its own copy of the commit; ``feat_main`` is checked out.
+    """
+
+    repo: Path
+    project: str
+    change_id: str
+    main: dict[str, Any]
+    dev: dict[str, Any]
+
+    def triplet(self, branch: str) -> str:
+        return f"{self.project}~{branch}~{self.change_id}"
+
+
+def push_sibling_changes(
+    ctx: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, workdir: str = "siblings"
+) -> SiblingChanges:
+    """Push one commit to ``main`` and its cherry-pick to ``dev`` with ``ger push``."""
+    repo = prepare_clone_at_branch(ctx, tmp_path, "main", workdir)
+    git("checkout", "-q", "-b", "feat_main", "origin/main", cwd=repo)
+    build_linear_chain(repo, [f"sibling change {secrets.token_hex(4)}"])
+    sha = git_out("rev-parse", "HEAD", cwd=repo)
+    change_id = commits_in_range(repo, "HEAD~1..HEAD")[0].change_id
+    assert change_id
+    ger_push(repo, monkeypatch)
+    git("checkout", "-q", "-b", "feat_dev", "origin/dev", cwd=repo)
+    git("cherry-pick", sha, cwd=repo)
+    ger_push(repo, monkeypatch)
+    git("checkout", "-q", "feat_main", cwd=repo)
+
+    session = GerritHttpSession(ctx.http_base, user=ctx.admin_user, password=ctx.admin_password)
+    rows = session.get_json("changes/", params=[("q", f"project:{ctx.project_verified} change:{change_id}")])
+    by_branch = {row["branch"]: row for row in rows}
+    assert set(by_branch) == {"main", "dev"}, rows
+    return SiblingChanges(repo, ctx.project_verified, change_id, by_branch["main"], by_branch["dev"])
 
 
 def prepare_clone_at_branch(
