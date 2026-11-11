@@ -106,7 +106,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
 
   model.onDidChange(() => {
     const stack = model.stack;
-    stackTree.description = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
+    const where = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
+    stackTree.description = where && model.stale ? `${where} · out of date` : where;
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.description = model.stale ? "out of date" : undefined;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;

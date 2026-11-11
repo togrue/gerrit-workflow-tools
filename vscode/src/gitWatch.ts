@@ -13,12 +13,13 @@ export interface Watch {
 }
 
 /**
- * The files that say what a local refresh would find different: where HEAD is, the branches, and
- * a rebase under way. Objects, the index and the logs change with every git command and say nothing more.
+ * The files that say what a local refresh would find different: where HEAD is, the branches, the
+ * remote-tracking branches a fetch moves, and a rebase under way. Objects, the index and the logs change with every git command and say nothing more.
  */
 export function watches({ gitDir, commonDir }: GitDirs): Watch[] {
   const own = "HEAD,rebase-merge,rebase-merge/*,rebase-apply,rebase-apply/*";
-  const shared = "packed-refs,refs/heads,refs/heads/**";
+  // refs/remotes too: a fetch moves the upstream, and with it what is ahead, behind and pushed.
+  const shared = "packed-refs,refs/heads,refs/heads/**,refs/remotes,refs/remotes/**";
   // Outside a worktree they are one directory: one watcher.
   return gitDir === commonDir
     ? [{ base: gitDir, pattern: `{${own},${shared}}` }]

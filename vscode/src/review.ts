@@ -22,7 +22,7 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
 /**
  * A change that exists only on Gerrit, to work on: `ger checkout` puts it on a branch here that
  * tracks its target branch, so it is your local stack. It may ask (update to the newest patchset?),
- * so it runs in a terminal; the views catch up at the next refresh (the terminal does not say when it ends).
+ * so it runs in a terminal; the views follow once it moves HEAD (repoWatcher.ts), as the terminal does not say when it ends.
  */
 export function checkout(model: Model, target: ChangeTarget | undefined): void {
   if (!target) {

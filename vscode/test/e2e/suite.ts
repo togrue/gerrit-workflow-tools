@@ -228,7 +228,7 @@ export async function run(): Promise<void> {
     );
     await press(
       "Inline Check Out to Work On on change 900",
-      "ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. Nothing else changes until you refresh.",
+      "ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.",
       exec("ger.checkout", theirs),
     );
     const mine = api.overviewView.getChildren(await chainRow("Cleanup after experiment"))[0]; // 103, the newest of the chain

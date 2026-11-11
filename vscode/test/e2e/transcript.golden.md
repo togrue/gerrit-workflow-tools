@@ -128,7 +128,7 @@ status bar message: ger checkout change:900 runs in the terminal: it may ask bef
 
 ## 8. Inline Check Out to Work On on change 900
 
-**Expect:** ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. Nothing else changes until you refresh.
+**Expect:** ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.
 
 ```
 terminal "ger checkout": runs `ger checkout change:900`

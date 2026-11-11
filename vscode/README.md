@@ -75,7 +75,7 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   a new terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
   the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it
   changes anything (update a branch you already have to the newest patchset?), which is why it runs
-  in a terminal. The views catch up at the next refresh: press *Refresh from Gerrit* when it is done.
+  in a terminal. The views follow by themselves once it has switched branches (see *Your repository* below).
   For changing a change of yours that exists only on Gerrit, or taking over a colleague's.
 - **Edit Commit Here** (pencil icon, your local stack commits, also where they appear in *Review
   chains*): `ger edit` runs in this checkout, in a new terminal: an interactive rebase that stops
@@ -110,9 +110,9 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
-`ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) refresh *Local stack*,
+`ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) or a fetch that moves the upstream, refresh *Local stack*,
 the *in your stack* markers and the Change view's buttons about a second after the last change, also when you
-work in the integrated terminal. This reads only your repository: it never asks Gerrit, and says nothing
+work in the integrated terminal. This does not make Gerrit refetch anything (answers still fresh are reused), and says nothing
 in a notification, as you did it yourself.
 
 stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the

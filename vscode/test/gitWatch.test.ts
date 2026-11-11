@@ -11,7 +11,7 @@ test("a plain checkout is watched in one place: HEAD, branches, the rebase state
   const [only, ...rest] = watches({ gitDir: "/r/.git", commonDir: "/r/.git" });
   assert.equal(rest.length, 0);
   assert.equal(only.base, "/r/.git");
-  for (const wanted of ["HEAD", "packed-refs", "refs/heads/**", "rebase-merge/*", "rebase-apply/*"]) {
+  for (const wanted of ["HEAD", "packed-refs", "refs/heads/**", "refs/remotes/**", "rebase-merge/*", "rebase-apply/*"]) {
     assert.ok(only.pattern.includes(wanted), wanted);
   }
   assert.ok(!only.pattern.includes("objects") && !only.pattern.includes("index"));
