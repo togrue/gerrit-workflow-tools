@@ -67,7 +67,7 @@
           "default": true,
           "scope": "window",
           "order": 4,
-          "markdownDescription": "Show a notification when something new becomes the most important change (the status bar headline)."
+          "markdownDescription": "Show a notification when a background refresh finds that something new has become the most important change (the status bar headline). A change you caused yourself is not announced: the status bar shows it."
         }
       }
     },

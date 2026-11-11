@@ -137,7 +137,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       if (model.failure) {
         model.restart();
       }
-      await model.refresh(true);
+      await model.refresh({ fromGerrit: true });
       await changeView.open();
     },
     "ger.showLog": () => log.show(),
@@ -207,7 +207,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
-    new Poller(() => void model.refresh()),
+    new Poller(() => void model.refresh({ background: true })),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ger.executable")) {
         model.restart();

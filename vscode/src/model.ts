@@ -9,6 +9,16 @@ import { GerState, failureState } from "./state";
 
 const SEEN_KEY = "ger.seen";
 
+export interface RefreshOptions {
+  /** Bypass the trust window, like `ger --refresh`. */
+  fromGerrit?: boolean;
+  /**
+   * Nobody asked for it (a timer, the window regaining focus): a new headline is news worth a
+   * notification. After your own action, or a refresh you asked for, the status bar is enough.
+   */
+  background?: boolean;
+}
+
 /** One change a view can open: a local stack commit or a change on Gerrit. */
 export interface ChangeTarget {
   /** What `ger show` takes: a commit id for a local commit, `change:<n>` otherwise. */
@@ -42,7 +52,7 @@ export class Model implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
   private readonly news = new vscode.EventEmitter<Headline>();
-  /** Fires when a refresh brings a headline that was not the headline before. Not on the first load. */
+  /** Fires when a background refresh brings a headline that was not the headline before. Not on the first load. */
   readonly onDidGetNewHeadline = this.news.event;
   private lastHeadline: string | undefined;
   /** Neighbours of the local stack that cannot swap places, for the stack whose head is `movesHead`. */
@@ -52,7 +62,7 @@ export class Model implements vscode.Disposable {
   upstreamChoice: UpstreamChoice | undefined;
   private refreshing: Promise<void> | undefined;
   private again: Promise<void> | undefined;
-  private againFromGerrit = false;
+  private againOptions: Required<RefreshOptions> | undefined;
 
   constructor(
     private readonly process: GerProcess,
@@ -71,25 +81,28 @@ export class Model implements vscode.Disposable {
     return isStack(this.overview?.local) ? this.overview?.local : undefined;
   }
 
-  /** Reload the overview. `fromGerrit` bypasses the trust window, like `ger --refresh`. */
-  refresh(fromGerrit = false): Promise<void> {
+  /** Reload the overview. */
+  refresh(options: RefreshOptions = {}): Promise<void> {
+    const wanted = { fromGerrit: options.fromGerrit ?? false, background: options.background ?? false };
     if (!this.refreshing) {
-      this.refreshing = this.load(fromGerrit).finally(() => {
+      this.refreshing = this.load(wanted).finally(() => {
         this.refreshing = undefined;
       });
       return this.refreshing;
     }
     // The load under way may have started before what this refresh is for: one more after it.
-    this.againFromGerrit ||= fromGerrit;
+    // It reads Gerrit if any of the merged requests asked to, and is news only if all were background.
+    const merged = this.againOptions;
+    this.againOptions = merged ? { fromGerrit: merged.fromGerrit || wanted.fromGerrit, background: merged.background && wanted.background } : wanted;
     this.again ??= this.refreshing.then(() => {
-      const fresh = this.againFromGerrit;
-      [this.again, this.againFromGerrit] = [undefined, false];
-      return this.refresh(fresh);
+      const next = this.againOptions;
+      [this.again, this.againOptions] = [undefined, undefined];
+      return this.refresh(next);
     });
     return this.again;
   }
 
-  private async load(fromGerrit: boolean): Promise<void> {
+  private async load({ fromGerrit, background }: Required<RefreshOptions>): Promise<void> {
     // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
     if (!vscode.workspace.isTrusted) {
       await this.setState("untrusted");
@@ -106,7 +119,8 @@ export class Model implements vscode.Disposable {
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       const headline = this.overview.headline ?? undefined;
       const key = headline ? `${headline.reason}:${headline.number}` : undefined;
-      if (!first && headline && key !== this.lastHeadline) {
+      // Remembered either way: what you caused yourself does not come back as news later.
+      if (background && !first && headline && key !== this.lastHeadline) {
         this.news.fire(headline);
       }
       this.lastHeadline = key;
