@@ -251,8 +251,10 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
 
 # The one detail shape of a change, for every query and for the cache: labels, submittable,
 # every revision, and the current commit with its parents (review chains follow them), in one
-# round trip (no separate /detail call).
+# round trip (no separate /detail call). Never the diffstat: nothing reads Gerrit's line counts
+# (those shown come from git), and computing them makes Gerrit open the commits.
 LOG_QUERY_OPTIONS = (
+    "SKIP_DIFFSTAT",
     "DETAILED_LABELS",
     "DETAILED_ACCOUNTS",
     "SUBMITTABLE",
@@ -261,6 +263,6 @@ LOG_QUERY_OPTIONS = (
     "CURRENT_COMMIT",
 )
 
-# What a listing asks for when the details may already be cached: the freshness token comes
-# with every ChangeInfo, and without the diffstat Gerrit does not have to open the commits.
+# What a request asks for when only the plain ChangeInfo is needed (a listing whose details
+# may already be cached, a lookup): the freshness token comes with every ChangeInfo.
 LIGHT_QUERY_OPTIONS = ("SKIP_DIFFSTAT",)

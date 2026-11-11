@@ -10,6 +10,8 @@ a server you run.
 - Past it, Gerrit is asked **lightly** (one query with `SKIP_DIFFSTAT`, naming the changes),
   and details are fetched only for changes whose freshness token moved.
 - Listings (`ger inbox`, the editor's *Review chains*) are asked on every call, lightly.
+- No request asks for the diffstat (`SKIP_DIFFSTAT` everywhere): the line counts `ger` shows
+  come from git, and counting them makes Gerrit open the commits of every row.
 - What cannot change is asked once: your account id, whether the host has the Checks plugin,
   commits that are merged history.
 

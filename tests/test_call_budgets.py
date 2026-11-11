@@ -183,6 +183,29 @@ def test_resolve_call_budget_for_change_id(stack_repo: Path, monkeypatch: pytest
     assert run.call_count <= _RESOLVE_GIT_BUDGET, f"git subprocesses={run.call_count} budget={_RESOLVE_GIT_BUDGET}"
 
 
+def test_no_request_asks_gerrit_for_the_diffstat(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every changes query says ``SKIP_DIFFSTAT``: nothing reads Gerrit's line counts.
+
+    Without it Gerrit opens the commits of every row to count inserted and deleted lines.
+    """
+    from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
+
+    _configure_web(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    cid = rows[0].change_id
+    assert cid
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    for main, argv in ((log_main, ["--color=never"]), (show_main, ["HEAD", "--color=never"]), (resolve_main, [cid])):
+        code, _out, err = run_cli(stack_repo, main, argv, monkeypatch, gerrit=store)
+        assert code in (0, 1), err
+
+    queries = store.calls_to("query_changes")
+    assert len(queries) >= 3
+    assert [q.args[0] for q in queries if "SKIP_DIFFSTAT" not in (q.kwargs.get("options") or [])] == []
+    assert "SKIP_DIFFSTAT" in LOG_QUERY_OPTIONS  # what GET changes/<id> sends
+
+
 def test_fix_local_ref_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger fix`` on a local stack ref never asks Gerrit (ADR-0003)."""
     _configure_web(stack_repo)

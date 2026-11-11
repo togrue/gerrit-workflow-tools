@@ -33,6 +33,7 @@ from gerrit_workflow_tools.core.gerrit.resolution import (
     local_sibling_note,
 )
 from gerrit_workflow_tools.core.gerrit.rest import (
+    LIGHT_QUERY_OPTIONS,
     GerritApiError,
     GerritRest,
     GerritUnavailableError,
@@ -93,7 +94,7 @@ def _fetch_change_row(client: GerritRest, change_key: str, raw: str) -> dict[str
 
 
 def _fetch_single_from_query(client: GerritRest, query: str) -> dict[str, Any]:
-    rows = client.query_changes(query)
+    rows = client.query_changes(query, options=list(LIGHT_QUERY_OPTIONS))
     try:
         return pick_change_from_query_result(rows)
     except GerritApiError as e:
@@ -204,7 +205,7 @@ def _resolve_on_gerrit(
 
     if change_id is not None and parsed.kind in ("git-rev", "change-id"):
         try:
-            rows = client.query_changes(f"change:{change_id}")
+            rows = client.query_changes(f"change:{change_id}", options=list(LIGHT_QUERY_OPTIONS))
         except GerritUnavailableError:  # A local commit still shows; the overlay reports why.
             if parsed.kind != "git-rev":
                 raise

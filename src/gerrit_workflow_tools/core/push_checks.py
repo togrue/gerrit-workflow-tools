@@ -8,7 +8,12 @@ from typing import NamedTuple
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, GerritUnavailableError
+from gerrit_workflow_tools.core.gerrit.rest import (
+    LIGHT_QUERY_OPTIONS,
+    GerritApiError,
+    GerritRest,
+    GerritUnavailableError,
+)
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
@@ -158,7 +163,7 @@ def _draft_counts(
         return ()
     query = "has:draft (" + " OR ".join(f"change:{number}" for number in by_number) + ")"
     try:
-        rows = service.rest.query_changes(query, n=len(by_number))
+        rows = service.rest.query_changes(query, n=len(by_number), options=list(LIGHT_QUERY_OPTIONS))
         drafted = [by_number[n] for n in (ChangeView.from_payload(r).number for r in rows) if n in by_number]
         counts = {sha: sum(map(len, service.comments.get_drafts(triplets[sha]).values())) for sha in drafted}
     except GerritApiError:
