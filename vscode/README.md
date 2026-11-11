@@ -135,8 +135,14 @@ anything it printed.
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
+| `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
+| `src/follow.ts` | The Change view following its commit through rewrites and amends. |
+| `src/review.ts` | Check Out for Review, Leave Review Checkout, Edit Commit Here. |
+| `src/upstream.ts` | Giving the branch an upstream. |
+| `src/agent.ts` | Handing a runbook to a coding agent. |
+| `src/config.ts`, `src/launch.ts` | The `ger.*` settings; how ger is started in a terminal. |
 | `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
-| `src/extension.ts` | Wiring: commands, status bar, polling. |
+| `src/extension.ts` | Wiring: views, commands, polling. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's
 copy of the contract.

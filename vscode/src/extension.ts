@@ -1,94 +1,23 @@
 // Wires the views, the status bar and the commands to one `ger serve` per workspace folder.
 
-import { execFile } from "node:child_process";
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange } from "./api";
 import { ChangeView, FILE_SCHEME, Location, Node as ChangeNode } from "./changeView";
 import { CommentThreads } from "./comments";
+import { setting } from "./config";
+import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { ChangeTarget, Model, describeError } from "./model";
+import { executable, runInTerminal } from "./launch";
+import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
+import { checkout, editCommit, leaveReview } from "./review";
 import { GerProcess } from "./server";
 import { StackView } from "./stackView";
+import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
-
-function setting<T>(name: string, fallback: T): T {
-  return vscode.workspace.getConfiguration("ger").get<T>(name, fallback);
-}
-
-function executable(): string {
-  return setting("executable", "ger").trim() || "ger";
-}
-
-/** Run a ger command that needs a human in front of it (it prompts, or opens an editor). */
-function runInTerminal(repo: string, args: string): void {
-  ui().terminal({ name: "ger", cwd: repo, reuse: true }, `${executable()} ${args}`);
-}
-
-function statusBar(model: Model): vscode.StatusBarItem {
-  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-  item.command = "ger.openHeadline";
-  const render = () => {
-    const overview = model.overview;
-    const news = model.active.size ? `  $(bell-dot) ${model.active.size}` : "";
-    const tooltip = new vscode.MarkdownString(undefined, true);
-    if (!overview) {
-      item.text = model.failure ? "$(warning) ger" : "$(sync~spin) ger";
-      tooltip.appendText(model.failure ?? "Starting ger serve…");
-      item.backgroundColor = undefined;
-    } else {
-      const headline = overview.headline;
-      const text = headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
-      const glyph = !headline ? "$(pass)" : headline.reason === "ci-failed" ? "$(error)" : headline.section === "to-review" ? "$(eye)" : "$(comment-unresolved)";
-      item.text = `${glyph} ${text.length > 60 ? `${text.slice(0, 59)}…` : text}${news}`;
-      item.backgroundColor = headline?.reason === "ci-failed" ? new vscode.ThemeColor("statusBarItem.errorBackground") : undefined;
-      for (const section of overview.sections ?? []) {
-        const title = section.name === "outgoing" ? "Outgoing" : "To review";
-        tooltip.appendMarkdown(`**${title}** — ${plural(section.chains.length, "chain")}`);
-        if (section.summary.ci_failures) {
-          tooltip.appendMarkdown(`, ${section.summary.ci_failures} with failed CI`);
-        }
-        if (section.summary.comments) {
-          tooltip.appendMarkdown(`, ${section.summary.comments} with unresolved comments`);
-        }
-        tooltip.appendMarkdown("\n\n");
-      }
-      const stack = model.stack;
-      if (stack) {
-        tooltip.appendMarkdown(`**Local stack** — ${plural(stack.summary.commits, "commit")}, ${stack.summary.not_on_gerrit} not on Gerrit\n\n`);
-      }
-      if (model.active.size) {
-        tooltip.appendMarkdown(`$(bell-dot) New activity on ${plural(model.active.size, "chain")}\n\n`);
-      }
-      tooltip.appendMarkdown(headline ? "Click to open it." : "Click to open the overview.");
-    }
-    item.tooltip = tooltip;
-    item.show();
-  };
-  model.onDidChange(render);
-  render();
-  return item;
-}
-
-/** The Markdown `ger show --ai` prints for a change: what an agent needs to fix it. */
-function agentBrief(repo: string, rev: string): Promise<string> {
-  const [command, ...prefix] = executable().split(/\s+/);
-  const args = [...prefix, "show", "--ai", "--comments", "unresolved", "--ci", "--context", rev];
-  return new Promise((resolve, reject) => {
-    // Exit 1 is "attention": the brief is on stdout all the same.
-    execFile(command, args, { cwd: repo, maxBuffer: 16 * 1024 * 1024, shell: process.platform === "win32" }, (error, stdout, stderr) => {
-      if (stdout.trim()) {
-        resolve(stdout);
-      } else {
-        reject(new Error(stderr.trim() || error?.message || "ger show printed nothing"));
-      }
-    });
-  });
-}
+import { setUpstream } from "./upstream";
 
 /** What the extension hands to its end-to-end tests. */
 export interface ExtensionApi {
@@ -129,37 +58,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
-  // A rewrite or an amend gives your commits new ids: follow the shown one by its Change-Id.
-  // When it goes (folded or dropped), remember it: an Undo brings it back, and the view with it.
-  let lost: { target: ChangeTarget; changeId: string } | undefined;
-  model.onDidChange(() => {
-    const target = changeView.target;
-    const stack = model.stack;
-    if (!stack) {
-      return;
-    }
-    if (!target && lost) {
-      const changeId = lost.changeId;
-      const back = stack.commits.find((c) => c.change_id === changeId);
-      if (back) {
-        const reopen = { ...lost.target, rev: back.sha, title: back.summary };
-        lost = undefined;
-        void changeView.open(reopen);
-      }
-      return;
-    }
-    if (!target?.local || stack.commits.some((c) => c.sha === target.rev)) {
-      return;
-    }
-    const changeId = changeView.shown?.change_id;
-    const moved = changeId ? stack.commits.find((c) => c.change_id === changeId) : undefined;
-    if (moved) {
-      void changeView.open({ ...target, rev: moved.sha, title: moved.summary });
-    } else {
-      lost = changeId ? { target, changeId } : undefined;
-      changeView.close();
-    }
-  });
+  const follower = new ShownCommitFollower(model, changeView);
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
       await vscode.commands.executeCommand("ger.openHeadline");
@@ -189,126 +88,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       return;
     }
     await vscode.commands.executeCommand("ger.change.focus");
-    lost = undefined; // you chose what to look at
+    follower.forget();
     await changeView.open(target);
     if (target.chainKey) {
       await model.markSeen([target.chainKey]);
-    }
-  };
-
-  /** Give the working branch an upstream: `upstream` directly, else picked from the suggestion and the remote branches. */
-  const setUpstream = async (upstream?: string) => {
-    try {
-      const client = await model.client();
-      let chosen = typeof upstream === "string" ? upstream : undefined;
-      if (!chosen) {
-        const choice = await client.upstream();
-        if (!choice.branch) {
-          void ui().message("warning", "HEAD is detached: check out a branch to give it an upstream.", {}, []);
-          return;
-        }
-        const items = choice.candidates.map((name): vscode.QuickPickItem => ({
-          label: name,
-          description:
-            [name === choice.upstream ? "current" : "", name === choice.suggested ? `$(star-full) suggested: ${choice.why ?? ""}` : ""]
-              .filter(Boolean)
-              .join(" · ") || undefined,
-        }));
-        const picked = await ui().pick(items, {
-          title: `Upstream for ${choice.branch}`,
-          placeHolder: "The local stack is the commits above it; ger push goes to its branch on Gerrit",
-          matchOnDescription: true,
-        });
-        chosen = picked?.label;
-      }
-      if (!chosen) {
-        return;
-      }
-      const done = await client.setUpstream(chosen);
-      ui().status(`$(check) ${done.branch} now tracks ${done.upstream}`, 6000);
-      await model.refresh();
-    } catch (error) {
-      void ui().message("warning", `Upstream not set: ${describeError(error)}`, {}, []);
-    }
-  };
-
-  /** Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place. */
-  const editCommit = (target: ChangeTarget | undefined) => {
-    if (!target) {
-      return;
-    }
-    runInTerminal(repo, `edit ${target.rev}`);
-    // It runs in the terminal: say what to do once it stopped, not that it already has.
-    void ui().message("info", `Started \`ger edit\` in the terminal. Once the rebase stops at "${target.title}", amend it, then run \`git rebase --continue\`.`, {}, []);
-  };
-
-  /** Someone's change on Gerrit: `ger review` checks it out for review (the review worktree by default). */
-  const checkout = async (target: ChangeTarget | undefined) => {
-    if (!target) {
-      return;
-    }
-    if (target.local) {
-      editCommit(target); // already in your stack: nothing to fetch, edit it where it is
-      return;
-    }
-    try {
-      const client = await model.client();
-      const review = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
-        client.reviewOpen(target.number ?? target.rev),
-      );
-      const where = vscode.Uri.file(review.worktree);
-      const inPlace = path.resolve(review.worktree) === path.resolve(repo);
-      const open = inPlace ? undefined : "Open Review Worktree";
-      const picked = await ui().message(
-        "info",
-        `Change ${review.number} (patchset ${review.patch_set}) is checked out${review.staged ? ", staged," : ""} on ${review.branch}${inPlace ? "" : ` in ${review.worktree}`}.`,
-        {},
-        open ? [open] : [],
-      );
-      void model.refresh(); // a review is open now: the Change view offers to leave it
-      if (picked) {
-        await ui().openFolder(where);
-      }
-    } catch (error) {
-      void ui().message("warning", `Not checked out: ${describeError(error)}`, {}, []);
-    }
-  };
-
-  /** Put what goes to the agent in front of the user, then start the agent on it or copy it. */
-  const handOver = async (markdown: string, name: string, summary: string, rev: string | undefined) => {
-    const file = path.join(os.tmpdir(), name);
-    await fs.writeFile(file, markdown, "utf8");
-    await vscode.commands.executeCommand("markdown.showPreview", vscode.Uri.file(file));
-    const template = setting("agentCommand", "").trim();
-    const start = template ? "Start Agent" : "Copy to Clipboard";
-    const detail = "The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.";
-    if ((await ui().message("info", summary, { modal: true, detail }, [start])) !== start) {
-      return;
-    }
-    if (!template) {
-      await ui().copy(markdown);
-      void ui().message("info", "Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.", {}, []);
-      return;
-    }
-    // GER_NO_PUBLISH makes ger refuse to publish drafts, whatever the agent decides to try.
-    ui().terminal({ name: "ger agent", cwd: repo, env: { GER_NO_PUBLISH: "1" } }, template.replaceAll("{rev}", rev ?? "").replaceAll("{brief}", file));
-  };
-
-  /** The runbook for the local stack, or one of its commits, handed to the agent. */
-  const runAgent = async (rev: string | undefined) => {
-    try {
-      const client = await model.client();
-      const runbook = await ui().progress(vscode.ProgressLocation.Notification, "Collecting comments and CI findings", () => client.runbook(rev));
-      const { commits, comments, findings, held } = runbook.totals;
-      const kept = held ? ` ${plural(held, "comment")} kept for you.` : "";
-      if (!commits) {
-        void ui().message("info", `Nothing here for an agent.${kept}`, {}, []);
-        return;
-      }
-      const summary = `${plural(commits, "commit")}: ${plural(comments, "comment")} and ${plural(findings, "CI finding")} for the agent.${kept}`;
-      await handOver(runbook.markdown, `ger-runbook-${Date.now()}.md`, summary, rev);
-    } catch (error) {
-      void ui().message("warning", `Nothing handed over: ${describeError(error)}`, {}, []);
     }
   };
 
@@ -317,23 +100,6 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     if (chain) {
       await (await model.client()).hold(chain.root_id, held);
       await changeView.open();
-    }
-  };
-
-  const handToAgent = async (target: ChangeTarget | undefined) => {
-    if (!target) {
-      return;
-    }
-    if (target.local) {
-      await runAgent(target.rev);
-      return;
-    }
-    try {
-      const brief = await ui().progress(vscode.ProgressLocation.Notification, "Collecting comments and CI findings", () => agentBrief(repo, target.rev));
-      const name = `ger-brief-${target.rev.replace(/[^\w.-]/g, "_").slice(0, 40)}.md`;
-      await handOver(brief, name, `The comments and CI findings of ${target.title}, for the agent.`, target.rev);
-    } catch (error) {
-      void ui().message("warning", `Nothing handed over: ${describeError(error)}`, {}, []);
     }
   };
 
@@ -356,23 +122,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       const url = targetOf(arg)?.url ?? changeView.shown?.gerrit_url;
       return url ? ui().openExternal(vscode.Uri.parse(url)) : undefined;
     },
-    "ger.checkout": (arg: unknown) => checkout(targetOf(arg)),
-    "ger.stack.edit": (arg: unknown) => editCommit(targetOf(arg)),
-    "ger.setUpstream": (upstream?: unknown) => setUpstream(typeof upstream === "string" ? upstream : undefined),
-    "ger.reviewDone": async () => {
-      try {
-        const client = await model.client();
-        if (!(await client.review())) {
-          void ui().message("info", "No review checkout is open here.", {}, []);
-          return;
-        }
-        const done = await client.reviewDone();
-        void ui().message("info", `Left the review of change ${done.done}.`, {}, []);
-        void model.refresh();
-      } catch (error) {
-        void ui().message("warning", describeError(error), {}, []);
-      }
-    },
+    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
+    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
+    "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
+    "ger.reviewDone": () => leaveReview(model),
     "ger.push": () => runInTerminal(repo, "push"),
     "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
     "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
@@ -398,8 +151,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     "ger.comment.saveNote": (reply: vscode.CommentReply) => threads.saveNew(reply, "note"),
     "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply, undefined),
     "ger.thread.resolve": (reply: vscode.CommentReply) => threads.replyInThread(reply, true),
-    "ger.agentBrief": (arg: unknown) => handToAgent(targetOf(arg)),
-    "ger.agentWalk": () => runAgent(undefined),
+    "ger.agentBrief": (arg: unknown) => handToAgent(model, targetOf(arg)),
+    "ger.agentWalk": () => runAgent(model, undefined),
     "ger.hold": (arg: unknown) => setHold(arg, true),
     "ger.release": (arg: unknown) => setHold(arg, false),
   };
@@ -420,6 +173,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     stackTree,
     changeTree,
     threads,
+    follower,
     statusBar(model),
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
     // Coming back to the window is when the stack has most likely changed underneath.
