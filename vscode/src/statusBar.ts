@@ -14,8 +14,9 @@ export function statusBar(model: Model, note: string | undefined): vscode.Status
     const news = model.active.size ? `  $(bell-dot) ${model.active.size}` : "";
     const tooltip = new vscode.MarkdownString(undefined, true);
     if (!overview) {
-      item.text = model.failure ? "$(warning) ger" : "$(sync~spin) ger";
-      tooltip.appendText(model.failure ?? "Starting ger serve…");
+      const untrusted = model.state === "untrusted";
+      item.text = untrusted ? "$(shield) ger" : model.failure ? "$(warning) ger" : "$(sync~spin) ger";
+      tooltip.appendText(untrusted ? "ger starts once you trust this folder." : (model.failure ?? "Starting ger serve…"));
       item.backgroundColor = undefined;
     } else {
       const headline = overview.headline;

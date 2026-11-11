@@ -29,6 +29,13 @@
     "@types/vscode": "~1.85.0",
     "typescript": "^5.4.0"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode nothing is started: ger runs git and the program in `ger.executable` in the repository, which an untrusted repository could make run its own code. `ger.executable` and `ger.agentCommand` are only read from your user settings there.",
+      "restrictedConfigurations": ["ger.executable", "ger.agentCommand"]
+    }
+  },
   "contributes": {
     "configuration": {
       "title": "ger",
@@ -36,23 +43,31 @@
         "ger.executable": {
           "type": "string",
           "default": "ger",
-          "description": "Command that runs ger, e.g. `ger` or `uv run ger`. The extension starts `<command> serve` in the workspace folder."
+          "scope": "machine-overridable",
+          "order": 1,
+          "markdownDescription": "How to run ger: a program on the `PATH` (`ger`), a path to it (`C:\\Program Files\\ger\\ger.exe`), or a command line (`uv run ger`), where quotes keep a path with blanks together. The extension starts `<this> serve` in the git checkout, and runs `ger push`, `ger edit` and `ger setup` this way in a terminal."
+        },
+        "ger.agentCommand": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 2,
+          "markdownDescription": "Terminal command that starts a coding agent. `{brief}` is replaced by the path of a Markdown runbook (what to fix in which commit, and the rules), `{rev}` by the commit when it is about one. Example: `claude \"Fix the review comments and CI failures described in {brief}\"`. Empty: the runbook is copied to the clipboard instead."
         },
         "ger.pollSeconds": {
           "type": "number",
           "default": 120,
           "minimum": 15,
-          "description": "How often the overview is refreshed in the background."
+          "scope": "window",
+          "order": 3,
+          "markdownDescription": "How often, in seconds, the views refresh in the background. They also refresh when the window regains focus."
         },
         "ger.notify": {
           "type": "boolean",
           "default": true,
-          "description": "Show a notification when something new becomes the most important change (the status bar headline)."
-        },
-        "ger.agentCommand": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Terminal command that starts a coding agent. `{brief}` is replaced by the path of a Markdown runbook (what to fix in which commit, and the rules), `{rev}` by the commit when it is about one. Example: `claude \"Fix the review comments and CI failures described in {brief}\"`. Empty: the brief is copied to the clipboard instead."
+          "scope": "window",
+          "order": 4,
+          "markdownDescription": "Show a notification when something new becomes the most important change (the status bar headline)."
         }
       }
     },
@@ -91,6 +106,11 @@
         "view": "ger.overview",
         "contents": "None of the folders in this window is in a git checkout. Open the folder of a Gerrit checkout.\n[Open Folder](command:workbench.action.files.openFolder)",
         "when": "workbenchState != empty && ger.state == no-repo"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "ger starts once you trust this folder: it runs git and the program in **ger.executable** here, which a repository you do not trust could make run its own code.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "ger.state == untrusted"
       },
       {
         "view": "ger.overview",

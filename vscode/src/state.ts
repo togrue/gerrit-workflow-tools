@@ -8,6 +8,8 @@ export type GerState =
   /** `ger serve` is starting, or answering its first request. */
   | "starting"
   | "ready"
+  /** Restricted Mode: ger runs git and the program the settings name, so nothing starts until you trust the folder. */
+  | "untrusted"
   /** No workspace folder is in a git checkout. */
   | "no-repo"
   /** The program `ger.executable` names is not there. */

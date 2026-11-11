@@ -83,10 +83,16 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 
 | Setting | Default | |
 |---------|---------|--|
-| `ger.executable` | `ger` | How to run ger, e.g. `uv run ger`. |
-| `ger.pollSeconds` | `120` | Background refresh. Also refreshes when the window regains focus. |
+| `ger.executable` | `ger` | How to run ger: a program on the `PATH`, a path to it, or a command line such as `uv run ger` (quote a path with blanks). |
+| `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
+| `ger.pollSeconds` | `120` | Background refresh. It also refreshes when the window regains focus. |
 | `ger.notify` | `true` | Notify when something new becomes the most important change. |
-| `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, e.g. `claude "Follow the runbook in {brief}"`. |
+
+**Workspace trust.** In Restricted Mode the extension starts nothing: ger runs git and the
+program in `ger.executable` in the repository, and a repository you do not trust could make
+either run its own code. `ger.executable` and `ger.agentCommand` are read only from your user
+settings there, never from the repository's `.vscode/settings.json`. Trust the folder and the
+views fill.
 
 ## Requirements
 

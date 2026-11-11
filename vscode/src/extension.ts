@@ -205,6 +205,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     follower,
     statusItem,
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
+    // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
+    vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
     // Coming back to the window is when the stack has most likely changed underneath.
     vscode.window.onDidChangeWindowState((state) => (state.focused ? void model.refresh() : undefined)),
     vscode.workspace.onDidChangeConfiguration((event) => {

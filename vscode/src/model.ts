@@ -61,6 +61,9 @@ export class Model implements vscode.Disposable {
   ) {}
 
   client(): Promise<GerClient> {
+    if (!vscode.workspace.isTrusted) {
+      return Promise.reject(new Error("ger starts once you trust this folder."));
+    }
     return this.process.client();
   }
 
@@ -87,6 +90,12 @@ export class Model implements vscode.Disposable {
   }
 
   private async load(fromGerrit: boolean): Promise<void> {
+    // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
+    if (!vscode.workspace.isTrusted) {
+      await this.setState("untrusted");
+      this.changed.fire();
+      return;
+    }
     try {
       const client = await this.client();
       const first = this.overview === undefined;
