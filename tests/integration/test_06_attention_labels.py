@@ -290,15 +290,18 @@ def test_attention_labels_on_pushed_chain(
     first_block = _first_blocking_index(_json_commits(out_json))
 
     for scenario in SCENARIOS:
-        labels = parse_trailing_attention_labels(out_log, scenario.subject_tag)
-        assert labels is not None, f"missing log line for {scenario.subject_tag!r}:\n{out_log}"
-        assert tuple(labels) == scenario.expected_labels, (
-            f"{scenario.subject_tag}: expected labels {scenario.expected_labels!r}, got {labels!r}\n{out_log}"
-        )
-
         row = json_rows.get(scenario.subject_tag)
         assert row is not None, f"missing JSON row for {scenario.subject_tag!r}"
         reasons = set(row.get("attention_reasons") or [])
+
+        # The text note ends with "chain blocked" exactly when JSON lists chain-blocked
+        # (docu/Reading-ger-log.md); the scenario's own labels come before it.
+        expected_labels = scenario.expected_labels + (("chain blocked",) if "chain-blocked" in reasons else ())
+        labels = parse_trailing_attention_labels(out_log, scenario.subject_tag)
+        assert labels is not None, f"missing log line for {scenario.subject_tag!r}:\n{out_log}"
+        assert tuple(labels) == expected_labels, (
+            f"{scenario.subject_tag}: expected labels {expected_labels!r}, got {labels!r}\n{out_log}"
+        )
         assert scenario.expected_reasons <= reasons, (
             f"{scenario.subject_tag}: expected reasons {scenario.expected_reasons!r}, got {reasons!r}"
         )
