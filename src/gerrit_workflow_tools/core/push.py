@@ -19,7 +19,6 @@ from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
     LAST_PUSH_PREFIX,
     effective_gerrit_destination_branch,
-    rebase_in_progress,
     refs_for_push_branch_name,
     resolve_upstream_parsed,
 )
@@ -42,6 +41,7 @@ from gerrit_workflow_tools.core.push_unchanged import (
     planned_updates,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
+from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.core.usage import UsageError

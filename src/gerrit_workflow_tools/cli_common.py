@@ -41,7 +41,7 @@ from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
-from gerrit_workflow_tools.core.git_state import conflict_next_step, history_rewrite_refusal
+from gerrit_workflow_tools.core.rebase_state import conflict_next_step, history_rewrite_refusal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 

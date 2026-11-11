@@ -27,14 +27,10 @@ from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_contex
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.git_state import (
-    checked_out_branch_name,
-    rebase_in_progress,
-    repo_toplevel,
-    resolve_working_branch,
-)
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, repo_toplevel, resolve_working_branch
 from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, section_summary
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
+from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review

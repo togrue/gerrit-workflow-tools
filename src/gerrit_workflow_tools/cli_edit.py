@@ -39,7 +39,8 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch, unmerged_paths
+from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.rebase_state import rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.status_fmt import attention_text

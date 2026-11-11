@@ -157,7 +157,7 @@ flowchart LR
 
 `config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list --show-scope`, then passes it down; there is no process-wide cache and nothing to invalidate. Values answer with `get`; the winning file scope answers with `scope` (`local` / `global` / …). Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
 
-`git_state.py` answers what the repository currently looks like — branch, HEAD, rebase state, upstream, and the Gerrit push destination. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
+`git_state.py` answers what the repository currently looks like — branch, HEAD, upstream, and the Gerrit push destination; `rebase_state.py`, one step above it, answers whether a rebase is underway and what that means for the next command. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
 `upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` prompts with that suggestion when a branch lacks `@{upstream}` — used by log, push, edit, rebase, change-id, sha. `ger serve` offers the same suggestion through `GET /stack/upstream`.
 
@@ -439,7 +439,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
 | `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules |
-| `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination, and whether a history rewrite can start (`history_rewrite_refusal`) |
+| `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
+| `core/rebase_state.py` | A rebase underway: whether one is, the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`) and the one next step after a conflict (`conflict_next_step`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |

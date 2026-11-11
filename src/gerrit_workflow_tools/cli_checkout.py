@@ -29,7 +29,7 @@ from gerrit_workflow_tools.core.change_checkout import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
-from gerrit_workflow_tools.core.git_state import rebase_refusal
+from gerrit_workflow_tools.core.rebase_state import rebase_refusal
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 

@@ -365,7 +365,7 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
-    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+    from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -392,7 +392,7 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
 
 def test_gedit_next_does_not_walk_when_continue_fails(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
-    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+    from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -430,7 +430,7 @@ def test_gedit_next_does_not_walk_when_continue_fails(stack_repo: Path, monkeypa
 def test_gedit_next_stops_when_continue_leaves_the_rebase_running(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+    from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)

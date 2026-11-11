@@ -21,7 +21,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.git_state import conflict_next_step, rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_in_progress
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
