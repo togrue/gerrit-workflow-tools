@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -159,3 +160,60 @@ def _range(repo: Path) -> str:
 )
 def test_resolve_rev_range_expands_bare_refs_only(stack_repo: Path, arg: str, expected: str) -> None:
     assert resolve_rev_range(stack_repo, arg, settings=Settings.from_cwd(stack_repo)) == expected
+
+
+# ---------------------------------------------------------------------------
+# Siblings (the same Change-Id on another branch) are kept as current as the stack
+# ---------------------------------------------------------------------------
+
+
+def _dated(payloads: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Give every change a freshness token, as a real Gerrit does."""
+    for payload in payloads.values():
+        payload["updated"] = "2026-01-01 10:00:00.000000000"
+    return payloads
+
+
+def _load_at(repo: Path, store: ChangeStore, monkeypatch: pytest.MonkeyPatch, now: int):  # type: ignore[no-untyped-def]
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: now)
+    return load_annotated_stack(repo, _range(repo), settings=Settings.from_cwd(repo), gerrit=store)
+
+
+def test_a_sibling_that_appears_after_the_stack_was_cached_is_noticed(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Somebody cherry-picks your change to another branch: the next look past the trust window says so."""
+    _configure(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    target = rows[0]
+    assert target.change_id is not None
+    store = ChangeStore(_dated(build_details_by_change_id(rows)), web_base="https://g.example")
+    assert _load_at(stack_repo, store, monkeypatch, 1000).notes_by_sha == {}
+
+    sibling = change_info_for_sha(target.sha, target.change_id, branch="dev", number=999)
+    store.add_change(dict(sibling, updated="2026-01-02 10:00:00.000000000"))
+    assert _load_at(stack_repo, store, monkeypatch, 1005).notes_by_sha == {}  # inside the trust window
+    assert "999" in _load_at(stack_repo, store, monkeypatch, 1020).notes_by_sha[target.sha]
+
+
+def test_a_sibling_that_moved_is_fetched_again_and_an_unchanged_one_is_not(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    target = rows[0]
+    assert target.change_id is not None
+    payloads = build_details_by_change_id(rows)
+    sibling = change_info_for_sha(target.sha, target.change_id, branch="dev", number=999)
+    payloads[str(sibling["id"])] = sibling
+    store = ChangeStore(_dated(payloads), web_base="https://g.example")
+    _load_at(stack_repo, store, monkeypatch, 1000)
+
+    before = len(store.calls)
+    _load_at(stack_repo, store, monkeypatch, 1020)
+    assert len(store.calls) - before == 1, "nothing moved: the probe alone"
+
+    store.add_change(dict(sibling, status="ABANDONED", updated="2030-01-01 00:00:00.000000000"))
+    _load_at(stack_repo, store, monkeypatch, 1040)
+    cached = _service(stack_repo, store).changes.find_by_footer_change_ids([target.change_id])[target.change_id]
+    assert {row["branch"]: row["status"] for row in cached}["dev"] == "ABANDONED"

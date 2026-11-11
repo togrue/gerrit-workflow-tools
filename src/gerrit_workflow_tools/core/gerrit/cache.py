@@ -196,6 +196,10 @@ class GerritCache(FollowUpCache, RememberedFacts):
         trust window starts again, the others are fetched. So an unchanged stack costs one
         light request, and nothing at all for the next *trust_window_seconds*.
 
+        The probe also names the same Change-Ids on other branches (**siblings**). One that is
+        new or moved is fetched too, so what the cache says about siblings is as current as
+        the stack, not as old as the last time a stack change happened to move.
+
         Database connections are never held across Gerrit network calls.
         """
         rows = self._lookup_changes(triplets)
@@ -221,6 +225,7 @@ class GerritCache(FollowUpCache, RememberedFacts):
                 else:
                     probe_ids.append(triplet)
 
+        siblings: list[str] = []
         if probe_ids:
             tokens = probe_updated(probe_ids)
             # Gerrit answers under its own id, which is not always the key that was asked for.
@@ -228,9 +233,11 @@ class GerritCache(FollowUpCache, RememberedFacts):
             current, moved = self.reconcile(asked)
             out.update(current)
             fetch_ids.extend(moved)
+            own = {*asked, *(payload_triplet(rows[key].payload) for key in probe_ids)}
+            siblings = self.reconcile({key: token for key, token in tokens.items() if key not in own})[1]
 
-        if fetch_ids:
-            aliased = alias_batch_fetch_results(fetch_ids, fetch_changes(fetch_ids))
+        if fetch_ids or siblings:
+            aliased = alias_batch_fetch_results(fetch_ids, fetch_changes([*fetch_ids, *siblings]))
             for ref in fetch_ids:
                 if ref in aliased:
                     out[ref] = aliased[ref]
