@@ -188,6 +188,7 @@ def prepare(
     gerrit: GerritRest | None = None,
     all_commits: bool = False,
     until: str | None = None,
+    until_sha: str | None = None,
     first_parent: bool = True,
     reviewer_flags: Sequence[str] = (),
     strategy: str | None = None,
@@ -236,6 +237,7 @@ def prepare(
         settings=settings,
         all_commits=all_commits,
         until=until,
+        until_sha=until_sha,
         first_parent=first_parent,
     )
     boundary = _boundary(cwd, ready, head=branch)
@@ -319,6 +321,7 @@ def _ready(
     settings: Settings,
     all_commits: bool,
     until: str | None,
+    until_sha: str | None,
     first_parent: bool,
 ) -> ReadyResult:
     project = settings.gerrit_project or ""
@@ -330,6 +333,7 @@ def _ready(
         head=branch,
         all_commits=all_commits,
         until=until,
+        until_sha=until_sha,
         first_parent=first_parent,
         stop_pattern=settings.stop_pattern,
         project=project,

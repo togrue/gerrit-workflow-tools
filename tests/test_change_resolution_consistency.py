@@ -64,10 +64,13 @@ _NO_ID = "I" + "0" * 40
         ("checkout", [_NO_ID], f"cannot resolve '{_NO_ID}': no Gerrit change has that Change-Id"),
         ("fix", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit in the local stack has that Change-Id"),
         ("edit", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit in the local stack has that Change-Id"),
+        ("push", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit in the local stack has that Change-Id"),
+        ("push", ["change:99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
         ("sha", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit has that Change-Id"),
         ("show", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
         ("fix", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
         ("edit", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
+        ("push", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
     ],
 )
 def test_not_found_reads_the_same_in_every_command(
@@ -83,7 +86,9 @@ def test_not_found_reads_the_same_in_every_command(
         "fix": cli_fix.main,
         "edit": cli_edit.main,
         "sha": cli_sha.main,
+        "push": push_main,
     }
+    argv = ["--dry-run", *argv] if command == "push" else argv
     _configure_web(stack_repo)
     gerrit = None if command == "sha" else ChangeStore({})
     code, _out, err = run_cli(stack_repo, mains[command], argv, monkeypatch, gerrit=gerrit)
@@ -177,6 +182,38 @@ def test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change(
     resolve_block = json_stdout(out_r)["resolution"]
     assert resolve_block == json_stdout(out_s)["resolution"]
     assert resolve_block["local_sha"] == row.sha
+
+
+@pytest.mark.parametrize("form", ["change-id", "change-number", "triplet"])
+def test_push_and_edit_take_rev_as_the_same_stack_changeish(
+    form: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger push REV`` resolves REV like every focus command: to the local stack commit of that change."""
+    from gerrit_workflow_tools.core.config import Settings
+    from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
+    from tests.cli_gerrit_mocks import build_details_by_change_id
+
+    _configure_web(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    store = ChangeStore(details)
+    row = rows[0]
+    assert row.change_id is not None
+    info = next(d for d in details.values() if d["change_id"] == row.change_id)
+    changeish = {
+        "change-id": row.change_id,
+        "change-number": f"change:{info['_number']}",
+        "triplet": build_triplet("testproj", "main", row.change_id),
+    }[form]
+
+    settings = Settings.from_cwd(stack_repo)
+    target = resolve_stack_changeish(stack_repo, changeish, settings=settings, gerrit=store, require_in_stack=True)
+    code, out, err = run_cli(stack_repo, push_main, ["--dry-run", changeish], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert target.sha == row.sha
+    pushed = out.split("About to push commits:")[1].split("Branch")[0]
+    assert row.short_sha in pushed and rows[1].short_sha not in pushed
 
 
 def test_log_on_main_target_uses_main_triplet_not_dev(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

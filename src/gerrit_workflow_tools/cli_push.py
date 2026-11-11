@@ -7,6 +7,7 @@ import logging
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.cli_attention import resolve_in_stack
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
@@ -141,7 +142,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         metavar="REV",
-        help="Push only through this commit.",
+        help="Push only through this commit: a git rev, Change-Id, change:N or triplet in the local stack.",
     )
     return parser
 
@@ -307,6 +308,7 @@ def _push_gerrit(
         gerrit=gerrit,
         all_commits=bool(args.all_),
         until=args.until,
+        until_sha=args.until and resolve_in_stack(cwd, args.until, settings=settings, branch=branch, gerrit=gerrit).sha,
         first_parent=first_parent,
         reviewer_flags=tuple(args.reviewers),
         strategy=args.reviewer_strategy,

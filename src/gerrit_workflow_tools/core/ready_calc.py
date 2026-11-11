@@ -139,6 +139,7 @@ def compute_ready(
     head: str = "HEAD",
     all_commits: bool = False,
     until: str | None = None,
+    until_sha: str | None = None,
     first_parent: bool = True,
     stop_pattern: str,
     project: str = "",
@@ -149,7 +150,8 @@ def compute_ready(
     """Compute how many commits are safe to push before a ready boundary (or entire stack with ``--all``).
 
     Change-Id errors always tighten the tip (including with ``--all``). Stop pattern / ready
-    strategies are ignored when ``all_commits`` is true.
+    strategies are ignored when ``all_commits`` is true. *until* is the tip as the user named it;
+    *until_sha* is that commit when the caller resolved it already (``ger push`` takes a changeish).
     """
     snap = get_stack_snapshot(cwd, branch, head=head, first_parent=first_parent, settings=settings)
     target_tip = snap.upstream_tip
@@ -164,9 +166,8 @@ def compute_ready(
         project,
     )
 
-    until_sha: str | None = None
     if until:
-        until_sha = local_commit_sha(cwd, until.strip())
+        until_sha = until_sha or local_commit_sha(cwd, until.strip())
         if until_sha not in shas:
             raise ChangeResolutionError(not_in_stack_message(until.strip(), until_sha))
 

@@ -16,11 +16,11 @@ Push the **ready prefix** of the local stack to Gerrit (`refs/for/<target>`), or
 ger push [options] [REV]
 ```
 
-`REV` — push only through this commit (must be before the ready boundary unless `--all`).
+`REV` — push only through this commit, a changeish (must be before the ready boundary unless `--all`).
 
 ### Change resolution
 
-When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/gerrit/change_resolution.py`**. Post-push reviewer REST and attribute preview resolve stack commits to Gerrit **triplets** (not bare Change-Ids). Push destination is inherently target-branch-scoped (`refs/for/<target>`). Shared grammar and target-branch narrowing for duplicate Change-Ids are defined in [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
+When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger reword` and `ger fix` resolve theirs (`resolve_stack_changeish` in **`core/gerrit/change_resolution.py`**): a git rev, a Change-Id, `change:N` or a triplet names the commit of that change in the local stack, with the same `cannot resolve '…'` messages and notes. Post-push reviewer REST and attribute preview resolve stack commits to Gerrit **triplets** (not bare Change-Ids). Push destination is inherently target-branch-scoped (`refs/for/<target>`). Shared grammar and target-branch narrowing for duplicate Change-Ids are defined in [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
 ---
 
@@ -136,7 +136,8 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | `0` | Success, dry-run OK, or user cancelled at prompt |
 | `1` | Nothing to push (empty ready prefix), or you declined the upstream prompt |
 | `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
-| `3` | `REV` is not a commit, or not in the local stack |
+| `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
+| `4` | `REV` names a Change-Id that more than one stack commit carries |
 | `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as a warning with Gerrit's reason) |
 | `6` | The branch has no upstream: the same message and hint as `ger log` |
 | other | `git push` exit code |
