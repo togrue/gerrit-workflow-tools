@@ -23,7 +23,7 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
-from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, push_argv, revise
+from gerrit_workflow_tools.core.push import PushBoundary, PushPlan, PushResult, push_argv, revise
 from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.push_reviewers import PushMark, ReviewerApplyChangeOutcome, needs_rest_assignment
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
@@ -224,6 +224,19 @@ def print_assignment_report(plan: PushPlan, outcomes: list[ReviewerApplyChangeOu
         if not frag:
             continue
         print(f"{sha} {subject} assigned {frag}")
+
+
+def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
+    """What happened after ``git push``: errors, reviewer assignments, warnings."""
+    if result.error_message:
+        print(result.error_message, file=sys.stderr)
+    if result.reviewers is not None and plan is not None:
+        for issue in result.reviewers.issues:
+            print(f"{issue.level}: {issue.message}", file=sys.stderr)
+        if result.reviewers.outcomes:
+            print_assignment_report(plan, result.reviewers.outcomes)
+    if result.warning:
+        print(result.warning, file=sys.stderr)
 
 
 def prompt_save_reviewers() -> bool:

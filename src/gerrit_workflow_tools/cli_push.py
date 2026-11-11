@@ -47,10 +47,10 @@ from gerrit_workflow_tools.push_preview import (
     commit_lines,
     confirm_with_options_line,
     options_line_available,
-    print_assignment_report,
     print_dry_run,
     print_gpush_preview,
     print_plan_status,
+    print_push_outcome,
     print_ready_boundary_notice,
     prompt_initial_options,
 )
@@ -175,15 +175,7 @@ def _emit_push_output(result: PushResult) -> None:
 
 def _finish_push(result: PushResult, plan: PushPlan | None) -> int:
     _emit_push_output(result)
-    if result.error_message:
-        print(result.error_message, file=sys.stderr)
-    if result.reviewers is not None and plan is not None:
-        for issue in result.reviewers.issues:
-            print(f"{issue.level}: {issue.message}", file=sys.stderr)
-        if result.reviewers.outcomes:
-            print_assignment_report(plan, result.reviewers.outcomes)
-    if result.warning:
-        print(result.warning, file=sys.stderr)
+    print_push_outcome(result, plan)
     return result.returncode
 
 
