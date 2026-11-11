@@ -20,11 +20,11 @@ from gerrit_workflow_tools.core.gerrit.cache_rows import (
     payload_updated,
     strip_avatars,
 )
+from gerrit_workflow_tools.core.gerrit.cache_schema import DATA_TABLES, SCHEMA_VERSION, create_tables, drop_tables
 from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, change_freshness_key
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_cache_db_path, gerrit_cache_host
 
 
-SCHEMA_VERSION = "5"
 DEFAULT_CHANGE_TRUST_WINDOW_SECONDS = 10
 DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_MISSING_CHANGE_TTL_SECONDS = 180
@@ -33,7 +33,6 @@ DEFAULT_SETTLED_COMMIT_TTL_SECONDS = 24 * 60 * 60
 _CAPABILITY_PREFIX = "capability:"
 _ACCOUNT_PREFIX = "account:"
 
-_DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "settled_commits")
 # Follow-up tables and the columns that key one row.
 _FOLLOW_UP_KEYS = {"comments": ("change_id", "context_key"), "checks": ("change_id",)}
 
@@ -85,76 +84,14 @@ class GerritCache:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
-            self._create_tables(conn)
+            create_tables(conn)
             version = self._meta_get(conn, "schema_version")
             if version and version != SCHEMA_VERSION:
-                self._drop_tables(conn)
-            self._create_tables(conn)
+                drop_tables(conn)
+            create_tables(conn)
             self._meta_set(conn, "schema_version", SCHEMA_VERSION)
             self._meta_set(conn, "host", self.host)
             self._meta_set(conn, "web_base", self.web_base)
-
-    @staticmethod
-    def _drop_tables(conn: sqlite3.Connection) -> None:
-        for table in (*_DATA_TABLES, "meta", "accounts", "scope_state"):  # the last two are retired
-            conn.execute(f"DROP TABLE IF EXISTS {table}")
-
-    @staticmethod
-    def _create_tables(conn: sqlite3.Connection) -> None:
-        conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS changes (
-              change_id      TEXT PRIMARY KEY,
-              number         INTEGER,
-              payload        TEXT NOT NULL,
-              updated        TEXT,
-              fetched_at     INTEGER NOT NULL
-            )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS changes_number ON changes(number)")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS changes_footer_change_id ON changes(json_extract(payload, '$.change_id'))"
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS missing_changes (
-              change_id   TEXT PRIMARY KEY,
-              checked_at  INTEGER NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS settled_commits (
-              sha         TEXT PRIMARY KEY,
-              checked_at  INTEGER NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS comments (
-              change_id      TEXT NOT NULL,
-              context_key    TEXT NOT NULL DEFAULT '',
-              payload        TEXT NOT NULL,
-              fetched_at     INTEGER NOT NULL,
-              change_updated TEXT,
-              PRIMARY KEY (change_id, context_key)
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS checks (
-              change_id      TEXT PRIMARY KEY,
-              payload        TEXT NOT NULL,
-              fetched_at     INTEGER NOT NULL,
-              change_updated TEXT
-            )
-            """
-        )
 
     @staticmethod
     def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
@@ -168,7 +105,7 @@ class GerritCache:
     def clear(self) -> None:
         """Delete all cached API payloads while keeping schema metadata."""
         with self._connect() as conn:
-            for table in _DATA_TABLES:
+            for table in DATA_TABLES:
                 conn.execute(f"DELETE FROM {table}")
             for prefix in (_CAPABILITY_PREFIX, _ACCOUNT_PREFIX):
                 conn.execute("DELETE FROM meta WHERE key LIKE ?", (f"{prefix}%",))
