@@ -151,6 +151,7 @@ def test_refresh_rereads_the_local_stack_inside_the_trust_window(
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest.from_settings", lambda _s: store)
     _code, out, _err = run_cli(stack_repo, ger_main, ["log", "--json"], monkeypatch)
     assert [c["code_review"] for c in json_stdout(out)["commits"]][:3] == [-2, -1, 2]
+    monkeypatch.setenv("GER_CACHE_REFRESH", "")  # `ger --refresh` sets it for the process: restore it after
     _code, out, _err = run_cli(stack_repo, ger_main, ["--refresh", "log", "--json"], monkeypatch)
     assert [c["code_review"] for c in json_stdout(out)["commits"]][:3] == [-2, -1, -1]
 
