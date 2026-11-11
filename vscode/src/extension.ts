@@ -9,7 +9,7 @@ import { CommentThreads } from "./comments";
 import { setting } from "./config";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { executable, runInTerminal } from "./launch";
+import { gerProgram, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { checkout, editCommit, leaveReview } from "./review";
@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
   }
   const repo = folder.uri.fsPath;
   const log = vscode.window.createOutputChannel("ger");
-  const model = new Model(new GerProcess(repo, executable, (line) => log.appendLine(line)), context.workspaceState, repo);
+  const model = new Model(new GerProcess(repo, gerProgram, (line) => log.appendLine(line)), context.workspaceState, repo);
   const overviewView = new OverviewView(model);
   const stackView = new StackView(model);
   const changeView = new ChangeView(model);
@@ -126,7 +126,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
-    "ger.push": () => runInTerminal(repo, "push"),
+    "ger.push": () => runInTerminal(repo, ["push"]),
     "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
     "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
     "ger.stack.moveUpBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, 1),

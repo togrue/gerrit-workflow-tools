@@ -4,8 +4,28 @@
 import { ChildProcess, spawn } from "node:child_process";
 
 import { GerClient, Hello } from "./api";
+import { shellCommandLine, spawnable } from "./commandLine";
 
 const STARTUP_TIMEOUT_MS = 20_000;
+
+/** The program `ger.executable` names is not there. */
+export class ExecutableNotFound extends Error {
+  constructor(readonly program: string) {
+    super(`there is no program "${program}": install ger, or set ger.executable to how to run it`);
+    this.name = "ExecutableNotFound";
+  }
+}
+
+/** `ger serve` did not come up. `code` is its exit code's name when it said why (`GIT`: not in a git checkout). */
+export class ServeFailed extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "ServeFailed";
+  }
+}
 
 export class GerProcess {
   private child: ChildProcess | undefined;
@@ -13,7 +33,8 @@ export class GerProcess {
 
   constructor(
     private readonly cwd: string,
-    private readonly executable: () => string,
+    /** The program and leading arguments that run ger, from `ger.executable`. */
+    private readonly program: () => string[],
     private readonly log: (line: string) => void,
   ) {}
 
@@ -30,23 +51,25 @@ export class GerProcess {
 
   private start(): Promise<GerClient> {
     // The service stops when its stdin closes, so it cannot outlive the editor.
-    const command = `${this.executable()} serve --exit-with-stdin`;
-    this.log(`starting: ${command}  (in ${this.cwd})`);
+    const argv = [...this.program(), "serve", "--exit-with-stdin"];
+    const shown = shellCommandLine(argv, process.platform === "win32" ? "cmd" : "posix");
+    this.log(`starting: ${shown}  (in ${this.cwd})`);
     return new Promise<GerClient>((resolve, reject) => {
-      const child = spawn(command, { cwd: this.cwd, shell: true, stdio: ["pipe", "pipe", "pipe"] });
+      const { command, args, shell } = spawnable(argv);
+      const child = spawn(command, args, { cwd: this.cwd, shell, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
       this.child = child;
       let out = "";
       let err = "";
       let settled = false;
-      const fail = (reason: string) => {
+      const fail = (reason: Error) => {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
-          reject(new Error(reason));
+          reject(reason);
         }
       };
       const timer = setTimeout(() => {
-        fail(`ger serve did not start within ${STARTUP_TIMEOUT_MS / 1000}s`);
+        fail(new ServeFailed(`ger serve did not start within ${STARTUP_TIMEOUT_MS / 1000}s`));
         this.stop();
       }, STARTUP_TIMEOUT_MS);
 
@@ -59,28 +82,37 @@ export class GerProcess {
         if (end < 0) {
           return;
         }
+        // One JSON line: where it listens, or why it cannot serve.
+        let first: (Hello & { error?: undefined }) | { error: { code: string; message: string } };
         try {
-          const hello = JSON.parse(out.slice(0, end)) as Hello;
-          settled = true;
-          clearTimeout(timer);
-          this.log(`ger serve is listening on ${hello.url} for ${hello.repo}`);
-          resolve(new GerClient(hello));
+          first = JSON.parse(out.slice(0, end));
         } catch {
-          fail(`ger serve printed something unexpected: ${out.slice(0, end)}`);
+          fail(new ServeFailed(`ger serve printed something unexpected: ${out.slice(0, end)}`));
+          return;
         }
+        if (first.error) {
+          fail(new ServeFailed(first.error.message, first.error.code));
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        this.log(`ger serve is listening on ${first.url} for ${first.repo}`);
+        resolve(new GerClient(first));
       });
       child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
         err += chunk;
         this.log(chunk.trimEnd());
       });
-      child.on("error", (error) => fail(`could not run "${command}": ${error.message}`));
+      child.on("error", (error: NodeJS.ErrnoException) =>
+        fail(error.code === "ENOENT" ? new ExecutableNotFound(argv[0]) : new ServeFailed(`could not run ${shown}: ${error.message}`)),
+      );
       child.on("exit", (code) => {
         this.log(`ger serve exited (${code ?? "killed"})`);
         if (this.child === child) {
           this.child = undefined;
           this.starting = undefined;
         }
-        fail(err.trim() || `"${command}" exited with code ${code}`);
+        fail(new ServeFailed(err.trim() || `${shown} exited with code ${code}`));
       });
     });
   }

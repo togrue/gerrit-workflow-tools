@@ -12,7 +12,7 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
   if (!target) {
     return;
   }
-  runInTerminal(model.repo, `edit ${target.rev}`);
+  runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
   void ui().message("info", `Started \`ger edit\` in the terminal. Once the rebase stops at "${target.title}", amend it, then run \`git rebase --continue\`.`, {}, []);
 }

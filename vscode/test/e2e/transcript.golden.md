@@ -345,7 +345,7 @@ status bar message: $(check) Private note saved here. It never leaves this repos
 **Expect:** ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.
 
 ```
-terminal "ger": runs `ger edit <sha>`
+terminal "ger edit": runs `ger edit <sha>`
 notification (info): Started `ger edit` in the terminal. Once the rebase stops at "Extract command routing", amend it, then run `git rebase --continue`.
 --- on screen:
 (no change)
@@ -403,10 +403,10 @@ dialog (info): 1 commit: 0 comments and 2 CI findings for the agent.  [Copy to C
 
 ## 30. Local stack › Push to Gerrit…
 
-**Expect:** ger push runs in a terminal, which shows what it will push and asks first.
+**Expect:** ger push runs in a new terminal of its own (never typed into one that is busy), which shows what it will push and asks first.
 
 ```
-terminal "ger": runs `ger push`
+terminal "ger push": runs `ger push`
 --- on screen:
 (no change)
 ```

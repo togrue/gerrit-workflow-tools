@@ -16,8 +16,6 @@ export interface TerminalOptions {
   name: string;
   cwd: string;
   env?: Record<string, string>;
-  /** Reuse a live terminal of the same name instead of opening another. */
-  reuse?: boolean;
 }
 
 export interface Ui {
@@ -28,7 +26,7 @@ export interface Ui {
   /** A transient status bar message. */
   status(text: string, milliseconds: number): void;
   progress<R>(location: vscode.ProgressLocation | { viewId: string }, title: string | undefined, task: () => Thenable<R>): Thenable<R>;
-  /** Type `text` into a terminal and run it. */
+  /** Open a new terminal and run the shell command line `text` in it. */
   terminal(options: TerminalOptions, text: string): void;
   copy(text: string): Thenable<void>;
   openExternal(uri: vscode.Uri): Thenable<boolean>;
@@ -47,8 +45,7 @@ export const vscodeUi: Ui = {
   },
   progress: (location, title, task) => vscode.window.withProgress({ location, title }, task),
   terminal(options, text) {
-    const existing = options.reuse ? vscode.window.terminals.find((t) => t.name === options.name && t.exitStatus === undefined) : undefined;
-    const term = existing ?? vscode.window.createTerminal({ name: options.name, cwd: options.cwd, env: options.env });
+    const term = vscode.window.createTerminal({ name: options.name, cwd: options.cwd, env: options.env });
     term.show(true);
     term.sendText(text);
   },

@@ -14,6 +14,7 @@ import * as vscode from "vscode";
 import type { CommentChain } from "../../src/api";
 import { fileUri } from "../../src/changeView";
 import type { ExtensionApi } from "../../src/extension";
+import { gerCommandLine } from "../../src/launch";
 import { Answer, ScriptedUi, lineDiff } from "./scriptedUi";
 
 type Provider<T> = vscode.TreeDataProvider<T>;
@@ -56,8 +57,9 @@ function normalizer(repo: string): (line: string) => string {
   const roots = [repo, repo.replaceAll("\\", "/"), os.tmpdir(), os.tmpdir().replaceAll("\\", "/")];
   // The fake stands in for `ger`: show the command a user would see run.
   const executable = vscode.workspace.getConfiguration("ger").get<string>("executable", "ger");
+  const commandLine = gerCommandLine([]);
   return (line) => {
-    let out = line.split(executable).join("ger");
+    let out = line.split(executable).join("ger").split(commandLine).join("ger");
     for (const [i, root] of roots.entries()) {
       out = out.split(root).join(i < 2 ? "<repo>" : "<tmp>");
       out = out.split(root.toLowerCase()).join(i < 2 ? "<repo>" : "<tmp>");
@@ -316,7 +318,7 @@ export async function run(): Promise<void> {
     );
 
     // --- Rewriting the stack ----------------------------------------------------------
-    await press("Local stack › Push to Gerrit…", "ger push runs in a terminal, which shows what it will push and asks first.", exec("ger.push"));
+    await press("Local stack › Push to Gerrit…", "ger push runs in a new terminal of its own (never typed into one that is busy), which shows what it will push and asks first.", exec("ger.push"));
     await press(
       "Inline ↑ on \"Refactor parser init\"",
       "It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.",
