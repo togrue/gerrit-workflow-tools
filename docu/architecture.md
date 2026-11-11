@@ -451,7 +451,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
-| `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries |
+| `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries and the attention cursor (`--cursor`, `--cursor-history`, `--set-cursor`) |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, and the **headline** (`pick_headline`) |
 | `core/review_target.py` | The Gerrit half of a review checkout: `patchset_to_review`, `related_chain_numbers` |

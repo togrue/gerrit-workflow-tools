@@ -8,13 +8,18 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.cli_attention import require_stack_upstream
+from gerrit_workflow_tools.cli_attention import (
+    print_cursor_history,
+    print_cursor_status,
+    require_stack_upstream,
+    resolve_in_stack,
+    set_cursor_from_changeish,
+)
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
     continue_rebase,
     init_cli_runtime,
-    print_resolution_note,
     require_history_rewrite,
     run_cli_command,
     run_interactive_rebase,
@@ -23,17 +28,14 @@ from gerrit_workflow_tools.core.attention_cursor import (
     CursorAction,
     EditAttentionMode,
     load_branch_cursor,
-    read_cursor_history,
     write_branch_cursor,
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.edit_attention_walk import (
     change_id_for_stack_sha,
-    describe_cursor_status,
     resolve_edit_attention_commit,
     resolve_first_edit_attention_sha,
 )
-from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch
@@ -59,70 +61,6 @@ def _has_upstreams(cwd: Path, settings: Settings, branch: str | None) -> bool:
     if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
         return False
     return require_stack_upstream(cwd, settings)
-
-
-def _resolve_in_stack(
-    cwd: Path,
-    rev: str,
-    *,
-    settings: Settings,
-    branch: str | None,
-    gerrit: GerritRest | None,
-) -> StackCommit:
-    target = resolve_stack_changeish(cwd, rev, settings=settings, gerrit=gerrit, branch=branch, require_in_stack=True)
-    print_resolution_note(target.resolution)
-    return target
-
-
-def _print_cursor_status(cwd: Path, *, settings: Settings, branch: str | None, gerrit: GerritRest | None) -> int:
-    status = describe_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
-    if status.change_id is None:
-        print(f"attention cursor: (none) on branch {status.branch}")
-        if status.last_attention_change_id:
-            print(f"repo lastAttentionChangeId: {status.last_attention_change_id}")
-        return 0
-    print(f"attention cursor: {status.change_id}")
-    print(f"  branch: {status.branch}")
-    print(f"  touchedAt: {status.touched_at}")
-    print(f"  inStack: {status.in_stack}")
-    print(f"  editAttention: {status.edit_attention}")
-    if status.short_sha:
-        print(f"  shortSha: {status.short_sha}")
-    return 0
-
-
-def _print_cursor_history(cwd: Path) -> int:
-    events = read_cursor_history(cwd, limit=50)
-    if not events:
-        print("attention cursor history: (empty)")
-        return 0
-    for event in events:
-        sha = f" {event.sha}" if event.sha else ""
-        print(f"{event.ts}  {event.branch}  {event.action}  {event.change_id}{sha}")
-    return 0
-
-
-def _set_cursor_from_changeish(
-    cwd: Path,
-    changeish: str,
-    *,
-    settings: Settings,
-    branch: str | None,
-    gerrit: GerritRest | None,
-) -> int:
-    if branch is None:
-        raise GitError("detached HEAD: cannot set attention cursor without a branch")
-    target = _resolve_in_stack(cwd, changeish, settings=settings, branch=branch, gerrit=gerrit)
-    change_id = change_id_for_stack_sha(cwd, target.sha, settings=settings, gerrit=gerrit)
-    if not change_id:
-        raise GitError("target commit has no Change-Id; cannot set attention cursor")
-    current = load_branch_cursor(settings, branch)
-    if current is not None and current.change_id == change_id:
-        print(f"attention cursor already at {change_id}")
-        return 0
-    write_branch_cursor(cwd, branch, change_id, action="set", sha=target.sha)
-    print(f"attention cursor set to {change_id}")
-    return 0
 
 
 def _build_parser(*, prog: str, description: str, default_action: Literal["edit", "reword"]) -> argparse.ArgumentParser:
@@ -234,7 +172,7 @@ def _resolve_target(
     after_change_id: str | None = None
 
     if args.next_attention and rev_arg is not None:
-        after_target = _resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
+        after_target = resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
         after_change_id = change_id_for_stack_sha(cwd, after_target.sha, settings=settings, gerrit=gerrit)
         if not after_change_id:
             raise GitError("REV has no Change-Id; cannot use --next AFTER")
@@ -247,7 +185,7 @@ def _resolve_target(
     elif rev_arg is None:
         mode = "resume"
     else:
-        target_res = _resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
+        target_res = resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
         return target_res.sha, change_id_for_stack_sha(cwd, target_res.sha, settings=settings, gerrit=gerrit), "set"
 
     target, notes = resolve_edit_attention_commit(
@@ -299,15 +237,15 @@ def _run_interactive_stack_rebase(
     branch = resolve_working_branch(cwd, settings=settings)
 
     if args.cursor_history:
-        return _print_cursor_history(cwd)
+        return print_cursor_history(cwd)
     if args.cursor and load_branch_cursor(settings, branch or "HEAD") is None:
-        return _print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+        return print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
     if not _has_upstreams(cwd, settings, branch):
         return int(ExitCode.ATTENTION)
     if args.cursor:
-        return _print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+        return print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
     if args.set_cursor:
-        return _set_cursor_from_changeish(cwd, args.set_cursor, settings=settings, branch=branch, gerrit=gerrit)
+        return set_cursor_from_changeish(cwd, args.set_cursor, settings=settings, branch=branch, gerrit=gerrit)
 
     action = args.action_override or default_action
     logger.debug(
