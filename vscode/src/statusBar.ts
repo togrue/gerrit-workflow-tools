@@ -7,22 +7,29 @@ import { Model } from "./model";
 
 /** `note` says which repository it is about, when the window has several folders. */
 export function statusBar(model: Model, note: string | undefined): vscode.StatusBarItem {
-  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
+  const item = vscode.window.createStatusBarItem("ger.headline", vscode.StatusBarAlignment.Left, 50);
+  // How it is listed where status bar items are hidden or shown.
+  item.name = "Gerrit Headline";
   item.command = "ger.openHeadline";
   const render = () => {
     const overview = model.overview;
     const news = model.active.size ? `  $(bell-dot) ${model.active.size}` : "";
     const tooltip = new vscode.MarkdownString(undefined, true);
+    // What a screen reader says: the words of the item, without its icons.
+    let label: string;
     if (!overview) {
       const untrusted = model.state === "untrusted";
+      const why = untrusted ? "ger starts once you trust this folder." : (model.failure ?? "Starting ger serve…");
       item.text = untrusted ? "$(shield) ger" : model.failure ? "$(warning) ger" : "$(sync~spin) ger";
-      tooltip.appendText(untrusted ? "ger starts once you trust this folder." : (model.failure ?? "Starting ger serve…"));
+      tooltip.appendText(why);
+      label = `ger: ${why}`;
       item.backgroundColor = undefined;
     } else {
       const headline = overview.headline;
       const text = headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
       const glyph = !headline ? "$(pass)" : headline.reason === "ci-failed" ? "$(error)" : headline.section === "to-review" ? "$(eye)" : "$(comment-unresolved)";
       item.text = `${glyph} ${text.length > 60 ? `${text.slice(0, 59)}…` : text}${news}`;
+      label = `Gerrit: ${text}${model.active.size ? `. New activity on ${plural(model.active.size, "chain")}` : ""}`;
       item.backgroundColor = headline?.reason === "ci-failed" ? new vscode.ThemeColor("statusBarItem.errorBackground") : undefined;
       for (const section of overview.sections ?? []) {
         const title = section.name === "outgoing" ? "Outgoing" : "To review";
@@ -48,6 +55,7 @@ export function statusBar(model: Model, note: string | undefined): vscode.Status
       tooltip.appendMarkdown("\n\n").appendText(note);
     }
     item.tooltip = tooltip;
+    item.accessibilityInformation = { label, role: "button" };
     item.show();
   };
   model.onDidChange(render);
