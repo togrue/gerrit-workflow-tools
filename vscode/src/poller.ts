@@ -1,5 +1,5 @@
-// Background refresh: every `ger.pollSeconds` while the window has focus, and when it regains
-// focus (not while only the user can fix what is wrong). A changed setting applies at once, without a reload. While Gerrit's event stream is
+// Background refresh of what Gerrit may have changed: every `ger.pollSeconds` while the window has focus, and when it regains
+// focus (not while only the user can fix what is wrong). Local git is watched separately (repoWatcher.ts). A changed setting applies at once, without a reload. While Gerrit's event stream is
 // live the events bring the news, and the poll is only a slow safety net.
 
 import * as vscode from "vscode";

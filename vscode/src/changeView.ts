@@ -117,6 +117,15 @@ export class ChangeView implements vscode.TreeDataProvider<Node> {
     this.loaded.fire();
   }
 
+  /** The shown change is (no longer) a commit of your stack: the title bar offers Edit instead of Review and Check Out, or the other way round. */
+  setLocal(local: boolean): void {
+    if (this.target && this.target.local !== local) {
+      this.target = { ...this.target, local };
+      void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", local);
+      this.changed.fire();
+    }
+  }
+
   /** Show nothing: the change that was shown is gone. */
   close(): void {
     this.generation += 1;

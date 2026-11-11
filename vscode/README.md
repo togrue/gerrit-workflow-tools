@@ -104,10 +104,16 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 |---------|---------|--|
 | `ger.executable` | `ger` | How to run ger: a program on the `PATH`, a path to it, or a command line such as `uv run ger` (quote a path with blanks). |
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
-| `ger.pollSeconds` | `120` | Background refresh while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
+| `ger.pollSeconds` | `120` | Background refresh from Gerrit while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
+**Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
+`ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) refresh *Local stack*,
+the `local` markers and the Change view's buttons about a second after the last change, also when you
+work in the integrated terminal. This reads only your repository: it never asks Gerrit, and says nothing
+in a notification, as you did it yourself.
+
 stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the
 views refresh a second after review activity happens — a new patchset, comment, vote, reviewer,
 merge — instead of at the next poll, and the poll drops to a 15-minute safety net. When it
@@ -200,7 +206,8 @@ printed.
 | `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal. |
 | `src/workspace.ts`, `src/state.ts` | Which checkout is served; the state the views' welcome texts follow (`ger.state`). |
 | `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
-| `src/poller.ts` | Background refresh: on a timer while focused, and on regaining focus. |
+| `src/poller.ts` | Background refresh from Gerrit: on a timer while focused, and on regaining focus. |
+| `src/gitWatch.ts`, `src/repoWatcher.ts` | The views following local git: what to watch (pure, unit-tested), the debounce, the watcher. |
 | `src/extension.ts` | Wiring: views and commands. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's

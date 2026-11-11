@@ -15,6 +15,7 @@ import { gerProgram, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
+import { RepoWatcher } from "./repoWatcher";
 import { checkout, editCommit, leaveReview, review } from "./review";
 import { GerProcess } from "./server";
 import { StackView } from "./stackView";
@@ -22,7 +23,7 @@ import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
-import { chooseRepo, repoNote } from "./workspace";
+import { chooseRepo, gitDirs, repoNote } from "./workspace";
 
 const VIEWS = ["ger.overview", "ger.stack", "ger.change"];
 
@@ -213,6 +214,16 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
   // Gerrit's event stream, when ger serve has one: a refresh on news, and only a slow poll.
   const events = new EventFollower(model, () => void model.refresh({ background: true }), (line) => log.appendLine(line));
   const statusItem = statusBar(model, events, note);
+  // Local git (a commit, a checkout, a rebase) is news Gerrit's events do not carry. Not news to notify about: you did it.
+  const dirs = gitDirs(repo);
+  const localGit = dirs
+    ? new RepoWatcher(dirs, (lastChange) => {
+        // A refresh that began after the last change (your own stack edit refreshes itself) already knows.
+        if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
+          void model.refresh();
+        }
+      })
+    : undefined;
   context.subscriptions.push(
     model,
     overviewTree,
@@ -225,6 +236,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
     events,
+    ...(localGit ? [localGit] : []),
     new Poller(() => void model.refresh({ background: true }), events, () => {
       // Not again and again: ger serve would start and fail each tick. Regaining focus, Retry and a changed setting still try.
       const paused = waitsForYou(model.state);

@@ -39,6 +39,9 @@ export class ShownCommitFollower implements vscode.Disposable {
       return;
     }
     if (!target?.local || stack.commits.some((c) => c.sha === target.rev)) {
+      // After a checkout, a commit or a rebase here the shown change may have become one of your stack's: the title buttons follow.
+      const changeId = this.changeView.shown?.change_id;
+      this.changeView.setLocal(Boolean(target?.local) || (changeId !== undefined && stack.commits.some((c) => c.change_id === changeId)));
       return;
     }
     const changeId = this.changeView.shown?.change_id;

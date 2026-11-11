@@ -68,6 +68,7 @@ export class Model implements vscode.Disposable {
   upstreamChoice: UpstreamChoice | undefined;
   private refreshing: Promise<void> | undefined;
   private again: Promise<void> | undefined;
+  private loadStartedAt = 0;
   private againOptions: Required<RefreshOptions> | undefined;
 
   constructor(
@@ -109,7 +110,13 @@ export class Model implements vscode.Disposable {
   }
 
   private async load({ fromGerrit, background }: Required<RefreshOptions>): Promise<void> {
+  /** Whether a load started at or after `time` (ms since the epoch): it saw whatever happened before. */
+  loadedSince(time: number): boolean {
+    return this.loadStartedAt >= time;
+  }
+
     // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
+    this.loadStartedAt = Date.now();
     if (!vscode.workspace.isTrusted) {
       await this.setState("untrusted");
       this.changed.fire();

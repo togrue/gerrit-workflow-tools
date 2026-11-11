@@ -104,15 +104,17 @@ export function eventsMayCome(events: EventsStatus | undefined): boolean {
 
 /** How the views stay current, in words, for the status bar tooltip and the log. */
 export function refreshMode(events: EventsStatus | undefined, pollSeconds: number): string {
+  // Gerrit's events and the poll are about Gerrit; the repository is watched whatever they do.
+  const local = " Commits, checkouts and rebases here refresh them at once.";
   if (events?.state === "live") {
-    return `Following Gerrit's event stream${events.source ? ` (${events.source})` : ""}: views refresh when something happens.`;
+    return `Following Gerrit's event stream${events.source ? ` (${events.source})` : ""}: review activity refreshes the views, and a poll every ${age(pollSeconds)} is the safety net.${local}`;
   }
   const every = `Refreshing every ${age(pollSeconds)}`;
   if (!events || events.state === "connecting") {
-    return `${every}.`;
+    return `${every}.${local}`;
   }
   const why = events.reason ? `: ${events.reason.replace(/\.$/, "")}` : "";
-  return events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}.` : `${every}; no Gerrit event stream${why}.`;
+  return `${events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}.` : `${every}; no Gerrit event stream${why}.`}${local}`;
 }
 
 export function plural(count: number, noun: string): string {
