@@ -181,13 +181,24 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     }
   };
 
+  /** Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place. */
+  const editCommit = (target: ChangeTarget | undefined) => {
+    if (!target) {
+      return;
+    }
+    runInTerminal(repo, `edit ${target.rev}`);
+    void vscode.window.showInformationMessage(
+      `Rebase stopped at "${target.title}" in this checkout: amend it, then \`git rebase --continue\`.`,
+    );
+  };
+
+  /** Someone's change on Gerrit: `ger review` checks it out for review (the review worktree by default). */
   const checkout = async (target: ChangeTarget | undefined) => {
     if (!target) {
       return;
     }
     if (target.local) {
-      // Your own commit: stop an interactive rebase on it, so you can amend it in place.
-      runInTerminal(repo, `edit ${target.rev}`);
+      editCommit(target); // already in your stack: nothing to fetch, edit it where it is
       return;
     }
     try {
@@ -304,6 +315,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
       return url ? vscode.env.openExternal(vscode.Uri.parse(url)) : undefined;
     },
     "ger.checkout": (arg: unknown) => checkout(targetOf(arg)),
+    "ger.stack.edit": (arg: unknown) => editCommit(targetOf(arg)),
     "ger.reviewDone": async () => {
       try {
         const done = await (await model.client()).reviewDone();

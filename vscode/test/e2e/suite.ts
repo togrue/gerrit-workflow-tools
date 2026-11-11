@@ -135,6 +135,31 @@ export async function run(): Promise<void> {
     assert.match(blocked[0], /^Rework d\.txt .*\.downx\]$/, "the arrow down is replaced by the blocked marker");
     assert.match(blocked[1], /^Cleanup after experiment .*\.upx\.down\]$/);
     assert.ok(blocked.slice(2).every((line) => !/x\b/.test(line.split("[")[1] ?? "")));
+
+    // Drag and drop: the dragged commit takes the place of the one it lands on, downwards too.
+    const shown = () => [...(api.model.stack?.commits ?? [])].reverse().map((c) => c.summary);
+    const row = async (summary: string) => {
+      const found = await find(api.stackView, summary);
+      assert.ok(found, summary);
+      return found;
+    };
+    const dragged = async (summary: string) => {
+      const data = new vscode.DataTransfer();
+      api.stackView.handleDrag([await row(summary)], data);
+      return data;
+    };
+    const head = api.model.stack?.head;
+    // Onto the commit it would conflict with: refused before anything is touched.
+    await api.stackView.handleDrop(await row("Cleanup after experiment"), await dragged("Rework d.txt"));
+    assert.equal(api.model.stack?.head, head, "a drop that would conflict leaves the stack as it was");
+    const below = shown()[2];
+    // Not awaited: the rewrite then waits on its Undo notification.
+    void api.stackView.handleDrop(await row(below), await dragged("Cleanup after experiment"));
+    for (let tries = 0; tries < 50 && shown()[2] !== "Cleanup after experiment"; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    section("Local stack after dropping a commit on the one below it", await dump(api.stackView));
+    assert.deepEqual(shown().slice(1, 3), [below, "Cleanup after experiment"]);
   } catch (error) {
     out.push("## FAILED", error instanceof Error ? (error.stack ?? error.message) : String(error), "");
     throw error;

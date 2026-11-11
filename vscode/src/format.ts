@@ -172,3 +172,15 @@ export function moved<T>(commits: readonly T[], index: number, step: number): T[
   next.splice(target, 0, item);
   return next;
 }
+
+/**
+ * `commits` (oldest first) after `dragged` is dropped on `target`: it takes the target's place,
+ * whichever way it travelled, so dropping on the neighbour below swaps the two. No target (the
+ * empty space under the list, which shows newest first) means the bottom: oldest. Undefined
+ * when nothing would change.
+ */
+export function droppedOn<T>(commits: readonly T[], dragged: T, target: T | undefined): T[] | undefined {
+  const from = commits.indexOf(dragged);
+  const to = target === undefined ? 0 : commits.indexOf(target);
+  return to < 0 ? undefined : moved(commits, from, to - from);
+}

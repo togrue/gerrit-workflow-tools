@@ -3,7 +3,7 @@
 import * as vscode from "vscode";
 
 import { StackCommit, StackStep } from "./api";
-import { blockedMove, commitDescription, moved, reasonWords, severity } from "./format";
+import { blockedMove, commitDescription, droppedOn, moved, reasonWords, severity } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model, describeError } from "./model";
 
@@ -100,15 +100,20 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
   }
 
   async handleDrop(target: Node | undefined, data: vscode.DataTransfer): Promise<void> {
-    const dragged: string[] = data.get(MIME)?.value ?? [];
-    if (target?.kind !== "commit" || !dragged.length || dragged.includes(target.commit.sha)) {
+    const value: unknown = data.get(MIME)?.value;
+    const dragged = Array.isArray(value) ? value.filter((sha): sha is string => typeof sha === "string") : [];
+    if (dragged.length !== 1 || target?.kind === "info") {
       return;
     }
-    // In the list (newest first) the dragged commits take the target's place, pushing it down.
-    const shown = [...this.commits()].reverse().map((c) => c.sha);
-    const rest = shown.filter((sha) => !dragged.includes(sha));
-    rest.splice(rest.indexOf(target.commit.sha), 0, ...shown.filter((sha) => dragged.includes(sha)));
-    await this.rewrite(rest.reverse(), "Stack reordered.");
+    // The dragged commit takes the target's place, up or down; empty space under the list is the bottom.
+    const order = droppedOn(
+      this.commits().map((c) => c.sha),
+      dragged[0],
+      target?.commit.sha,
+    );
+    if (order) {
+      await this.rewrite(order, "Stack reordered.");
+    }
   }
 
   /** Move one commit a place later (`+1`) or earlier (`-1`) in the stack. */

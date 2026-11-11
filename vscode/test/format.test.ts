@@ -8,6 +8,7 @@ import {
   blockedSwaps,
   chainDescription,
   chainsWithActivity,
+  droppedOn,
   fileState,
   moved,
   rememberSeen,
@@ -79,6 +80,18 @@ test("activity is what moved since the chain was last seen", () => {
 test("moving a commit keeps every commit exactly once", () => {
   assert.deepEqual(moved(["a", "b", "c"], 0, 1), ["b", "a", "c"]);
   assert.deepEqual(moved(["a", "b", "c"], 2, -1), ["a", "c", "b"]);
+});
+
+test("a dropped commit takes the place of the one it lands on, in either direction", () => {
+  // Oldest first; the view shows d c b a.
+  const stack = ["a", "b", "c", "d"];
+  assert.deepEqual(droppedOn(stack, "c", "b"), ["a", "c", "b", "d"], "onto the neighbour below: the two swap");
+  assert.deepEqual(droppedOn(stack, "b", "c"), ["a", "c", "b", "d"], "onto the neighbour above: the two swap");
+  assert.deepEqual(droppedOn(stack, "d", "a"), ["d", "a", "b", "c"], "newest to the very bottom");
+  assert.deepEqual(droppedOn(stack, "a", "d"), ["b", "c", "d", "a"], "oldest to the very top");
+  assert.deepEqual(droppedOn(stack, "c", undefined), ["c", "a", "b", "d"], "empty space under the list is the bottom");
+  assert.equal(droppedOn(stack, "c", "c"), undefined);
+  assert.equal(droppedOn(stack, "x", "c"), undefined);
   assert.equal(moved(["a", "b", "c"], 2, 1), undefined);
   assert.equal(moved(["a", "b", "c"], 0, -1), undefined);
 });

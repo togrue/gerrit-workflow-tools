@@ -23,7 +23,8 @@ with a count appears when chains had activity since you last looked. Click to op
 
 - The commits above your upstream, newest first, each with patchset state, votes, unresolved
   comments, and whether `ger push` would hold it back.
-- **Reorder by drag and drop**, or with the arrows on a row. All or nothing: if a commit does
+- **Reorder by drag and drop**, or with the arrows on a row. A dropped commit takes the place of
+  the one you drop it on, up or down; drop it under the list to make it the oldest. All or nothing: if a commit does
   not apply in its new place, nothing is touched and you are told which commit and which files.
 - **Conflict preview**: where two neighbours cannot swap places, the arrow is replaced by a
   blocked marker; click it (or hover the row) to see which commit would conflict in which files.
@@ -46,8 +47,12 @@ with a count appears when chains had activity since you last looked. Click to op
 - **CI**: opened on demand (it downloads build logs). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
-- **Check out**: someone else's change opens as a review checkout (`ger review`); your own
-  commit starts `ger edit` on it.
+- **Check Out for Review** (pull-request icon, changes on Gerrit): `ger review` fetches the
+  change into the review worktree (or a `change-<n>` branch here, per `ger.reviewCheckout`) and
+  offers to open that worktree in a new window. Your own stack is not touched.
+- **Edit Commit Here** (pencil icon, your local stack commits): `ger edit` runs in this checkout,
+  in a terminal: an interactive rebase that stops at the commit, so you amend it in place and
+  `git rebase --continue`. No worktree, nothing fetched.
 - **Hand to agent**: for one commit, the same runbook as below, narrowed to it.
 
 **Fix Stack with Agent** (robot icon on *Local stack*)
