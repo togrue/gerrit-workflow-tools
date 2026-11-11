@@ -186,8 +186,9 @@ def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritS
     if publish_blocked() and not args.dry_run:
         p.error(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     key, number, reviewed = _vote_target(args, service, cwd)
-    current = ChangeView.from_payload(service.rest.get_change(key)).current_revision_number
-    if reviewed is not None and current != reviewed:
+    # Only a review going on names a patchset the vote could miss; --change was just read from Gerrit.
+    current = reviewed and ChangeView.from_payload(service.rest.get_change(key)).current_revision_number
+    if current != reviewed:
         print(
             f"change {number} is at patchset {current}, you reviewed {reviewed}: run ger review {number} first",
             file=sys.stderr,

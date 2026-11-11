@@ -280,3 +280,14 @@ def test_naming_a_change_to_review_reads_it_from_gerrit_once(
     assert len(store.calls_to("get_change")) == 1
     assert _review(stack_repo, store, ["102"], monkeypatch)[0] == ExitCode.OK
     assert len(store.calls_to("get_change")) == 2
+
+
+def test_a_vote_on_a_named_change_reads_it_once(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--vote --change N`` resolves the change and votes: no second read of what was just read."""
+    store, _keys, _shas = gerrit
+    code, _out, err = _review(stack_repo, store, ["--vote", "CR+1", "--change", "102", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert len(store.calls_to("get_change")) == 1
+    assert len(store.calls_to("publish_drafts")) == 1
