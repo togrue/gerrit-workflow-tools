@@ -505,6 +505,18 @@ class GerritCache:
             for triplet in triplets:
                 self._clear_missing(conn, footer_of_triplet(triplet))
 
+    def forget_change(self, number: int, change_id: str | None = None) -> bool:
+        """Drop every row cached for change *number*, under any key, and a "no such change" for *change_id*.
+
+        For news that the change moved (an event): it only ever narrows what is trusted.
+        Returns whether anything was cached.
+        """
+        with self._connect() as conn:
+            keys = [str(row[0]) for row in conn.execute("SELECT change_id FROM changes WHERE number = ?", (number,))]
+            cleared = conn.execute("DELETE FROM missing_changes WHERE change_id = ?", (change_id or "",)).rowcount
+        self.invalidate_changes(keys)
+        return bool(keys) or cleared > 0
+
     def _load_follow_up(
         self,
         table: str,

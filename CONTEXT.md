@@ -214,6 +214,10 @@ _Avoid_: detail, payload (for the parsed value), change dict
 How long a cached ChangeInfo is served without re-checking Gerrit. Offline / cache-only operation is an unbounded trust window with the freshness probe skipped — it is a policy, not a separate **GerritRest**.
 _Avoid_: TTL, cache timeout, offline mode
 
+**Event stream**:
+Gerrit's `stream-events` feed, read over ssh (`core/gerrit/event_stream.py`). Optional: without ssh, a key Gerrit accepts or the *Stream Events* capability, `ger` polls exactly as before. An event only narrows the **trust window** — the cached rows of the change it names are dropped — and never puts data into the cache (ADR-0012).
+_Avoid_: notifications, webhooks, push updates, live mode
+
 ## Flagged ambiguities
 
 **"Client" is overloaded.**

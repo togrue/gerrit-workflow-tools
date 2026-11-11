@@ -318,6 +318,18 @@ class Settings:
         return self.flag("ger.reviewStage", default=True)
 
     @property
+    def event_stream(self) -> str:
+        """``ger.eventStream``: ``auto`` (the default: try once, quietly), ``on`` or ``off``."""
+        value = (self.get("ger.eventStream") or "").lower()
+        if value in _TRUTHY:
+            return "on"
+        return "off" if value in ("0", "false", "no", "off") else "auto"
+
+    def event_stream_ssh(self, part: str) -> str | None:
+        """``ger.eventStreamHost``, ``…Port`` or ``…User`` (*part*: ``Host``, ``Port``, ``User``): ssh overrides."""
+        return self.get(f"ger.eventStream{part}")
+
+    @property
     def inbox_require_verified(self) -> bool:
         """``inbox.requireVerified``: CI gate for ready chains. Default on."""
         return self.flag("inbox.requireVerified", default=True)

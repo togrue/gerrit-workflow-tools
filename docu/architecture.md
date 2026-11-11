@@ -102,7 +102,7 @@ Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which
 - `render/` does not import `cli_*`.
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
-- One owner per concept: git runs through `core/git_run.py`, commit rows are read by `core/stack.py`, and `HttpGerritRest` is built by `GerritService.from_cwd` plus the few owners the test names.
+- One owner per concept: git runs through `core/git_run.py` (ssh, for the event stream, only in `core/gerrit/event_source.py`), commit rows are read by `core/stack.py`, and `HttpGerritRest` is built by `GerritService.from_cwd` plus the few owners the test names.
 - Every command builds its runtime with `init_cli_runtime` and wraps its body in `run_cli_command`. `cli_bash_completion.py` is exempt: it runs from shell startup and must not load `core/`.
 - Modules stay at or under 400 lines. Larger ones are pinned at their size and only shrink; so do counts of `# pylint: disable=too-many-*`.
 
@@ -505,6 +505,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
 | `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, the comments context key, avatar stripping, follow-up payloads read back; `CacheInfo` (row counts) |
+| `core/gerrit/event_source.py` | Where the **event stream** comes from: the `EventSource` seam, `SshEventSource` (the one place ssh runs), `discover_ssh_target` (host, port, user from what ger already knows) |
+| `core/gerrit/event_stream.py` | Following the **event stream**: `EventStream` (one reader, reconnect, capped backoff, `StreamStatus`), `parse_event`, and what an event means (`apply_event`: drop that change's cached rows, ADR-0012) |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
 | `core/gerrit/change_resolution.py` | Changeish resolution: narrowing a changeish to one change, and to a local stack commit |
 | `core/gerrit/resolution.py` | The resolution model: `Resolution`, `SelectedChange`, `ChangeAmbiguousError`, resolution notes |
