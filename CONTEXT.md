@@ -215,7 +215,7 @@ One ChangeInfo payload, parsed once in `core/gerrit/` — labels, revisions and 
 _Avoid_: detail, payload (for the parsed value), change dict
 
 **Trust window**:
-How long a cached ChangeInfo is served without re-checking Gerrit. It starts when the row is fetched, and again whenever Gerrit confirms the row is current (ADR-0013). Offline / cache-only operation is an unbounded trust window with the freshness probe skipped — it is a policy, not a separate **GerritRest**.
+How long a cached ChangeInfo is served without re-checking Gerrit. It starts when the row is fetched, and again whenever Gerrit confirms the row is current (ADR-0013). "Gerrit has no such change" is trusted for the same window, no longer. Offline / cache-only operation is an unbounded trust window with the freshness probe skipped — it is a policy, not a separate **GerritRest**.
 _Avoid_: TTL, cache timeout, offline mode
 
 **Event stream**:

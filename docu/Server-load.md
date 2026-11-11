@@ -13,6 +13,36 @@ a server you run.
 - What cannot change is asked once: your account id, whether the host has the Checks plugin,
   commits that are merged history.
 
+## How old can what you see be
+
+Less asking must not mean older answers. What bounds each thing:
+
+| What you see | At most this old |
+|--------------|------------------|
+| A change of your stack: votes, patchsets, status, comment counts | the trust window (10 s); past it Gerrit confirms or replaces it |
+| "Not on Gerrit" for a commit | the trust window, also when the change was pushed from elsewhere |
+| The same Change-Id on another branch (a **sibling**) | as the stack: checked with the same request |
+| What a listing contains (`ger inbox`, *Review chains*) | asked every time |
+| Details of a listed change | exact: taken from the cache only when Gerrit's freshness token is unchanged |
+| Comments | exact, by the same token |
+| Your drafts | asked every time |
+| Anything you changed through `ger` (push, vote, reply, reviewers, topic) | dropped from the cache by the write, under every key |
+| The editor's views | the last poll (`ger.pollSeconds`), a Gerrit event, or a local git change, whichever came last |
+| The commit below a review chain | a merged change: a week (it stays merged); no change Gerrit shows: 15 minutes |
+| Your account id, whether the host has the Checks plugin | a week |
+
+`ger --refresh <command>` (the editor's *Refresh*) skips all of it and asks for everything.
+
+Known limits, where the freshness token (ADR-0007) cannot see a change:
+
+- A project that changes its submit rules: `submittable` of an untouched change stays as it
+  was until the change moves.
+- A Gerrit that sends no `meta_rev_id`: the token is `updated` plus the comment counts, so a
+  vote within the same second as the last fetch can be missed until the next update.
+- Checks-plugin rows are cached by the same token; a check that finishes without voting or
+  commenting does not move it.
+- A clock set back does not stretch any of the above: a time in the future is not trusted.
+
 Why: [ADR-0001](adr/0001-offline-is-a-trust-window-not-a-gerritrest.md),
 [ADR-0007](adr/0007-follow-up-cache-key-is-note-db-meta.md),
 [ADR-0013](adr/0013-gerrit-is-asked-lightly-and-only-for-what-moved.md).
