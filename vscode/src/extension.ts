@@ -151,7 +151,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
         const title = "Refreshing from Gerrit";
         await ui().progress({ viewId: "ger.overview" }, title, () => ui().progress({ viewId: "ger.stack" }, title, () => model.refresh({ fromGerrit: true })));
       }
-      if (model.state === "ready") {
+      if (model.stale) {
+        // Failed again: the views keep the last answer (marked out of date); you asked, so say why.
+        void ui().message("warning", `Still out of date: ${model.stale}`, {}, []);
+      } else if (model.state === "ready") {
         await changeView.open(); // still failing: the change shown stays as it was, the welcome text says why
       }
     },

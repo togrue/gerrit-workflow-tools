@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, rememberSeen, swapKey } from "./format";
 import { GerProcess } from "./server";
-import { GerState, failureState } from "./state";
+import { GerState, failureState, staleReason } from "./state";
 
 const SEEN_KEY = "ger.seen";
 
@@ -13,8 +13,8 @@ export interface RefreshOptions {
   /** Bypass the trust window, like `ger --refresh`. */
   fromGerrit?: boolean;
   /**
-   * Nobody asked for it (a timer, the window regaining focus): a new headline is news worth a
-   * notification. After your own action, or a refresh you asked for, the status bar is enough.
+   * Nobody asked for it (a timer, the window regaining focus, Gerrit's events): a new headline is
+   * news worth a notification. After your own action, or a refresh you asked for, the status bar is enough.
    */
   background?: boolean;
 }
@@ -45,9 +45,10 @@ export class Model implements vscode.Disposable {
   /** Why there is no overview: the service did not start, or did not answer. */
   failure: string | undefined;
   /**
-   * Why the overview shown is out of date: a refresh nobody asked for (a timer, an event) failed, and
-   * the last overview stays rather than blanking the views. Cleared by the next refresh that works.
-   * Permanent states (no program, no setup, untrusted, no repository) do clear the overview.
+   * Why the overview shown is out of date: a refresh failed (whoever asked for it), and the last
+   * overview stays rather than blanking the views. Cleared by the next refresh that works.
+   * Permanent states (no program, no setup, untrusted, no repository) do clear the overview, and so
+   * does a failure when there is no overview yet.
    */
   stale: string | undefined;
   /** What the views can show; their welcome texts follow it as the `ger.state` context key. */
@@ -67,8 +68,8 @@ export class Model implements vscode.Disposable {
   /** What to offer as upstream while the branch has none (and so no stack to show). */
   upstreamChoice: UpstreamChoice | undefined;
   private refreshing: Promise<void> | undefined;
-  private again: Promise<void> | undefined;
   private loadStartedAt = 0;
+  private again: Promise<void> | undefined;
   private againOptions: Required<RefreshOptions> | undefined;
 
   constructor(
@@ -109,14 +110,14 @@ export class Model implements vscode.Disposable {
     return this.again;
   }
 
-  private async load({ fromGerrit, background }: Required<RefreshOptions>): Promise<void> {
   /** Whether a load started at or after `time` (ms since the epoch): it saw whatever happened before. */
   loadedSince(time: number): boolean {
     return this.loadStartedAt >= time;
   }
 
-    // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
+  private async load({ fromGerrit, background }: Required<RefreshOptions>): Promise<void> {
     this.loadStartedAt = Date.now();
+    // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
     if (!vscode.workspace.isTrusted) {
       await this.setState("untrusted");
       this.changed.fire();
@@ -144,9 +145,9 @@ export class Model implements vscode.Disposable {
       await this.setState("ready");
     } catch (error) {
       const state = failureState(error);
-      if (background && state === "failed" && this.overview) {
-        // A hiccup: what was shown is still the best there is. Say it is old; the next refresh that works clears it.
-        this.stale = describeError(error);
+      if (state === "failed" && this.overview) {
+        // A hiccup, whoever asked: what was shown is still the best there is. Say it is old; the next refresh that works clears it.
+        this.stale = staleReason(error);
       } else {
         // What was shown may be wrong now: the views say what went wrong and what to do instead.
         this.failure = describeError(error);

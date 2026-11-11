@@ -32,6 +32,12 @@ export function failureState(error: unknown): GerState {
   return error instanceof ServeFailed && code === "GIT" ? "no-repo" : "failed";
 }
 
+/** Why a refresh that failed left the last overview in place: what the served error code says, else its message. */
+export function staleReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return error instanceof GerApiError && error.code === "GERRIT" ? `Gerrit unreachable: ${message}` : message;
+}
+
 /** States only you can end (install ger, run `ger setup`, trust the folder, open a repository): polling them again would only restart `ger serve` to fail again. */
 export function waitsForYou(state: GerState): boolean {
   return state === "no-executable" || state === "setup" || state === "untrusted" || state === "no-repo";

@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { GerApiError } from "../src/api";
 import { ExecutableNotFound, ServeFailed } from "../src/server";
-import { failureState } from "../src/state";
+import { failureState, staleReason } from "../src/state";
 import { checkoutRoot, chooseRepo, repoNote } from "../src/workspace";
 
 function tree(): { root: string; repo: string; worktree: string; plain: string } {
@@ -48,4 +48,10 @@ test("a failure to load leaves the state its reason calls for; the server classi
   assert.equal(failureState(new GerApiError("GIT", "a git command failed", 500)), "failed");
   assert.equal(failureState(new ServeFailed("Traceback …")), "failed");
   assert.equal(failureState(new Error("socket hang up")), "failed");
+});
+
+test("an overview kept after a failed refresh says why; an unreachable Gerrit says so", () => {
+  assert.equal(staleReason(new GerApiError("GERRIT", "HTTP 503 from gerrit.example", 502)), "Gerrit unreachable: HTTP 503 from gerrit.example");
+  assert.equal(staleReason(new GerApiError("GIT", "a git command failed", 500)), "a git command failed");
+  assert.equal(staleReason(new ServeFailed("ger serve exited")), "ger serve exited");
 });

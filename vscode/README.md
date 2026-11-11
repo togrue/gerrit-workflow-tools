@@ -13,9 +13,9 @@ In the editor, places are called *Gerrit* (the activity bar, the status bar item
 **Status bar** — the *headline*: the one change that most wants you (failed CI on your chain,
 then unresolved comments, then a negative vote, else the review that has waited longest). A bell
 with a count appears when chains had activity since you last looked. Click to open the change.
-When a refresh in the background fails (`ger serve` stopped and cannot be restarted), the views keep the last answer
-and the item carries a warning mark; its tooltip says it is out of date, and *Review chains* is labelled so. The next
-refresh that works clears the mark. While `ger` cannot run at all (not found, not set up, folder not trusted) the
+When a refresh fails, whether it ran in the background or you pressed *Refresh* (Gerrit unreachable, `ger serve` stopped
+and cannot be restarted), the views keep the last answer and the item carries a warning mark; its tooltip says why
+it is out of date, and *Review chains* is labelled so. The next refresh that works clears the mark. While `ger` cannot run at all (not found, not set up, folder not trusted) the
 views clear and say why, and the timer stops trying: it would only start `ger serve` to fail again, once per poll.
 The log says so once; regaining focus, *Retry* and a changed `ger.executable` still try.
 
