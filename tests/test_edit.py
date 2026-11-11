@@ -16,7 +16,7 @@ from gerrit_workflow_tools.cli_edit import (
 )
 from gerrit_workflow_tools.cli_rebase import main as grebase_main
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -473,3 +473,76 @@ def test_gedit_next_show_failure_is_returned(stack_repo: Path, monkeypatch: pyte
     _fake_rebase_capture(monkeypatch)
     code, _out, _err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
     assert code == int(ExitCode.CONFIG)
+
+
+def test_the_walk_says_which_commit_it_chose_before_the_editor(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 2}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+    _fake_rebase_capture(monkeypatch)
+
+    code, _out, err = run_cli(stack_repo, greword_main, ["--first-attention-commit"], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert f"rewording {rows[0].short_sha} {rows[0].subject} (oldest needing attention: 2 unresolved comments)" in err
+
+
+def test_the_walk_ending_after_a_continued_rebase_is_no_error(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+    code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+    assert code == 0, err
+
+    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+
+    assert code == ExitCode.NO_EDIT_ATTENTION
+    assert err.rstrip().endswith(
+        "rebase finished\nno commit needs edit attention (unresolved comments or build failed)"
+    )
+    assert "error:" not in err
+
+
+def test_drop_says_what_it_dropped_and_how_to_get_it_back(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    before = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    code, _out, err = run_cli(stack_repo, gedit_main, ["--drop", rows[-1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert f"dropped {rows[-1].short_sha} {rows[-1].subject}" in err
+    undo = err.split("to get it back: ")[1].split()
+    git(*undo[1:], cwd=stack_repo)
+    assert git_out("rev-parse", "HEAD", cwd=stack_repo) == before
+
+
+def test_reword_warning_says_how_to_keep_the_old_change(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    tip = rows[-1]
+    real_run = subprocess.run
+
+    def rewording_rebase(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            git("commit", "--amend", "--allow-empty", "-m", "no change id here", cwd=stack_repo)
+            return subprocess.CompletedProcess(cmd, 0)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", rewording_rebase)
+    code, _out, err = run_cli(
+        stack_repo, greword_main, [tip.sha], monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows))
+    )
+
+    assert code == 0
+    assert "The old change stays open on Gerrit" in err
+    assert f"put `Change-Id: {tip.change_id}` back with `ger reword" in err

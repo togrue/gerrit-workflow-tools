@@ -41,6 +41,7 @@ from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.render.status_fmt import attention_text
 
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,7 @@ def _resolve_target(
     settings: Settings,
     branch: str | None,
     gerrit: GerritRest | None,
+    action: str,
 ) -> tuple[str, str | None, CursorAction]:
     """Resolve the SHA to stop on, plus the Change-Id and action for the cursor move it earns."""
     rev_arg = args.rev
@@ -199,7 +201,14 @@ def _resolve_target(
     )
     for note in notes:
         print(note, file=sys.stderr)
+    # Said before the editor opens: the walk chose this commit, not the user.
+    why = attention_text(target) or "needs edit attention"
+    print(f"{_VERBS[action]} {target.short_sha} {target.summary} ({_WALK[mode]}: {why})", file=sys.stderr)
     return target.sha, target.change_id, mode
+
+
+_VERBS = {"edit": "editing", "reword": "rewording", "drop": "dropping"}
+_WALK = {"first": "oldest needing attention", "next": "next needing attention", "resume": "attention walk"}
 
 
 def _continue_stopped_rebase(cwd: Path) -> int:
@@ -212,6 +221,8 @@ def _continue_stopped_rebase(cwd: Path) -> int:
     print("continuing the rebase", file=sys.stderr)
     code = continue_rebase(cwd)
     if not rebase_in_progress(cwd):
+        if code == 0:
+            print("rebase finished", file=sys.stderr)
         return code
     if code == 0:
         print("rebase is still in progress; `ger edit -n` to continue it", file=sys.stderr)
@@ -262,7 +273,9 @@ def _run_interactive_stack_rebase(
         if continued != 0:
             return continued
     require_history_rewrite(cwd)
-    full, cursor_change_id, cursor_action = _resolve_target(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
+    full, cursor_change_id, cursor_action = _resolve_target(
+        cwd, args, settings=settings, branch=branch, gerrit=gerrit, action=action
+    )
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
 
@@ -279,9 +292,19 @@ def _run_interactive_stack_rebase(
         subject = git_out("log", "-1", "--format=%s", full, cwd=cwd)
         print(f"stopped at {short} {subject}", file=sys.stderr)
         print("next: amend it, then `ger edit -n`", file=sys.stderr)
+    elif returncode == 0 and action == "drop":
+        print(f"dropped {git_out('log', '-1', '--format=%h %s', full, cwd=cwd)}", file=sys.stderr)
+        print(
+            f"to get it back: git reset --keep {git_out('rev-parse', '--short', 'ORIG_HEAD', cwd=cwd)}", file=sys.stderr
+        )
     elif returncode == 0:
         for lost in sorted(change_ids_before - _stack_change_ids(cwd, branch)):
-            print(f"warning: Change-Id {lost} left the stack; the next push creates a new change", file=sys.stderr)
+            print(
+                f"warning: Change-Id {lost} left the stack; the next push creates a new change. "
+                f"The old change stays open on Gerrit: put `Change-Id: {lost}` back with `ger reword {short}` "
+                "to keep updating it, or abandon it there.",
+                file=sys.stderr,
+            )
     moved = default_action == "edit" and args.next_attention and returncode == 0
     if moved and settings.edit_next_show:
         from gerrit_workflow_tools.cli_ger import run_show
