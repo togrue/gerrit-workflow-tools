@@ -363,6 +363,9 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         else:
             print(json.dumps({"commits": json_payloads}, indent=2))
 
+    # Shown what is known locally; now say, once, why the rest is not.
+    if unavailable := next((item.gerrit_unavailable for item in shown if item.gerrit_unavailable), None):
+        raise unavailable
     return int(ExitCode.ATTENTION) if any_attention else int(ExitCode.OK)
 
 

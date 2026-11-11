@@ -157,7 +157,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
         return text
 
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    commits = annotate(commit_inputs, service=service, cwd=cwd)
+    commits = annotate(commit_inputs, service=service, cwd=cwd).require_gerrit()
 
     # Build short_sha → LogCommit lookup.
     commit_by_sha: dict[str, LogCommit] = {c.short_sha: c for c in commits}

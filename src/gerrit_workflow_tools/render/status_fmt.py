@@ -7,7 +7,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 
 
 def patchset_token(commit: LogCommit) -> str:
-    """Single-character patchset status: p/n/o/m/!/a/-."""
+    """Single-character patchset status: p/n/o/m/!/?/a/-, and ``~`` when Gerrit could not be asked."""
     if commit.abandoned:
         return "a"
     status = commit.patchset_status
@@ -23,6 +23,8 @@ def patchset_token(commit: LogCommit) -> str:
         return "n"
     if status == "outdated":
         return "o"
+    if status == "unknown":
+        return "~"
     return "-"
 
 
@@ -57,8 +59,11 @@ def comments_token(count: int) -> str:
     return "com" if count > 0 else "   "
 
 
+GERRIT_UNKNOWN_TEXT = "Gerrit state unknown"
+
 _TERMINAL_TEXT = (
     (Attention.MISSING_CHANGE_ID, "missing Change-Id"),
+    (Attention.GERRIT_UNKNOWN, GERRIT_UNKNOWN_TEXT),
     (Attention.ABANDONED, "abandoned"),
     (Attention.NOT_PUSHED, Attention.NOT_PUSHED),
     (Attention.MERGED_DRIFT, "merged drift"),

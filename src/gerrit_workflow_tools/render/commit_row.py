@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
+    GERRIT_UNKNOWN_TEXT,
     code_review_token,
     comments_token,
     patchset_token,
@@ -226,6 +227,7 @@ def extra_detail_lines(commit: LogCommit) -> list[str]:
 # Reasons that replace every other hint: the change cannot be reviewed as it stands.
 _TERMINAL_TOKENS = (
     (Attention.MISSING_CHANGE_ID, "missing Change-Id", ANSI_YELLOW),
+    (Attention.GERRIT_UNKNOWN, GERRIT_UNKNOWN_TEXT, ANSI_YELLOW),
     (Attention.ABANDONED, "abandoned", ANSI_RED),
     (Attention.NOT_PUSHED, Attention.NOT_PUSHED, ANSI_YELLOW),
     (Attention.MERGED_DRIFT, "merged drift", ANSI_RED),

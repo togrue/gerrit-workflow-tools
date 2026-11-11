@@ -205,7 +205,7 @@ class ChangeStore:
     def _row_or_raise(self, ref: str) -> dict[str, Any]:
         rows = self._lookup_rows(ref)
         if not rows:
-            raise GerritApiError(f"no matching change {ref}")
+            raise GerritApiError(f"Gerrit HTTP 404: no matching change {ref}", status=404)
         return rows[0]
 
     def _payload_id(self, ref: str) -> str:
@@ -221,7 +221,7 @@ class ChangeStore:
         rows = self._lookup_rows(ref)
         if len(rows) > 1 and "~" not in ref and not ref.isdigit():
             raise GerritApiError(
-                f"Gerrit HTTP 404 for changes/{ref}/comments: Not Found (Multiple changes found for {ref})"
+                f"Gerrit HTTP 404 for changes/{ref}/comments: Not Found (Multiple changes found for {ref})", status=404
             )
         return self._payload_id(ref)
 
@@ -357,7 +357,7 @@ class ChangeStore:
             else:
                 payload = next(iter(self._accounts.values()), None)
             if payload is None:
-                raise GerritApiError("no matching account self")
+                raise GerritApiError("Gerrit HTTP 404: no matching account self", status=404)
             return payload
         try:
             payload = self._accounts.get(int(account_id))
@@ -367,7 +367,7 @@ class ChangeStore:
                 None,
             )
         if payload is None:
-            raise GerritApiError(f"no matching account {account_id}")
+            raise GerritApiError(f"Gerrit HTTP 404: no matching account {account_id}", status=404)
         return payload
 
     def get_comments(

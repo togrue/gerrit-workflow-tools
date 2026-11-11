@@ -37,6 +37,8 @@ class Attention:  # pylint: disable=too-few-public-methods
     AWAITING_REVIEW = "awaiting-review"
     UNRESOLVED_COMMENTS = "unresolved-comments"
     WIP = "wip"
+    GERRIT_UNKNOWN = "gerrit-unknown"
+    """Gerrit could not be asked, so this commit's review state is unknown."""
 
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``).
@@ -60,6 +62,8 @@ def _settled_reasons(commit: LogCommit, *, chain_blocked: bool) -> list[str] | N
     if not commit.change_id and commit.patchset_status != PatchsetStatus.MERGED_SAME:
         # Prefer missing-change-id over only not-pushed: overlay cannot match Gerrit without a footer.
         return [Attention.MISSING_CHANGE_ID]
+    if commit.patchset_status == PatchsetStatus.UNKNOWN:
+        return [Attention.GERRIT_UNKNOWN]
     if commit.abandoned:
         return [Attention.ABANDONED]
     if commit.patchset_status == PatchsetStatus.ABSENT:

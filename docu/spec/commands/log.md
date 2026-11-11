@@ -61,7 +61,9 @@ Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when co
 | `1` | At least one commit requires attention |
 | `2` | Invalid usage |
 | `3` | A revision in the range does not exist |
-| `5` | Gerrit API error |
+| `5` | Gerrit API error, or Gerrit could not be asked at all (see below) |
+
+**Gerrit unreachable or credentials rejected:** the local stack is still printed, but every change's Gerrit state is shown as unknown (patchset `~`, hint `Gerrit state unknown`, JSON `patchset_status: "unknown"` and reason `gerrit-unknown`), never as `not-pushed`. One line on stderr says what happened (`gerrit error: Gerrit unreachable at host:port (connection refused)` or `gerrit error: Gerrit at host rejected the credentials (HTTP 401); …`), and the exit code is `5`. A batch that fails this way is not retried change by change. Cached state inside the [trust window](../../adr/0001-offline-is-a-trust-window-not-a-gerritrest.md) is still served as valid; once any change needs Gerrit, the whole overlay is unknown.
 
 Attention rules: shared `determine_attention()` in `core/attention.py` (same family as `ger edit --first-attention-commit`). The trailing hints are a rendering of `attention_reasons`, so a project attention strategy changes both. `ci-failed` means a failed Checks run or `Verified <= -1`.
 
@@ -71,7 +73,7 @@ A commit with no usable Change-Id footer (missing or malformed) must include `mi
 
 ## JSON fields
 
-Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `ci_links`, `ci_pipelines`, `gerrit_url`, `number` (the change number, `null` before the first push), `last_pushed_votes` (`{verified, code_review}` of the pushed patchset while the commit is `newer` with different code, else `null`; Gerrit may not carry them to the next push. A commit that is only rebased keeps its votes in `verified` and `code_review`), `submittable`, `work_in_progress`, `private`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent`). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid. `ci_links` is a list of `{label, url, source}` (`source`: `checks` \| `message`) from the project CI registry when present, otherwise from the built-in Jenkins message parser when Verified is −1; otherwise `[]`. `ci_pipelines` lists Checks-plugin rows as `{label, state, url?}` when fetched (verbose log / show).
+Per commit: `sha`, `summary`, `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `ci_links`, `ci_pipelines`, `gerrit_url`, `number` (the change number, `null` before the first push), `last_pushed_votes` (`{verified, code_review}` of the pushed patchset while the commit is `newer` with different code, else `null`; Gerrit may not carry them to the next push. A commit that is only rebased keeps its votes in `verified` and `code_review`), `submittable`, `work_in_progress`, `private`, `change_id`, `attention_reasons`, etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent` \| `unknown` \| a merged variant). `attention_reasons` includes `missing-change-id` when the local footer is absent or invalid. `ci_links` is a list of `{label, url, source}` (`source`: `checks` \| `message`) from the project CI registry when present, otherwise from the built-in Jenkins message parser when Verified is −1; otherwise `[]`. `ci_pipelines` lists Checks-plugin rows as `{label, state, url?}` when fetched (verbose log / show).
 
 ---
 

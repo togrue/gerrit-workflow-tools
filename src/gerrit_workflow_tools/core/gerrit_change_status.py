@@ -37,6 +37,8 @@ class PatchsetStatus(str, Enum):
     MERGED_SAME = "merged-same"
     MERGED_DRIFT = "merged-drift"
     MERGED_UNKNOWN = "merged-unknown"
+    UNKNOWN = "unknown"
+    """Gerrit could not be asked (unreachable, credentials rejected): nothing is known, not even absence."""
 
 
 @dataclass(frozen=True)
@@ -248,6 +250,25 @@ def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | Non
     return f"{base}/comment/{cid_enc}/"
 
 
+def local_log_commit(row: Commit, status: PatchsetStatus) -> LogCommit:
+    """A ``LogCommit`` carrying no Gerrit state: *status* says whether that is absence or ignorance.
+
+    A commit without a valid Change-Id is ``ABSENT`` either way: Gerrit cannot hold it.
+    """
+    return LogCommit(
+        sha=row.sha,
+        short_sha=row.short_sha,
+        summary=row.subject,
+        change_id=row.valid_change_id,
+        pushed=False,
+        abandoned=False,
+        patchset_status=status if row.valid_change_id else PatchsetStatus.ABSENT,
+        verified=None,
+        code_review=None,
+        comments_unresolved=0,
+    )
+
+
 def build_log_commit(
     row: Commit,
     change: ChangeView | None,
@@ -266,21 +287,7 @@ def build_log_commit(
     sha, short, summary, change_id = row.sha, row.short_sha, row.subject, row.valid_change_id
 
     if not change_id or change is None:
-        return (
-            LogCommit(
-                sha=sha,
-                short_sha=short,
-                summary=summary,
-                change_id=change_id,
-                pushed=False,
-                abandoned=False,
-                patchset_status=PatchsetStatus.ABSENT,
-                verified=None,
-                code_review=None,
-                comments_unresolved=0,
-            ),
-            frozenset(),
-        )
+        return local_log_commit(row, PatchsetStatus.ABSENT), frozenset()
 
     st = change.status.upper() if change.status else ""
     needed: set[str] = set()

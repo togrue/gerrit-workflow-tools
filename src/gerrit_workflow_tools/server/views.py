@@ -126,6 +126,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
             "not_on_gerrit": sum(1 for c in view.commits if _NOT_ON_GERRIT.intersection(c.attention_reasons)),
         },
         "commits": commits,
+        **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
 
 

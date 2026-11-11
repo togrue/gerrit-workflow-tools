@@ -144,7 +144,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         raise ChangeResolutionError("no commits to inspect")
     for resolved in targets:
         print_resolution_note(resolved.resolution)
-    commits = annotate([t.row for t in targets], service=service, cwd=cwd)
+    commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
 
     ci = CiContentService.from_settings(cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh)
     body = _body_mode(args)

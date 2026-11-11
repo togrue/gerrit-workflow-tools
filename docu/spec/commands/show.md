@@ -78,8 +78,9 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 |------|---------|
 | `0` | Success, no attention reasons |
 | `1` | Success but attention required |
-| `3` | Gerrit / git resolution error |
+| `3` | The changeish names no commit or change (Gerrit answered 404, or no such git revision) |
 | `4` | Ambiguous changeish after narrowing |
+| `5` | Gerrit failed: unreachable, credentials rejected, or another HTTP error. A local commit is still shown, its Gerrit state unknown, as in [`ger log`](log.md#attention--exit-codes) |
 
 ---
 

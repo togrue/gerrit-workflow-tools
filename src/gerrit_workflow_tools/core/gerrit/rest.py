@@ -24,6 +24,15 @@ class GerritApiError(RuntimeError):
         self.status = status
 
 
+class GerritUnavailableError(GerritApiError):
+    """Gerrit could not be asked at all: unreachable, or it rejected the credentials.
+
+    Unlike a per-change failure, this says nothing about any one change, so nothing may
+    read it as "not found" or "not pushed", and retrying change by change cannot help.
+    The message is the whole story, written for the user.
+    """
+
+
 def norm_change_id(change_id: str) -> str:
     """Normalize Change-Id values for case-insensitive lookups (lowercase)."""
     return change_id.lower()

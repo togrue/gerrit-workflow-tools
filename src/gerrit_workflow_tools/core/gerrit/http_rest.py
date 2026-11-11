@@ -5,12 +5,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import socket
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url, record_call
@@ -18,6 +19,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     LOG_QUERY_OPTIONS,
     GerritApiError,
+    GerritUnavailableError,
     change_id_for_gerrit_rest_path,
     encode_gerrit_path_segment,
     resolve_gerrit_web_base,
@@ -60,6 +62,20 @@ def _strip_magic_json_prefix(raw: str) -> str:
     return raw
 
 
+def _why_unreachable(error: OSError) -> str:
+    """A few words on why a connection failed, without the platform's localized prose."""
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ConnectionRefusedError):
+        return "connection refused"
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "timed out"
+    if isinstance(reason, socket.gaierror):
+        return "unknown host"
+    if isinstance(reason, OSError) and reason.strerror:
+        return reason.strerror
+    return str(reason)
+
+
 @dataclass(frozen=True)
 class GerritAuth:
     """Resolved HTTP Basic credentials for one Gerrit host."""
@@ -93,6 +109,11 @@ class HttpGerritRest:
         """
         self.web_base = web_base.rstrip("/")
         self.auth = auth
+
+    @property
+    def host(self) -> str:
+        """``host[:port]`` of :attr:`web_base`, which is how a failure names the server."""
+        return urlsplit(self.web_base).netloc or self.web_base
 
     @classmethod
     def from_settings(cls, settings: Settings, *, web_base: str | None = None) -> HttpGerritRest:
@@ -144,12 +165,18 @@ class HttpGerritRest:
             with urlopen(req, timeout=120) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
         except HTTPError as e:
+            if e.code == 401:
+                raise GerritUnavailableError(
+                    f"Gerrit at {self.host} rejected the credentials (HTTP 401); "
+                    "check gerrit.user and gerrit.token, or run `ger setup`",
+                    status=e.code,
+                ) from e
             raise GerritApiError(
                 f"Gerrit HTTP {e.code} for {url}: {e.reason}",
                 status=e.code,
             ) from e
-        except URLError as e:
-            raise GerritApiError(f"Gerrit request failed: {e.reason!r}") from e
+        except (URLError, OSError) as e:
+            raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({_why_unreachable(e)})") from e
         finally:
             record_call("gerrit", label, time.perf_counter() - t0)
 

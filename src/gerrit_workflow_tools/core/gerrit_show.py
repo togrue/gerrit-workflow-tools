@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.changeish import unresolved_rev_message
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, merge_chains
@@ -17,7 +18,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     resolve_changeish,
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest, norm_change_id
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
@@ -97,7 +98,7 @@ def resolve_show_commit_row(
     if resolution.kind == "git-rev":
         sha = resolution.local_sha
         if sha is None:
-            raise ChangeResolutionError(f"cannot resolve git revision {raw_arg!r}")
+            raise ChangeResolutionError(unresolved_rev_message(raw_arg))
         row = _row_from_local_commit(cwd, sha)
         return ShowCommitResolution(row=row, is_local_commit=True, resolution=resolution)
 
@@ -272,6 +273,8 @@ class ShownCommit:
     """Gerrit and local comment chains, as selected."""
     ci_contents: list[CiContent] | None
     """**CI content** per failed **CI link**; ``None`` when it was not asked for."""
+    gerrit_unavailable: GerritUnavailableError | None = None
+    """Why Gerrit could not be asked; :attr:`commit` then holds local state only."""
 
     @property
     def ci_verdict_contents(self) -> list[CiContent] | None:
@@ -298,9 +301,10 @@ def load_shown_commits(
     *targets* must be in stack order for chain-blocking attention. A CI link that cannot be
     fetched stays on its result; nothing here raises for it.
     """
-    commits = annotate(
+    annotated = annotate(
         [t.row for t in targets], service=service, cwd=service.cwd, fetch_ci_pipelines=fetch_ci_pipelines
     )
+    commits = annotated.commits
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
     shown: list[ShownCommit] = []
@@ -314,5 +318,5 @@ def load_shown_commits(
             )
         if rest_key:
             chains = merge_chains(chains, local_chains_of(service, rest_key, commit.sha or None, comments=comments))
-        shown.append(ShownCommit(target=target, commit=commit, chains=chains, ci_contents=ci_contents))
+        shown.append(ShownCommit(target, commit, chains, ci_contents, annotated.gerrit_unavailable))
     return shown

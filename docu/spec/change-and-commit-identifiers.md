@@ -103,7 +103,10 @@ it as follows.
 ### 2.2 Disambiguation rules
 
 - A **bare integer** (`120045`) is a **git revision**, never a change number. To
-  mean the change, write `change:120045`.
+  mean the change, write `change:120045`. When no commit has that name, every command
+  says so the same way and points there: `cannot resolve '120045': no commit by that
+  name; did you mean change:120045?` (exit `3`). An `I…` token that is not a valid
+  Change-Id gets `…, and no Change-Id either (I plus 40 hex digits)`.
 - A **triplet**, **change number**, **change ref**, and **URL** each identify
   **exactly one** Gerrit change. No ambiguity is possible; if the change does not
   exist, that is a not-found error, not an ambiguity error.

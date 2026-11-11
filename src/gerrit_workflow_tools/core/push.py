@@ -245,8 +245,9 @@ def prepare(
         return PushRefusal("error: nothing to push (empty ready prefix)", boundary=boundary, warnings=warnings)
     try:
         commits = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
-        marks = push_marks(cwd, commits, settings=settings, gerrit=gerrit) if show_attributes else None
         existing = check_existing_changes(cwd, commits, settings=settings, gerrit=gerrit)
+        ask_marks = show_attributes and not existing.gerrit_unavailable
+        marks = push_marks(cwd, commits, settings=settings, gerrit=gerrit) if ask_marks else None
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
     plan = PushPlan(

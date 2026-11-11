@@ -491,7 +491,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError`, change-id path encoding, `parallel_map`, `self_account_id` |
+| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError` and `GerritUnavailableError` (Gerrit could not be asked at all), change-id path encoding, `parallel_map`, `self_account_id` |
 | `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth` |
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe, `since:` delta |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |

@@ -107,7 +107,7 @@ def test_an_unsubmittable_commit_blocks_the_ones_after_it(stack_repo: Path) -> N
         commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
         service=_service(stack_repo, store),
         cwd=stack_repo,
-    )
+    ).commits
 
     assert "chain-blocked" not in commits[0].attention_reasons, "the blocker itself is not blocked"
     assert all("chain-blocked" in c.attention_reasons for c in commits[1:]), (
@@ -124,7 +124,7 @@ def test_a_healthy_stack_blocks_nothing(stack_repo: Path) -> None:
         commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
         service=_service(stack_repo, store),
         cwd=stack_repo,
-    )
+    ).commits
 
     assert all("chain-blocked" not in c.attention_reasons for c in commits)
 
@@ -139,7 +139,7 @@ def test_a_lone_commit_is_never_chain_blocked(stack_repo: Path) -> None:
     )
     single = commits_in_range(stack_repo, _range(stack_repo), first_parent=True)[-1:]
 
-    commits = annotate(single, service=_service(stack_repo, store), cwd=stack_repo)
+    commits = annotate(single, service=_service(stack_repo, store), cwd=stack_repo).commits
 
     assert len(commits) == 1
     assert "chain-blocked" not in commits[0].attention_reasons

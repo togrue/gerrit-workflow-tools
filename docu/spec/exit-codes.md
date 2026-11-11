@@ -11,7 +11,7 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | `2` | `USAGE` | Bad arguments or invalid input format. Also what argparse itself exits with. |
 | `3` | `NOT_FOUND` | A changeish, Change-Id or git revision resolved to nothing |
 | `4` | `AMBIGUOUS` | Several candidates survived narrowing; `--json` lists them under `alternatives` |
-| `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable |
+| `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable. Never reported as `NOT_FOUND`: only Gerrit's own 404 means "no such change". A command that can still show local state (`ger log`, `ger show`) shows it, with the Gerrit state unknown, then exits `5` |
 | `6` | `CONFIG` | Required git configuration is missing (`gerrit.webUrl`, credentials) |
 | `7` | `GIT` | A git command failed |
 | `8` | `DUPLICATE_CHANGE_ID` | The same Change-Id appears on more than one local commit |

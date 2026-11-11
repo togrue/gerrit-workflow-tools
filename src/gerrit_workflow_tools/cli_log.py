@@ -272,6 +272,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         ]
         payload = {"stack": stack_payload, "commits": commit_payload}
         print(json.dumps(payload, indent=2))
+        if stack_view.gerrit_unavailable is not None:
+            raise stack_view.gerrit_unavailable
         return int(exit_code)
 
     _render_text_output(
@@ -293,6 +295,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     )
     print()
     print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
+    if stack_view.gerrit_unavailable is not None:
+        raise stack_view.gerrit_unavailable
     return int(exit_code)
 
 

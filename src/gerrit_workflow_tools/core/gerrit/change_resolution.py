@@ -8,18 +8,27 @@ from pathlib import Path
 from typing import Any, Literal
 
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
-from gerrit_workflow_tools.core.changeish import KINDS_NEEDING_GERRIT, Changeish, ChangeishKind, address_problem, parse
+from gerrit_workflow_tools.core.changeish import (
+    KINDS_NEEDING_GERRIT,
+    Changeish,
+    ChangeishKind,
+    address_problem,
+    parse,
+    unresolved_rev_message,
+)
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
+    GerritUnavailableError,
     norm_change_id,
     pick_change_from_query_result,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git_out
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
 
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
@@ -126,37 +135,26 @@ def parse_changeish(s: str) -> Changeish:
     return parsed
 
 
-def _verified_local_sha(cwd: Path | str | None, rev: str) -> str:
-    """Full SHA for *rev*, with a message that names the input rather than git's internals."""
+def local_commit_sha(cwd: Path | str | None, rev: str) -> str:
+    """Full SHA of the commit *rev* names; the one "cannot resolve" error every command shares."""
     sha = commit_sha_or_none(cwd, rev)
     if sha is None:
-        raise ChangeResolutionError(f"not a valid commit-ish: {rev!r}")
+        raise ChangeResolutionError(unresolved_rev_message(rev))
     return sha
 
 
-def _resolve_local_sha(cwd: Path | str | None, rev: str) -> str:
-    try:
-        return git_out("rev-parse", rev, cwd=cwd)
-    except GitError as e:
-        raise ChangeResolutionError(f"cannot resolve git revision {rev!r}") from e
-
-
 def _fetch_change_row(client: GerritRest, change_key: str) -> dict[str, Any]:
+    """Only Gerrit's 404 means "not found"; any other failure is Gerrit's and says so."""
     try:
         return client.get_change(change_key)
     except GerritApiError as e:
+        if e.status != 404:
+            raise
         raise ChangeResolutionError(f"Gerrit change not found: {change_key!r}") from e
 
 
-def _query_changes(client: GerritRest, query: str, *, n: int = 25) -> list[dict[str, Any]]:
-    try:
-        return client.query_changes(query, n=n)
-    except GerritApiError as e:
-        raise ChangeResolutionError(f"Gerrit query failed: {e}") from e
-
-
 def _fetch_single_from_query(client: GerritRest, query: str) -> dict[str, Any]:
-    rows = _query_changes(client, query)
+    rows = client.query_changes(query)
     try:
         return pick_change_from_query_result(rows)
     except GerritApiError as e:
@@ -269,13 +267,18 @@ def resolve_changeish(
     # where the Change-Id comes from. Everything else addresses one change directly.
     change_id = parsed.change_id
     if parsed.kind == "git-rev":
-        resolution.local_sha = _resolve_local_sha(cwd, parsed.rev or parsed.raw)
+        resolution.local_sha = local_commit_sha(cwd, parsed.rev or parsed.raw)
         change_id = change_id_of_rev(cwd, resolution.local_sha)
         if not change_id:
             return resolution
 
     if change_id is not None and parsed.kind in ("git-rev", "change-id"):
-        rows = _query_changes(client, f"change:{change_id}")
+        try:
+            rows = client.query_changes(f"change:{change_id}")
+        except GerritUnavailableError:  # A local commit still shows; the overlay reports why.
+            if parsed.kind != "git-rev":
+                raise
+            rows = []
         if not rows:
             return resolution
         try:
@@ -314,8 +317,6 @@ def _stack_commit(
     resolution: Resolution | None = None,
 ) -> StackCommit:
     """Wrap *sha*, optionally insisting it is one of the **local stack**'s commits."""
-    from gerrit_workflow_tools.core.stack import get_stack_snapshot
-
     if require_in_stack:
         snap = get_stack_snapshot(cwd, branch)
         if sha not in {c.sha for c in snap.commits}:
@@ -349,7 +350,7 @@ def resolve_to_stack_sha(
     parsed = parse_changeish(ref)
 
     if parsed.kind == "git-rev":
-        sha = _verified_local_sha(cwd, parsed.raw)
+        sha = local_commit_sha(cwd, parsed.raw)
         return _stack_commit(cwd, branch, sha, require_in_stack=require_in_stack)
 
     if parsed.kind == "change-ref":
@@ -372,8 +373,6 @@ def resolve_to_stack_sha(
         if resolution.selected is None:
             raise ChangeResolutionError(f"no Gerrit change resolved for {parsed.raw!r}")
         change_id = resolution.selected.change_id
-
-    from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
     # Searching the stack for the Change-Id already guarantees membership, so this path needs
     # no separate require_in_stack check.

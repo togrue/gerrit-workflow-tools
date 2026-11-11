@@ -160,7 +160,7 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
     git("add", "a.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["42424242"], monkeypatch)
     assert code != 0
-    assert "not a valid commit" in err.lower()
+    assert "cannot resolve '42424242': no commit by that name; did you mean change:42424242?" in err
 
 
 def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

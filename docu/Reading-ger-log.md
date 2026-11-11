@@ -51,6 +51,7 @@ Single letter: is this local commit aligned with Gerrit?
 | `m` | **Merged** (same content as merged change) | Often safe to drop or rebase away |
 | `!` | **Merged drift** — merged on server but local content diverged | Investigate; may need manual fix |
 | `?` | **Merged (equivalence unknown)** | Check Gerrit; rebase if unsure |
+| `~` | **Unknown** — Gerrit could not be asked (unreachable, credentials rejected); the last stderr line says why | Fix the connection or credentials (`ger setup`), then rerun |
 
 When a commit is **not pushed** (`-`), Verified / Code-Review / comment columns are blank — there is nothing on Gerrit to show. A commit marked `n` shows `v?` and `cr?`: the votes on Gerrit belong to the previous patch set, so they say nothing about this commit yet.
 
@@ -100,6 +101,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 |------|---------|
 | `missing Change-Id` | Commit message has no usable Change-Id footer (absent or malformed); JSON reason `missing-change-id` |
 | `not-pushed` | Commit not on Gerrit yet |
+| `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comment(s)` | Open review threads |
 | `no reviewers` | Change has no reviewers assigned |

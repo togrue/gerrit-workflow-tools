@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     LOG_QUERY_OPTIONS,
     GerritApiError,
     GerritRest,
+    GerritUnavailableError,
     parallel_map,
     pick_change_from_query_result,
 )
@@ -211,10 +212,13 @@ def _query_batch_with_halving(
     it replaces. Halving finds the size the server accepts in ``O(log n)`` requests instead.
 
     Errors that are not about size keep the per-ref fallback: they are per-change problems
-    (a deleted change, a permission gap) that splitting cannot fix.
+    (a deleted change, a permission gap) that splitting cannot fix. An unreachable Gerrit,
+    or one that rejects the credentials, is no per-change problem: it propagates, once.
     """
     try:
         return client.query_changes(build_query(chunk), n=_batch_query_limit(chunk), options=opts)
+    except GerritUnavailableError:
+        raise
     except GerritApiError as error:
         if len(chunk) > 1 and error.status in _OVERSIZED_REQUEST_STATUSES:
             mid = len(chunk) // 2
@@ -235,6 +239,8 @@ def _one_change_rows(client: GerritRest, ref: str) -> list[dict[str, Any]]:
     """Rows for a single ref, for use as the leaf of a failed batch."""
     try:
         one = query_single_change(client, ref)
+    except GerritUnavailableError:
+        raise
     except GerritApiError as error:
         logger.warning("Gerrit query failed for %s: %s", ref, error)
         return []
@@ -271,12 +277,11 @@ def _query_change_refs(client: GerritRest, refs: list[str], opts: list[str]) -> 
 
 
 def query_single_change(client: GerritRest, ref: str) -> dict[str, Any] | None:
-    """Query one Gerrit change by triplet or numeric id; raise on ambiguous multi-match."""
-    try:
-        rows = client.query_changes(_batch_ref_query(parse(ref)), n=5, options=list(LOG_QUERY_OPTIONS))
-    except GerritApiError as e:
-        logger.warning("Gerrit query failed for %s: %s", ref, e)
-        return None
+    """Query one Gerrit change by triplet or numeric id; raise on ambiguous multi-match.
+
+    ``None`` means Gerrit answered and has no such change. A failed query raises.
+    """
+    rows = client.query_changes(_batch_ref_query(parse(ref)), n=5, options=list(LOG_QUERY_OPTIONS))
     if not rows:
         return None
     return pick_change_from_query_result(rows)
@@ -333,6 +338,8 @@ def delta_changes_since(
     query = f'project:{project} since:"{since}"'
     try:
         rows = client.query_changes(query, n=n, options=list(LOG_QUERY_OPTIONS))
+    except GerritUnavailableError:
+        raise
     except GerritApiError as error:
         logger.warning("delta query failed for project:%s since:%s: %s", project, since, error)
         return [], False
@@ -365,6 +372,8 @@ def batch_load_changes_by_commit(
     def _one_commit_rows(sha: str) -> list[dict[str, Any]]:
         try:
             return client.query_changes(f"commit:{sha}", n=5, options=opts)
+        except GerritUnavailableError:
+            raise
         except GerritApiError as error:
             logger.warning("Gerrit query failed for commit:%s: %s", sha, error)
             return []

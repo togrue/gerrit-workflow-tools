@@ -18,7 +18,7 @@ caller decides whether to prompt, fail, or carry on.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import annotate_attention
@@ -28,10 +28,10 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_resolution_note,
     resolution_from_change_rows,
 )
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context, stack_project
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
@@ -50,9 +50,19 @@ class AnnotatedStack:
     notes_by_sha: dict[str, str] = field(default_factory=dict)
     """Multi-branch resolution notes, keyed by commit SHA. Only commits whose Change-Id
     matched on more than one branch appear here."""
+    gerrit_unavailable: GerritUnavailableError | None = None
+    """Why Gerrit could not be asked, when it could not. Every commit then carries
+    :attr:`PatchsetStatus.UNKNOWN` rather than a guess; the caller shows the local state and
+    reports this, once."""
 
     def __bool__(self) -> bool:
         return bool(self.commits)
+
+    def require_gerrit(self) -> list[LogCommit]:
+        """:attr:`commits`, for a caller that has nothing to show without Gerrit; else raise why."""
+        if self.gerrit_unavailable is not None:
+            raise self.gerrit_unavailable
+        return self.commits
 
 
 def resolve_rev_range(cwd: Path | str | None, arg_rev_range: str | None, *, settings: Settings) -> str:
@@ -98,16 +108,24 @@ def annotate(
     cwd: Path | str | None,
     fetch_ci_pipelines: bool = False,
     on_target: frozenset[str] = frozenset(),
-) -> list[LogCommit]:
+) -> AnnotatedStack:
     """Overlay Gerrit state onto *rows* and annotate attention, oldest first.
 
     Order matters: attention includes chain-blocking, so *rows* must be in stack order for
     an earlier commit to block the ones after it. *on_target* names commits already on the
     target branch: with no change to report, they count as merged rather than not pushed.
+
+    When Gerrit cannot be asked at all, the rows come back with an unknown Gerrit state and
+    the reason in :attr:`AnnotatedStack.gerrit_unavailable`: shown, never guessed.
     """
-    commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
+    unavailable: GerritUnavailableError | None = None
+    try:
+        commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
+    except GerritUnavailableError as error:
+        unavailable = error
+        commits = [local_log_commit(row, PatchsetStatus.UNKNOWN) for row in rows]
     for commit in commits:
-        if commit.sha in on_target and commit.patchset_status == PatchsetStatus.ABSENT:
+        if commit.sha in on_target and commit.patchset_status in (PatchsetStatus.ABSENT, PatchsetStatus.UNKNOWN):
             commit.patchset_status = PatchsetStatus.MERGED_SAME
             commit.merged_equivalent = True
     annotate_attention(
@@ -117,7 +135,7 @@ def annotate(
         settings=service.settings,
         web_base=service.web_base,
     )
-    return commits
+    return AnnotatedStack(commits=commits, rows=list(rows), gerrit_unavailable=unavailable)
 
 
 def _commits_on_target(
@@ -183,14 +201,16 @@ def load_annotated_stack(
     ``first_parent=False`` for ``--follow-merges``.
 
     Returns an empty stack when the range holds no commits — deciding whether that is an
-    error is the caller's business. Raises :class:`GitError` for git failures,
-    :class:`ValueError` when ``gerrit.webUrl`` is unset, and
-    :class:`ChangeResolutionError` / :class:`GerritApiError` for Gerrit failures.
+    error is the caller's business. Raises :class:`GitError` for git failures and
+    :class:`ValueError` when ``gerrit.webUrl`` is unset. A Gerrit that cannot be asked at all
+    does not raise: see :attr:`AnnotatedStack.gerrit_unavailable`.
     """
     rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
     if not rows:
         return AnnotatedStack()
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     on_target = _commits_on_target(cwd, rows, rev_range, settings=settings)
-    commits = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target)
-    return AnnotatedStack(commits=commits, rows=rows, notes_by_sha=_multi_branch_notes(service, rows, cwd))
+    annotated = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target)
+    if annotated.gerrit_unavailable is not None:
+        return annotated
+    return replace(annotated, notes_by_sha=_multi_branch_notes(service, rows, cwd))

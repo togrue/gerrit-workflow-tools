@@ -156,6 +156,23 @@ def address_problem(parsed: Changeish, *, web_base: str | None) -> str | None:
     return None
 
 
+_CHANGE_ID_LOOKALIKE_RE = re.compile(r"^[iI][0-9A-Za-z]{6,}$")
+
+
+def unresolved_rev_message(rev: str) -> str:
+    """What to tell the user when *rev*, read as a git revision, names no commit.
+
+    One wording for every command. A bare number is a git rev by design, so the message
+    says how to name the change instead; a near-miss Change-Id says what a valid one is.
+    """
+    message = f"cannot resolve {rev!r}: no commit by that name"
+    if _DIGITS_RE.fullmatch(rev):
+        return f"{message}; did you mean change:{rev}?"
+    if _CHANGE_ID_LOOKALIKE_RE.fullmatch(rev):
+        return f"{message}, and no Change-Id either (I plus 40 hex digits)"
+    return message
+
+
 def parse(s: str) -> Changeish:
     """Parse *s* into a :class:`Changeish`. Total — anything unrecognized is a ``git-rev``.
 

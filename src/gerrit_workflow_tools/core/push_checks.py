@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
@@ -84,6 +84,8 @@ class ExistingChanges(NamedTuple):
     """Short SHAs that already are their change's current patchset."""
     drafts: tuple[tuple[str, int], ...] = ()
     """``(short SHA, count)`` of your unpublished drafts, for commits whose change has any."""
+    gerrit_unavailable: bool = False
+    """Gerrit could not be asked at all; :attr:`warnings` says why. Nothing else here is known."""
 
 
 def check_existing_changes(
@@ -104,6 +106,10 @@ def check_existing_changes(
         triplets = {c.sha: build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id}
         service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
         payloads = service.changes.get_payloads(list(triplets.values()))
+    except GerritUnavailableError as error:
+        return ExistingChanges(
+            warnings=(f"warning: {error}; the preview shows no Gerrit state",), gerrit_unavailable=True
+        )
     except (ValueError, GerritApiError, ChangeResolutionError):
         return ExistingChanges()
     warnings: list[str] = []
