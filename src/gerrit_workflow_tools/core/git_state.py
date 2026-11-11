@@ -191,6 +191,21 @@ def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:
     return target.removeprefix(f"{settings.gerrit_remote}/")
 
 
+def configured_upstream_abbrev(settings: Settings, branch: str) -> str | None:
+    """Remote-tracking abbrev from ``branch.<branch>.remote`` + ``merge``, read from *settings* alone.
+
+    Returns ``origin/main`` only when ``merge`` is ``refs/heads/…`` (what
+    ``git branch --set-upstream-to`` writes). Any other ``merge`` shape returns
+    ``None`` so callers fall back to ``git rev-parse …@{upstream}``.
+    """
+    remote = settings.branch_remote(branch)
+    merge = settings.branch_merge(branch)
+    if not remote or not merge or remote == "." or not merge.startswith("refs/heads/"):
+        return None
+    branch_name = merge.removeprefix("refs/heads/")
+    return f"{remote}/{branch_name}" if branch_name else None
+
+
 def upstream_abbrev_sym(cwd: Path | str | None, branch: str | None = None) -> str | None:
     """Revision expression for a branch's upstream, or ``HEAD``'s when on a named branch."""
     if branch:
@@ -208,7 +223,7 @@ def resolve_upstream_abbrev_ref(
 ) -> str | None:
     """Return ``git rev-parse --abbrev-ref`` of the upstream, or ``None``."""
     if branch and settings is not None:
-        configured = settings.branch_upstream_abbrev(branch)
+        configured = configured_upstream_abbrev(settings, branch)
         if configured:
             return configured
     sym = upstream_abbrev_sym(cwd, branch)

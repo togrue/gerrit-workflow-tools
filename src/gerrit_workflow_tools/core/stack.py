@@ -10,7 +10,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out, is_unknown_revision, unknown_revision_error
-from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
+from gerrit_workflow_tools.core.git_state import configured_upstream_abbrev, resolve_branch_for_branch_config
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 
 
@@ -45,7 +45,7 @@ def upstream_tracking_tip_and_display(
     """
     snap = settings if settings is not None else Settings.from_cwd(cwd)
     b = _resolve_stack_branch(cwd, branch, settings=snap)
-    display = snap.branch_upstream_abbrev(b)
+    display = configured_upstream_abbrev(snap, b)
     if not display:
         upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
         upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)

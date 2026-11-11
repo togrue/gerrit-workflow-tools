@@ -10,39 +10,40 @@ from gerrit_workflow_tools.core.gerrit import stack_context as cr
 from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
+    configured_upstream_abbrev,
     repo_toplevel,
     resolve_upstream_abbrev_ref,
 )
 
 
-def test_branch_upstream_abbrev_from_refs_heads_merge() -> None:
+def test_configured_upstream_abbrev_from_refs_heads_merge() -> None:
     settings = Settings.from_map(
         {
             "branch.feature.remote": "origin",
             "branch.feature.merge": "refs/heads/main",
         }
     )
-    assert settings.branch_upstream_abbrev("feature") == "origin/main"
+    assert configured_upstream_abbrev(settings, "feature") == "origin/main"
 
 
-def test_branch_upstream_abbrev_nonstandard_merge_returns_none() -> None:
+def test_configured_upstream_abbrev_nonstandard_merge_returns_none() -> None:
     settings = Settings.from_map(
         {
             "branch.feature.remote": "origin",
             "branch.feature.merge": "refs/remotes/origin/main",
         }
     )
-    assert settings.branch_upstream_abbrev("feature") is None
+    assert configured_upstream_abbrev(settings, "feature") is None
 
 
-def test_branch_upstream_abbrev_local_dot_remote_returns_none() -> None:
+def test_configured_upstream_abbrev_local_dot_remote_returns_none() -> None:
     settings = Settings.from_map(
         {
             "branch.feature.remote": ".",
             "branch.feature.merge": "refs/heads/main",
         }
     )
-    assert settings.branch_upstream_abbrev("feature") is None
+    assert configured_upstream_abbrev(settings, "feature") is None
 
 
 def test_resolve_upstream_abbrev_ref_settings_first(tmp_path: Path) -> None:

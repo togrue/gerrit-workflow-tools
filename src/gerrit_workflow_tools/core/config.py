@@ -257,25 +257,6 @@ class Settings:
         """``branch.<branch>.merge`` when set (often ``refs/heads/<name>``)."""
         return self.get(f"branch.{branch}.merge")
 
-    def branch_upstream_abbrev(self, branch: str) -> str | None:
-        """Remote-tracking abbrev from ``branch.<branch>.remote`` + ``merge``.
-
-        Returns ``origin/main`` only when ``merge`` is ``refs/heads/…`` (what
-        ``git branch --set-upstream-to`` writes). Any other ``merge`` shape returns
-        ``None`` so callers fall back to ``git rev-parse …@{upstream}``.
-        """
-        remote = self.branch_remote(branch)
-        merge = self.branch_merge(branch)
-        if not remote or not merge or remote == ".":
-            return None
-        prefix = "refs/heads/"
-        if not merge.startswith(prefix):
-            return None
-        branch_name = merge[len(prefix) :]
-        if not branch_name:
-            return None
-        return f"{remote}/{branch_name}"
-
     # -- Per-command defaults -----------------------------------------------------
 
     @property
