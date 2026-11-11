@@ -45,6 +45,7 @@ from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_ch
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
+from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
@@ -237,7 +238,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
 
     With ``stack=1``, or ``chain=1`` (the ``rev`` values are one chain, base first), each
     commit also carries ``ci_introduced``: fingerprints of its **introduced findings**, or
-    ``null`` where that cannot be told.
+    ``null`` where that cannot be told. ``markdown=1`` adds ``markdown``: what ``ger show --ai`` prints.
     """
     selection = req.one("comments", "unresolved")
     if selection not in COMMENT_SELECTIONS:
@@ -274,6 +275,14 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         for chain_payload in payload["comment_chains"]:  # type: ignore[attr-defined]
             chain_payload["held"] = chain_payload["root_id"] in holds
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
+        if req.flag("markdown"):
+            lines = commit_markdown(
+                item.commit,
+                chains=item.chains,
+                ci_contents=item.ci_contents,
+                comments=selection,  # type: ignore[arg-type]
+            )
+            payload["markdown"] = "".join(f"{line}\n" for line in lines)
         if introduced is not None:
             found = introduced[index]
             payload["ci_introduced"] = sorted(found) if found is not None else None

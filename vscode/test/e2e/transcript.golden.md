@@ -101,7 +101,7 @@ progress (notification): Collecting comments and CI findings
 dialog (info): The comments and CI findings of 900: Add retry to the uploader, for the agent.  [Copy to Clipboard] [Cancel]
     detail: The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.
     → pressed "Copy to Clipboard"
-clipboard: 13 lines, starting "## <sha> — Add retry to the uploader"
+clipboard: 12 lines, starting "## <sha> — Add retry to the uploader"
 notification (info): Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.
 --- on screen:
 + editor | Preview ger-brief-<id>.md (webview)

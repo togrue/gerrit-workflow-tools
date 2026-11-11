@@ -18,6 +18,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_serve import main as serve_main
+from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core import reorder, reorder_preview
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
@@ -199,6 +200,21 @@ def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) ->
     assert [c["ci_introduced"] for c in commits] == [[], [], sorted(fingerprints), []]
     # One change on its own is not a chain: nothing claims to know what it introduced.
     assert "ci_introduced" not in _get(api, "/show", rev="HEAD", ci="1")["commits"][0]
+
+
+def test_show_serves_the_markdown_ger_show_ai_prints(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, keys, _rows = _gerrit(stack_repo, [{}, {}, {}, {"verified": -1, "unresolved_comment_count": 1}])
+    comment = {"id": "c1", "line": 1, "message": "rename this", "unresolved": True, "patch_set": 1}
+    store.set_comments(keys[3], {"d.txt": [comment]})
+    api = GerApi(stack_repo, gerrit=store, ci_http=FakeCiHttp(jenkins_build()))
+    [commit] = _get(api, "/show", rev="HEAD", comments="unresolved", context="2", markdown="1")["commits"]
+    _code, out, err = run_cli(stack_repo, show_main, ["--ai", "--context", "HEAD"], monkeypatch, gerrit=store)
+    # The command ends with a blank line between commits; the served Markdown ends with its last line.
+    assert out == f"{commit['markdown']}\n", err
+    assert "rename this" in commit["markdown"]
+    [with_ci] = _get(api, "/show", rev="HEAD", ci="1", markdown="1")["commits"]
+    assert "test_divide" in with_ci["markdown"]
+    assert "markdown" not in _get(api, "/show", rev="HEAD")["commits"][0]
 
 
 def test_agent_runbook_walks_the_commits_that_need_edits_and_keeps_holds_away(stack_repo: Path) -> None:

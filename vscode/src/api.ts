@@ -211,6 +211,8 @@ export interface ShownCommit extends CommitStatus {
   ci_introduced?: string[] | null;
   /** What a new comment on it becomes by default: a draft where Gerrit has this commit, else a local draft. */
   new_comment?: "draft" | "local-draft";
+  /** With `markdown`: the commit as `ger show --ai` prints it, for an agent. */
+  markdown?: string;
 }
 
 export interface FileChange {
@@ -267,6 +269,8 @@ export interface ShowOptions {
   ci?: boolean;
   comments?: "unresolved" | "all" | "resolved";
   context?: number;
+  /** Add `markdown`: what `ger show --ai` prints. */
+  markdown?: boolean;
 }
 
 type Params = Record<string, string | string[] | number | boolean | undefined>;

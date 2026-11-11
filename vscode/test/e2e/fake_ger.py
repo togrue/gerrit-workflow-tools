@@ -2,7 +2,6 @@
 
     fake_ger.py --make-repo DIR     create the fixture repository (a four-commit local stack)
     fake_ger.py serve [options]     what the extension starts: cli_serve over a ChangeStore
-    fake_ger.py show [options]      `ger show` over the same fake (Hand to Agent asks it)
 
 The Gerrit side is the test suite's own: the stack is one outgoing review chain with two
 unresolved comments on its second change and a failing build on the two top ones; change 900
@@ -26,7 +25,6 @@ from tests.test_inbox import _change  # noqa: E402
 from tests.test_serve import WEB, _gerrit  # noqa: E402
 
 from gerrit_workflow_tools.cli_serve import main as serve_main  # noqa: E402
-from gerrit_workflow_tools.cli_show import main as show_main  # noqa: E402
 from gerrit_workflow_tools.core.config import Settings  # noqa: E402
 from gerrit_workflow_tools.core.git_run import git, git_out  # noqa: E402
 from gerrit_workflow_tools.core.inbox import build_to_review_query  # noqa: E402
@@ -115,8 +113,6 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["--make-repo"]:
         make_repo(Path(sys.argv[2]))
         raise SystemExit(0)
-    commands = {"serve": serve_main, "show": show_main}
-    if sys.argv[1:2] and sys.argv[1] in commands:
-        main = commands[sys.argv[1]]
-        raise SystemExit(main(sys.argv[2:], gerrit=fake_gerrit(Path.cwd()), ci_http=FakeCiHttp(jenkins_build())))
-    raise SystemExit("usage: fake_ger.py (--make-repo DIR | serve [options] | show [options])")
+    if sys.argv[1:2] == ["serve"]:
+        raise SystemExit(serve_main(sys.argv[2:], gerrit=fake_gerrit(Path.cwd()), ci_http=FakeCiHttp(jenkins_build())))
+    raise SystemExit("usage: fake_ger.py (--make-repo DIR | serve [options])")
