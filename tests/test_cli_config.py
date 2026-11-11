@@ -20,7 +20,7 @@ def test_ger_config_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_ger_config_refuses_a_non_tty(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, ger_main, ["config"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "interactive terminal" in err
 
 

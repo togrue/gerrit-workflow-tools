@@ -107,7 +107,7 @@ def test_gshow_stack_missing_upstream_non_tty_prints_setup_hint(
         monkeypatch,
         gerrit=ChangeStore({}),
     )
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.CONFIG
     assert out == ""
     assert "No upstream configured for branch" in err
     assert "git branch --set-upstream-to=" in err

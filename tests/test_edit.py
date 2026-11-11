@@ -180,7 +180,7 @@ def test_rebase_in_progress_is_refused_before_anything_moves(
 
     code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=store)
 
-    assert code == ExitCode.GIT
+    assert code == ExitCode.USAGE
     assert "git rebase --continue" in err
     assert git("config", "branch.feature.gerAttentionCursor", cwd=stack_repo, check=False).returncode != 0
 

@@ -120,7 +120,10 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
 | `1` | Push succeeded, but `lazy` / `overwrite` could not apply reviewers (printed as a warning) |
-| `1` | Nothing to push / config / non-interactive without `-y` |
+| `1` | Nothing to push (empty ready prefix), or you declined the upstream prompt |
+| `2` | Usage: invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
+| `3` | `REV` is not a commit, or not in the local stack |
+| `6` | The branch has no upstream: the same message and hint as `ger log` |
 | other | `git push` exit code |
 
 ---

@@ -62,7 +62,7 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
 ## Behavior
 
 1. `ger edit -n` / `--next`, when a rebase is already in progress, runs `git rebase --continue` before resolving the next commit. The cursor does not move unless that rebase finishes and the next one starts. A failed continue returns git's exit code. If git exits 0 but the rebase is still underway, the command exits `7`.
-2. Any other `ger edit` or `ger reword` invocation refuses with exit `7` while a rebase is in progress, before the cursor moves. `ger rebase` makes the same refusal.
+2. Any other `ger edit` or `ger reword` invocation refuses with exit `2` (`USAGE`) while a rebase is in progress, before the cursor moves, and so does a work tree with uncommitted changes to tracked files (git would refuse the rebase). `ger rebase` makes the same refusals, with the same messages: one shared check, `cli_common.require_history_rewrite`.
 3. Resolve target commit in stack (explicit `REV`, or attention walk).
 4. `git rebase -i <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`).
 5. `ger reword` warns when a Change-Id left the stack: the next push would create a new change and leave the old one open. `ger edit` cannot tell, because the commit is amended after it returns.

@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    _cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    _cwd, settings, _summary_highlighter = init_cli_runtime(args, repository=False)
     path = _api_path(args.path)
     if path is None:
         print(

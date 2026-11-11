@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, Inline
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.render.comments import (
     chain_location,
     draft_transition,
@@ -237,8 +238,7 @@ def _confirmed(args: argparse.Namespace, count: int, changes: int) -> bool:
     if args.yes:
         return True
     if args.json_ or not stdin_is_terminal():
-        print("not publishing: pass -y to publish without a prompt", file=sys.stderr)
-        return False
+        raise UsageError("no prompt to answer (non-interactive or --json): pass -y to publish")
     return confirm(f"Publish {count} draft(s) on {changes} change(s)?", default=False)
 
 

@@ -36,6 +36,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 @dataclass(frozen=True)
@@ -208,7 +209,7 @@ def prepare(
     publish_comments: bool = False,
 ) -> PushPlan | PushRefusal:
     if topic and "," in topic:
-        return PushRefusal(f"error: invalid topic {topic!r}: a comma separates push options")
+        raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     if not destination:
         raise GitError("Internal error: Gerrit push mode without effective destination.")

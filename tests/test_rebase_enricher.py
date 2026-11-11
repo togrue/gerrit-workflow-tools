@@ -541,7 +541,7 @@ def test_cli_rebase_refuses_while_a_rebase_is_stopped(stack_repo: Path, monkeypa
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
         code = rebase_main([])
 
-    assert code == 7
+    assert code == 2  # USAGE
     assert "cmd" not in captured
 
 

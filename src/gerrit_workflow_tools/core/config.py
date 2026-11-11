@@ -135,6 +135,11 @@ class Settings:
                 resolved_scopes.setdefault(key, ConfigScope.LOCAL)
         return cls(values=values, scopes=resolved_scopes)
 
+    @property
+    def in_repository(self) -> bool:
+        """Read inside a git repository, which always has local config. Free: no subprocess."""
+        return any(scope in (ConfigScope.LOCAL, ConfigScope.WORKTREE) for scope in self.scopes.values())
+
     def get(self, key: str) -> str | None:
         """Return the value for *key*, stripped, or ``None`` when unset or blank.
 

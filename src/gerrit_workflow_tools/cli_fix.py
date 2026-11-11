@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
     # `git rebase --autosquash` can actually place (ADR-0003).
     target = resolve_stack_changeish(cwd, args.target, settings=settings, gerrit=gerrit, require_in_stack=True)
-    fixup_sha = fixup_target_sha(get_stack_snapshot(cwd, settings=settings).commits, target.sha)
+    snapshot = get_stack_snapshot(cwd, settings=settings)
+    fixup_sha = fixup_target_sha(snapshot.commits, target.sha)
     logger.info("fixup target commit: %s", fixup_sha)
 
     print_resolution_note(target.resolution)
@@ -144,12 +146,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         and not _index_has_staged_changes(cwd)
         and (not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd))
     ):
-        print(
-            "error: no staged changes (index empty). Stage edits with `git add`, "
-            "or use `ger fix -a …` to commit all changes to tracked files.",
-            file=sys.stderr,
+        raise UsageError(
+            "no staged changes (index empty). Stage edits with `git add`, "
+            "or use `ger fix -a …` to commit all changes to tracked files."
         )
-        return 1
 
     cmd: list[str] = ["-c", "core.editor=true", "commit"]
     if args.no_verify:
@@ -170,6 +170,11 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         print(json.dumps(payload, indent=2))
     else:
         print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
+        # The same advice `ger push` gives when it stops at this commit, with the real base filled in.
+        print(
+            f"next: squash it with `git rebase -i --autosquash {snapshot.upstream or snapshot.upstream_tip[:12]}`",
+            file=sys.stderr,
+        )
     return 0
 
 

@@ -34,7 +34,7 @@ def test_ger_setup_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPa
 def test_ger_setup_non_tty_reports_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     code, _out, err = run_cli(stack_repo, ger_main, ["setup"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "interactive terminal" in err.lower()
     assert "gerrit.webUrl" in err
 
@@ -46,7 +46,7 @@ def test_ger_setup_treats_windows_nul_as_non_interactive(stack_repo: Path, monke
 
     code, _out, err = run_cli(stack_repo, ger_main, ["setup"], monkeypatch)
 
-    assert code == 1
+    assert code == 2
     assert "interactive terminal" in err.lower()
 
 

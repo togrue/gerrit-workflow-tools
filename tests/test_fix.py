@@ -18,7 +18,7 @@ from tests.fixtures import _cid
 def test_ger_fix_requires_staged_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (stack_repo / "a.txt").write_text("unstaged only\n", encoding="utf-8")
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "staged" in err.lower()
 
 
@@ -38,7 +38,7 @@ def test_ger_fix_prompt_declines_on_no(stack_repo: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "staged" in err.lower()
     # Declined: working tree still dirty, index still empty
     assert git("diff", "--quiet", cwd=stack_repo, check=False).returncode != 0

@@ -78,7 +78,7 @@ def test_gpush_requires_target(stack_repo_unconfigured, monkeypatch):
     repo = stack_repo_unconfigured
     # no configure_gerrit_target, no upstream → no push destination
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == ExitCode.GIT
+    assert code == ExitCode.CONFIG
     assert "push destination" in err.lower() or "upstream" in err.lower()
 
 
@@ -126,8 +126,8 @@ def test_gpush_dry_run_never_writes_upstream(stack_repo_unconfigured: Path, monk
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("--dry-run must not prompt for an upstream")),
     )
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == ExitCode.GIT
-    assert "push destination" in err.lower()
+    assert code == ExitCode.CONFIG
+    assert "No upstream configured for branch" in err
     assert git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=repo, check=False).returncode != 0
 
 
@@ -260,7 +260,7 @@ def test_gpush_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypat
 
     code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
 
-    assert code == 1
+    assert code == ExitCode.USAGE
     assert "--yes" in err
 
 
@@ -271,7 +271,7 @@ def test_gpush_i_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeyp
 
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
 
-    assert code == 1
+    assert code == ExitCode.USAGE
     assert "-i requires an interactive terminal" in err
 
 
@@ -299,7 +299,7 @@ def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: 
     mock_run = MagicMock()
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.USAGE
     assert "non-interactive" in err.lower() or "--yes" in err
     mock_run.assert_not_called()
 
@@ -516,7 +516,7 @@ def test_gpush_says_which_commits_missed_the_push_options(stack_repo: Path, monk
 
 def test_gpush_refuses_a_comma_in_the_topic(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--topic", "x,y"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.USAGE
     assert "invalid topic 'x,y'" in err
 
 
@@ -972,7 +972,7 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
 def test_gpush_interactive_requires_tty(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.USAGE
     assert "tty" in err.lower()
 
 

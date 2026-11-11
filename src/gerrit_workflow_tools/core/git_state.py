@@ -121,6 +121,22 @@ def rebase_in_progress(cwd: Path | str | None) -> bool:
     return repo_dir is not None and any((repo_dir / d).exists() for d in ("rebase-merge", "rebase-apply"))
 
 
+def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
+    """Why rewriting the local stack cannot start here, or ``None``: the one wording every rewrite shares.
+
+    Git refuses an interactive rebase over a rebase underway or uncommitted changes to tracked
+    files; asking first replaces git's bare refusal with what to do about it.
+    """
+    if rebase_in_progress(cwd):
+        return "a rebase is already in progress; run `git rebase --continue` or `git rebase --abort` first"
+    if git_out("status", "--porcelain", "--untracked-files=no", cwd=cwd):
+        return (
+            "you have uncommitted changes; commit them (`ger fix REV` folds them into a stack commit) "
+            "or `git stash` them first"
+        )
+    return None
+
+
 def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
     """Branch currently being rebased, if Git has an in-progress rebase state."""
     repo_dir = git_dir(cwd)

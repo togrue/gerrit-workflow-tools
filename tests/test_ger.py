@@ -25,7 +25,7 @@ def test_ger_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_ger_unknown_command(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = _run_ger(stack_repo, ["nope"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "unknown command" in err
 
 

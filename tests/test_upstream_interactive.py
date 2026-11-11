@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, read_recent_upstream_abbrevs
@@ -100,11 +100,12 @@ def test_require_branch_upstream_non_tty_prints_hint(
     assert not branch_has_upstream(repo, "feature")
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
 
-    assert not require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
+    with pytest.raises(ConfigError) as caught:
+        require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
 
-    err = capsys.readouterr().err
-    assert "No upstream configured for branch 'feature'" in err
-    assert "git branch --set-upstream-to=" in err
+    assert "No upstream configured for branch 'feature'" in str(caught.value)
+    assert "git branch --set-upstream-to=" in str(caught.value)
+    assert capsys.readouterr().err == ""
 
 
 def test_upstream_prompt_refuses_a_local_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,5 +132,5 @@ def test_missing_upstream_without_a_console_reports_instead_of_prompting(
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
 
-    assert require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo)) is False
-    assert "No upstream configured" in capsys.readouterr().err
+    with pytest.raises(ConfigError, match="No upstream configured"):
+        require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))

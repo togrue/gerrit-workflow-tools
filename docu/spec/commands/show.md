@@ -24,7 +24,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 **Ranges:** each endpoint is resolved to a local SHA (git-rev directly; Change-Id / Gerrit keys via the local stack or a locally present current revision). Then `git log` expands the range (oldest first). Endpoints that do not resolve to a local commit are errors.
 
-**`--stack`:** includes every commit in `upstream_tip..HEAD`. May be combined with other `REV` args; duplicates (same Change-Id, else same SHA) keep the first occurrence. When the working branch (or `--branch`) has no upstream, prompt to set one on a TTY via `require_branch_upstream` (same helper as `ger log`); otherwise print a setup hint and exit `1` rather than failing as a git error. Without `--stack`, missing upstream is not prompted.
+**`--stack`:** includes every commit in `upstream_tip..HEAD`. May be combined with other `REV` args; duplicates (same Change-Id, else same SHA) keep the first occurrence. When the working branch (or `--branch`) has no upstream, prompt to set one on a TTY via `require_branch_upstream` (same helper as `ger log`); otherwise print the setup hint every command shares and exit `6` (`CONFIG`: the upstream is missing git configuration) rather than failing as a git error. Declining the prompt exits `1`. Without `--stack`, missing upstream is not prompted.
 
 **Multiple targets:** `resolve_show_targets` in `core/gerrit_show.py` builds the ordered, deduped list. Human and Markdown print one block per commit. JSON with a single target keeps the flat object shape; multiple targets wrap as `{ "commits": [ … ] }`.
 

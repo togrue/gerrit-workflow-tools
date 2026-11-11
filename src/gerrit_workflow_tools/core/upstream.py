@@ -11,11 +11,22 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git
 
 
 logger = logging.getLogger(__name__)
+
+
+def missing_upstream_error(branch: str) -> ConfigError:
+    """The one error, and the one hint, every command gives for a branch with no upstream."""
+    return ConfigError(
+        f"No upstream configured for branch {branch!r}.\n"
+        "Set an upstream, e.g.:\n"
+        "  git branch --set-upstream-to=<remote>/<branch>\n"
+        "Fetch from your Gerrit remote first if the tracking branch is missing."
+    )
+
 
 _RECENT_UPSTREAM_KEY = "gerrit.recentUpstreamAbbrev"
 _RECENT_UPSTREAM_LIMIT = 20

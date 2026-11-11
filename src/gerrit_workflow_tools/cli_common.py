@@ -41,7 +41,8 @@ from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
-from gerrit_workflow_tools.core.git_state import rebase_in_progress
+from gerrit_workflow_tools.core.git_state import history_rewrite_refusal
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -100,8 +101,10 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),
+    (UsageError, ExitCode.USAGE, "error"),
     (UnknownRevisionError, ExitCode.NOT_FOUND, "error"),
-    (NoEditAttentionError, ExitCode.NO_EDIT_ATTENTION, "error"),
+    # The normal end of a walk, not a failure: reported without an "error:" prefix.
+    (NoEditAttentionError, ExitCode.NO_EDIT_ATTENTION, ""),
     (CiContentError, ExitCode.CI_CONTENT, "ci error"),
     (GitError, ExitCode.GIT, "error"),
 )
@@ -134,7 +137,8 @@ def run_cli_command(body: Callable[[], int]) -> int:
         if failure is None:
             raise
         code, prefix = failure
-        print(f"{prefix}: {error}", file=sys.stderr)
+        sys.stdout.flush()  # What the command did show comes first, the reason it stopped last.
+        print(f"{prefix}: {error}" if prefix else str(error), file=sys.stderr)
         return int(code)
     finally:
         print_call_trace_summary()
@@ -305,10 +309,12 @@ def configure_logging(verbosity: int | bool) -> None:
         _CONFIGURED = True
 
 
-def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryHighlighter]:
+def init_cli_runtime(args: argparse.Namespace, *, repository: bool = True) -> tuple[Path, Settings, SummaryHighlighter]:
     """Configure logging/color from parsed *args*; return ``(cwd, settings, summary_highlighter)``.
 
     Commands without ``--debug-log`` or ``--color`` get logging off and color on ``auto``.
+    Outside a git repository a command that needs one (*repository*, the default) fails here,
+    the same way for every command, before it can misreport what it would have looked up.
 
     This is where a command's :class:`Settings` snapshot is taken: once, at the entry
     point, from a single ``git config --list --show-scope``. Everything below receives it as an
@@ -321,13 +327,15 @@ def init_cli_runtime(args: argparse.Namespace) -> tuple[Path, Settings, SummaryH
     init_color_mode(color=getattr(args, "color", "auto"))
     init_hyperlink_mode(hyperlinks=getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
+    if repository and not settings.in_repository:
+        raise GitError("not a git repository; run ger inside a clone")
     return cwd, settings, build_summary_highlighter(settings)
 
 
-def require_no_rebase_in_progress(cwd: Path) -> None:
-    """Raise :class:`GitError` when a rebase is underway, so a new one could not start."""
-    if rebase_in_progress(cwd):
-        raise GitError("a rebase is already in progress; run `git rebase --continue` or `git rebase --abort` first")
+def require_history_rewrite(cwd: Path) -> None:
+    """Refuse to start rewriting the local stack where git would refuse: one message per reason."""
+    if refusal := history_rewrite_refusal(cwd):
+        raise UsageError(refusal)
 
 
 def run_interactive_rebase(cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str]) -> int:

@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.change_id import ChangeIdRow, first_change_id_boundary
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
     find_ready_boundary_via_registry,
 )
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 if TYPE_CHECKING:
@@ -70,6 +72,7 @@ def _ready_result_from_block(
     boundary_reason: str,
     until_sha: str | None,
     until: str | None,
+    all_lifts_boundary: bool = False,
 ) -> ReadyResult:
     """Build :class:`ReadyResult` from a composed block index (and optional ``--until``)."""
     if block_idx is not None and (block_idx < 0 or block_idx >= len(shas)):
@@ -108,8 +111,10 @@ def _ready_result_from_block(
     if until_sha:
         uidx = shas.index(until_sha)
         if uidx >= block_idx:
-            raise GitError(
-                f"revision {until!r} is at or after the ready boundary; choose a commit before the blocking commit."
+            way_out = ", or pass --all to push past it" if all_lifts_boundary else ""
+            raise UsageError(
+                f"revision {until!r} is at or after the ready boundary ({shas[block_idx][:7]}: {boundary_reason}); "
+                f"push an earlier commit{way_out}"
             )
         tip_idx = uidx
         tip = until_sha
@@ -162,7 +167,7 @@ def compute_ready(
     if until:
         until_sha = git_out("rev-parse", until.strip(), cwd=cwd)
         if until_sha not in shas:
-            raise GitError(f"commit {until} is not in the current stack")
+            raise ChangeResolutionError(f"commit {until_sha[:8]} is not in the current local stack")
 
     if all_commits:
         strategy = BoundaryResult(block_index=None, reason="ignored (--all)")
@@ -189,4 +194,5 @@ def compute_ready(
         boundary_reason=boundary_reason,
         until_sha=until_sha,
         until=until,
+        all_lifts_boundary=boundary is strategy and strategy.block_index is not None,
     )

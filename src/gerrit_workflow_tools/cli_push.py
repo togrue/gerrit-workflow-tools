@@ -38,7 +38,9 @@ from gerrit_workflow_tools.core.push import (
     push_argv,
 )
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.push_preview import (
     apply_interactive_line,
     ask_push_action,
@@ -203,11 +205,9 @@ def _print_refusal(
     print(refusal.message, file=sys.stderr)
 
 
-def _refuses_non_interactive(args: argparse.Namespace) -> bool:
-    if stdin_is_terminal() or args.yes:
-        return False
-    print("error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt", file=sys.stderr)
-    return True
+def _require_confirmable(args: argparse.Namespace) -> None:
+    if not (stdin_is_terminal() or args.yes):
+        raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
 
 
 def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Settings) -> str:
@@ -251,8 +251,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
         return 0
-    if _refuses_non_interactive(args):
-        return 1
+    _require_confirmable(args)
     if not args.yes:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
@@ -289,8 +288,7 @@ def _confirm_gerrit_push(
         if args.dry_run:
             print_dry_run(plan)
             return 0
-        if _refuses_non_interactive(args):
-            return 1
+        _require_confirmable(args)
         if args.yes:
             if plan.credential_error:
                 print(plan.credential_error, file=sys.stderr)
@@ -399,8 +397,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.publish_comments and publish_blocked():
         parser.error(f"--publish-comments is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     if args.i and not stdin_is_terminal():
-        print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
-        return 1
+        raise UsageError("-i requires an interactive terminal (stdin is not a TTY)")
 
     detached = is_detached_head(cwd)
     branch = _resolve_push_branch(cwd, args.branch, settings=settings)
@@ -410,13 +407,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
             return 1
         mode = ger_push_mode(cwd, branch, settings=settings)
     if mode is None:
-        raise GitError(
-            "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
-            "run `git fetch` first if the tracking branch is missing)."
-        )
+        raise missing_upstream_error(branch)
     if args.i and mode == "vanilla":
-        print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)
-        return 1
+        raise UsageError("-i applies only to Gerrit push (upstream on gerrit.remote)")
     if mode == "vanilla":
         return _handle_vanilla_push(cwd, args, branch=branch, settings=settings)
     return _push_gerrit(cwd, args, branch=branch, settings=settings, gerrit=gerrit)

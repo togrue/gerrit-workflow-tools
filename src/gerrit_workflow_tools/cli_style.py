@@ -53,13 +53,16 @@ def ensure_utf8_stdio() -> None:
     On Windows (and some other locales), ``ger log > file`` attaches a legacy
     encoding such as cp1252. Combining strikethrough and other CLI glyphs then
     raise ``UnicodeEncodeError``. Reconfigure when the stream supports it.
+
+    Lines end in a bare newline on every platform: piped into ``grep``, ``cut`` or ``xargs``
+    (Git Bash on Windows), the carriage return of text-mode translation would land in the values.
     """
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if not callable(reconfigure):
             continue
         with contextlib.suppress(OSError, ValueError, AttributeError):
-            reconfigure(encoding="utf-8")
+            reconfigure(encoding="utf-8", newline="\n")
 
 
 def set_color_mode(enabled: bool) -> None:

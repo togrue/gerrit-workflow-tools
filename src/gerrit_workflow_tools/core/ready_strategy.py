@@ -52,7 +52,7 @@ def default_find_ready_boundary(
             if re.search(stop_pattern, row.subject, re.IGNORECASE):
                 return BoundaryResult(
                     block_index=index,
-                    reason=f"subject matches stop pattern {stop_pattern!r}",
+                    reason=f"subject matches stop pattern `{stop_pattern}`",
                 )
         except re.error:
             continue

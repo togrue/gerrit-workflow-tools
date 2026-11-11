@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     continue_rebase,
     init_cli_runtime,
     print_resolution_note,
-    require_no_rebase_in_progress,
+    require_history_rewrite,
     run_cli_command,
     run_interactive_rebase,
 )
@@ -323,7 +323,7 @@ def _run_interactive_stack_rebase(
         continued = _continue_stopped_rebase(cwd)
         if continued != 0:
             return continued
-    require_no_rebase_in_progress(cwd)
+    require_history_rewrite(cwd)
     full, cursor_change_id, cursor_action = _resolve_target(cwd, args, settings=settings, branch=branch, gerrit=gerrit)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)

@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream import (
     branch_has_upstream,
     local_branch_exists,
+    missing_upstream_error,
     set_branch_upstream,
     upstream_choice,
 )
@@ -78,15 +79,6 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, s
     return chosen
 
 
-def missing_upstream_error_message(branch: str) -> str:
-    return (
-        f"No upstream configured for branch {branch!r}.\n"
-        "Set an upstream, e.g.:\n"
-        "  git branch --set-upstream-to=<remote>/<branch>\n"
-        "Fetch from your Gerrit remote first if the tracking branch is missing."
-    )
-
-
 def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str, *, settings: Settings) -> bool:
     if is_detached_head(cwd):
         return False
@@ -105,9 +97,9 @@ def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str, *, s
 def require_branch_upstream(cwd: Path | str | None, branch: str, *, settings: Settings) -> bool:
     """Return True when *branch* has upstream (possibly set via TTY prompt).
 
-    When upstream is still missing and stdin is not a TTY, print setup guidance
-    to stderr before returning False. Non-existent local branches are ignored so
-    downstream git commands can report invalid refs.
+    ``False`` means the user declined the prompt. With no terminal to prompt on, raise
+    :class:`ConfigError` with the setup guidance every command shares. Non-existent local
+    branches are ignored so downstream git commands can report invalid refs.
     """
     if not local_branch_exists(cwd, branch):
         return True
@@ -116,5 +108,5 @@ def require_branch_upstream(cwd: Path | str | None, branch: str, *, settings: Se
     if ensure_branch_upstream_interactive(cwd, branch, settings=settings):
         return True
     if not prompt_toolkit_can_run():
-        print(f"error: {missing_upstream_error_message(branch)}", file=sys.stderr)
+        raise missing_upstream_error(branch)
     return False

@@ -206,7 +206,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, settings, highlighter = init_cli_runtime(args)
+    cwd, settings, highlighter = init_cli_runtime(args, repository=False)
     service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
     query = build_to_review_query(
         settings,

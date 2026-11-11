@@ -310,7 +310,7 @@ def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkey
     _configure_repo(stack_repo)
     git("branch", "--unset-upstream", cwd=stack_repo, check=False)
     code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.CONFIG
     assert out == ""
     assert "No upstream configured for branch" in err
     assert "git branch --set-upstream-to=" in err

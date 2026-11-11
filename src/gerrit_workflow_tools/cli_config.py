@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.config_form import resolve_config_form
 from gerrit_workflow_tools.core.config_write import apply_config_write
 from gerrit_workflow_tools.core.git_editor import run_git_editor
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -60,10 +61,9 @@ def _format_parse_errors(errors: tuple[ParseError, ...]) -> str:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    cwd, settings, _summary_highlighter = init_cli_runtime(args, repository=False)
     if not _stream_is_tty(sys.stdin) or not _stream_is_tty(sys.stdout):
-        print("error: ger config requires an interactive terminal.", file=sys.stderr)
-        return int(ExitCode.ATTENTION)
+        raise UsageError("ger config requires an interactive terminal")
 
     branch = resolve_working_branch(cwd, settings=settings)
     sections = resolve_config_form(settings, branch=branch)

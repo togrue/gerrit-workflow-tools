@@ -125,6 +125,13 @@ def _usage() -> str:
     return "\n".join(lines)
 
 
+def _did_you_mean(cmd: str) -> str:
+    import difflib
+
+    close = difflib.get_close_matches(cmd, [*_COMMANDS, *_ALIASES], n=1)
+    return f"; did you mean {close[0]!r}?" if close else ""
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger``: dispatch ``ger <command>`` to the matching tool."""
     try:
@@ -143,9 +150,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         cmd = _ALIASES.get(argv[0], argv[0])
         if cmd not in _COMMANDS:
-            print(f"ger: unknown command {cmd!r}", file=sys.stderr)
+            print(f"error: unknown command {cmd!r}{_did_you_mean(cmd)}", file=sys.stderr)
             print("Run `ger --help` for a list of commands.", file=sys.stderr)
-            return 1
+            return 2  # ExitCode.USAGE; cli_common is not imported here, to keep dispatch light
         if refresh:
             os.environ["GER_CACHE_REFRESH"] = "1"
         _, import_path = _COMMANDS[cmd]

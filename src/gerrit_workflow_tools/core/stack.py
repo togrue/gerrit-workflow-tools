@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validat
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out, is_unknown_revision, unknown_revision_error
 from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
+from gerrit_workflow_tools.core.upstream import missing_upstream_error
 
 
 logger = logging.getLogger(__name__)
@@ -49,12 +50,7 @@ def upstream_tracking_tip_and_display(
         upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
         upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
         if upstream_name.returncode != 0:
-            raise GitError(
-                f"No upstream configured for branch {b!r}.\n"
-                "Set an upstream, e.g.:\n"
-                "  git branch --set-upstream-to=<remote>/<branch>\n"
-                "Fetch from your Gerrit remote first if the tracking branch is missing."
-            )
+            raise missing_upstream_error(b)
         display = upstream_name.stdout.strip()
     upstream_ref = git("rev-parse", "--verify", display, cwd=cwd, check=False)
     if upstream_ref.returncode != 0:
@@ -91,6 +87,8 @@ class StackSnapshot:
 
     upstream_tip: str
     commits: tuple[Commit, ...]
+    upstream: str = ""
+    """The upstream as the user names it (``origin/main``), for advice that quotes it."""
 
 
 def get_stack_snapshot(
@@ -106,12 +104,9 @@ def get_stack_snapshot(
     The one way to load the stack. *first_parent* follows Gerrit's relation-chain
     semantics (merged side branches are not stack members).
     """
-    upstream_tip, _display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
+    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
     rows_list = commits_in_range(cwd, f"{upstream_tip}..{head}", first_parent=first_parent)
-    return StackSnapshot(
-        upstream_tip=upstream_tip,
-        commits=tuple(rows_list),
-    )
+    return StackSnapshot(upstream_tip=upstream_tip, commits=tuple(rows_list), upstream=display)
 
 
 def merge_base_with_target(

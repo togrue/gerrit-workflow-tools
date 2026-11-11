@@ -22,7 +22,7 @@ from typing import Literal
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git, git_out
-from gerrit_workflow_tools.core.git_state import checked_out_branch_name, rebase_in_progress
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, history_rewrite_refusal, rebase_in_progress
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 
@@ -64,12 +64,10 @@ class StackRewrite:
 
 
 def _refuse_unless_ready(cwd: Path | str, upstream_tip: str) -> None:
-    if rebase_in_progress(cwd):
-        raise ReorderRefusal("a rebase is already in progress; finish or abort it first")
+    if refusal := history_rewrite_refusal(cwd):
+        raise ReorderRefusal(refusal)
     if checked_out_branch_name(cwd) is None:
         raise ReorderRefusal("HEAD is detached; check out the branch whose stack you want to rewrite")
-    if git_out("status", "--porcelain", "--untracked-files=no", cwd=cwd):
-        raise ReorderRefusal("the worktree has uncommitted changes; commit or stash them first")
     if git_out("rev-list", "--merges", f"{upstream_tip}..HEAD", cwd=cwd):
         raise ReorderRefusal("the local stack contains a merge commit; rewrite it by hand with ger rebase")
 

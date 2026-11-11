@@ -219,7 +219,7 @@ def test_dry_run_lists_drafts_and_publishes_nothing(stack_repo: Path, monkeypatc
 def test_publish_without_a_terminal_needs_yes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, key = _store_with_draft(stack_repo)
     code, _out, err = run_cli(stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.USAGE
     assert "pass -y" in err
     assert store.calls_to("publish_drafts") == []
     assert len(_drafts(store, key)) == 1

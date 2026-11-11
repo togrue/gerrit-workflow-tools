@@ -20,7 +20,7 @@ ger config
 
 Shared `--color`, `--hyperlinks`, and `--debug-log` flags apply.
 
-Non-interactive environments print an error and exit 1 (`ATTENTION`).
+Non-interactive environments print an error and exit `2` (`USAGE`), as every command does that needs a terminal it does not have.
 
 ---
 
