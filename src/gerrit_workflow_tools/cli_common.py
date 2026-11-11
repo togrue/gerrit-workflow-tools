@@ -339,14 +339,23 @@ def require_history_rewrite(cwd: Path) -> None:
 
 
 def run_interactive_rebase(
-    cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str], continue_with: str = "git rebase --continue"
+    cwd: Path,
+    base: str,
+    *,
+    sequence_editor: str,
+    env: dict[str, str],
+    continue_with: str = "git rebase --continue",
+    autosquash: bool | None = False,
 ) -> int:
     """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code.
 
-    A stop on a conflict ends with the shared next step, naming *continue_with* as the way on.
+    *autosquash* ``False`` keeps every ``fixup!`` commit where it is whatever ``rebase.autosquash``
+    says, ``True`` folds them, ``None`` leaves it to git config. A stop on a conflict ends with the
+    shared next step, naming *continue_with* as the way on.
     """
     env = {**env, "GIT_SEQUENCE_EDITOR": module_editor_command(f"gerrit_workflow_tools.{sequence_editor}")}
-    code = git("rebase", "-i", base, cwd=cwd, env=env, check=False, capture=False).returncode
+    squash = [] if autosquash is None else ["--autosquash" if autosquash else "--no-autosquash"]
+    code = git("rebase", "-i", *squash, base, cwd=cwd, env=env, check=False, capture=False).returncode
     _print_conflict_next_step(cwd, continue_with)
     return code
 

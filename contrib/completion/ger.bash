@@ -224,7 +224,7 @@ _ger_rebase() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --onto-remote --no-onto-remote --drop-merged-equivalent --debug-log
+        __gwt_flags "$cur" -h --help --onto-remote --no-onto-remote --drop-merged-equivalent --autosquash --debug-log
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then

@@ -40,6 +40,7 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 | `--onto-remote` | Rebase onto fetched `refs/remotes/<gerrit.remote>/<target>` tip |
 | `--no-onto-remote` | Force merge-base behavior (overrides `gerrit.rebaseOntoRemote`) |
 | `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
+| `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Editor: enricher delegates to `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`.

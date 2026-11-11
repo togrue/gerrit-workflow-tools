@@ -61,7 +61,7 @@ Default: only **staged** changes are committed. On a TTY with an empty index, pr
    - **Interactive TTY** and there are unstaged modifications to tracked files: prompt `[y/n/d]` — `y` runs `git add -u` and continues; `d` prints the unstaged diff to stderr and re-prompts; `n` / empty / interrupt declines.
    - Otherwise (non-TTY, declined, or nothing to stage): exit `2` (`USAGE`) with a hint to stage edits or use `-a`.
 3. When the target is itself a fixup, aim at the stack commit it belongs to, so a fixup of a fixup never reads `fixup! fixup! …`.
-4. Run `git commit --fixup=<sha>` (honours `--no-verify` and `-a`), then print the new commit's short SHA and subject (text mode).
+4. Run `git commit --fixup=<sha>` (honours `--no-verify` and `-a`), then print the new commit's short SHA and subject (text mode), and on stderr the same advice `ger log` and `ger push` give for the commit: `next: squash it with `ger rebase --autosquash``.
 
 ---
 

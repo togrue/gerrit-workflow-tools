@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_ch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import conflict_next_step, rebase_in_progress
-from gerrit_workflow_tools.core.stack import fixup_target_sha, get_stack_snapshot
+from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 
@@ -173,10 +173,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         print(json.dumps(payload, indent=2))
     else:
         print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
-        # The same advice `ger push` gives when it stops at this commit, with the real base filled in.
+        # The same advice `ger push` and `ger log` give for this commit.
         first = "finish the rebase (`git rebase --continue`), then " if rebase_in_progress(cwd) else ""
-        base = snapshot.upstream or snapshot.upstream_tip[:12]
-        print(f"next: {first}squash it with `git rebase -i --autosquash {base}`", file=sys.stderr)
+        print(f"next: {first}{UNSQUASHED_FIXUP_ADVICE}", file=sys.stderr)
     return 0
 
 

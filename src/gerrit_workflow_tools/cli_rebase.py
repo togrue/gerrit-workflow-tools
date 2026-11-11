@@ -65,6 +65,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "drop lines in the todo. Default: gerrit.rebaseDropMergedEquivalent."
         ),
     )
+    p.add_argument(
+        "--autosquash",
+        action="store_true",
+        help=(
+            "Fold fixup!/squash! commits (from `ger fix`) into their targets in the todo. "
+            "Without it, git's rebase.autosquash decides, as for `git rebase -i`."
+        ),
+    )
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands and enricher steps to stderr.",
@@ -128,7 +136,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
 
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
-    return run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env)
+    autosquash = True if args.autosquash else None
+    return run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
 
 
 if __name__ == "__main__":

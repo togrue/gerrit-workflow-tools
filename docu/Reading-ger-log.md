@@ -109,7 +109,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | Hint | Meaning |
 |------|---------|
 | `missing Change-Id` | Commit message has no usable Change-Id footer (absent or malformed); JSON reason `missing-change-id` |
-| `unsquashed fixup commit` | A `fixup!`/`squash!` commit with no Change-Id, the commit `ger push` stops at; squash it with `git rebase -i --autosquash`. JSON reason `unsquashed-fixup` |
+| `unsquashed fixup commit` | A `fixup!`/`squash!` commit with no Change-Id, the commit `ger push` stops at; squash it with `ger rebase --autosquash`. JSON reason `unsquashed-fixup` |
 | `not-pushed` | Commit not on Gerrit yet |
 | `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |

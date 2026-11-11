@@ -219,3 +219,32 @@ def test_fix_prints_the_new_commit(stack_repo: Path, monkeypatch: pytest.MonkeyP
     code, out, _err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
     assert code == 0
     assert out.strip() == git_out("log", "-1", "--format=%h %s", cwd=stack_repo)
+
+
+def test_fix_hint_folds_the_fixup_and_ger_edit_never_folds_it_behind_your_back(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger fix`` names ``ger rebase --autosquash``; ``ger edit`` keeps fixups even with rebase.autosquash."""
+    from gerrit_workflow_tools.cli_edit import main as edit_main
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "rebase.autosquash", "true", cwd=stack_repo)
+    monkeypatch.setenv("GIT_EDITOR", "true")
+    target = git_out("log", "-1", "--format=%s", "HEAD~2", cwd=stack_repo)
+    (stack_repo / "fixup.txt").write_text("x", encoding="utf-8")
+    git("add", "fixup.txt", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~2"], monkeypatch)
+    assert code == 0, err
+    assert err.strip().endswith("next: squash it with `ger rebase --autosquash`")
+    count = len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split())
+
+    code, _out, err = run_cli(stack_repo, edit_main, ["--drop", "HEAD~1"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == 0, err
+    assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == f"fixup! {target}"
+    assert len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split()) == count - 1
+
+    code, _out, err = run_cli(stack_repo, rebase_main, ["--autosquash"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == 0, err
+    subjects = git_out("log", "--format=%s", "@{u}..HEAD", cwd=stack_repo).splitlines()
+    assert target in subjects and not any(s.startswith("fixup!") for s in subjects)

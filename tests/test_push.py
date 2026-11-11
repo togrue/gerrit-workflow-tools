@@ -499,7 +499,7 @@ def test_gpush_names_a_fixup_commit_as_the_boundary(stack_repo: Path, monkeypatc
     git("commit", "--allow-empty", "--fixup", "HEAD~1", cwd=stack_repo)
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
     assert code == 0
-    assert "git rebase -i --autosquash" in out
+    assert "ger rebase --autosquash" in out
     assert "no Change-Id" not in out
 
 
