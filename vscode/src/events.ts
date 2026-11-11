@@ -77,6 +77,10 @@ export class EventFollower implements vscode.Disposable {
   }
 
   private update(events: EventsStatus | undefined): void {
+    // The abort at dispose ends the long poll in an error: that is not news, and the emitter is gone.
+    if (this.disposed) {
+      return;
+    }
     if (events?.state === this.events?.state && events?.reason === this.events?.reason) {
       return;
     }
@@ -88,6 +92,9 @@ export class EventFollower implements vscode.Disposable {
   }
 
   private schedule(): void {
+    if (this.disposed) {
+      return;
+    }
     clearTimeout(this.debounce);
     this.debounce = setTimeout(() => this.refresh(), DEBOUNCE_MS);
   }

@@ -170,7 +170,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   private memberItem(member: Member, chain: Chain): vscode.TreeItem {
     const item = new vscode.TreeItem(member.subject);
     item.id = `${chain.key}/${member.number}`;
-    item.description = `${member.number} · ${votes(member)}${member.local_sha ? " · local" : ""}`;
+    item.description = `${member.number} · ${votes(member)}${member.local_sha ? " · in your stack" : ""}`;
     item.iconPath = severityIcon(severity(member.attention_reasons));
     item.tooltip = reasonWords(member.attention_reasons) || "no open issues";
     item.contextValue = changeRowContext({ kind: "change", url: Boolean(member.url), local: member.local_sha !== null });

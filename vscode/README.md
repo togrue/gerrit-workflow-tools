@@ -24,7 +24,7 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - *Outgoing*: your open chains. *To review*: chains waiting on you.
 - One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
   it for the chain's changes. A `●` marks new activity.
-- Changes that are commits of your local stack are marked `local` and open as local commits.
+- Changes that are commits of your local stack are marked *in your stack* and open as local commits.
 
 **Local stack**
 
@@ -111,7 +111,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
 `ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) refresh *Local stack*,
-the `local` markers and the Change view's buttons about a second after the last change, also when you
+the *in your stack* markers and the Change view's buttons about a second after the last change, also when you
 work in the integrated terminal. This reads only your repository: it never asks Gerrit, and says nothing
 in a notification, as you did it yourself.
 

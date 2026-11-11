@@ -242,10 +242,10 @@
         { "command": "ger.prevComment", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@1" },
         { "command": "ger.nextComment", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@2" },
         { "command": "ger.agentBrief", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@3" },
-        { "command": "ger.review", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "navigation@4" },
-        { "command": "ger.checkout", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "navigation@5" },
+        { "command": "ger.review", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "1_open@1" },
+        { "command": "ger.checkout", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "navigation@4" },
         { "command": "ger.stack.edit", "when": "view == ger.change && ger.ready && ger.changeShown && ger.changeIsLocal", "group": "navigation@4" },
-        { "command": "ger.openInGerrit", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@6" },
+        { "command": "ger.openInGerrit", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "1_open@2" },
         { "command": "ger.reviewDone", "when": "view == ger.change && ger.ready && ger.reviewOpen" }
       ],
       "view/item/context": [
