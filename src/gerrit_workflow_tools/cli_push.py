@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.push import (
     PushPlan,
     PushRefusal,
     PushResult,
+    changes_nothing,
     execute,
     prepare,
     prepare_vanilla,
@@ -326,6 +327,8 @@ def _push_gerrit(
     plan = prepared
     if args.i:
         plan = prompt_initial_options(cwd, plan, args, settings=settings)
+    if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
+        return _finish_push(execute(cwd, plan, settings=settings, gerrit=gerrit), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):

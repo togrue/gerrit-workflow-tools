@@ -64,6 +64,11 @@ class StateUpdateFailure:
     error: str
 
 
+def all_unchanged(commits: Sequence[Commit], unchanged: Sequence[UnchangedChange]) -> bool:
+    """Every commit already is its change's current patch set: ``git push`` would give Gerrit nothing."""
+    return not {commit.sha for commit in commits} - {change.commit.sha for change in unchanged}
+
+
 def planned_updates(options: PushOptions, unchanged: Sequence[UnchangedChange]) -> tuple[StateUpdate, ...]:
     """The REST updates *options* ask for on *unchanged*: only where a change's state differs."""
     updates: list[StateUpdate] = []

@@ -33,7 +33,7 @@ from gerrit_workflow_tools.core.push import (
 )
 from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
-from gerrit_workflow_tools.core.push_unchanged import StateUpdate
+from gerrit_workflow_tools.core.push_unchanged import StateUpdate, all_unchanged
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
@@ -206,7 +206,10 @@ def print_dry_run(plan: PushPlan) -> None:
     """Status line and the ``git push`` that would run; what would happen after it on stderr."""
     print()
     print_plan_status(plan)
-    print(color_text(" ".join(push_argv(plan)), ANSI_DIM_GRAY))
+    if all_unchanged(plan.commits, plan.unchanged):  # what the real run does: no git push, REST only
+        print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
+    else:
+        print(color_text(" ".join(push_argv(plan)), ANSI_DIM_GRAY))
     if needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
         label = strategy_status_label(plan.options.strategy)
         print(

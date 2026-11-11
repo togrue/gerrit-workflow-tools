@@ -540,6 +540,7 @@ def test_gpush_preview_names_what_it_sets_over_rest(stack_repo: Path, monkeypatc
     assert "set over REST" in out
     assert f"{rows[0].short_sha}  # {rows[0].subject}  wip,topic=t" in out
     assert rows[1].short_sha not in out.split("set over REST")[1].split("Branch")[0]
+    assert "git push origin" in out  # the second commit is new
     assert not store.calls_to("set_wip") and not store.calls_to("set_topic")
 
 
@@ -558,6 +559,38 @@ def test_gpush_sets_only_what_differs_and_nothing_without_options(
     code, out, _err = run_cli(stack_repo, gpush_main, ["-y", "--wip", rows[1].sha], monkeypatch, gerrit=store)
     assert code == 0
     assert len(store.calls_to("set_wip")) == 1 and f"set {rows[0].short_sha}" in out
+
+
+@pytest.mark.parametrize("argv", [[], ["-y"]])
+def test_gpush_with_nothing_to_send_or_set_says_so_without_asking(
+    argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No preview, no question, no ``-y`` needed off a terminal, and no ``git push`` Gerrit would refuse."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    mock_run = _rejected_as_unchanged(monkeypatch)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    monkeypatch.setattr("builtins.input", lambda _prompt="": pytest.fail("must not prompt"))
+
+    code, out, err = run_cli(
+        stack_repo, gpush_main, [*argv, rows[1].sha], monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows))
+    )
+
+    assert (code, out.strip(), err) == (ExitCode.OK, "nothing to push: Gerrit already has these commits", "")
+    mock_run.assert_not_called()
+
+
+def test_gpush_dry_run_shows_no_git_push_the_real_run_would_not_make(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--wip", rows[1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0
+    assert f"{rows[0].short_sha}  # {rows[0].subject}  wip" in out.split("set over REST")[1]
+    assert "git push" not in out
+    assert "[dry-run] no git push: Gerrit already has these commits" in err
 
 
 def test_gpush_a_failed_rest_update_is_a_warning_and_exit_gerrit(

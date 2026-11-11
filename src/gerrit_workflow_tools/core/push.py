@@ -37,6 +37,7 @@ from gerrit_workflow_tools.core.push_unchanged import (
     StateUpdate,
     StateUpdateFailure,
     UnchangedChange,
+    all_unchanged,
     apply_updates,
     planned_updates,
     unreached_options_warning,
@@ -125,6 +126,15 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
         options=options,
         credential_error=credential_error(options.strategy, options.reviewers, settings),
     )
+
+
+NOTHING_TO_PUSH = "nothing to push: Gerrit already has these commits"
+
+
+def changes_nothing(plan: PushPlan) -> bool:
+    """Nothing to send and nothing to set over REST: the push would leave Gerrit as it is."""
+    rest = state_updates(plan) or needs_rest_assignment(plan.options.strategy, plan.options.reviewers)
+    return all_unchanged(plan.commits, plan.unchanged) and not rest
 
 
 def unchanged_short_shas(plan: PushPlan) -> set[str]:
@@ -265,27 +275,20 @@ def execute(
 ) -> PushResult:
     if not isinstance(plan, PushPlan):
         return _captured(run_git_push(list(plan), cwd))
-    argv = push_argv(plan)
-    captured = _captured(run_git_push(argv, cwd))
-    rejected = push_rejected_no_new_changes(captured.stdout, captured.stderr)
+    sent = not all_unchanged(plan.commits, plan.unchanged)  # else Gerrit says "no new changes": not run
+    captured = _captured(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0, NOTHING_TO_PUSH)
+    rejected = not sent or push_rejected_no_new_changes(captured.stdout, captured.stderr)
     if captured.returncode != 0 and not rejected:
         return captured
     if rejected:
-        captured = PushResult(returncode=0, stdout="nothing to push: Gerrit already has these commits")
+        captured = PushResult(returncode=0, stdout=NOTHING_TO_PUSH)
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
     updates = state_updates(plan)
     failures = apply_updates(GerritService.from_cwd(cwd, settings=settings, rest=gerrit), updates) if updates else []
     failed_updates = {failure.update for failure in failures}
-    note = "\n".join(
-        filter(
-            None,
-            (
-                _update_last_pushed(cwd, plan),
-                unreached_options_warning(plan.options, plan.unchanged, rejected=rejected),
-            ),
-        )
-    )
+    unreached = unreached_options_warning(plan.options, plan.unchanged, rejected=rejected)
+    note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), unreached)))
     failed = bool(error) or bool(failures) or (reviewers is not None and not reviewers.ok)
     return replace(
         captured,
