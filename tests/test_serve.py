@@ -22,12 +22,12 @@ from gerrit_workflow_tools.core import reorder, reorder_preview
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.git_state import rebase_in_progress
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict, swap_conflicts
-from gerrit_workflow_tools.core.review_checkout import changes_ref
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit
 from gerrit_workflow_tools.server.api import GerApi

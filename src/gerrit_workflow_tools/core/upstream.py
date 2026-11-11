@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git
+from gerrit_workflow_tools.core.git_run import UnknownRevisionError, commit_sha_or_none, git
 
 
 logger = logging.getLogger(__name__)
@@ -220,3 +220,11 @@ def set_branch_upstream(cwd: Path | str | None, branch: str, upstream: str) -> N
         raise UnknownRevisionError(f"{upstream!r} is not a remote-tracking branch; fetch from the remote first")
     git("branch", "--set-upstream-to", upstream, branch, cwd=cwd)
     append_recent_upstream_abbrev(cwd, upstream)
+
+
+def track_remote_branch(cwd: Path | str | None, branch: str, remote: str, target: str) -> bool:
+    """Make ``<remote>/<target>`` the upstream of *branch* when that remote-tracking ref exists; whether it did."""
+    if commit_sha_or_none(cwd, f"refs/remotes/{remote}/{target}") is None:
+        return False
+    git("branch", "-q", f"--set-upstream-to={remote}/{target}", branch, cwd=cwd)
+    return True

@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_patchset
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel
+from gerrit_workflow_tools.core.upstream import track_remote_branch
 
 
 ReviewMode = Literal["worktree", "branch"]
@@ -34,20 +36,6 @@ class ReviewChainEndError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class PatchsetToReview:
-    """One patchset of a change, as Gerrit describes it: what ``open_review`` checks out."""
-
-    number: int
-    key: str
-    """The change's triplet."""
-    change_id: str
-    patch_set: int
-    commit: str
-    subject: str
-    target_branch: str
-
-
-@dataclass(frozen=True)
 class CheckoutOptions:
     """How ``open_review`` checks a change out."""
 
@@ -61,7 +49,7 @@ class CheckoutOptions:
 class ReviewState:
     """What is being reviewed in one worktree. Lives under that worktree's git dir."""
 
-    change: PatchsetToReview
+    change: GerritPatchset
     staged: bool
     mode: ReviewMode
     worktree: str
@@ -96,11 +84,6 @@ class ReviewState:
         return f"{BRANCH_PREFIX}{self.number}"
 
 
-def changes_ref(number: int, patch_set: int) -> str:
-    """Gerrit's ``refs/changes/NN/<number>/<patchset>`` ref."""
-    return f"refs/changes/{number % 100:02d}/{number}/{patch_set}"
-
-
 def _state_path(worktree: Path | str) -> Path | None:
     repo_dir = git_dir(worktree)
     return repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None
@@ -113,7 +96,7 @@ def load_state(worktree: Path | str) -> ReviewState | None:
         return None
     try:
         raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-        return ReviewState(**{**raw, "change": PatchsetToReview(**raw["change"])})
+        return ReviewState(**{**raw, "change": GerritPatchset(**raw["change"])})
     except (ValueError, TypeError, KeyError):
         return None
 
@@ -223,16 +206,8 @@ def set_staged(state: ReviewState, staged: bool) -> ReviewState:
     return new
 
 
-def fetch_patchset(cwd: Path | str, remote: str, number: int, patch_set: int, commit: str) -> None:
-    """Fetch patchset *patch_set* of change *number* from *remote*; it must bring *commit*."""
-    ref = changes_ref(number, patch_set)
-    git("fetch", "-q", remote, ref, cwd=cwd)
-    if commit_sha_or_none(cwd, commit) is None:
-        raise GitError(f"fetching {ref} did not bring {commit[:12]}")
-
-
 def open_review(
-    cwd: Path | str, target: PatchsetToReview, *, settings: Settings, options: CheckoutOptions
+    cwd: Path | str, target: GerritPatchset, *, settings: Settings, options: CheckoutOptions
 ) -> tuple[ReviewState, str | None]:
     """Fetch *target*, check it out on its ``change-<number>`` branch, stage it, record the review.
 
@@ -245,7 +220,7 @@ def open_review(
     worktree = review_worktree_path(cwd, settings) if mode == "worktree" else repo_toplevel(cwd)
     if worktree is None:
         raise GitError("not inside a git worktree")
-    fetch_patchset(cwd, remote, target.number, target.patch_set, target.commit)
+    fetch_patchset(cwd, remote, target)
     if mode == "worktree":
         ensure_review_worktree(cwd, worktree, target.commit)
     previous = load_state(worktree)
@@ -260,9 +235,7 @@ def open_review(
     if previous is not None:
         _unstage(worktree, previous)
     git("switch", "-q", "-C", branch, target.commit, cwd=worktree)
-    upstream = f"refs/remotes/{remote}/{target.target_branch}"
-    if commit_sha_or_none(worktree, upstream) is not None:
-        git("branch", "-q", f"--set-upstream-to={remote}/{target.target_branch}", branch, cwd=worktree)
+    track_remote_branch(worktree, branch, remote, target.target_branch)
     state = ReviewState(
         change=target, staged=False, mode=mode, worktree=str(worktree), created_branches=created, return_to=return_to
     )

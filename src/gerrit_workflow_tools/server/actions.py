@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.comment_target import resolve_comment_target
 from gerrit_workflow_tools.core.comment_write import default_state, locate, write_comment
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentState
+from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, resolve_working_branch
 from gerrit_workflow_tools.core.reorder import STEP_ACTIONS, StackStep, rewrite_stack, undo_rewrite
@@ -26,7 +27,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     find_review,
     open_review,
 )
-from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
+from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.upstream import set_branch_upstream
 from gerrit_workflow_tools.render.review_json import review_state_json
 from gerrit_workflow_tools.render.show_json import written_comment_json
@@ -48,7 +49,7 @@ def review_open(ctx: Context, req: Request) -> dict[str, Any]:
     if mode not in _REVIEW_MODES:
         raise BadRequest(f"mode must be one of {', '.join(_REVIEW_MODES)}")
     stage = req.body_field("stage", bool)
-    target, url = patchset_to_review(
+    target, url = resolve_patchset(
         ctx.service, ctx.cwd, safe_rev(str(change), "change"), req.body_field("patchset", int)
     )
     options = CheckoutOptions(

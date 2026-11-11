@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
+from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import (
@@ -36,9 +37,9 @@ from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, section_
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
-from gerrit_workflow_tools.core.review_checkout import fetch_patchset, find_review
+from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_delta import load_review_delta
-from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
+from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
@@ -310,8 +311,8 @@ def diff(ctx: Context, req: Request) -> dict[str, Any]:
     [target] = resolve_show_targets(ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch)
     sha = target.row.sha
     if not sha or commit_sha_or_none(ctx.cwd, sha) is None:
-        patchset, _url = patchset_to_review(ctx.service, ctx.cwd, rev, None)
-        fetch_patchset(ctx.cwd, ctx.settings.gerrit_remote, patchset.number, patchset.patch_set, patchset.commit)
+        patchset, _url = resolve_patchset(ctx.service, ctx.cwd, rev, None)
+        fetch_patchset(ctx.cwd, ctx.settings.gerrit_remote, patchset)
         sha = patchset.commit
     changed = commit_diff(ctx.cwd, sha)
     return {

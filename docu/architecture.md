@@ -454,7 +454,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries and the attention cursor (`--cursor`, `--cursor-history`, `--set-cursor`) |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, and the **headline** (`pick_headline`) |
-| `core/review_target.py` | The Gerrit half of a review checkout: `patchset_to_review`, `related_chain_numbers` |
+| `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
+| `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |

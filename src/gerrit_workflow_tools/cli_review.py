@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
     ReviewChainEndError,
@@ -37,7 +38,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     open_review,
     set_staged,
 )
-from gerrit_workflow_tools.core.review_target import patchset_to_review, related_chain_numbers
+from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
 from gerrit_workflow_tools.render.review_json import review_state_json
@@ -147,7 +148,7 @@ def _emit_state(state: ReviewState, *, chain: list[int] | None, url: str | None,
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:
     settings = service.settings
     if args.changeish is not None:
-        target, url = patchset_to_review(service, cwd, args.changeish, args.patchset)
+        target, url = resolve_patchset(service, cwd, args.changeish, args.patchset)
         mode = _mode(args, cwd, settings)
     else:
         if state is None:
@@ -155,7 +156,7 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
         number = neighbour(
             related_chain_numbers(service, state.key, state.patch_set), state.number, 1 if args.next else -1
         )
-        target, url = patchset_to_review(service, cwd, f"change:{number}", None)
+        target, url = resolve_patchset(service, cwd, f"change:{number}", None)
         mode = state.mode
     stage = settings.review_stage if args.stage is None else args.stage
     options = CheckoutOptions(mode=mode, stage=stage, force=args.force)
@@ -169,7 +170,7 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
 def _vote_target(args: argparse.Namespace, service: GerritService, cwd: Path) -> tuple[str, int, int | None]:
     """``(triplet, number, reviewed patchset)`` to vote on: ``--change``, else the review going on."""
     if args.change is not None:
-        target, _url = patchset_to_review(service, cwd, args.change, None)
+        target, _url = resolve_patchset(service, cwd, args.change, None)
         return target.key, target.number, None
     state = find_review(cwd, service.settings)
     if state is None:

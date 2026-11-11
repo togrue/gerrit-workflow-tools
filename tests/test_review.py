@@ -10,8 +10,8 @@ import pytest
 from gerrit_workflow_tools.cli_comment import main as comment_main
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_review import main as review_main
+from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.review_checkout import changes_ref
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import json_stdout, run_cli

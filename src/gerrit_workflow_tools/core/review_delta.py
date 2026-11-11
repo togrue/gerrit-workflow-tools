@@ -14,9 +14,8 @@ from typing import Any
 from gerrit_workflow_tools.core.commit_diff import FileChange, commit_diff, diff_between
 from gerrit_workflow_tools.core.gerrit.rest import self_account_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_patchset
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.review_checkout import fetch_patchset
-from gerrit_workflow_tools.core.review_target import patchset_to_review
 
 
 @dataclass(frozen=True)
@@ -78,7 +77,7 @@ def load_review_delta(
 
     Fetches both patchsets from ``gerrit.remote`` when they are not in the repository.
     """
-    current, _url = patchset_to_review(service, cwd, changeish, None)
+    current, _url = resolve_patchset(service, cwd, changeish, None)
     reviewed = since
     if reviewed is None:
         reviewed = last_reviewed_patch_set(service.rest.get_messages(current.key), self_account_id(service.rest))
@@ -88,11 +87,11 @@ def load_review_delta(
             commit=current.commit,
             reviewed_patch_set=None if reviewed is None else current.patch_set,
         )
-    old, _url = patchset_to_review(service, cwd, changeish, reviewed)
+    old, _url = resolve_patchset(service, cwd, changeish, reviewed)
     remote = service.settings.gerrit_remote
     for patchset in (old, current):
         if commit_sha_or_none(cwd, patchset.commit) is None:
-            fetch_patchset(cwd, remote, patchset.number, patchset.patch_set, patchset.commit)
+            fetch_patchset(cwd, remote, patchset)
     rebased, files = patchset_delta_files(cwd, old.commit, current.commit)
     return ReviewDelta(
         current_patch_set=current.patch_set,
