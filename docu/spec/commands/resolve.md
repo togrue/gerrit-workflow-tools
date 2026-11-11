@@ -61,8 +61,10 @@ Prints only the `resolution` object ([§5](../change-and-commit-identifiers.md#5
 |------|---------|
 | `0` | Resolved (including narrowed ambiguous Change-Ids that picked one change) |
 | `2` | Usage error (missing `CHANGEISH`, invalid flags) |
-| `3` | Gerrit API / git resolution error (not found, missing stack context, auth) |
+| `3` | Not found: the changeish resolves to nothing, or names an address that cannot be right |
 | `4` | Ambiguous — multiple matches survived narrowing; re-run with a triplet or `change:` number |
+| `5` | Gerrit answered badly or not at all (HTTP, auth, unreachable); never reported as `3` |
+| `6` | Required git configuration missing (`gerrit.webUrl`, credentials) |
 
 ---
 
