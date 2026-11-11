@@ -14,9 +14,12 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 
 - You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`).
 - You want **branch-local Gerrit settings** (target branch, reviewers via `branch.*` git config) and **push** commands that understand your stack (`ger push`).
-- You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger sha` / `ger change-id`).
+- You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger fix`, `ger rebase`).
+- You **review other people's chains** from your editor: find them (`ger inbox`), check one out in a review worktree (`ger review`), comment, and vote (`ger comment`, `ger review --vote`).
+- You **work through review comments and CI failures** on your own stack, or hand that to an agent (`ger show`, `ger ci`, `ger reply`, private notes with `ger comment --note`).
+- You want all of that in **VS Code** too: the extension in [`vscode/`](vscode/README.md) does it through `ger serve`.
 
-**Documentation:** [Getting started](docu/Getting-Started.md) · [Reading `ger log`](docu/Reading-ger-log.md) · [Full index](docu/README.md)
+**Documentation:** [Getting started](docu/Getting-Started.md) · [Workflows, step by step](docu/flows.md) · [Reading `ger log`](docu/Reading-ger-log.md) · [Full index](docu/README.md)
 
 ### Change-Id vs Gerrit change identity
 
@@ -53,7 +56,7 @@ and to reorder the stack by drag and drop. API: [docu/spec/commands/serve.md](do
 
 ### Testing
 
-Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in).
+Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in). The extension has its own: `npm test` and `npm run e2e` in `vscode/` (the e2e run drives the real `ger serve` over a fake Gerrit).
 
 ### Integration tests (optional)
 

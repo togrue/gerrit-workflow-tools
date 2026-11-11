@@ -46,7 +46,7 @@ Commands listed here are registered in `cli_ger.py` today.
 | `ger push` | [spec/commands/push.md](spec/commands/push.md) |
 | `ger show` | [spec/commands/show.md](spec/commands/show.md) |
 | `ger ci` | [spec/commands/ci.md](spec/commands/ci.md) — **CI findings** behind failed **CI links** ([design](spec/ci-content.md)) |
-| `ger comment` | [spec/commands/comment.md](spec/commands/comment.md) (partial: re-anchoring, uploading local drafts and orphans planned) |
+| `ger comment` | [spec/commands/comment.md](spec/commands/comment.md) (partial: uploading local drafts and orphans planned) |
 | `ger review` | [spec/commands/review.md](spec/commands/review.md) |
 | `ger reply` | [spec/commands/reply.md](spec/commands/reply.md) (partial: guided reply planned) |
 | `ger serve` | [spec/commands/serve.md](spec/commands/serve.md) — local HTTP service for editor integrations (the VS Code extension) |

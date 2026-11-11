@@ -40,7 +40,6 @@ When `REV` / `--until` is given, it is resolved as a **changeish** via **`core/g
 | `--private` | Magic ref `%private` |
 | `--branch NAME` | Push a different local branch than current |
 | `--no-rebase-check` | Skip fetch/linear-on-remote check (`gerrit.push.remotePolicy`) |
-| `--until REV` | Same as positional `REV` |
 | `--color`, `--debug-log`, `-v` | Standard CLI helpers (`-v` reserved, no extra effect today) |
 | `--follow-merges` | Include merge commits in stack range |
 

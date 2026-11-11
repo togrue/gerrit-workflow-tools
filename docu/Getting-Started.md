@@ -132,8 +132,13 @@ ger log              → see what needs attention
 ger show <ref>       → read comments and votes on one change
 ger push             → push the ready prefix of your stack
 ger edit / ger rebase → rework commits in the middle of the stack
+ger ci               → why CI failed, from the CI logs
+ger reply <id> --done → answer a review comment (a draft until you push)
+ger inbox            → chains waiting on your review
+ger review <change>  → check one out in the review worktree, then --vote and --done
 ```
 
+- **The workflows, step by step:** [flows.md](flows.md)
 - **Reading `ger log` output:** [Reading-ger-log.md](Reading-ger-log.md)
 - **Command reference:** [SPEC.md](SPEC.md)
 - **All config keys:** [Configuration.md](Configuration.md)

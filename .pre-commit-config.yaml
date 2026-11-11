@@ -5,7 +5,7 @@ repos:
     hooks:
       - id: guardrails
         name: architecture and doc guardrails
-        entry: uv run pytest -q -p no:cacheprovider tests/test_architecture.py tests/test_docs.py
+        entry: uv run pytest -q -p no:cacheprovider tests/test_architecture.py tests/test_docs.py tests/test_parity.py
         language: system
         pass_filenames: false
         always_run: true

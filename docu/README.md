@@ -27,6 +27,7 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 
 | Document | Role |
 |----------|------|
+| [flows.md](flows.md) | The review, rework and local-review workflows step by step: CLI command, VS Code command, tests, gaps |
 | [SPEC.md](SPEC.md) | **Index** — command registry, conventions (source of truth for CLI behavior) |
 | [architecture.md](architecture.md) | System design, shared concepts, module map |
 | [../CONTEXT.md](../CONTEXT.md) | Domain vocabulary — binding terms for code, docs and design discussion |
@@ -67,6 +68,13 @@ ger inbox                # chains waiting on your review
 ger show <ref>           # one change, full comments
 ger ci                   # why CI failed: findings from the CI logs
 ger push                 # push ready prefix
+
+ger review <change>      # check out someone's change in the review worktree
+ger comment app.py:42 -m "..."   # comment on a line (a draft until you send it)
+ger review --vote CR+1   # send your comments with the vote
+ger review --done        # leave the review
 ```
+
+Every step of the review, rework and local-review flows: [flows.md](flows.md).
 
 Command details: [SPEC.md](SPEC.md) → [spec/commands/](spec/commands/).
