@@ -461,7 +461,13 @@ def test_get_related_asks_for_the_relation_chain_of_one_patchset() -> None:
 @pytest.mark.parametrize(
     ("body", "reason"),
     [
-        (b"nosuchuser does not identify\na registered user\n", "nosuchuser does not identify a registered user"),
+        (b"nosuchuser does not identify a  registered user\n", "nosuchuser does not identify a registered user"),
+        (  # what Gerrit 3.14 answers to an unknown reviewer
+            b')]}\'\n{"error": "error adding reviewer", "reviewers": {"nosuchuser": {"input": "nosuchuser",'
+            b' "error": "Account \'nosuchuser\' not found\\nnosuchuser does not identify a registered user or group"'
+            b"}}}",
+            "Account 'nosuchuser' not found; nosuchuser does not identify a registered user or group",
+        ),
         (
             b')]}\'\n{"reviewers": {"nosuchuser": {"input": "nosuchuser", "error": "nosuchuser is not a user"},'
             b' "alice": {"input": "alice"}}}',

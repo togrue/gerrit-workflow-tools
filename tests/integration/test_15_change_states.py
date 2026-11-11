@@ -157,3 +157,27 @@ def test_a_push_gerrit_rejects_exits_nonzero_with_gerrits_reason(
     code, _out, err = run_ger(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
     assert code != 0
     assert "[remote rejected]" in err and "prohibited" in err.lower(), err
+
+
+def test_an_unknown_reviewer_says_gerrits_reason_once(
+    tmp_path: Path,
+    gerrit_integration_context: GerritIntegrationContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Changes Gerrit already has get reviewers over REST: its 400 body is the reason, said once."""
+    repo, _branch, _triplets = _pushed_stack(gerrit_integration_context, tmp_path, monkeypatch, "nosuch")
+    nobody = f"nosuch_{secrets.token_hex(3)}"
+    argv = ["--yes", "--no-rebase-check", "--reviewers", nobody]
+
+    code, _out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
+    warnings = [line for line in err.splitlines() if line.startswith("warning: could not set")]
+    assert code == 5, err
+    assert len(warnings) == 1 and f"r={nobody} on 2 commits" in warnings[0], err
+    assert warnings[0].endswith(
+        f"Gerrit HTTP 400: Account '{nobody}' not found; {nobody} does not identify a registered user or group"
+    ), err
+
+    # A new commit carries the reviewer as %r=: git push relays Gerrit's own refusal.
+    build_linear_chain(repo, ["nosuch new"])
+    code, _out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
+    assert code != 0 and nobody in err, err

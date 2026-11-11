@@ -38,10 +38,14 @@ class GerritUnavailableError(GerritApiError):
 
 
 def _error_texts(value: Any) -> list[str]:
-    """Every ``error`` string in a Gerrit JSON error body (``ReviewResult`` has one per reviewer)."""
+    """The ``error`` strings of a Gerrit JSON error body, the most specific ones.
+
+    ``ReviewResult`` has one per reviewer under a generic top-level one (``error adding reviewer``),
+    which is said only when nothing below it is.
+    """
     if isinstance(value, dict):
-        own = [value["error"]] if isinstance(value.get("error"), str) else []
-        return own + [text for item in value.values() for text in _error_texts(item)]
+        nested = [text for item in value.values() for text in _error_texts(item)]
+        return nested or ([value["error"]] if isinstance(value.get("error"), str) else [])
     if isinstance(value, list):
         return [text for item in value for text in _error_texts(item)]
     return []
@@ -57,7 +61,7 @@ def gerrit_error_reason(body: str, status_phrase: str) -> str:
     if text[:1] in ("{", "["):
         with contextlib.suppress(json.JSONDecodeError):
             text = "; ".join(dict.fromkeys(_error_texts(json.loads(text))))
-    text = " ".join(text.split())
+    text = "; ".join(" ".join(line.split()) for line in text.splitlines() if line.strip())
     if not text:
         return status_phrase
     return text if len(text) <= 300 else f"{text[:297]}..."
