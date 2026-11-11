@@ -23,6 +23,13 @@ class PushResult:
     updated: tuple[StateUpdate, ...] = ()
     """What was set over REST on changes Gerrit already had at that commit."""
     update_failures: tuple[StateUpdateFailure, ...] = ()
+    nothing_sent: bool = False
+    """Gerrit took no new patch set: every commit was already on it, or it answered ``no new changes``."""
+
+    @property
+    def set_nothing(self) -> bool:
+        """Nothing was sent, and nothing set over REST either: the push left Gerrit as it was."""
+        return self.nothing_sent and not (self.updated or self.update_failures or self.reviewers)
 
     @property
     def gerrit_failed(self) -> bool:

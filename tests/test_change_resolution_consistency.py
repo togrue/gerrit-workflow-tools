@@ -191,11 +191,11 @@ def test_push_and_edit_take_rev_as_the_same_stack_changeish(
     """``ger push REV`` resolves REV like every focus command: to the local stack commit of that change."""
     from gerrit_workflow_tools.core.config import Settings
     from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
-    from tests.cli_gerrit_mocks import build_details_by_change_id
+    from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id
 
     _configure_web(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
+    details = at_older_patchsets(build_details_by_change_id(rows))
     store = ChangeStore(details)
     row = rows[0]
     assert row.change_id is not None

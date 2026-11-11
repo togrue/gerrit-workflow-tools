@@ -28,12 +28,14 @@ from gerrit_workflow_tools.core.push import (
     PushPlan,
     push_argv,
     revise,
+    sent_commits,
     state_updates,
     unchanged_short_shas,
 )
 from gerrit_workflow_tools.core.push_options import PushOptions
+from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
-from gerrit_workflow_tools.core.push_unchanged import StateUpdate, all_unchanged
+from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
@@ -109,9 +111,9 @@ def print_ready_boundary_notice(boundary: PushBoundary, *, summary_highlighter: 
         print(color_text(f"... {boundary.remaining_unpushed} not-ready commit(s) remain unpushed", ANSI_YELLOW))
 
 
-def commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> list[str]:
+def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> list[str]:
     lines: list[str] = []
-    for commit in plan.commits:
+    for commit in sent_commits(plan):
         disp = summary_highlighter.highlight(commit.subject, sha=commit.sha)
         sha_p = commit.short_sha.ljust(8)
         line = f"    {color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{disp}"
@@ -122,15 +124,30 @@ def commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> lis
     return lines
 
 
-def print_gpush_preview(plan: PushPlan, commit_lines: list[str], *, summary_highlighter: SummaryHighlighter) -> None:
-    print(color_text("About to push commits:", f"{ANSI_BOLD}{ANSI_CYAN}"))
-    for line in commit_lines:
-        print(line)
-    updates = state_updates(plan)
+def _commits(count: int) -> str:
+    return "1 commit Gerrit already has is" if count == 1 else f"{count} commits Gerrit already has are"
+
+
+def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlighter) -> None:
+    """What the push sends and what it sets over REST, each listed once, under a heading only when it has any.
+
+    Commits Gerrit already has with nothing to set are one line, not a list.
+    """
+    heading = f"{ANSI_BOLD}{ANSI_CYAN}"
+    sent, updates = sent_commits(plan), state_updates(plan)
+    if sent:
+        print(color_text("About to push commits:", heading))
+        for line in _commit_lines(plan, summary_highlighter):
+            print(line)
     if updates:
-        print(color_text("Gerrit already has these at that commit; set over REST instead:", ANSI_DIM))
+        rest = "Gerrit already has these at that commit; set over REST instead:"
+        print(color_text(rest, ANSI_DIM) if sent else color_text("No new commits to push; set on Gerrit:", heading))
         for update in updates:
             print(f"    {update_line(update, summary_highlighter)}")
+    if sent and (idle := len(plan.commits) - len(sent) - len(updates)):
+        print(color_text(f"{_commits(idle)} not sent again", ANSI_DIM))
+    if not sent and not updates:
+        print(NOTHING_TO_PUSH)
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
 
 
@@ -172,10 +189,11 @@ def print_plan_status(plan: PushPlan) -> None:
         print(color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit gets no new patchset there", ANSI_DIM))
 
 
-def ask_push_action(drafts: int) -> str:
+def ask_push_action(drafts: int, *, sends: bool = True) -> str:
     """Ask the push confirmation: ``push``, ``cancel`` or ``reviewers``, plus ``push-only`` with *drafts*.
 
     With drafts, the question offers them: ``push`` publishes them with the push, ``push-only`` keeps them.
+    A push that *sends* no commit only sets options over REST, and the question says so.
     """
     answers = {
         "": "push",
@@ -194,10 +212,11 @@ def ask_push_action(drafts: int) -> str:
             hint="  (Enter or y: push and publish, p: push and keep the drafts, n: cancel, r: set reviewers)",
             on_eof="cancel",
         )
+    question, verb = ("Do you want to push these commits?", "push") if sends else ("Set these on Gerrit?", "set them")
     return ask_choice(
-        "Do you want to push these commits? [Y/n/r]: ",
+        f"{question} [Y/n/r]: ",
         answers,
-        hint="  (Enter or y: push, n: cancel, r: set reviewers and strategy)",
+        hint=f"  (Enter or y: {verb}, n: cancel, r: set reviewers and strategy)",
         on_eof="cancel",
     )
 
@@ -206,7 +225,7 @@ def print_dry_run(plan: PushPlan) -> None:
     """Status line and the ``git push`` that would run; what would happen after it on stderr."""
     print()
     print_plan_status(plan)
-    if all_unchanged(plan.commits, plan.unchanged):  # what the real run does: no git push, REST only
+    if not sent_commits(plan):  # what the real run does: no git push, REST only
         print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
     else:
         print(color_text(" ".join(push_argv(plan)), ANSI_DIM_GRAY))
@@ -303,7 +322,7 @@ def options_line_available() -> bool:
     return prompt_toolkit_can_run() and sys.stdout.isatty()
 
 
-_CONFIRM_LINE_MESSAGE = "Push options (Enter pushes, Up: history, Ctrl-C cancels): "
+_CONFIRM_LINE_MESSAGE = "Push options (Enter {}, Up: history, Ctrl-C cancels): "
 
 
 def confirm_with_options_line(
@@ -311,7 +330,8 @@ def confirm_with_options_line(
 ) -> PushPlan | None:
     """The one-line push confirmation: Enter pushes, a typed line sets options first. ``None`` cancels.
 
-    An empty line keeps the options *plan* already has, as the status line shows them.
+    An empty line keeps the options *plan* already has, as the status line shows them. When the
+    push sends no commit, Enter sets them on Gerrit, and the line says that instead.
     """
     try:
         res = prompt_reviewers_line(
@@ -321,7 +341,7 @@ def confirm_with_options_line(
             change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
             reviewer_flag_segments=list(args.reviewers),
             session_strategy=_session_strategy(args),
-            message=_CONFIRM_LINE_MESSAGE,
+            message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
             prefill=False,
         )
     except (EOFError, KeyboardInterrupt):

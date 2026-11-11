@@ -106,6 +106,14 @@ def build_details_by_change_id(
     return out
 
 
+def at_older_patchsets(details: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """*details* with Gerrit at an older patchset of each change, so a push sends every local commit."""
+    for detail in details.values():
+        detail["current_revision"] = "0" * 40
+        detail["revisions"] = {"0" * 40: {"_number": 1}}
+    return details
+
+
 def gerrit_client_class_stub(inst: object) -> MagicMock:
     """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
 

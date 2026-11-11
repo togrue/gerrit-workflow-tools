@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.git_state import (
 )
 from gerrit_workflow_tools.core.push_checks import check_existing_changes, git_or_none, rebase_check
 from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
-from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult, push_rejected_no_new_changes, result_of
+from gerrit_workflow_tools.core.push_result import PushResult, push_rejected_no_new_changes, result_of
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
@@ -37,7 +37,6 @@ from gerrit_workflow_tools.core.push_reviewers import (
 from gerrit_workflow_tools.core.push_unchanged import (
     StateUpdate,
     UnchangedChange,
-    all_unchanged,
     apply_updates,
     planned_updates,
     unreached_options_warning,
@@ -109,7 +108,13 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
 def changes_nothing(plan: PushPlan) -> bool:
     """Nothing to send and nothing to set over REST: the push would leave Gerrit as it is."""
     rest = state_updates(plan) or needs_rest_assignment(plan.options.strategy, plan.options.reviewers)
-    return all_unchanged(plan.commits, plan.unchanged) and not rest
+    return not sent_commits(plan) and not rest
+
+
+def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
+    """The commits *plan* gives Gerrit as new patch sets: all but those already their change's current one."""
+    unchanged = {change.commit.sha for change in plan.unchanged}
+    return tuple(commit for commit in plan.commits if commit.sha not in unchanged)
 
 
 def unchanged_short_shas(plan: PushPlan) -> set[str]:
@@ -252,13 +257,13 @@ def execute(
 ) -> PushResult:
     if not isinstance(plan, PushPlan):
         return result_of(run_git_push(list(plan), cwd))
-    sent = not all_unchanged(plan.commits, plan.unchanged)  # else Gerrit says "no new changes": not run
-    captured = result_of(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0, NOTHING_TO_PUSH)
+    sent = bool(sent_commits(plan))  # else Gerrit says "no new changes": not run
+    captured = result_of(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0)
     rejected = not sent or push_rejected_no_new_changes(captured.stdout, captured.stderr)
     if captured.returncode != 0 and not rejected:
         return captured
     if rejected:
-        captured = PushResult(returncode=0, stdout=NOTHING_TO_PUSH)
+        captured = PushResult(returncode=0, nothing_sent=True)
     _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
     reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
     updates = state_updates(plan)

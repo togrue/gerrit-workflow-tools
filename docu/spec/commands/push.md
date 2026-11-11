@@ -78,7 +78,14 @@ Gerrit applies magic-ref options only to the changes a push gives a new patch se
 | `--topic` | `PUT /changes/{id}/topic` |
 | `--reviewers` (strategy `push`) | the reviewer batch, for the named reviewers not yet on the change; `lazy` / `overwrite` reach every change anyway |
 
-`--dry-run` is built from the same plan: it prints the `git push` line only when the real run would push, else `[dry-run] no git push: Gerrit already has these commits` on stderr. The preview (and `--dry-run`) lists them under `Gerrit already has these at that commit; set over REST instead:` as `<sha> # <subject>  ready,topic=x`; after the push each one prints `set <sha> # <subject>  …`. A failed update is a warning naming the commit and ending in Gerrit's own reason; the same failure on several commits is one line naming them all (`warning: could not set r=nosuchuser on 2 commits (abc1234, def5678): Gerrit HTTP 400: Account 'nosuchuser' not found; nosuchuser does not identify a registered user or group`). The exit code is `5` (`GERRIT`), as for reviewers. Without Gerrit's view of the changes (no credentials) nothing can be set, and a `no new changes` push says so. The cached state of every updated change is dropped. A push without these options makes no extra call. Hashtags are not a `ger push` option.
+The preview is built from the plan (`sent_commits` and `state_updates` in `core/push.py`), and `--dry-run` from the same plan. Each commit is listed once, and a heading only appears over a list that has something in it:
+
+- `About to push commits:` lists only the commits the push sends, the ones Gerrit gets a new patchset for.
+- `Gerrit already has these at that commit; set over REST instead:` lists the commits that only get options set, as `<sha> # <subject>  ready,topic=x`.
+- Commits Gerrit already has with nothing to set are one dim line under the list: `1 commit Gerrit already has is not sent again`.
+- When the push sends nothing and only sets options, there is no `About to push` block: the heading is `No new commits to push; set on Gerrit:`, the question is `Set these on Gerrit? [Y/n/r]:` (the options line says `Enter sets them on Gerrit`), and no `nothing to push` line is printed beside the sets.
+
+`--dry-run` prints the `git push` line only when the real run would push, else `[dry-run] no git push: Gerrit already has these commits` on stderr. After the push each update prints `set <sha> # <subject>  …`. A failed update fails the command, so it is an error naming the commit and ending in Gerrit's own reason; the same failure on several commits is one line naming them all (`error: could not set r=nosuchuser on 2 commits (abc1234, def5678): Gerrit HTTP 400: Account 'nosuchuser' not found; nosuchuser does not identify a registered user or group`). The exit code is `5` (`GERRIT`), as for reviewers. Without Gerrit's view of the changes (no credentials) nothing can be set, and a `no new changes` push says so. The cached state of every updated change is dropped. A push without these options makes no extra call. Hashtags are not a `ger push` option.
 
 Interactive push line (`push_input_prompt`) can set strategy keywords; see module `push_input_line.py`.
 
@@ -121,7 +128,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 
 ## Confirmation output
 
-Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt, on a terminal with no drafts to publish: the push-options input line (`Push options (Enter pushes, Up: history, Ctrl-C cancels):`). Enter on the empty line pushes with the options the status line shows (no reviewers unless `--reviewers`/config gave some); a typed line (`r=alice,bob topic=x wip …`, with completion and history) sets them first; Ctrl-C / Ctrl-D cancels (exit `0`). Without a terminal on stdout, or with drafts, the question is `Do you want to push these commits? [Y/n/r]:`. No prompt with `--dry-run` / `-y` / non-TTY without `-y`, nor when the push would change nothing on Gerrit (see above).
+Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt, on a terminal with no drafts to publish: the push-options input line (`Push options (Enter pushes, Up: history, Ctrl-C cancels):`). Enter on the empty line pushes with the options the status line shows (no reviewers unless `--reviewers`/config gave some); a typed line (`r=alice,bob topic=x wip …`, with completion and history) sets them first; Ctrl-C / Ctrl-D cancels (exit `0`). Without a terminal on stdout, or with drafts, the question is `Do you want to push these commits? [Y/n/r]:`. A push that sends no commit and only sets options over REST asks `Set these on Gerrit? [Y/n/r]:` instead (see above). No prompt with `--dry-run` / `-y` / non-TTY without `-y`, nor when the push would change nothing on Gerrit (see above).
 
 **Drafts.** When you have drafts on changes the push updates, the status line shows `Drafts keep N` and the prompt becomes `Push and publish N draft(s)? [Y/n/p/r]`. Yes adds Gerrit's `publish-comments` push option; `p` pushes and keeps them. Whenever the push does not publish, it sends `no-publish-comments`, so an account preference that publishes on push cannot publish them behind your back. Drafts on commits Gerrit already has (no new patchset) cannot be published by a push; the preview names them (`drafts on … stay drafts`). Details: [reply.md](reply.md#publishing-with-ger-push).
 
@@ -138,7 +145,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
 | `4` | `REV` names a Change-Id that more than one stack commit carries |
-| `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as a warning with Gerrit's reason) |
+| `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as an error with Gerrit's reason) |
 | `6` | The branch has no upstream: the same message and hint as `ger log` |
 | other | `git push` exit code |
 

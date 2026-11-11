@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.push import PushPlan
-from gerrit_workflow_tools.core.push_result import PushResult
+from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
 from gerrit_workflow_tools.push_preview import update_line
@@ -60,7 +60,12 @@ def _failure_lines(failures: Sequence[StateUpdateFailure]) -> list[str]:
 
 
 def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
-    """What happened after ``git push``: errors, reviewer assignments, warnings."""
+    """What happened after ``git push``: errors, reviewer assignments, what was set, warnings.
+
+    Gerrit refusing an option on a change it already had fails the command, so it is an error.
+    """
+    if result.set_nothing:
+        print(NOTHING_TO_PUSH)
     if result.error_message:
         print(result.error_message, file=sys.stderr)
     if result.reviewers is not None and plan is not None:
@@ -71,6 +76,6 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
     for update in result.updated:
         print(f"set {update_line(update)}")
     for line in _failure_lines(result.update_failures):
-        print(f"warning: could not set {line}", file=sys.stderr)
+        print(f"error: could not set {line}", file=sys.stderr)
     if result.warning:
         print(result.warning, file=sys.stderr)

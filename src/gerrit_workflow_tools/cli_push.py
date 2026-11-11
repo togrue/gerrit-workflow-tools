@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.push import (
     publish_drafts_with,
     publishable_drafts,
     push_argv,
+    sent_commits,
 )
 from gerrit_workflow_tools.core.push_checks import resolve_push_branch
 from gerrit_workflow_tools.core.push_result import PushResult
@@ -43,7 +44,6 @@ from gerrit_workflow_tools.push_outcome import print_push_outcome
 from gerrit_workflow_tools.push_preview import (
     apply_interactive_line,
     ask_push_action,
-    commit_lines,
     confirm_with_options_line,
     options_line_available,
     print_dry_run,
@@ -254,7 +254,7 @@ def _confirm_gerrit_push(
             argv[-1],
         )
         if not stack_printed:
-            print_gpush_preview(plan, commit_lines(plan, summary_highlighter), summary_highlighter=summary_highlighter)
+            print_gpush_preview(plan, summary_highlighter=summary_highlighter)
             stack_printed = True
         if args.dry_run:
             print_dry_run(plan)
@@ -274,7 +274,7 @@ def _confirm_gerrit_push(
             act = "push" if revised else "cancel"
             plan = revised or plan
         else:
-            act = ask_push_action(drafts)
+            act = ask_push_action(drafts, sends=bool(sent_commits(plan)))
         if act == "push" and drafts:
             plan = publish_drafts_with(plan, True)
         if act == "cancel":

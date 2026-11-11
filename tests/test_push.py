@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from gerrit_workflow_tools.push_options_history import load_push_options_history
 from tests.change_store import ChangeStore
-from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
+from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import make_repo_with_merged_side_branch
 from tests.helpers import ref_exists, write_rebase_head
@@ -523,7 +523,7 @@ def test_gpush_ready_reaches_changes_gerrit_already_has_and_log_agrees(
     code, out, err = run_cli(stack_repo, gpush_main, ["-y", "--ready", rows[1].sha], monkeypatch, gerrit=store)
 
     assert code == 0, err
-    assert "nothing to push" in out
+    assert "nothing to push" not in out and "About to push" not in out
     assert [call.args[1] for call in store.calls_to("set_wip")] == [False, False]
     assert all(f"set {row.short_sha}" in out and "ready" in out for row in rows)
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
@@ -588,12 +588,12 @@ def test_gpush_dry_run_shows_no_git_push_the_real_run_would_not_make(
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--wip", rows[1].sha], monkeypatch, gerrit=store)
 
     assert code == 0
-    assert f"{rows[0].short_sha}  # {rows[0].subject}  wip" in out.split("set over REST")[1]
-    assert "git push" not in out
+    assert f"{rows[0].short_sha}  # {rows[0].subject}  wip" in out.split("No new commits to push; set on Gerrit:")[1]
+    assert "git push" not in out and "About to push" not in out
     assert "[dry-run] no git push: Gerrit already has these commits" in err
 
 
-def test_gpush_a_failed_rest_update_is_a_warning_and_exit_gerrit(
+def test_gpush_a_failed_rest_update_is_an_error_and_exit_gerrit(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class _RejectsTopic(ChangeStore):
@@ -602,7 +602,7 @@ def test_gpush_a_failed_rest_update_is_a_warning_and_exit_gerrit(
 
     rows = commits_in_range(stack_repo, "main..feature")[:1]
     _rejected_as_unchanged(monkeypatch)
-    code, _out, err = run_cli(
+    code, out, err = run_cli(
         stack_repo,
         gpush_main,
         ["-y", "--topic", "t", rows[0].sha],
@@ -610,7 +610,8 @@ def test_gpush_a_failed_rest_update_is_a_warning_and_exit_gerrit(
         gerrit=_RejectsTopic(build_details_by_change_id(rows)),
     )
     assert code == ExitCode.GERRIT
-    assert f"warning: could not set {rows[0].short_sha}" in err and "Gerrit HTTP 403" in err
+    assert f"error: could not set {rows[0].short_sha}" in err and "Gerrit HTTP 403" in err
+    assert "nothing to push" not in out and "warning:" not in err
 
 
 def test_gpush_an_unknown_reviewer_is_said_once_with_gerrits_reason(
@@ -631,10 +632,53 @@ def test_gpush_an_unknown_reviewer_is_said_once_with_gerrits_reason(
     )
 
     assert code == ExitCode.GERRIT
-    warnings = [line for line in err.splitlines() if line.startswith("warning:")]
-    assert warnings == [
-        f"warning: could not set r=nosuchuser on 2 commits ({rows[0].short_sha}, {rows[1].short_sha}): {reason}"
+    errors = [line for line in err.splitlines() if line.startswith(("warning:", "error:"))]
+    assert errors == [
+        f"error: could not set r=nosuchuser on 2 commits ({rows[0].short_sha}, {rows[1].short_sha}): {reason}"
     ]
+
+
+def test_gpush_that_only_sets_options_says_so_and_asks_to_set_them(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every commit on Gerrit: no "About to push" list, no "nothing to push", and the question names the REST sets."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows))
+    mock_run = _rejected_as_unchanged(monkeypatch)
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    prompts: list[str] = []
+
+    def _input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return "y"
+
+    monkeypatch.setattr("builtins.input", _input)
+
+    code, out, err = run_cli(stack_repo, gpush_main, ["--wip", rows[1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert prompts == ["Set these on Gerrit? [Y/n/r]: "]
+    preview, _, after = out.partition("Branch")
+    assert "About to push" not in out and "nothing to push" not in out
+    assert preview.count("No new commits to push; set on Gerrit:") == 1
+    assert [line.split()[0] for line in after.splitlines() if line.startswith("set ")] == ["set"] * 2
+    assert len(store.calls_to("set_wip")) == 2
+    mock_run.assert_not_called()
+
+
+def test_gpush_lists_only_the_commits_it_sends(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A commit Gerrit already has, with nothing to set, is one line under the list, not in it."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    store = ChangeStore(build_details_by_change_id(rows[:1]))
+
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", rows[1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0
+    listed = out.split("About to push commits:")[1].split("Branch")[0]
+    assert rows[1].short_sha in listed and rows[0].short_sha not in listed
+    assert "1 commit Gerrit already has is not sent again" in listed
+    assert "set over REST" not in out
+    assert "git push origin" in out
 
 
 def test_gpush_refuses_a_comma_in_the_topic(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -840,7 +884,7 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
         gpush_main,
         ["--dry-run", "--reviewers", "alice"],
         monkeypatch,
-        gerrit=ChangeStore(details),
+        gerrit=ChangeStore(at_older_patchsets(details)),
     )
     assert code == 0
     assert "About to push commits:" in out
@@ -870,7 +914,7 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
         gpush_main,
         ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
         monkeypatch,
-        gerrit=ChangeStore(details),
+        gerrit=ChangeStore(at_older_patchsets(details)),
     )
     assert code == 0
     assert "->" in out
@@ -933,7 +977,7 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
         gpush_main,
         ["--dry-run", "--reviewers", "alice"],
         monkeypatch,
-        gerrit=ChangeStore(details),
+        gerrit=ChangeStore(at_older_patchsets(details)),
     )
     assert code == 0
     assert "`r=alice,wip`" in out
