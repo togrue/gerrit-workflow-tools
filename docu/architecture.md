@@ -504,7 +504,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
-| `core/gerrit/change_resolution.py` | Changeish resolution, resolution notes |
+| `core/gerrit/change_resolution.py` | Changeish resolution: narrowing a changeish to one change, and to a local stack commit |
+| `core/gerrit/resolution.py` | The resolution model: `Resolution`, `SelectedChange`, `ChangeAmbiguousError`, resolution notes |
 | `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), its memo, triplets |
 | `core/gerrit/paths.py` | Cache DB path and host key |
 

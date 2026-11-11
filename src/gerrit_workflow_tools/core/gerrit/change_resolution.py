@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.changeish import (
@@ -21,24 +21,29 @@ from gerrit_workflow_tools.core.changeish import (
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.resolution import (
+    ChangeAmbiguousError,
+    Resolution,
+    SelectedChange,
+    SelectedReason,
+    format_resolution_note,
+)
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
     GerritUnavailableError,
-    norm_change_id,
     pick_change_from_query_result,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
 
-SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
-
 _INACTIVE_STATUSES = frozenset({"ABANDONED", "MERGED"})
 
 # The changeish grammar lives in core.changeish; this module decides what a parsed changeish
-# *means*. ChangeishKind is re-exported because Resolution.kind is part of the JSON contract.
+# *means*. ChangeishKind is re-exported because Resolution.kind is part of the JSON contract; the
+# resolution model (core.gerrit.resolution) is re-exported so callers keep one import.
 __all__ = [
     "ChangeAmbiguousError",
     "ChangeResolutionError",
@@ -52,82 +57,6 @@ __all__ = [
     "resolve_stack_changeish",
     "resolve_to_stack_sha",
 ]
-
-
-class ChangeAmbiguousError(ChangeResolutionError):
-    """Multiple Gerrit changes matched after narrowing."""
-
-    def __init__(self, message: str, *, alternatives: list[SelectedChange]) -> None:
-        listed = ", ".join(f"change:{alt.number} ({alt.triplet}, {alt.status})" for alt in alternatives)
-        super().__init__(f"{message}: {listed}. Name one by its change: number or triplet" if listed else message)
-        self.alternatives = alternatives
-
-
-@dataclass(frozen=True)
-class SelectedChange:
-    """One resolved Gerrit change row."""
-
-    number: int
-    triplet: str
-    branch: str
-    change_id: str
-    status: str
-
-    @classmethod
-    def from_change_row(cls, row: dict[str, Any]) -> SelectedChange:
-        number = row.get("_number")
-        triplet = row.get("id")
-        branch = row.get("branch")
-        change_id = row.get("change_id")
-        status = row.get("status")
-        project = row.get("project")
-        if not isinstance(number, int):
-            raise ChangeResolutionError("Gerrit change row missing _number")
-        if not isinstance(triplet, str) or not triplet:
-            raise ChangeResolutionError("Gerrit change row missing id (triplet)")
-        if not isinstance(branch, str) or not branch:
-            raise ChangeResolutionError("Gerrit change row missing branch")
-        if not isinstance(change_id, str) or not change_id:
-            raise ChangeResolutionError("Gerrit change row missing change_id")
-        return cls(
-            number=number,
-            # Gerrit's `id` may be the compact project~number; a triplet is always the full form.
-            triplet=build_triplet(project, branch, change_id) if isinstance(project, str) and project else triplet,
-            branch=branch,
-            change_id=change_id,
-            status=status if isinstance(status, str) else "UNKNOWN",
-        )
-
-    def to_json_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class Resolution:
-    """Result of resolving a changeish (mirrors spec ``resolution`` JSON block)."""
-
-    input: str
-    kind: ChangeishKind
-    selected: SelectedChange | None = None
-    selected_reason: SelectedReason | None = None
-    ambiguous: bool = False
-    alternatives: list[SelectedChange] = field(default_factory=list)
-    local_sha: str | None = None
-
-    def to_json_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "input": self.input,
-            "kind": self.kind,
-            "ambiguous": self.ambiguous,
-            "alternatives": [alt.to_json_dict() for alt in self.alternatives],
-        }
-        if self.selected is not None:
-            out["selected"] = self.selected.to_json_dict()
-        if self.selected_reason is not None:
-            out["selected_reason"] = self.selected_reason
-        if self.local_sha is not None:
-            out["local_sha"] = self.local_sha
-        return out
 
 
 def parse_changeish(s: str) -> Changeish:
@@ -372,11 +301,7 @@ def resolve_to_stack_sha(
 
     # Searching the stack for the Change-Id already guarantees membership, so this path needs
     # no separate require_in_stack check.
-    snap = get_stack_snapshot(cwd, branch)
-    # Case-insensitively, because the grammar accepts either case: `ger edit I5F3A…` has to
-    # find a commit whose footer spells the same id in lowercase.
-    want = norm_change_id(change_id)
-    matches = [c for c in snap.commits if c.change_id and norm_change_id(c.change_id) == want]
+    matches = get_stack_snapshot(cwd, branch).carrying(change_id)
     if not matches:
         raise ChangeResolutionError(not_in_stack_message(parsed.raw))
     if len(matches) > 1:
@@ -419,36 +344,4 @@ def resolve_stack_changeish(
         branch=branch,
         client_factory=_build_client if needs_gerrit else None,
         require_in_stack=require_in_stack,
-    )
-
-
-def format_resolution_note(resolution: Resolution) -> str | None:
-    """Return a one-line stderr transparency note when narrowing occurred."""
-    if not resolution.ambiguous or resolution.selected is None:
-        if resolution.selected is None and resolution.alternatives:
-            alts = resolution.alternatives
-            branches = ", ".join(f"{alt.branch} #{alt.number}" for alt in alts)
-            return (
-                f"note: Change-Id matches {len(alts)} change(s) on other branch(es) "
-                f"({branches}); absent on your push target."
-            )
-        return None
-
-    selected = resolution.selected
-    all_matches = [selected, *resolution.alternatives]
-    total = len(all_matches)
-    branches = ", ".join(f"{alt.branch} #{alt.number}" for alt in all_matches)
-    reason = resolution.selected_reason
-    if reason == "target-branch":
-        detail = f"using #{selected.number} on {selected.branch!r} (your push target)"
-    elif reason == "prefer-open":
-        detail = f"using open change #{selected.number} on {selected.branch!r}"
-    elif reason == "branch-mismatch":
-        detail = f"using #{selected.number} on {selected.branch!r} (not your push target)"
-    else:
-        detail = f"using #{selected.number} on {selected.branch!r}"
-
-    return (
-        f"note: Change-Id {selected.change_id} matches {total} change(s) (branches: {branches}); "
-        f"{detail}. Override with a triplet or change: number."
     )

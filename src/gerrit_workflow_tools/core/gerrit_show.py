@@ -70,11 +70,9 @@ def _row_from_local_commit(cwd: Path | str, sha: str) -> Commit:
 def _stack_commit_for(cwd: Path | str, change_id: str, *, branch: str | None, settings: Settings) -> Commit | None:
     """The **local stack** commit carrying *change_id*, so a change renders like its commit."""
     try:
-        snap = get_stack_snapshot(cwd, branch, settings=settings)
+        return next(iter(get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id)), None)
     except GitError:
         return None
-    want = norm_change_id(change_id)
-    return next((c for c in snap.commits if c.valid_change_id and norm_change_id(c.valid_change_id) == want), None)
 
 
 def resolve_show_commit_row(
@@ -142,12 +140,8 @@ def resolve_range_endpoint_sha(
         change_id = parsed.change_id
 
     if change_id:
-        want = norm_change_id(change_id)
-        snap = get_stack_snapshot(cwd, branch, settings=settings)
-        for commit in snap.commits:
-            footer = commit.valid_change_id
-            if footer and norm_change_id(footer) == want:
-                return commit.sha
+        for commit in get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id):
+            return commit.sha
         if resolution.selected is not None:
             rev = ChangeView.from_payload(client.get_change(resolution.selected.triplet)).current_revision
             if rev is not None:

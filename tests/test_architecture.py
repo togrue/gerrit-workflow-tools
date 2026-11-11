@@ -332,7 +332,6 @@ MAX_LINES = 400
 SIZE_BASELINE = {
     "cli_push.py": 410,
     "core/gerrit/cache.py": 684,
-    "core/gerrit/change_resolution.py": 454,
     "push_input_line.py": 441,
     "reviewer_catalog.py": 478,
 }

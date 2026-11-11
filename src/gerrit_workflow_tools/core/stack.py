@@ -90,6 +90,11 @@ class StackSnapshot:
     upstream: str = ""
     """The upstream as the user names it (``origin/main``), for advice that quotes it."""
 
+    def carrying(self, change_id: str) -> list[Commit]:
+        """The stack commits whose footer is *change_id*, case-insensitively (the grammar accepts either)."""
+        want = change_id.lower()
+        return [c for c in self.commits if c.valid_change_id and c.valid_change_id.lower() == want]
+
 
 def get_stack_snapshot(
     cwd: Path | str | None,
