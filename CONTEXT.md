@@ -218,6 +218,10 @@ _Avoid_: TTL, cache timeout, offline mode
 Gerrit's `stream-events` feed, read over ssh (`core/gerrit/event_stream.py`). Optional: without ssh, a key Gerrit accepts or the *Stream Events* capability, `ger` polls exactly as before. An event only narrows the **trust window** — the cached rows of the change it names are dropped — and never puts data into the cache (ADR-0012).
 _Avoid_: notifications, webhooks, push updates, live mode
 
+**Activity sequence**:
+A number `ger serve` raises whenever a client should look again: an **event stream** event that concerns this repository, or the stream becoming live or ceasing to be. A client remembers the last one it saw and long-polls `GET /activity` for the next. It says *when* to refresh, never *what* changed.
+_Avoid_: revision (a git or Gerrit revision), version, generation, counter
+
 ## Flagged ambiguities
 
 **"Client" is overloaded.**

@@ -266,21 +266,23 @@ class EventStream:
                 self._set(StreamState.LIVE)
 
         threading.Thread(target=promote, name="ger-events-grace", daemon=True).start()
+        broken: str | None = None
         try:
             for line in connection.lines():
                 if not live.is_set():
                     live.set()
                     self._set(StreamState.LIVE)
                 self._deliver(line)
-        except (OSError, ValueError) as error:  # a pipe torn down under the reader
-            logger.debug("event stream read failed: %s", error)
+        except Exception as error:  # pylint: disable=broad-exception-caught  # never the end of ger serve
+            logger.debug("event stream read failed: %s", error, exc_info=True)
+            broken = f"reading the stream failed: {error}"
         finally:
             ended.set()
             with self._lock:
                 self._connection = None
         failure = connection.failure()
         connection.close()
-        return live.is_set(), failure
+        return live.is_set(), broken or failure
 
     def _deliver(self, line: str) -> None:
         event = parse_event(line)

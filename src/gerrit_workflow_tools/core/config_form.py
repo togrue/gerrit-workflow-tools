@@ -27,6 +27,7 @@ SECTION_TITLES: tuple[str, ...] = (
     "ger review",
     "ger rebase",
     "ger edit",
+    "ger serve",
 )
 
 
@@ -233,6 +234,35 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "After ger edit --next moves to a commit and that rebase succeeds, run ger show on it. "
         "Off means --next only moves.",
         default="false",
+    ),
+    _spec(
+        "ger.eventStream",
+        "ger serve",
+        "Follow Gerrit's event stream over ssh: auto tries once quietly, on keeps trying and says so, off never.",
+        SettingKind.CHOICE,
+        "auto",
+        ("auto", "on", "off"),
+    ),
+    _spec(
+        "ger.eventStreamHost",
+        "ger serve",
+        "ssh host of Gerrit. Empty: from the remote or gerrit.webUrl.",
+        SettingKind.TEXT,
+        "",
+    ),
+    _spec(
+        "ger.eventStreamPort",
+        "ger serve",
+        "ssh port of Gerrit. Empty: from the remote, else 29418.",
+        SettingKind.INT,
+        "",
+    ),
+    _spec(
+        "ger.eventStreamUser",
+        "ger serve",
+        "ssh user on Gerrit. Empty: from the remote, else gerrit.user.",
+        SettingKind.TEXT,
+        "",
     ),
 )
 

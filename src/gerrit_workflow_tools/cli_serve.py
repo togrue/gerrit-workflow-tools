@@ -19,9 +19,12 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.core.ci_http import CiHttp
+from gerrit_workflow_tools.core.gerrit.event_source import EventSource
+from gerrit_workflow_tools.core.gerrit.event_stream import EventStream, StreamState, StreamStatus
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.git_state import repo_toplevel
+from gerrit_workflow_tools.server.activity import Activity, follow_events
 from gerrit_workflow_tools.server.api import PREFIX, GerApi
 from gerrit_workflow_tools.server.httpd import GerHttpServer
 from gerrit_workflow_tools.server.views import error_json
@@ -83,44 +86,74 @@ def _stop_when_stdin_closes(server: GerHttpServer) -> None:
     threading.Thread(target=watch, name="ger-serve-stdin", daemon=True).start()
 
 
-def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> int:
-    """Serve until interrupted; the first stdout line is ``{"url", "token", …}``, or ``{"error": …}``."""
-    return run_cli_command(lambda: _run(argv, gerrit=gerrit, ci_http=ci_http))
+def main(
+    argv: list[str] | None = None,
+    *,
+    gerrit: GerritRest | None = None,
+    ci_http: CiHttp | None = None,
+    events: EventSource | None = None,
+) -> int:
+    """Serve until interrupted; the first stdout line is ``{"url", "token", …}``, or ``{"error": …}``.
+
+    *events* replaces the ssh event stream (tests, the extension's end-to-end run).
+    """
+    return run_cli_command(lambda: _run(argv, gerrit=gerrit, ci_http=ci_http, events=events))
+
+
+def _say(status: StreamStatus) -> None:
+    """One line on stderr when the event stream changes; whoever started ger serve logs it."""
+    print(f"ger serve: {status.sentence()}", file=sys.stderr, flush=True)
 
 
 def _start(
-    args: argparse.Namespace, *, gerrit: GerritRest | None, ci_http: CiHttp | None
-) -> tuple[GerHttpServer, Path]:
-    """The server, bound and ready, and the repository it serves.
+    args: argparse.Namespace, *, gerrit: GerritRest | None, ci_http: CiHttp | None, events: EventSource | None
+) -> tuple[GerHttpServer, EventStream, Path]:
+    """The server, bound and ready, its event stream (not started yet), and the repository it serves.
 
     A known failure is also the one JSON line a client reads, in the shape a request's failure
     has, so it can tell "not in a git checkout" from a crash without reading stderr.
     """
     try:
-        cwd, _settings, _highlighter = init_cli_runtime(args)
+        cwd, settings, _highlighter = init_cli_runtime(args)
         top = repo_toplevel(cwd)
         if top is None:
             raise GitError("not inside a git worktree")
-        api = GerApi(cwd, gerrit=gerrit, ci_http=ci_http)
-        return GerHttpServer(api, token=secrets.token_urlsafe(32), port=args.port), top
+        activity = Activity()
+        server = GerHttpServer(
+            GerApi(cwd, gerrit=gerrit, ci_http=ci_http, activity=activity),
+            token=secrets.token_urlsafe(32),
+            port=args.port,
+        )
+        stream = follow_events(
+            cwd, settings, activity=activity, lock=server.api_lock, gerrit=gerrit, source=events, say=_say
+        )
+        if stream.status.state is StreamState.OFF and settings.event_stream != "off":
+            _say(stream.status)
+        return server, stream, top
     except Exception as error:  # pylint: disable=broad-exception-caught
         if failure_exit(error) is not None:
             print(json.dumps({"error": error_json(error)}), flush=True)
         raise
 
 
-def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp | None) -> int:
+def _run(
+    argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp | None, events: EventSource | None
+) -> int:
     args = _build_parser().parse_args(argv)
-    server, top = _start(args, gerrit=gerrit, ci_http=ci_http)
+    server, stream, top = _start(args, gerrit=gerrit, ci_http=ci_http, events=events)
     try:
         hello = {"url": server.url, "api": PREFIX, "token": server.token, "repo": str(top), "pid": os.getpid()}
         print(json.dumps(hello), flush=True)
+        stream.start()
         if args.exit_with_stdin:
             _stop_when_stdin_closes(server)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        # The ssh child goes with the service; a client waiting on /activity is let go.
+        stream.stop()
+        server.api.activity.close()
         server.server_close()
     return int(ExitCode.OK)
 

@@ -27,6 +27,7 @@ def test_sections_follow_command_order() -> None:
         "ger review",
         "ger rebase",
         "ger edit",
+        "ger serve",
     )
 
 

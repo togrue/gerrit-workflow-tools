@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.server.activity import Activity
 
 
 class BadRequest(ValueError):
@@ -83,6 +84,7 @@ class Context:
     settings: Settings
     service: GerritService
     ci_http: CiHttp | None = None
+    activity: Activity = field(default_factory=Activity)
 
     def ci(self) -> CiContentService:
         """The CI content service for this repository and host."""

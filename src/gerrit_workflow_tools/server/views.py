@@ -57,7 +57,7 @@ def error_json(error: BaseException) -> dict[str, str]:
 
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Who is answering, and for which repository."""
+    """Who is answering, for which repository, and whether Gerrit's event stream is followed."""
     top = repo_toplevel(ctx.cwd)
     return {
         "name": "ger",
@@ -66,6 +66,7 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
         "repo": str(top) if top else None,
         "branch": checked_out_branch_name(ctx.cwd),
         "host": host_from_web_base(ctx.service.web_base),
+        **ctx.activity.json(),
     }
 
 

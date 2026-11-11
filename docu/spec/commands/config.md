@@ -26,7 +26,7 @@ Non-interactive environments print an error and exit `2` (`USAGE`), as every com
 
 ## Editor file
 
-Sections, in order: General, `ger show`, `ger log`, `ger push`, `ger inbox`, `ger rebase`, `ger edit`. Commands with no settings are omitted. Branch-scoped keys appear under `ger push` when a working branch resolves.
+Sections, in order: General, `ger show`, `ger log`, `ger push`, `ger inbox`, `ger review`, `ger rebase`, `ger edit`, `ger serve`. Commands with no settings are omitted. Branch-scoped keys appear under `ger push` when a working branch resolves.
 
 Each setting is:
 

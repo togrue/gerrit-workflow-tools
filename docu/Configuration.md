@@ -114,6 +114,27 @@ Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbo
 
 ---
 
+## `ger serve` — `ger.eventStream*`
+
+Gerrit's **event stream** (`ssh … gerrit stream-events`), which `ger serve` follows so the
+editor refreshes when review activity happens. Optional: it needs ssh, a key Gerrit accepts and
+the *Stream Events* capability. Without it everything works as before, by polling. See
+[spec/commands/serve.md](spec/commands/serve.md#gerrits-event-stream).
+
+| Key | Effect |
+|-----|--------|
+| `ger.eventStream` | `auto` (default): try once at startup, quietly; when it never comes up, poll. `on`: keep retrying and log each failure (still polling meanwhile). `off`: never connect. `true`/`false` read as `on`/`off`. |
+| `ger.eventStreamHost` | ssh host of Gerrit. Default: the host of the `gerrit.remote` URL when it is an ssh URL, else the host of `gerrit.webUrl`. |
+| `ger.eventStreamPort` | ssh port. Default: the port in an ssh remote URL (none: ssh's own config decides), else Gerrit's `29418`. |
+| `ger.eventStreamUser` | ssh user. Default: the user in an ssh remote URL, else `gerrit.user`, else ssh's own config. |
+
+ssh runs non-interactively (`BatchMode=yes`, no tty, 10-second connect timeout): it never asks
+for a password or to accept a host key. Connect once by hand (`ssh -p 29418 you@host gerrit
+version`) to accept the host key, and make sure your account has the *Stream Events* global
+capability (or is an administrator).
+
+---
+
 ## `ger rebase` — `gerrit.rebase*`
 
 | Key | Effect |

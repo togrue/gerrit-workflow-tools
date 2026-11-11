@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import clear_git_cache
 from gerrit_workflow_tools.server import actions, views
+from gerrit_workflow_tools.server.activity import Activity
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
 
@@ -48,6 +49,18 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("POST", "/stack/undo", actions.undo),
 )
 
+
+def _activity(activity: Activity, req: Request) -> dict[str, Any]:
+    """``activity`` and ``events`` once the activity sequence moves past ``since``, or after ``wait`` seconds."""
+    activity.wait(req.number("since"), req.number("wait") or 0)
+    return activity.json()
+
+
+# Calls that may wait, so they must not queue behind the serialised ones: no Context, no git, no Gerrit.
+UNLOCKED_ROUTES: tuple[tuple[str, str, Callable[[Activity, Request], dict[str, Any]]], ...] = (
+    ("GET", "/activity", _activity),
+)
+
 _REFRESH_ENV = "GER_CACHE_REFRESH"
 
 
@@ -75,17 +88,34 @@ class GerApi:
     may set the refresh environment. The HTTP layer serialises requests.
     """
 
-    def __init__(self, cwd: Path | str, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> None:
+    def __init__(
+        self,
+        cwd: Path | str,
+        *,
+        gerrit: GerritRest | None = None,
+        ci_http: CiHttp | None = None,
+        activity: Activity | None = None,
+    ) -> None:
         self.cwd = Path(cwd)
         self._gerrit = gerrit
         self._ci_http = ci_http
+        self.activity = activity if activity is not None else Activity()
 
     def _context(self) -> Context:
         """A fresh view per request: the repository may have changed since the last one."""
         clear_git_cache()
         settings = Settings.from_cwd(self.cwd)
         service = GerritService.from_cwd(self.cwd, settings=settings, rest=self._gerrit)
-        return Context(cwd=self.cwd, settings=settings, service=service, ci_http=self._ci_http)
+        return Context(cwd=self.cwd, settings=settings, service=service, ci_http=self._ci_http, activity=self.activity)
+
+    def handle_unlocked(
+        self, method: str, path: str, query: Mapping[str, list[str]] | None = None
+    ) -> dict[str, Any] | None:
+        """Answer a call of :data:`UNLOCKED_ROUTES`, beside the request being served; ``None`` for any other."""
+        for route_method, route, endpoint in UNLOCKED_ROUTES:
+            if method == route_method and path.rstrip("/") == f"{PREFIX}{route}":
+                return endpoint(self.activity, Request(query=query or {}))
+        return None
 
     def handle(
         self,

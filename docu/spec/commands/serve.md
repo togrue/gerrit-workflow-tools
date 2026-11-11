@@ -2,7 +2,7 @@
 
 | | |
 |--|--|
-| **Status** | **First slice** — the endpoints below; no push, vote or publish over HTTP, no event stream |
+| **Status** | **First slice** — the endpoints below; no push, vote or publish over HTTP. Gerrit's event stream is followed when it can be |
 | **Module** | `src/gerrit_workflow_tools/cli_serve.py`, `src/gerrit_workflow_tools/server/` |
 | **Requires** | A git worktree, `gerrit.webUrl`, credentials |
 | **Client** | The VS Code extension in [`vscode/`](../../../vscode/README.md) |
@@ -67,6 +67,66 @@ request to bypass it, like `ger --refresh`.
 
 ---
 
+## Gerrit's event stream
+
+When it can, the service follows Gerrit's **event stream** — `ssh -p <port> <user>@<host>
+gerrit stream-events` — so a client learns about review activity when it happens instead of
+at its next poll. It is strictly optional: it needs ssh, a key Gerrit accepts and the *Stream
+Events* global capability, and many users have only HTTP. Whenever it is not there, the
+service behaves exactly as without it: same answers, same Gerrit calls, no failed request.
+
+**Configuration** ([Configuration.md](../../Configuration.md#ger-serve--gereventstream)):
+`ger.eventStream` is `auto` (the default), `on` or `off`. `ger.eventStreamHost`,
+`ger.eventStreamPort` and `ger.eventStreamUser` override where it connects. Otherwise: the
+`gerrit.remote` URL when it is an ssh URL (`ssh://user@host:29418/…`, `user@host:…`; without
+a port, ssh's own config decides), else the host of `gerrit.webUrl` on port 29418 as
+`gerrit.user`. Nothing is asked over the network to find out. The settings are read once,
+when the service starts.
+
+**ssh never prompts.** It runs with `-T`, `BatchMode=yes`, `ConnectTimeout=10` and
+keep-alives (a dead connection is noticed within about 90 seconds), stdin closed and, on
+Windows, no console window. A missing key, an unknown host key or a password-only account
+is a failure that is reported, never a question; ger never touches `~/.ssh`. Only the events
+that can move what ger shows are subscribed to (`-s`): `patchset-created`, `comment-added`,
+`change-merged`, `change-abandoned`, `change-restored`, `change-deleted`, `reviewer-added`,
+`reviewer-deleted`, `vote-deleted`, `topic-changed`, `hashtags-changed`, `wip-state-changed`,
+`private-state-changed`, `ref-updated`, `dropped-output`. Gerrit has no event for the
+attention set: that, like anything else, still arrives with the next poll.
+
+| `events.state` | Meaning |
+|----------------|---------|
+| `off` | Not followed: `ger.eventStream` is `off`, no Gerrit host is known, or (tests) a Gerrit was injected without an event source. `reason` says which. |
+| `connecting` | ssh is starting. |
+| `live` | Following. A connection is live once it has stayed open 5 seconds or delivered an event. |
+| `retrying` | The stream dropped (or, with `on`, never came up); `reason` is the last thing ssh said. It reconnects after 1, 2, 4 … seconds, at most 60. |
+| `unavailable` | `auto` tried once and the stream never became live (no ssh, `Permission denied`, no capability, refused); not tried again until the service restarts. |
+
+`on` differs from `auto` only in that it keeps retrying a stream that never came up. A
+stream that was live is retried in either mode. Each change of state, except `connecting`,
+is one line on stderr (`ger serve: …`), and never the same line twice in a row: whoever
+started the service has it in its log.
+
+**What an event does.** An event about a change drops what the Gerrit cache holds on that
+change — every row under every key, its comments and checks, a "no such change" verdict —
+so the next read asks Gerrit. Nothing else: an event never puts data into the cache and
+never lengthens the trust window ([ADR-0012](../../adr/0012-events-invalidate-never-populate.md)).
+It is applied under the lock requests run under, so a request that read Gerrit just before
+the event cannot store its answer after the event dropped it.
+
+Then the **activity sequence** goes up, when the event concerns this repository: the change
+was cached here, it is in the repository's Gerrit project or in `inbox.projects`, or it names
+you (owner, author, reviewer … with `gerrit.user` or the ssh user as username). It also goes
+up when a branch of those projects moves (`ref-updated` on `refs/heads/…`), when Gerrit says
+it dropped events (`dropped-output`), and when the stream becomes live, stops being live or
+turns out unavailable — a client then switches between following and polling. Every other
+event is ignored after one look at the cache.
+
+**One-shot commands do not use it.** A command lives for seconds and reads Gerrit through the
+trust window anyway; an ssh connection would cost more than it saves. Only `ger serve` follows
+the stream.
+
+---
+
 ## Errors
 
 A failure answers with a status and one shape:
@@ -98,7 +158,18 @@ All under `/api/v1`.
 
 ### `GET /health`
 
-`name`, `version`, `api`, `repo`, `branch`, `host`.
+`name`, `version`, `api`, `repo`, `branch`, `host`; `activity` (the activity sequence) and
+`events`: the event stream's `state`, `reason` and `source` (`ssh://user@host:port`, or `null`).
+
+### `GET /activity`
+
+`activity` and `events`, as in `/health`. With `since=N` (the `activity` a client last saw)
+and `wait=S` it answers as soon as `activity` differs from `N`, or after `S` seconds (whole
+seconds, at most 30), or when the service stops. Without `since` it answers at once.
+
+It is the one request that waits, so it is not serialised: it runs beside the request being
+served and touches neither git nor Gerrit. A client long-polls it while `events.state` is
+`live`, `connecting` or `retrying`, and refreshes when `activity` moves.
 
 ### `GET /overview`
 

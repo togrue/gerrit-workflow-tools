@@ -393,6 +393,8 @@ The long-running caller core was kept terminal-free for. An endpoint is a comman
 
 Each request gets a fresh `Context`: the git memo is cleared and a new `Settings` snapshot is taken, because the repository changes between requests. Requests are serialised for the same reason. Failures map to HTTP statuses through `cli_common.failure_exit`, so the error code a client sees is the exit code's name. Contract: [spec/commands/serve.md](spec/commands/serve.md).
 
+When it can, the service also follows Gerrit's **event stream** (`core/gerrit/event_stream.py`, over `core/gerrit/event_source.py`): one background reader applies each event to the Gerrit cache under the request lock (dropping that change's rows, ADR-0012) and raises the **activity sequence** (`server/activity.py`) that clients long-poll. Without it nothing changes but the sequence, which then never moves.
+
 ---
 
 ## Module catalog
@@ -540,11 +542,12 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1` |
+| `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line) |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
 | `server/views.py` | Read endpoints: health, overview, stack, stack moves (conflict preview), chain, show, diff, file, review, agent runbook; `error_json` |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite and its undo |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
+| `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 
 ---
 

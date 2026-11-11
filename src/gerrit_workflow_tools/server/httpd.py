@@ -129,8 +129,12 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             url = urlsplit(self.path)
             body = self._body() if method == "POST" else {}
-            with self.server.api_lock:
-                payload = self.server.api.handle(method, unquote(url.path), parse_qs(url.query), body)
+            unlocked = self.server.api.handle_unlocked(method, unquote(url.path), parse_qs(url.query))
+            if unlocked is not None:
+                payload = unlocked
+            else:
+                with self.server.api_lock:
+                    payload = self.server.api.handle(method, unquote(url.path), parse_qs(url.query), body)
             status = 200
         except Exception as error:  # pylint: disable=broad-exception-caught
             status, payload = failure_response(error)
