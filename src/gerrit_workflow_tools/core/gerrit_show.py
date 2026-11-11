@@ -23,7 +23,13 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.local_comments import local_chains_of
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
+from gerrit_workflow_tools.core.stack import (
+    Commit,
+    abbreviated_sha,
+    commits_in_range,
+    get_stack_snapshot,
+    read_commit_rows,
+)
 
 
 @dataclass(frozen=True)
@@ -68,9 +74,7 @@ def _row_from_gerrit_change(change: ChangeView) -> Commit:
     if not change_id:
         raise ChangeResolutionError("Gerrit change has no change_id")
     summary = change.subject
-    short = sha[:8] if len(sha) >= 8 else "?" * min(8, max(1, len(sha) or 1))
-    if not sha:
-        short = "????????"
+    short = abbreviated_sha(sha) or "???????"
     return Commit(sha=sha, short_sha=short, subject=summary, body="", change_id=change_id)
 
 

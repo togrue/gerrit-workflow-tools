@@ -379,7 +379,9 @@ def test_show_resolve_and_serve_agree_on_which_sibling_is_shown(
     assert resolution["local_sibling"] == {"sha": sha, "branch": "main", "number": None}
     assert [chain["comments"][0]["message"] for chain in shown["comment_chains"]] == ["only on dev"]
     for err in (err_r, err_s):
-        assert f"local stack commit {sha[:8]} carries the same Change-Id but targets 'main'" in err
+        assert f"local stack commit {sha[:7]} carries the same Change-Id but targets 'main'" in err
+    _code, text, _err = run_cli(stack_repo, gshow_main, [changeish], monkeypatch, gerrit=store)
+    assert _DEV_SHA[:7] in text and _DEV_SHA[:8] not in text, "one abbreviation for every commit shown"
 
 
 @pytest.mark.parametrize("form", ["dev-triplet", "dev-number"])
@@ -396,4 +398,4 @@ def test_fix_of_the_dev_sibling_fixes_the_stack_commit_and_says_it_targets_main(
     code, out, err = run_cli(stack_repo, fix_main, ["--json", changeish], monkeypatch, gerrit=store)
     assert code == 0, err
     assert json_stdout(out)["fixup_sha"] == sha
-    assert f"local stack commit {sha[:8]} carries the same Change-Id but targets 'main'" in err
+    assert f"local stack commit {sha[:7]} carries the same Change-Id but targets 'main'" in err

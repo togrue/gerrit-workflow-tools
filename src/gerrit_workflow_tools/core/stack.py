@@ -61,6 +61,11 @@ def upstream_tracking_tip_and_display(
     return (upstream_ref.stdout.strip(), display)
 
 
+def abbreviated_sha(sha: str) -> str:
+    """*sha* as ger shows a commit it did not read through ``git log`` (git's own default length, 7)."""
+    return sha[:7]
+
+
 @dataclass(frozen=True)
 class Commit:
     """One commit from a ``git log`` metadata line (subject + full message body)."""

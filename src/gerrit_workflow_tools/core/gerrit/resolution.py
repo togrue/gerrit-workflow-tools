@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from gerrit_workflow_tools.core.changeish import ChangeishKind
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
+from gerrit_workflow_tools.core.stack import abbreviated_sha
 
 
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
@@ -124,7 +125,7 @@ def local_sibling_note(sibling: LocalSibling, *, branch: str, number: int | None
     named = f"change #{number}" if number is not None else "that change"
     as_change = f" (#{sibling.number})" if sibling.number is not None else ""
     return (
-        f"note: {named} is on {branch!r}; local stack commit {sibling.sha[:8]} carries the same "
+        f"note: {named} is on {branch!r}; local stack commit {abbreviated_sha(sibling.sha)} carries the same "
         f"Change-Id but targets {sibling.branch!r}{as_change}."
     )
 
