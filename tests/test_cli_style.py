@@ -9,6 +9,7 @@ from gerrit_workflow_tools.cli_style import (
     GERRIT_LINK_LABEL,
     color_text,
     format_link,
+    init_color_mode,
     init_hyperlink_mode,
     set_color_mode,
     set_hyperlink_mode,
@@ -155,3 +156,28 @@ def test_init_hyperlink_mode_force_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FORCE_HYPERLINK", "0")
     monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
     assert init_hyperlink_mode(hyperlinks="auto") is False
+
+
+@pytest.mark.parametrize(
+    ("color", "no_color", "expected"),
+    [
+        ("auto", None, True),
+        ("auto", "1", False),
+        ("auto", "", True),  # set but empty: no-color.org says it does not count
+        ("always", "1", True),
+        ("never", None, False),
+    ],
+)
+def test_no_color_turns_auto_off_but_not_always(
+    color: str, no_color: str | None, expected: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    if no_color is None:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+    else:
+        monkeypatch.setenv("NO_COLOR", no_color)
+    try:
+        assert init_color_mode(color=color) is expected
+        assert (color_text("x", ANSI_DIM) != "x") is expected
+    finally:
+        set_color_mode(False)

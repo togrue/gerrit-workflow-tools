@@ -29,7 +29,7 @@ ger log [options] [REV_RANGE]
 | Option | Description |
 |--------|-------------|
 | `--json` | Machine-readable JSON (one object per commit) |
-| `--color WHEN` | `always` \| `auto` \| `never` |
+| `--color WHEN` | `always` \| `auto` \| `never`; `auto` honours `NO_COLOR` ([Configuration.md](../../Configuration.md#colour)) |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
 | `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `gerrit.logShowUrl`. |
 | `--show-change-id` | Show full Change-Id on an indented continuation line (default: `gerrit.logShowChangeId`) |

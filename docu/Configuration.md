@@ -156,6 +156,12 @@ Set via `git config` (or `set_branch_config` / attention-cursor helpers in `core
 
 ---
 
+## Colour
+
+Every command that colours takes `--color WHEN` (`always` | `auto` | `never`, default `auto`), decided once per run for stdout and stderr (`cli_style.init_color_mode`). `auto` colours only a terminal, and not at all while the environment variable `NO_COLOR` is set to anything non-empty ([no-color.org](https://no-color.org/)). `--color=always` and `--color=never` win over both.
+
+---
+
 ## Examples
 
 ```ini

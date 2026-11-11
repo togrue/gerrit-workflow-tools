@@ -77,15 +77,17 @@ def is_color_enabled() -> bool:
 
 
 def init_color_mode(*, color: str = "auto") -> bool:
-    """Initialize global color mode from ``--color`` and output TTY capability."""
-    out = sys.stdout
-    tty = bool(getattr(out, "isatty", lambda: False)())
+    """Initialize global color mode (stdout and stderr) from ``--color``, ``NO_COLOR`` and the TTY.
+
+    ``auto`` colours a terminal unless ``NO_COLOR`` is set to anything non-empty (no-color.org);
+    ``always`` and ``never`` win over both.
+    """
     if color == "always":
         enabled = True
     elif color == "never":
         enabled = False
     else:
-        enabled = tty
+        enabled = _stdout_is_tty() and not os.environ.get("NO_COLOR")
     set_color_mode(enabled)
     return enabled
 
