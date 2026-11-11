@@ -409,6 +409,8 @@ def test_ssh_runs_without_prompts_or_a_tty_and_subscribes_only_to_what_matters()
     assert tail[:3] == ["g.example", "gerrit", "stream-events"]
     assert [tail[i + 1] for i, a in enumerate(tail) if a == "-s"] == list(SUBSCRIBED_EVENTS)
     assert SshTarget("alias").argv("ssh")[-len(SUBSCRIBED_EVENTS) * 2 - 3 :][:3] == ["alias", "gerrit", "stream-events"]
+    with_key = SshTarget("alias").argv("ssh", ["-i", "key"])  # a throwaway key, as the integration test uses
+    assert with_key.index("-i") < with_key.index("alias") and with_key[with_key.index("-i") + 1] == "key"
 
 
 @pytest.mark.parametrize(

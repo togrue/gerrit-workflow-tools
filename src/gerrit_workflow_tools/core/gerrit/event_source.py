@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -94,11 +94,11 @@ class SshTarget:
         port = f":{self.port}" if self.port else ""
         return f"ssh://{user}{self.host}{port}"
 
-    def argv(self, ssh: str = "ssh") -> list[str]:
-        """The non-interactive ``ssh … gerrit stream-events -s …`` command line."""
+    def argv(self, ssh: str = "ssh", extra: Sequence[str] = ()) -> list[str]:
+        """The non-interactive ``ssh … gerrit stream-events -s …`` command line; *extra* goes before the host."""
         options = ["BatchMode=yes", f"ConnectTimeout={CONNECT_TIMEOUT_SECONDS}", "ServerAliveInterval=30"]
         options.append("ServerAliveCountMax=3")
-        cmd = [ssh, "-T", *(arg for option in options for arg in ("-o", option))]
+        cmd = [ssh, "-T", *(arg for option in options for arg in ("-o", option)), *extra]
         if self.port:
             cmd += ["-p", str(self.port)]
         if self.user:
@@ -202,9 +202,11 @@ class _SshConnection:
 class SshEventSource:
     """Gerrit's event stream over ssh, one ``ssh`` child per connection."""
 
-    def __init__(self, target: SshTarget, *, ssh: str = "ssh") -> None:
+    def __init__(self, target: SshTarget, *, ssh: str = "ssh", extra: Sequence[str] = ()) -> None:
         self.target = target
         self._ssh = ssh
+        # More ssh arguments, such as a throwaway key and known_hosts for a test (`-i`, `-F`, `-o`).
+        self._extra = tuple(extra)
 
     @property
     def description(self) -> str:
@@ -216,7 +218,7 @@ class SshEventSource:
         program = shutil.which(self._ssh)
         if program is None:
             raise EventSourceUnavailable("no ssh program on PATH")
-        argv = self.target.argv(program)
+        argv = self.target.argv(program, self._extra)
         logger.debug("event stream: %s", " ".join(argv))
         # No console window for ssh when ger serve runs without one (an editor started it).
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
