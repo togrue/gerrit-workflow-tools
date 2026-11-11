@@ -36,7 +36,7 @@ A branch called `NAME` (or `change-<number>`) that already exists but holds no v
 
 A **local version** of the change is a commit carrying its Change-Id on a local branch, above `gerrit.remote` (`git log --branches --not --remotes=<remote>`). A branch that pushes to another Gerrit branch holds a cherry-pick with the same Change-Id, not a version of this change, and does not count. A branch with no Gerrit destination does count. ger's own bookkeeping branches (`lastPush/<branch>`, the marker `ger push` moves) never count: they are not named in a note, and `ger checkout` never switches onto one (`git_state.is_bookkeeping_branch`).
 
-When the change has a local version, `ger checkout` does not make a second copy. What it does depends on how the local version relates to the patchset:
+When the change has a local version, `ger checkout` does not make a second copy. Which branch it goes to, in one line (also in `ger checkout --help`): a branch whose tip is the change wins; else it goes to (or stays on) the branch that holds the change and says how many commits below HEAD it is. So on a stack branch, `ger checkout <a lower change>` switches to that change's own branch when one ends at it, and otherwise stays put with `already on <branch>: … is N commit(s) below HEAD`. The full order is under **Several local versions** below. What it does with the local version depends on how it relates to the patchset:
 
 | Local version | What happens |
 |---|---|
@@ -95,4 +95,4 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 | `4` | The Change-Id names changes on several target branches and narrowing could not pick one |
 | `5` | Gerrit failed |
 | `6` | `gerrit.webUrl` or credentials missing |
-| `7` | A git command failed (fetch, switch) |
+| `7` | A git command failed (fetch, switch). When the remote does not have the patchset's `refs/changes/…` ref, git's message is followed by one line saying what is most likely wrong: for a private change (the change data already says so; no extra call), that Gerrit does not serve a private change's refs to `gerrit.remote` as it signs in (anonymous, or an HTTP URL without `/a/`), so fetch over SSH or an authenticated `/a/` URL; otherwise that the remote does not have the ref and `gerrit.remote` should be checked (`core/gerrit_patchset.py`, shared with `ger review`) |

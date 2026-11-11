@@ -311,3 +311,31 @@ def test_moving_to_an_older_patchset_says_moved(
     code, out, err = _checkout(stack_repo, gerrit, ["102", "--update", "--patchset", "1"], monkeypatch)
     assert code == ExitCode.OK, err
     assert "moved feature from patchset 2 to change 102 patchset 1" in out
+
+
+@pytest.mark.parametrize("private", [False, True])
+def test_a_patchset_ref_the_remote_does_not_serve_says_what_is_likely_wrong(
+    private: bool, stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git's own words, then one line: a private change's ref needs a signed-in remote; else check gerrit.remote."""
+    _fresh_clone(stack_repo)
+    git("update-ref", "-d", changes_ref(102, 1), cwd=gerrit.remote)
+    gerrit.store.set_private(gerrit.keys[2], private)
+
+    code, _out, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
+
+    assert code == ExitCode.GIT
+    first, hint = err.strip().splitlines()[-2:]
+    assert first.startswith("error: git fetch") and f"couldn't find remote ref {changes_ref(102, 1)}" in first
+    generic = f"remote 'origin' does not have {changes_ref(102, 1)}: check that gerrit.remote names the Gerrit server"
+    private_hint = "change 102 is private: Gerrit does not serve a private change's refs to remote 'origin'"
+    assert hint.startswith(private_hint if private else generic)
+
+
+def test_help_states_which_branch_a_change_on_a_branch_goes_to(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, out, _err = _checkout(stack_repo, gerrit, ["--help"], monkeypatch)
+    assert code == 0
+    assert "a branch whose tip is the change wins" in " ".join(out.split())
+    assert "commits below HEAD" in " ".join(out.split())

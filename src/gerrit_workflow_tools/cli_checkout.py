@@ -41,7 +41,9 @@ def _build_parser() -> argparse.ArgumentParser:
         usage="ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force]",
         description=(
             "Check a Gerrit change out on a local branch whose upstream is the change's target branch, "
-            "so ger log and ger push work on it. A local version of the change is switched to, or updated."
+            "so ger log and ger push work on it. A local version of the change is switched to, or updated: "
+            "a branch whose tip is the change wins; else ger checkout goes to (or stays on) the branch that "
+            "holds the change and says how many commits below HEAD it is."
         ),
     )
     p.add_argument("changeish", metavar="CHANGEISH", help=changeish_help("The change", change_only=True))

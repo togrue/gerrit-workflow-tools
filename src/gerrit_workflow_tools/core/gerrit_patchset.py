@@ -31,6 +31,8 @@ class GerritPatchset:
     commit: str
     subject: str
     target_branch: str
+    private: bool = False
+    """The change is private: Gerrit serves its refs only to a remote signed in as someone who may see it."""
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,7 @@ class ResolvedChange:
             commit=sha,
             subject=view.subject,
             target_branch=view.branch,
+            private=view.private,
         )
 
     def patch_set_of(self, commit: str) -> int | None:
@@ -108,6 +111,22 @@ def fetch_patchset(cwd: Path | str, remote: str, patchset: GerritPatchset, *, wi
     ref = changes_ref(patchset.number, patchset.patch_set)
     target = patchset.target_branch
     tracking = [f"+refs/heads/{target}:refs/remotes/{remote}/{target}"] if with_target_branch else []
-    git("fetch", "-q", remote, ref, *tracking, cwd=cwd)
+    try:
+        git("fetch", "-q", remote, ref, *tracking, cwd=cwd)
+    except GitError as error:
+        if "couldn't find remote ref" not in error.stderr:
+            raise
+        raise GitError(f"{error}\n{_missing_ref_hint(remote, ref, patchset)}", returncode=error.returncode) from error
     if commit_sha_or_none(cwd, patchset.commit) is None:
         raise GitError(f"fetching {ref} did not bring {patchset.commit[:12]}")
+
+
+def _missing_ref_hint(remote: str, ref: str, patchset: GerritPatchset) -> str:
+    """What most likely keeps *ref* from *remote*, and what to do; the change data says whether it is private."""
+    if patchset.private:
+        return (
+            f"change {patchset.number} is private: Gerrit does not serve a private change's refs to remote "
+            f"'{remote}' as it signs in (anonymous, or an HTTP URL without /a/); fetch over SSH or an /a/ URL "
+            "with credentials"
+        )
+    return f"remote '{remote}' does not have {ref}: check that gerrit.remote names the Gerrit server of the change"
