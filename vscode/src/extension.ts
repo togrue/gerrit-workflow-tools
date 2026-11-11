@@ -135,10 +135,19 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
   const commands: Record<string, (...args: never[]) => unknown> = {
     "ger.refresh": async () => {
       if (model.failure) {
-        model.restart();
+        // It failed: Retry starts ger serve afresh, and says so.
+        await ui().progress(vscode.ProgressLocation.Notification, "Restarting ger serve", () => {
+          model.restart();
+          return model.refresh({ fromGerrit: true });
+        });
+      } else {
+        // Both views it reloads show that they are loading, whichever one the button is in.
+        const title = "Refreshing from Gerrit";
+        await ui().progress({ viewId: "ger.overview" }, title, () => ui().progress({ viewId: "ger.stack" }, title, () => model.refresh({ fromGerrit: true })));
       }
-      await model.refresh({ fromGerrit: true });
-      await changeView.open();
+      if (model.state === "ready") {
+        await changeView.open(); // still failing: the change shown stays as it was, the welcome text says why
+      }
     },
     "ger.showLog": () => log.show(),
     "ger.openHeadline": async () => {

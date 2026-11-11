@@ -196,7 +196,7 @@ export async function run(): Promise<void> {
     // --- The overview -------------------------------------------------------------
     await press("Click the status bar item", "The Change view opens on the change the status bar names (CI failed on 102).", exec("ger.openHeadline"));
     await press("Review chains › Mark All Activity as Seen", "Every \"● new activity\" marker goes; nothing else changes.", exec("ger.markSeen"));
-    await press("Review chains › Refresh from Gerrit", "The views reload from Gerrit. With nothing new there, nothing changes.", exec("ger.refresh"));
+    await press("Review chains › Refresh from Gerrit", "Both Review chains and Local stack show progress while they reload from Gerrit. With nothing new there, nothing changes.", exec("ger.refresh"));
     const theirs = await chainRow("Add retry to the uploader");
     await press(
       "Click \"Add retry to the uploader\" under To review",
@@ -230,6 +230,11 @@ export async function run(): Promise<void> {
       "Settings › ger.executable set to a program that is not installed",
       "ger serve restarts with it and cannot start: the Gerrit views go empty and their welcome text says the program was not found, with Open Settings and Retry; the status bar shows a warning.",
       () => settings.update("executable", "ger-not-installed", vscode.ConfigurationTarget.Global),
+    );
+    await press(
+      "Review chains › Retry, the program still missing",
+      "It says it is restarting ger serve; the program is still missing, so the views still say so.",
+      exec("ger.refresh"),
     );
     await press(
       "Settings › ger.executable set back",
