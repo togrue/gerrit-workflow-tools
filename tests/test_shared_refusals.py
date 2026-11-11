@@ -133,3 +133,40 @@ def test_log_and_push_agree_on_an_unsquashed_fixup(stack_repo: Path, monkeypatch
     # The plain-text boundary marker sits right above the commit push stops at.
     lines = log_out.splitlines()
     assert lines[lines.index(fixup_line) - 1].startswith("---- ready boundary")
+
+
+def _stop_on_a_conflict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Two stack commits growing one file; dropping the first stops the second on a conflict."""
+    _configure(repo)
+    for text, subject in (("one\n", "grow: one"), ("one\ntwo\n", "grow: two"), ("one\ntwo\nthree\n", "grow: three")):
+        (repo / "grow.txt").write_text(text, encoding="utf-8")
+        git("add", "grow.txt", cwd=repo)
+        git("commit", "-q", "-m", subject, cwd=repo)
+    _code, _out, err = run_cli(repo, edit_main, ["--drop", "HEAD~1"], monkeypatch, gerrit=ChangeStore({}))
+    assert git("diff", "--name-only", "--diff-filter=U", cwd=repo).stdout.split() == ["grow.txt"]
+    return err
+
+
+def test_a_rebase_stopped_on_a_conflict_says_how_on_and_nothing_commits_or_pushes_it(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The next step names resolving and ``git add``; ``ger fix`` and ``ger push`` refuse until then."""
+    err = _stop_on_a_conflict(stack_repo, monkeypatch)
+    step = (
+        "resolve the conflicts in grow.txt, `git add` them, then `git rebase --continue`; "
+        "`git rebase --abort` goes back to where the rebase started"
+    )
+    assert err.rstrip().endswith(f"next: {step}")
+    head = git("rev-parse", "HEAD", cwd=stack_repo).stdout
+
+    code, _out, fix_err = run_cli(stack_repo, fix_main, ["-a", "HEAD"], monkeypatch)
+    assert (code, fix_err.strip()) == (
+        ExitCode.USAGE,
+        f"error: the index has unresolved conflicts, and a fixup would commit them; {step}",
+    )
+    assert git("rev-parse", "HEAD", cwd=stack_repo).stdout == head
+
+    for argv in (["-y"], ["--dry-run"]):
+        code, _out, push_err = run_cli(stack_repo, push_main, argv, monkeypatch, gerrit=ChangeStore({}))
+        assert code == ExitCode.USAGE
+        assert "a rebase is in progress, and 'feature' still points at the commits from before it" in push_err

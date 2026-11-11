@@ -41,7 +41,7 @@ from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
-from gerrit_workflow_tools.core.git_state import history_rewrite_refusal
+from gerrit_workflow_tools.core.git_state import conflict_next_step, history_rewrite_refusal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -338,12 +338,26 @@ def require_history_rewrite(cwd: Path) -> None:
         raise UsageError(refusal)
 
 
-def run_interactive_rebase(cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str]) -> int:
-    """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code."""
+def run_interactive_rebase(
+    cwd: Path, base: str, *, sequence_editor: str, env: dict[str, str], continue_with: str = "git rebase --continue"
+) -> int:
+    """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code.
+
+    A stop on a conflict ends with the shared next step, naming *continue_with* as the way on.
+    """
     env = {**env, "GIT_SEQUENCE_EDITOR": module_editor_command(f"gerrit_workflow_tools.{sequence_editor}")}
-    return git("rebase", "-i", base, cwd=cwd, env=env, check=False, capture=False).returncode
+    code = git("rebase", "-i", base, cwd=cwd, env=env, check=False, capture=False).returncode
+    _print_conflict_next_step(cwd, continue_with)
+    return code
 
 
-def continue_rebase(cwd: Path) -> int:
+def continue_rebase(cwd: Path, *, continue_with: str = "git rebase --continue") -> int:
     """``git rebase --continue``; return git's exit code. Output goes to the terminal."""
-    return git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode
+    code = git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode
+    _print_conflict_next_step(cwd, continue_with)
+    return code
+
+
+def _print_conflict_next_step(cwd: Path, continue_with: str) -> None:
+    if step := conflict_next_step(cwd, continue_with=continue_with):
+        print(f"next: {step}", file=sys.stderr)

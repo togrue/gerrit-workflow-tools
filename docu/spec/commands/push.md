@@ -111,6 +111,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 
 `prepare` runs before `-i`. A push refusal (empty ready range, or a rebase check that refuses) is printed without asking for reviewers. `execute` is the only call that runs `git push`.
 
+0. No rebase underway: the branch ref moves only when a rebase finishes, so mid-rebase `ger push` would send the stack as it was before the rebase. It refuses with exit `2` (`USAGE`) — `--dry-run` too, since the push it previews would not run — and says to finish (`git rebase --continue`) or `git rebase --abort` first.
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
 3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
@@ -135,7 +136,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | `0` | Success, dry-run OK, or user cancelled at prompt |
 | `1` | Push succeeded, but `lazy` / `overwrite` could not apply reviewers, or an option could not be set over REST on a change Gerrit already had (printed as a warning) |
 | `1` | Nothing to push (empty ready prefix), or you declined the upstream prompt |
-| `2` | Usage: invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
+| `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` is not a commit, or not in the local stack |
 | `6` | The branch has no upstream: the same message and hint as `ger log` |
 | other | `git push` exit code |

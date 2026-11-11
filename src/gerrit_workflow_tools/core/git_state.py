@@ -128,6 +128,29 @@ def rebase_refusal(cwd: Path | str | None) -> str | None:
     return None
 
 
+def unmerged_paths(cwd: Path | str | None) -> list[str]:
+    """Paths the index holds as unresolved conflicts (``git diff --diff-filter=U``)."""
+    out = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout or ""
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def conflict_next_step(cwd: Path | str | None, *, continue_with: str = "git rebase --continue") -> str | None:
+    """The one next step after a rebase stopped on a conflict, or ``None`` when none is stopped on one.
+
+    Every ger command that starts or continues a rebase prints this when it stops on a conflict,
+    and every command that must not run on a conflicted index refuses with it.
+    """
+    paths = unmerged_paths(cwd)
+    if not paths:
+        return None
+    if not rebase_in_progress(cwd):
+        return f"resolve the conflicts in {', '.join(paths)} and `git add` them, then finish the merge or pick"
+    return (
+        f"resolve the conflicts in {', '.join(paths)}, `git add` them, then `{continue_with}`; "
+        "`git rebase --abort` goes back to where the rebase started"
+    )
+
+
 def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
     """Why rewriting the local stack cannot start here, or ``None``: the one wording every rewrite shares.
 

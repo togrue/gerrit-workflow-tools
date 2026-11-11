@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_state import conflict_next_step, rebase_in_progress
 from gerrit_workflow_tools.core.stack import fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
@@ -132,6 +133,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     args = p.parse_args(argv)
     cwd, settings, _summary_highlighter = init_cli_runtime(args)
 
+    if step := conflict_next_step(cwd):
+        raise UsageError(f"the index has unresolved conflicts, and a fixup would commit them; {step}")
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
     # `git rebase --autosquash` can actually place (ADR-0003).
     target = resolve_stack_changeish(cwd, args.target, settings=settings, gerrit=gerrit, require_in_stack=True)
@@ -171,10 +174,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     else:
         print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
         # The same advice `ger push` gives when it stops at this commit, with the real base filled in.
-        print(
-            f"next: squash it with `git rebase -i --autosquash {snapshot.upstream or snapshot.upstream_tip[:12]}`",
-            file=sys.stderr,
-        )
+        first = "finish the rebase (`git rebase --continue`), then " if rebase_in_progress(cwd) else ""
+        base = snapshot.upstream or snapshot.upstream_tip[:12]
+        print(f"next: {first}squash it with `git rebase -i --autosquash {base}`", file=sys.stderr)
     return 0
 
 

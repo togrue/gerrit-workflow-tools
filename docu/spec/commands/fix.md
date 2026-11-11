@@ -53,6 +53,9 @@ Default: only **staged** changes are committed. On a TTY with an empty index, pr
 
 ## Behavior
 
+0. **Unresolved conflicts refuse.** When the index has unmerged paths (a rebase, merge or pick stopped on a conflict), `-a` or a plain commit would commit the conflict markers. `ger fix` exits `2` (`USAGE`) with `the index has unresolved conflicts, and a fixup would commit them;` and the shared next step (resolve, `git add`, `git rebase --continue` or `--abort`), before anything is resolved or staged.
+
+   **A rebase stopped cleanly (an `edit` stop) does not refuse.** The fixup is committed at the stop, the rest of the rebase replays on top of it, and it folds into its target like any other fixup: [ADR-0003](../../adr/0003-ger-fix-targets-the-local-stack.md) makes `ger fix` a shortcut for a *later* autosquash, and nothing in an edit stop makes that later step wrong. The target resolves against the stack as rebased so far. The next-step line then starts with finishing the rebase (`git rebase --continue`). To change the stopped commit itself, `git commit --amend` is the tool, not a fixup.
 1. Resolve `REF_OR_CHANGE` to a commit SHA on the local stack (see Change resolution above). Never fetches.
 2. If the index has no staged changes and `-a` was not passed:
    - **Interactive TTY** and there are unstaged modifications to tracked files: prompt `[y/n/d]` — `y` runs `git add -u` and continues; `d` prints the unstaged diff to stderr and re-prompts; `n` / empty / interrupt declines.
@@ -69,8 +72,7 @@ Semantic codes come from the shared `ExitCode` table ([exit-codes.md](../exit-co
 | Code | Meaning |
 |------|---------|
 | `0` | Fixup commit created successfully |
-| `1` | Fixup rejected (no staged changes) |
-| `2` | Usage error (bad arguments) |
+| `2` | Usage: bad arguments, nothing staged, or unresolved conflicts in the index |
 | `3` | `NOT_FOUND` — no commit on the local stack matches |
 | `4` | `AMBIGUOUS` — several stack commits share the Change-Id |
 | `5` | `GERRIT` — Gerrit answered badly, or not at all |

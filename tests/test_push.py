@@ -158,7 +158,8 @@ def test_gpush_detached_head_no_local_branch_errors(stack_repo: Path, monkeypatc
     assert "detached" in err.lower()
 
 
-def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_refuses_while_a_rebase_is_underway(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The branch ref moves only when the rebase ends: pushing now would send the stack from before it."""
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
     (stack_repo / "rebased.txt").write_text("x\n", encoding="utf-8")
     git("add", "rebased.txt", cwd=stack_repo)
@@ -174,9 +175,9 @@ def test_gpush_detached_head_uses_rebase_branch(stack_repo: Path, monkeypatch: p
 
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
 
-    assert code == 0, err
-    assert ":refs/for/main" in out
-    assert "warning: a rebase is in progress" in err
+    assert code == ExitCode.USAGE
+    assert ":refs/for/main" not in out
+    assert "finish it (`git rebase --continue`) or `git rebase --abort`, then push" in err
 
 
 def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

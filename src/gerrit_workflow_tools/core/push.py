@@ -185,6 +185,12 @@ def prepare(
 ) -> PushPlan | PushRefusal:
     if topic and "," in topic:
         raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
+    if rebase_in_progress(cwd):
+        # The branch ref moves only when the rebase finishes: a push now sends the stack as it was before.
+        raise UsageError(
+            f"a rebase is in progress, and '{branch}' still points at the commits from before it; "
+            "finish it (`git rebase --continue`) or `git rebase --abort`, then push"
+        )
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     if not destination:
         raise GitError("Internal error: Gerrit push mode without effective destination.")
@@ -197,8 +203,6 @@ def prepare(
     )
     if error:
         return PushRefusal(error)
-    if rebase_in_progress(cwd):
-        warnings = (*warnings, "warning: a rebase is in progress; these commits may still be rewritten")
 
     reviewers = resolve_push_reviewers(cwd, branch, reviewer_flags, settings=settings)
     options = PushOptions(

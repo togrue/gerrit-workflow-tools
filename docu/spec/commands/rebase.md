@@ -44,6 +44,8 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 
 Editor: enricher delegates to `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`.
 
+A rebase that stops on a conflict ends with the shared next step ([edit.md](edit.md#behavior)): resolve the paths, `git add` them, then `git rebase --continue`, or `git rebase --abort`.
+
 ---
 
 ## Configuration

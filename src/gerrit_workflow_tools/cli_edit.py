@@ -38,7 +38,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch
+from gerrit_workflow_tools.core.git_state import rebase_in_progress, resolve_working_branch, unmerged_paths
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.status_fmt import attention_text
@@ -219,7 +219,7 @@ def _continue_stopped_rebase(cwd: Path) -> int:
     cannot start.
     """
     print("continuing the rebase", file=sys.stderr)
-    code = continue_rebase(cwd)
+    code = continue_rebase(cwd, continue_with="ger edit -n")
     if not rebase_in_progress(cwd):
         if code == 0:
             print("rebase finished", file=sys.stderr)
@@ -227,7 +227,8 @@ def _continue_stopped_rebase(cwd: Path) -> int:
     if code == 0:
         print("rebase is still in progress; `ger edit -n` to continue it", file=sys.stderr)
         return int(ExitCode.GIT)
-    print("`ger edit -n` again once the rebase can continue", file=sys.stderr)
+    if not unmerged_paths(cwd):  # a conflict already got its next step
+        print("`ger edit -n` again once the rebase can continue", file=sys.stderr)
     return code
 
 
@@ -284,7 +285,13 @@ def _run_interactive_stack_rebase(
     if args.debug_log:
         env["GEDIT_DEBUG_LOG"] = "1"
     logger.debug("gedit rebasing onto %s to stop at %s", rebase_fork[:8], short)
-    returncode = run_interactive_rebase(cwd, rebase_fork, sequence_editor="rebase_sequence_editor", env=env)
+    returncode = run_interactive_rebase(
+        cwd,
+        rebase_fork,
+        sequence_editor="rebase_sequence_editor",
+        env=env,
+        continue_with="ger edit -n" if cursor_change_id and cursor_action != "set" else "git rebase --continue",
+    )
     # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
         write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
