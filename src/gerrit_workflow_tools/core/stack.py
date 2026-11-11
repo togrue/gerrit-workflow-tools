@@ -279,6 +279,14 @@ def commits_in_range(
     return read_commit_rows(cwd, "--reverse", *extra, rev_range)
 
 
+UNSQUASHED_FIXUP_ADVICE = "squash it with `git rebase -i --autosquash`"
+
+
+def is_unsquashed_fixup(subject: str) -> bool:
+    """A ``fixup!``/``squash!`` commit still in the stack: the one test ``ger log`` and ``ger push`` share."""
+    return subject.startswith((_FIXUP_PREFIX, "squash! "))
+
+
 def fixup_target_sha(commits: Sequence[Commit], sha: str) -> str:
     """The commit a new fixup of *sha* should name: the original when *sha* is itself a fixup.
 

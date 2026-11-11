@@ -14,6 +14,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.stack import is_unsquashed_fixup
 
 
 class NoEditAttentionError(GitError):
@@ -24,6 +25,8 @@ class Attention:  # pylint: disable=too-few-public-methods
     """Reason names. Plain strings, because attention strategies return plain strings."""
 
     MISSING_CHANGE_ID = "missing-change-id"
+    UNSQUASHED_FIXUP = "unsquashed-fixup"
+    """A ``fixup!``/``squash!`` commit with no Change-Id: the same commit ``ger push`` stops at."""
     ABANDONED = "abandoned"
     NOT_PUSHED = "not-pushed"
     MERGED_DRIFT = "merged-drift"
@@ -61,7 +64,7 @@ def _settled_reasons(commit: LogCommit, *, chain_blocked: bool) -> list[str] | N
     """Reasons for a commit with no open review to judge, or ``None`` when it has one."""
     if not commit.change_id and commit.patchset_status != PatchsetStatus.MERGED_SAME:
         # Prefer missing-change-id over only not-pushed: overlay cannot match Gerrit without a footer.
-        return [Attention.MISSING_CHANGE_ID]
+        return [Attention.UNSQUASHED_FIXUP if is_unsquashed_fixup(commit.summary) else Attention.MISSING_CHANGE_ID]
     if commit.patchset_status == PatchsetStatus.UNKNOWN:
         return [Attention.GERRIT_UNKNOWN]
     if commit.abandoned:

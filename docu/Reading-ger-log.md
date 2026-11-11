@@ -10,6 +10,15 @@ One line per **local commit** in your stack (default range: `branch@{upstream}..
 
 At the bottom, a **summary** line counts ready commits and outstanding issues.
 
+When the **ready boundary** falls inside the stack, a plain line marks it, readable without
+colour (piped output, `NO_COLOR`):
+
+```text
+---- ready boundary: `ger push` sends the commits above ----
+```
+
+The commit right below it is the one `ger push` stops at.
+
 Exit code **1** means at least one commit still needs your attention; **0** means the stack looks clean from `ger`'s perspective.
 
 ---
@@ -100,6 +109,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | Hint | Meaning |
 |------|---------|
 | `missing Change-Id` | Commit message has no usable Change-Id footer (absent or malformed); JSON reason `missing-change-id` |
+| `unsquashed fixup commit` | A `fixup!`/`squash!` commit with no Change-Id, the commit `ger push` stops at; squash it with `git rebase -i --autosquash`. JSON reason `unsquashed-fixup` |
 | `not-pushed` | Commit not on Gerrit yet |
 | `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |

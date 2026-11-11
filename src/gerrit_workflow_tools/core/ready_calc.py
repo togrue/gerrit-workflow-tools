@@ -15,7 +15,7 @@ from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
     find_ready_boundary_via_registry,
 )
-from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
+from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, Commit, get_stack_snapshot, is_unsquashed_fixup
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -41,8 +41,8 @@ def change_id_boundary_for_commits(commits: list[Commit]) -> BoundaryResult:
     """Ready boundary at the first missing/malformed/duplicate Change-Id, if any."""
     rows = [ChangeIdRow(sha=c.sha, short_sha=c.short_sha, change_id=c.change_id) for c in commits]
     block_index, reason = first_change_id_boundary(rows, strict=True)
-    if block_index is not None and commits[block_index].subject.startswith(("fixup! ", "squash! ")):
-        reason = "it is an unsquashed fixup commit; squash it with `git rebase -i --autosquash`"
+    if block_index is not None and is_unsquashed_fixup(commits[block_index].subject):
+        reason = f"it is an unsquashed fixup commit; {UNSQUASHED_FIXUP_ADVICE}"
     return BoundaryResult(block_index=block_index, reason=reason)
 
 

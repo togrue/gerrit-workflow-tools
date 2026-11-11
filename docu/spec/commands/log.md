@@ -67,7 +67,7 @@ Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when co
 
 Attention rules: shared `determine_attention()` in `core/attention.py` (same family as `ger edit --first-attention-commit`). The trailing hints are a rendering of `attention_reasons`, so a project attention strategy changes both. `ci-failed` means a failed Checks run or `Verified <= -1`.
 
-A commit with no usable Change-Id footer (missing or malformed) must include `missing-change-id` in `attention_reasons` and show a matching attention hint in text output (see [Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)). Prefer this over only `not-pushed` when the root cause is a bad/absent footer — Gerrit overlay cannot identify the change without one.
+A commit with no usable Change-Id footer (missing or malformed) must include `missing-change-id` in `attention_reasons` and show a matching attention hint in text output (see [Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)). Prefer this over only `not-pushed` when the root cause is a bad/absent footer — Gerrit overlay cannot identify the change without one. A `fixup!`/`squash!` commit without a footer reports `unsquashed-fixup` instead (hint `unsquashed fixup commit`): the same test, `stack.is_unsquashed_fixup`, that makes `ger push` stop there.
 
 ---
 

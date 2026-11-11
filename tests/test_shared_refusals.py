@@ -116,3 +116,20 @@ def test_errors_come_after_what_the_command_printed(stack_repo: Path, monkeypatc
     assert code == ExitCode.USAGE
     assert text.rstrip().endswith("error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
     assert "About to push" in text
+
+
+def test_log_and_push_agree_on_an_unsquashed_fixup(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """One classification: the commit ``ger push`` stops at is the one ``ger log`` names, in the same words."""
+    _configure(stack_repo)
+    git("config", "gerrit.stopPattern", "^nomatch$", cwd=stack_repo)
+    git("commit", "--allow-empty", "-q", "-m", "fixup! whatever", cwd=stack_repo)
+
+    _code, log_out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
+    _code, push_out, push_err = run_cli(stack_repo, push_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore({}))
+
+    fixup_line = next(line for line in log_out.splitlines() if "fixup! whatever" in line)
+    assert fixup_line.rstrip().endswith("# unsquashed fixup commit")
+    assert "because it is an unsquashed fixup commit" in push_out + push_err
+    # The plain-text boundary marker sits right above the commit push stops at.
+    lines = log_out.splitlines()
+    assert lines[lines.index(fixup_line) - 1].startswith("---- ready boundary")

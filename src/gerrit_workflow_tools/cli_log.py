@@ -49,6 +49,9 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_su
 
 logger = logging.getLogger(__name__)
 
+# Readable without colour (piped, NO_COLOR): commits above it are what `ger push` sends.
+READY_BOUNDARY_MARKER = "---- ready boundary: `ger push` sends the commits above ----"
+
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -172,8 +175,9 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
     show_url: bool,
     show_change_id: bool,
     summary_highlighter: SummaryHighlighter | None,
+    blocked: frozenset[str] = frozenset(),
 ) -> None:
-    """Render text view for ``ger log``."""
+    """Render text view for ``ger log``, with a plain-text line where the ready boundary falls."""
     attn_col = attention_column(
         visible,
         summary_highlighter=summary_highlighter,
@@ -185,7 +189,10 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
         attn_col=attn_col,
     )
 
+    boundary = next((c.sha for c in visible if c.sha in blocked), None)
     for commit in visible:
+        if commit.sha == boundary:
+            print(color_text(READY_BOUNDARY_MARKER, ANSI_DIM))
         print(
             oneline_line(
                 commit,
@@ -276,14 +283,6 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             raise stack_view.gerrit_unavailable
         return int(exit_code)
 
-    _render_text_output(
-        visible=commits,
-        verbose_level=verbose_level,
-        show_url=show_url,
-        show_change_id=show_change_id,
-        summary_highlighter=summary_highlighter,
-    )
-
     # The same boundary `ger push` stops at, so the two commands cannot disagree.
     blocked = blocked_shas_for_stack(
         cwd,
@@ -292,6 +291,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         stop_pattern=settings.stop_pattern,
         settings=settings,
         web_base=settings.gerrit_web_url,
+    )
+    _render_text_output(
+        visible=commits,
+        verbose_level=verbose_level,
+        show_url=show_url,
+        show_change_id=show_change_id,
+        summary_highlighter=summary_highlighter,
+        blocked=blocked,
     )
     print()
     print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))

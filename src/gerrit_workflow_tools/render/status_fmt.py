@@ -60,9 +60,11 @@ def comments_token(count: int) -> str:
 
 
 GERRIT_UNKNOWN_TEXT = "Gerrit state unknown"
+UNSQUASHED_FIXUP_TEXT = "unsquashed fixup commit"
 
 _TERMINAL_TEXT = (
     (Attention.MISSING_CHANGE_ID, "missing Change-Id"),
+    (Attention.UNSQUASHED_FIXUP, UNSQUASHED_FIXUP_TEXT),
     (Attention.GERRIT_UNKNOWN, GERRIT_UNKNOWN_TEXT),
     (Attention.ABANDONED, "abandoned"),
     (Attention.NOT_PUSHED, Attention.NOT_PUSHED),
