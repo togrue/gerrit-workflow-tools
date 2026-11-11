@@ -11,7 +11,7 @@ const STARTUP_TIMEOUT_MS = 20_000;
 /** The program `ger.executable` names is not there. */
 export class ExecutableNotFound extends Error {
   constructor(readonly program: string) {
-    super(`there is no program "${program}": install ger, or set ger.executable to how to run it`);
+    super(`there is no program "${program}": install ger, or set ger.executable to how to run it (its full path works too)`);
     this.name = "ExecutableNotFound";
   }
 }

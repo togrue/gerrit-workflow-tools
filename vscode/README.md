@@ -155,7 +155,7 @@ A branch without an upstream still shows your review chains; *Local stack* offer
 cd vscode
 npm install
 npm run compile     # or: npm run watch
-npm test            # unit tests of the pure parts (formatting, activity, reorder math)
+npm test            # unit tests of the pure parts (formatting, activity, reorder math) and of package.json against the code (menus, row contexts, commands)
 npm run e2e         # the extension inside a real VS Code, against a fixture repo and a fake Gerrit
 ```
 
@@ -190,6 +190,7 @@ printed.
 | `src/format.ts` | Words, ages, urgency, activity tracking. Pure, unit-tested. |
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
+| `src/rows.ts` | The `contextValue` of every tree row, which the menus in `package.json` match with `viewItem =~ /…/`. Pinned against them by `test/package.test.ts`. |
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
 | `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |

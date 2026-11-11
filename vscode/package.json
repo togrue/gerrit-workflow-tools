@@ -120,7 +120,7 @@
       },
       {
         "view": "ger.overview",
-        "contents": "The program that runs ger was not found. Install ger, or set **ger.executable** to how to run it (for example `uv run ger`).\n[Open Settings](command:workbench.action.openSettings?%5B%22ger.executable%22%5D)\n[Retry](command:ger.refresh)",
+        "contents": "The program that runs ger was not found. Install ger, or set **ger.executable** to how to run it (for example `uv run ger`, or the full path of the program).\n[Open Settings](command:workbench.action.openSettings?%5B%22ger.executable%22%5D)\n[Retry](command:ger.refresh)",
         "when": "ger.state == no-executable"
       },
       {
