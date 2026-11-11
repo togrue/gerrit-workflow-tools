@@ -48,6 +48,10 @@ _Avoid_: calling an unvalidated footer value a Change-Id
 `project~branch~Change-Id` — Gerrit's canonical key for a review. The cache primary key and the path segment for follow-up REST calls.
 _Avoid_: change key, full id
 
+**Sibling**:
+Another Gerrit change with the same **Change-Id** on a different branch — a cherry-pick of the change to `dev` is the sibling of the one on `main`. A **local stack** commit belongs to the sibling on its **push branch** only; naming the other sibling (by **triplet** or `change:N`) names that change, not the commit.
+_Avoid_: twin, duplicate (for a change on another branch)
+
 **Changeish**:
 Any input that might name a commit or a Gerrit change: a git rev, **Change-Id**, **triplet**, `change:N`, `refs/changes/…` ref, Gerrit URL, or `q:` query. Resolution classifies it before acting on it.
 _Avoid_: ref, target, identifier

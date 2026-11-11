@@ -24,10 +24,13 @@ from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.narrowing import narrow_matches
 from gerrit_workflow_tools.core.gerrit.resolution import (
     ChangeAmbiguousError,
+    LocalSibling,
     Resolution,
     SelectedChange,
     SelectedReason,
+    format_local_sibling_note,
     format_resolution_note,
+    local_sibling_note,
 )
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
@@ -35,7 +38,11 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     GerritUnavailableError,
     pick_change_from_query_result,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import (
+    ChangeResolutionError,
+    StackContext,
+    resolve_stack_context,
+)
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
@@ -47,9 +54,11 @@ __all__ = [
     "ChangeAmbiguousError",
     "ChangeResolutionError",
     "ChangeishKind",
+    "LocalSibling",
     "Resolution",
     "SelectedChange",
     "SelectedReason",
+    "format_local_sibling_note",
     "format_resolution_note",
     "resolve_changeish",
     "resolve_stack_changeish",
@@ -130,15 +139,36 @@ def resolve_changeish(
     """Resolve *ref* to a :class:`Resolution` using stack context and Gerrit.
 
     ``local_sha`` is the commit a git rev names, else the **local stack** commit carrying the
-    selected change's Change-Id, however that change was addressed. Every command that reports
-    a resolution takes it from here, so ``ger show`` and ``ger resolve`` cannot disagree on it.
+    selected change's Change-Id, however that change was addressed — provided that commit pushes
+    to the selected change (same project and **push branch**). A commit carrying the Change-Id
+    while pushing to another branch belongs to a **sibling**: it is ``local_sibling`` instead.
+    Every command that reports a resolution takes it from here, so ``ger show`` and
+    ``ger resolve`` cannot disagree on it.
     """
     resolution = _resolve_on_gerrit(
         ref, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=explicit_target
     )
-    if resolution.local_sha is None and resolution.selected is not None:
-        resolution.local_sha = _local_stack_sha(cwd, resolution.selected.change_id, branch=branch, settings=settings)
+    selected = resolution.selected
+    if resolution.local_sha is not None or selected is None:
+        return resolution
+    sha = _local_stack_sha(cwd, selected.change_id, branch=branch, settings=settings)
+    if sha is None:
+        return resolution
+    stack = _stack_context_or_none(cwd, branch, settings)
+    if stack is None or (selected.project, selected.branch) == (stack.project, stack.push_branch):
+        resolution.local_sha = sha
+        return resolution
+    on_push_branch = [alt for alt in resolution.alternatives if alt.branch == stack.push_branch]
+    number = on_push_branch[0].number if len(on_push_branch) == 1 else None
+    resolution.local_sibling = LocalSibling(sha=sha, branch=stack.push_branch, number=number)
     return resolution
+
+
+def _stack_context_or_none(cwd: Path | str | None, branch: str | None, settings: Settings) -> StackContext | None:
+    try:
+        return resolve_stack_context(cwd, branch, settings=settings)
+    except ChangeResolutionError:
+        return None
 
 
 def _local_stack_sha(cwd: Path | str | None, change_id: str, *, branch: str | None, settings: Settings) -> str | None:
@@ -206,6 +236,9 @@ class StackCommit:
 
     sha: str
     resolution: Resolution | None = None
+    note: str | None = None
+    """Set when the changeish named a **sibling**: a change on another branch than the one this
+    commit pushes to. The command still acts on this commit (spec §4), and says so."""
 
 
 def _stack_commit(
@@ -278,7 +311,22 @@ def resolve_to_stack_sha(
             f"ambiguous Change-Id {change_id} in stack ({', '.join(shorts)})",
             alternatives=[],
         )
-    return StackCommit(sha=matches[0].sha, resolution=resolution)
+    sha = matches[0].sha
+    if resolution is not None:
+        return StackCommit(sha=sha, resolution=resolution, note=format_local_sibling_note(resolution))
+    return StackCommit(sha=sha, note=_triplet_sibling_note(parsed, sha, cwd=cwd, branch=branch, settings=settings))
+
+
+def _triplet_sibling_note(
+    parsed: Changeish, sha: str, *, cwd: Path | str | None, branch: str | None, settings: Settings
+) -> str | None:
+    """The sibling note for a **triplet** naming another branch than the one *sha* pushes to. Offline."""
+    if parsed.kind != "triplet" or parsed.branch is None:
+        return None
+    stack = _stack_context_or_none(cwd, branch, settings)
+    if stack is None or (parsed.project, parsed.branch) == (stack.project, stack.push_branch):
+        return None
+    return local_sibling_note(LocalSibling(sha=sha, branch=stack.push_branch), branch=parsed.branch)
 
 
 def resolve_stack_changeish(

@@ -235,7 +235,9 @@ The **review chain** an open change sits in, base to top, in the `ger inbox --js
 ### `GET /show`
 
 `ger show --json` for one or more targets: overlay state, `comment_chains`, and with `ci=1` the
-`ci_content` of each failed **CI link**.
+`ci_content` of each failed **CI link**. A `rev` naming a **sibling** on another branch than the
+local commit with its Change-Id pushes to is that change, `local_commit: false`, with the commit in
+`resolution.local_sibling` ([show](show.md)).
 
 Each commit also says what a new comment on it becomes by default, in `new_comment`: `draft`
 when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else

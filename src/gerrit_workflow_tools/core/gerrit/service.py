@@ -127,15 +127,24 @@ class GerritService:
         *,
         cwd: Path | str | None = None,
         fetch_ci_pipelines: bool = False,
+        triplets: Sequence[str | None] | None = None,
     ) -> list[Any]:
-        """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
+        """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups.
+
+        Each row is overlaid with the push branch's change carrying its Change-Id, unless
+        *triplets* (one per row) names the change for it: a change shown for itself.
+        """
 
         from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
 
         stack = self.stack_context()
-
-        change_ids = [row.valid_change_id for row in commits if row.valid_change_id]
-        detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
+        keys = [
+            named
+            or (build_triplet(stack.project, stack.push_branch, row.valid_change_id) if row.valid_change_id else None)
+            for row, named in zip(commits, triplets or [None] * len(commits), strict=True)
+        ]
+        refs = [key for key in keys if key]
+        detail_map = self.changes.get_payloads(refs) if refs else {}
         by_triplet: dict[str, ChangeView] = {}
         for ref, payload in detail_map.items():
             view = ChangeView.from_payload(payload)
@@ -145,10 +154,8 @@ class GerritService:
 
         result: list[Any] = []
         follow_ups: list[Callable[[], None]] = []
-        for row in commits:
-            change: ChangeView | None = None
-            if row.valid_change_id:
-                change = by_triplet.get(build_triplet(stack.project, stack.push_branch, row.valid_change_id))
+        for row, key in zip(commits, keys, strict=True):
+            change = by_triplet.get(key) if key else None
             lc, needed = build_log_commit(row, change, self.web_base, cwd)
             if fetch_ci_pipelines and lc.pushed:
                 needed = needed | frozenset({"checks"})

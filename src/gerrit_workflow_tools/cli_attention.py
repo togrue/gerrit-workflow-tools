@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import ExitCode, print_resolution_note
+from gerrit_workflow_tools.cli_common import ExitCode, print_stack_commit_notes
 from gerrit_workflow_tools.core.annotated_stack import branches_needing_upstream, resolve_rev_range
 from gerrit_workflow_tools.core.attention_cursor import (
     EditAttentionMode,
@@ -127,7 +127,7 @@ def resolve_in_stack(
     gerrit: GerritRest | None,
 ) -> StackCommit:
     target = resolve_stack_changeish(cwd, rev, settings=settings, gerrit=gerrit, branch=branch, require_in_stack=True)
-    print_resolution_note(target.resolution)
+    print_stack_commit_notes(target)
     return target
 
 

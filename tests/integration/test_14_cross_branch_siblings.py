@@ -112,13 +112,6 @@ def test_a_triplet_or_change_number_names_the_other_branchs_sibling_exactly(
     assert resolution["ambiguous"] is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "product bug: ger show of the sibling on another branch renders the local commit with the "
-        "push branch's change (main's number, votes and URLs) while resolution.selected names dev's"
-    ),
-)
 def test_show_of_the_other_branchs_sibling_reports_that_change(
     reviewed_siblings: SiblingChanges, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -126,6 +119,11 @@ def test_show_of_the_other_branchs_sibling_reports_that_change(
     shown = ger_json(_on(s, "feat_main"), ger_show_main, [s.triplet("dev")], monkeypatch)
     assert shown["resolution"]["selected"]["number"] == s.dev["_number"]
     assert (shown["number"], shown["code_review"]) == (s.dev["_number"], -1)
+    # Not the local commit, which pushes to main: that one is named beside it.
+    assert shown["local_commit"] is False and "local_sha" not in shown["resolution"]
+    assert shown["resolution"]["local_sibling"]["sha"] == git_out("rev-parse", "HEAD", cwd=s.repo)
+    assert [chain["comments"][0]["message"] for chain in shown["comment_chains"]] == ["only on dev"]
+    assert all(f"/+/{s.dev['_number']}/" in chain["url"] for chain in shown["comment_chains"])
 
 
 @pytest.mark.parametrize("form", ["change-id", "triplet", "change-number"])

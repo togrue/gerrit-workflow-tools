@@ -28,12 +28,13 @@ An address that cannot be right exits `3`: a URL for another host or project, a 
 
 Stdout:
 
-- `local SHA: …` when the changeish maps to a commit in the working repo: a git rev, or the **local stack** commit of the selected change
+- `local SHA: …` when the changeish maps to a commit in the working repo: a git rev, or the **local stack** commit of the selected change (the one that pushes to it; a **sibling** on another branch has none)
 - `Gerrit change: #<n> <triplet> (branch …, status …)` when a Gerrit change was selected
 
 Stderr:
 
 - A dimmed **transparency note** when a bare Change-Id was narrowed (same text as other commands via `format_resolution_note`)
+- A dimmed note when the selected change is a **sibling** of the local stack commit carrying its Change-Id, which targets another branch (`format_local_sibling_note`; `local_sibling` in JSON)
 
 ### `--json`
 

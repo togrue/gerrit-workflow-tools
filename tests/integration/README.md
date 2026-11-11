@@ -21,18 +21,12 @@ Unit tests (`pytest` with default config) **ignore** this directory; run integra
 | `test_11_draft_replies.py` | `ger reply` drafts; publishing or keeping them with `ger push` |
 | `test_12_review_and_comment.py` | `ger review` staging, chain walk and votes; `ger comment` |
 | `test_13_checkout.py` | `ger checkout` of a pushed change and its new patchset; one Change-Id on two branches |
-| `test_14_cross_branch_siblings.py` | One Change-Id on `main` and `dev`: `ger log` shows each branch its own change, votes and comments; a bare Change-Id is narrowed or refused (exit 4); triplet and `change:N` name either; `ger fix` by Change-Id, triplet or number; `ger push` renews only its branch's change; an abandoned or merged sibling leaves the other alone |
+| `test_14_cross_branch_siblings.py` | One Change-Id on `main` and `dev`: `ger log` shows each branch its own change, votes and comments; a bare Change-Id is narrowed or refused (exit 4); triplet and `change:N` name either, and `ger show` of the other branch's sibling shows that change, not the local commit; `ger fix` by Change-Id, triplet or number; `ger push` renews only its branch's change; an abandoned or merged sibling leaves the other alone |
 | `test_15_change_states.py` | WIP and `--ready`; private with topic and reviewers; a web-editor patchset and a Gerrit rebase show as outdated and survive a push; pushes Gerrit rejects (abandoned change, no upload permission) exit non-zero with Gerrit's reason |
 | `test_16_rewrite_and_repush.py` | `ger push REV`, then the rest, then nothing to push; `ger fix` / `ger reword` / `ger edit` round trip renews only the touched change and those above, Change-Ids kept; a reordered stack |
 | `test_17_gerrit_failures.py` | Wrong token (HTTP 401) and an unreachable host for `ger log`, `ger show`, `ger edit -n`, `ger push --dry-run`: one line, exit 5 (push preview: one warning, exit 0), local state shown |
 | `test_18_serve.py` | `ger serve` `/stack` and `/overview` agree with `ger log --json`; the outgoing chain comes from Gerrit's relation data |
 | `test_reviewer_strategies_rest.py` | `push` / `lazy` / `overwrite` reviewer strategies |
-
-### Known product gaps (strict xfail)
-
-A test marked `xfail(strict=True)` pins a behaviour the product does not have yet; it turns red once fixed, so the mark comes off with the fix.
-
-- `test_14_cross_branch_siblings.py::test_show_of_the_other_branchs_sibling_reports_that_change` — `ger show <dev triplet>` from a branch pushing to `main` renders the local commit with main's change (number, votes, URLs) while `resolution.selected` is dev's.
 
 ### Writing a test here
 

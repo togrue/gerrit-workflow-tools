@@ -34,6 +34,17 @@ class ShowCommitResolution:
     is_local_commit: bool
     resolution: Resolution
 
+    @property
+    def shown_triplet(self) -> str | None:
+        """The change a target that is not a local commit is shown as; ``None``: the push branch's.
+
+        A local commit is overlaid with the change it pushes to. Anything else is the selected
+        change itself, which may be a **sibling** on another branch.
+        """
+        if self.is_local_commit or self.resolution.selected is None:
+            return None
+        return self.resolution.selected.triplet
+
 
 def gerrit_rest_key(commit: LogCommit, resolution: object, service: GerritService) -> str | None:
     """Unambiguous REST key for *commit*: selected triplet, else push-branch triplet from Change-Id.
@@ -85,7 +96,8 @@ def resolve_show_commit_row(
         raw_arg, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
     )
 
-    # A change with a commit on the local stack renders as that commit, however it was named.
+    # A change with a commit on the local stack renders as that commit, however it was named;
+    # a sibling on another branch is not that commit's change (resolve_changeish decides).
     if resolution.local_sha is not None:
         row = _row_from_local_commit(cwd, resolution.local_sha)
         return ShowCommitResolution(row=row, is_local_commit=True, resolution=resolution)
@@ -281,7 +293,11 @@ def load_shown_commits(
     fetched stays on its result; nothing here raises for it.
     """
     annotated = annotate(
-        [t.row for t in targets], service=service, cwd=service.cwd, fetch_ci_pipelines=fetch_ci_pipelines
+        [t.row for t in targets],
+        service=service,
+        cwd=service.cwd,
+        fetch_ci_pipelines=fetch_ci_pipelines,
+        triplets=[t.shown_triplet for t in targets],
     )
     commits = annotated.commits
     if len(commits) != len(targets):

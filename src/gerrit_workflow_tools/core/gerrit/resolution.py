@@ -61,6 +61,29 @@ class SelectedChange:
             status=status if isinstance(status, str) else "UNKNOWN",
         )
 
+    @property
+    def project(self) -> str:
+        """The project segment of :attr:`triplet`."""
+        return self.triplet.rsplit("~", 2)[0]
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class LocalSibling:
+    """A **local stack** commit carrying the selected change's Change-Id, pushing to another branch.
+
+    That commit belongs to its **sibling** on the **push branch**, not to the selected change,
+    so it is reported beside the selected change rather than as its ``local_sha``.
+    """
+
+    sha: str
+    branch: str
+    """The **push branch** the commit targets."""
+    number: int | None = None
+    """The sibling change on :attr:`branch`, when the resolution already saw it."""
+
     def to_json_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -76,6 +99,7 @@ class Resolution:
     ambiguous: bool = False
     alternatives: list[SelectedChange] = field(default_factory=list)
     local_sha: str | None = None
+    local_sibling: LocalSibling | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -90,7 +114,27 @@ class Resolution:
             out["selected_reason"] = self.selected_reason
         if self.local_sha is not None:
             out["local_sha"] = self.local_sha
+        if self.local_sibling is not None:
+            out["local_sibling"] = self.local_sibling.to_json_dict()
         return out
+
+
+def local_sibling_note(sibling: LocalSibling, *, branch: str, number: int | None = None) -> str:
+    """One line: the change named on *branch* is not the one the **local stack** commit pushes to."""
+    named = f"change #{number}" if number is not None else "that change"
+    as_change = f" (#{sibling.number})" if sibling.number is not None else ""
+    return (
+        f"note: {named} is on {branch!r}; local stack commit {sibling.sha[:8]} carries the same "
+        f"Change-Id but targets {sibling.branch!r}{as_change}."
+    )
+
+
+def format_local_sibling_note(resolution: Resolution) -> str | None:
+    """:func:`local_sibling_note` for *resolution*, when it has a :attr:`~Resolution.local_sibling`."""
+    sibling, selected = resolution.local_sibling, resolution.selected
+    if sibling is None or selected is None:
+        return None
+    return local_sibling_note(sibling, branch=selected.branch, number=selected.number)
 
 
 def format_resolution_note(resolution: Resolution) -> str | None:

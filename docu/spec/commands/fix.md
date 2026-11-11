@@ -29,6 +29,10 @@ exists on Gerrit but not on your stack exits `3`; rebase or cherry-pick it first
 ref outside the stack is rejected for the same reason: `git rebase --autosquash` over the stack
 could not place the resulting `fixup!`.
 
+A triplet or `change:<n>` naming a **sibling** on another branch (`proj~dev~I…` from a branch
+pushing to `main`) still maps to the stack commit carrying that Change-Id, which is the only one
+you could fix; a stderr note says that commit targets `main`, not `dev`.
+
 | Input | Network |
 |-------|---------|
 | git ref, Change-Id, triplet | none — matched against the stack directly |

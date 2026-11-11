@@ -275,3 +275,88 @@ def test_push_stack_resolve_and_show_agree_on_triplet(stack_repo: Path, monkeypa
     log_row = next(c for c in json_stdout(out_l)["commits"] if c["change_id"] == cid)
     assert log_row["pushed"] is True
     assert f"/+/{json_stdout(out_r)['resolution']['selected']['number']}" in (log_row.get("gerrit_url") or "")
+
+
+# --- Siblings: one Change-Id on main and on dev ------------------------------------
+
+_DEV_SHA = "d" * 40
+"""Dev's cherry-pick: a commit this repository does not have."""
+
+
+def _siblings(repo: Path) -> tuple[ChangeStore, str, str]:
+    """HEAD~1 is main's #120100 (Code-Review +2); dev's #119900 is its sibling, -1 with a comment.
+
+    Returns the store, HEAD~1's Change-Id and its SHA. The stack pushes to ``main``.
+    """
+    _configure_web(repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=repo)
+    cid = next(row.change_id for row in stack_rows_mb_to_head(repo) if row.sha == sha)
+    assert cid is not None
+    main_row = change_info_for_sha(sha, cid, number=120100, branch="main", cr=2)
+    dev_row = change_info_for_sha(_DEV_SHA, cid, number=119900, branch="dev", cr=-1, unresolved_comment_count=1)
+    store = ChangeStore({str(main_row["id"]): main_row, str(dev_row["id"]): dev_row})
+    comment = {"id": "c1", "line": 1, "message": "only on dev", "unresolved": True, "patch_set": 1}
+    store.set_comments(str(dev_row["id"]), {"a.txt": [comment]})
+    return store, cid, sha
+
+
+@pytest.mark.parametrize(
+    ("form", "number"),
+    [("change-id", 120100), ("main-triplet", 120100), ("dev-triplet", 119900), ("dev-number", 119900)],
+)
+def test_show_resolve_and_serve_agree_on_which_sibling_is_shown(
+    form: str, number: int, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The change a changeish names is the change shown; the local commit only when it pushes there."""
+    from gerrit_workflow_tools.server.api import GerApi
+
+    store, cid, sha = _siblings(stack_repo)
+    changeish = {
+        "change-id": cid,
+        "main-triplet": build_triplet("testproj", "main", cid),
+        "dev-triplet": build_triplet("testproj", "dev", cid),
+        "dev-number": "change:119900",
+    }[form]
+    code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", changeish], monkeypatch, gerrit=store)
+    code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", changeish], monkeypatch, gerrit=store)
+    assert code_r == 0, err_r
+    assert code_s in (0, 1), err_s
+    shown = json_stdout(out_s)
+    [served] = GerApi(stack_repo, gerrit=store).handle("GET", "/api/v1/show", {"rev": [changeish]})["commits"]
+    resolution = json_stdout(out_r)["resolution"]
+    assert resolution == shown["resolution"] == served["resolution"]
+    assert resolution["selected"]["number"] == number
+
+    for payload in (shown, served):
+        assert payload["number"] == number
+        assert f"/+/{number}" in payload["gerrit_url"]
+        assert all(f"/+/{number}/" in chain["url"] for chain in payload["comment_chains"])
+    if number == 120100:
+        assert (shown["local_commit"], resolution["local_sha"], shown["code_review"]) == (True, sha, 2)
+        assert "local_sibling" not in resolution
+        assert shown["comment_chains"] == []
+        return
+    # Dev's change, as for any change that is not local, with a note about the local commit.
+    assert (shown["local_commit"], shown["sha"], shown["code_review"]) == (False, _DEV_SHA, -1)
+    assert "local_sha" not in resolution
+    assert resolution["local_sibling"] == {"sha": sha, "branch": "main", "number": None}
+    assert [chain["comments"][0]["message"] for chain in shown["comment_chains"]] == ["only on dev"]
+    for err in (err_r, err_s):
+        assert f"local stack commit {sha[:8]} carries the same Change-Id but targets 'main'" in err
+
+
+@pytest.mark.parametrize("form", ["dev-triplet", "dev-number"])
+def test_fix_of_the_dev_sibling_fixes_the_stack_commit_and_says_it_targets_main(
+    form: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger fix`` still targets the stack commit carrying the Change-Id (spec §4), and says so."""
+    from gerrit_workflow_tools.cli_fix import main as fix_main
+
+    store, cid, sha = _siblings(stack_repo)
+    changeish = build_triplet("testproj", "dev", cid) if form == "dev-triplet" else "change:119900"
+    (stack_repo / "a.txt").write_text("fixed\n", encoding="utf-8")
+    git("add", "a.txt", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, fix_main, ["--json", changeish], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert json_stdout(out)["fixup_sha"] == sha
+    assert f"local stack commit {sha[:8]} carries the same Change-Id but targets 'main'" in err

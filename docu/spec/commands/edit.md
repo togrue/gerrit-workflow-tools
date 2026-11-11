@@ -24,7 +24,7 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit | -n | --next]
 
 `REV` is resolved by `resolve_stack_changeish` — the same path as [`ger fix`](fix.md), [`ger reword`](edit.md) and [`ger rebase`](rebase.md). Change-Ids, triplets, `change:<n>`, `refs/changes/…` refs, URLs and `q:` queries all map to the stack commit with that identity; anything not **in** the stack is an error, because an interactive rebase over the stack cannot touch it.
 
-A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` query costs one Gerrit round trip to learn the Change-Id, and a `refs/changes/…` ref the repository already has needs none. Change-Id matching is case-insensitive. When Gerrit narrowing occurred, the **resolution note** is printed to stderr. Shared changeish grammar: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
+A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` query costs one Gerrit round trip to learn the Change-Id, and a `refs/changes/…` ref the repository already has needs none. Change-Id matching is case-insensitive. When Gerrit narrowing occurred, the **resolution note** is printed to stderr. A triplet or `change:<n>` naming a **sibling** on another branch still maps to the stack commit with that Change-Id; a stderr note says which branch that commit targets. Shared changeish grammar: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
 ---
 

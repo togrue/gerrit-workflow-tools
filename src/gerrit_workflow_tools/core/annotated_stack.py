@@ -18,6 +18,7 @@ caller decides whether to prompt, fail, or carry on.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -105,19 +106,22 @@ def annotate(
     cwd: Path | str | None,
     fetch_ci_pipelines: bool = False,
     on_target: frozenset[str] = frozenset(),
+    triplets: Sequence[str | None] | None = None,
 ) -> AnnotatedStack:
     """Overlay Gerrit state onto *rows* and annotate attention, oldest first.
 
     Order matters: attention includes chain-blocking, so *rows* must be in stack order for
     an earlier commit to block the ones after it. *on_target* names commits already on the
     target branch: with no change to report, they count as merged rather than not pushed.
+    *triplets* names, per row, a change to overlay instead of the push branch's (see
+    :meth:`GerritService.fetch_gerrit_data`).
 
     When Gerrit cannot be asked at all, the rows come back with an unknown Gerrit state and
     the reason in :attr:`AnnotatedStack.gerrit_unavailable`: shown, never guessed.
     """
     unavailable: GerritUnavailableError | None = None
     try:
-        commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines)
+        commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, triplets=triplets)
     except GerritUnavailableError as error:
         unavailable = error
         commits = [local_log_commit(row, PatchsetStatus.UNKNOWN) for row in rows]
