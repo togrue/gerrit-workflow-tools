@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.annotated_stack import annotate
@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
-from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
@@ -67,14 +67,6 @@ def _row_from_local_commit(cwd: Path | str, sha: str) -> Commit:
     return read_commit_rows(cwd, "-1", sha)[0]
 
 
-def _stack_commit_for(cwd: Path | str, change_id: str, *, branch: str | None, settings: Settings) -> Commit | None:
-    """The **local stack** commit carrying *change_id*, so a change renders like its commit."""
-    try:
-        return next(iter(get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id)), None)
-    except GitError:
-        return None
-
-
 def resolve_show_commit_row(
     cwd: Path | str,
     arg: str | None,
@@ -93,21 +85,14 @@ def resolve_show_commit_row(
         raw_arg, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=True
     )
 
-    if resolution.kind == "git-rev":
-        sha = resolution.local_sha
-        if sha is None:
-            raise ChangeResolutionError(unresolved_rev_message(raw_arg))
-        row = _row_from_local_commit(cwd, sha)
+    # A change with a commit on the local stack renders as that commit, however it was named.
+    if resolution.local_sha is not None:
+        row = _row_from_local_commit(cwd, resolution.local_sha)
         return ShowCommitResolution(row=row, is_local_commit=True, resolution=resolution)
-
+    if resolution.kind == "git-rev":
+        raise ChangeResolutionError(unresolved_rev_message(raw_arg))
     if resolution.selected is None:
         raise ChangeResolutionError(unresolved_change_message(raw_arg))
-
-    local = _stack_commit_for(cwd, resolution.selected.change_id, branch=branch, settings=settings)
-    if local is not None:
-        return ShowCommitResolution(
-            row=local, is_local_commit=True, resolution=replace(resolution, local_sha=local.sha)
-        )
 
     change = ChangeView.from_payload(client.get_change(resolution.selected.triplet))
     row = _row_from_gerrit_change(change)

@@ -269,7 +269,10 @@ object so an agent never has to scrape human text:
   even if one was ultimately selected. Agents can gate on this.
 - `alternatives` — every other match, fully qualified, so the agent can re-issue
   an exact request.
-- `local_sha` — present when the changeish maps to a commit in the working repo.
+- `local_sha` — present when the changeish maps to a commit in the working repo: the commit a
+  git rev names, else the **local stack** commit carrying the selected change's Change-Id,
+  however the change was addressed (Change-Id, triplet, `change:` number, URL, …). It is
+  worked out once, in `resolve_changeish`, so every command reports the same one.
 
 ### 5.1 Automation contract
 

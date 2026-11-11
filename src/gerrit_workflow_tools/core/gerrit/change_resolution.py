@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.changeish import (
     unresolved_change_message,
     unresolved_rev_message,
 )
-from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.resolution import (
@@ -35,7 +35,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     pick_change_from_query_result,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 
 
@@ -191,7 +191,39 @@ def resolve_changeish(
     branch: str | None = None,
     explicit_target: bool = False,
 ) -> Resolution:
-    """Resolve *ref* to a :class:`Resolution` using stack context and Gerrit."""
+    """Resolve *ref* to a :class:`Resolution` using stack context and Gerrit.
+
+    ``local_sha`` is the commit a git rev names, else the **local stack** commit carrying the
+    selected change's Change-Id, however that change was addressed. Every command that reports
+    a resolution takes it from here, so ``ger show`` and ``ger resolve`` cannot disagree on it.
+    """
+    resolution = _resolve_on_gerrit(
+        ref, client=client, cwd=cwd, settings=settings, branch=branch, explicit_target=explicit_target
+    )
+    if resolution.local_sha is None and resolution.selected is not None:
+        resolution.local_sha = _local_stack_sha(cwd, resolution.selected.change_id, branch=branch, settings=settings)
+    return resolution
+
+
+def _local_stack_sha(cwd: Path | str | None, change_id: str, *, branch: str | None, settings: Settings) -> str | None:
+    """The **local stack** commit carrying *change_id*; ``None`` without one, or without a stack."""
+    try:
+        matches = get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id)
+    except (GitError, ConfigError):
+        return None
+    return matches[0].sha if matches else None
+
+
+def _resolve_on_gerrit(
+    ref: str,
+    *,
+    client: GerritRest,
+    cwd: Path | str | None,
+    settings: Settings,
+    branch: str | None,
+    explicit_target: bool,
+) -> Resolution:
+    """:func:`resolve_changeish` before the local stack is searched for a Gerrit-side changeish."""
     parsed = parse_changeish(ref)
     resolution = Resolution(input=parsed.raw, kind=parsed.kind)
 

@@ -150,6 +150,35 @@ def test_resolve_and_show_json_agree_on_narrowed_change_id(stack_repo: Path, mon
     assert "119900" in err_s
 
 
+@pytest.mark.parametrize("form", ["change-id", "change-number", "triplet"])
+def test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change(
+    form: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A change with a commit on the local stack: both commands report that commit as ``local_sha``."""
+    from tests.cli_gerrit_mocks import build_details_by_change_id
+
+    _configure_web(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    store = ChangeStore(details)
+    row = rows[0]
+    assert row.change_id is not None
+    info = next(d for d in details.values() if d["change_id"] == row.change_id)
+    changeish = {
+        "change-id": row.change_id,
+        "change-number": f"change:{info['_number']}",
+        "triplet": build_triplet("testproj", "main", row.change_id),
+    }[form]
+
+    code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", changeish], monkeypatch, gerrit=store)
+    code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", changeish], monkeypatch, gerrit=store)
+    assert code_r == 0, err_r
+    assert code_s == 0, err_s
+    resolve_block = json_stdout(out_r)["resolution"]
+    assert resolve_block == json_stdout(out_s)["resolution"]
+    assert resolve_block["local_sha"] == row.sha
+
+
 def test_log_on_main_target_uses_main_triplet_not_dev(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger log --json`` on a main-target stack overlays the main-branch Gerrit change."""
     _configure_web(stack_repo)

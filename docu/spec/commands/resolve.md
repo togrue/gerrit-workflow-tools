@@ -28,7 +28,7 @@ An address that cannot be right exits `3`: a URL for another host or project, a 
 
 Stdout:
 
-- `local SHA: …` when the changeish maps to a commit in the working repo
+- `local SHA: …` when the changeish maps to a commit in the working repo: a git rev, or the **local stack** commit of the selected change
 - `Gerrit change: #<n> <triplet> (branch …, status …)` when a Gerrit change was selected
 
 Stderr:
