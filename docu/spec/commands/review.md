@@ -61,7 +61,7 @@ A `change-<number>` branch that already exists is moved to the fetched patchset,
 
 ### Leaving the checkout clean
 
-Before switching to another change, `ger review` checks that the worktree holds nothing of yours: no unstaged edits, and an index that is either clean or exactly the staged review. Otherwise it exits `1` and lists the files. Untracked files are left alone and do not count. `--force` does not override this check; ger never throws your edits away.
+Before switching to another change, `ger review` checks that the worktree holds nothing of yours: no unstaged edits, and an index that is either clean or exactly the staged review. Otherwise it exits `2` (`USAGE`, as `ger checkout` and `ger edit` do for the same reason), lists the files, and says to commit or stash them. Untracked files are left alone and do not count. `--force` does not override this check; ger never throws your edits away.
 
 In place, the branch you were on before the first `ger review` is remembered, so `--done` can go back to it.
 
@@ -136,8 +136,8 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
 | Code | When |
 |------|------|
 | `0` | Done |
-| `1` | The worktree holds your edits; a `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined |
-| `2` | Bad usage; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
+| `1` | A `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined |
+| `2` | Bad usage; the worktree holds your edits; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
 | `3` | The changeish or patchset resolves to nothing |
 | `5` | Gerrit failed |
 | `7` | A git command failed (fetch, worktree, switch) |

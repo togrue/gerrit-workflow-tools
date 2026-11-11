@@ -122,9 +122,9 @@ def test_your_edits_stop_a_switch_and_are_kept(
     worktree = _worktree(stack_repo)
     (worktree / "c.txt").write_text("my fix\n", encoding="utf-8")
     code, _, err = _review(stack_repo, store, ["--next"], monkeypatch)
-    assert code == ExitCode.ATTENTION and "edits of yours: c.txt" in err
+    assert code == ExitCode.USAGE and "changes to tracked files (c.txt)" in err
     assert (worktree / "c.txt").read_text(encoding="utf-8") == "my fix\n"
-    assert _review(stack_repo, store, ["--done"], monkeypatch)[0] == ExitCode.ATTENTION
+    assert _review(stack_repo, store, ["--done"], monkeypatch)[0] == ExitCode.USAGE
 
 
 def test_a_change_branch_with_your_commits_is_not_moved_without_force(

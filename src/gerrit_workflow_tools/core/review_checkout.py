@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_pat
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel
 from gerrit_workflow_tools.core.upstream import track_remote_branch
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 ReviewMode = Literal["worktree", "branch"]
@@ -170,6 +171,15 @@ def own_edits(worktree: Path | str, state: ReviewState | None) -> list[str]:
     return sorted(name for name in names if name)
 
 
+def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: str) -> None:
+    """Stop while the worktree holds edits of yours: a state you fix, then rerun (``USAGE``)."""
+    if edits := own_edits(worktree, state):
+        raise UsageError(
+            f"your working tree has changes to tracked files ({', '.join(edits)}): "
+            f"commit or stash them (git stash), then run {rerun} again"
+        )
+
+
 def _commits_not_in(worktree: Path | str, tip: str, *bases: str) -> list[str]:
     """Commits reachable from *tip* but from none of *bases*."""
     return git_out("rev-list", tip, "--not", *bases, cwd=worktree).split()
@@ -198,9 +208,7 @@ def _stage(worktree: Path | str, state: ReviewState) -> ReviewState:
 def set_staged(state: ReviewState, staged: bool) -> ReviewState:
     """Stage or unstage the reviewed change, and record it."""
     worktree = state.worktree
-    edits = own_edits(worktree, state)
-    if edits:
-        raise ReviewRefusal("the worktree holds edits of yours: " + ", ".join(edits))
+    refuse_own_edits(worktree, state, rerun=f"ger review {'--stage' if staged else '--unstage'}")
     new = _stage(worktree, state) if staged else _unstage(worktree, state)
     save_state(new)
     return new
@@ -211,8 +219,8 @@ def open_review(
 ) -> tuple[ReviewState, str | None]:
     """Fetch *target*, check it out on its ``change-<number>`` branch, stage it, record the review.
 
-    Raises :class:`ReviewRefusal` when the worktree holds your edits, or the branch has your
-    commits and ``options.force`` is not set. Never discards an edit. Also returns the old tip
+    Raises :class:`UsageError` when the worktree holds your edits, :class:`ReviewRefusal` when the
+    branch has your commits and ``options.force`` is not set. Never discards an edit. Also returns the old tip
     of a branch ``force`` moved off commits of yours, so they can be recovered.
     """
     mode = options.mode
@@ -224,9 +232,7 @@ def open_review(
     if mode == "worktree":
         ensure_review_worktree(cwd, worktree, target.commit)
     previous = load_state(worktree)
-    edits = own_edits(worktree, previous)
-    if edits:
-        raise ReviewRefusal("the worktree holds edits of yours: " + ", ".join(edits))
+    refuse_own_edits(worktree, previous, rerun="ger review")
 
     branch = f"{BRANCH_PREFIX}{target.number}"
     created = dict(previous.created_branches) if previous else {}
@@ -278,9 +284,7 @@ def close_review(state: ReviewState) -> tuple[list[str], list[str]]:
     Returns ``(deleted, kept)`` branch names. A branch with commits of yours is kept.
     """
     worktree = state.worktree
-    edits = own_edits(worktree, state)
-    if edits:
-        raise ReviewRefusal("the worktree holds edits of yours: " + ", ".join(edits))
+    refuse_own_edits(worktree, state, rerun="ger review --done")
     _unstage(worktree, state)
     if state.mode == "branch" and state.return_to:
         is_branch = commit_sha_or_none(worktree, f"refs/heads/{state.return_to}") is not None

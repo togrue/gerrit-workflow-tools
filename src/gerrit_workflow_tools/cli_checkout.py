@@ -98,7 +98,8 @@ def _report(plan: CheckoutPlan, result: CheckoutResult, url: str | None) -> None
     elif result.action is CheckoutAction.UPDATE:
         rebased = f", rebased the {result.rebased} commit(s) above it" if result.rebased else ""
         old = plan.local.patch_set if plan.local else None
-        print(f"updated {branch} {f'from patchset {old} ' if old else ''}to {change}{rebased}")
+        verb = "moved" if old and old > patchset.patch_set else "updated"  # back to an older patchset
+        print(f"{verb} {branch} {f'from patchset {old} ' if old else ''}to {change}{rebased}")
     elif plan.state is LocalState.SAME:
         print(f"{'already on' if result.unchanged else 'switched to'} {branch}: it has {change}")
     elif plan.state is LocalState.PUSHED:

@@ -34,7 +34,7 @@ A branch called `NAME` (or `change-<number>`) that already exists but holds no v
 
 ## The local version
 
-A **local version** of the change is a commit carrying its Change-Id on a local branch, above `gerrit.remote` (`git log --branches --not --remotes=<remote>`). A branch that pushes to another Gerrit branch holds a cherry-pick with the same Change-Id, not a version of this change, and does not count. A branch with no Gerrit destination does count.
+A **local version** of the change is a commit carrying its Change-Id on a local branch, above `gerrit.remote` (`git log --branches --not --remotes=<remote>`). A branch that pushes to another Gerrit branch holds a cherry-pick with the same Change-Id, not a version of this change, and does not count. A branch with no Gerrit destination does count. ger's own bookkeeping branches (`lastPush/<branch>`, the marker `ger push` moves) never count: they are not named in a note, and `ger checkout` never switches onto one (`git_state.is_bookkeeping_branch`).
 
 When the change has a local version, `ger checkout` does not make a second copy. What it does depends on how the local version relates to the patchset:
 
@@ -46,9 +46,9 @@ When the change has a local version, `ger checkout` does not make a second copy.
 
 **Without a terminal**, the update question is not guessed: `ger checkout` exits `1` without changing anything and says to pass `--update` or `--no-update`.
 
-**Several local versions** (the change sits on more than one branch): the current branch's wins, else the one that already is the patchset. Otherwise `ger checkout` exits `1` and lists the branches; `-b BRANCH` names the one to use. With `-b NAME`, only the local version on `NAME` counts; local versions on other branches are mentioned in a note.
+**Several local versions** (the change sits on more than one branch): the first rule that leaves exactly one decides — a branch whose tip is the change (the current branch's first), then the branch named for it (`change-<number>`), then the current branch's, then the one that already is the patchset. So after `ger checkout 885` and `ger checkout 886` (stacked on 885), `ger checkout 885` goes back to `change-885`. Only when no rule decides does `ger checkout` exit `1` and list the branches; `-b BRANCH` names the one to use. With `-b NAME`, only the local version on `NAME` counts; local versions on other branches are mentioned in a note.
 
-`--patchset` may name an older patchset than the local version's; that is an update like any other.
+`--patchset` may name an older patchset than the local version's; that is an update like any other, reported as `moved <branch> from patchset 5 to … patchset 2` rather than `updated`.
 
 ### What an update does
 
@@ -66,7 +66,7 @@ A local version's branch keeps its upstream. One with no Gerrit destination gets
 
 ## Leaving your work alone
 
-Before anything moves, `ger checkout` checks that the working tree and index hold no changes to tracked files. Otherwise it exits `1`, lists the files, and says to commit or stash them. Untracked files do not count; git itself refuses when the switch would overwrite one. When there is nothing to do (you are already on the local version and it is the patchset), the check is skipped.
+Before anything moves, `ger checkout` checks that the working tree and index hold no changes to tracked files. Otherwise it exits `2` (`USAGE`: a state you fix, then rerun, as for `ger edit`), lists the files, and says to commit or stash them, in the wording `ger review` uses. Untracked files do not count; git itself refuses when the switch would overwrite one. When there is nothing to do (you are already on the local version and it is the patchset), the check is skipped.
 
 A rebase in progress stops `ger checkout` before it asks Gerrit anything (exit `2`, with the `git rebase --continue` / `--abort` hint every history-moving command gives).
 
@@ -89,8 +89,8 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 | Code | When |
 |------|------|
 | `0` | Done, including switching to a local version you chose not to update |
-| `1` | Changes to tracked files are in the way; the local version holds edits Gerrit never had; the update question has no terminal to ask on; several local versions; `-b NAME` is taken; the commits above would not rebase cleanly |
-| `2` | Bad usage; a rebase is in progress |
+| `1` | Needs your decision: the local version holds edits Gerrit never had; the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly |
+| `2` | Bad usage; a rebase is in progress; changes to tracked files are in the way |
 | `3` | The changeish or patchset resolves to nothing |
 | `4` | The Change-Id names changes on several target branches and narrowing could not pick one |
 | `5` | Gerrit failed |

@@ -184,6 +184,14 @@ def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
     return None
 
 
+LAST_PUSH_PREFIX = "lastPush/"
+"""ger's own marker branches, ``lastPush/<branch>``: bookkeeping, never a branch you work on."""
+
+
+def is_bookkeeping_branch(name: str) -> bool:
+    return name.startswith(LAST_PUSH_PREFIX)
+
+
 def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
     p = git("branch", "--points-at", "HEAD", cwd=cwd, check=False)
     if p.returncode != 0:
@@ -191,7 +199,7 @@ def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
     names: list[str] = []
     for line in (p.stdout or "").splitlines():
         name = line.strip().lstrip("* ").strip()
-        if not name or name.startswith("("):
+        if not name or name.startswith("(") or is_bookkeeping_branch(name):
             continue
         names.append(name)
     return names

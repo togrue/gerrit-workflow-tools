@@ -19,17 +19,18 @@ from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
     effective_gerrit_destination_branch,
+    is_bookkeeping_branch,
     refs_for_push_branch_name,
     resolve_upstream_abbrev_ref,
 )
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
-from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX, own_edits
+from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX, refuse_own_edits
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 
 
 class CheckoutRefusal(RuntimeError):
-    """ger will not go on without the user: their edits, commits or branches are in the way (exit 1)."""
+    """ger will not go on without the user's decision: their commits or branches are in the way (exit 1)."""
 
 
 class LocalState(Enum):
@@ -118,7 +119,8 @@ def find_local_versions(cwd: Path | str, change: ResolvedChange, *, settings: Se
     """Every local version of *change*: a commit with its Change-Id on a local branch, above the Gerrit remote.
 
     A branch that pushes to another Gerrit branch holds a different change with the same
-    Change-Id (a cherry-pick), not a version of this one, and is skipped.
+    Change-Id (a cherry-pick), not a version of this one, and is skipped; so are ger's own
+    bookkeeping branches (``lastPush/…``).
     """
     view = change.view
     rows = read_commit_rows(
@@ -130,7 +132,7 @@ def find_local_versions(cwd: Path | str, change: ResolvedChange, *, settings: Se
             continue
         holders = git_out("for-each-ref", "--format=%(refname:short)", f"--contains={row.sha}", "refs/heads/", cwd=cwd)
         for branch in holders.splitlines():
-            if _gerrit_branch(cwd, branch, settings) not in (None, view.branch):
+            if is_bookkeeping_branch(branch) or _gerrit_branch(cwd, branch, settings) not in (None, view.branch):
                 continue
             above = commits_in_range(cwd, f"{row.sha}..refs/heads/{branch}", first_parent=True)
             versions.append(LocalVersion(branch, row, change.patch_set_of(row.sha), tuple(above)))
@@ -138,10 +140,22 @@ def find_local_versions(cwd: Path | str, change: ResolvedChange, *, settings: Se
 
 
 def _pick(versions: list[LocalVersion], current: str | None, patchset: GerritPatchset) -> LocalVersion | None:
-    """The one local version to act on: the only one, else the current branch's, else the identical one."""
+    """The one local version to act on; the first rule that leaves exactly one wins.
+
+    The only one; else the one at a branch tip (the current branch's first), the way back to a
+    change after checking out the one stacked on it; else the ``change-<number>`` branch; else the
+    current branch's; else the one that is the patchset. Only when none decides is it a question.
+    """
     if len(versions) <= 1:
         return versions[0] if versions else None
-    for wanted in (lambda v: v.branch == current, lambda v: v.commit.sha == patchset.commit):
+    named = f"{BRANCH_PREFIX}{patchset.number}"
+    for wanted in (
+        lambda v: not v.above and v.branch == current,
+        lambda v: not v.above,
+        lambda v: v.branch == named,
+        lambda v: v.branch == current,
+        lambda v: v.commit.sha == patchset.commit,
+    ):
         hits = [version for version in versions if wanted(version)]
         if len(hits) == 1:
             return hits[0]
@@ -254,12 +268,7 @@ def apply_checkout(
     remote, patchset, branch = settings.gerrit_remote, plan.patchset, plan.branch
     if action is CheckoutAction.SWITCH and branch == plan.current_branch:
         return CheckoutResult(action, branch, resolve_upstream_abbrev_ref(cwd, branch), unchanged=True)
-    edits = own_edits(cwd, None)
-    if edits:
-        raise CheckoutRefusal(
-            f"your working tree has changes to tracked files ({', '.join(edits)}): "
-            "commit or stash them (git stash), then run ger checkout again"
-        )
+    refuse_own_edits(cwd, None, rerun="ger checkout")
     rebased, moved_from = 0, None
     if action is CheckoutAction.SWITCH:
         git("switch", "-q", branch, cwd=cwd)

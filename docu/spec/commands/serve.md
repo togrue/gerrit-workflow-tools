@@ -76,9 +76,10 @@ A failure answers with a status and one shape:
 ```
 
 `code` is the name of the shared exit code ([exit-codes.md](../exit-codes.md)) the same failure
-gives on the command line — one reason, one code. Beside those: `REFUSED` (409; your edits, a
-dirty worktree or a conflict stand in the way and nothing was changed), `FORBIDDEN` (401/403)
-and `INTERNAL` (500, a bug).
+gives on the command line — one reason, one code: a review checkout over changes to tracked
+files is `USAGE`, as `ger review` exits `2`. Beside those: `REFUSED` (409; your commits, a
+dirty worktree under a stack rewrite or a conflict stand in the way and nothing was changed),
+`FORBIDDEN` (401/403) and `INTERNAL` (500, a bug).
 
 | Code | Status |
 |------|--------|

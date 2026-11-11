@@ -227,7 +227,7 @@ def test_changes_to_tracked_files_stop_it_before_anything_moves(
     _fresh_clone(stack_repo)
     (stack_repo / "README.md").write_text("edited\n", encoding="utf-8")
     code, _, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.USAGE  # a state you fix, then rerun: as for ger edit
     assert "changes to tracked files (README.md)" in err and "git stash" in err
     assert git_out("branch", "--list", "change-*", cwd=stack_repo) == ""
     assert (stack_repo / "README.md").read_text(encoding="utf-8") == "edited\n"
@@ -266,3 +266,44 @@ def test_a_change_id_on_two_other_branches_is_ambiguous_and_lists_them(
     code, out, err = _checkout(stack_repo, gerrit, [f"testproj~stable~{cid}"], monkeypatch)
     assert code == ExitCode.OK, err
     assert "on change-201" in out and _upstream(stack_repo, "change-201") == "origin/stable"
+
+
+def test_bookkeeping_branches_are_not_local_versions(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``lastPush/<branch>`` is ger's marker: never named as a local version, never switched onto."""
+    git("branch", "-q", "lastPush/feature", "feature", cwd=stack_repo)
+    git("switch", "-q", "main", cwd=stack_repo)
+    code, out, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
+    assert code == ExitCode.OK and "switched to feature" in out
+    assert "lastPush" not in out + err
+
+    git("switch", "-q", "main", cwd=stack_repo)
+    git("branch", "-q", "-D", "feature", cwd=stack_repo)
+    code, out, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert _on(stack_repo) == ("change-102", gerrit.shas[2]) and "lastPush" not in out + err
+
+
+def test_back_to_a_change_after_checking_out_the_one_stacked_on_it(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """change-101 then change-102 (which holds 101 too): ``ger checkout 101`` goes back, no question."""
+    _fresh_clone(stack_repo)
+    for number in ("101", "102", "101"):
+        code, _out, err = _checkout(stack_repo, gerrit, [number], monkeypatch)
+        assert code == ExitCode.OK, err
+    assert _on(stack_repo) == ("change-101", gerrit.shas[1])
+    code, _out, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert _on(stack_repo) == ("change-102", gerrit.shas[2])
+
+
+def test_moving_to_an_older_patchset_says_moved(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gerrit.upload(stack_repo, 2, 2, "test! reworded experiment")
+    assert _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)[0] == ExitCode.OK
+    code, out, err = _checkout(stack_repo, gerrit, ["102", "--update", "--patchset", "1"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "moved feature from patchset 2 to change 102 patchset 1" in out

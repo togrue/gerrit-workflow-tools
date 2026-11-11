@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
+    LAST_PUSH_PREFIX,
     effective_gerrit_destination_branch,
     rebase_in_progress,
     refs_for_push_branch_name,
@@ -364,7 +365,7 @@ def _apply_reviewers(
 def _update_last_pushed(cwd: Path, plan: PushPlan) -> str | None:
     if not plan.update_last_pushed:
         return None
-    marker = f"lastPush/{plan.branch}"
+    marker = f"{LAST_PUSH_PREFIX}{plan.branch}"
     try:
         git("branch", "-f", marker, plan.tip_sha, cwd=cwd)
     except GitError as exc:
