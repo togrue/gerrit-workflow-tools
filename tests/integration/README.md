@@ -2,7 +2,7 @@
 
 These tests start the official image **`gerritcodereview/gerrit:3.10`** (or `GERRIT_IT_IMAGE`), create projects and accounts, then run `ger` commands against a real server. They cover what a real Gerrit decides and the in-memory `ChangeStore` of the unit tests cannot: relation chains, patchsets Gerrit makes itself, push rejections, permissions, HTTP failures, and one Change-Id on several branches.
 
-Gerrit's event stream over real ssh is **`test_14_event_stream.py`**: it uploads a throwaway ssh key (generated in a temp directory; your `~/.ssh` is neither read nor written) for two test accounts, checks that the one without the *Stream Events* capability is refused once and quietly, grants the capability to a temporary group for the other (and removes the grant afterwards), and follows its events. It needs OpenSSH (`ssh`, `ssh-keygen`) on `PATH` and the container's SSH port (`GERRIT_IT_HOST_PORT_SSH`) reachable from your machine; without OpenSSH it is skipped.
+Gerrit's event stream over real ssh is **`test_19_event_stream.py`**: it uploads a throwaway ssh key (generated in a temp directory; your `~/.ssh` is neither read nor written) for two test accounts, checks that the one without the *Stream Events* capability is refused once and quietly, grants the capability to a temporary group for the other (and removes the grant afterwards), and follows its events. It needs OpenSSH (`ssh`, `ssh-keygen`) on `PATH` and the container's SSH port (`GERRIT_IT_HOST_PORT_SSH`) reachable from your machine; without OpenSSH it is skipped.
 
 Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly.
 
