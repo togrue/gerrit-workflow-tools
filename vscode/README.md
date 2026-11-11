@@ -85,7 +85,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 |---------|---------|--|
 | `ger.executable` | `ger` | How to run ger: a program on the `PATH`, a path to it, or a command line such as `uv run ger` (quote a path with blanks). |
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
-| `ger.pollSeconds` | `120` | Background refresh. It also refreshes when the window regains focus. |
+| `ger.pollSeconds` | `120` | Background refresh while the window has focus; a change applies at once. It also refreshes when the window regains focus. |
 | `ger.notify` | `true` | Notify when something new becomes the most important change. |
 
 **Workspace trust.** In Restricted Mode the extension starts nothing: ger runs git and the
@@ -163,7 +163,8 @@ printed.
 | `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal. |
 | `src/workspace.ts`, `src/state.ts` | Which checkout is served; the state the views' welcome texts follow (`ger.state`). |
 | `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
-| `src/extension.ts` | Wiring: views, commands, polling. |
+| `src/poller.ts` | Background refresh: on a timer while focused, and on regaining focus. |
+| `src/extension.ts` | Wiring: views and commands. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's
 copy of the contract.

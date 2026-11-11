@@ -13,6 +13,7 @@ import { plural } from "./format";
 import { gerProgram, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
+import { Poller } from "./poller";
 import { checkout, editCommit, leaveReview } from "./review";
 import { GerProcess } from "./server";
 import { StackView } from "./stackView";
@@ -195,7 +196,6 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
   };
 
   const statusItem = statusBar(model, note);
-  const poll = setInterval(() => void model.refresh(), Math.max(15, setting("pollSeconds", 120)) * 1000);
   context.subscriptions.push(
     model,
     overviewTree,
@@ -207,15 +207,13 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
-    // Coming back to the window is when the stack has most likely changed underneath.
-    vscode.window.onDidChangeWindowState((state) => (state.focused ? void model.refresh() : undefined)),
+    new Poller(() => void model.refresh()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ger.executable")) {
         model.restart();
         void model.refresh();
       }
     }),
-    { dispose: () => clearInterval(poll) },
   );
   void model.refresh();
   return { model, overviewView, stackView, changeView, threads, statusItem, useUi };
