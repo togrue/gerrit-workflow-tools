@@ -31,8 +31,9 @@ for what the cache does not have current.**
   asked lightly. Up to 25 moved changes are fetched by number; past that, the query is asked
   once more in full.
 - Facts that do not change are remembered: the caller's account id (per `gerrit.user`, a
-  week), and commits that are no open change (merged, or history that never was one; a day),
-  so the ground a review chain sits on is not looked up on every poll.
+  week), and commits that are no open change, so the ground a review chain sits on is not
+  looked up on every poll: a merged change for a week, a commit Gerrit shows no change for
+  only a quarter of an hour, because it may be a change the user cannot see yet.
 - The `since:` delta, its watermark and the per-scope certification are removed.
 
 Measured on Gerrit 3.10 with an eight-change stack (requests as the server logged them):

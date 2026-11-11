@@ -491,3 +491,24 @@ def test_refresh_asks_for_everything_again(tmp_path: Path) -> None:
     fresh = _listing_calls(GerritService.from_cwd(tmp_path, rest=store, settings=settings, refresh=True), store)
     # The listing, its details, who you are, and the commit below the chain.
     assert sorted(method for method, _ in fresh) == ["get_account", "query_changes", "query_changes", "query_changes"]
+
+
+def test_what_a_chain_sits_on_is_remembered_by_how_final_it_is(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A merged change stays merged; a commit Gerrit shows no change for may be one you cannot see yet."""
+    clock = {"t": 1_000_000}
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: clock["t"])
+    merged = dict(_waiting(1, "aaa", "root"), status="MERGED")
+    on_merged, on_unknown = _waiting(2, "bbb", "aaa"), _waiting(3, "ccc", "history")
+    store = _store(merged, on_merged, on_unknown, stub=[on_merged, on_unknown])
+    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+
+    def commits_asked() -> list[str]:
+        return sorted(query for method, query in _listing_calls(service, store) if "commit:" in str(query))
+
+    assert len(commits_asked()) == 1  # both parents, in one query
+    assert commits_asked() == []
+    clock["t"] += 16 * 60
+    assert commits_asked() == ["commit:history"]
+    clock["t"] += 8 * 24 * 60 * 60
+    (both,) = commits_asked()
+    assert "commit:aaa" in both and "commit:history" in both

@@ -19,7 +19,10 @@ from gerrit_workflow_tools.core.gerrit.cache_schema import meta_get, meta_set, p
 
 
 DEFAULT_CAPABILITY_TTL_SECONDS = 7 * 24 * 60 * 60
-DEFAULT_SETTLED_COMMIT_TTL_SECONDS = 24 * 60 * 60
+# A commit that is a merged change stays one. A commit Gerrit shows no change for is history,
+# or a change this user cannot see yet (private, or not visible): that is asked again sooner.
+MERGED_COMMIT_TTL_SECONDS = 7 * 24 * 60 * 60
+UNKNOWN_COMMIT_TTL_SECONDS = 15 * 60
 
 _CAPABILITY_PREFIX = "capability:"
 _ACCOUNT_PREFIX = "account:"
@@ -73,24 +76,28 @@ class RememberedFacts:
         """Record the account id of *user*: it never changes, so nobody needs to ask on every run."""
         self._set_host_fact(f"{_ACCOUNT_PREFIX}{user}", account_id)
 
-    def settled_commits(
-        self, shas: Iterable[str], *, ttl_seconds: int = DEFAULT_SETTLED_COMMIT_TTL_SECONDS
-    ) -> set[str]:
-        """Those of *shas* recently found to be no open change: history a review chain sits on."""
+    def settled_commits(self, shas: Iterable[str]) -> set[str]:
+        """Those of *shas* recently found to be no open change: what a review chain sits on."""
         wanted = list(shas)
         if not wanted:
             return set()
+        now = self._clock()
         with self._connect() as conn:
             rows = conn.execute(
-                f"SELECT sha FROM settled_commits WHERE checked_at > ? AND sha IN ({placeholders(wanted)})",
-                [self._clock() - ttl_seconds, *wanted],
+                f"""
+                SELECT sha FROM settled_commits
+                WHERE checked_at <= ? AND trust_until > ? AND sha IN ({placeholders(wanted)})
+                """,
+                [now, now, *wanted],
             ).fetchall()
         return {str(row["sha"]) for row in rows}
 
-    def settle_commits(self, shas: Iterable[str]) -> None:
-        """Record that Gerrit has no open change for *shas* (merged, or never a change)."""
+    def settle_commits(self, shas: Iterable[str], *, merged: bool) -> None:
+        """Record that Gerrit has no open change for *shas*: *merged* changes, else no change it shows."""
         now = self._clock()
+        until = now + (MERGED_COMMIT_TTL_SECONDS if merged else UNKNOWN_COMMIT_TTL_SECONDS)
         with self._connect() as conn:
             conn.executemany(
-                "INSERT OR REPLACE INTO settled_commits(sha, checked_at) VALUES (?, ?)", [(sha, now) for sha in shas]
+                "INSERT OR REPLACE INTO settled_commits(sha, checked_at, trust_until) VALUES (?, ?, ?)",
+                [(sha, now, until) for sha in shas],
             )

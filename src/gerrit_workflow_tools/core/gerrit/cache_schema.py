@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Sized
 
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 
 # Tables that hold what Gerrit said. `ger cache clear` empties these; ``meta`` stays.
 DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "settled_commits")
@@ -54,7 +54,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS settled_commits (
           sha         TEXT PRIMARY KEY,
-          checked_at  INTEGER NOT NULL
+          checked_at  INTEGER NOT NULL,
+          trust_until INTEGER NOT NULL
         )
         """
     )

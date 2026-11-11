@@ -84,9 +84,10 @@ class ChangeApi:
     def by_commit(self, shas: list[str]) -> list[dict[str, Any]]:
         """ChangeInfo payloads of the changes that have one of *shas* as a patchset.
 
-        A commit that turned out to be no open change (merged, or history that never was a
-        change) is remembered and not asked about again for a day: it is what a review chain
-        sits on, and every listing of that chain would ask anew.
+        A commit that turned out to be no open change is remembered, so that not every
+        listing of the chain that sits on it asks anew: for a week when it is a merged change
+        (it stays one), for a quarter of an hour when Gerrit shows no change for it (history,
+        or a change this user cannot see yet).
         """
         service = self._service
         settled = set() if service.refresh else service.cache.settled_commits(shas)
@@ -97,7 +98,9 @@ class ChangeApi:
         found = self._with_details(light, lambda: list(batch_load_changes_by_commit(service.rest, ask).values()))
         views = [ChangeView.from_payload(payload) for payload in found]
         pending = {sha for view in views if view.status != "MERGED" for sha in view.revisions}
-        service.cache.settle_commits(sha for sha in ask if sha not in pending)
+        merged = {sha for view in views if view.status == "MERGED" for sha in view.revisions} - pending
+        service.cache.settle_commits((sha for sha in ask if sha in merged), merged=True)
+        service.cache.settle_commits((sha for sha in ask if sha not in merged | pending), merged=False)
         return found
 
     def _with_details(
