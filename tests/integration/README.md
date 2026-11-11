@@ -31,7 +31,6 @@ Unit tests (`pytest` with default config) **ignore** this directory; run integra
 A test marked `xfail(strict=True)` pins a behaviour the product does not have yet; it turns red once fixed, so the mark comes off with the fix.
 
 - `test_14_cross_branch_siblings.py::test_show_of_the_other_branchs_sibling_reports_that_change` — `ger show <dev triplet>` from a branch pushing to `main` renders the local commit with main's change (number, votes, URLs) while `resolution.selected` is dev's.
-- `test_15_change_states.py::test_push_ready_marks_an_unchanged_wip_stack_ready` — `ger log` advises `ger push --ready`, but on an unchanged stack Gerrit gets no new patchset, so `%ready` is dropped and the changes stay WIP.
 
 ### Writing a test here
 

@@ -16,7 +16,7 @@ import pytest
 from gerrit_workflow_tools.cli_log import main as ger_log_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
-from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_run import git
 from tests.helpers import force_zero_change_trust_window
 from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.gerrit_http import GerritHttpSession
@@ -54,7 +54,7 @@ def _amend_top(repo: Path, content: str) -> None:
     git("commit", "-q", "-a", "--amend", "--no-edit", cwd=repo)
 
 
-def test_wip_changes_become_ready_with_the_patchset_that_carries_ready(
+def test_push_ready_readies_the_reworked_and_the_unchanged_wip_change(
     tmp_path: Path,
     gerrit_integration_context: GerritIntegrationContext,
     gerrit_admin_session: GerritHttpSession,
@@ -66,23 +66,15 @@ def test_wip_changes_become_ready_with_the_patchset_that_carries_ready(
     assert "WIP 2" in out and "ger push --ready" in out
 
     _amend_top(repo, "reworked\n")
-    _out, err = ger_push(repo, monkeypatch, "--ready")
-    # Gerrit applies %ready only with a new patchset, and ger says which commit it missed.
-    assert f"ready not applied to unchanged commits: {git_out('rev-parse', '--short', 'HEAD~1', cwd=repo)}" in err
+    ger_push(repo, monkeypatch, "--ready")
+    # Gerrit applies %ready only with a new patchset; ger sets the unchanged commit ready over REST.
     assert change_detail(gerrit_admin_session, top).get("work_in_progress") is not True
-    assert change_detail(gerrit_admin_session, base).get("work_in_progress") is True
+    assert change_detail(gerrit_admin_session, base).get("work_in_progress") is not True
     force_zero_change_trust_window(monkeypatch)
     rows = log_commits_by_change_id(repo, monkeypatch)
-    assert [row["work_in_progress"] for row in rows.values()] == [True, False]
+    assert [row["work_in_progress"] for row in rows.values()] == [False, False]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "product gap: ger log advises `ger push --ready` for WIP changes, but on an unchanged stack "
-        "Gerrit gets no new patchset, so %ready is dropped and the changes stay WIP"
-    ),
-)
 def test_push_ready_marks_an_unchanged_wip_stack_ready(
     tmp_path: Path,
     gerrit_integration_context: GerritIntegrationContext,
