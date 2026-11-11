@@ -222,6 +222,15 @@ def test_comments_seeded_by_number_are_found_by_triplet() -> None:
     assert store.get_comments(f"testproj~main~{CID_A}")["a.py"][0]["message"] == "hi"
 
 
+def test_comments_reject_ambiguous_bare_change_id() -> None:
+    """Follow-up REST with a bare Change-Id must fail when it matches multiple changes."""
+    store = _store()
+    with pytest.raises(GerritApiError, match="Multiple changes found"):
+        store.get_comments(CID_A)
+    with pytest.raises(GerritApiError, match="Multiple changes found"):
+        store.list_drafts(CID_A)
+
+
 # ---------------------------------------------------------------------------
 # Conformance to the seam
 # ---------------------------------------------------------------------------

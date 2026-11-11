@@ -162,9 +162,8 @@ def _gerrit_changes(
     commits = annotate([t.row for t in targets], service=service, cwd=cwd)
     found: dict[str, _Change] = {}
     for target, commit in zip(targets, commits, strict=True):
-        key = gerrit_rest_key(commit, target.resolution)
+        key = gerrit_rest_key(commit, target.resolution, service)
         if commit.pushed and key:
-            key = service.cache_key(key)
             found[key] = _Change(key, commit.freshness, commit.gerrit_url, commit.summary)
     return list(found.values()), (", ".join(revs) if revs else "the local stack" if stack else "HEAD")
 

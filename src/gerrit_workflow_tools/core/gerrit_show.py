@@ -34,10 +34,19 @@ class ShowCommitResolution:
     resolution: Resolution
 
 
-def gerrit_rest_key(commit: LogCommit, resolution: object) -> str | None:
-    """The REST key for *commit*'s change: the resolved triplet, else its Change-Id."""
+def gerrit_rest_key(commit: LogCommit, resolution: object, service: GerritService) -> str | None:
+    """Unambiguous REST key for *commit*: selected triplet, else push-branch triplet from Change-Id.
+
+    Bare Change-Ids 404 on follow-up endpoints when the same id exists on multiple branches
+    (Gerrit: "Multiple changes found"). Stack paths (``--stack``, git ranges) often have no
+    ``resolution.selected``; narrow through :meth:`GerritService.cache_key` like reply does.
+    """
     selected = getattr(resolution, "selected", None)
-    return selected.triplet if selected is not None else commit.change_id
+    if selected is not None:
+        return selected.triplet
+    if not commit.change_id:
+        return None
+    return service.cache_key(commit.change_id)
 
 
 def _row_from_gerrit_change(change: ChangeView) -> Commit:
@@ -297,7 +306,7 @@ def load_shown_commits(
     shown: list[ShownCommit] = []
     for target, commit in zip(targets, commits, strict=True):
         ci_contents = ci.fetch(commit.ci_links) if ci is not None else None
-        rest_key = gerrit_rest_key(commit, target.resolution)
+        rest_key = gerrit_rest_key(commit, target.resolution, service)
         chains: list[CommentChain] = []
         if commit.pushed and rest_key:
             chains = service.comments.get_chains(

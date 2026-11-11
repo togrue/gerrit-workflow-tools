@@ -212,6 +212,15 @@ class ChangeStore:
                 return payload_id
         return ref
 
+    def _require_unique_change_ref(self, ref: str) -> str:
+        """Resolve *ref* to one change id, mirroring Gerrit's 404 on ambiguous bare Change-Ids."""
+        rows = self._lookup_rows(ref)
+        if len(rows) > 1 and "~" not in ref and not ref.isdigit():
+            raise GerritApiError(
+                f"Gerrit HTTP 404 for changes/{ref}/comments: Not Found (Multiple changes found for {ref})"
+            )
+        return self._payload_id(ref)
+
     def _query_rows(self, query: str) -> list[dict[str, Any]]:
         """Evaluate the query shapes this project actually issues.
 
@@ -367,7 +376,7 @@ class ChangeStore:
         """Return inline comments grouped by file path."""
         del context_padding
         self._record("get_comments", change_id)
-        payload = self._comments.get(self._payload_id(change_id), {})
+        payload = self._comments.get(self._require_unique_change_ref(change_id), {})
         if enable_context:
             return payload
         return {path: [_without_comment_context(row) for row in rows] for path, rows in payload.items()}
@@ -377,7 +386,7 @@ class ChangeStore:
         self._record("list_drafts", change_id)
         return {
             path: [dict(row) for row in rows]
-            for path, rows in self._drafts.get(self._payload_id(change_id), {}).items()
+            for path, rows in self._drafts.get(self._require_unique_change_ref(change_id), {}).items()
         }
 
     def put_draft(

@@ -164,7 +164,7 @@ class CommentApi:
         Never cached: drafts live in All-Users, not in the change's NoteDb meta ref, so the
         follow-up freshness token (ADR-0007) does not move when a draft does.
         """
-        return self._service.rest.list_drafts(change_id)
+        return self._service.rest.list_drafts(self._service.cache_key(change_id))
 
     def get_file_map(
         self,
@@ -173,15 +173,21 @@ class CommentApi:
         change_updated: str | None = None,
         context_padding: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
-        """Return raw published Gerrit comments grouped by file path."""
+        """Return raw published Gerrit comments grouped by file path.
 
+        Bare Change-Ids are narrowed to the push-branch triplet via
+        :meth:`GerritService.cache_key` so follow-up REST never hits Gerrit's
+        ambiguous-id 404.
+        """
+
+        key = self._service.cache_key(change_id)
         rest = self._service.rest
         fetch = rest.get_comments
         if context_padding is not None:
             fetch = partial(rest.get_comments, enable_context=True, context_padding=context_padding)
 
         return self._service.cache.load_comments(
-            change_id,
+            key,
             fetch_comments=fetch,
             change_updated=change_updated,
             trust_window_seconds=self._service.trust_window_seconds,

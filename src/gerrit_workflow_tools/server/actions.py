@@ -85,7 +85,7 @@ def reply(ctx: Context, req: Request) -> dict[str, Any]:
     branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
     [target] = resolve_show_targets(ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch)
     [commit] = annotate([target.row], service=ctx.service, cwd=ctx.cwd)
-    key = gerrit_rest_key(commit, target.resolution)
+    key = gerrit_rest_key(commit, target.resolution, ctx.service)
     matches = ctx.service.comments.find_chain({key: commit.freshness}, comment_id) if commit.pushed and key else []
     if not matches:
         raise ChangeResolutionError(f"no comment {comment_id!r} on {rev!r}")

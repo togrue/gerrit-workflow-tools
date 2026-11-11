@@ -1102,6 +1102,52 @@ def test_gshow_json_change_id_narrowing_includes_resolution(stack_repo: Path, mo
     assert resolution["alternatives"][0]["number"] == 119870
 
 
+def test_gshow_stack_comments_use_triplet_when_change_id_on_two_branches(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--stack`` must fetch comments by push-branch triplet, not a bare Change-Id.
+
+    Gerrit 404s ``GET …/changes/<Change-Id>/comments`` when the same Change-Id exists on
+    multiple branches ("Multiple changes found"). Stack expansion has no
+    ``resolution.selected``, so the show path must build the triplet itself.
+    """
+    _configure_gshow_repo(stack_repo)
+    tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    tip_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", tip, cwd=stack_repo).strip()
+    main_row = _detail_ok(change_id=tip_cid, sha=tip, number=301, branch="main", cr_value=0)
+    main_row["unresolved_comment_count"] = 1
+    dev_row = _detail_ok(change_id=tip_cid, sha=tip, number=302, branch="dev", cr_value=0)
+    store = ChangeStore(_mock_show_details(main_row, dev_row), web_base="https://g.example")
+    store.set_comments(
+        str(main_row["id"]),
+        {
+            "stack.py": [
+                {
+                    "id": "stack-c1",
+                    "line": 1,
+                    "message": "fix on push branch",
+                    "unresolved": True,
+                    "author": {"username": "alice", "name": "Alice"},
+                }
+            ]
+        },
+    )
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--stack", "--comments", "unresolved"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code in (0, 1), err
+    assert "fix on push branch" in out
+    comment_refs = [call.args[0] for call in store.calls_to("get_comments")]
+    assert comment_refs, "expected at least one comments fetch"
+    assert all("~" in ref for ref in comment_refs), comment_refs
+    assert all(tip_cid not in ref or ref.endswith(f"~{tip_cid}") for ref in comment_refs)
+    assert any(ref == f"testproj~main~{tip_cid}" for ref in comment_refs)
+
+
 def test_gshow_ambiguity_after_narrowing_exits_four(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Two open changes on the target branch exit with ambiguity code 4."""
     _configure_gshow_repo(stack_repo)
