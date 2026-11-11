@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Partial**: Gerrit drafts, notes, local drafts, `--discard` and re-anchoring ship. [Later slices](#later-slices) (uploading, orphans, `ger log`) are planned |
-| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in `core/local_comments.py`; chain assembly in `core/comment_chains.py`; re-anchoring in `core/anchor_mapping.py` |
+| **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; writing in `core/comment_write.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in `core/local_comments.py`; chain assembly in `core/comment_chains.py`; re-anchoring in `core/anchor_mapping.py` |
 | **Requires** | A git repository. `gerrit.webUrl` and credentials, except for `--note`, `--local` and `--discard` of a local comment, which work without Gerrit configured |
 
 Write a new comment on a line, a range or a file of a change. `ger reply` answers a chain that already exists; `ger comment` starts one.

@@ -459,6 +459,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
 | `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
+| `core/comment_write.py` | Writing a new comment chain: a Gerrit draft, a local draft or a note |
 | `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |

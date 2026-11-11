@@ -15,30 +15,21 @@ from gerrit_workflow_tools.cli_common import (
     read_message,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.comment_anchor import (
-    Anchor,
-    CommentLocation,
-    LocationError,
-    anchor_at,
-    close_unchecked,
-    file_lines,
-    fit_to_file,
-    parse_location,
-    repository_path,
-)
+from gerrit_workflow_tools.core.comment_anchor import CommentLocation, LocationError
 from gerrit_workflow_tools.core.comment_target import (
     CommentTarget,
     local_target,
     resolve_comment_target,
     target_for_commit,
 )
+from gerrit_workflow_tools.core.comment_write import WrittenComment, default_state, locate, write_comment
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentState, LocalCommentState, gerrit_inline_comment_url
+from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
-from gerrit_workflow_tools.core.local_comments import LocalComment, LocalCommentStore, new_comment
+from gerrit_workflow_tools.core.local_comments import LocalCommentStore
 from gerrit_workflow_tools.core.review_checkout import load_state
 from gerrit_workflow_tools.render.comments import first_line
 
@@ -106,10 +97,7 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> str:
 def _located(p: argparse.ArgumentParser, cwd: Path, raw: str, target: CommentTarget) -> CommentLocation:
     """*raw* parsed and checked against the target's commit. Exits 2 on a location that does not fit."""
     try:
-        location = repository_path(cwd, parse_location(raw))
-        if target.commit is None:
-            return close_unchecked(location)
-        return fit_to_file(location, file_lines(cwd, target.commit, location.path), commit=target.commit)
+        return locate(cwd, raw, target)
     except LocationError as error:
         p.error(str(error))
 
@@ -118,21 +106,36 @@ def _state(args: argparse.Namespace, target: CommentTarget, service: GerritServi
     """Where the comment goes: ``--note``/``--local``, else a draft on Gerrit's patchset, else local."""
     if args.note:
         return "note"
-    if args.local or service is None or not target.on_gerrit:
+    if args.local:
         return "local-draft"
-    return "draft"
+    return default_state(target, gerrit=service is not None)
 
 
-def _payload(target: CommentTarget, location: CommentLocation, **fields: object) -> dict[str, object]:
+def _payload(written: WrittenComment) -> dict[str, object]:
+    location = written.location
     return {
         "action": "created",
-        "change": target.key,
-        "commit": target.commit,
+        "change": written.change,
+        "commit": written.commit,
         "path": location.path,
         "line": location.line,
         "range": location.range.as_gerrit() if location.range else None,
-        **fields,
+        "state": written.state,
+        "id": written.id,
+        "patch_set": written.patch_set,
+        "unresolved": written.unresolved,
+        "url": written.url,
     }
+
+
+def _line(written: WrittenComment) -> str:
+    """The human line for a comment just written."""
+    where = written.location.describe()
+    if written.state == "draft":
+        return f"draft on {where} (patchset {written.patch_set})"
+    commit = (written.commit or "")[:7]
+    place = f"commit {commit}, not on Gerrit" if written.state == "local-draft" else f"commit {commit}"
+    return f"{_LABELS[written.state]} on {where} ({place}) id {written.id}"
 
 
 def _emit(payload: dict[str, object], text: str, *, as_json: bool) -> None:
@@ -142,36 +145,6 @@ def _emit(payload: dict[str, object], text: str, *, as_json: bool) -> None:
     print(text)
     if payload.get("url"):
         print(f"  {payload['url']}")
-
-
-def _write_draft(
-    service: GerritService, target: CommentTarget, location: CommentLocation, message: str, *, unresolved: bool
-) -> tuple[dict[str, object], str]:
-    """Write a Gerrit draft on the target's patchset; return its JSON payload and its human line."""
-    assert target.patch_set is not None
-    body = {**location.as_gerrit(), "message": message, "unresolved": unresolved}
-    draft_id = service.comments.create_draft(target.key, target.patch_set, body)
-    url = gerrit_inline_comment_url(target.change_url, draft_id)
-    fields = {"state": "draft", "id": draft_id, "patch_set": target.patch_set, "unresolved": unresolved, "url": url}
-    return _payload(target, location, **fields), f"draft on {location.describe()} (patchset {target.patch_set})"
-
-
-def _anchor(cwd: Path, target: CommentTarget, location: CommentLocation) -> Anchor:
-    """The anchor of *location* in the target's commit, which a local comment needs to be here."""
-    commit = target.commit
-    lines = file_lines(cwd, commit, location.path) if commit else None
-    if commit is None or lines is None:
-        raise ChangeResolutionError(f"{target.key}: its commit is not here, and a local comment is anchored to it")
-    return anchor_at(cwd, commit, location, lines)
-
-
-def _store_local(cwd: Path, target: CommentTarget, comment: LocalComment) -> tuple[dict[str, object], str]:
-    """Add a note or local draft to the local comment store; return its JSON payload and human line."""
-    LocalCommentStore(cwd).add(comment)
-    location, commit, state = comment.anchor.location, comment.anchor.commit[:7], comment.state
-    fields = {"state": state, "id": comment.id, "patch_set": None, "unresolved": comment.unresolved, "url": None}
-    where = f"commit {commit}, not on Gerrit" if state == "local-draft" else f"commit {commit}"
-    return _payload(target, location, **fields), f"{_LABELS[state]} on {location.describe()} ({where}) id {comment.id}"
 
 
 def _discard(
@@ -237,20 +210,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         _discard(cwd, service, target, args.discard.strip(), as_json=args.json_)
         return int(ExitCode.OK)
     location = _located(p, cwd, args.location, target)
-    state = _state(args, target, service)
-    if state == "draft" and service is not None:
-        payload, text = _write_draft(service, target, location, message, unresolved=not args.resolved)
-    else:
-        local_state: LocalCommentState = "note" if state == "note" else "local-draft"
-        comment = new_comment(
-            state=local_state,
-            change=target.key,
-            anchor=_anchor(cwd, target, location),
-            message=message,
-            unresolved=not args.resolved,
-        )
-        payload, text = _store_local(cwd, target, comment)
-    _emit(payload, text, as_json=args.json_)
+    written = write_comment(
+        cwd, service, target, location, message, state=_state(args, target, service), unresolved=not args.resolved
+    )
+    _emit(_payload(written), _line(written), as_json=args.json_)
     return int(ExitCode.OK)
 
 
