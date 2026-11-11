@@ -512,6 +512,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/event_stream.py` | Following the **event stream**: `EventStream` (one reader, reconnect, capped backoff, `StreamStatus`), `parse_event`, and what an event means (`apply_event`: drop that change's cached rows, ADR-0012) |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
 | `core/gerrit/change_resolution.py` | Changeish resolution: narrowing a changeish to one change, and to a local stack commit |
+| `core/gerrit/narrowing.py` | Change-Id narrowing (spec §3.1): `narrow_matches`, `resolution_from_change_rows` — picking one of a Change-Id's changes by push branch, without contacting Gerrit |
 | `core/gerrit/resolution.py` | The resolution model: `Resolution`, `SelectedChange`, `ChangeAmbiguousError`, resolution notes |
 | `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), its memo, triplets |
 | `core/gerrit/paths.py` | Cache DB path and host key |

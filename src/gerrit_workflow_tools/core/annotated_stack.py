@@ -23,11 +23,8 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import annotate_attention
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeResolutionError,
-    format_resolution_note,
-    resolution_from_change_rows,
-)
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, format_resolution_note
+from gerrit_workflow_tools.core.gerrit.narrowing import resolution_from_change_rows
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context, stack_project
