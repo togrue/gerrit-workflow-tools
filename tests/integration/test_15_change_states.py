@@ -109,13 +109,20 @@ def test_no_private_makes_a_private_stack_gerrit_already_has_public(
     gerrit_admin_session: GerritHttpSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``--private``, then ``--no-private`` with nothing new: the way back from private goes over REST."""
+    """``--private``, then ``--no-private``: over REST with nothing new, as ``%remove-private`` with a new patchset."""
     repo, _branch, triplets = _pushed_stack(gerrit_integration_context, tmp_path, monkeypatch, "public", "--private")
     assert [change_detail(gerrit_admin_session, t).get("is_private") for t in triplets] == [True, True]
 
     out, _err = ger_push(repo, monkeypatch, "--no-private")
 
     assert "No new commits to push; set on Gerrit:" in out and out.count("  remove-private") >= 2, out
+    assert [change_detail(gerrit_admin_session, t).get("is_private") for t in triplets] == [None, None]
+
+    # Private again, then a new patchset of the top: %remove-private rides the push, the base goes over REST.
+    ger_push(repo, monkeypatch, "--private")
+    _amend_top(repo, "public again\n")
+    out, _err = ger_push(repo, monkeypatch, "--no-private")
+    assert "About to push commits:" in out and "  remove-private" in out, out
     assert [change_detail(gerrit_admin_session, t).get("is_private") for t in triplets] == [None, None]
 
 
