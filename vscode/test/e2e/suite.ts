@@ -478,7 +478,8 @@ export async function run(): Promise<void> {
         "ger serve can start again, and the next background refresh works",
         "The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository); its event stream is followed again.",
         async () => {
-          await api.model.refresh({ background: true });
+          // From Gerrit: the cache of the service that went away would otherwise be served or not, by timing.
+          await api.model.refresh({ background: true, fromGerrit: true });
           assert.equal(api.model.stale, undefined);
           assert.ok(await until(() => api.events.live), "the event stream is followed again");
         },
