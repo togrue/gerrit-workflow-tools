@@ -34,10 +34,6 @@ SPECS = REPO / "docu" / "spec" / "commands"
 KNOWN_GAPS = frozenset(
     {
         "ger.markSeen",
-        "ger.stack.moveUp",
-        "ger.stack.moveDown",
-        "ger.stack.moveUpBlocked",
-        "ger.stack.moveDownBlocked",
         "ger.stack.squash",
         "ger.stack.squashTakeMessage",
         "ger.agentWalk",
@@ -47,7 +43,9 @@ KNOWN_GAPS = frozenset(
 )
 
 # Extension commands that only make sense in an editor.
-UI_ONLY = frozenset({"ger.showLog", "ger.openDiff", "ger.openLocation", "ger.nextComment", "ger.prevComment"})
+UI_ONLY = frozenset(
+    {"ger.showLog", "ger.openDiff", "ger.openLocation", "ger.nextComment", "ger.prevComment", "ger.sortChains"}
+)
 
 # Spec files that do not describe exactly the command of their name.
 _SPEC_COMMANDS = {"sha-change-id": ("sha", "change-id"), "edit": ("edit", "reword")}

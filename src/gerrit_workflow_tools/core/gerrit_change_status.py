@@ -164,6 +164,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     resolves leave ``updated`` unchanged."""
     wip: bool = False
     private: bool = False
+    diverged: bool = False
+    """``newer``, and Gerrit's current patch set is a commit this repository never had: somebody
+    else (or another checkout) uploaded it, so a push would put this commit over work it was not built on."""
 
 
 def _is_merge_commit(cwd: Path | str | None, sha: str) -> bool:
@@ -318,6 +321,8 @@ def build_log_commit(
     # on such a push, so they stay. Two git calls, and only for commits ahead of Gerrit.
     same_code = newer and compute_merged_equivalent(sha, change, Path.cwd() if cwd is None else Path(cwd)) is True
     votes_moved_on = newer and not same_code
+    current = change.current_revision
+    diverged = newer and current is not None and commit_sha_or_none(cwd, current) is None
     if votes_moved_on:
         needed.discard("checks")
 
@@ -344,6 +349,7 @@ def build_log_commit(
             freshness=change.freshness,
             wip=change.work_in_progress,
             private=change.private,
+            diverged=diverged,
         ),
         frozenset(needed),
     )

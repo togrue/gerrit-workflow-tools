@@ -2,18 +2,21 @@
 
 "Reviewed" is the newest patchset you posted anything on — a vote, a comment, a reply. Gerrit
 records that as a change message of yours carrying the patchset number.
+
+The same comparison serves any two versions of one change: an older patchset against a newer
+one, or a patchset against the local commit that carries the change.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from gerrit_workflow_tools.core.commit_diff import FileChange, commit_diff, diff_between
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_patchset
+from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 
 
@@ -23,19 +26,21 @@ class ReviewDelta:
 
     current_patch_set: int
     commit: str
-    """The current patchset's commit."""
+    """The commit compared: the current patchset's, unless another patchset or a local commit was asked for."""
     reviewed_patch_set: int | None = None
     """``None``: you have not reviewed this change (or asked for a patchset it does not have)."""
     base: str | None = None
     """The reviewed patchset's commit; ``None`` when there is nothing to compare."""
+    target_patch_set: int | None = None
+    """The patchset :attr:`commit` is; ``None`` when it is a local commit."""
     rebased: bool = False
     """The two patchsets sit on different parents: :attr:`files` is narrowed to what either touched."""
     files: list[FileChange] = field(default_factory=list)
 
     @property
     def up_to_date(self) -> bool:
-        """You reviewed the current patchset: nothing is new."""
-        return self.reviewed_patch_set == self.current_patch_set
+        """You reviewed the patchset compared: nothing is new."""
+        return self.target_patch_set is not None and self.reviewed_patch_set == self.target_patch_set
 
 
 def last_reviewed_patch_set(messages: Sequence[Mapping[str, Any]], account_id: int | None) -> int | None:
@@ -70,33 +75,43 @@ def patchset_delta_files(cwd: Path | str, old: str, new: str) -> tuple[bool, lis
 
 
 def load_review_delta(
-    service: GerritService, cwd: Path | str, changeish: str, *, since: int | None = None
+    service: GerritService,
+    cwd: Path | str,
+    changeish: str,
+    *,
+    since: int | Literal["current"] | None = None,
+    upto: int | None = None,
+    local_commit: str | None = None,
 ) -> ReviewDelta:
-    """The review delta of *changeish*; *since* names the patchset to compare with instead of asking Gerrit.
+    """The review delta of *changeish*: the patchset you last reviewed against the current one.
 
-    Fetches both patchsets from ``gerrit.remote`` when they are not in the repository.
+    *since* names the patchset to compare from instead of asking Gerrit which you reviewed
+    (``"current"``: Gerrit's current one). The comparison runs to patchset *upto*, or to
+    *local_commit* (the commit of the local stack that carries the change), else to the current
+    patchset. Fetches the patchsets from ``gerrit.remote`` when they are not in the repository.
     """
-    current, _url = resolve_patchset(service, cwd, changeish, None)
-    reviewed = since
+    change = resolve_change(service, cwd, changeish)
+    current = change.patchset()
+    target = None if local_commit else change.patchset(upto)
+    commit = local_commit or (target.commit if target else current.commit)
+    reviewed = current.patch_set if since == "current" else since
     if reviewed is None:
         reviewed = last_reviewed_patch_set(service.rest.get_messages(current.key), service.self_account_id())
-    if reviewed is None or reviewed >= current.patch_set:
-        return ReviewDelta(
-            current_patch_set=current.patch_set,
-            commit=current.commit,
-            reviewed_patch_set=None if reviewed is None else current.patch_set,
-        )
-    old, _url = resolve_patchset(service, cwd, changeish, reviewed)
-    remote = service.settings.gerrit_remote
-    for patchset in (old, current):
-        if commit_sha_or_none(cwd, patchset.commit) is None:
-            fetch_patchset(cwd, remote, patchset)
-    rebased, files = patchset_delta_files(cwd, old.commit, current.commit)
-    return ReviewDelta(
+    known = ReviewDelta(
         current_patch_set=current.patch_set,
-        commit=current.commit,
-        reviewed_patch_set=reviewed,
-        base=old.commit,
-        rebased=rebased,
-        files=files,
+        commit=commit,
+        target_patch_set=target.patch_set if target else None,
     )
+    # A patchset is compared with an older one only; a local commit with any patchset Gerrit has.
+    newest = target.patch_set - 1 if target else current.patch_set
+    if reviewed is None:
+        return known
+    if reviewed > newest:
+        return replace(known, reviewed_patch_set=target.patch_set if target else None)
+    old = change.patchset(reviewed)
+    remote = service.settings.gerrit_remote
+    for patchset in (old, target):
+        if patchset is not None and commit_sha_or_none(cwd, patchset.commit) is None:
+            fetch_patchset(cwd, remote, patchset)
+    rebased, files = patchset_delta_files(cwd, old.commit, commit)
+    return replace(known, reviewed_patch_set=reviewed, base=old.commit, rebased=rebased, files=files)

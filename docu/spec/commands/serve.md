@@ -142,6 +142,9 @@ files is `USAGE`, as `ger review` exits `2`. Beside those: `REFUSED` (409; your 
 dirty worktree under a stack rewrite or a conflict stand in the way and nothing was changed),
 `FORBIDDEN` (401/403) and `INTERNAL` (500, a bug).
 
+A refusal the client can do something about also carries `reason`, a word for it:
+`uncommitted-changes` on `/stack/rewrite` means the same call with `autostash` would go through.
+
 | Code | Status |
 |------|--------|
 | `USAGE` | 400 |
@@ -200,6 +203,19 @@ The **annotated stack** of the working branch: `ger log --json`, plus per commit
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the
 `{code, message}` saying why.
+
+For a view that draws the stack, each commit also says:
+
+- `diverged` — its patchset status is `newer` *and* Gerrit's current patch set is a commit this
+  repository never had: somebody else, or another checkout, uploaded it. Told from the object
+  database alone, so a patch set you fetched without building on it does not count.
+- `merge` — it is a merge commit. The stack is first-parent, as Gerrit relates changes: the
+  merge is a stack commit, what it merged is not. A stack with one cannot be rewritten here.
+- `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the branch as it
+  was before, and this is where the rebase stands on each commit: `done` (replayed), `current`
+  (it stopped here), `todo` (still to come), or `null` for a commit the rebase does not replay.
+  The top-level `rebase` is `null` without one, else `{applied}`: `false` while the `current`
+  commit is only partly there, stopped on a conflict.
 
 ### `GET /stack/moves`
 
@@ -275,6 +291,26 @@ plus `since`: `patch_set`, `current_patch_set`, `up_to_date` and `rebased`. `pat
 different parents, `rebased` is true and `files` holds only files the change touches; inside
 those, edits that came in from underneath still show.
 
+What is compared can be chosen:
+
+| Query | Shows |
+|-------|-------|
+| `patchset=<n>` | patchset `n` of the change against its parent, instead of the commit `rev` names |
+| `since=reviewed&patchset=<n>` | the patchset you reviewed against patchset `n` |
+| `since=reviewed&local=<commit>` | the patchset you reviewed against the local commit carrying the change |
+| `since=current&local=<commit>` | Gerrit against local: the current patchset against that commit |
+
+`since.to_patch_set` is the patchset on the right-hand side, `null` when that is a local commit
+(`local_commit` is then true). A patchset is compared with an older one only; a local commit
+with any patchset Gerrit has. Without `since`, the answer also carries the commit's `message`
+(the whole commit message) and `author`.
+
+### `GET /patchsets?rev=<changeish>`
+
+The patchsets Gerrit has of one change, oldest first: `number`, `current` (the current
+patchset's number), `reviewed` (the newest you posted on, or `null`) and `patchsets`, each
+with `number`, `commit` and `created`. Asks Gerrit, outside the trust window.
+
 ### `GET /file?rev=<commit>&path=<path>`
 
 `content` of a file at a commit id from `/diff`; `null` when the file is not there (added or
@@ -319,8 +355,9 @@ The **review state**, as `ger review --status --json`, under `review`; `null` wh
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
 | `/comments/new` | `rev`, `location`, `message`, optional `state`, `resolved` | `ger comment`: start a chain. `location` is `PATH`, `PATH:LINE`, `PATH:START-END` or `PATH:L.C-L.C`, lines from 1. `state`: `draft` (on Gerrit), `local-draft` or `note` (both only here); the default is a draft where Gerrit has the change, else a local draft. Answers `ger comment --json`. |
 | `/comments/hold` | `root_id`, `held` | Put a comment chain on **hold**, or release it. Local: nothing goes to Gerrit. |
-| `/stack/rewrite` | `steps`, oldest first | Reorder, fold or drop commits of the local stack. Answers the new `/stack` plus `previous_head`. |
-| `/stack/undo` | `head`, `previous_head` | Take that rewrite back. |
+| `/stack/rewrite` | `steps`, oldest first; optional `autostash` | Reorder, fold or drop commits of the local stack. Answers the new `/stack` plus `previous_head` and `stash_kept`. |
+| `/stack/reword` | `rev`, `message` | Give one commit of the local stack a new commit message. Answers the new `/stack` plus `previous_head`. |
+| `/stack/undo` | `head`, `previous_head` | Take that rewrite or reword back. |
 | `/stack/upstream` | `upstream` (a remote-tracking branch, `origin/main`) | Set it as the working branch's upstream, and remember it for next time. Answers `branch` and `upstream`. |
 
 ### Rewriting the stack is all or nothing
@@ -345,7 +382,20 @@ is the change of a dropped commit.
 only while the branch is still on `head`, where the rewrite left it; after a new commit it
 is `REFUSED` and the reflog is the way back.
 
-It is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted changes,
+With `autostash`, uncommitted changes to tracked files are stashed for the rewrite and put
+back after it — or after its refusal. When they no longer fit the rewritten commits (the file
+they edit went with a dropped commit), git leaves them in `git stash` and the answer says
+`stash_kept: true`.
+
+`/stack/reword` changes a message and nothing else: every tree stays, the commits from the
+reworded one up are recreated on their new parents, and the index and the worktree are not
+touched — so uncommitted changes are no obstacle and nothing can conflict. A message that
+lost the commit's **Change-Id** footer gets it back; one that names another Change-Id is
+taken as written. It is `REFUSED` for an empty message, a commit outside the stack, a rebase
+in progress or a detached HEAD.
+
+A rewrite is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted
+changes (and no `autostash`: `reason` is `uncommitted-changes`),
 a rebase is in progress, HEAD is detached, the stack contains a merge, or a commit does not
 apply in its new place. The last is found out before anything is touched, with the same
 simulation as `GET /stack/moves`, and the message names the commit and the files it

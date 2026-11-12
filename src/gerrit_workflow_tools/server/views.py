@@ -5,8 +5,6 @@ Spec: docu/spec/commands/serve.md.
 
 from __future__ import annotations
 
-import re
-from dataclasses import asdict
 from datetime import datetime, timezone
 from itertools import pairwise
 from typing import Any
@@ -19,22 +17,19 @@ from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_at
 from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
 from gerrit_workflow_tools.core.comment_write import new_comment_state
-from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, commit_diff, file_text
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
-from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, repo_toplevel, resolve_working_branch
 from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, section_summary
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import rebase_in_progress, rebase_progress
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
-from gerrit_workflow_tools.core.review_delta import load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
@@ -46,14 +41,18 @@ from gerrit_workflow_tools.server.request import BadRequest, Context, Request, s
 
 
 API_VERSION = 1
-_OBJECT_ID = re.compile(r"[0-9a-f]{7,40}")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT})
 
 
 def error_json(error: BaseException) -> dict[str, str]:
-    """``{code, message}`` for a failure: the shared exit-code name, so one reason reads the same everywhere."""
+    """``{code, message}`` for a failure: the shared exit-code name, so one reason reads the same everywhere.
+
+    A failure the client can do something about also carries ``reason``, a word for it.
+    """
     failure = failure_exit(error)
-    return {"code": failure[0].name if failure else "INTERNAL", "message": str(error) or type(error).__name__}
+    answer = {"code": failure[0].name if failure else "INTERNAL", "message": str(error) or type(error).__name__}
+    reason = getattr(error, "reason", None)
+    return {**answer, "reason": reason} if isinstance(reason, str) else answer
 
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
@@ -94,11 +93,16 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         else frozenset()
     )
     head = commit_sha_or_none(cwd, "HEAD")
+    progress = rebase_progress(cwd)
+    merges = _merge_commits(cwd, [c.sha for c in view.commits])
     commits = [
         {
             **log_commit_json(c),
             "short_sha": c.short_sha,
             "abandoned": c.abandoned,
+            "diverged": c.diverged,
+            "merge": c.sha in merges,
+            "rebase": progress.state_of(c.sha) if progress else None,
             "updated": iso_utc(parse_gerrit_time(c.updated)),
             "reviewers": [reviewer.slug for reviewer in c.reviewers],
             "is_head": c.sha == head,
@@ -112,6 +116,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "branch": checked_out_branch_name(cwd),
         "head": head,
         "rebase_in_progress": rebase_in_progress(cwd),
+        "rebase": {"applied": progress.applied} if progress else None,
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch,
@@ -127,6 +132,14 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "commits": commits,
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
+
+
+def _merge_commits(cwd: Any, shas: list[str]) -> frozenset[str]:
+    """Which of *shas* are merge commits: one ``git rev-list``, none for an empty stack."""
+    if not shas:
+        return frozenset()
+    listed = git("rev-list", "--no-walk", "--min-parents=2", *shas, cwd=cwd, check=False)
+    return frozenset(listed.stdout.split())
 
 
 def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
@@ -291,62 +304,6 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             payload["ci_introduced"] = sorted(found) if found is not None else None
         commits.append(payload)
     return {"commits": commits}
-
-
-def _review_delta(ctx: Context, req: Request, rev: str) -> dict[str, Any]:
-    since = None if req.one("since") == "reviewed" else req.number("since")
-    delta = load_review_delta(ctx.service, ctx.cwd, rev, since=since)
-    return {
-        "commit": delta.commit,
-        "base": delta.base,
-        "local_commit": False,
-        "files": [asdict(change) for change in delta.files],
-        "since": {
-            "patch_set": delta.reviewed_patch_set,
-            "current_patch_set": delta.current_patch_set,
-            "up_to_date": delta.up_to_date,
-            "rebased": delta.rebased,
-        },
-    }
-
-
-def diff(ctx: Context, req: Request) -> dict[str, Any]:
-    """The files one change touched, against its first parent. Fetches the patchset when it is not here.
-
-    With ``since=reviewed`` (or ``since=<patchset>``) it is the **review delta** instead: the
-    current patchset against the one you last reviewed.
-    """
-    rev = safe_rev(req.one("rev"))
-    if req.one("since"):
-        return _review_delta(ctx, req, rev)
-    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
-    [target] = resolve_show_targets(
-        ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
-    )
-    sha = target.row.sha
-    if not sha or commit_sha_or_none(ctx.cwd, sha) is None:
-        patchset, _url = resolve_patchset(ctx.service, ctx.cwd, rev, None)
-        fetch_patchset(ctx.cwd, ctx.settings.gerrit_remote, patchset)
-        sha = patchset.commit
-    changed = commit_diff(ctx.cwd, sha)
-    return {
-        "commit": changed.commit,
-        "base": changed.base,
-        "subject": target.row.subject,
-        "local_commit": target.is_local_commit,
-        "files": [asdict(change) for change in changed.files],
-    }
-
-
-def file(ctx: Context, req: Request) -> dict[str, Any]:
-    """Text of ``path`` at commit ``rev`` (an object id from ``/diff``); ``content`` is ``null`` when absent."""
-    rev, path = req.one("rev") or "", req.one("path") or ""
-    if not _OBJECT_ID.fullmatch(rev):
-        raise BadRequest("rev must be a commit id, as /diff returns it")
-    if not path or path.startswith(("-", "/")) or "\0" in path:
-        raise BadRequest("path is missing or not a repository path")
-    content = None if rev == EMPTY_TREE else file_text(ctx.cwd, rev, path)
-    return {"rev": rev, "path": path, "content": content}
 
 
 def agent_runbook(ctx: Context, req: Request) -> dict[str, Any]:

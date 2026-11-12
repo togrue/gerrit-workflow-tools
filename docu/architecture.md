@@ -444,7 +444,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program |
 | `core/editor_extension.py` | The VS Code extension a release ships: where it is (`bundled_extension`), the editor's CLI (`find_editor_cli`), installing it, and release download addresses (`release_url`) |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
-| `core/rebase_state.py` | A rebase underway: whether one is, the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`) and the one next step after a conflict (`conflict_next_step`) |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got (`rebase_progress`, `RebaseProgress`), the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`) and the one next step after a conflict (`conflict_next_step`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |
@@ -483,8 +483,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
-| `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (current patchset against the one you reviewed) |
-| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
+| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept) |
 | `core/reorder_preview.py` | Whether a rewrite would conflict, simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `PickConflict`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
@@ -553,8 +554,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line) |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
-| `server/views.py` | Read endpoints: health, overview, stack, stack moves (conflict preview), chain, show, diff, file, review, agent runbook; `error_json` |
-| `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite and its undo |
+| `server/views.py` | Read endpoints: health, overview, stack (with rebase progress), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
+| `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
+| `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
 | `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 

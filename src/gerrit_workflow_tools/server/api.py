@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import clear_git_cache
-from gerrit_workflow_tools.server import actions, views
+from gerrit_workflow_tools.server import actions, diff_views, views
 from gerrit_workflow_tools.server.activity import Activity
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
@@ -35,8 +35,9 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/stack/upstream", views.stack_upstream),
     ("GET", "/chains/([^/]+)", views.chain),
     ("GET", "/show", views.show),
-    ("GET", "/diff", views.diff),
-    ("GET", "/file", views.file),
+    ("GET", "/diff", diff_views.diff),
+    ("GET", "/patchsets", diff_views.patchsets),
+    ("GET", "/file", diff_views.file),
     ("GET", "/review", views.review),
     ("GET", "/agent/runbook", views.agent_runbook),
     ("POST", "/review/open", actions.review_open),
@@ -46,6 +47,7 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("POST", "/comments/hold", actions.hold),
     ("POST", "/stack/upstream", actions.set_upstream),
     ("POST", "/stack/rewrite", actions.rewrite),
+    ("POST", "/stack/reword", actions.reword),
     ("POST", "/stack/undo", actions.undo),
 )
 

@@ -4,10 +4,11 @@
 import * as vscode from "vscode";
 
 import { Chain, Headline, Member, Section } from "./api";
-import { chainDescription, plural, reasonWords, severity, votes } from "./format";
+import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, severity, sortedChains, votes } from "./format";
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model } from "./model";
 import { changeRowContext } from "./rows";
+import { ui } from "./ui";
 
 type Node =
   | { kind: "headline"; headline: Headline }
@@ -17,6 +18,7 @@ type Node =
   | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon };
 
 const SECTION_TITLES: Record<string, string> = { "to-review": "To review", outgoing: "Outgoing" };
+const SORT_KEY = "ger.chainSort";
 
 function memberRev(member: Member): string {
   return member.local_sha ?? `change:${member.number}`;
@@ -57,8 +59,33 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.changed.event;
 
-  constructor(private readonly model: Model) {
+  constructor(
+    private readonly model: Model,
+    private readonly memento: vscode.Memento,
+  ) {
     model.onDidChange(() => this.changed.fire());
+  }
+
+  /** How the chains of each section are ordered; remembered per workspace. */
+  get sort(): ChainSort {
+    const stored = this.memento.get<string>(SORT_KEY, "state");
+    return stored in CHAIN_SORTS ? (stored as ChainSort) : "state";
+  }
+
+  /** Ask how to order the chains: by state (what needs you first, as the service orders them) or by last activity. */
+  async chooseSort(): Promise<void> {
+    const current = this.sort;
+    const items = (Object.keys(CHAIN_SORTS) as ChainSort[]).map((sort) => ({
+      label: CHAIN_SORTS[sort],
+      description: sort === current ? "current" : undefined,
+      detail: sort === "state" ? "What needs you most comes first" : undefined,
+      sort,
+    }));
+    const picked = await ui().pick(items, { title: "Sort review chains", placeHolder: "Applies to both sections" });
+    if (picked && picked.sort !== current) {
+      await this.memento.update(SORT_KEY, picked.sort);
+      this.changed.fire();
+    }
   }
 
   getChildren(node?: Node): Node[] {
@@ -66,7 +93,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       return this.roots();
     }
     if (node.kind === "section") {
-      const chains = node.section.chains;
+      const chains = sortedChains(node.section.chains, this.sort);
       return chains.length
         ? chains.map((chain) => ({ kind: "chain", chain, section: node.section }))
         : [{ kind: "info", text: node.section.name === "to-review" ? "Nothing to review" : "No open changes" }];
@@ -116,6 +143,9 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
         }
         if (summary.comments) {
           notes.push(`${summary.comments} with comments`);
+        }
+        if (this.sort !== "state") {
+          notes.push(this.sort === "newest" ? "newest first" : "oldest first");
         }
         item.description = notes.join(" · ");
         item.tooltip = node.section.query;

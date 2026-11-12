@@ -1,0 +1,3 @@
+# Copied from @vscode/codicons by scripts/copy-codicons.js (npm postinstall)
+codicon.css
+codicon.ttf

@@ -1,33 +1,35 @@
-// "Local stack": the commits above the upstream, newest first, with drag-and-drop reordering.
+// "Local stack": the commits above the upstream, newest first. A webview (media/stack.js) draws
+// the rows of stackRows.ts; this is what its clicks, drops and context menu do.
 
 import * as vscode from "vscode";
 
-import { StackCommit, StackStep } from "./api";
-import { blockedMove, commitDescription, droppedOn, moved, reasonWords, sentence, severity } from "./format";
-import { icon, severityIcon } from "./icons";
+import { GerApiError, GerClient, Rewritten, StackCommit, StackStep } from "./api";
+import { blockedMove, movedTo, sentence } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
-import { commitRowContext } from "./rows";
+import { StackVm, frozen, stackLines, stackVm } from "./stackRows";
+import { waitingFor } from "./state";
 import { ui } from "./ui";
+import { Message, WebView } from "./webview";
 
-const MIME = "application/vnd.code.tree.ger.stack";
-
-type Node =
-  | { kind: "commit"; commit: StackCommit }
-  | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon; tooltip?: string; command?: vscode.Command };
+const STASH = "Stash and Continue";
 
 export function commitTarget(commit: StackCommit): ChangeTarget {
   return { rev: commit.sha, title: commit.summary, number: commit.number ?? undefined, url: commit.gerrit_url, local: true };
 }
 
-export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDragAndDropController<Node> {
-  readonly dragMimeTypes = [MIME];
-  readonly dropMimeTypes = [MIME];
+/** What a command gets from the view: the row's context (`sha`, and `shas` when several rows are selected), or a commit id. */
+export type CommitArg = { sha?: unknown; shas?: unknown } | string | undefined;
 
-  private readonly changed = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this.changed.event;
+export class StackView extends WebView<StackVm> {
+  /** Runs when a row is chosen: `preserveFocus` while you walk the list with the arrow keys. */
+  onOpen: (target: ChangeTarget, preserveFocus: boolean) => unknown = () => undefined;
 
-  constructor(private readonly model: Model) {
-    model.onDidChange(() => this.changed.fire());
+  constructor(
+    extensionUri: vscode.Uri,
+    private readonly model: Model,
+  ) {
+    super(extensionUri, "stack");
+    model.onDidChange(() => this.render());
   }
 
   /** Oldest first, as git and the service order them. */
@@ -35,151 +37,117 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     return this.model.stack?.commits ?? [];
   }
 
-  getChildren(node?: Node): Node[] {
-    if (node) {
-      return [];
-    }
-    const local = this.model.overview?.local;
-    if (!local) {
-      return [];
-    }
-    if ("error" in local) {
-      const warning = icon("warning", "list.warningForeground");
-      if (local.needs_upstream) {
-        const branch = this.model.upstreamChoice?.branch ?? "This branch";
-        const why = `${branch} has no upstream, so ger cannot tell where your stack starts`;
-        const tip = `${local.error.message}\n\n\`ger checkout\` (Check Out to Work On) sets the upstream when it creates the branch.`;
-        return [{ kind: "info", text: why, tooltip: tip, icon: warning }, ...this.upstreamRows()];
+  vm(): StackVm {
+    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "Your local stack");
+    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper));
+    return waiting ? { ...vm, waiting } : vm;
+  }
+
+  /** The view as text: for the end-to-end suite. */
+  lines(): string[] {
+    return stackLines(this.vm());
+  }
+
+  protected decorate(view: vscode.WebviewView): void {
+    const stack = this.model.stack;
+    const where = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
+    view.description = where && this.model.stale ? `${where} · out of date` : where;
+  }
+
+  /** The commits a command's argument names, oldest first. */
+  private named(arg: CommitArg): StackCommit[] {
+    const one = typeof arg === "string" ? arg : arg?.sha;
+    const many = typeof arg === "object" && Array.isArray(arg.shas) ? arg.shas : [one];
+    return this.commits().filter((commit) => many.includes(commit.sha));
+  }
+
+  /** The one commit a command's argument is about: the row it was invoked on. */
+  commit(arg: CommitArg): StackCommit | undefined {
+    const sha = typeof arg === "string" ? arg : arg?.sha;
+    return this.commits().find((commit) => commit.sha === sha);
+  }
+
+  target(arg: CommitArg): ChangeTarget | undefined {
+    const commit = this.commit(arg);
+    return commit ? commitTarget(commit) : undefined;
+  }
+
+  protected receive(message: Message): unknown {
+    switch (message.type) {
+      case "open": {
+        const target = this.target(message.sha as string);
+        return target ? this.onOpen(target, message.keepFocus === true) : undefined;
       }
-      return [{ kind: "info", text: local.error.message.split("\n")[0], tooltip: local.error.message, icon: warning }];
+      case "move":
+        return this.move(message.shas as string[], message.gap as number);
+      case "frozen":
+        return this.explainFrozen();
+      case "command":
+        return vscode.commands.executeCommand(message.command as string, ...((message.args as unknown[] | undefined) ?? []));
+      default:
+        return undefined;
     }
-    const nodes: Node[] = [];
-    if (local.rebase_in_progress) {
-      nodes.push({ kind: "info", text: "A rebase is in progress", detail: "this is the branch as it was before", icon: icon("warning", "list.warningForeground") });
-    }
-    if (!local.commits.length) {
-      nodes.push({ kind: "info", text: "No local commits", detail: `${local.branch ?? "HEAD"} is at ${local.stack.target_branch}` });
-    }
-    return nodes.concat([...local.commits].reverse().map((commit) => ({ kind: "commit", commit })));
   }
 
-  /** The branch has no upstream, so no stack: offer the suggested one in one click, or a choice. */
-  private upstreamRows(): Node[] {
-    const choice = this.model.upstreamChoice;
-    const rows: Node[] = [];
-    if (choice?.suggested) {
-      rows.push({
-        kind: "info",
-        text: `Track ${choice.suggested}`,
-        detail: choice.why ?? undefined,
-        tooltip: `Make ${choice.suggested} the upstream of ${choice.branch}: the stack is the commits above it, and push goes to its branch on Gerrit.`,
-        icon: icon("git-branch"),
-        command: { command: "ger.setUpstream", title: "Track", arguments: [choice.suggested] },
-      });
+  private explainFrozen(): boolean {
+    const stack = this.model.stack;
+    const why = stack ? frozen(stack) : null;
+    if (why) {
+      void ui().message("info", `${why} Nothing was changed.`, {}, []);
     }
-    rows.push({
-      kind: "info",
-      text: choice?.suggested ? "Choose another upstream branch…" : "Choose an upstream branch…",
-      icon: icon("list-selection"),
-      command: { command: "ger.setUpstream", title: "Choose" },
-    });
-    return rows;
+    return Boolean(why);
   }
 
-  getTreeItem(node: Node): vscode.TreeItem {
-    if (node.kind === "info") {
-      const item = new vscode.TreeItem(node.text);
-      item.description = node.detail;
-      item.iconPath = node.icon;
-      item.tooltip = node.tooltip;
-      item.command = node.command;
-      return item;
+  // --- Copying ----------------------------------------------------------------------
+
+  /** Copy the commit ids, or the Change-Ids, of the selected rows: one per line, newest first as shown. */
+  async copy(arg: CommitArg, what: "hash" | "change-id"): Promise<void> {
+    const values = this.named(arg)
+      .reverse()
+      .map((commit) => (what === "hash" ? commit.sha : commit.change_id))
+      .filter((value): value is string => Boolean(value));
+    if (!values.length) {
+      return;
     }
-    const commit = node.commit;
+    await ui().copy(values.join("\n"));
+    const noun = what === "hash" ? "commit hash" : "Change-Id";
+    ui().status(`$(check) Copied ${values.length === 1 ? `the ${noun}` : `${values.length} ${noun}${what === "hash" ? "es" : "s"}`}`, 4000);
+  }
+
+  // --- Rewriting --------------------------------------------------------------------
+
+  /**
+   * Move the commits `shas` to `gap` of the list as shown (newest first): gap 0 is above the
+   * top row, the number of rows is under the last. They stay together, in their own order.
+   */
+  async move(shas: readonly string[], gap: number): Promise<void> {
+    if (this.explainFrozen()) {
+      return;
+    }
+    const shown = this.commits()
+      .map((commit) => commit.sha)
+      .reverse();
+    const next = movedTo(shown, shas, gap);
+    if (!next) {
+      return;
+    }
+    const order = [...next].reverse();
+    if (shas.length === 1 && this.explainBlocked(shas[0], order)) {
+      return;
+    }
+    await this.rewrite((client, autostash) => client.rewrite(order, autostash), "Stack reordered.");
+  }
+
+  /** One commit, one place: when the conflict preview already knows the swap fails, say so at once. */
+  private explainBlocked(sha: string, order: readonly string[]): boolean {
     const commits = this.commits();
-    const index = commits.findIndex((c) => c.sha === commit.sha);
-    const [below, above] = [commits[index - 1], commits[index + 1]];
-    const upConflict = above && this.model.swapConflict(commit.sha, above.sha);
-    const downConflict = below && this.model.swapConflict(below.sha, commit.sha);
-    const item = new vscode.TreeItem(commit.summary);
-    item.id = commit.sha;
-    item.description = `${commit.is_head ? "HEAD · " : ""}${commitDescription(commit)}`;
-    item.iconPath = commit.pushed ? severityIcon(severity(commit.attention_reasons)) : icon("cloud-upload");
-    item.tooltip = new vscode.MarkdownString(
-      [
-        `**${commit.summary}**`,
-        reasonWords(commit.attention_reasons) || "no open issues",
-        commit.held_back ? "Held back by the ready boundary: `ger push` will not send it." : "",
-        commit.reviewers.length ? `Reviewers: ${commit.reviewers.join(", ")}` : "",
-        upConflict ? blockedMove(commit.summary, above.summary, upConflict) : "",
-        downConflict ? blockedMove(commit.summary, below.summary, downConflict) : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-    );
-    // `upx` / `downx`: the neighbour is there, but the two would conflict in each other's place.
-    item.contextValue = commitRowContext({
-      url: Boolean(commit.gerrit_url),
-      up: above ? (upConflict ? "upx" : "up") : undefined,
-      down: below ? (downConflict ? "downx" : "down") : undefined,
-    });
-    item.command = { command: "ger.openChange", title: "Show Change", arguments: [commitTarget(commit)] };
-    return item;
-  }
-
-  static target(node: Node | undefined): ChangeTarget | undefined {
-    return node?.kind === "commit" ? commitTarget(node.commit) : undefined;
-  }
-
-  // --- Reordering -------------------------------------------------------------------
-
-  handleDrag(source: readonly Node[], data: vscode.DataTransfer): void {
-    const shas = source.filter((n) => n.kind === "commit").map((n) => (n as { commit: StackCommit }).commit.sha);
-    data.set(MIME, new vscode.DataTransferItem(shas));
-  }
-
-  async handleDrop(target: Node | undefined, data: vscode.DataTransfer): Promise<void> {
-    const value: unknown = data.get(MIME)?.value;
-    const dragged = Array.isArray(value) ? value.filter((sha): sha is string => typeof sha === "string") : [];
-    if (dragged.length !== 1 || target?.kind === "info") {
-      return;
+    const from = commits.findIndex((commit) => commit.sha === sha);
+    const step = order.indexOf(sha) - from;
+    const [commit, other] = [commits[from], commits[from + step]];
+    if (Math.abs(step) !== 1 || !commit || !other) {
+      return false;
     }
-    // Onto its neighbour is a swap: when the conflict preview already knows it fails, say so at once.
-    const shas = this.commits().map((c) => c.sha);
-    const [from, to] = [shas.indexOf(dragged[0]), target ? shas.indexOf(target.commit.sha) : 0];
-    const draggedNode = this.commits()[from];
-    if (draggedNode && Math.abs(to - from) === 1 && this.explainBlocked({ kind: "commit", commit: draggedNode }, to - from)) {
-      return;
-    }
-    // The dragged commit takes the target's place, up or down; empty space under the list is the bottom.
-    const order = droppedOn(
-      this.commits().map((c) => c.sha),
-      dragged[0],
-      target?.commit.sha,
-    );
-    if (order) {
-      await this.rewrite(order, "Stack reordered.");
-    }
-  }
-
-  /** Move one commit a place later (`+1`) or earlier (`-1`) in the stack. */
-  async move(node: Node | undefined, step: number): Promise<void> {
-    if (node?.kind !== "commit") {
-      return;
-    }
-    const shas = this.commits().map((c) => c.sha);
-    const order = moved(shas, shas.indexOf(node.commit.sha), step);
-    if (order) {
-      await this.rewrite(order, "Stack reordered.");
-    }
-  }
-
-  /** Say why a commit cannot move a place later (`+1`) or earlier (`-1`); false when it can. */
-  explainBlocked(node: Node | undefined, step: number): boolean {
-    const commits = this.commits();
-    const index = node?.kind === "commit" ? commits.findIndex((c) => c.sha === node.commit.sha) : -1;
-    const [commit, other] = [commits[index], commits[index + step]];
-    const conflict = commit && other && (step > 0 ? this.model.swapConflict(commit.sha, other.sha) : this.model.swapConflict(other.sha, commit.sha));
+    const conflict = step > 0 ? this.model.swapConflict(commit.sha, other.sha) : this.model.swapConflict(other.sha, commit.sha);
     if (conflict) {
       void ui().message("info", `${blockedMove(commit.summary, other.summary, conflict)} Nothing was changed.`, {}, []);
     }
@@ -187,10 +155,10 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
   }
 
   /** Fold a commit into the one below it. One message survives whole, and with it its Change-Id. */
-  async fold(node: Node | undefined, takeMessage: boolean): Promise<void> {
+  async fold(arg: CommitArg, takeMessage: boolean): Promise<void> {
     const commits = this.commits();
-    const index = node?.kind === "commit" ? commits.findIndex((c) => c.sha === node.commit.sha) : -1;
-    if (index < 1) {
+    const index = commits.findIndex((commit) => commit.sha === this.commit(arg)?.sha);
+    if (index < 1 || this.explainFrozen()) {
       return;
     }
     const [below, folded] = [commits[index - 1], commits[index]];
@@ -198,14 +166,14 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
     const action = takeMessage ? "fixup-take-message" : "fixup";
     const steps = commits.map((c): StackStep => (c.sha === folded.sha ? { sha: c.sha, action } : c.sha));
     const orphan = gone.pushed ? ` The Gerrit change of "${gone.summary}" stays open: abandon it there.` : "";
-    await this.rewrite(steps, `Squashed into "${kept.summary}".${orphan}`);
+    await this.rewrite((client, autostash) => client.rewrite(steps, autostash), `Squashed into "${kept.summary}".${orphan}`);
   }
 
-  async drop(node: Node | undefined): Promise<void> {
-    if (node?.kind !== "commit") {
+  async drop(arg: CommitArg): Promise<void> {
+    const commit = this.commit(arg);
+    if (!commit || this.explainFrozen()) {
       return;
     }
-    const commit = node.commit;
     const detail = commit.pushed
       ? "Its change stays open on Gerrit until you abandon it there. You can undo the drop right after."
       : "It was never pushed: after the drop it exists only in the reflog. You can undo the drop right after.";
@@ -214,30 +182,73 @@ export class StackView implements vscode.TreeDataProvider<Node>, vscode.TreeDrag
       return;
     }
     const steps = this.commits().map((c): StackStep => (c.sha === commit.sha ? { sha: c.sha, action: "drop" } : c.sha));
-    await this.rewrite(steps, `Dropped "${commit.summary}".`);
+    await this.rewrite((client, autostash) => client.rewrite(steps, autostash), `Dropped "${commit.summary}".`);
   }
 
-  private async rewrite(steps: StackStep[], done: string): Promise<void> {
+  /** Give a commit a new commit message; `applied` runs as soon as it has it, before Undo is offered. */
+  async reword(sha: string, message: string, applied: () => void = () => undefined): Promise<boolean> {
+    const commit = this.commit(sha);
+    if (!commit) {
+      void ui().message("warning", "Commit message not applied: the commit is no longer in the local stack.", {}, []);
+      return false;
+    }
+    return this.rewrite((client) => client.reword(sha, message), `Commit message of "${commit.summary}" changed.`, applied);
+  }
+
+  /**
+   * Run one rewrite, show its result, and offer Undo. Uncommitted changes in the way are not a
+   * dead end: ask, then stash them for the rewrite and put them back after it.
+   */
+  private async rewrite(run: (client: GerClient, autostash: boolean) => Promise<Rewritten>, done: string, applied: () => void = () => undefined): Promise<boolean> {
     const before = this.commits();
     try {
       const client = await this.model.client();
-      const stack = await ui().progress({ viewId: "ger.stack" }, "Rewriting the stack", () => client.rewrite(steps));
+      const attempt = (autostash: boolean) => ui().progress({ viewId: "ger.stack" }, "Rewriting the stack", () => run(client, autostash));
+      let stack: Rewritten;
+      try {
+        stack = await attempt(false);
+      } catch (error) {
+        if (!(error instanceof GerApiError) || error.reason !== "uncommitted-changes") {
+          throw error;
+        }
+        const detail = "They are stashed for the rewrite and put back right after it, also when the rewrite is refused.";
+        const answer = await ui().message("warning", "You have uncommitted changes. Stash them and continue?", { modal: true, detail }, [STASH]);
+        if (answer !== STASH) {
+          return false;
+        }
+        stack = await attempt(true);
+      }
       this.model.setStack(stack);
       void this.model.refresh();
+      applied();
+      if (stack.stash_kept) {
+        void ui().message("warning", "Your uncommitted changes no longer fit the rewritten commits. They are safe in the stash: run git stash pop and resolve the conflicts.", {}, []);
+      }
       if (stack.head && stack.head !== stack.previous_head) {
         // Only commits Gerrit has seen and that got new ids need a push; a commit never pushed does not.
         const kept = new Set(stack.commits.map((c) => c.sha));
         const push = before.some((c) => c.pushed && !kept.has(c.sha)) ? " Push to update Gerrit." : "";
-        const undo = await ui().message("info", `${done}${push}`, {}, ["Undo"]);
-        if (undo && stack.head) {
-          this.model.setStack(await client.undo(stack.head, stack.previous_head));
-          void this.model.refresh();
-        }
+        await this.offerUndo(client, stack, `${done}${push}`);
       }
+      return true;
     } catch (error) {
       // All or nothing on the server: a refusal means the branch is exactly as it was.
       const reason = describeError(error);
       void ui().message("warning", /left as it was/.test(reason) ? sentence(reason) : `Stack left as it was: ${reason}`, {}, []);
+      void this.model.refresh();
+      return false;
+    }
+  }
+
+  private async offerUndo(client: GerClient, stack: Rewritten, text: string): Promise<void> {
+    try {
+      const undo = await ui().message("info", text, {}, ["Undo"]);
+      if (undo && stack.head) {
+        this.model.setStack(await client.undo(stack.head, stack.previous_head));
+        void this.model.refresh();
+      }
+    } catch (error) {
+      void ui().message("warning", `Not undone: ${describeError(error)}`, {}, []);
       void this.model.refresh();
     }
   }

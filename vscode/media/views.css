@@ -1,0 +1,458 @@
+/* The webview views (Local stack, Change), drawn with the editor's own theme colours so they sit
+   next to the Review chains tree without looking like another program. No colour is hard-coded. */
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  user-select: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.codicon {
+  flex: none;
+  width: 16px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.tone-good {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+.tone-bad {
+  color: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+}
+.tone-warn {
+  color: var(--vscode-list-warningForeground, var(--vscode-charts-yellow));
+}
+.tone-dim {
+  color: var(--vscode-disabledForeground);
+}
+
+/* --- Rows, as in a tree ---------------------------------------------------------- */
+
+.row,
+.info,
+.item,
+.head,
+.reply,
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 8px 0 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.label {
+  flex: 0 1 auto;
+  min-width: 2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.row,
+.item,
+.info.clickable {
+  cursor: pointer;
+}
+
+.row:hover,
+.item:hover,
+.info.clickable:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.item:focus-visible,
+.info.clickable:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* Icon buttons that show on the row under the pointer, as a tree's inline actions do. */
+.actions {
+  display: none;
+  flex: none;
+  gap: 2px;
+}
+
+.row:hover .actions,
+.row.focused .actions,
+.item:hover .actions,
+.item:focus-within .actions {
+  display: flex;
+}
+
+.actions button,
+button.twist {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.actions button:hover,
+button.twist:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.twist {
+  flex: none;
+  width: 16px;
+}
+
+/* --- Local stack ----------------------------------------------------------------- */
+
+.list {
+  position: relative;
+  outline: none;
+  padding-bottom: 22px; /* room to drop under the last commit */
+}
+
+.list.rebasing .row {
+  padding-left: 4px;
+}
+
+.marker {
+  display: none;
+  flex: none;
+  width: 16px;
+}
+
+.list.rebasing .marker {
+  display: inline-flex;
+}
+
+.row.selected {
+  background: var(--vscode-list-inactiveSelectionBackground);
+  color: var(--vscode-list-inactiveSelectionForeground, inherit);
+}
+
+.list:focus .row.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.list:focus .row.selected .detail {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.list:focus .row.focused {
+  outline: 1px solid var(--vscode-list-focusOutline, var(--vscode-focusBorder));
+  outline-offset: -1px;
+}
+
+/* Not there yet: still to be replayed by the rebase, or stopped part-way on a conflict. */
+.row.dim .label,
+.row.dim .detail,
+.row.dim .cloud,
+.row.dim .badges {
+  opacity: 0.5;
+}
+
+.list.dragging .row.selected {
+  opacity: 0.55;
+}
+
+/* Where the dragged commits will land: a line between two rows. */
+.dropline {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--vscode-focusBorder);
+  pointer-events: none;
+}
+
+.dropline::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 50%;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+/* The cloud says how the commit relates to Gerrit. */
+.cloud-same {
+  color: inherit;
+}
+.cloud-changed {
+  color: var(--vscode-charts-yellow);
+}
+.cloud-outdated {
+  color: var(--vscode-charts-red);
+}
+.cloud-diverged {
+  color: var(--vscode-charts-blue);
+}
+.cloud-not-pushed,
+.cloud-unknown {
+  color: var(--vscode-disabledForeground);
+}
+.cloud-merged {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+/* The selection colours a row's text; the cloud and the votes keep their own meaning. */
+.badges {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1px;
+  min-width: 30px;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-ci {
+  min-width: 16px;
+}
+
+.badge .codicon {
+  font-size: 14px;
+}
+
+.badge.stale {
+  opacity: 0.5;
+}
+
+/* --- Change ---------------------------------------------------------------------- */
+
+.head.note .label,
+.heading .label {
+  flex: none;
+}
+
+.head .label {
+  font-weight: 600;
+}
+
+.head.note .label {
+  font-weight: normal;
+}
+
+.message-block {
+  padding-bottom: 4px;
+}
+
+.heading .label,
+.section-head .label {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.message {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  margin: 0 12px;
+  padding: 4px 6px;
+  resize: vertical;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.4;
+  /* Long lines wrap on screen only: the message keeps the line breaks you typed. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.message:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.message[readonly] {
+  background: transparent;
+  border-color: var(--vscode-widget-border, var(--vscode-input-border, transparent));
+  color: var(--vscode-descriptionForeground);
+}
+
+.message-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 4px 12px 0;
+}
+
+.button {
+  padding: 2px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.button.secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.button.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.link {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vscode-textLink-foreground);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 4px 12px 6px;
+}
+
+.picker {
+  display: flex;
+  flex: 1 1 160px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.picker .detail {
+  flex: none;
+}
+
+select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+select:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.section-head {
+  padding-left: 4px;
+  border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-widget-border, transparent));
+}
+
+.file,
+.thread {
+  padding-left: 24px;
+}
+
+.thread.revealed {
+  background: var(--vscode-list-inactiveSelectionBackground);
+}
+
+.reply,
+.finding {
+  padding-left: 46px;
+}
+
+.reply .label {
+  flex: none;
+}
+
+/* Added and removed lines: the colours git gives them, quiet, in columns that line up. */
+.counts {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.counts .added,
+.counts .deleted {
+  min-width: 2.6em;
+  text-align: right;
+}
+
+.added {
+  color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+}
+
+.deleted {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+}
+
+/* --- Nothing to show ------------------------------------------------------------- */
+
+.panel {
+  padding: 8px 20px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.4;
+  user-select: text;
+}
+
+.panel .button {
+  margin-top: 4px;
+  padding: 4px 12px;
+}

@@ -84,9 +84,9 @@ Code itself, against what the stack view does today:
 | **Undo is always there**, not only in a toast that disappears | "Undo" button on the notification after a rewrite | A permanent *Undo last stack change* in the view title and `Ctrl+Z` while the view has focus, backed by the operation log |
 | **No confirmation for what can be undone** | Drop asks in a modal dialog | Drop at once, offer undo. Keep modals for what cannot be taken back (push, abandon on Gerrit) |
 | **The row moves at once** (optimistic update), and snaps back on refusal | The list redraws after the server answers | Reorder the tree locally, spinner on the moved row, revert and show the reason on refusal |
-| **Drag shows where it lands**: an insertion line between rows | VS Code's tree view only highlights the row dropped *on*; "takes its place" is the rule | Keep the rule and say it in the tooltip; if precise dragging matters, a webview stack panel is the only way to draw an insertion line |
+| **Drag shows where it lands**: an insertion line between rows | Done: *Local stack* is a webview, and a line between two rows shows where the dragged commits land | — |
 | **Keyboard first**: move like moving lines | Arrows only as inline icons | `Alt+Up` / `Alt+Down` to move, `Delete` to drop, `Enter` to open, `F2` to reword |
-| **Several commits at once** | Single selection | Multi-select to move, squash or drop a run of commits as one rewrite |
+| **Several commits at once** | Multi-select moves a run of commits as one rewrite, and copies their ids | Squash or drop a run of commits as one rewrite |
 | **Few inline icons, everything in the context menu** | Up to four inline icons per row | Inline: move up/down (or the blocked marker) and the primary action; the rest in the context menu and palette |
 | **Selection follows the commit** through a rewrite | The change view follows by Change-Id; tree selection does not | Re-select by Change-Id after every rewrite |
 | **Actions say where they happen** | "Check Out" meant two different things (now split) | Every action that changes files names the place: *this checkout*, *review worktree* |

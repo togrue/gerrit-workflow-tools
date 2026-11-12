@@ -67,7 +67,7 @@ The step that takes local commit rows and returns them enriched with Gerrit stat
 _Avoid_: enrichment, sync, fetch
 
 **Patchset status**:
-How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`). `unknown` when Gerrit could not be asked at all (unreachable, credentials rejected): not even absence is known.
+How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`). `unknown` when Gerrit could not be asked at all (unreachable, credentials rejected): not even absence is known. A `newer` commit has **diverged** when Gerrit's current patch set is a commit this repository never had: it was uploaded from elsewhere, and the local commit was not built on it.
 _Avoid_: state, sync status
 
 **Annotated stack**:

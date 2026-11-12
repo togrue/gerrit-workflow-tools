@@ -12,6 +12,8 @@ export interface Hello {
 export interface ApiError {
   code: string;
   message: string;
+  /** A word for a refusal the client can do something about (`uncommitted-changes`). */
+  reason?: string;
 }
 
 /** Where Gerrit's event stream is, as `ger serve` follows it. */
@@ -118,12 +120,20 @@ export interface StackCommit extends CommitStatus {
   is_head: boolean;
   held_back: boolean;
   needs_edit: boolean;
+  /** `newer`, and Gerrit's current patchset is a commit this repository never had: it came from elsewhere. */
+  diverged?: boolean;
+  /** A merge commit: the stack cannot be rewritten while it holds one. */
+  merge?: boolean;
+  /** Where a rebase underway stands on this commit; null without one, or when it does not replay it. */
+  rebase?: "done" | "current" | "todo" | null;
 }
 
 export interface Stack {
   branch: string | null;
   head: string | null;
   rebase_in_progress: boolean;
+  /** With a rebase underway: `applied` is false while the commit it stopped at is only partly there (a conflict). */
+  rebase?: { applied: boolean } | null;
   stack: { project: string; target_branch: string; push_branch: string };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
   commits: StackCommit[];
@@ -243,10 +253,32 @@ export interface Diff {
   /** Null only in a review delta with nothing to compare against. */
   base: string | null;
   subject?: string;
+  /** The whole commit message, and `Name <email>`; not in a review delta. */
+  message?: string;
+  author?: string;
   local_commit: boolean;
   files: FileChange[];
-  /** Present in a review delta: the patchset you last reviewed against the current one. */
-  since?: { patch_set: number | null; current_patch_set: number; up_to_date: boolean; rebased: boolean };
+  /** Present in a review delta: patchset `patch_set` against `to_patch_set` (null: a local commit). */
+  since?: { patch_set: number | null; current_patch_set: number; to_patch_set?: number | null; up_to_date: boolean; rebased: boolean };
+}
+
+/** What `/diff` compares instead of a commit with its parent. */
+export interface DiffOptions {
+  /** This patchset of the change, not the commit `rev` names. */
+  patchset?: number;
+  /** A review delta from the patchset you reviewed, Gerrit's current one, or patchset `n`. */
+  since?: "reviewed" | "current" | number;
+  /** The review delta runs to this local commit. */
+  local?: string;
+}
+
+/** The patchsets Gerrit has of one change, oldest first. */
+export interface Patchsets {
+  number: number | null;
+  current: number | null;
+  /** The newest patchset you posted on. */
+  reviewed: number | null;
+  patchsets: { number: number; commit: string; created: string | null }[];
 }
 
 export interface ReviewState {
@@ -278,6 +310,9 @@ export interface Runbook {
 /** A commit id (kept as it is), or what to do with it: fold into the commit below, or drop. */
 export type StackStep = string | { sha: string; action: "pick" | "fixup" | "fixup-take-message" | "drop" };
 
+/** The stack after a rewrite, and what `undo` takes back. */
+export type Rewritten = Stack & { previous_head: string; stash_kept?: boolean };
+
 export interface ShowOptions {
   stack?: boolean;
   chain?: boolean;
@@ -295,6 +330,7 @@ export class GerApiError extends Error {
     readonly code: string,
     message: string,
     readonly status: number,
+    readonly reason?: string,
   ) {
     super(message);
     this.name = "GerApiError";
@@ -340,7 +376,7 @@ export class GerClient {
     const payload = (await response.json()) as { error?: ApiError } & T;
     if (!response.ok) {
       const error = payload.error ?? { code: "INTERNAL", message: response.statusText };
-      throw new GerApiError(error.code, error.message, response.status);
+      throw new GerApiError(error.code, error.message, response.status, error.reason);
     }
     return payload;
   }
@@ -367,8 +403,12 @@ export class GerClient {
     return answer.commits;
   }
 
-  diff(rev: string): Promise<Diff> {
-    return this.call("GET", "/diff", { rev });
+  diff(rev: string, options: DiffOptions = {}): Promise<Diff> {
+    return this.call("GET", "/diff", { rev, ...options });
+  }
+
+  patchsets(rev: string): Promise<Patchsets> {
+    return this.call("GET", "/patchsets", { rev });
   }
 
   /** What changed since the patchset you last reviewed. */
@@ -431,9 +471,14 @@ export class GerClient {
     return this.call("GET", "/stack/moves");
   }
 
-  /** Rewrite the local stack; `steps` are oldest first. All or nothing. */
-  rewrite(steps: StackStep[]): Promise<Stack & { previous_head: string }> {
-    return this.call("POST", "/stack/rewrite", undefined, { steps });
+  /** Rewrite the local stack; `steps` are oldest first. All or nothing. `autostash` stashes uncommitted changes for it. */
+  rewrite(steps: StackStep[], autostash = false): Promise<Rewritten> {
+    return this.call("POST", "/stack/rewrite", undefined, { steps, autostash });
+  }
+
+  /** Give one commit of the local stack a new commit message. Nothing else changes. */
+  reword(rev: string, message: string): Promise<Rewritten> {
+    return this.call("POST", "/stack/reword", undefined, { rev, message });
   }
 
   /** Take a rewrite back, while the branch is still where it left it. */

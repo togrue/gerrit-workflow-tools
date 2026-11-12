@@ -91,13 +91,12 @@ A **gap** names the work that would close it.
 | `ger.push` | `ger push` | |
 | `ger.setup` | `ger setup` | runs in a terminal; offered when the checkout lacks Gerrit settings |
 | `ger.installCli` | `ger vscode install` is the same step from the other side | installs the ger release with the extension's version, in a terminal (uv or pipx); offered when ger is not found |
-| `ger.stack.moveUp` | **gap** | `ger rebase` reorders interactively only |
-| `ger.stack.moveDown` | **gap** | `ger rebase` reorders interactively only |
-| `ger.stack.moveUpBlocked` | **gap** | no conflict preview on the CLI |
-| `ger.stack.moveDownBlocked` | **gap** | no conflict preview on the CLI |
 | `ger.stack.squash` | **gap** | `ger rebase` squashes interactively only |
 | `ger.stack.squashTakeMessage` | **gap** | `ger rebase` squashes interactively only |
 | `ger.stack.drop` | `ger edit --drop REV` | |
+| `ger.stack.copyChangeId` | `ger change-id REV` | |
+| `ger.stack.copyHash` | `ger sha CHANGEISH` | |
+| `ger.sortChains` | UI only | `ger inbox` prints chains by state |
 | `ger.openDiff` | UI only | `ger review --stage` shows the diff to git's own tools |
 | `ger.openLocation` | UI only | |
 | `ger.nextComment` | UI only | `ger show` lists every unresolved chain |

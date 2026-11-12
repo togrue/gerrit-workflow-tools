@@ -127,9 +127,9 @@ export async function run(): Promise<void> {
         `state  | ${api.model.state}`,
         `events | ${api.events.events?.state ?? "(not said)"}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
-        ...(await dump(api.stackView)).map((line) => `stack  | ${line}`),
+        ...api.stackView.lines().map((line) => `stack  | ${line}`),
         `change | title: ${shown ? `${shown.number ? `Change ${shown.number}` : "Change"} — ${api.changeView.shown?.summary ?? shown.title}` : "(nothing shown)"}`,
-        ...(await dump(api.changeView)).map((line) => `change | ${line}`),
+        ...(await api.changeView.lines()).map((line) => `change | ${line}`),
         `editor | ${editor()}`,
       ].map(normalize);
     };
@@ -181,19 +181,27 @@ export async function run(): Promise<void> {
       before = after;
     };
 
+    /** A row of Local stack, as its context menu and its buttons hand it to a command. */
     const stackRow = async (summary: string) => {
-      const row = await find(api.stackView, summary);
-      assert.ok(row, `stack row "${summary}"`);
-      return row;
+      const commit = api.model.stack?.commits.find((c) => c.summary === summary);
+      assert.ok(commit, `stack row "${summary}"`);
+      return { webviewSection: "commit", sha: commit.sha, shas: [commit.sha] };
+    };
+    /** Where a row is in Local stack as shown, newest first: gap `n` is the line above it, `n + 1` the line under it. */
+    const shownAt = (summary: string): number => {
+      const shown = [...(api.model.stack?.commits ?? [])].reverse();
+      const index = shown.findIndex((c) => c.summary === summary);
+      assert.ok(index >= 0, `stack row "${summary}"`);
+      return index;
+    };
+    /** Drag rows and let go on the line at `gap`. */
+    const drag = (summaries: string[], gap: () => number) => async () => {
+      const shas = await Promise.all(summaries.map(async (summary) => (await stackRow(summary)).sha));
+      await api.stackView.move(shas, gap());
     };
     const chainRow = async (subject: string) => {
       const row = await find(api.overviewView, subject);
       assert.ok(row, `overview row "${subject}"`);
-      return row;
-    };
-    const threadRow = async (first: RegExp) => {
-      const row = await find(api.changeView, first);
-      assert.ok(row, `thread ${first}`);
       return row;
     };
     const chain = (first: RegExp): CommentChain => {
@@ -201,11 +209,25 @@ export async function run(): Promise<void> {
       assert.ok(found, `chain ${first}`);
       return found;
     };
+    /** A comment chain of the Change view, as its buttons hand it to a command. */
+    const threadRow = async (first: RegExp) => ({ kind: "thread" as const, chain: chain(first) });
     const exec = (command: string, ...args: unknown[]) => () => vscode.commands.executeCommand(command, ...args);
 
     // --- The overview -------------------------------------------------------------
     await press("Click the status bar item", "The Change view opens on the change the status bar names (CI failed on 102).", exec("ger.openHeadline"));
     await press("Review chains › Mark All Activity as Seen", "Every \"● new activity\" marker goes; nothing else changes.", exec("ger.markSeen"));
+    await press(
+      "Review chains › Sort Chains… › By last activity, oldest first",
+      "A picker offers the three orders, the current one marked; both sections say \"oldest first\" and list their chains that way.",
+      exec("ger.sortChains"),
+      [{ pick: "By last activity, oldest first" }],
+    );
+    await press(
+      "Review chains › Sort Chains… › By chain state",
+      "Back to the order that puts what needs you first; the sections no longer name an order.",
+      exec("ger.sortChains"),
+      [{ pick: "By chain state" }],
+    );
     await press("Review chains › Refresh from Gerrit", "Both Review chains and Local stack show progress while they reload from Gerrit. With nothing new there, nothing changes.", exec("ger.refresh"));
     const theirs = await chainRow("Add retry to the uploader");
     await press(
@@ -277,9 +299,20 @@ export async function run(): Promise<void> {
     // --- Your commit with comments ----------------------------------------------------
     await press(
       "Click \"Extract command routing\" in Local stack",
-      "The Change view is titled Change 101 and shows b.txt under Files and both unresolved comments.",
+      "The Change view is titled Change 101 and shows its commit message (editable: it is your commit), the local commit against its base, b.txt under Files with its added and removed lines, and both unresolved comments.",
       exec("ger.openChange", await stackRow("Extract command routing")),
     );
+    await press(
+      "Change › Compare › Gerrit vs. local",
+      "The files list becomes what your commit changes compared with Gerrit's patchset: nothing, as the commit is the pushed one.",
+      () => api.changeView.choose("local", "gerrit"),
+    );
+    await press(
+      "Change › Show › Gerrit's current patchset",
+      "The view shows patchset 1 as Gerrit has it, against its base; its message is read-only.",
+      () => api.changeView.choose("current", "base"),
+    );
+    await press("Change › Show › Local commit", "Back on your commit: the message is editable again.", () => api.changeView.choose("local", "base"));
     await press("Change › Next Unresolved Comment (Alt+F9)", "b.txt opens at line 1, the first thread expands, the status bar says Comment 1 of 2.", exec("ger.nextComment"));
     await press("Next Unresolved Comment again", "The second thread: Comment 2 of 2.", exec("ger.nextComment"));
     await press("Next Unresolved Comment a third time", "It wraps around to Comment 1 of 2.", exec("ger.nextComment"));
@@ -370,14 +403,59 @@ export async function run(): Promise<void> {
     // --- Rewriting the stack ----------------------------------------------------------
     await press("Local stack › Push to Gerrit…", "ger push runs in a new terminal of its own (never typed into one that is busy), which shows what it will push and asks first.", exec("ger.push"));
     await press(
-      "Inline ↑ on \"Refactor parser init\"",
-      "It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.",
-      exec("ger.stack.moveUp", await stackRow("Refactor parser init")),
+      "Right-click \"Refactor parser init\" › Copy Commit Hash",
+      "The commit's full id is on the clipboard; the status bar says so.",
+      exec("ger.stack.copyHash", await stackRow("Refactor parser init")),
     );
     await press(
-      "Inline ↓ on \"Refactor parser init\", then Undo",
+      "Select two rows, right-click › Copy Change-Id",
+      "Both Change-Ids are on the clipboard, one per line, newest first as shown.",
+      async () => {
+        const [one, two] = [await stackRow("Refactor parser init"), await stackRow("Extract command routing")];
+        await vscode.commands.executeCommand("ger.stack.copyChangeId", { ...one, shas: [one.sha, two.sha] });
+      },
+    );
+    await press(
+      "Drag \"Refactor parser init\" to the line above \"Extract command routing\"",
+      "It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.",
+      drag(["Refactor parser init"], () => shownAt("Extract command routing")),
+    );
+    await press(
+      "Drag \"Refactor parser init\" to the bottom, then Undo",
       "It swaps back with the commit below; Undo puts the stack back as it was before this move.",
-      exec("ger.stack.moveDown", await stackRow("Refactor parser init")),
+      drag(["Refactor parser init"], () => api.model.stack?.commits.length ?? 0),
+      [{ button: "Undo" }],
+    );
+    await press(
+      "Select \"Cleanup after experiment\" and \"Extract command routing\", drag them to the bottom, then Undo",
+      "Both land under the last row, together and in the order they had; Undo puts the stack back.",
+      drag(["Cleanup after experiment", "Extract command routing"], () => api.model.stack?.commits.length ?? 0),
+      [{ button: "Undo" }],
+    );
+    await meanwhile("you edit a.txt and do not commit it", () => fs.writeFileSync(path.join(repo, "a.txt"), "file a.txt\nnot committed yet\n", "utf8"));
+    await press(
+      "Drag \"Extract command routing\" up one row, with uncommitted changes › Cancel",
+      "A dialog asks whether to stash the uncommitted changes and continue; Cancel leaves the stack and the edit as they were.",
+      drag(["Extract command routing"], () => shownAt("Refactor parser init")),
+      [{ dismiss: true }],
+    );
+    await press(
+      "The same drag › Stash and Continue, then Undo",
+      "The commits swap, and the edit to a.txt is back in the worktree afterwards; Undo puts the stack back and keeps the edit.",
+      drag(["Extract command routing"], () => shownAt("Refactor parser init")),
+      [{ button: "Stash and Continue" }, { button: "Undo" }],
+    );
+    await meanwhile("you take the edit to a.txt back", () => {
+      assert.equal(fs.readFileSync(path.join(repo, "a.txt"), "utf8"), "file a.txt\nnot committed yet\n", "the stash was put back");
+      execFileSync("git", ["checkout", "--", "a.txt"], { cwd: repo });
+    });
+    await press(
+      "Change › edit the commit message of \"test! temporary experiment\" › Apply, then Undo",
+      "The commit gets the new message and keeps its Change-Id, though the text typed had none; the commits above get new ids, nothing else changes. Undo puts the old message back.",
+      async () => {
+        const row = await stackRow("test! temporary experiment");
+        await api.changeView.reword(row.sha, "test! a better name\n\nAnd why.", () => undefined);
+      },
       [{ button: "Undo" }],
     );
     await meanwhile("you commit a rework of d.txt in the terminal", () => {
@@ -385,29 +463,20 @@ export async function run(): Promise<void> {
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qam", "Rework d.txt"], { cwd: repo });
     });
     await press(
-      "Inline ⊘ (Show Why It Cannot Move Earlier) on \"Rework d.txt\"",
-      "It says which commit it would conflict with, and that nothing changed.",
-      exec("ger.stack.moveDownBlocked", await stackRow("Rework d.txt")),
+      "Drag \"Rework d.txt\" to the line under \"Cleanup after experiment\"",
+      "One place down: the conflict preview already knows the two cannot swap, so it says at once which commit would conflict, and that nothing changed.",
+      drag(["Rework d.txt"], () => shownAt("Cleanup after experiment") + 1),
     );
-    const dragged = async (summary: string) => {
-      const data = new vscode.DataTransfer();
-      api.stackView.handleDrag([await stackRow(summary)], data);
-      return data;
-    };
-    {
-      const [target, data] = [await stackRow("Cleanup after experiment"), await dragged("Rework d.txt")];
-      await press("Drag \"Rework d.txt\" onto \"Cleanup after experiment\"", "Refused before anything is touched, saying why; the stack stays as it was.", () =>
-        api.stackView.handleDrop(target, data),
-      );
-    }
-    {
-      const [target, data] = [await stackRow("Extract command routing"), await dragged("Cleanup after experiment")];
-      await press(
-        "Drag \"Cleanup after experiment\" onto \"Extract command routing\"",
-        "It takes that commit's place, and the commits between move up one; Undo is offered.",
-        () => api.stackView.handleDrop(target, data),
-      );
-    }
+    await press(
+      "Drag \"Rework d.txt\" to the bottom",
+      "Refused before anything is touched, saying which commit does not apply in its new place; the stack stays as it was.",
+      drag(["Rework d.txt"], () => api.model.stack?.commits.length ?? 0),
+    );
+    await press(
+      "Drag \"Cleanup after experiment\" to the line under \"Extract command routing\"",
+      "It lands there, and the commits between move up one; Undo is offered.",
+      drag(["Cleanup after experiment"], () => shownAt("Extract command routing") + 1),
+    );
     await press(
       "Right-click \"Rework d.txt\" › Squash into Commit Below, then Undo",
       "It folds into the commit below, keeping that commit's message; Undo brings it back.",

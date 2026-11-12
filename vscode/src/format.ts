@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState, StackCommit, StackMoves } from "./api";
+import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -140,18 +140,6 @@ export function chainDescription(chain: Chain, section: string): string {
   return parts.join(" · ");
 }
 
-export function commitDescription(commit: StackCommit): string {
-  const parts = [commit.short_sha];
-  parts.push(commit.pushed ? commitVotes(commit) : "not on Gerrit");
-  if (commit.patchset_status === "newer") {
-    parts.push("ahead of Gerrit");
-  }
-  if (commit.held_back) {
-    parts.push("held back");
-  }
-  return parts.join(" · ");
-}
-
 /** Last activity per chain, as remembered from the previous look. */
 export type Seen = Record<string, string>;
 
@@ -203,16 +191,36 @@ export function blockedMove(moving: string, other: string, conflict: MoveConflic
   return `"${moving}" cannot change places with "${other}": "${conflict.summary}" would conflict${files}.`;
 }
 
-/** `commits` (oldest first) with the one at `index` moved by `step` places; undefined when it cannot move. */
-export function moved<T>(commits: readonly T[], index: number, step: number): T[] | undefined {
-  const target = index + step;
-  if (index < 0 || index >= commits.length || target < 0 || target >= commits.length || step === 0) {
+/**
+ * `order` after the `moving` items are taken out and put back together at `gap`, in the order
+ * they had. Gap 0 is before the first item, `order.length` after the last. Undefined when
+ * nothing would change, or nothing of `moving` is in `order`.
+ */
+export function movedTo<T>(order: readonly T[], moving: readonly T[], gap: number): T[] | undefined {
+  const picked = order.filter((item) => moving.includes(item));
+  if (!picked.length || gap < 0 || gap > order.length) {
     return undefined;
   }
-  const next = [...commits];
-  const [item] = next.splice(index, 1);
-  next.splice(target, 0, item);
-  return next;
+  const stays = (item: T) => !moving.includes(item);
+  const next = [...order.slice(0, gap).filter(stays), ...picked, ...order.slice(gap).filter(stays)];
+  return next.every((item, index) => item === order[index]) ? undefined : next;
+}
+
+export type ChainSort = "state" | "newest" | "oldest";
+
+export const CHAIN_SORTS: Record<ChainSort, string> = {
+  state: "By chain state",
+  newest: "By last activity, newest first",
+  oldest: "By last activity, oldest first",
+};
+
+/** The chains of one section in the order asked for; `state` is the order the service gives (most urgent first). */
+export function sortedChains(chains: readonly Chain[], sort: ChainSort): Chain[] {
+  const time = (chain: Chain) => chain.last_activity ?? "";
+  if (sort === "state") {
+    return [...chains];
+  }
+  return [...chains].sort((a, b) => (sort === "newest" ? time(b).localeCompare(time(a)) : time(a).localeCompare(time(b))));
 }
 
 /** A LOCATION for `ger comment`: the file, one line, or a range of lines (from 1). */
@@ -222,16 +230,4 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   }
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
-}
-
-/**
- * `commits` (oldest first) after `dragged` is dropped on `target`: it takes the target's place,
- * whichever way it travelled, so dropping on the neighbour below swaps the two. No target (the
- * empty space under the list, which shows newest first) means the bottom: oldest. Undefined
- * when nothing would change.
- */
-export function droppedOn<T>(commits: readonly T[], dragged: T, target: T | undefined): T[] | undefined {
-  const from = commits.indexOf(dragged);
-  const to = target === undefined ? 0 : commits.indexOf(target);
-  return to < 0 ? undefined : moved(commits, from, to - from);
 }

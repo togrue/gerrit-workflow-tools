@@ -34,7 +34,7 @@ export class ShownCommitFollower implements vscode.Disposable {
       const back = stack.commits.find((c) => c.change_id === lost.changeId);
       if (back) {
         this.lost = undefined;
-        void this.changeView.open({ ...lost.target, rev: back.sha, title: back.summary });
+        void this.changeView.open({ ...lost.target, rev: back.sha, title: back.summary }, true);
       }
       return;
     }
@@ -47,7 +47,7 @@ export class ShownCommitFollower implements vscode.Disposable {
     const changeId = this.changeView.shown?.change_id;
     const moved = changeId ? stack.commits.find((c) => c.change_id === changeId) : undefined;
     if (moved) {
-      void this.changeView.open({ ...target, rev: moved.sha, title: moved.summary });
+      void this.changeView.open({ ...target, rev: moved.sha, title: moved.summary }, true);
     } else {
       this.lost = changeId ? { target, changeId } : undefined;
       this.changeView.close();

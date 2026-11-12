@@ -56,7 +56,7 @@ def failure_response(error: BaseException) -> tuple[int, dict[str, Any]]:
     """HTTP status and ``{"error": {code, message}}`` body for *error*; 500 ``INTERNAL`` for a bug."""
     for kind, status, code in _OWN_FAILURES:
         if isinstance(error, kind):
-            return status, {"error": {"code": code, "message": str(error)}}
+            return status, {"error": {**error_json(error), "code": code}}
     failure = failure_exit(error)
     if failure is None:
         logger.error("unhandled error in ger serve", exc_info=error)

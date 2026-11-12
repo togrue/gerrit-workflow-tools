@@ -23,9 +23,10 @@ from gerrit_workflow_tools.core.change_id import (
     strip_change_id_lines,
 )
 from gerrit_workflow_tools.core.changeish import is_change_id
-from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git
+from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import current_branch
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
+from gerrit_workflow_tools.core.reword import move_head, rewrite_messages
 from gerrit_workflow_tools.core.stack import (
     Commit,
     read_commit_rows,
@@ -95,21 +96,6 @@ def _ensure_safe_for_fix(cwd: Path) -> None:
         raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
 
 
-def _commit_tree(cwd: Path, tree: str, parents: list[str], message: str, ident_env: dict[str, str]) -> str:
-    """Create a commit with *message* (via stdin) and return its SHA."""
-    args = ["commit-tree", tree, "-F", "-"]
-    for parent in parents:
-        args.extend(["-p", parent])
-    p = git(*args, cwd=cwd, env=ident_env, input=message, check=False)
-    if p.returncode != 0:
-        raise GitError(
-            "git commit-tree failed",
-            stderr=p.stderr.strip() or p.stdout.strip(),
-            returncode=p.returncode,
-        )
-    return p.stdout.strip()
-
-
 def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     """Rewrite stack commit messages, assigning Change-Ids where missing on the last line."""
     if is_change_id(input_arg):
@@ -121,42 +107,20 @@ def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
     if not needs_fix:
         return
 
-    # Commits before the first message change keep their SHAs; only rewrite from there.
-    first_fix_sha = needs_fix[0].sha
-    start = next(i for i, c in enumerate(rows) if c.sha == first_fix_sha)
-    to_rewrite = rows[start:]
+    messages: dict[str, str] = {}
+    for idx, commit in enumerate(needs_fix, start=1):
+        print(f'{idx}/{len(needs_fix)} Fixed "{commit.subject}"', file=sys.stderr, flush=True)
+        base_msg = strip_change_id_lines(commit.body)
+        first_parent = commit.parents[0] if commit.parents else None
+        cid = generate_change_id_from_idents(commit.committer_ident, first_parent, base_msg)
+        messages[commit.sha] = append_change_id_footer(base_msg, cid)
 
-    total = len(needs_fix)
-    fix_progress = {c.sha: (i, c.subject) for i, c in enumerate(needs_fix, start=1)}
-
-    head_ref = current_branch(cwd)
-    sha_map: dict[str, str] = {}
-    new_head: str | None = None
-    for commit in to_rewrite:
-        new_parents = [sha_map.get(p, p) for p in commit.parents]
-
-        if commit.sha in fix_progress:
-            idx, subject = fix_progress[commit.sha]
-            print(f'{idx}/{total} Fixed "{subject}"', file=sys.stderr, flush=True)
-            base_msg = strip_change_id_lines(commit.body)
-            first_parent = commit.parents[0] if commit.parents else None
-            cid = generate_change_id_from_idents(commit.committer_ident, first_parent, base_msg)
-            message = append_change_id_footer(base_msg, cid)
-        else:
-            message = commit.body
-
-        new_sha = _commit_tree(cwd, commit.tree, new_parents, message, commit.ident_env)
-        sha_map[commit.sha] = new_sha
-        new_head = new_sha
-
+    new_head = rewrite_messages(cwd, rows, messages)
     assert new_head is not None
-    ref = "HEAD" if head_ref == "HEAD" else f"refs/heads/{head_ref}"
-    update = git("update-ref", ref, new_head, cwd=cwd, check=False)
-    if update.returncode != 0:
-        raise ChangeIdError(
-            f"error: --fix failed: {update.stderr.strip() or update.stdout.strip()}",
-            code=int(ExitCode.GIT),
-        )
+    try:
+        move_head(cwd, new_head)
+    except GitError as error:
+        raise ChangeIdError(f"error: --fix failed: {error.stderr or error}", code=int(ExitCode.GIT)) from error
 
 
 def main(argv: list[str] | None = None) -> int:

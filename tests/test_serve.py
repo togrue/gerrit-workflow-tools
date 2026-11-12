@@ -358,7 +358,13 @@ def test_diff_since_reviewed_is_the_current_patchset_against_the_one_you_voted_o
     api = GerApi(stack_repo, gerrit=store)
 
     delta = _get(api, "/diff", rev="change:103", since="reviewed")
-    assert delta["since"] == {"patch_set": 1, "current_patch_set": 2, "up_to_date": False, "rebased": False}
+    assert delta["since"] == {
+        "patch_set": 1,
+        "current_patch_set": 2,
+        "to_patch_set": 2,
+        "up_to_date": False,
+        "rebased": False,
+    }
     assert (delta["base"], delta["commit"]) == (rows[3].sha, amended)
     # d.txt is new in the change, but only modified since your review.
     assert delta["files"] == [{"path": "d.txt", "status": "M", "old_path": None, "insertions": 1, "deletions": 0}]

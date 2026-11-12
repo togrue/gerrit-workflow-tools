@@ -25,19 +25,45 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
   it for the chain's changes. A `●` marks new activity.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
+- **Sort Chains…** (title bar): *By chain state* — the order `ger inbox` gives, what needs you
+  first — or *By last activity*, newest or oldest first. It applies to both sections and is
+  remembered per workspace; the sections name an order other than by state.
 
 **Local stack**
 
-- The commits above your upstream, newest first, each with patchset state, votes, unresolved
-  comments, and whether `ger push` would hold it back.
-- **Reorder by drag and drop**, or with the arrows on a row. A dropped commit takes the place of
-  the one you drop it on, up or down; drop it under the list to make it the oldest. All or nothing: if a commit does
-  not apply in its new place, nothing is touched and you are told which commit and which files.
-- **Conflict preview**: where two neighbours cannot swap places, the arrow is replaced by a
-  blocked marker; click it (or hover the row) to see which commit would conflict in which files.
-- **Squash into the commit below** (keeping either message — never both, so there is always
-  exactly one Change-Id) and **drop**, from a commit's context menu. Every rewrite offers
-  **Undo** right after.
+The commits above your upstream, newest first. One row per commit:
+
+- A **cloud** in front says how the commit relates to Gerrit, by colour: the text colour when it
+  is the same as on Gerrit, **yellow** when you changed it since the last push, **red** when
+  Gerrit has a newer patchset than this commit (outdated), **blue** when both happened
+  (diverged: you changed it, and Gerrit's current patchset came from somewhere else). A dimmed
+  upload cloud is a commit Gerrit does not have yet; a check, one that is merged.
+- On the right, as icons: **unresolved comments** (with their number), the **review vote** and the
+  **CI vote**. Dimmed, they are the last pushed patchset's: the commit's code changed since, and
+  Gerrit may not keep them. Hover any of them for the words.
+- `HEAD`, the short commit id, and *held back* where `ger push` would stop at the ready boundary.
+- Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
+  message, while the keyboard stays in the list. `Enter` (or a double click) moves to the Change view.
+- **Select several** with `Ctrl`/`Cmd`+click, `Shift`+click or `Shift`+↑/↓ (`Ctrl+A`: all).
+- **Reorder by drag and drop.** While you drag, a **line between two rows** shows where the
+  commits will land; selected commits move together and keep their order. All or nothing: if a
+  commit does not apply in its new place, nothing is touched and you are told which commit and
+  which files. One place up or down, the **conflict preview** already knows and says so at once
+  (hover a row to see which neighbour it cannot swap with).
+- **Uncommitted changes** do not stop a rewrite: you are asked whether to stash them; they are
+  put back right after, also when the rewrite is refused. If they no longer fit (the file they
+  edit went with a dropped commit), they stay in `git stash` and you are told.
+- Context menu: **Edit Commit Here**, **Open in Gerrit**, **Hand to Agent…**, **Squash into the
+  commit below** (keeping either message — never both, so there is always exactly one
+  Change-Id), **Drop**, **Copy Change-Id** and **Copy Commit Hash** (of every selected row, one
+  per line). Every rewrite offers **Undo** right after.
+- **During a rebase** (a `ger edit`, a conflict) the view shows the branch as it was before it,
+  with a **marker** on the commit the rebase stopped at; commits still to be replayed are
+  **dimmed**. Stopped on a conflict, the marked commit is dimmed too: it is not applied yet.
+  Nothing can be moved until the rebase is finished or aborted.
+- **A merge commit** in the stack is listed (marked *merge*; what it merged is not part of the
+  stack, as on Gerrit). A stack with one cannot be reordered, squashed or dropped from here —
+  the view says so when you try; `ger rebase` does it by hand. Rewording still works.
 - Push (`ger push` in a new terminal of its own, where it can ask you).
 - **No upstream** (typical after checking a change out with Gerrit's download commands; `ger
   checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
@@ -47,10 +73,21 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 **Change** — select any change or commit
 
 - What it needs, in words, with its votes.
-- **Since your review**: on someone else's change you already reviewed, the files that changed
-  between the patchset you voted or commented on and the current one — click for that diff.
-- **Files**: click for a diff against the parent. The commit you are standing on diffs against
-  the real file, so you can fix things in the diff editor.
+- **Commit message**: the whole message. For a commit of your local stack it is a text box:
+  edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's message. Only
+  the message is rewritten — uncommitted changes stay where they are, nothing can conflict —
+  and a message that lost its Change-Id footer keeps the commit's. **Undo** is offered right
+  after. What you typed survives a refresh and switching views until you apply or revert it.
+- **Show**: which version of the change you look at. It always starts on your **local commit**
+  when the change is in your stack; the list also has every patchset on Gerrit, the current one
+  and the one you reviewed marked.
+- **Compare**: *Against its base commit* (what the change does), *Since my last review* (from
+  the newest patchset you voted or commented on), or *Gerrit vs. local* (Gerrit's current
+  patchset against your commit: what a push would add). On someone else's change you reviewed
+  before, a line says what is new since, with **Show** to switch to it.
+- **Files**: added and removed lines per file, in the colours git gives them. Click for the
+  diff of what is compared. The commit you are standing on diffs against the real file, so you
+  can fix things in the diff editor.
 - **Comments**: unresolved first. Click to jump to the line; *Next / Previous Unresolved Comment* (the arrows in the view's title bar) step
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
@@ -66,7 +103,7 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - **CI**: opened on demand (it downloads build logs). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
-- **Review Change** (pull-request icon, changes that are not in your stack): `ger review`
+- **Review Change** (eye icon, changes that are not in your stack): `ger review`
   fetches the change into the review worktree and offers to open that worktree in a new window; your
   own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
   this checkout to a `change-<n>` branch instead, the message says so, and *Leave Review Checkout*
@@ -172,7 +209,7 @@ A branch without an upstream still shows your review chains; *Local stack* offer
 cd vscode
 npm install
 npm run compile     # or: npm run watch
-npm test            # unit tests of the pure parts (formatting, activity, reorder math) and of package.json against the code (menus, row contexts, commands)
+npm test            # unit tests of the pure parts (formatting, activity, reorder math, the view models of the two webview views) and of package.json against the code (menus, row contexts, commands)
 npm run e2e         # the extension inside a real VS Code, against a fixture repo and a fake Gerrit
 ```
 
@@ -181,7 +218,15 @@ a generated four-commit repository, and has the extension start the real `ger se
 test suite's fake Gerrit (`test/e2e/fake_ger.py`). Your git config and ger's cache and config
 are kept out. Needs `uv`.
 
-The suite presses every button in turn. Everything the extension says or does outside its
+*Local stack* and *Change* are webview views: `src/stackRows.ts` and `src/changeRows.ts` build
+what they show as plain data, the pages in `media/` (`stack.js`, `change.js`, `views.css`) only
+draw it and send back what you did. They use VS Code's icon font, which `npm install` copies
+from `@vscode/codicons` into `media/` (a webview cannot reach the editor's own copy). The font is
+Microsoft's [Codicons](https://github.com/microsoft/vscode-codicons), licensed CC BY 4.0.
+
+The suite presses every button in turn. For the two webview views it calls what their pages
+send (a drop at a line, a button on a comment) and prints their view models as text; how the
+pages look and feel is not covered by it. Everything the extension says or does outside its
 views (notifications, dialogs, pickers, input boxes, the status bar, terminals, the clipboard,
 the browser) goes through one seam, `src/ui.ts`, which the suite replaces with a scripted user
 (`test/e2e/scriptedUi.ts`) that answers each prompt and writes it down. For each press,

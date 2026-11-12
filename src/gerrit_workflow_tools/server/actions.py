@@ -28,6 +28,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     open_review,
 )
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
+from gerrit_workflow_tools.core.reword import reword_commit
 from gerrit_workflow_tools.core.upstream import set_branch_upstream
 from gerrit_workflow_tools.render.review_json import review_state_json
 from gerrit_workflow_tools.render.show_json import written_comment_json
@@ -123,9 +124,27 @@ def rewrite(ctx: Context, req: Request) -> dict[str, Any]:
     """Rewrite the local stack as ``steps`` say (oldest first), all or nothing; answers the new stack.
 
     A step is a commit id (kept) or ``{sha, action}``. ``previous_head`` in the answer is
-    what ``/stack/undo`` takes back.
+    what ``/stack/undo`` takes back. With ``autostash``, uncommitted changes are stashed for
+    the rewrite and put back after it; ``stash_kept`` says they did not go back on cleanly.
+    Without it they are refused, with ``reason`` ``uncommitted-changes``.
     """
-    done = rewrite_stack(ctx.cwd, _steps(req.body_field("steps", list, required=True)), settings=ctx.settings)
+    done = rewrite_stack(
+        ctx.cwd,
+        _steps(req.body_field("steps", list, required=True)),
+        settings=ctx.settings,
+        autostash=bool(req.body_field("autostash", bool)),
+    )
+    return {**views.stack(ctx, Request()), "previous_head": done.previous_head, "stash_kept": done.stash_kept}
+
+
+def reword(ctx: Context, req: Request) -> dict[str, Any]:
+    """Give the local stack commit ``rev`` the commit message ``message``; answers the new stack.
+
+    Only the message changes: uncommitted changes stay where they are. A message without the
+    commit's **Change-Id** keeps it. ``previous_head`` is what ``/stack/undo`` takes back.
+    """
+    rev = safe_rev(req.body_field("rev", str, required=True))
+    done = reword_commit(ctx.cwd, rev, req.body_field("message", str, required=True), settings=ctx.settings)
     return {**views.stack(ctx, Request()), "previous_head": done.previous_head}
 
 

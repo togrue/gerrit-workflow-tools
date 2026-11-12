@@ -47,6 +47,15 @@ _TODO_WORD: dict[StepAction, str] = {
 class ReorderRefusal(RuntimeError):
     """The stack was left as it was: the request, the worktree, or a conflict stands in the way."""
 
+    reason: str | None = None
+    """A word for a refusal the caller can do something about, beside the message for the user."""
+
+
+class UncommittedChanges(ReorderRefusal):
+    """Uncommitted changes are in the way; the rewrite can stash them (``autostash``) and try again."""
+
+    reason = "uncommitted-changes"
+
 
 @dataclass(frozen=True)
 class StackStep:
@@ -62,9 +71,11 @@ class StackRewrite:
 
     commits: list[Commit]
     previous_head: str
+    stash_kept: bool = False
+    """The uncommitted changes stashed for the rewrite did not go back on cleanly: they are in ``git stash``."""
 
 
-def _refuse_unless_on_the_branch(cwd: Path | str) -> None:
+def refuse_unless_on_the_branch(cwd: Path | str) -> None:
     """Asked before the steps are read: off the branch, ``HEAD`` is not the stack the caller was shown."""
     if refusal := rebase_refusal(cwd):
         raise ReorderRefusal(refusal)
@@ -72,9 +83,11 @@ def _refuse_unless_on_the_branch(cwd: Path | str) -> None:
         raise ReorderRefusal("HEAD is detached; check out the branch whose stack you want to rewrite")
 
 
-def _refuse_unless_ready(cwd: Path | str, upstream_tip: str) -> None:
-    if refusal := history_rewrite_refusal(cwd):
+def _refuse_unless_ready(cwd: Path | str, upstream_tip: str, *, autostash: bool) -> None:
+    if refusal := rebase_refusal(cwd):
         raise ReorderRefusal(refusal)
+    if not autostash and (refusal := history_rewrite_refusal(cwd)):
+        raise UncommittedChanges(refusal)
     if git_out("rev-list", "--merges", f"{upstream_tip}..HEAD", cwd=cwd):
         raise ReorderRefusal("the local stack contains a merge commit; rewrite it by hand with ger rebase")
 
@@ -126,19 +139,27 @@ def _preview(cwd: Path | str, base: str, picks: Sequence[Commit], stack: Sequenc
         return None  # an older git: the rebase below finds out, and is aborted
 
 
-def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Settings) -> StackRewrite:
+def _stash_tip(cwd: Path | str) -> str:
+    return git("rev-parse", "-q", "--verify", "refs/stash", cwd=cwd, check=False).stdout.strip()
+
+
+def rewrite_stack(
+    cwd: Path | str, steps: Sequence[StackStep], *, settings: Settings, autostash: bool = False
+) -> StackRewrite:
     """Rewrite the local stack of the checked-out branch as *steps* say (oldest first).
 
     Raises :class:`ReorderRefusal`, with the branch untouched, when *steps* do not cover the
-    stack, the worktree is not clean, or a commit does not apply in its new place.
+    stack, the worktree is not clean (:class:`UncommittedChanges`), or a commit does not apply
+    in its new place. With *autostash*, uncommitted changes to tracked files are stashed for
+    the rewrite and put back after it, or after its refusal.
     """
-    _refuse_unless_on_the_branch(cwd)
+    refuse_unless_on_the_branch(cwd)
     snapshot = get_stack_snapshot(cwd, first_parent=True, settings=settings)
     head = commit_sha_or_none(cwd, "HEAD") or ""
     resolved = _resolve_steps(snapshot.commits, steps)
     if [(c.sha, action) for c, action in resolved] == [(c.sha, "pick") for c in snapshot.commits]:
         return StackRewrite(list(snapshot.commits), head)
-    _refuse_unless_ready(cwd, snapshot.upstream_tip)
+    _refuse_unless_ready(cwd, snapshot.upstream_tip, autostash=autostash)
     kept = [commit for commit, action in resolved if action != "drop"]
     if conflict := _preview(cwd, snapshot.upstream_tip, kept, snapshot.commits):
         raise _does_not_apply(conflict.commit, conflict.files)
@@ -151,7 +172,9 @@ def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Sett
             "GIT_EDITOR": "true",
             TODO_ENV: str(todo),
         }
-        done = git("rebase", "-i", "--no-autosquash", snapshot.upstream_tip, cwd=cwd, env=env, check=False)
+        stash_before = _stash_tip(cwd) if autostash else ""
+        stash = "--autostash" if autostash else "--no-autostash"
+        done = git("rebase", "-i", "--no-autosquash", stash, snapshot.upstream_tip, cwd=cwd, env=env, check=False)
     if done.returncode != 0:
         stopped_at = git("rev-parse", "-q", "--verify", "REBASE_HEAD", cwd=cwd, check=False).stdout.strip()
         conflicted = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout.split()
@@ -162,7 +185,10 @@ def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Sett
                 f"git rebase failed: {_git_reason(done.stderr or done.stdout)}; the stack was left as it was"
             )
         raise _does_not_apply(next((c for c, _ in resolved if c.sha == stopped_at), None), conflicted)
-    return StackRewrite(list(get_stack_snapshot(cwd, first_parent=True, settings=settings).commits), head)
+    # Git leaves a stash that conflicts with the rewritten commits where it is, and says so only in words.
+    stash_kept = autostash and _stash_tip(cwd) != stash_before
+    commits = list(get_stack_snapshot(cwd, first_parent=True, settings=settings).commits)
+    return StackRewrite(commits, head, stash_kept=stash_kept)
 
 
 def reorder_stack(cwd: Path | str, order: Sequence[str], *, settings: Settings) -> list[Commit]:

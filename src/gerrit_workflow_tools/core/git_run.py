@@ -129,19 +129,34 @@ def _run_git(
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd_str or ".")
     merged = {**os.environ, **env} if env else None
     t0 = time.perf_counter()
-    result = subprocess.run(
-        cmd,
-        cwd=cwd,
-        env=merged,
-        input=input_text,
-        # Git writes UTF-8 whatever the console code page says; text=True alone uses the locale.
-        encoding="utf-8",
-        errors="replace",
-        capture_output=capture,
-        check=False,
-    )
+    result: subprocess.CompletedProcess[str]
+    if input_text is None:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=merged,
+            # Git writes UTF-8 whatever the console code page says; text=True alone uses the locale.
+            encoding="utf-8",
+            errors="replace",
+            capture_output=capture,
+            check=False,
+        )
+    else:
+        # Bytes in: a text-mode pipe turns every LF of the input into CR LF on Windows, and git
+        # would store that — in a commit message given to `commit-tree`, in a diff given to `patch-id`.
+        raw = subprocess.run(
+            cmd, cwd=cwd, env=merged, input=input_text.encode("utf-8"), capture_output=capture, check=False
+        )
+        result = subprocess.CompletedProcess(raw.args, raw.returncode, _as_text(raw.stdout), _as_text(raw.stderr))
     record_call("git", " ".join(cmd), time.perf_counter() - t0)
     return result
+
+
+def _as_text(output: bytes | None) -> str:
+    """Git's output as text mode reads it: UTF-8, with every line ending a line feed."""
+    if output is None:
+        return None  # type: ignore[return-value]  # not captured, as in text mode
+    return output.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
 @lru_cache(maxsize=512)

@@ -38,6 +38,27 @@ export function staleReason(error: unknown): string {
   return error instanceof GerApiError && error.code === "GERRIT" ? `Gerrit unreachable: ${message}` : message;
 }
 
+/** What a webview view shows in place of its content while ger is not running. */
+export interface Waiting {
+  text: string;
+  /** A button under the text. */
+  link?: { label: string; command: string };
+}
+
+/** Why `what` (a view's content, as a noun phrase) is not shown in `state`; undefined when it is. */
+export function waitingFor(state: GerState, what: string): Waiting | undefined {
+  if (state === "ready") {
+    return undefined;
+  }
+  if (state === "starting") {
+    return { text: "Starting ger serve…" };
+  }
+  return {
+    text: `${what} shows here once ger runs. Review chains says what is missing and what to do next.`,
+    link: { label: "Show Review Chains", command: "ger.overview.focus" },
+  };
+}
+
 /** States only you can end (install ger, run `ger setup`, trust the folder, open a repository): polling them again would only restart `ger serve` to fail again. */
 export function waitsForYou(state: GerState): boolean {
   return state === "no-executable" || state === "setup" || state === "untrusted" || state === "no-repo";

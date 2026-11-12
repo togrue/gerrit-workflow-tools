@@ -10,15 +10,15 @@ import {
   chainsWithActivity,
   commentLocation,
   commitVotes,
-  droppedOn,
   eventsMayCome,
   fileState,
-  moved,
+  movedTo,
   refreshMode,
   reviewOpened,
   rememberSeen,
   sentence,
   severity,
+  sortedChains,
   swapKey,
   vote,
   votes,
@@ -82,29 +82,35 @@ test("activity is what moved since the chain was last seen", () => {
   assert.deepEqual(Object.keys(rememberSeen(overview(chain("b", "x")), marked)), ["b"]);
 });
 
-test("moving a commit keeps every commit exactly once", () => {
-  assert.deepEqual(moved(["a", "b", "c"], 0, 1), ["b", "a", "c"]);
-  assert.deepEqual(moved(["a", "b", "c"], 2, -1), ["a", "c", "b"]);
-});
-
 test("a new comment's location is the file, a line or a range, lines from 1", () => {
   assert.equal(commentLocation("a.py"), "a.py");
   assert.equal(commentLocation("a.py", { start: 4, end: 4 }), "a.py:4");
   assert.equal(commentLocation("a.py", { start: 7, end: 4 }), "a.py:4-7");
 });
 
-test("a dropped commit takes the place of the one it lands on, in either direction", () => {
-  // Oldest first; the view shows d c b a.
-  const stack = ["a", "b", "c", "d"];
-  assert.deepEqual(droppedOn(stack, "c", "b"), ["a", "c", "b", "d"], "onto the neighbour below: the two swap");
-  assert.deepEqual(droppedOn(stack, "b", "c"), ["a", "c", "b", "d"], "onto the neighbour above: the two swap");
-  assert.deepEqual(droppedOn(stack, "d", "a"), ["d", "a", "b", "c"], "newest to the very bottom");
-  assert.deepEqual(droppedOn(stack, "a", "d"), ["b", "c", "d", "a"], "oldest to the very top");
-  assert.deepEqual(droppedOn(stack, "c", undefined), ["c", "a", "b", "d"], "empty space under the list is the bottom");
-  assert.equal(droppedOn(stack, "c", "c"), undefined);
-  assert.equal(droppedOn(stack, "x", "c"), undefined);
-  assert.equal(moved(["a", "b", "c"], 2, 1), undefined);
-  assert.equal(moved(["a", "b", "c"], 0, -1), undefined);
+test("dragged commits land together in the gap the line showed, in the order they had", () => {
+  // As shown: newest first. Gap 0 is above the top row, 4 under the last.
+  const shown = ["d", "c", "b", "a"];
+  assert.deepEqual(movedTo(shown, ["b"], 0), ["b", "d", "c", "a"], "one commit to the top");
+  assert.deepEqual(movedTo(shown, ["d"], 4), ["c", "b", "a", "d"], "under the last row: the oldest");
+  assert.deepEqual(movedTo(shown, ["c"], 3), ["d", "b", "c", "a"], "one place down");
+  assert.deepEqual(movedTo(shown, ["a", "d"], 2), ["c", "d", "a", "b"], "two that were apart land together, newest first");
+  assert.deepEqual(movedTo(shown, ["c", "b"], 4), ["d", "a", "c", "b"], "a block moves as a block");
+  // Next to itself nothing moves: both gaps around a commit, and any gap inside a selected block.
+  assert.equal(movedTo(shown, ["c"], 1), undefined);
+  assert.equal(movedTo(shown, ["c"], 2), undefined);
+  assert.equal(movedTo(shown, ["c", "b"], 2), undefined);
+  assert.equal(movedTo(shown, ["x"], 0), undefined, "not a commit of the stack");
+  assert.equal(movedTo(shown, ["c"], 5), undefined);
+});
+
+test("chains sort by last activity either way, or stay as the service ordered them", () => {
+  const chains = [chain("urgent", "2026-11-02T00:00:00Z"), chain("old", "2026-11-01T00:00:00Z"), chain("new", "2026-11-03T00:00:00Z")];
+  const keys = (sort: Parameters<typeof sortedChains>[1]) => sortedChains(chains, sort).map((c) => c.key);
+  assert.deepEqual(keys("state"), ["urgent", "old", "new"]);
+  assert.deepEqual(keys("newest"), ["new", "urgent", "old"]);
+  assert.deepEqual(keys("oldest"), ["old", "urgent", "new"]);
+  assert.deepEqual(chains.map((c) => c.key), ["urgent", "old", "new"], "the overview itself is not reordered");
 });
 
 test("the conflict preview blocks only the swaps that would conflict", () => {

@@ -24,6 +24,7 @@
   ],
   "main": "./out/src/extension.js",
   "scripts": {
+    "postinstall": "node scripts/copy-codicons.js",
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "test": "tsc -p . && node --test \"out/test/**/*.test.js\"",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "~1.85.0",
+    "@vscode/codicons": "0.0.36",
     "typescript": "^5.4.0"
   },
   "capabilities": {
@@ -94,11 +96,13 @@
         },
         {
           "id": "ger.stack",
-          "name": "Local stack"
+          "name": "Local stack",
+          "type": "webview"
         },
         {
           "id": "ger.change",
-          "name": "Change"
+          "name": "Change",
+          "type": "webview"
         }
       ]
     },
@@ -137,31 +141,6 @@
         "view": "ger.overview",
         "contents": "`ger serve` stopped or failed. The log says why.\n[Retry](command:ger.refresh)\n[Show Log](command:ger.showLog)",
         "when": "ger.state == failed"
-      },
-      {
-        "view": "ger.change",
-        "contents": "Select a change in *Review chains* or a commit in *Local stack* to see its files, comments and CI findings.",
-        "when": "ger.ready"
-      },
-      {
-        "view": "ger.change",
-        "contents": "Starting `ger serve`…",
-        "when": "ger.state == starting"
-      },
-      {
-        "view": "ger.change",
-        "contents": "A change shows here once ger runs. *Review chains* says what is missing and what to do next.\n[Show Review Chains](command:ger.overview.focus)",
-        "when": "ger.state =~ /^(no-repo|untrusted|no-executable|setup|failed)$/"
-      },
-      {
-        "view": "ger.stack",
-        "contents": "Starting `ger serve`…",
-        "when": "ger.state == starting"
-      },
-      {
-        "view": "ger.stack",
-        "contents": "Your local stack shows here once ger runs. *Review chains* says what is missing and what to do next.\n[Show Review Chains](command:ger.overview.focus)",
-        "when": "ger.state =~ /^(no-repo|untrusted|no-executable|setup|failed)$/"
       }
     ],
     "commands": [
@@ -171,20 +150,19 @@
       { "command": "ger.markSeen", "title": "Mark All Activity as Seen", "category": "ger", "icon": "$(check-all)" },
       { "command": "ger.openChange", "title": "Show Change", "category": "ger" },
       { "command": "ger.openInGerrit", "title": "Open in Gerrit", "category": "ger", "icon": "$(link-external)" },
-      { "command": "ger.review", "title": "Review Change", "category": "ger", "icon": "$(git-pull-request)" },
+      { "command": "ger.review", "title": "Review Change", "category": "ger", "icon": "$(eye)" },
       { "command": "ger.checkout", "title": "Check Out to Work On", "category": "ger", "icon": "$(cloud-download)" },
       { "command": "ger.stack.edit", "title": "Edit Commit Here", "category": "ger", "icon": "$(edit)" },
       { "command": "ger.reviewDone", "title": "Leave Review Checkout", "category": "ger" },
       { "command": "ger.push", "title": "Push to Gerrit…", "category": "ger", "icon": "$(cloud-upload)" },
       { "command": "ger.setup", "title": "Set Up Gerrit Access (ger setup)…", "category": "ger" },
       { "command": "ger.installCli", "title": "Install ger…", "category": "ger" },
-      { "command": "ger.stack.moveUp", "title": "Move Later in the Stack", "category": "ger", "icon": "$(arrow-up)" },
-      { "command": "ger.stack.moveDown", "title": "Move Earlier in the Stack", "category": "ger", "icon": "$(arrow-down)" },
-      { "command": "ger.stack.moveUpBlocked", "title": "Show Why It Cannot Move Later", "category": "ger", "icon": "$(circle-slash)" },
-      { "command": "ger.stack.moveDownBlocked", "title": "Show Why It Cannot Move Earlier", "category": "ger", "icon": "$(circle-slash)" },
       { "command": "ger.stack.squash", "title": "Squash into Commit Below", "category": "ger" },
       { "command": "ger.stack.squashTakeMessage", "title": "Squash into Commit Below, Keeping This Message", "category": "ger" },
       { "command": "ger.stack.drop", "title": "Drop Commit…", "category": "ger" },
+      { "command": "ger.stack.copyChangeId", "title": "Copy Change-Id", "category": "ger" },
+      { "command": "ger.stack.copyHash", "title": "Copy Commit Hash", "category": "ger" },
+      { "command": "ger.sortChains", "title": "Sort Chains…", "category": "ger", "icon": "$(sort-precedence)" },
       { "command": "ger.openDiff", "title": "Open Diff", "category": "ger" },
       { "command": "ger.openLocation", "title": "Go to Location", "category": "ger" },
       { "command": "ger.nextComment", "title": "Next Unresolved Comment", "category": "ger", "icon": "$(arrow-down)" },
@@ -222,13 +200,12 @@
         { "command": "ger.openChange", "when": "false" },
         { "command": "ger.openDiff", "when": "false" },
         { "command": "ger.openLocation", "when": "false" },
-        { "command": "ger.stack.moveUp", "when": "false" },
-        { "command": "ger.stack.moveDown", "when": "false" },
-        { "command": "ger.stack.moveUpBlocked", "when": "false" },
-        { "command": "ger.stack.moveDownBlocked", "when": "false" },
         { "command": "ger.stack.squash", "when": "false" },
         { "command": "ger.stack.squashTakeMessage", "when": "false" },
         { "command": "ger.stack.drop", "when": "false" },
+        { "command": "ger.stack.copyChangeId", "when": "false" },
+        { "command": "ger.stack.copyHash", "when": "false" },
+        { "command": "ger.sortChains", "when": "ger.ready" },
         { "command": "ger.reply", "when": "false" },
         { "command": "ger.hold", "when": "false" },
         { "command": "ger.release", "when": "false" },
@@ -242,6 +219,7 @@
       "view/title": [
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
         { "command": "ger.markSeen", "when": "view == ger.overview && ger.ready", "group": "navigation@2" },
+        { "command": "ger.sortChains", "when": "view == ger.overview && ger.ready", "group": "navigation@3" },
         { "command": "ger.agentWalk", "when": "view == ger.stack && ger.ready", "group": "navigation@0" },
         { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
         { "command": "ger.push", "when": "view == ger.stack && ger.ready", "group": "navigation@1" },
@@ -258,23 +236,22 @@
       "view/item/context": [
         { "command": "ger.review", "when": "viewItem =~ /^ger\\.change(?!.*\\.local)/", "group": "inline@1" },
         { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.change(?!.*\\.local)/", "group": "inline@2" },
-        { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.change.*\\.local/ || view == ger.stack && viewItem =~ /^ger\\.commit/", "group": "inline@1" },
-        { "command": "ger.openInGerrit", "when": "viewItem =~ /^ger\\.(change|commit|chain)/ && viewItem =~ /\\.url/", "group": "inline@5" },
+        { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.change.*\\.local/", "group": "inline@1" },
+        { "command": "ger.openInGerrit", "when": "viewItem =~ /^ger\\.(change|chain)/ && viewItem =~ /\\.url/", "group": "inline@5" },
         { "command": "ger.review", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@1" },
         { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@2" },
         { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.chain.*\\.local/", "group": "0_open@1" },
-        { "command": "ger.stack.moveUp", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.up\\b/", "group": "inline@3" },
-        { "command": "ger.stack.moveUpBlocked", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.upx\\b/", "group": "inline@3" },
-        { "command": "ger.stack.moveDown", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.down\\b/", "group": "inline@4" },
-        { "command": "ger.stack.moveDownBlocked", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.downx\\b/", "group": "inline@4" },
-        { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.(change|commit)/", "group": "1_ger@1" },
-        { "command": "ger.stack.squash", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.downx?\\b/", "group": "2_stack@1" },
-        { "command": "ger.stack.squashTakeMessage", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/ && viewItem =~ /\\.downx?\\b/", "group": "2_stack@2" },
-        { "command": "ger.stack.drop", "when": "view == ger.stack && viewItem =~ /^ger\\.commit/", "group": "2_stack@3" },
-        { "command": "ger.reply", "when": "viewItem =~ /^ger\\.thread/", "group": "inline@1" },
-        { "command": "ger.replyDone", "when": "viewItem =~ /^ger\\.thread\\.open/", "group": "inline@2" },
-        { "command": "ger.hold", "when": "viewItem =~ /^ger\\.thread\\.open\\.free/", "group": "inline@3" },
-        { "command": "ger.release", "when": "viewItem =~ /^ger\\.thread\\.open\\.held/", "group": "inline@3" }
+        { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.change/", "group": "1_ger@1" }
+      ],
+      "webview/context": [
+        { "command": "ger.stack.edit", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "0_open@1" },
+        { "command": "ger.openInGerrit", "when": "webviewId == ger.stack && webviewSection == commit && gerUrl && !gerMulti", "group": "0_open@2" },
+        { "command": "ger.agentBrief", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "1_ger@1" },
+        { "command": "ger.stack.squash", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@1" },
+        { "command": "ger.stack.squashTakeMessage", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@2" },
+        { "command": "ger.stack.drop", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "2_stack@3" },
+        { "command": "ger.stack.copyChangeId", "when": "webviewId == ger.stack && webviewSection == commit && gerChangeId", "group": "9_copy@1" },
+        { "command": "ger.stack.copyHash", "when": "webviewId == ger.stack && webviewSection == commit", "group": "9_copy@2" }
       ],
       "comments/commentThread/context": [
         { "command": "ger.thread.reply", "when": "commentController == ger && !commentThreadIsEmpty", "group": "inline@1" },

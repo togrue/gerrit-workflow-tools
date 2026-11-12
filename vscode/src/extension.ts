@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange } from "./api";
-import { ChangeView, FILE_SCHEME, Location, Node as ChangeNode } from "./changeView";
+import { ChangeView, FILE_SCHEME, Location, ThreadArg } from "./changeView";
 import { CommentThreads } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";
@@ -18,14 +18,15 @@ import { Poller } from "./poller";
 import { RepoWatcher } from "./repoWatcher";
 import { checkout, editCommit, leaveReview, review } from "./review";
 import { GerProcess } from "./server";
-import { StackView } from "./stackView";
+import { CommitArg, StackView } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
+import { staticView } from "./webview";
 import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
 
-const VIEWS = ["ger.overview", "ger.stack", "ger.change"];
+const WEBVIEWS = ["ger.stack", "ger.change"];
 
 /**
  * No workspace folder is in a git checkout. Every command is still there and says so, rather
@@ -42,8 +43,9 @@ function activateWithoutRepo(context: vscode.ExtensionContext, log: vscode.Outpu
     waiting.push(vscode.commands.registerCommand(command, command === "ger.showLog" ? () => log.show() : missing));
   }
   const empty: vscode.TreeDataProvider<never> = { getChildren: () => [], getTreeItem: (node) => node };
-  for (const view of VIEWS) {
-    waiting.push(vscode.window.registerTreeDataProvider(view, empty));
+  waiting.push(vscode.window.registerTreeDataProvider("ger.overview", empty));
+  for (const view of WEBVIEWS) {
+    waiting.push(vscode.window.registerWebviewViewProvider(view, staticView("Open a folder with a Gerrit checkout: Review chains says how.")));
   }
   waiting.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -90,24 +92,18 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   log.appendLine(note ?? `Repository: ${repo}`);
   void vscode.commands.executeCommand("setContext", "ger.state", "starting");
   const model = new Model(new GerProcess(repo, gerProgram, (line) => log.appendLine(line)), context.workspaceState, repo);
-  const overviewView = new OverviewView(model);
-  const stackView = new StackView(model);
-  const changeView = new ChangeView(model);
+  const overviewView = new OverviewView(model, context.workspaceState);
+  const stackView = new StackView(context.extensionUri, model);
+  const changeView = new ChangeView(context.extensionUri, model);
 
   const overviewTree = vscode.window.createTreeView("ger.overview", { treeDataProvider: overviewView });
-  const stackTree = vscode.window.createTreeView("ger.stack", { treeDataProvider: stackView, dragAndDropController: stackView, canSelectMany: false });
-  const changeTree = vscode.window.createTreeView("ger.change", { treeDataProvider: changeView });
-  const threads = new CommentThreads(model, changeView, (chain) => {
-    const node = changeView.threadNode(chain);
-    if (node) {
-      void changeTree.reveal(node, { select: true, focus: false });
-    }
-  });
+  // Kept while hidden: the selection in the stack, and a commit message you are still typing.
+  const kept = { webviewOptions: { retainContextWhenHidden: true } };
+  const stackPane = vscode.window.registerWebviewViewProvider("ger.stack", stackView, kept);
+  const changePane = vscode.window.registerWebviewViewProvider("ger.change", changeView, kept);
+  const threads = new CommentThreads(model, changeView, (chain) => changeView.revealThread(chain));
 
   model.onDidChange(() => {
-    const stack = model.stack;
-    const where = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
-    stackTree.description = where && model.stale ? `${where} · out of date` : where;
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.description = model.stale ? "out of date" : undefined;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
@@ -119,36 +115,38 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       await vscode.commands.executeCommand("ger.openHeadline");
     }
   });
-  changeView.onDidLoad(() => {
-    const number = changeView.shown?.number ?? changeView.target?.number;
-    changeTree.title = number ? `Change ${number}` : "Change";
-    changeTree.description = changeView.shown?.summary ?? changeView.target?.title;
-  });
 
-  /** The change a command acts on: its argument (a target or a tree node), else the one shown. */
+  /** The change a command acts on: its argument (a target, a tree node or a stack row), else the one shown. */
   const targetOf = (arg: unknown): ChangeTarget | undefined => {
     if (arg && typeof arg === "object" && "rev" in arg) {
       return arg as ChangeTarget;
     }
-    type Any = Parameters<typeof OverviewView.target>[0] & Parameters<typeof StackView.target>[0];
-    return OverviewView.target(arg as Any) ?? StackView.target(arg as Any) ?? changeView.target;
+    return OverviewView.target(arg as Parameters<typeof OverviewView.target>[0]) ?? stackView.target(arg as CommitArg) ?? changeView.target;
   };
   const threadOf = (arg: unknown): CommentChain | undefined => {
-    const node = arg as ChangeNode | undefined;
-    return node?.kind === "thread" ? node.chain : undefined;
+    const row = arg as ThreadArg | undefined;
+    return row?.kind === "thread" ? row.chain : undefined;
   };
 
-  const openChange = async (target: ChangeTarget | undefined) => {
+  /** `preserveFocus`: the keyboard stays where it is (walking the stack with the arrow keys). */
+  const openChange = async (target: ChangeTarget | undefined, preserveFocus = false) => {
     if (!target) {
       return;
     }
-    await vscode.commands.executeCommand("ger.change.focus");
+    if (preserveFocus) {
+      changeView.show(true);
+    } else {
+      await vscode.commands.executeCommand("ger.change.focus");
+    }
     follower.forget();
     await changeView.open(target);
     if (target.chainKey) {
       await model.markSeen([target.chainKey]);
     }
   };
+
+  stackView.onOpen = openChange;
+  changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
 
   const setHold = async (arg: unknown, held: boolean) => {
     const chain = threadOf(arg);
@@ -197,13 +195,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.push": () => runInTerminal(repo, ["push"]),
     "ger.setup": () => runInTerminal(repo, ["setup"]),
     "ger.installCli": () => installGer(repo, context.extension.packageJSON),
-    "ger.stack.moveUp": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, 1),
-    "ger.stack.moveDown": (node: Parameters<StackView["move"]>[0]) => stackView.move(node, -1),
-    "ger.stack.moveUpBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, 1),
-    "ger.stack.moveDownBlocked": (node: Parameters<StackView["move"]>[0]) => stackView.explainBlocked(node, -1),
-    "ger.stack.squash": (node: Parameters<StackView["move"]>[0]) => stackView.fold(node, false),
-    "ger.stack.squashTakeMessage": (node: Parameters<StackView["move"]>[0]) => stackView.fold(node, true),
-    "ger.stack.drop": (node: Parameters<StackView["move"]>[0]) => stackView.drop(node),
+    "ger.stack.squash": (arg: CommitArg) => stackView.fold(arg, false),
+    "ger.stack.squashTakeMessage": (arg: CommitArg) => stackView.fold(arg, true),
+    "ger.stack.drop": (arg: CommitArg) => stackView.drop(arg),
+    "ger.stack.copyChangeId": (arg: CommitArg) => stackView.copy(arg, "change-id"),
+    "ger.stack.copyHash": (arg: CommitArg) => stackView.copy(arg, "hash"),
+    "ger.sortChains": () => overviewView.chooseSort(),
     "ger.openDiff": (file: FileChange, diff?: Diff) => changeView.openDiff(file, diff),
     "ger.openLocation": (location: Location) => changeView.openLocation(location),
     "ger.nextComment": () => threads.step(1),
@@ -251,8 +248,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   context.subscriptions.push(
     model,
     overviewTree,
-    stackTree,
-    changeTree,
+    stackPane,
+    changePane,
     threads,
     follower,
     statusItem,

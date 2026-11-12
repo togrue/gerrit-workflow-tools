@@ -70,20 +70,9 @@ test("each row action is offered on exactly the rows it is meant for", () => {
   const expected: Record<string, (value: string) => boolean> = {
     "ger.review": (v) => is(v, "change|chain") && !local(v),
     "ger.checkout": (v) => is(v, "change|chain") && !local(v),
-    "ger.stack.edit": (v) => (is(v, "change|chain") && local(v)) || is(v, "commit"),
-    "ger.openInGerrit": (v) => is(v, "change|chain|commit") && /\.url\b/.test(v),
-    "ger.stack.moveUp": (v) => is(v, "commit") && /\.up\b/.test(v),
-    "ger.stack.moveUpBlocked": (v) => is(v, "commit") && /\.upx\b/.test(v),
-    "ger.stack.moveDown": (v) => is(v, "commit") && /\.down\b/.test(v),
-    "ger.stack.moveDownBlocked": (v) => is(v, "commit") && /\.downx\b/.test(v),
-    "ger.stack.squash": (v) => is(v, "commit") && /\.downx?\b/.test(v),
-    "ger.stack.squashTakeMessage": (v) => is(v, "commit") && /\.downx?\b/.test(v),
-    "ger.stack.drop": (v) => is(v, "commit"),
-    "ger.agentBrief": (v) => is(v, "change|commit"),
-    "ger.reply": (v) => is(v, "thread"),
-    "ger.replyDone": (v) => is(v, "thread.open"),
-    "ger.hold": (v) => is(v, "thread.open.free"),
-    "ger.release": (v) => is(v, "thread.open.held"),
+    "ger.stack.edit": (v) => is(v, "change|chain") && local(v),
+    "ger.openInGerrit": (v) => is(v, "change|chain") && /\.url\b/.test(v),
+    "ger.agentBrief": (v) => is(v, "change"),
   };
   const offered = new Map<string, Set<string>>();
   for (const entry of itemMenu) {
@@ -98,16 +87,42 @@ test("each row action is offered on exactly the rows it is meant for", () => {
   }
 });
 
-test("every row has some action, except your own notes", () => {
+test("every row has some action", () => {
   const matched = new Set<string>();
   for (const entry of itemMenu) {
     matchedBy(entry.when ?? "").forEach((value) => matched.add(value));
   }
   assert.deepEqual(
     allRowContexts().filter((value) => !matched.has(value)),
-    ["ger.mine"],
+    [],
     "a row nothing can be done with: its contextValue is not what the menus expect",
   );
+});
+
+test("the stack's context menu reads only what its rows hand over", () => {
+  // media/stack.js builds each row's context object; a key a `when` clause reads must be in it.
+  const page = fs.readFileSync(path.join(root, "media", "stack.js"), "utf8");
+  const handed = new Set([...page.matchAll(/^\s+(ger\w+|webviewSection):/gm)].map((m) => m[1]));
+  const read = new Set<string>();
+  for (const entry of menus["webview/context"]) {
+    assert.match(entry.when ?? "", /^webviewId == ger\.stack && webviewSection == commit\b/, entry.command);
+    for (const [key] of (entry.when ?? "").matchAll(/\bger[A-Z]\w*/g)) {
+      read.add(key);
+    }
+  }
+  assert.deepEqual([...read].filter((key) => !handed.has(key)).sort(), [], "read by a menu, never set by a row");
+  assert.ok(handed.has("webviewSection"));
+});
+
+test("the views that are webviews are declared so, and their pages are packaged", () => {
+  const views: { id: string; type?: string }[] = manifest.contributes.views.ger;
+  assert.deepEqual(views.filter((view) => view.type === "webview").map((view) => view.id), ["ger.stack", "ger.change"]);
+  for (const file of ["common.js", "stack.js", "change.js", "views.css"]) {
+    assert.ok(fs.existsSync(path.join(root, "media", file)), file);
+  }
+  // Tree views get their welcome text from the manifest; a webview draws its own (state.ts, waitingFor).
+  const welcomed = new Set(manifest.contributes.viewsWelcome.map((entry: Entry) => entry.view));
+  assert.deepEqual([...welcomed], ["ger.overview"]);
 });
 
 test("every command in a menu or keybinding is declared, and every declared command is registered", () => {
