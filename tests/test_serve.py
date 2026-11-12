@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import sys
@@ -599,6 +600,39 @@ def test_reorder_refuses_a_stale_order_and_a_dirty_worktree(stack_repo: Path) ->
     (stack_repo / "a.txt").write_text("edited\n", encoding="utf-8")
     with pytest.raises(ReorderRefusal, match="uncommitted changes"):
         reorder_stack(stack_repo, [row.sha for row in reversed(rows)], settings=settings)
+
+
+def test_reorder_says_a_commit_is_gone_or_an_id_too_short_not_both_at_once(stack_repo: Path) -> None:
+    settings = Settings.from_cwd(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    gone = "f" * 40
+    with pytest.raises(ReorderRefusal, match=r"^'ffffffffffff' is not a commit of the local stack \(.*reload it\)$"):
+        reorder_stack(stack_repo, [gone, *(row.sha for row in rows[1:])], settings=settings)
+    stack = [dataclasses.replace(rows[0], sha=sha) for sha in ("ab" + "1" * 38, "ab" + "2" * 38)]
+    with pytest.raises(ReorderRefusal, match="'ab' names 2 commits of the local stack"):
+        reorder._resolve_steps(stack, [StackStep("ab")])  # pylint: disable=protected-access
+
+
+def test_reorder_off_the_branch_says_so_instead_of_missing_the_commits_it_was_shown(stack_repo: Path) -> None:
+    # The view shows the branch; off it, HEAD..upstream no longer holds those commits.
+    settings = Settings.from_cwd(stack_repo)
+    order = [row.sha for row in reversed(stack_rows_mb_to_head(stack_repo))]
+    git("checkout", "-q", "--detach", "HEAD~2", cwd=stack_repo)
+    with pytest.raises(ReorderRefusal, match="HEAD is detached"):
+        reorder_stack(stack_repo, order, settings=settings)
+    git("checkout", "-q", "feature", cwd=stack_repo)
+    git(
+        "rebase",
+        "-q",
+        "-i",
+        "HEAD~2",
+        cwd=stack_repo,
+        env={"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"},
+        check=False,
+    )
+    assert rebase_in_progress(stack_repo)
+    with pytest.raises(ReorderRefusal, match="a rebase is already in progress"):
+        reorder_stack(stack_repo, order, settings=settings)
 
 
 # --- Transport ---------------------------------------------------------------------

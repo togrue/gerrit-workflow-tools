@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
-from gerrit_workflow_tools.core.rebase_state import history_rewrite_refusal, rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import history_rewrite_refusal, rebase_in_progress, rebase_refusal
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 
@@ -64,11 +64,17 @@ class StackRewrite:
     previous_head: str
 
 
-def _refuse_unless_ready(cwd: Path | str, upstream_tip: str) -> None:
-    if refusal := history_rewrite_refusal(cwd):
+def _refuse_unless_on_the_branch(cwd: Path | str) -> None:
+    """Asked before the steps are read: off the branch, ``HEAD`` is not the stack the caller was shown."""
+    if refusal := rebase_refusal(cwd):
         raise ReorderRefusal(refusal)
     if checked_out_branch_name(cwd) is None:
         raise ReorderRefusal("HEAD is detached; check out the branch whose stack you want to rewrite")
+
+
+def _refuse_unless_ready(cwd: Path | str, upstream_tip: str) -> None:
+    if refusal := history_rewrite_refusal(cwd):
+        raise ReorderRefusal(refusal)
     if git_out("rev-list", "--merges", f"{upstream_tip}..HEAD", cwd=cwd):
         raise ReorderRefusal("the local stack contains a merge commit; rewrite it by hand with ger rebase")
 
@@ -78,8 +84,14 @@ def _resolve_steps(stack: Sequence[Commit], steps: Sequence[StackStep]) -> list[
     resolved: list[tuple[Commit, StepAction]] = []
     for step in steps:
         matches = [c for c in stack if step.sha and c.sha.startswith(step.sha.lower())]
-        if len(matches) != 1:
-            raise ReorderRefusal(f"{step.sha!r} does not name exactly one commit of the local stack")
+        if not matches:
+            raise ReorderRefusal(
+                f"{step.sha[:12]!r} is not a commit of the local stack (the stack may have changed: reload it)"
+            )
+        if len(matches) > 1:
+            raise ReorderRefusal(
+                f"{step.sha!r} names {len(matches)} commits of the local stack; give more of the commit id"
+            )
         if step.action not in STEP_ACTIONS:
             raise ReorderRefusal(f"unknown action {step.action!r}; use one of {', '.join(STEP_ACTIONS)}")
         resolved.append((matches[0], step.action))
@@ -120,6 +132,7 @@ def rewrite_stack(cwd: Path | str, steps: Sequence[StackStep], *, settings: Sett
     Raises :class:`ReorderRefusal`, with the branch untouched, when *steps* do not cover the
     stack, the worktree is not clean, or a commit does not apply in its new place.
     """
+    _refuse_unless_on_the_branch(cwd)
     snapshot = get_stack_snapshot(cwd, first_parent=True, settings=settings)
     head = commit_sha_or_none(cwd, "HEAD") or ""
     resolved = _resolve_steps(snapshot.commits, steps)
