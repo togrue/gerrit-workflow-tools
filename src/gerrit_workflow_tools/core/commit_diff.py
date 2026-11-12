@@ -39,47 +39,48 @@ class CommitDiff:
     files: list[FileChange]
 
 
-def _name_status(fields: list[str]) -> list[tuple[str, str, str | None]]:
-    """``(status letter, path, old path)`` rows from ``--name-status -z`` fields."""
+def _changed_files(fields: list[str]) -> list[FileChange]:
+    """The files of one ``git diff --raw --numstat -z``: its raw records, then its line counts.
+
+    A raw record is ``:<modes> <ids> <letter>[score]`` followed by the path (old and new path
+    for a rename or copy). A count is ``<added>\t<deleted>\t<path>``, or for a rename
+    ``<added>\t<deleted>\t`` followed by the old and new path; ``-`` counts mean binary.
+    """
     rows: list[tuple[str, str, str | None]] = []
-    i = 0
-    while i < len(fields) and fields[i]:
-        letter = fields[i][:1]
-        if letter in "RC" and i + 2 < len(fields):
-            rows.append((letter, fields[i + 2], fields[i + 1]))
-            i += 3
-        elif i + 1 < len(fields):
-            rows.append((letter, fields[i + 1], None))
-            i += 2
-        else:
-            break
-    return rows
-
-
-def _numstat(fields: list[str]) -> dict[str, tuple[int | None, int | None]]:
-    """``path -> (insertions, deletions)`` from ``--numstat -z`` fields; a rename is keyed by its new path."""
     counts: dict[str, tuple[int | None, int | None]] = {}
     i = 0
     while i < len(fields) and fields[i]:
-        added, _, rest = fields[i].partition("\t")
+        field = fields[i]
+        if field.startswith(":"):
+            letter = field.rsplit(" ", 1)[-1][:1]
+            if letter in "RC" and i + 2 < len(fields):
+                rows.append((letter, fields[i + 2], fields[i + 1]))
+                i += 3
+            elif i + 1 < len(fields):
+                rows.append((letter, fields[i + 1], None))
+                i += 2
+            else:
+                break
+            continue
+        added, _, rest = field.partition("\t")
         deleted, _, path = rest.partition("\t")
         if not path and i + 2 < len(fields):  # rename: counts, then old and new path as own fields
             path = fields[i + 2]
             i += 2
         counts[path] = (int(added) if added.isdigit() else None, int(deleted) if deleted.isdigit() else None)
         i += 1
-    return counts
+    return [FileChange(path, letter, old_path, *counts.get(path, (None, None))) for letter, path, old_path in rows]
 
 
 def diff_between(cwd: Path | str | None, base: str, commit: str, paths: Sequence[str] = ()) -> list[FileChange]:
-    """The files that differ from *base* to *commit*, renames detected; only *paths* when given."""
+    """The files that differ from *base* to *commit*, renames detected; only *paths* when given.
+
+    One ``git diff`` gives the status letters and the line counts: on Windows, starting git
+    costs more than the diff itself.
+    """
     limit = ("--", *paths) if paths else ()
-    listed = git("diff", "--name-status", *_DIFF_FLAGS, base, commit, *limit, cwd=cwd).stdout.split("\0")
-    counts = _numstat(git("diff", "--numstat", *_DIFF_FLAGS, base, commit, *limit, cwd=cwd).stdout.split("\0"))
-    return [
-        FileChange(path, letter, old_path, *counts.get(path, (None, None)))
-        for letter, path, old_path in _name_status(listed)
-    ]
+    fields = git("diff", "--raw", "--numstat", *_DIFF_FLAGS, base, commit, *limit, cwd=cwd).stdout.split("\0")
+    return _changed_files(fields)
 
 
 def commit_diff(cwd: Path | str | None, rev: str) -> CommitDiff:

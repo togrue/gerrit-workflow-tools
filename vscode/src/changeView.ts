@@ -80,7 +80,23 @@ export class ChangeView extends WebView<ChangeVm> {
    * id) leaves the version and the comparison as you chose them.
    */
   open(target: ChangeTarget | undefined = this.target, keep: boolean = target === this.target): Promise<void> {
-    this.loading = this.load(target, keep);
+    if (!target) {
+      return this.loading;
+    }
+    if (!keep) {
+      [this.version, this.mode, this.patchsets] = [target.local ? "local" : "current", "base", undefined];
+    }
+    this.target = target;
+    this.ci = { state: "closed" };
+    // The title bar offers "Edit Commit" for your own stack commit, "Review Change" and "Check Out to Work On" otherwise.
+    void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
+    void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
+    // ger serve answers one request at a time: a load for every commit walked past would queue
+    // in front of the one you stopped on. So one load runs at a time, the one under way is
+    // dropped, and of the opens asked for meanwhile only the latest is loaded.
+    const generation = ++this.generation;
+    const load = () => (generation === this.generation ? this.load(target, generation) : undefined);
+    this.loading = this.loading.then(load, load);
     return this.loading;
   }
 
@@ -95,25 +111,13 @@ export class ChangeView extends WebView<ChangeVm> {
     return Boolean(this.target?.local) && this.version === "local";
   }
 
-  private async load(target: ChangeTarget | undefined, keep: boolean): Promise<void> {
-    if (!target) {
-      return;
-    }
-    const generation = ++this.generation;
-    if (!keep) {
-      [this.version, this.mode, this.patchsets] = [target.local ? "local" : "current", "base", undefined];
-    }
-    this.target = target;
-    this.ci = { state: "closed" };
-    // The title bar offers "Edit Commit" for your own stack commit, "Review Change" and "Check Out to Work On" otherwise.
-    void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
-    void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
+  private async load(target: ChangeTarget, generation: number): Promise<void> {
     const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
       try {
         const client = await this.model.client();
         const [commits, diff, delta] = await Promise.all([
           client.show([target.rev], { comments: "all", context: 3 }),
-          this.baseDiff(client, target).catch(() => undefined),
+          this.baseDiff(client, target, generation).catch(() => undefined),
           this.deltaDiff(client, target).catch(() => undefined),
         ]);
         return [commits[0], diff, delta, undefined] as const;
@@ -133,14 +137,18 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /** The version looked at against its parent. */
-  private async baseDiff(client: GerClient, target: ChangeTarget): Promise<Diff> {
+  private async baseDiff(client: GerClient, target: ChangeTarget, generation: number): Promise<Diff> {
     const change = this.change(target);
-    if (this.version === "current" && target.local && change) {
+    let version = this.version;
+    if (version === "current" && target.local && change) {
       // Your commit carries the change, so the change alone would name your commit: ask which patchset is current.
-      this.patchsets ??= await client.patchsets(change);
-      this.version = this.patchsets.current ?? "local";
+      const patchsets = this.patchsets ?? (await client.patchsets(change));
+      version = patchsets.current ?? "local";
+      if (generation === this.generation) {
+        [this.patchsets, this.version] = [patchsets, version]; // a load dropped meanwhile leaves the next change's choice alone
+      }
     }
-    return typeof this.version === "number" && change ? client.diff(change, { patchset: this.version }) : client.diff(target.rev);
+    return typeof version === "number" && change ? client.diff(change, { patchset: version }) : client.diff(target.rev);
   }
 
   private async deltaDiff(client: GerClient, target: ChangeTarget): Promise<Diff | undefined> {
