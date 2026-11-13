@@ -31,7 +31,7 @@ from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, pinned_count
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
@@ -137,13 +137,16 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
 def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
     """Which adjacent commits of the local stack can swap places: a conflict preview, nothing is touched.
 
-    One entry per adjacent pair, oldest first. ``available`` is false when this git cannot tell.
+    One entry per adjacent pair above the newest merge, oldest first: that merge and what is below
+    it stay where they are. ``available`` is false when this git cannot tell.
     """
     snapshot = get_stack_snapshot(ctx.cwd, settings=ctx.settings)
-    commits = snapshot.commits
+    pinned = pinned_count(ctx.cwd, snapshot.commits)
+    commits = snapshot.commits[pinned:]
+    base = snapshot.commits[pinned - 1].sha if pinned else snapshot.upstream_tip
     answer: dict[str, Any] = {"head": commit_sha_or_none(ctx.cwd, "HEAD"), "available": True, "swaps": []}
     try:
-        conflicts = swap_conflicts(ctx.cwd, snapshot.upstream_tip, commits)
+        conflicts = swap_conflicts(ctx.cwd, base, commits)
     except PreviewUnavailable as error:
         return {**answer, "available": False, "reason": str(error)}
     for (lower, upper), conflict in zip(pairwise(commits), conflicts, strict=True):

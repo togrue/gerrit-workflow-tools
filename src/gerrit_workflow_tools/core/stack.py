@@ -301,6 +301,16 @@ def merge_commits(cwd: Path | str | None, shas: Sequence[str]) -> frozenset[str]
     return frozenset(listed.stdout.split())
 
 
+def pinned_count(cwd: Path | str | None, commits: Sequence[Commit]) -> int:
+    """How many of *commits* (oldest first) cannot be replayed elsewhere: the newest merge and all below it.
+
+    ``git rebase`` cannot recreate a merge, so the commits from the bottom up to the newest
+    merge stay where they are; the ones above it can still be reordered, folded or dropped.
+    """
+    merges = merge_commits(cwd, [c.sha for c in commits])
+    return next((len(commits) - i for i, c in enumerate(reversed(commits)) if c.sha in merges), 0)
+
+
 UNSQUASHED_FIXUP_ADVICE = "squash it with `ger rebase --autosquash`"
 
 

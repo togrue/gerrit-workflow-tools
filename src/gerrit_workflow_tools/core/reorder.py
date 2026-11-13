@@ -5,6 +5,9 @@ All or nothing: a rewrite that would conflict is refused before anything is touc
 as asked or exactly as it was. Runs ``git rebase -i`` with this module as the sequence editor
 (``python -m gerrit_workflow_tools.core.reorder``), which only writes the prepared todo.
 
+A merge commit cannot be replayed by ``git rebase``: it and every commit below it stay where
+they are, and the rewrite starts on top of it. The commits the merge brings in are never walked.
+
 Folding never merges two commit messages: a message with two **Change-Id** footers is not a
 Gerrit change. One of the two messages survives whole, and with it its Change-Id.
 """
@@ -21,11 +24,11 @@ from typing import Literal
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git, git_out
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
 from gerrit_workflow_tools.core.rebase_state import history_rewrite_refusal, rebase_in_progress, rebase_refusal
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
-from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
+from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
 
 
 TODO_ENV = "GER_REORDER_TODO"
@@ -83,17 +86,20 @@ def refuse_unless_on_the_branch(cwd: Path | str) -> None:
         raise ReorderRefusal("HEAD is detached; check out the branch whose stack you want to rewrite")
 
 
-def _refuse_unless_ready(cwd: Path | str, upstream_tip: str, *, autostash: bool) -> None:
+def _refuse_unless_ready(cwd: Path | str, *, autostash: bool) -> None:
     if refusal := rebase_refusal(cwd):
         raise ReorderRefusal(refusal)
     if not autostash and (refusal := history_rewrite_refusal(cwd)):
         raise UncommittedChanges(refusal)
-    if git_out("rev-list", "--merges", f"{upstream_tip}..HEAD", cwd=cwd):
-        raise ReorderRefusal("the local stack contains a merge commit; rewrite it by hand with ger rebase")
 
 
-def _resolve_steps(stack: Sequence[Commit], steps: Sequence[StackStep]) -> list[tuple[Commit, StepAction]]:
-    """*steps* against the stack: each commit named exactly once, and nothing folded into thin air."""
+def _resolve_steps(
+    stack: Sequence[Commit], steps: Sequence[StackStep], pinned: int = 0
+) -> list[tuple[Commit, StepAction]]:
+    """*steps* against the stack: each commit named exactly once, and nothing folded into thin air.
+
+    The lowest *pinned* commits (up to the newest merge) must stay where they are, as they are.
+    """
     resolved: list[tuple[Commit, StepAction]] = []
     for step in steps:
         matches = [c for c in stack if step.sha and c.sha.startswith(step.sha.lower())]
@@ -113,8 +119,21 @@ def _resolve_steps(stack: Sequence[Commit], steps: Sequence[StackStep]) -> list[
             f"the rewrite must name each of the {len(stack)} local stack commits once "
             "(the stack may have changed: reload it)"
         )
-    kept = [(commit, action) for commit, action in resolved if action != "drop"]
+    if pinned:
+        merge = stack[pinned - 1]
+        for (commit, action), there in zip(resolved[:pinned], stack[:pinned], strict=True):
+            if commit.sha != there.sha or action != "pick":
+                raise ReorderRefusal(
+                    f'"{there.subject}" is at or below the merge commit "{merge.subject}" ({merge.short_sha}), '
+                    "which git rebase cannot replay: it stays where it is; rewrite it by hand with ger rebase"
+                )
+    kept = [(commit, action) for commit, action in resolved[pinned:] if action != "drop"]
     if kept and kept[0][1] != "pick":
+        if pinned:
+            merge = stack[pinned - 1]
+            raise ReorderRefusal(
+                f'"{kept[0][0].subject}" cannot be folded into the merge commit "{merge.subject}" ({merge.short_sha})'
+            )
         raise ReorderRefusal(f'"{kept[0][0].subject}" is the lowest commit: there is nothing below to fold it into')
     return resolved
 
@@ -154,19 +173,23 @@ def rewrite_stack(
     the rewrite and put back after it, or after its refusal.
     """
     refuse_unless_on_the_branch(cwd)
-    snapshot = get_stack_snapshot(cwd, first_parent=True, settings=settings)
+    snapshot = get_stack_snapshot(cwd, settings=settings)
     head = commit_sha_or_none(cwd, "HEAD") or ""
-    resolved = _resolve_steps(snapshot.commits, steps)
+    pinned = pinned_count(cwd, snapshot.commits)
+    resolved = _resolve_steps(snapshot.commits, steps, pinned)
     if [(c.sha, action) for c, action in resolved] == [(c.sha, "pick") for c in snapshot.commits]:
         return StackRewrite(list(snapshot.commits), head)
-    _refuse_unless_ready(cwd, snapshot.upstream_tip, autostash=autostash)
-    kept = [commit for commit, action in resolved if action != "drop"]
-    if conflict := _preview(cwd, snapshot.upstream_tip, kept, snapshot.commits):
+    _refuse_unless_ready(cwd, autostash=autostash)
+    # Only what is above the newest merge is replayed, onto that merge.
+    base = snapshot.commits[pinned - 1].sha if pinned else snapshot.upstream_tip
+    movable, replayed = snapshot.commits[pinned:], resolved[pinned:]
+    kept = [commit for commit, action in replayed if action != "drop"]
+    if conflict := _preview(cwd, base, kept, movable):
         raise _does_not_apply(conflict.commit, conflict.files)
 
     with tempfile.TemporaryDirectory(prefix="ger-reorder-") as tmp:
         todo = Path(tmp) / "todo"
-        todo.write_text("".join(f"{_TODO_WORD[action]} {c.sha}\n" for c, action in resolved), encoding="utf-8")
+        todo.write_text("".join(f"{_TODO_WORD[action]} {c.sha}\n" for c, action in replayed), encoding="utf-8")
         env = {
             "GIT_SEQUENCE_EDITOR": module_editor_command("gerrit_workflow_tools.core.reorder"),
             "GIT_EDITOR": "true",
@@ -174,7 +197,7 @@ def rewrite_stack(
         }
         stash_before = _stash_tip(cwd) if autostash else ""
         stash = "--autostash" if autostash else "--no-autostash"
-        done = git("rebase", "-i", "--no-autosquash", stash, snapshot.upstream_tip, cwd=cwd, env=env, check=False)
+        done = git("rebase", "-i", "--no-autosquash", stash, base, cwd=cwd, env=env, check=False)
     if done.returncode != 0:
         stopped_at = git("rev-parse", "-q", "--verify", "REBASE_HEAD", cwd=cwd, check=False).stdout.strip()
         conflicted = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout.split()
@@ -184,10 +207,10 @@ def rewrite_stack(
             raise ReorderRefusal(
                 f"git rebase failed: {_git_reason(done.stderr or done.stdout)}; the stack was left as it was"
             )
-        raise _does_not_apply(next((c for c, _ in resolved if c.sha == stopped_at), None), conflicted)
+        raise _does_not_apply(next((c for c, _ in replayed if c.sha == stopped_at), None), conflicted)
     # Git leaves a stash that conflicts with the rewritten commits where it is, and says so only in words.
     stash_kept = autostash and _stash_tip(cwd) != stash_before
-    commits = list(get_stack_snapshot(cwd, first_parent=True, settings=settings).commits)
+    commits = list(get_stack_snapshot(cwd, settings=settings).commits)
     return StackRewrite(commits, head, stash_kept=stash_kept)
 
 

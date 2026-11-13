@@ -80,7 +80,7 @@ def test_a_commit_ahead_of_a_patchset_this_repository_never_had_has_diverged(sta
     assert (top["patchset_status"], top["diverged"]) == ("newer", True)
 
 
-def test_a_merge_commit_in_the_stack_is_marked_and_the_rewrite_says_why_it_refuses(stack_repo: Path) -> None:
+def test_a_merge_commit_in_the_stack_is_marked_and_what_is_below_it_stays_put(stack_repo: Path) -> None:
     store, _keys, rows = _gerrit(stack_repo)
     git("checkout", "-q", "-b", "side", "main", cwd=stack_repo)
     (stack_repo / "side.txt").write_text("side\n", encoding="utf-8")
@@ -93,7 +93,7 @@ def test_a_merge_commit_in_the_stack_is_marked_and_the_rewrite_says_why_it_refus
     # First-parent, as Gerrit relates changes: the merge is a stack commit, what it merged is not.
     assert [c["merge"] for c in stack["commits"]] == [False, False, False, False, True]
     order = [c["sha"] for c in stack["commits"]]
-    with pytest.raises(ReorderRefusal, match="contains a merge commit"):
+    with pytest.raises(ReorderRefusal, match="at or below the merge commit"):
         _post(api, "/stack/rewrite", {"steps": [order[1], order[0], *order[2:]]})
     assert [row.sha for row in stack_rows_mb_to_head(stack_repo)][:4] == [row.sha for row in rows]
     # A message is another matter: no commit is replayed, the merge keeps both its parents.
@@ -105,6 +105,49 @@ def test_a_merge_commit_in_the_stack_is_marked_and_the_rewrite_says_why_it_refus
     assert git_out("rev-parse", "HEAD^{tree}", cwd=stack_repo) == git_out(
         "rev-parse", f"{order[-1]}^{{tree}}", cwd=stack_repo
     )
+
+
+def _merge_then_two_on_top(repo: Path) -> None:
+    """``feature`` gets a merge of a side branch, then two commits of its own above it."""
+    git("checkout", "-q", "-b", "side", "main", cwd=repo)
+    for name in ("side-1", "side-2"):
+        (repo / f"{name}.txt").write_text(f"{name}\n", encoding="utf-8")
+        git("add", "-A", cwd=repo)
+        git("commit", "-qm", f"On the side: {name}", cwd=repo)
+    git("checkout", "-q", "feature", cwd=repo)
+    git("merge", "-q", "--no-ff", "-m", "Merge side", "side", cwd=repo)
+    for name in ("above-1", "above-2"):
+        (repo / f"{name}.txt").write_text(f"{name}\n", encoding="utf-8")
+        git("add", "-A", cwd=repo)
+        git("commit", "-qm", f"Above the merge: {name}", cwd=repo)
+
+
+def test_commits_above_the_newest_merge_still_move_and_the_merged_side_is_never_listed(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    _merge_then_two_on_top(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    stack = _get(api, "/stack")
+    subjects = [c["summary"] for c in stack["commits"]]
+    assert not [s for s in subjects if s.startswith("On the side")], "the merged-in commits are not stack members"
+    assert [c["merge"] for c in stack["commits"]] == [False] * 4 + [True, False, False]
+    order = [c["sha"] for c in stack["commits"]]
+    merge = order[4]
+    # Only the pair above the merge can swap; the merge and what is below it are not offered.
+    moves = _get(api, "/stack/moves")
+    assert [(s["lower"], s["upper"]) for s in moves["swaps"]] == [(order[5], order[6])]
+
+    rewritten = _post(api, "/stack/rewrite", {"steps": [*order[:5], order[6], order[5]]})
+    after = [c["summary"] for c in rewritten["commits"]]
+    assert after[5:] == ["Above the merge: above-2", "Above the merge: above-1"]
+    assert git_out("rev-parse", "HEAD~2", cwd=stack_repo) == merge, "the merge itself was not replayed"
+    assert [c["sha"] for c in rewritten["commits"]][:5] == order[:5]
+
+    now = [c["sha"] for c in rewritten["commits"]]
+    with pytest.raises(ReorderRefusal, match="cannot be folded into the merge commit"):
+        _post(api, "/stack/rewrite", {"steps": [*now[:5], {"sha": now[5], "action": "fixup"}, now[6]]})
+    with pytest.raises(ReorderRefusal, match="at or below the merge commit"):
+        _post(api, "/stack/rewrite", {"steps": [*now[:4], {"sha": now[4], "action": "drop"}, *now[5:]]})
+    assert [row.sha for row in rows] == now[:4]
 
 
 # --- Rewriting with uncommitted changes -------------------------------------------------

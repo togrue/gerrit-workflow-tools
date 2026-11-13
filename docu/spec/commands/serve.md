@@ -213,7 +213,8 @@ For a view that draws the stack, each commit also says:
   repository never had: somebody else, or another checkout, uploaded it. Told from the object
   database alone, so a patch set you fetched without building on it does not count.
 - `merge` — it is a merge commit. The stack is first-parent, as Gerrit relates changes: the
-  merge is a stack commit, what it merged is not. A stack with one cannot be rewritten here.
+  merge is a stack commit, what it merged is not, and is never walked. The newest merge and
+  the commits below it cannot be moved, folded or dropped here; the ones above it can.
 - `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the branch as it
   was before, and this is where the rebase stands on each commit: `done` (replayed), `current`
   (it stopped here), `todo` (still to come), or `null` for a commit the rebase does not replay.
@@ -226,7 +227,8 @@ The conflict preview for reordering: which neighbours of the local stack can swa
 Nothing is touched — no rebase starts, the worktree and the branch stay as they are.
 
 - `head` — the stack this answer is for.
-- `swaps` — one entry per adjacent pair, oldest first: `lower`, `upper` (commit ids) and
+- `swaps` — one entry per adjacent pair above the newest merge commit (all of them without
+  one), oldest first: `lower`, `upper` (commit ids) and
   `conflict`: `null` when the two can swap, else `sha` and `summary` of the first commit
   that would not apply, and the `files` it conflicts in.
 - `available` — `false` (with `reason`, and no `swaps`) when this git cannot simulate the
@@ -399,8 +401,9 @@ in progress or a detached HEAD.
 
 A rewrite is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted
 changes (and no `autostash`: `reason` is `uncommitted-changes`),
-a rebase is in progress, HEAD is detached, the stack contains a merge, or a commit does not
-apply in its new place. The last is found out before anything is touched, with the same
+a rebase is in progress, HEAD is detached, it would move, fold, drop or fold into the newest
+merge commit or a commit below it (git rebase cannot replay a merge, so the rewrite starts on
+top of it), or a commit does not apply in its new place. The last is found out before anything is touched, with the same
 simulation as `GET /stack/moves`, and the message names the commit and the files it
 conflicts in. Where git is too old for that, the rebase is tried and aborted.
 
