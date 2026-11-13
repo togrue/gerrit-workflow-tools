@@ -476,7 +476,10 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding`, provenance, cache verdict), the `CiContentProvider` seam, and **introduced findings** (`introduced_fingerprints`) |
 | `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape |
 | `core/ci_content_store.py` | `CiContentStore`: size-bounded LRU store of immutable CI content, apart from the Gerrit cache |
-| `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`) |
+| `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`): the finder order and the generic fallback |
+| `core/ci_log.py` | A CI log as clean lines (`clean_log_lines`) and what finders share: the `Finder` type, the path fragment |
+| `core/ci_findings_located.py` | Finders for one-line located diagnostics (`path:line: severity: msg`): linters, compilers, the linker |
+| `core/ci_findings_tests.py` | Finders for test runners: the failed test, located by its failure section |
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |

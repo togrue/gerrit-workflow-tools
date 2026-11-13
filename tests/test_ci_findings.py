@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.ci_content import CiFinding
-from gerrit_workflow_tools.core.ci_findings import clean_log_lines, find_ci_findings
+from gerrit_workflow_tools.core.ci_findings import find_ci_findings
+from gerrit_workflow_tools.core.ci_log import clean_log_lines
 
 
 PYTEST_LONG = """\
