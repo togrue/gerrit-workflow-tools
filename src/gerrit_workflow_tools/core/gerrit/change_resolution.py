@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from gerrit_workflow_tools.core.change_id import change_id_of_rev
+from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.changeish import (
     KINDS_NEEDING_GERRIT,
     Changeish,
@@ -45,7 +45,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
     resolve_stack_context,
 )
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
-from gerrit_workflow_tools.core.stack import get_stack_snapshot
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_rows
 
 
 if TYPE_CHECKING:
@@ -216,7 +216,8 @@ def _resolve_on_gerrit(
     change_id = parsed.change_id
     if parsed.kind == "git-rev":
         resolution.local_sha = local_commit_sha(cwd, parsed.rev or parsed.raw)
-        change_id = change_id_of_rev(cwd, resolution.local_sha)
+        # The commit row, not just its message: `ger show` reads that very row next, from git's cache.
+        change_id = extract_valid_change_id(read_commit_rows(cwd, "-1", resolution.local_sha)[0].body)
         if not change_id:
             return resolution
 
