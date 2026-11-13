@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState, changeLines, changeVm } from "../src/changeRows";
-import { badges, cloud, frozen, stackLines, stackVm } from "../src/stackRows";
+import { badges, cloud, frozen, pinned, pinnedWhy, stackLines, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 
 function commit(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
@@ -101,10 +101,23 @@ test("mid-rebase the stack marks where it stands and dims what is not replayed y
   assert.equal(stackLines(conflict)[2], "▶! Two — two0000 · the same as on Gerrit  (dim)");
 });
 
-test("a merge commit in the stack is shown, and says why nothing can be moved", () => {
-  const withMerge = stack([commit("One"), commit("Merge side", { merge: true })]);
-  assert.match(frozen(withMerge) ?? "", /merge commit/);
-  assert.deepEqual(stackVm(withMerge, undefined, never).rows[0].notes, ["mergesi", "merge"]);
+test("a merge is one row; it and what is below it stay, what is above it still moves", () => {
+  const withMerge = stack([commit("One"), commit("Merge side", { merge: true }), commit("Two"), commit("Three")]);
+  assert.equal(frozen(withMerge), null, "a merge no longer freezes the whole stack");
+  assert.equal(pinned(withMerge), 2);
+  const vm = stackVm(withMerge, undefined, never);
+  assert.equal(vm.movable, 2, "drops land no lower than under Two");
+  assert.deepEqual(vm.rows.map((row) => [row.summary, row.merge, row.pinned, row.squash]), [
+    ["Three", false, false, true],
+    ["Two", false, false, false],
+    ["Merge side", true, true, false],
+    ["One", false, true, false],
+  ]);
+  assert.deepEqual(vm.rows[2].notes, ["mergesi", "merge"]);
+  assert.match(vm.rows[2].tooltip, /commits it brings in are not part of the stack/);
+  assert.match(pinnedWhy(withMerge), /"Merge side" is a merge commit/);
+  assert.equal(pinned(stack([commit("One")])), 0);
+  assert.equal(stackVm(stack([commit("One")]), undefined, never).movable, 1);
 });
 
 test("without an upstream the stack offers one to track; while ger is not running it says so", () => {

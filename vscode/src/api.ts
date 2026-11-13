@@ -122,7 +122,7 @@ export interface StackCommit extends CommitStatus {
   needs_edit: boolean;
   /** `newer`, and Gerrit's current patchset is a commit this repository never had: it came from elsewhere. */
   diverged?: boolean;
-  /** A merge commit: the stack cannot be rewritten while it holds one. */
+  /** A merge commit: one stack commit, whatever it brings in; it and the commits below it cannot be moved. */
   merge?: boolean;
   /** Where a rebase underway stands on this commit; null without one, or when it does not replay it. */
   rebase?: "done" | "current" | "todo" | null;
@@ -404,17 +404,17 @@ export class GerClient {
     return this.call("GET", `/chains/${number}`);
   }
 
-  async show(revs: string[], options: ShowOptions = {}): Promise<ShownCommit[]> {
-    const answer = await this.call<{ commits: ShownCommit[] }>("GET", "/show", { rev: revs, ...options });
+  async show(revs: string[], options: ShowOptions = {}, signal?: AbortSignal): Promise<ShownCommit[]> {
+    const answer = await this.call<{ commits: ShownCommit[] }>("GET", "/show", { rev: revs, ...options }, undefined, signal);
     return answer.commits;
   }
 
-  diff(rev: string, options: DiffOptions = {}): Promise<Diff> {
-    return this.call("GET", "/diff", { rev, ...options });
+  diff(rev: string, options: DiffOptions = {}, signal?: AbortSignal): Promise<Diff> {
+    return this.call("GET", "/diff", { rev, ...options }, undefined, signal);
   }
 
-  patchsets(rev: string): Promise<Patchsets> {
-    return this.call("GET", "/patchsets", { rev });
+  patchsets(rev: string, signal?: AbortSignal): Promise<Patchsets> {
+    return this.call("GET", "/patchsets", { rev }, undefined, signal);
   }
 
   /** What changed since the patchset you last reviewed. */

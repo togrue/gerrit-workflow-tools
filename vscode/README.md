@@ -61,9 +61,11 @@ The commits above your upstream, newest first. One row per commit:
   with a **marker** on the commit the rebase stopped at; commits still to be replayed are
   **dimmed**. Stopped on a conflict, the marked commit is dimmed too: it is not applied yet.
   Nothing can be moved until the rebase is finished or aborted.
-- **A merge commit** in the stack is listed (marked *merge*; what it merged is not part of the
-  stack, as on Gerrit). A stack with one cannot be reordered, squashed or dropped from here —
-  the view says so when you try; `ger rebase` does it by hand. Rewording still works.
+- **A merge commit** in the stack is one row, with a merge icon and marked *merge*, however
+  many commits it brings in: those are not part of the stack (as on Gerrit) and are never read.
+  `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where
+  they are — the view says so when you try to move, squash or drop one; `ger rebase` does it by
+  hand. The commits above it reorder, squash and drop as usual. Rewording works everywhere.
 - Push (`ger push` in a new terminal of its own, where it can ask you).
 - **No upstream** (typical after checking a change out with Gerrit's download commands; `ger
   checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else

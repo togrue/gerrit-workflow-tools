@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import { GerApiError, GerClient, Rewritten, StackCommit, StackStep } from "./api";
 import { blockedMove, movedTo, sentence } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
-import { StackVm, frozen, stackLines, stackVm } from "./stackRows";
+import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm } from "./stackRows";
 import { waitingFor } from "./state";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
@@ -82,6 +82,8 @@ export class StackView extends WebView<StackVm> {
         return this.move(message.shas as string[], message.gap as number);
       case "frozen":
         return this.explainFrozen();
+      case "pinned":
+        return this.explainPinned(true);
       case "command":
         return vscode.commands.executeCommand(message.command as string, ...((message.args as unknown[] | undefined) ?? []));
       default:
@@ -96,6 +98,21 @@ export class StackView extends WebView<StackVm> {
       void ui().message("info", `${why} Nothing was changed.`, {}, []);
     }
     return Boolean(why);
+  }
+
+  /** Say why commits at or below the newest merge stay put, when `touched` asks one of them to change. */
+  private explainPinned(touched: boolean): boolean {
+    const stack = this.model.stack;
+    if (touched && stack) {
+      void ui().message("info", `${pinnedWhy(stack)} Nothing was changed.`, {}, []);
+    }
+    return touched;
+  }
+
+  /** How many commits, oldest first, stay where they are. */
+  private pinned(): number {
+    const stack = this.model.stack;
+    return stack ? pinned(stack) : 0;
   }
 
   // --- Copying ----------------------------------------------------------------------
@@ -132,6 +149,10 @@ export class StackView extends WebView<StackVm> {
       return;
     }
     const order = [...next].reverse();
+    const fixed = this.pinned();
+    if (this.explainPinned(order.slice(0, fixed).some((sha, index) => sha !== shown[shown.length - 1 - index]))) {
+      return;
+    }
     if (shas.length === 1 && this.explainBlocked(shas[0], order)) {
       return;
     }
@@ -158,7 +179,7 @@ export class StackView extends WebView<StackVm> {
   async fold(arg: CommitArg, takeMessage: boolean): Promise<void> {
     const commits = this.commits();
     const index = commits.findIndex((commit) => commit.sha === this.commit(arg)?.sha);
-    if (index < 1 || this.explainFrozen()) {
+    if (index < 1 || this.explainFrozen() || this.explainPinned(index - 1 < this.pinned())) {
       return;
     }
     const [below, folded] = [commits[index - 1], commits[index]];
@@ -171,7 +192,7 @@ export class StackView extends WebView<StackVm> {
 
   async drop(arg: CommitArg): Promise<void> {
     const commit = this.commit(arg);
-    if (!commit || this.explainFrozen()) {
+    if (!commit || this.explainFrozen() || this.explainPinned(this.commits().indexOf(commit) < this.pinned())) {
       return;
     }
     const detail = commit.pushed

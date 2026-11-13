@@ -221,6 +221,9 @@ button.twist:hover {
 .cloud-unknown {
   color: var(--vscode-disabledForeground);
 }
+.row.merge .codicon-git-merge {
+  color: var(--vscode-descriptionForeground);
+}
 .cloud-merged {
   color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
 }

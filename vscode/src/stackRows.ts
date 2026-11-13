@@ -111,12 +111,15 @@ export interface StackRow {
   marker: "rebase" | "conflict" | null;
   /** Not (wholly) there yet: still to be replayed by the rebase, or stopped part-way. */
   dim: boolean;
+  /** A merge commit: one row, whatever it brings in. */
   merge: boolean;
+  /** The newest merge or below it: git rebase cannot replay a merge, so it stays where it is. */
+  pinned: boolean;
   /** Words after the summary: `HEAD`, the short id, `held back`. */
   notes: string[];
   badges: (Badge | null)[];
   tooltip: string;
-  /** There is a commit below to squash into. */
+  /** There is a commit below to squash into (not a pinned one). */
   squash: boolean;
 }
 
@@ -136,6 +139,8 @@ export interface StackVm {
   rows: StackRow[];
   /** Why commits cannot be moved right now; null when they can. */
   frozen: string | null;
+  /** How many rows, from the top, can move: a drop lands no lower than under the last of them. */
+  movable: number;
 }
 
 const MARKER_WORDS = {
@@ -143,7 +148,27 @@ const MARKER_WORDS = {
   conflict: "The rebase stopped here on a conflict: this commit is not applied yet.",
 };
 
-function row(commit: StackCommit, stack: Stack, below: StackCommit | undefined, above: StackCommit | undefined, conflicts: Conflicts): StackRow {
+const MERGE_WORDS = "A merge commit: the commits it brings in are not part of the stack, and are not listed.";
+
+/** How many commits, oldest first, stay where they are: the newest merge and all below it (git rebase cannot replay a merge). */
+export function pinned(stack: Stack): number {
+  for (let index = stack.commits.length - 1; index >= 0; index--) {
+    if (stack.commits[index].merge) {
+      return index + 1;
+    }
+  }
+  return 0;
+}
+
+/** Why commits at or below the newest merge cannot move, fold or go: for the message when one is asked to. */
+export function pinnedWhy(stack: Stack): string {
+  const merge = stack.commits[pinned(stack) - 1];
+  return `"${merge?.summary ?? "The merge"}" is a merge commit, which git rebase cannot replay: it and the commits below it stay where they are. Rewrite them by hand with ger rebase.`;
+}
+
+function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: number, conflicts: Conflicts): StackRow {
+  const [below, above] = [stack.commits[index - 1], stack.commits[index + 1]];
+  const isPinned = index < pinnedBelow;
   const state = cloud(commit);
   const stopped = commit.rebase === "current";
   const conflict = stopped && stack.rebase?.applied === false;
@@ -157,6 +182,8 @@ function row(commit: StackCommit, stack: Stack, below: StackCommit | undefined, 
     reasonWords(commit.attention_reasons) || "no open issues",
     marker ? MARKER_WORDS[marker] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
+    commit.merge ? MERGE_WORDS : "",
+    isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",
     commit.reviewers.length ? `Reviewers: ${commit.reviewers.join(", ")}` : "",
     up ? blockedMove(commit.summary, above.summary, up) : "",
     down ? blockedMove(commit.summary, below.summary, down) : "",
@@ -173,10 +200,11 @@ function row(commit: StackCommit, stack: Stack, below: StackCommit | undefined, 
     marker,
     dim: commit.rebase === "todo" || conflict,
     merge: Boolean(commit.merge),
+    pinned: isPinned,
     notes: notes.filter(Boolean),
     badges: badges(commit),
     tooltip: tooltip.filter(Boolean).join("\n"),
-    squash: below !== undefined,
+    squash: below !== undefined && index - 1 >= pinnedBelow,
   };
 }
 
@@ -187,20 +215,17 @@ export function frozen(stack: Stack): string | null {
   if (stack.rebase_in_progress) {
     return "A rebase is in progress: finish it (git rebase --continue) or abort it (git rebase --abort) before you move commits.";
   }
-  if (stack.commits.some((commit) => commit.merge)) {
-    return "The stack contains a merge commit, which cannot be replayed in another place: rewrite it by hand with ger rebase.";
-  }
   return null;
 }
 
 /** The view for `local` (the overview's local stack, or why there is none). */
 export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts): StackVm {
   if (!local) {
-    return { info: [], rows: [], frozen: null };
+    return { info: [], rows: [], frozen: null, movable: 0 };
   }
   if ("error" in local) {
     if (!local.needs_upstream) {
-      return { info: [{ text: local.error.message.split("\n")[0], tooltip: local.error.message, icon: "warning", tone: "warn" }], rows: [], frozen: null };
+      return { info: [{ text: local.error.message.split("\n")[0], tooltip: local.error.message, icon: "warning", tone: "warn" }], rows: [], frozen: null, movable: 0 };
     }
     const info: StackInfo[] = [
       {
@@ -224,7 +249,7 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
       icon: "list-selection",
       command: { id: "ger.setUpstream", args: [] },
     });
-    return { info, rows: [], frozen: null };
+    return { info, rows: [], frozen: null, movable: 0 };
   }
   const info: StackInfo[] = [];
   if (local.rebase_in_progress) {
@@ -241,8 +266,9 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
     info.push({ text: "No local commits", detail: `${local.branch ?? "HEAD"} is at ${local.stack.target_branch}` });
   }
   const commits = local.commits;
-  const rows = commits.map((commit, index) => row(commit, local, commits[index - 1], commits[index + 1], conflicts)).reverse();
-  return { info, rows, frozen: frozen(local) };
+  const fixed = pinned(local);
+  const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts)).reverse();
+  return { info, rows, frozen: frozen(local), movable: commits.length - fixed };
 }
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */

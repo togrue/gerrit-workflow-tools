@@ -6,7 +6,7 @@
   const { h, icon, post, panel, listen } = window.ger;
   const root = document.getElementById("root");
 
-  let vm = { info: [], rows: [], frozen: null };
+  let vm = { info: [], rows: [], frozen: null, movable: 0 };
   /** Row keys (the Change-Id, so a rewrite keeps the selection). */
   let selected = new Set();
   let focused = null;
@@ -48,7 +48,7 @@
   }
 
   function rowElement(row, slots) {
-    const classes = ["row", selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : "", row.dim ? "dim" : ""];
+    const classes = ["row", selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : "", row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
     const marker = row.marker ? icon("debug-stackframe", row.marker === "conflict" ? "bad" : "warn") : null;
     return h(
       "div",
@@ -63,6 +63,7 @@
       },
       h("span", { class: "marker" }, marker),
       h("span", { class: `codicon codicon-${CLOUD_ICON[row.cloud] || "cloud"} cloud cloud-${row.cloud}`, title: row.cloudTitle }),
+      row.merge ? icon("git-merge", undefined, "A merge commit: what it brings in is not listed") : null,
       h("span", { class: "label" }, row.summary),
       h("span", { class: "detail" }, row.notes.join(" · ")),
       h(
@@ -190,8 +191,11 @@
     return index < 0 ? rows.length : index;
   }
 
-  /** Whether dropping the selection at `gap` changes the order at all. */
+  /** Whether dropping the selection at `gap` changes the order at all. Below the newest merge nothing lands. */
   function moves(gap) {
+    if (gap > vm.movable) {
+      return false;
+    }
     const keys = vm.rows.map((row) => row.key);
     const stays = (key) => !selected.has(key);
     const next = [...keys.slice(0, gap).filter(stays), ...keys.filter((key) => selected.has(key)), ...keys.slice(gap).filter(stays)];
@@ -274,6 +278,11 @@
       }
       if (!selected.has(row.dataset.key)) {
         select(row.dataset.key, "single");
+      }
+      if (selectedRows().some((r) => r.pinned)) {
+        event.preventDefault();
+        post("pinned"); // the extension says why the merge and what is below it stay
+        return;
       }
       dragging = true;
       list.classList.add("dragging");
