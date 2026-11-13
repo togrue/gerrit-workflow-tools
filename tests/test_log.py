@@ -742,7 +742,7 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     rev_range = resolve_rev_range(cwd, "a..b", settings=Settings.from_map({}))
     assert rev_range == "a..b"
 
-    commit_data = commits_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=False)
     assert commit_data == []
 
     assert [args for args, _cwd, _check in git_calls] == [
@@ -788,7 +788,7 @@ def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_pat
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data = commits_in_range(repo, rev_range, first_parent=True)
+    commit_data = commits_in_range(repo, rev_range)  # first-parent by default
     assert commit_data is not None
     subjects = [row.subject for row in commit_data]
     assert len(subjects) == 2, f"expected 2 first-parent commits, got {len(subjects)}: {subjects}"
@@ -808,7 +808,7 @@ def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data = commits_in_range(repo, rev_range)
+    commit_data = commits_in_range(repo, rev_range, first_parent=False)
     assert commit_data is not None
     subjects = [row.subject for row in commit_data]
     assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"

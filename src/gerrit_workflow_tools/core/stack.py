@@ -106,13 +106,14 @@ def get_stack_snapshot(
     branch: str | None = None,
     *,
     head: str = "HEAD",
-    first_parent: bool = False,
+    first_parent: bool = True,
     settings: Settings | None = None,
 ) -> StackSnapshot:
     """The **local stack**: the upstream tip SHA and oldest-first ``upstream_tip..head`` commits.
 
-    The one way to load the stack. *first_parent* follows Gerrit's relation-chain
-    semantics (merged side branches are not stack members).
+    The one way to load the stack. It follows first parents only, as Gerrit's relation chain
+    does: a merge is one commit of the stack, and the commits it brings in are not walked.
+    ``first_parent=False`` is ``--follow-merges``.
     """
     upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
     rows_list = commits_in_range(cwd, f"{upstream_tip}..{head}", first_parent=first_parent)
@@ -247,10 +248,13 @@ class RewriteCommit:
 
 
 def read_rewrite_rows(cwd: Path | str | None, rev_spec: str) -> list[RewriteCommit]:
-    """Oldest-first commits in *rev_spec* with tree, parents and idents, from one ``git log``."""
+    """Oldest-first first-parent commits in *rev_spec* with tree, parents and idents, from one ``git log``.
+
+    A merge's other parents are named in its row but not walked: they stay as they are.
+    """
     rows: list[RewriteCommit] = []
     for sha, tree, parents, an, ae, ad, cn, ce, cd, subject, body in _log_records(
-        cwd, _REWRITE_ROW_FMT, 11, "--reverse", "--date=raw", rev_spec
+        cwd, _REWRITE_ROW_FMT, 11, "--reverse", "--first-parent", "--date=raw", rev_spec
     ):
         rows.append(
             RewriteCommit(
@@ -277,16 +281,24 @@ def commits_in_range(
     cwd: Path | str | None,
     rev_range: str,
     *,
-    first_parent: bool = False,
+    first_parent: bool = True,
 ) -> list[Commit]:
     """
     Oldest-first commits in *rev_range* (e.g. ``upstream_tip..HEAD``).
 
-    One ``git log`` call.  Pass *first_parent=True* to restrict traversal to
-    first-parent edges only (i.e. ignore commits reachable via merge parents).
+    One ``git log`` call along first-parent edges: the commits a merge brings in are not
+    walked. ``first_parent=False`` follows every parent (``--follow-merges``).
     """
     extra: list[str] = ["--first-parent"] if first_parent else []
     return read_commit_rows(cwd, "--reverse", *extra, rev_range)
+
+
+def merge_commits(cwd: Path | str | None, shas: Sequence[str]) -> frozenset[str]:
+    """Which of *shas* are merge commits: one ``git rev-list --no-walk``, none for no *shas*."""
+    if not shas:
+        return frozenset()
+    listed = git("rev-list", "--no-walk", "--min-parents=2", *shas, cwd=cwd, check=False)
+    return frozenset(listed.stdout.split())
 
 
 UNSQUASHED_FIXUP_ADVICE = "squash it with `ger rebase --autosquash`"

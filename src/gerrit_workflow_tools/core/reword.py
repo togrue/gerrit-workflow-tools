@@ -80,7 +80,7 @@ def reword_commit(cwd: Path | str, rev: str, message: str, *, settings: Settings
     commit that is not in the stack, a rebase underway or a detached ``HEAD``.
     """
     refuse_unless_on_the_branch(cwd)
-    snapshot = get_stack_snapshot(cwd, first_parent=True, settings=settings)
+    snapshot = get_stack_snapshot(cwd, settings=settings)
     matches = [c for c in snapshot.commits if rev and c.sha.startswith(rev.lower())]
     if len(matches) != 1:
         raise ReorderRefusal(f"{rev[:12]!r} is not a commit of the local stack (the stack may have changed: reload it)")
@@ -98,4 +98,4 @@ def reword_commit(cwd: Path | str, rev: str, message: str, *, settings: Settings
     if new_head is None:
         raise ReorderRefusal(f"{target.short_sha} is not reachable from HEAD; the commit was left as it was")
     move_head(cwd, new_head)
-    return StackRewrite(list(get_stack_snapshot(cwd, first_parent=True, settings=settings).commits), head)
+    return StackRewrite(list(get_stack_snapshot(cwd, settings=settings).commits), head)

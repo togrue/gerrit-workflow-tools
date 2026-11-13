@@ -22,7 +22,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, repo_toplevel, resolve_working_branch
 from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, project_scope, section_summary
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
@@ -31,7 +31,7 @@ from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
-from gerrit_workflow_tools.core.stack import get_stack_snapshot
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
@@ -94,7 +94,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     )
     head = commit_sha_or_none(cwd, "HEAD")
     progress = rebase_progress(cwd)
-    merges = _merge_commits(cwd, [c.sha for c in view.commits])
+    merges = merge_commits(cwd, [c.sha for c in view.commits])
     commits = [
         {
             **log_commit_json(c),
@@ -134,20 +134,12 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     }
 
 
-def _merge_commits(cwd: Any, shas: list[str]) -> frozenset[str]:
-    """Which of *shas* are merge commits: one ``git rev-list``, none for an empty stack."""
-    if not shas:
-        return frozenset()
-    listed = git("rev-list", "--no-walk", "--min-parents=2", *shas, cwd=cwd, check=False)
-    return frozenset(listed.stdout.split())
-
-
 def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
     """Which adjacent commits of the local stack can swap places: a conflict preview, nothing is touched.
 
     One entry per adjacent pair, oldest first. ``available`` is false when this git cannot tell.
     """
-    snapshot = get_stack_snapshot(ctx.cwd, first_parent=True, settings=ctx.settings)
+    snapshot = get_stack_snapshot(ctx.cwd, settings=ctx.settings)
     commits = snapshot.commits
     answer: dict[str, Any] = {"head": commit_sha_or_none(ctx.cwd, "HEAD"), "available": True, "swaps": []}
     try:
