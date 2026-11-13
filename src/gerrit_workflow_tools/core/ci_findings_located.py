@@ -49,12 +49,23 @@ _RUFF = re.compile(
 _RUFF_FORMAT = re.compile(rf"^Would reformat: (?P<path>{PATH})$")
 _PYLINT = re.compile(rf"^{_PY}:(?P<line>\d+):(?P<col>\d+): (?P<code>[CRWEFI]\d{{4}}): (?P<msg>.*)$")
 _MYPY = re.compile(rf"^{_PY}:(?P<line>\d+)(?::(?P<col>\d+))?(?::\d+:\d+)?: (?P<sev>error|warning):\s*(?P<msg>.*)$")
+_BRACKETED = re.compile(
+    rf"^{_PY}:(?P<line>\d+): \[(?P<code>[A-Z]+\d*)(?:\([^)]*\))?(?P<object>, [^\]]*)?\] (?P<msg>.*)$"
+)
 _PYLINT_KINDS = {"C": "convention", "R": "refactor", "W": "warning", "E": "error", "F": "fatal", "I": "info"}
 
 
 def _ruff(m: re.Match[str]) -> CiFinding:
     syntax = m.group("code").endswith(":")
     return _located(m, tool="ruff", kind="syntax" if syntax else "lint", message=f"{m.group('code')} {m.group('msg')}")
+
+
+def _bracketed(m: re.Match[str]) -> CiFinding:
+    """``path:line: [CODE, object] msg``: pylint's parseable format, which flake8 can print too."""
+    code = m.group("code")
+    if code[0] not in _PYLINT_KINDS or (m.group("object") is None and 1 < len(code) < 5):
+        return _located(m, tool="flake8", kind="lint", message=f"{code} {m.group('msg')}")
+    return _pylint(m)
 
 
 def _pylint(m: re.Match[str]) -> CiFinding:
@@ -106,14 +117,24 @@ def _linker(m: re.Match[str]) -> CiFinding | None:
 
 # --- JVM: javac (plain and through Maven), scalac through sbt ----------------------
 
-_JAVAC = re.compile(rf"^(?P<path>{PATH}\.java):(?P<line>\d+): (?P<sev>error|warning): (?P<msg>.*)$")
-_MAVEN = re.compile(rf"^{LEVEL} (?P<path>{PATH}\.(?P<ext>java|scala|kt)):\[(?P<line>\d+),(?P<col>\d+)\] (?P<msg>.*)$")
-_SBT = re.compile(rf"^{LEVEL} (?P<path>{PATH}\.(?P<ext>scala|sc|java)):(?P<line>\d+):(?P<col>\d+): (?P<msg>.*)$")
+# A level tag is anchor enough: whatever a wrapper printed before it (a stage tag, a clock) is
+# skipped, and the path after it may hold spaces (a Jenkins job named "Hudson main").
+_TAGS = r"(?:\s*\[[\w .:-]+\]\s+)*"
+_JAVAC = re.compile(
+    rf"^{_TAGS}(?P<path>{PATH}\.(?P<ext>java|scala)):(?P<line>\d+): (?P<sev>error|warning): (?P<msg>.*)$"
+)
+_MAVEN = re.compile(rf"^.*?{LEVEL} (?P<path>.+?\.(?P<ext>java|scala|kt)):\[(?P<line>\d+),(?P<col>\d+)\] (?P<msg>.*)$")
+_SBT = re.compile(rf"^.*?{LEVEL} (?P<path>.+?\.(?P<ext>scala|sc|java)):(?P<line>\d+)(?::(?P<col>\d+))?: (?P<msg>.*)$")
 _SCALA3 = re.compile(
-    rf"^{LEVEL} -- (?:\[(?P<code>E\d+)\] )?(?P<title>[^:]*): "
-    rf"(?P<path>{PATH}\.(?:scala|sc)):(?P<line>\d+):(?P<col>\d+)[\s-]*$"
+    rf"^(?:.*?{LEVEL} )?-- (?:\[(?P<code>E\d+)\] )?(?P<title>[^:\[\]]*): "
+    rf"(?P<path>.+?\.(?:scala|sc)):(?P<line>\d+):(?P<col>\d+)[\s-]*$"
 )
 _JVM_TOOLS = {"java": "javac", "scala": "scalac", "sc": "scalac", "kt": "kotlinc"}
+
+
+def _javac(m: re.Match[str]) -> CiFinding:
+    """``Foo.java:12: error: msg``, bare or behind a wrapper's tag; the compiler's own word is the severity."""
+    return _by_severity(m, _JVM_TOOLS[m.group("ext")])
 
 
 def _jvm(m: re.Match[str]) -> CiFinding:
@@ -122,8 +143,9 @@ def _jvm(m: re.Match[str]) -> CiFinding:
 
 
 def _scala3(m: re.Match[str]) -> CiFinding:
-    severity = level_severity(m.group("level"))
     title = m.group("title").strip()
+    # sbt tags the line; the compiler run directly says it in the title only.
+    severity = level_severity(m.group("level") or ("warning" if "Warning" in title else "error"))
     message = f"{m.group('code')} {title}" if m.group("code") else title
     return _located(m, tool="scalac", kind=severity, message=message, severity=severity)
 
@@ -147,11 +169,12 @@ def _rustfmt(m: re.Match[str]) -> CiFinding:
 
 _RULES: tuple[Rule, ...] = (
     (_PYLINT, _pylint),
+    (_BRACKETED, _bracketed),
     (_RUFF, _ruff),
     (_RUFF_FORMAT, lambda m: _located(m, tool="ruff", kind="format", message="would reformat")),
     (_MYPY, lambda m: _by_severity(m, "mypy")),
     (_CC, _cc),
-    (_JAVAC, lambda m: _by_severity(m, "javac")),
+    (_JAVAC, _javac),
     (_MAVEN, _jvm),
     (_SCALA3, _scala3),
     (_SBT, _jvm),
@@ -164,7 +187,7 @@ _RULES: tuple[Rule, ...] = (
     (_CC_DRIVER, _cc_driver),
 )
 
-_LEVEL_LINE = re.compile(rf"^{LEVEL} ?(?P<text>.*)$")
+_LEVEL_LINE = re.compile(rf"^(?:.*?{LEVEL} ?)?(?P<text>.*)$")
 
 
 def _scala3_excerpt(lines: Sequence[str], start: int, claimed: set[int]) -> str | None:
@@ -174,6 +197,8 @@ def _scala3_excerpt(lines: Sequence[str], start: int, claimed: set[int]) -> str 
         m = _LEVEL_LINE.match(lines[j])
         if m is None or m.group("text").startswith("-- ") or "|" not in m.group("text"):
             break
+        if set(m.group("text")) <= set(" |-"):
+            break  # the rule that opens ``-explain``: the excerpt ends above it
         claimed.add(j)
         excerpt.append(m.group("text").rstrip())
     return "\n".join(excerpt[:DETAIL_LINES]) or None

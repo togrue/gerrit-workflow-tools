@@ -26,7 +26,7 @@ def _block_end(lines: Sequence[str], start: int) -> int:
 # --- rustc / clippy / ruff: header, then ``--> path:line:col`` ----------------------
 
 _ARROW = re.compile(r"^\s*--> (?P<path>.+?):(?P<line>\d+):(?P<col>\d+)$")
-_RUST_HEAD = re.compile(r"^(?P<sev>error|warning)(?:\[(?P<code>[A-Z]\d+)\])?: (?P<msg>.+)$")
+_RUST_HEAD = re.compile(r"^\s*(?P<sev>error|warning)(?:\[(?P<code>[A-Z]\d+)\])?: (?P<msg>.+)$")
 _RUFF_HEAD = re.compile(r"^(?P<code>[A-Z]+\d+|[a-z]+(?:-[a-z]+)+:) (?:\[\*\] )?(?P<msg>.+)$")
 _RUST_NOISE = re.compile(
     r"^(?:error: aborting due to |warning: `.+` \(.+\) generated \d+ warning|For more information about this error)"

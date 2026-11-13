@@ -73,7 +73,8 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 |-----------|------|-------|------------|
 | Python | `pytest` | `failed`, `error` | `FAILED` / `ERROR` summary lines, located by the raising frame of the `FAILURES` section; `detail` holds the `E` lines |
 | | `ruff` | `lint`, `syntax`, `format` | the default block (`CODE msg`, then `--> path:line:col`), the concise `path:line:col: CODE msg`, `Would reformat: path` |
-| | `pylint` | `convention`, `refactor`, `warning`, `error`, `fatal` | `path:line:col: C0116: msg (symbol)`; only `error` / `fatal` are errors |
+| | `pylint` | `convention`, `refactor`, `warning`, `error`, `fatal` | `path:line:col: C0116: msg (symbol)` and the parseable `path:line: [C0103, object] msg`; only `error` / `fatal` are errors |
+| | `flake8` | `lint` | `path:line: [F401] msg` (its pylint-style format; the default `path:line:col: F401 msg` reads as `ruff`) |
 | | `mypy` | `error`, `warning` | `path.py:line[:col]: error: msg`, with end positions and `--pretty` wrapping |
 | | `python` | `error` | an uncaught `Traceback`: its last line, at the deepest frame outside installed packages |
 | C / C++ | `cc` | `error`, `warning` | `file.c:line[:col]: error: msg` (C/C++/ObjC/CUDA extensions); `gcc:` / `clang: error:` driver lines |
@@ -90,17 +91,17 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 | | `eslint` | `lint` | the default report: a file path, then `line:col  severity  msg  rule` rows |
 | | `jest`, `node-test` | `failed` | `●` headings under `FAIL file`; the entries under `✖ failing tests:` |
 | | `npm` | `error` | one finding per `npm error` / `npm ERR!` report: its code and first telling line |
-| Java | `javac` | `error`, `warning` | `Foo.java:12: error: msg`; through Maven `[ERROR] /path/Foo.java:[12,5] msg` |
-| | `junit` | `failed`, `error` | Surefire's `Failures:` / `Errors:` rows; Gradle's `Class > test FAILED` |
+| Java | `javac` | `error`, `warning` | `Foo.java:12: error: msg`, also behind a wrapper's tag (`[javac]`, `[WARNING]`); through Maven `[ERROR] /path/Foo.java:[12,5] msg`, where the path may hold spaces |
+| | `junit` | `failed`, `error` | Surefire's `… <<< FAILURE!` test line, located by the stack frame in the test's class (else its `Failures:` / `Errors:` summary row); Gradle's `Class > test FAILED` |
 | | `maven`, `gradle` | `error` | `Failed to execute goal …`, `Task :x FAILED` |
-| Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12:5: msg` and Scala 3's `-- [E007] … Error: path:line:col` |
+| Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12[:5]: msg`, Scala 3's `-- [E007] … Error: path:line:col`, and through Maven `Foo.scala:12: warning: msg` |
 | | `scalatest` | `failed` | `- name *** FAILED ***` and the `(File.scala:12)` line under it |
 | | `sbt` | `error` | `[error] (Compile / compileIncremental) Compilation failed` |
 | any | `generic` | `error` | `Error:` lines, `make: ***`, non-zero exit statuses, `marked build as failure`, `Finished: FAILURE` |
 
 npm, Maven, Gradle, sbt, Ninja and Make mostly *wrap* another tool: the finding worth reading comes from what they ran, and their own line only says which step failed.
 
-**Line prefixes.** What a CI system puts in front of a tool's output is removed once, before any finder runs: ANSI escapes, Jenkins timestamper prefixes, the `[branch]` tag of a parallel pipeline stage, Docker BuildKit's `#12 3.4` step prefix. A build tool's own level tag (Maven's `[ERROR]`, sbt's `[error]`) stays, because it is the only severity those lines carry.
+**Line prefixes.** What a CI system puts in front of a tool's output is removed once, before any finder runs: ANSI escapes, Jenkins timestamper prefixes, the `[branch]` tag of a parallel pipeline stage, Docker BuildKit's `#12 3.4` step prefix. Maven and sbt lines are also found behind any text a wrapper put before their level tag. A build tool's own level tag (Maven's `[ERROR]`, sbt's `[error]`) stays, because it is the only severity those lines carry.
 
 `find_ci_findings(text)` is public so custom providers can reuse the finders. `fingerprint` hashes tool, kind, path and message (no line numbers, no severity): the key **introduced findings** compare on.
 

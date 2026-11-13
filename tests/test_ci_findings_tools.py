@@ -1,8 +1,9 @@
 # Spec: docu/spec/ci-content.md § Finding extractors
 """One log per ecosystem through the built-in finders: every tool is found once, with its place.
 
-The C/C++, Rust, Python, npm and ``node --test`` logs are real tool output, trimmed. The JVM,
-eslint, Jest and tsc logs follow those tools' documented formats.
+The C/C++, Rust, Python, npm, tsc and ``node --test`` logs are real tool output, trimmed. The
+JVM, eslint, Jest and GoogleTest logs follow those tools' formats as published; the section at
+the end pins shapes that only showed up in real build logs.
 """
 
 from __future__ import annotations
@@ -500,3 +501,180 @@ def test_windows_workspace_and_backslashes() -> None:
     assert lines[0].startswith("Running on")
     [finding] = find_ci_findings("Running on win-1 in C:\\ws\\widget\nDiff in \\\\?\\C:\\ws\\widget\\src\\lib.rs:9:\n")
     assert finding.path == "src/lib.rs"
+
+
+# --- formats seen in real build logs -----------------------------------------------
+# Shapes taken from the public sample logs of the Jenkins warnings parser
+# (jenkinsci/analysis-model test resources) and from published Gradle and ScalaTest runs.
+
+
+def test_maven_paths_with_spaces_and_text_before_the_level_tag() -> None:
+    log = """\
+[WARNING] /home/hudson/data/jobs/Hudson main/workspace/src/test/java/a/StreamTest.java:[3,54] sun.misc is internal
+[ERROR] \\Jenkins\\workspace\\VIGO - Compile\\src\\at\\Details.java:[350,48] cannot find symbol
+[ParallelStep] [WARNING] C:\\Build\\workspace\\ui\\src\\main\\java\\Dialog.java:[12,39] [deprecation] x is deprecated
+08:52:34[WARNING] /ws/src/main/java/my/Filing.java:[86,76] Test6
+"""
+    assert _rows(log) == [
+        (
+            "javac",
+            "warning",
+            "/home/hudson/data/jobs/Hudson main/workspace/src/test/java/a/StreamTest.java:3:54",
+            "sun.misc is internal",
+        ),
+        ("javac", "error", "/Jenkins/workspace/VIGO - Compile/src/at/Details.java:350:48", "cannot find symbol"),
+        ("javac", "warning", "C:/Build/workspace/ui/src/main/java/Dialog.java:12:39", "[deprecation] x is deprecated"),
+        ("javac", "warning", "/ws/src/main/java/my/Filing.java:86:76", "Test6"),
+    ]
+
+
+def test_javac_and_scalac_lines_behind_a_wrapper_tag_keep_the_compilers_own_severity() -> None:
+    log = """\
+[java] /var/lib/jenkins/workspace/webhooks/src/main/java/File.java:59: error: ';' expected
+[WARNING] /ws/src/main/java/edu/Ensure.java:57: warning: @param "value" has already been specified
+[ERROR] /ws/yet/another/path/SomeFile.scala:59: warning: method error in object Predef is deprecated
+"""
+    assert _rows(log) == [
+        ("javac", "error", "/var/lib/jenkins/workspace/webhooks/src/main/java/File.java:59", "';' expected"),
+        ("javac", "warning", "/ws/src/main/java/edu/Ensure.java:57", '@param "value" has already been specified'),
+        ("scalac", "warning", "/ws/yet/another/path/SomeFile.scala:59", "method error in object Predef is deprecated"),
+    ]
+
+
+def test_sbt_scalac_without_a_column() -> None:
+    log = """\
+[warn] /ws/path/SomeFile.scala:111: method stop in class Thread is deprecated: see corresponding Javadoc
+[error] /ws/another/path/SomeFile.scala:9: ';' expected but identifier found.
+[error] \tat com.x.Foo.bar(Foo.scala:12)
+[error] Total time: 127 s, completed Oct 7, 2019 9:11:30 AM
+"""
+    assert _rows(log) == [
+        (
+            "scalac",
+            "warning",
+            "/ws/path/SomeFile.scala:111",
+            "method stop in class Thread is deprecated: see corresponding Javadoc",
+        ),
+        ("scalac", "error", "/ws/another/path/SomeFile.scala:9", "';' expected but identifier found."),
+    ]
+
+
+def test_bracketed_codes_are_pylint_parseable_or_flake8() -> None:
+    log = """\
+trunk/src/python/tv.py:28: [C0103, Show.__init__] Invalid name "seasonCount"
+trunk/src/python/tv.py:39: [E0213, Episode.__init__] Method should have "self" as first argument
+trunk/src/python/tv.py:1: [F0001(fatal), ] No module named nope
+myproject/__init__.py:7: [F401] 'db' imported but unused
+"""
+    assert [(f.tool, f.kind, f.severity, f.location) for f in find_ci_findings(log)] == [
+        ("pylint", "convention", "warning", "trunk/src/python/tv.py:28"),
+        ("pylint", "error", "error", "trunk/src/python/tv.py:39"),
+        ("pylint", "fatal", "error", "trunk/src/python/tv.py:1"),
+        ("flake8", "lint", "error", "myproject/__init__.py:7"),
+    ]
+
+
+def test_gradle_names_a_kotlin_test_with_spaces() -> None:
+    log = """\
+> Task :test FAILED
+
+com.example.CalculatorSpec > adds 2 to 2 FAILED
+    org.opentest4j.AssertionFailedError at CalculatorSpec.kt:11
+
+3 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+BUILD FAILED in 2s
+"""
+    assert _rows(log) == [
+        (
+            "junit",
+            "error",
+            "CalculatorSpec.kt:11",
+            "com.example.CalculatorSpec.adds 2 to 2: org.opentest4j.AssertionFailedError",
+        ),
+        ("gradle", "error", "", "Task :test FAILED"),
+    ]
+
+
+def test_scalatest_failure_with_a_duration() -> None:
+    log = """\
+[info] - should send the markup unindented out the door *** FAILED *** (52 milliseconds)
+[info]   "[]" did not equal "[one]" (OldDocSpec.scala:64)
+"""
+    assert _rows(log) == [
+        (
+            "scalatest",
+            "error",
+            "OldDocSpec.scala:64",
+            'should send the markup unindented out the door: "[]" did not equal "[one]"',
+        )
+    ]
+
+
+def test_googletest_failure_outside_a_run_and_looser_tag_spacing() -> None:
+    log = """\
+path/to/foo_test.cc:11: Failure
+Value of: Bar(n)
+Expected: 1
+  Actual: 2
+[ RUN      ] BarTest.ReturnsTrueOnSuccess
+[   FAILED ] BarTest.ReturnsTrueOnSuccess
+"""
+    assert _rows(log) == [
+        ("gtest", "error", "path/to/foo_test.cc:11", "Value of: Bar(n)"),
+        ("gtest", "error", "", "BarTest.ReturnsTrueOnSuccess"),
+    ]
+
+
+def test_eslint_file_path_with_a_space() -> None:
+    log = """\
+/var/lib/jenkins/workspace/eslint Release/eslint/fullOfProblems.js
+  1:10  error    'addOne' is defined but never used  no-unused-vars
+  3:20  warning  Missing semicolon                   semi
+"""
+    assert [(f.severity, f.location) for f in find_ci_findings(log)] == [
+        ("error", "/var/lib/jenkins/workspace/eslint Release/eslint/fullOfProblems.js:1:10"),
+        ("warning", "/var/lib/jenkins/workspace/eslint Release/eslint/fullOfProblems.js:3:20"),
+    ]
+
+
+def test_surefire_failed_test_is_located_by_its_stack_trace_and_listed_once() -> None:
+    log = """\
+[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.016 s <<< FAILURE! -- in org.x.FailTest
+[ERROR] org.x.FailTest.adds -- Time elapsed: 0.011 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <3> but was: <2>
+\tat org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:37)
+\tat org.x.FailTest.adds(FailTest.java:11)
+\tat java.base/java.lang.reflect.Method.invoke(Method.java:580)
+Error:  testResponse(org.x.handlers.ResponseIT)  Time elapsed: 5.01 s  <<< ERROR!
+java.lang.IllegalStateException: no server
+\tat org.x.handlers.ResponseIT.setUp(ResponseIT.java:86)
+[ERROR] Failures:
+[ERROR]   FailTest.adds:11 expected: <3> but was: <2>
+[ERROR] Tests run: 3, Failures: 1, Errors: 1, Skipped: 0
+"""
+    assert _rows(log) == [
+        (
+            "junit",
+            "error",
+            "FailTest.java:11",
+            "FailTest.adds: org.opentest4j.AssertionFailedError: expected: <3> but was: <2>",
+        ),
+        ("junit", "error", "ResponseIT.java:86", "ResponseIT.testResponse: java.lang.IllegalStateException: no server"),
+    ]
+
+
+def test_scala3_error_printed_by_the_compiler_itself() -> None:
+    log = """\
+-- [E007] Type Mismatch Error: example.scala:1:16 ------------------------------
+1 |val x: String = 42
+  |                ^^
+  |                Found:    (42 : Int)
+  |                Required: String
+  |-----------------------------------------------------------------------------
+  | Explanation (enabled by `-explain`)
+"""
+    [finding] = find_ci_findings(log)
+    assert (finding.tool, finding.severity, finding.location) == ("scalac", "error", "example.scala:1:16")
+    assert (finding.detail or "").splitlines()[-1].strip() == "|                Required: String"

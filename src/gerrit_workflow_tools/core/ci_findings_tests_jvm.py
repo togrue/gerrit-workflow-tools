@@ -16,31 +16,83 @@ from gerrit_workflow_tools.core.ci_log import DETAIL_LINES
 
 # --- Maven Surefire ----------------------------------------------------------------
 
+_SUREFIRE_TAG = r"(?:\[ERROR\]|Error:)?\s*"
+_SUREFIRE_TEST = (
+    # Surefire 3: ``com.x.FooTest.testBar -- Time elapsed: 0.01 s <<< FAILURE!``
+    re.compile(rf"^{_SUREFIRE_TAG}(?P<cls>[\w.$]+)\.(?P<test>[\w$]+) -- Time elapsed: .*<<< (?P<what>FAILURE|ERROR)!$"),
+    # Surefire 2: ``testBar(com.x.FooTest)  Time elapsed: 0.01 s  <<< FAILURE!``
+    re.compile(
+        rf"^{_SUREFIRE_TAG}(?P<test>[\w$]+)\((?P<cls>[\w.$]+)\)\s+Time elapsed: .*<<< (?P<what>FAILURE|ERROR)!$"
+    ),
+)
+_SUREFIRE_CLASS = re.compile(r"^(?:\[\w+\]|Error:)?\s*Tests run: \d+, Failures: \d+, Errors: \d+.*$")
 _SUREFIRE_HEAD = re.compile(r"^\[ERROR\] (?P<what>Failures|Errors):\s*$")
 _SUREFIRE_ROW = re.compile(r"^\[ERROR\]\s{2,}(?P<cls>[\w.$]+)\.(?P<test>[\w$]+)(?::(?P<line>\d+))?(?: (?P<msg>.*))?$")
+_JAVA_FRAME = re.compile(r"^\s+at (?P<cls>[\w.$]+)\.[\w$<>]+\((?P<file>[\w$]+\.\w+):(?P<line>\d+)\)$")
+
+
+def _simple(cls: str) -> str:
+    """``com.x.Outer$Inner`` -> ``Outer``: the class a source file is named after."""
+    return cls.rsplit(".", 1)[-1].split("$")[0]
+
+
+def _surefire_trace(
+    lines: Sequence[str], start: int, cls: str, claimed: set[int]
+) -> tuple[str, str | None, int | None]:
+    """Under a failed test's line: what was thrown, and the first frame in the test's own class."""
+    said = lines[start].strip() if start < len(lines) and not _JAVA_FRAME.match(lines[start]) else ""
+    file: str | None = None
+    lineno: int | None = None
+    end = start + (1 if said else 0)
+    while end < len(lines) and (frame := _JAVA_FRAME.match(lines[end])):
+        if file is None and _simple(frame.group("cls")) == _simple(cls):
+            file, lineno = frame.group("file"), int(frame.group("line"))
+        end += 1
+    claimed.update(range(start, end))
+    return said, file, lineno
 
 
 def find_surefire(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
-    """The rows under Surefire's ``[ERROR] Failures:`` / ``[ERROR] Errors:`` summary."""
+    """A test's ``<<< FAILURE!`` line and the stack trace under it; else its row in the closing summary."""
     findings: list[CiFinding] = []
+    seen: set[str] = set()
     what: str | None = None
     for i, line in enumerate(lines):
         if i in claimed:
             continue
-        if head := _SUREFIRE_HEAD.match(line):
-            what = head.group("what")
-        elif what is not None and (m := _SUREFIRE_ROW.match(line)):
-            test = f"{m.group('cls')}.{m.group('test')}"
-            said = (m.group("msg") or "").strip()
+        failed = next((m for rx in _SUREFIRE_TEST if (m := rx.match(line))), None)
+        if failed is not None:
+            cls, test = failed.group("cls"), failed.group("test")
+            said, file, lineno = _surefire_trace(lines, i + 1, cls, claimed)
+            name = f"{_simple(cls)}.{test}"
+            seen.add(name)
             findings.append(
                 CiFinding(
                     tool="junit",
-                    kind="failed" if what == "Failures" else "error",
-                    message=f"{test}: {said}" if said else test,
-                    path=f"{m.group('cls').rsplit('.', 1)[-1].split('$')[0]}.java",
-                    line=int(m.group("line")) if m.group("line") else None,
+                    kind="failed" if failed.group("what") == "FAILURE" else "error",
+                    message=f"{name}: {said}" if said else name,
+                    path=file or f"{_simple(cls)}.java",
+                    line=lineno,
                 )
             )
+        elif head := _SUREFIRE_HEAD.match(line):
+            what = head.group("what")
+        elif what is not None and (m := _SUREFIRE_ROW.match(line)):
+            name = f"{_simple(m.group('cls'))}.{m.group('test')}"
+            said = (m.group("msg") or "").strip()
+            if name not in seen:
+                seen.add(name)
+                findings.append(
+                    CiFinding(
+                        tool="junit",
+                        kind="failed" if what == "Failures" else "error",
+                        message=f"{name}: {said}" if said else name,
+                        path=f"{_simple(m.group('cls'))}.java",
+                        line=int(m.group("line")) if m.group("line") else None,
+                    )
+                )
+        elif _SUREFIRE_CLASS.match(line):
+            what = None
         else:
             what = None
             continue

@@ -169,10 +169,10 @@ def find_cargo_test(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
 
 # --- GoogleTest / CTest ------------------------------------------------------------
 
-_GTEST_RUN = re.compile(r"^\[ RUN      \] (?P<name>\S+)$")
+_GTEST_RUN = re.compile(r"^\[\s*RUN\s*\] (?P<name>\S+)$")
 _GTEST_FAILURE = re.compile(rf"^(?P<path>{PATH}):(?P<line>\d+): Failure$")
-_GTEST_FAILED = re.compile(r"^\[  FAILED  \] (?P<name>[\w/.$]+)(?:, where .*?)?(?: \(\d+ ms\))?$")
-_GTEST_TOTAL = re.compile(r"^(?:\[  FAILED  \] \d+ tests?, listed below:| *\d+ FAILED TESTS?)$")
+_GTEST_FAILED = re.compile(r"^\[\s*FAILED\s*\] (?P<name>[\w/.$]+)(?:, where .*?)?(?: \(\d+ ms\))?$")
+_GTEST_TOTAL = re.compile(r"^(?:\[\s*FAILED\s*\] \d+ tests?, listed below:| *\d+ FAILED TESTS?)$")
 _CTEST_ROW = re.compile(r"^\s+\d+ - (?P<name>\S+) \((?P<why>[^)]+)\)\s*$")
 
 
@@ -188,7 +188,14 @@ def find_gtest(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
             continue
         if run := _GTEST_RUN.match(line):
             name, where, said = run.group("name"), None, []
-        elif name is not None and (m := _GTEST_FAILURE.match(line)):
+        elif m := _GTEST_FAILURE.match(line):
+            if name is None:
+                # A failure outside any test's run (a fixture, or output cut to the failures alone).
+                told = lines[i + 1].strip() if i + 1 < len(lines) else ""
+                at = (m.group("path"), int(m.group("line")))
+                findings.append(
+                    CiFinding(tool="gtest", kind="failed", message=told or "Failure", path=at[0], line=at[1])
+                )
             where = where or (m.group("path"), int(m.group("line")))
         elif m := _GTEST_FAILED.match(line):
             test = m.group("name")
