@@ -23,7 +23,13 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.inbox import DEFAULT_TO_REVIEW_QUERY, build_to_review_query
+from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.inbox import (
+    DEFAULT_OUTGOING_QUERY,
+    DEFAULT_TO_REVIEW_QUERY,
+    build_to_review_query,
+    project_scope,
+)
 from tests.change_store import ChangeStore
 from tests.conftest import json_stdout, run_cli
 
@@ -89,6 +95,7 @@ def _store(*rows: dict[str, Any], stub: list[dict[str, Any]] | None = None) -> C
         self_account_id=SELF,
     )
     store.stub_query(TO_REVIEW_QUERY, stub if stub is not None else list(rows))
+    store.stub_query(DEFAULT_OUTGOING_QUERY, [])
     return store
 
 
@@ -172,7 +179,7 @@ def test_json_contract_includes_ages_and_top_url(tmp_path: Path, monkeypatch: py
     assert chain["wait_age_seconds"] >= 0
     assert chain["last_activity"]
     assert "unresolved-comments" in chain["attention_reasons"]
-    assert data["summary"]["chains"] == 1
+    assert data["sections"][0]["summary"]["chains"] == 1
 
 
 def test_follow_up_commit_query_fills_chain_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -512,3 +519,87 @@ def test_what_a_chain_sits_on_is_remembered_by_how_final_it_is(tmp_path: Path, m
     clock["t"] += 8 * 24 * 60 * 60
     (both,) = commits_asked()
     assert "commit:aaa" in both and "commit:history" in both
+
+
+def _in_clone(path: Path, project: str) -> Path:
+    git("init", "-q", cwd=path)
+    git("remote", "add", "origin", f"https://gerrit.example.com/{project}", cwd=path)
+    return path
+
+
+def test_scope_inside_a_clone_is_its_project(tmp_path: Path) -> None:
+    clone = _in_clone(tmp_path, "myproject")
+    settings = Settings.from_cwd(clone)
+    assert project_scope(clone, settings) == ["myproject"]
+    assert project_scope(clone, settings, all_projects=True) == []
+    assert project_scope(clone, settings, projects=["other"]) == ["other"]
+
+
+def test_scope_outside_a_clone_is_the_configured_projects(tmp_path: Path) -> None:
+    assert project_scope(tmp_path, Settings.from_map({})) == []
+    assert project_scope(tmp_path, Settings.from_map({"inbox.projects": "a,b"})) == ["a", "b"]
+
+
+def _mine(number: int, project: str) -> dict[str, Any]:
+    row = _change(
+        number=number,
+        sha=f"m{number}",
+        parent="origin",
+        subject=f"mine in {project}",
+        owner="me",
+        updated="2026-08-18 08:00:00.000000000",
+    )
+    row.update(project=project, id=f"{project}~main~{row['change_id']}")
+    return row
+
+
+def test_inside_a_clone_both_sections_are_its_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clone = _in_clone(tmp_path, "myproject")
+    theirs = _change(
+        number=7,
+        sha="ttt",
+        parent="origin",
+        subject="theirs",
+        updated="2026-08-18 08:00:00.000000000",
+        attention_since="2026-08-17 12:00:00.000000000",
+    )
+    store = _store(theirs, _mine(8, "myproject"))
+    store.stub_query(f"{TO_REVIEW_QUERY} project:myproject", [theirs])
+    store.stub_query(f"{DEFAULT_OUTGOING_QUERY} project:myproject", [_mine(8, "myproject")])
+    code, out, err = run_cli(clone, inbox_main, ["--json"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.ATTENTION), err
+    data = json_stdout(out)
+    assert data["projects"] == ["myproject"]
+    to_review, outgoing = data["sections"]
+    assert to_review["query"].endswith("project:myproject")
+    assert [c["top"]["number"] for c in to_review["chains"]] == [7]
+    assert outgoing["name"] == "outgoing"
+    assert [c["top"]["number"] for c in outgoing["chains"]] == [8]
+
+
+def test_all_drops_the_project_filter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clone = _in_clone(tmp_path, "myproject")
+    store = _store(_mine(8, "myproject"), _mine(9, "elsewhere"), stub=[])
+    store.stub_query(DEFAULT_OUTGOING_QUERY, [_mine(8, "myproject"), _mine(9, "elsewhere")])
+    code, out, err = run_cli(clone, inbox_main, ["--all", "--outgoing", "--color=never"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    assert "project: all projects" in out
+    assert "outgoing (2)" in out
+    assert "to review" not in out
+    assert "mine in elsewhere" in out
+    assert TO_REVIEW_QUERY not in store.queries()
+
+
+def test_to_review_alone_does_not_ask_for_outgoing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(stub=[])
+    code, out, err = run_cli(tmp_path, inbox_main, ["--to-review", "--color=never"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    assert "to review (0)" in out
+    assert "outgoing" not in out
+    assert TO_REVIEW_QUERY in store.queries()
+    assert DEFAULT_OUTGOING_QUERY not in store.queries()
+
+
+def test_all_and_project_do_not_combine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, _err = run_cli(tmp_path, inbox_main, ["--all", "--project", "x"], monkeypatch, catch_sys_exit=True)
+    assert code == int(ExitCode.USAGE)

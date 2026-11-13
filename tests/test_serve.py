@@ -42,6 +42,7 @@ from tests.conftest import json_stdout, run_cli
 
 
 WEB = "https://g.example"
+OUTGOING_QUERY = f"{DEFAULT_OUTGOING_QUERY} project:testproj"
 V1 = "/api/v1"
 
 
@@ -83,8 +84,8 @@ def _gerrit(repo: Path, overrides: list[dict[str, Any]] | None = None) -> tuple[
         self_account_id=1000,
     )
     settings = Settings.from_cwd(repo)
-    store.stub_query(build_to_review_query(settings, projects=[], include_unready=False), [])
-    store.stub_query(DEFAULT_OUTGOING_QUERY, list(details.values()))
+    store.stub_query(build_to_review_query(settings, projects=["testproj"], include_unready=False), [])
+    store.stub_query(OUTGOING_QUERY, list(details.values()))
     related = [{"_change_number": 100 + i, "_revision_number": 1, "status": "NEW"} for i in range(len(rows))]
     for key in keys:
         store.set_related(key, list(reversed(related)))
@@ -162,7 +163,7 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
     overview = _get(GerApi(stack_repo, gerrit=store), "/overview")
     to_review, outgoing = overview["sections"]
     assert (to_review["name"], to_review["chains"]) == ("to-review", [])
-    assert outgoing["name"] == "outgoing" and outgoing["query"] == DEFAULT_OUTGOING_QUERY
+    assert outgoing["name"] == "outgoing" and outgoing["query"] == OUTGOING_QUERY
     [chain] = outgoing["chains"]
     assert [m["number"] for m in chain["members"]] == [100, 101, 102, 103]
     assert chain["top"]["number"] == 103 and chain["depth"] == 4
@@ -181,8 +182,8 @@ def test_headline_falls_back_to_the_longest_waiting_review(stack_repo: Path) -> 
     settings = Settings.from_cwd(stack_repo)
     waiting = dict(store.get_change(keys[0]), owner={"name": "alice", "_account_id": 2})
     store.add_change(waiting)  # the change is alice's on Gerrit, not only in the query's answer
-    store.stub_query(build_to_review_query(settings, projects=[], include_unready=False), [waiting])
-    store.stub_query(DEFAULT_OUTGOING_QUERY, [])
+    store.stub_query(build_to_review_query(settings, projects=["testproj"], include_unready=False), [waiting])
+    store.stub_query(OUTGOING_QUERY, [])
     headline = _get(GerApi(stack_repo, gerrit=store), "/overview")["headline"]
     assert (headline["section"], headline["reason"], headline["number"]) == ("to-review", "waiting-on-you", 100)
     assert headline["text"].startswith("alice has waited ")

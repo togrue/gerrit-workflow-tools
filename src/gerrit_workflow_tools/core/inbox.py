@@ -1,6 +1,7 @@
 """The inbox: its **inbox sections**, their queries, what a section adds up to, and the **headline**.
 
-Host-scoped (ADR-0004): nothing here resolves a stack context or looks at local commits.
+Host-scoped (ADR-0004): nothing here resolves a stack context or looks at local commits. Run
+inside a clone, the sections are narrowed to that clone's Gerrit project (:func:`project_scope`).
 """
 
 from __future__ import annotations
@@ -9,11 +10,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
+from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain
 
 
@@ -57,7 +60,10 @@ def build_to_review_query(
     projects: list[str],
     include_unready: bool,
 ) -> str:
-    """Section query for *to review*, with verified gate and project filters folded in."""
+    """Section query for *to review*, with verified gate and project filters folded in.
+
+    *projects* is the scope as :func:`project_scope` decides it; empty means the whole host.
+    """
     custom = settings.inbox_to_review_query
     if custom:
         base = custom
@@ -67,7 +73,29 @@ def build_to_review_query(
         base = DEFAULT_TO_REVIEW_QUERY
         if settings.inbox_require_verified:
             base = f"{base} label:{settings.inbox_verified_label}+1"
-    return with_project_filter(base, list(projects) if projects else list(settings.inbox_projects))
+    return with_project_filter(base, list(projects))
+
+
+def project_scope(
+    cwd: Path | str | None,
+    settings: Settings,
+    *,
+    projects: Sequence[str] = (),
+    all_projects: bool = False,
+) -> list[str]:
+    """The Gerrit projects the inbox is narrowed to; empty means every project on the host.
+
+    Projects named explicitly win. Otherwise ``all_projects`` asks for the whole host; inside a
+    clone it is the clone's own project; outside one, ``inbox.projects``.
+    """
+    if projects:
+        return list(projects)
+    if all_projects:
+        return []
+    current = resolve_gerrit_project_name(cwd, settings=settings)
+    if current:
+        return [current]
+    return list(settings.inbox_projects)
 
 
 def with_project_filter(query: str, projects: list[str]) -> str:
@@ -103,32 +131,37 @@ def load_inbox(
     *,
     now: datetime | None = None,
     projects: Sequence[str] = (),
+    all_projects: bool = False,
     include_unready: bool = False,
     limit: int | None = None,
+    sections: Sequence[str] = (TO_REVIEW, OUTGOING),
 ) -> list[InboxSection]:
-    """Both inbox sections, queried in parallel: *to review*, then *outgoing* (your open chains).
+    """The wanted inbox *sections*, queried in parallel: *to review*, then *outgoing* (your open
+    chains). A section not wanted is not asked for.
 
-    *To review* keeps the inbox order (longest unreviewed first) and honours *limit*, else
-    ``ger.inbox.limit``. *Outgoing* puts what you must act on first, then the latest activity.
+    Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
+    inbox order (longest unreviewed first) and honours *limit*, else ``ger.inbox.limit``.
+    *Outgoing* puts what you must act on first, then the latest activity.
     """
     settings = service.settings
     moment = now if now is not None else datetime.now(timezone.utc)
-    names = list(projects)
-    queries = {
-        TO_REVIEW: build_to_review_query(settings, projects=names, include_unready=include_unready),
-        OUTGOING: with_project_filter(DEFAULT_OUTGOING_QUERY, names or list(settings.inbox_projects)),
+    names = project_scope(service.cwd, settings, projects=projects, all_projects=all_projects)
+    every = {
+        TO_REVIEW: lambda: build_to_review_query(settings, projects=names, include_unready=include_unready),
+        OUTGOING: lambda: with_project_filter(DEFAULT_OUTGOING_QUERY, names),
     }
+    queries = {name: build() for name, build in every.items() if name in sections}
+    if not queries:
+        return []
     account = service.self_account_id()
     fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
-    to_review, outgoing = parallel_map(partial(fetch, query) for query in queries.values())
+    fetched = dict(zip(queries, parallel_map(partial(fetch, query) for query in queries.values()), strict=True))
     cap = limit if limit is not None else settings.inbox_limit
-    if cap is not None:
-        to_review = to_review[: max(0, cap)]
-    outgoing.sort(key=lambda chain: (_urgency(chain), chain.wait_age_seconds, chain.top.number))
-    return [
-        InboxSection(TO_REVIEW, queries[TO_REVIEW], to_review),
-        InboxSection(OUTGOING, queries[OUTGOING], outgoing),
-    ]
+    if cap is not None and TO_REVIEW in fetched:
+        fetched[TO_REVIEW] = fetched[TO_REVIEW][: max(0, cap)]
+    if OUTGOING in fetched:
+        fetched[OUTGOING].sort(key=lambda chain: (_urgency(chain), chain.wait_age_seconds, chain.top.number))
+    return [InboxSection(name, queries[name], chains) for name, chains in fetched.items()]
 
 
 def pick_headline(sections: Sequence[InboxSection]) -> Headline | None:

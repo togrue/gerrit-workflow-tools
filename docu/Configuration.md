@@ -91,13 +91,13 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 
 ## `ger inbox` — `inbox.*`
 
-Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbox.md).
+Host-scoped (no clone required); inside a clone it is narrowed to that clone's project unless `--all` is given. See [spec/commands/inbox.md](spec/commands/inbox.md).
 
 | Key | Effect |
 |-----|--------|
 | `inbox.requireVerified` | When `true` (default), the *to review* query requires `label:<verifiedLabel>+1`. |
 | `inbox.verifiedLabel` | CI label name for that gate (default `Verified`). |
-| `inbox.projects` | Default `--project` list, comma-separated. Unset means every project on the host. |
+| `inbox.projects` | Default `--project` list outside a clone, comma-separated. Unset means every project on the host. Inside a clone, the clone's own project is the default instead. |
 | `inbox.toReviewQuery` | Replace the *to review* query entirely (verified gate is then your problem). |
 | `inbox.limit` | Default `--limit` (positive integer). |
 

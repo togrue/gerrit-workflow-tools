@@ -65,7 +65,7 @@ Every term (*local stack*, *ready boundary*, *target branch*, *triplet*, …) is
 
 ```bash
 ger log                  # stack vs Gerrit — see Reading-ger-log.md
-ger inbox                # chains waiting on your review
+ger inbox                # chains waiting on your review, and your own (this project; --all)
 ger show <ref>           # one change, full comments
 ger ci                   # why CI failed: findings from the CI logs
 ger push                 # push ready prefix

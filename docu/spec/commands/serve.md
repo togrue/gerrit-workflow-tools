@@ -186,6 +186,9 @@ Everything the first screen needs, in one call.
 - `headline` — the **headline**: `section`, `reason`, `chain`, `number`, `subject`, `url` and a
   sentence in `text`. `null` when nothing wants you.
 - `local` — the answer of `GET /stack`.
+- `projects` — the Gerrit projects both sections are narrowed to: the repository's own
+  (from `gerrit.project` or the remote URL), as `ger inbox` does inside a clone. `all=1` drops
+  the filter and the list is empty: every project on the host.
 - `generated`, `host`.
 
 The inbox and the local stack fail separately. Either may be `{"error": {…}}` while the other

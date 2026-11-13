@@ -158,6 +158,8 @@ export interface Overview {
   host: string;
   generated?: string;
   headline?: Headline | null;
+  /** The Gerrit projects the sections are narrowed to: this repository's. Empty means all. */
+  projects?: string[];
   sections?: Section[];
   /** Set instead of `sections` when the inbox could not be loaded. */
   error?: ApiError;

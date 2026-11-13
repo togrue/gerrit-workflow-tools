@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_contex
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, repo_toplevel, resolve_working_branch
-from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, section_summary
+from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, project_scope, section_summary
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress, rebase_progress
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
@@ -189,11 +189,14 @@ def _soft(load: Any, ctx: Context, req: Request) -> dict[str, Any]:
         return {"error": error_json(error)}
 
 
-def _inbox(ctx: Context, _req: Request) -> dict[str, Any]:
+def _inbox(ctx: Context, req: Request) -> dict[str, Any]:
+    """Both inbox sections, narrowed to the repository's project; every project with ``all=1``."""
     now = datetime.now(timezone.utc)
-    sections = load_inbox(ctx.service, now=now)
+    projects = project_scope(ctx.cwd, ctx.settings, all_projects=req.flag("all"))
+    sections = load_inbox(ctx.service, now=now, projects=projects, all_projects=not projects)
     return {
         "generated": iso_utc(now),
+        "projects": projects,
         "headline": headline_json(pick_headline(sections)),
         "sections": [
             {

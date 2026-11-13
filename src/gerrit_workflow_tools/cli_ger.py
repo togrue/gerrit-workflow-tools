@@ -49,7 +49,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "fetch-api": ("GET a Gerrit REST path with configured user and token.", "gerrit_workflow_tools.cli_fetch_api:main"),
     "fix": ("Create a git fixup commit for a ref or Gerrit change.", "gerrit_workflow_tools.cli_fix:main"),
     "inbox": (
-        "Open review chains waiting on you (unreviewed age, last activity, Gerrit link).",
+        "Open review chains: waiting on your review, and your own (outgoing). Current project; --all for every.",
         "gerrit_workflow_tools.cli_inbox:main",
     ),
     "log": (

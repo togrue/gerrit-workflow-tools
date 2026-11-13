@@ -152,7 +152,9 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
     )
     theirs.update(project="testproj", id=f"testproj~main~{THEIRS_CHANGE_ID}")
     store.add_change(theirs)
-    store.stub_query(build_to_review_query(Settings.from_cwd(repo), projects=[], include_unready=False), [theirs])
+    store.stub_query(
+        build_to_review_query(Settings.from_cwd(repo), projects=["testproj"], include_unready=False), [theirs]
+    )
     store.set_comments(
         theirs["id"],
         {

@@ -2,13 +2,13 @@
 
 | | |
 |--|--|
-| **Status** | **Partial** — *to review* is implemented; *waiting on others*, watermark, and `--watch` are still planned |
+| **Status** | **Partial** — *to review* and *outgoing* are implemented; watermark and `--watch` are still planned |
 | **Module** | `src/gerrit_workflow_tools/cli_inbox.py` |
 | **Requires** | `gerrit.webUrl`, credentials. **No git repository required.** |
 
-What is waiting on you. Groups open Gerrit changes into **review chains** and reports one entry per chain.
+What is waiting on you, and where your own chains stand. Groups open Gerrit changes into **review chains** and reports one entry per chain, in two **inbox sections**: *to review* (incoming — others' chains you review) and *outgoing* (your own open chains). There is no separate `ger outbox`: `--to-review` / `--outgoing` pick one section.
 
-Answers: *how long has this chain gone without my review, and when was it last touched?*
+Answers: *how long has this chain gone without my review, and when was it last touched?* and *which of my chains needs me now?*
 
 `ger log` looks outward from the **local stack**. `ger inbox` looks the other way — it starts from a Gerrit query and never needs local commits. That inversion is the reason this command exists as its own thing rather than a `ger log` flag.
 
@@ -22,7 +22,16 @@ ger inbox [options]
 
 Takes no positional arguments. Runs from **any directory**, including outside a clone: identity and credentials come from `gerrit.*` git config (normally global, written by `ger setup`).
 
-This slice implements the **to review** section only.
+### Project scope
+
+| Where / how | Projects shown |
+|-------------|----------------|
+| `--project P` (repeatable) | Exactly those |
+| `--all` | Every project on the host |
+| Inside a clone | The clone's Gerrit project (`gerrit.project`, else the remote URL) |
+| Outside a clone | `inbox.projects`, else every project on the host |
+
+Both sections use the same scope, and the text output names it on its first line (`project: myproject`, or `project: all projects`). `--all` and `--project` cannot be combined.
 
 ---
 
@@ -79,13 +88,13 @@ $XDG_STATE_HOME/ger/<host>/inbox-state.json      (fallback ~/.local/state)
 | Section | Meaning | Query (default) | Status |
 |---------|---------|-----------------|--------|
 | **to review** | Open chains where you are a reviewer | `is:open -is:wip -is:private -owner:self reviewer:self` | Implemented |
-| **waiting on others** | Your open chains where the ball is elsewhere | `is:open -is:wip owner:self -attention:self` | Planned |
+| **outgoing** | Your own open chains | `is:open owner:self` | Implemented |
 
-The *to review* section has `label:Verified+1` appended when `inbox.requireVerified` is on, and `--project` filters folded in as `(project:A OR project:B)`.
+The *to review* section has `label:Verified+1` appended when `inbox.requireVerified` is on. The [project scope](#project-scope) is folded into both queries as `project:A`, or `(project:A OR project:B)`.
 
 A chain appears in **to review** if any member matches; the chain is then fetched whole (via assembly), so members you are not a reviewer on still appear as context.
 
-Within the section, chains sort by **unreviewed age**, oldest first (longest waiting for you). Ties break on wait age, then change number.
+Within *to review*, chains sort by **unreviewed age**, oldest first (longest waiting for you). Ties break on wait age, then change number. Within *outgoing*, what you must act on comes first — failed CI, then unresolved comments, then a negative vote — then the latest activity.
 
 ---
 
@@ -93,10 +102,12 @@ Within the section, chains sort by **unreviewed age**, oldest first (longest wai
 
 | Option | Description |
 |--------|-------------|
-| `--to-review` | Only the *to review* section (currently the default and the only implemented section) |
-| `--project P` | Restrict to a Gerrit project; repeatable. Default: all projects on the host (or `inbox.projects`) |
-| `--all` | Include chains filtered out as not ready (WIP, private, CI red) |
-| `--limit N` | At most N chains. N must be positive |
+| `--to-review` | Only the *to review* section |
+| `--outgoing` | Only the *outgoing* section (your own chains) |
+| `--project P` | Restrict to a Gerrit project; repeatable. Default: see [project scope](#project-scope) |
+| `--all` | Every project on the host, not only the current clone's |
+| `--unready` | Include *to review* chains filtered out as not ready (WIP, private, CI red) |
+| `--limit N` | At most N chains per section. N must be positive |
 | `--json` | Machine-readable output (see [JSON](#json)) |
 | `--url`, `--show-url` | Chain-top URL per entry (default: **on**) |
 | `--no-url` | Omit URLs from text output |
@@ -104,7 +115,7 @@ Within the section, chains sort by **unreviewed age**, oldest first (longest wai
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, the chain-top URL becomes a clickable `Open in gerrit` (OSC 8), same as `ger log`. JSON always includes the raw URL. |
 | `--debug-log`, `-v` | Standard helpers (see `cli_common`) |
 
-Planned, not in this slice: `--waiting`, `--since-last`, `--watch`, `--forget`, `--sort`, `--query`.
+Planned, not in this slice: `--since-last`, `--watch`, `--forget`, `--sort`, `--query`.
 
 ---
 
@@ -113,6 +124,8 @@ Planned, not in this slice: `--waiting`, `--since-last`, `--watch`, `--forget`, 
 One line per chain; indented lines only for members that individually need something. Status tokens are the **same vocabulary as `ger log`** — patchset column omitted, since a chain has no local commit to align with.
 
 ```text
+project: myproject
+
 to review (3)
 c4321  5c  v+1 cr0       unrevi 3d  act 4h  alice   # feat: rate limiter
   https://gerrit.example.com/c/myproject/+/4321
@@ -124,7 +137,16 @@ c4380  9c  v-1 cr0       unrevi 6d  act 6d  carol   # refactor: split scheduler
    └ c4379  cr0 com  # 2 unresolved comments
 
 summary: 3 chains · 15 changes · oldest unrevi 6d · CI 1 · comments 1
+
+outgoing (1)
+c4410  2c  v-1 cr0  act 2h  # feat: quota headers
+  https://gerrit.example.com/c/myproject/+/4410
+   └ c4409  v-1      # build failed
+
+summary: 1 chains · 2 changes · oldest act 2h · CI 1
 ```
+
+An *outgoing* line is yours: it has no `unrevi` clock and no owner.
 
 | Column | Meaning |
 |--------|---------|
@@ -139,7 +161,7 @@ summary: 3 chains · 15 changes · oldest unrevi 6d · CI 1 · comments 1
 
 **Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote. A healthy chain stays one line plus its URL.
 
-**Empty sections** print a dim `(nothing to review)` rather than vanishing, so the output shape is stable.
+**Empty sections** print a dim `(nothing to review)` / `(no open chains of yours)` rather than vanishing, so the output shape is stable.
 
 `-v` lists every member, not only those with attention.
 
@@ -167,10 +189,13 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
 {
   "host": "gerrit.example.com",
   "generated": "2026-08-18T09:14:22Z",
-  "sections": [
+  "projects": ["myproject"],  // the project scope; [] = every project
+  "sections": [               // to-review, then outgoing (one with --to-review / --outgoing)
     {
       "name": "to-review",
-      "query": "is:open -is:wip -is:private -owner:self reviewer:self label:Verified+1",
+      "query": "is:open -is:wip -is:private -owner:self reviewer:self label:Verified+1 project:myproject",
+      "summary": { "chains": 3, "changes": 15, "oldest_unreviewed_seconds": 518400,
+                   "oldest_wait_seconds": 518400, "ci_failures": 1, "comments": 1 },
       "chains": [
         {
           "key": "gerrit.example.com~myproject~4321",
@@ -193,10 +218,9 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
           ]
         }
       ]
-    }
-  ],
-  "summary": { "chains": 3, "changes": 15, "oldest_unreviewed_seconds": 518400,
-               "oldest_wait_seconds": 518400, "ci_failures": 1, "comments": 1 }
+    },
+    { "name": "outgoing", "query": "is:open owner:self project:myproject", "summary": { … }, "chains": [ … ] }
+  ]
 }
 ```
 
@@ -210,8 +234,8 @@ Shared table ([exit-codes.md](../exit-codes.md)) — no new codes.
 
 | Code | Meaning |
 |------|---------|
-| `0` | Ran fine; nothing wants you (empty inbox) |
-| `1` | `ATTENTION` — the inbox is non-empty |
+| `0` | Ran fine; nothing wants you |
+| `1` | `ATTENTION` — something wants you: a chain to review, or an outgoing chain with failed CI, unresolved comments or a negative vote (the **headline** exists) |
 | `2` | `USAGE` — bad arguments |
 | `5` | `GERRIT` — query failed, auth, unreachable |
 | `6` | `CONFIG` — `gerrit.webUrl` or credentials missing |
@@ -226,7 +250,7 @@ Consistent with `ger log` / `ger show`: exit `1` reports a *state*, not a failur
 |-----|--------|---------|
 | `inbox.requireVerified` | Require `label:Verified+1` for a chain to count as ready | `true` |
 | `inbox.verifiedLabel` | Label name for the CI gate (sites rename it) | `Verified` |
-| `inbox.projects` | Default `--project` list, comma-separated | *(all)* |
+| `inbox.projects` | Default `--project` list outside a clone, comma-separated | *(all)* |
 | `inbox.toReviewQuery` | Override the *to review* query entirely | *(see table)* |
 | `inbox.limit` | Default `--limit` | *(none)* |
 | `gerrit.warningPattern` | Reused from `ger log` | |
@@ -237,7 +261,7 @@ Site variation in label names and workflow is real, which is why the query is ov
 
 ## Architecture notes
 
-Settled in [adr/0004-inbox-is-host-scoped.md](../../adr/0004-inbox-is-host-scoped.md): **the inbox is scoped to a Gerrit host, not a working directory.** Nothing in `ger inbox` may build a **stack context**.
+Settled in [adr/0004-inbox-is-host-scoped.md](../../adr/0004-inbox-is-host-scoped.md): **the inbox is scoped to a Gerrit host, not a working directory.** Nothing in `ger inbox` may build a **stack context**. Narrowing to the clone's project reads only `gerrit.project` / the remote URL (`core/inbox.py:project_scope`).
 
 Query-driven fetch is a sibling of `GerritService.fetch_gerrit_data`: `GerritService.fetch_review_chains(query)`. Chain assembly is a pure function over ChangeInfo payloads (`core/review_chain.py`), testable against `ChangeStore`.
 
@@ -250,7 +274,6 @@ New binding vocabulary lives in [CONTEXT.md](../../../CONTEXT.md): **review chai
 - **`-q` / quiet.** A cron notifier would want a quiet flag. Either add `-q` here or promote it to `cli_common` for all commands. Deferred with `--since-last`.
 - **Chain key stability.** Keying on the chain top's change number is readable, but the top changes when someone adds a commit on top. Keying on the chain *base* is more stable; decide before the watermark format is written.
 - **Relation to `ger review checkout`.** The intended follow-up is materializing a chain into a dedicated review clone. `ger inbox --json` already carries project, branch, top change number. Confirm no extra field is required before freezing the schema.
-- **Waiting on others.** Second section, same assembly.
 
 ---
 

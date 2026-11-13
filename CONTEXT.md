@@ -103,7 +103,7 @@ Time since the last activity on a **review chain**: `now − max(updated)` over 
 _Avoid_: using this for "how long since I reviewed"
 
 **Inbox section**:
-One Gerrit query plus the **review chains** assembled from it. Two exist: **to review** (open chains where you are a reviewer) and **outgoing** (open chains you own). `ger inbox` prints *to review*; `ger serve` serves both.
+One Gerrit query plus the **review chains** assembled from it. Two exist: **to review** (open chains where you are a reviewer) and **outgoing** (open chains you own). `ger inbox` prints both and `ger serve` serves both, each narrowed to the current clone's project unless asked for every project.
 _Avoid_: inbox tab, queue (unqualified), incoming (for *to review*)
 
 **Headline**:
