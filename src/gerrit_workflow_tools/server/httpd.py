@@ -10,6 +10,8 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import select
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -134,11 +136,23 @@ class _Handler(BaseHTTPRequestHandler):
                 payload = unlocked
             else:
                 with self.server.api_lock:
+                    if method == "GET" and self._caller_left():
+                        # Called off while it queued (the Change view moved on): nobody reads the answer.
+                        self.close_connection = True
+                        return
                     payload = self.server.api.handle(method, unquote(url.path), parse_qs(url.query), body)
             status = 200
         except Exception as error:  # pylint: disable=broad-exception-caught
             status, payload = failure_response(error)
         self._send(status, payload)
+
+    def _caller_left(self) -> bool:
+        """Whether the client closed the connection: it then reads as at end, with no next request."""
+        try:
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            return bool(readable) and self.connection.recv(1, socket.MSG_PEEK) == b""
+        except OSError:
+            return True
 
     def _send(self, status: int, payload: dict[str, Any], *, close: bool = False) -> None:
         data = json.dumps(payload).encode("utf-8")

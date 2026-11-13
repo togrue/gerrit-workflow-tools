@@ -52,6 +52,8 @@ export class ChangeView extends WebView<ChangeVm> {
   private ci: CiView = { state: "closed" };
   /** Counts opens and closes: a load that finishes after a later one started is dropped. */
   private generation = 0;
+  /** Aborted with each open and close: the requests of a load nobody waits for any more are called off, so ger serve skips what it has not started. */
+  private requests = new AbortController();
   private loading: Promise<void> = Promise.resolve();
   /** Gives a stack commit a new message; `applied` runs once it has it. Set by the extension. */
   reword: (sha: string, message: string, applied: () => void) => Promise<boolean> = () => Promise.resolve(false);
@@ -94,8 +96,8 @@ export class ChangeView extends WebView<ChangeVm> {
     // ger serve answers one request at a time: a load for every commit walked past would queue
     // in front of the one you stopped on. So one load runs at a time, the one under way is
     // dropped, and of the opens asked for meanwhile only the latest is loaded.
-    const generation = ++this.generation;
-    const load = () => (generation === this.generation ? this.load(target, generation) : undefined);
+    const [generation, signal] = this.supersede();
+    const load = () => (generation === this.generation ? this.load(target, generation, signal) : undefined);
     this.loading = this.loading.then(load, load);
     return this.loading;
   }
@@ -111,14 +113,21 @@ export class ChangeView extends WebView<ChangeVm> {
     return Boolean(this.target?.local) && this.version === "local";
   }
 
-  private async load(target: ChangeTarget, generation: number): Promise<void> {
+  /** A new generation: the loads of the previous ones are dropped, and their requests called off. */
+  private supersede(): [number, AbortSignal] {
+    this.requests.abort();
+    this.requests = new AbortController();
+    return [++this.generation, this.requests.signal];
+  }
+
+  private async load(target: ChangeTarget, generation: number, signal: AbortSignal): Promise<void> {
     const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
       try {
         const client = await this.model.client();
         const [commits, diff, delta] = await Promise.all([
-          client.show([target.rev], { comments: "all", context: 3 }),
-          this.baseDiff(client, target, generation).catch(() => undefined),
-          this.deltaDiff(client, target).catch(() => undefined),
+          client.show([target.rev], { comments: "all", context: 3 }, signal),
+          this.baseDiff(client, target, generation, signal).catch(() => undefined),
+          this.deltaDiff(client, target, signal).catch(() => undefined),
         ]);
         return [commits[0], diff, delta, undefined] as const;
       } catch (error) {
@@ -133,42 +142,42 @@ export class ChangeView extends WebView<ChangeVm> {
     void vscode.commands.executeCommand("setContext", "ger.newComment", this.shown?.new_comment ?? "none");
     this.render();
     this.loaded.fire();
-    void this.loadPatchsets(generation);
+    void this.loadPatchsets(generation, signal);
   }
 
   /** The version looked at against its parent. */
-  private async baseDiff(client: GerClient, target: ChangeTarget, generation: number): Promise<Diff> {
+  private async baseDiff(client: GerClient, target: ChangeTarget, generation: number, signal: AbortSignal): Promise<Diff> {
     const change = this.change(target);
     let version = this.version;
     if (version === "current" && target.local && change) {
       // Your commit carries the change, so the change alone would name your commit: ask which patchset is current.
-      const patchsets = this.patchsets ?? (await client.patchsets(change));
+      const patchsets = this.patchsets ?? (await client.patchsets(change, signal));
       version = patchsets.current ?? "local";
       if (generation === this.generation) {
         [this.patchsets, this.version] = [patchsets, version]; // a load dropped meanwhile leaves the next change's choice alone
       }
     }
-    return typeof version === "number" && change ? client.diff(change, { patchset: version }) : client.diff(target.rev);
+    return typeof version === "number" && change ? client.diff(change, { patchset: version }, signal) : client.diff(target.rev, {}, signal);
   }
 
-  private async deltaDiff(client: GerClient, target: ChangeTarget): Promise<Diff | undefined> {
+  private async deltaDiff(client: GerClient, target: ChangeTarget, signal: AbortSignal): Promise<Diff | undefined> {
     const change = this.change(target);
     if (!change) {
       return undefined;
     }
     const local = target.local && this.version === "local" ? target.rev : undefined;
     if (this.mode === "gerrit") {
-      return local ? client.diff(change, { since: "current", local }) : undefined;
+      return local ? client.diff(change, { since: "current", local }, signal) : undefined;
     }
     // Someone's change: asked either way, as what is new since your review is offered up front.
     if (this.mode === "reviewed" || !target.local) {
-      return client.diff(change, { since: "reviewed", patchset: typeof this.version === "number" ? this.version : undefined, local });
+      return client.diff(change, { since: "reviewed", patchset: typeof this.version === "number" ? this.version : undefined, local }, signal);
     }
     return undefined;
   }
 
   /** The patchsets to choose from. After the change itself, and only once it has stayed a moment: walking the stack with the arrow keys asks nothing. */
-  private async loadPatchsets(generation: number): Promise<void> {
+  private async loadPatchsets(generation: number, signal: AbortSignal): Promise<void> {
     const change = this.target && this.change(this.target);
     if (!change || !this.shown?.pushed || this.patchsets) {
       return;
@@ -178,7 +187,7 @@ export class ChangeView extends WebView<ChangeVm> {
       return;
     }
     try {
-      const patchsets = await (await this.model.client()).patchsets(change);
+      const patchsets = await (await this.model.client()).patchsets(change, signal);
       if (generation === this.generation) {
         this.patchsets = patchsets;
         this.render();
@@ -199,7 +208,7 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** Show nothing: the change that was shown is gone. */
   close(): void {
-    this.generation += 1;
+    this.supersede();
     [this.target, this.shown, this.diff, this.delta, this.problem, this.patchsets] = [undefined, undefined, undefined, undefined, undefined, undefined];
     this.ci = { state: "closed" };
     void vscode.commands.executeCommand("setContext", "ger.changeShown", false);

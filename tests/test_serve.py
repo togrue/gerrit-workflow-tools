@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import json
+import socket
 import sys
 import threading
 import urllib.error
@@ -33,7 +34,7 @@ from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnav
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit
 from gerrit_workflow_tools.server.api import GerApi
-from gerrit_workflow_tools.server.httpd import GerHttpServer, failure_response
+from gerrit_workflow_tools.server.httpd import GerHttpServer, _Handler, failure_response
 from gerrit_workflow_tools.server.request import BadRequest, NoRoute
 from tests.change_store import ChangeStore
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
@@ -701,6 +702,34 @@ def test_http_maps_failures_to_statuses_and_shared_codes(served: GerHttpServer) 
     assert (status, body["error"]["code"]) == (400, "USAGE")
     assert failure_response(NoRoute("x"))[0] == 404
     assert failure_response(RuntimeError("bug"))[1]["error"]["code"] == "INTERNAL"
+
+
+def test_http_skips_a_read_its_caller_called_off_while_it_queued(
+    served: GerHttpServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Change view abandons the load of a commit you walked past: ger serve does not run it."""
+    handled: list[str] = []
+    answer = served.api.handle
+    asked = threading.Event()
+    left = _Handler._caller_left
+
+    def handle(method: str, path: str, *rest: Any) -> dict[str, Any]:
+        handled.append(path)
+        return answer(method, path, *rest)
+
+    def caller_left(self: _Handler) -> bool:
+        asked.set()
+        return left(self)
+
+    monkeypatch.setattr(served.api, "handle", handle)
+    monkeypatch.setattr(_Handler, "_caller_left", caller_left)
+    port = int(served.url.rsplit(":", 1)[1])
+    # The lock is held, as by a request under way, until the caller has hung up.
+    with served.api_lock, socket.create_connection(("127.0.0.1", port)) as caller:
+        caller.sendall(f"GET {V1}/show HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer s3cret\r\n\r\n".encode())
+    assert asked.wait(timeout=10)
+    assert _http(served, f"{V1}/health")[0] == 200  # a caller that waits is answered
+    assert f"{V1}/show" not in handled
 
 
 def test_serve_prints_where_it_listens_and_stops_with_stdin(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
