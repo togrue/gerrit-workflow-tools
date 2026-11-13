@@ -290,7 +290,9 @@ def test_warnings_collapse_below_an_error_that_explains_the_failure() -> None:
     assert "- 1 warning not listed (ger ci --warnings lists them)" in format_ci_section_markdown([content])
     payload = ci_content_json(content)
     assert payload["collapse_warnings"] is True
-    assert [f["severity"] for f in payload["findings"]] == ["warning", "error", "error"]  # type: ignore[union-attr]
+    findings = payload["findings"]
+    assert isinstance(findings, list)
+    assert [f["severity"] for f in findings] == ["warning", "error", "error"]
 
 
 def test_warnings_stay_in_view_when_only_a_build_verdict_stands_beside_them() -> None:
