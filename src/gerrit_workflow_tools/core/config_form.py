@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 
-from gerrit_workflow_tools.core.config import EDIT_NEXT_SHOW_KEY, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import SHOW_AFTER_EDIT_KEY, ConfigScope, Settings
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
@@ -229,11 +229,11 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "14d",
     ),
     _bool(
-        EDIT_NEXT_SHOW_KEY,
+        SHOW_AFTER_EDIT_KEY,
         "ger edit",
-        "After ger edit --next moves to a commit and that rebase succeeds, run ger show on it. "
-        "Off means --next only moves.",
-        default="false",
+        "After ger edit --next or --first-attention-commit stops at a commit, run ger show on it. "
+        "Off means they only move.",
+        default="true",
     ),
     _spec(
         "ger.eventStream",

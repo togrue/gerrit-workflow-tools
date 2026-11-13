@@ -107,7 +107,7 @@ Host-scoped (no clone required); inside a clone it is narrowed to that clone's p
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.editNextShow` | When `true`, `ger edit --next` runs `ger show` on the commit it moved to after that rebase exits 0. Unset is off: `--next` only moves. `ger reword --next` ignores this key. Show's attention exit does not replace a successful rebase; other show failures are returned as-is. |
+| `ger.showAfterEdit` | Default `true`: `ger edit --next` and `ger edit --first-attention-commit` run `ger show` on the commit they stopped at, after that rebase exits 0. `false`: they only move. `ger edit REV` and `ger reword` never show. Show's attention exit does not replace a successful rebase; other show failures are returned as-is. Unset, the old key `gerrit.editNextShow` is still read. |
 | `ger.attentionCursorTtl` | Max age of a usable attention cursor (default `14d`). See [Attention cursor](#attention-cursor-ger-and-branch-local). |
 
 `ger config` shows these keys, and the rest of this page, in one screen. See [spec/commands/config.md](spec/commands/config.md).

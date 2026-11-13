@@ -315,8 +315,9 @@ def _run_interactive_stack_rebase(
                 "to keep updating it, or abandon it there.",
                 file=sys.stderr,
             )
-    moved = default_action == "edit" and args.next_attention and returncode == 0
-    if moved and settings.edit_next_show:
+    walked = args.next_attention or args.first_attention_commit
+    moved = default_action == "edit" and walked and returncode == 0
+    if moved and settings.show_after_edit:
         from gerrit_workflow_tools.cli_ger import run_show
 
         show_code = run_show([full], gerrit=gerrit)

@@ -72,7 +72,7 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
    A rebase that stops on a conflict (here, or in the `git rebase --continue` that `-n` runs) ends with one shared next step, the same for every ger-started rebase: `next: resolve the conflicts in <paths>, `git add` them, then `git rebase --continue` to finish; `git rebase --abort` goes back to where the rebase started`. During an attention walk (`ger edit -n`, `--first-attention-commit`, or the cursor) it also names the way on, between the two: `` `ger edit -n` finishes and goes on to the next commit needing attention``. `cli_common.run_interactive_rebase` / `continue_rebase` print it from `rebase_state.conflict_next_step`.
 6. The attention cursor moves only once the rebase has started (it exited `0`, or stopped with a conflict) and the target's Change-Id is known.
 7. For `edit`, the stop says `next: amend it, then `git rebase --continue` to finish; `ger edit -n` finishes and goes on to the next commit needing attention` (`rebase_state.edit_stop_next_step`): `git rebase --continue` only finishes the rewrite; `ger edit -n` continues the rebase and walks to the next edit-attention commit.
-8. When `gerrit.editNextShow` is true, this was `ger edit --next` (not `ger reword`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Unset, the flag is off and `--next` only moves.
+8. When `ger.showAfterEdit` is on (the default; unset falls back to the old `gerrit.editNextShow`), this was `ger edit --next` or `ger edit --first-attention-commit` (not `ger reword`, not `ger edit REV`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Off, the walk only moves.
 
 ---
 
@@ -99,5 +99,5 @@ codes [`ger fix`](fix.md) uses for the same failures.
 - [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger show`](show.md) / [`ger sha`](sha-change-id.md) — read-only `--first-attention` / `--next-attention`
-- [Configuration.md](../../Configuration.md#ger-edit) — `gerrit.editNextShow`
+- [Configuration.md](../../Configuration.md#ger-edit) — `ger.showAfterEdit`
 - [`ger rebase`](rebase.md)

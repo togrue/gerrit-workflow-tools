@@ -313,9 +313,21 @@ def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytes
     assert "no commit in the local stack has that Change-Id" in err
 
 
-def test_gedit_next_runs_show_only_when_edit_next_show_is_set(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("config", "shows"),
+    [
+        ({}, True),
+        ({"ger.showAfterEdit": "false"}, False),
+        ({"gerrit.editNextShow": "false"}, False),
+        ({"gerrit.editNextShow": "true"}, True),
+        ({"gerrit.editNextShow": "false", "ger.showAfterEdit": "true"}, True),
+    ],
+)
+@pytest.mark.parametrize("walk", [["-n"], ["--first-attention-commit"]])
+def test_gedit_walk_runs_show_unless_show_after_edit_is_off(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, config: dict[str, str], shows: bool, walk: list[str]
 ) -> None:
+    """Issue #33: on by default, for --next and --first-attention-commit; the old key still turns it off."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     assert len(rows) >= 2
@@ -334,19 +346,16 @@ def test_gedit_next_runs_show_only_when_edit_next_show_is_set(
     monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", _run_show)
     _fake_rebase_capture(monkeypatch)
 
-    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    for key, value in config.items():
+        git("config", key, value, cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, gedit_main, walk, monkeypatch, gerrit=store)
     assert code == 0, err
-    assert calls == []
-
-    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
-    assert code == 0, err
-    assert calls == [[rows[1].sha]]
+    assert calls == ([[rows[0].sha]] if shows else [])
 
 
-def test_greword_next_ignores_edit_next_show(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_greword_next_ignores_show_after_edit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
-    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
+    git("config", "ger.showAfterEdit", "true", cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{}] * len(rows)
     overrides[0] = {"unresolved_comment_count": 2}
@@ -470,7 +479,7 @@ def test_gedit_next_show_failure_is_returned(stack_repo: Path, monkeypatch: pyte
     from gerrit_workflow_tools.cli_common import ExitCode
 
     _configure_repo(stack_repo)
-    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
+    git("config", "ger.showAfterEdit", "true", cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{}] * len(rows)
     overrides[0] = {"unresolved_comment_count": 2}

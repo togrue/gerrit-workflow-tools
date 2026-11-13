@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.core.config import EDIT_NEXT_SHOW_KEY, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import SHOW_AFTER_EDIT_KEY, ConfigScope, Settings
 from gerrit_workflow_tools.core.config_editor_file import (
     parse_config_editor_text,
     planned_editor_writes,
@@ -48,7 +48,7 @@ def test_stored_value_wins_and_keeps_scope() -> None:
     settings = Settings.from_map(
         {
             "gerrit.remote": "gerrit",
-            EDIT_NEXT_SHOW_KEY: "yes",
+            SHOW_AFTER_EDIT_KEY: "yes",
             "gerrit.webUrl": "https://g.example",
         },
         scopes={"gerrit.webUrl": ConfigScope.GLOBAL},
@@ -57,8 +57,8 @@ def test_stored_value_wins_and_keeps_scope() -> None:
     assert resolved["gerrit.remote"].stored == "gerrit"
     assert resolved["gerrit.remote"].scope is ConfigScope.LOCAL
     assert resolved["gerrit.webUrl"].scope is ConfigScope.GLOBAL
-    assert resolved[EDIT_NEXT_SHOW_KEY].value == "true"
-    assert resolved[EDIT_NEXT_SHOW_KEY].stored == "yes"
+    assert resolved[SHOW_AFTER_EDIT_KEY].value == "true"
+    assert resolved[SHOW_AFTER_EDIT_KEY].stored == "yes"
 
 
 def test_branch_keys_need_a_branch() -> None:
@@ -80,7 +80,7 @@ def test_render_comments_out_unset_and_shows_default() -> None:
 
 
 def test_round_trip_unchanged_file_plans_no_writes() -> None:
-    settings = Settings.from_map({"gerrit.remote": "gerrit", EDIT_NEXT_SHOW_KEY: "true"})
+    settings = Settings.from_map({"gerrit.remote": "gerrit", SHOW_AFTER_EDIT_KEY: "true"})
     form = resolve_config_form(settings, branch="feature")
     text = render_config_editor_text(form)
     parsed, errors = parse_config_editor_text(text, form)
@@ -93,15 +93,15 @@ def test_round_trip_unchanged_file_plans_no_writes() -> None:
 def test_uncomment_default_writes_local_explicit_value() -> None:
     form = resolve_config_form(Settings.from_map({}), branch=None)
     text = render_config_editor_text(form).replace(
-        f"# {EDIT_NEXT_SHOW_KEY}=false",
-        f"{EDIT_NEXT_SHOW_KEY}=false",
+        f"# {SHOW_AFTER_EDIT_KEY}=true",
+        f"{SHOW_AFTER_EDIT_KEY}=false",
     )
     parsed, errors = parse_config_editor_text(text, form)
     assert errors == ()
     writes, write_errors = planned_editor_writes(form, parsed)
     assert write_errors == ()
     assert len(writes) == 1
-    assert writes[0].key == EDIT_NEXT_SHOW_KEY
+    assert writes[0].key == SHOW_AFTER_EDIT_KEY
     assert writes[0].action == "set"
     assert writes[0].value == "false"
     assert writes[0].scope is ConfigScope.LOCAL
@@ -142,8 +142,8 @@ def test_missing_key_is_a_parse_error() -> None:
     assert any("missing setting gerrit.remote" in err.message for err in errors)
 
 
-def test_edit_next_show_is_bool_under_ger_edit() -> None:
-    resolved = _by_key(Settings.from_map({}))[EDIT_NEXT_SHOW_KEY]
+def test_show_after_edit_is_bool_under_ger_edit_and_on_by_default() -> None:
+    resolved = _by_key(Settings.from_map({}))[SHOW_AFTER_EDIT_KEY]
     assert resolved.spec.section == "ger edit"
     assert resolved.spec.kind is SettingKind.BOOL
-    assert resolved.value == "false"
+    assert resolved.value == "true"

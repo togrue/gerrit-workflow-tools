@@ -54,7 +54,7 @@ Empty file after the editor exits → abort (`ATTENTION`). Parse errors → usag
 
 Resolution lives in `resolve_config_form` (`core/config_form.py`); file format in `render_config_editor_text` / `parse_config_editor_text` (`core/config_editor_file.py`). Scope comes from `Settings.scope` (`git config --list --show-scope`).
 
-`gerrit.editNextShow` (default off) is the `ger edit` flag that makes `ger edit --next` run `ger show` after a successful move. See [edit.md](edit.md) and [Configuration.md](../../Configuration.md#ger-edit).
+`ger.showAfterEdit` (default on) is the `ger edit` flag that makes `ger edit --next` and `--first-attention-commit` run `ger show` after a successful move. See [edit.md](edit.md) and [Configuration.md](../../Configuration.md#ger-edit).
 
 ---
 
@@ -73,4 +73,4 @@ Resolution lives in `resolve_config_form` (`core/config_form.py`); file format i
 
 - [Configuration.md](../../Configuration.md) — key reference
 - [`ger setup`](setup.md) — first-run web URL, user, and token
-- [`ger edit`](edit.md) — `gerrit.editNextShow`
+- [`ger edit`](edit.md) — `ger.showAfterEdit`
