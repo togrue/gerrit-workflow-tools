@@ -147,7 +147,7 @@ What a **CI content provider** returns for one **CI link**: **provenance**, **CI
 _Avoid_: CI log (unqualified), build output, console dump
 
 **CI finding**:
-One normalized, fingerprintable failure or diagnostic extracted from **CI content** (tool/kind, path, line, message, …). What `ger show` attaches when CI content is enabled, and what `ger ci` prints by default.
+One normalized, fingerprintable failure or diagnostic extracted from **CI content** (tool/kind, severity, path, line, message, …). What `ger show` attaches when CI content is enabled, and what `ger ci` prints by default. An error leads; a warning is listed below the errors and collapsed when an error explains the failure. Its path is the file of the commit CI ran on, wherever the build agent kept it.
 _Avoid_: error (unqualified), log line, failure (the Checks name alone)
 
 **Introduced findings**:

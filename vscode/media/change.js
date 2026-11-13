@@ -196,20 +196,46 @@
           h("span", { class: "label" }, link.text),
           h("span", { class: "detail" }, link.detail),
         ),
-        link.findings.map((finding) =>
-          item(
-            {
-              class: "finding",
-              title: finding.tooltip,
-              onclick: finding.path ? () => post("finding", { path: finding.path, line: finding.line }) : undefined,
-            },
-            icon(finding.icon, finding.tone),
-            h("span", { class: "label" }, finding.text),
-            h("span", { class: "detail" }, finding.notes.join(" · ")),
-          ),
-        ),
+        link.findings.map((finding) => findingRow(finding, "finding")),
+        warningRows(link),
       ]),
     );
+  }
+
+  function findingRow(finding, cls) {
+    return item(
+      {
+        class: cls,
+        title: finding.tooltip,
+        onclick: finding.path ? () => post("finding", { path: finding.path, line: finding.line }) : undefined,
+      },
+      icon(finding.icon, finding.tone),
+      h("span", { class: "label" }, finding.text),
+      h("span", { class: "detail" }, finding.notes.join(" · ")),
+    );
+  }
+
+  /** Warnings sit below the errors behind one row that opens them: they are rarely why the build failed. */
+  function warningRows(link) {
+    if (!link.warnings.length) {
+      return [];
+    }
+    const key = `warnings:${link.url}`;
+    const isOpen = Boolean(toggled[key]);
+    const count = `${link.warnings.length} warning${link.warnings.length === 1 ? "" : "s"}`;
+    const head = item(
+      {
+        class: "finding",
+        "aria-expanded": isOpen ? "true" : "false",
+        onclick: () => {
+          toggled[key] = !isOpen;
+          draw(vm);
+        },
+      },
+      icon(isOpen ? "chevron-down" : "chevron-right"),
+      h("span", { class: "detail" }, count),
+    );
+    return [head, isOpen ? link.warnings.map((finding) => findingRow(finding, "finding nested")) : []];
   }
 
   function picker(label, choice, type) {

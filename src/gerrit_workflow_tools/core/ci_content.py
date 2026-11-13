@@ -29,6 +29,12 @@ BodyMode = Literal["none", "tail", "full"]
 
 CACHE_VERDICTS: tuple[CacheVerdict, ...] = ("none", "findings", "body")
 
+Severity = Literal["error", "warning"]
+"""Whether a finding can be why the build failed (``error``) or is a remark printed beside it."""
+
+VERDICT_TOOLS = frozenset({"generic", "ninja", "cmake", "cargo", "maven", "gradle", "sbt"})
+"""Tools whose findings say *that* a build step failed, not why: the build driver's verdict."""
+
 
 class CiContentError(Exception):
     """A **CI link**'s content could not be fetched or parsed where the command required it."""
@@ -45,7 +51,7 @@ class CiFinding:
     """One normalized failure or diagnostic extracted from **CI content**."""
 
     tool: str
-    """Which tool produced it: ``pytest``, ``ruff``, ``mypy``, ``cc``, ``clang-format``, ``ld``, ``generic``."""
+    """Which tool produced it, e.g. ``pytest``, ``ruff``, ``mypy``, ``cc``, ``rustc``, ``javac``, ``generic``."""
     kind: str
     """What it is for that tool, e.g. ``failed`` (pytest), ``lint`` (ruff), ``error`` / ``warning``."""
     message: str
@@ -55,6 +61,8 @@ class CiFinding:
     detail: str | None = None
     """A short excerpt (e.g. pytest's ``E`` lines), when the tool gives one."""
     fingerprint: str = ""
+    severity: Severity = "error"
+    """``warning`` for a diagnostic the tool itself ranks below an error; not part of the fingerprint."""
 
     def __post_init__(self) -> None:
         if not self.fingerprint:
@@ -79,6 +87,7 @@ class CiFinding:
             "message": self.message,
             "detail": self.detail,
             "fingerprint": self.fingerprint,
+            "severity": self.severity,
         }
 
     @classmethod
@@ -89,15 +98,19 @@ class CiFinding:
             value = raw.get(key)
             return value if isinstance(value, int) else None
 
+        kind = str(raw.get("kind") or "error")
+        severity = raw.get("severity")
         return cls(
             tool=str(raw.get("tool") or "generic"),
-            kind=str(raw.get("kind") or "error"),
+            kind=kind,
             message=str(raw.get("message") or ""),
             path=raw.get("path") if isinstance(raw.get("path"), str) else None,
             line=_int("line"),
             column=_int("column"),
             detail=raw.get("detail") if isinstance(raw.get("detail"), str) else None,
             fingerprint=str(raw.get("fingerprint") or ""),
+            # Entries stored before severity existed: only ``warning`` kinds ranked below an error.
+            severity=severity if severity in ("error", "warning") else ("warning" if kind == "warning" else "error"),
         )
 
 
@@ -162,6 +175,26 @@ class CiContent:
     def failed(self) -> bool:
         """The content could not be fetched or parsed."""
         return self.provenance.error is not None
+
+    @property
+    def collapse_warnings(self) -> bool:
+        """Warnings step back: some error here explains the failure, beyond a build driver's verdict.
+
+        Without such an error the warnings are the best lead there is, so they stay in view.
+        """
+        return any(f.severity == "error" and f.tool not in VERDICT_TOOLS for f in self.findings)
+
+    @property
+    def leading_findings(self) -> list[CiFinding]:
+        """The findings to read first: errors, and the warnings too unless they are collapsed."""
+        if not self.collapse_warnings:
+            return sorted(self.findings, key=lambda f: f.severity != "error")
+        return [f for f in self.findings if f.severity == "error"]
+
+    @property
+    def collapsed_warnings(self) -> list[CiFinding]:
+        """The warnings listed below :attr:`leading_findings`, collapsed by default."""
+        return [f for f in self.findings if f.severity == "warning"] if self.collapse_warnings else []
 
 
 def introduced_fingerprints(per_commit: Sequence[Sequence[CiContent] | None]) -> list[frozenset[str] | None]:

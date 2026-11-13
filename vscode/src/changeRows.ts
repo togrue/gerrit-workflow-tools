@@ -96,7 +96,10 @@ export interface CiLinkRow extends Icon {
   detail: string;
   url: string;
   tooltip: string;
+  /** The findings to read first: errors, and warnings when nothing else explains the failure. */
   findings: FindingRow[];
+  /** Warnings below the errors, collapsed by default. */
+  warnings: FindingRow[];
 }
 
 export interface Option {
@@ -248,7 +251,7 @@ function finding(item: CiFinding, introduced: boolean | null): FindingRow {
   return {
     ...icon,
     text: item.message,
-    notes: [item.tool, where, origin].filter(Boolean),
+    notes: [item.tool, item.severity === "warning" ? "warning" : "", where, origin].filter(Boolean),
     tooltip: [item.message, item.detail ?? "", origin].filter(Boolean).join("\n\n"),
     path: item.path,
     line: item.line,
@@ -262,16 +265,22 @@ function ciLinks(ci: CiView): CiLinkRow[] {
   return ci.contents.map((content) => {
     const failed = content.provenance.error !== null;
     const rows = content.findings.map((item) => ({ item, introduced: ci.introduced ? ci.introduced.has(item.fingerprint) : null }));
-    // What this change broke comes first; what it inherited from below follows.
-    rows.sort((a, b) => Number(b.introduced ?? false) - Number(a.introduced ?? false));
+    // What this change broke comes first; what it inherited from below follows. Errors before warnings.
+    const rank = (row: (typeof rows)[number]) => (row.introduced ? 0 : 2) + (row.item.severity === "warning" ? 1 : 0);
+    rows.sort((a, b) => rank(a) - rank(b));
+    const collapsed = (row: (typeof rows)[number]) => Boolean(content.collapse_warnings) && row.item.severity === "warning";
+    const leading = rows.filter((row) => !collapsed(row));
+    const warnings = rows.filter(collapsed);
+    const counted = [plural(leading.length, "finding"), warnings.length ? plural(warnings.length, "warning") : ""];
     return {
       icon: failed ? "warning" : "beaker",
       tone: failed ? "warn" : undefined,
       text: content.provenance.build ?? content.label,
-      detail: failed ? `could not be read: ${content.provenance.error}` : plural(content.findings.length, "finding"),
+      detail: failed ? `could not be read: ${content.provenance.error}` : counted.filter(Boolean).join(" · "),
       url: content.provenance.url,
       tooltip: `${content.provenance.url}${content.provenance.truncated ? "\nThe log was cut: findings may be incomplete." : ""}`,
-      findings: rows.map(({ item, introduced }) => finding(item, introduced)),
+      findings: leading.map(({ item, introduced }) => finding(item, introduced)),
+      warnings: warnings.map(({ item, introduced }) => finding(item, introduced)),
     };
   });
 }
@@ -376,6 +385,9 @@ export function changeLines(vm: ChangeVm): string[] {
     for (const link of vm.ci.links) {
       add(1, link.text, link.detail);
       link.findings.forEach((row) => add(2, row.text, row.notes.join(" · ")));
+      if (link.warnings.length) {
+        add(2, plural(link.warnings.length, "warning"), "collapsed");
+      }
     }
   }
   return lines;

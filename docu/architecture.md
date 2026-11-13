@@ -358,7 +358,8 @@ flowchart LR
   links[CiLink rows · overlay]
   svc[core/ci_content_service.py]
   prov[CI content providers · .ger/ci CONTENT_PROVIDERS · ci_jenkins]
-  find[core/ci_findings.py]
+  find[core/ci_findings.py · finders by shape]
+  paths[core/ci_paths.py]
   http[core/ci_http.py]
   store[(ci_content store)]
   render[render/ci_content.py]
@@ -368,10 +369,11 @@ flowchart LR
   svc --> prov
   prov --> http
   prov --> find
+  svc --> paths
   svc --> render
 ```
 
-A second, opt-in hop after the overlay: the overlay stops at **CI links**; `CiContentService` matches each link to a provider by URL, passes it `ger.ciCredential.<host>`, and turns what comes back into one `CiContent` (provenance, findings, optional body). The provider's cache verdict says what is safe to reuse; `CiContentStore` decides what it can afford to keep. Failures are recorded per link, never raised: `ger ci` turns them into exit `11`, `ger show` reports them inline. Design: [spec/ci-content.md](spec/ci-content.md).
+A second, opt-in hop after the overlay: the overlay stops at **CI links**; `CiContentService` matches each link to a provider by URL, passes it `ger.ciCredential.<host>`, and turns what comes back into one `CiContent` (provenance, findings, optional body). The provider's cache verdict says what is safe to reuse; `CiContentStore` decides what it can afford to keep. Failures are recorded per link, never raised: `ger ci` turns them into exit `11`, `ger show` reports them inline. The store keeps findings as the log named them; `CiContentService` resolves their paths to the files of the commit that asks (`core/ci_paths.py`), so one build reads the same from any build agent. Design: [spec/ci-content.md](spec/ci-content.md).
 
 ### 11. The local service (`ger serve`)
 
@@ -473,13 +475,16 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |
 | `core/ci_strategy.py` | Loading CI link strategies and **CI content providers** from `.ger/ci/` |
-| `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding`, provenance, cache verdict), the `CiContentProvider` seam, and **introduced findings** (`introduced_fingerprints`) |
-| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape |
+| `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding` and its severity, provenance, cache verdict), which warnings are collapsed (`collapse_warnings`), the `CiContentProvider` seam, and **introduced findings** (`introduced_fingerprints`) |
+| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape, finding paths resolved per commit |
 | `core/ci_content_store.py` | `CiContentStore`: size-bounded LRU store of immutable CI content, apart from the Gerrit cache |
-| `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`): the finder order and the generic fallback |
-| `core/ci_log.py` | A CI log as clean lines (`clean_log_lines`) and what finders share: the `Finder` type, the path fragment |
-| `core/ci_findings_located.py` | Finders for one-line located diagnostics (`path:line: severity: msg`): linters, compilers, the linker |
-| `core/ci_findings_tests.py` | Finders for test runners: the failed test, located by its failure section |
+| `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`): the finder order, build-driver verdicts and the generic fallback |
+| `core/ci_log.py` | A CI log as clean lines (`clean_log_lines`: CI-system line prefixes removed), the workspace directories it names (`workspace_roots`), and what finders share: the `Finder` type, the path and level fragments |
+| `core/ci_findings_located.py` | Finder for one-line located diagnostics (`path:line: severity: msg`): ruff, pylint, mypy, gcc/clang, javac, scalac, tsc, rustfmt, the linker |
+| `core/ci_findings_blocks.py` | Finders for diagnostics printed as a block: rustc / clippy / ruff (`--> path:line:col`), Python tracebacks, CMake, eslint, npm |
+| `core/ci_findings_tests.py` | Finders for test runners: pytest, cargo test, GoogleTest, CTest, `node --test` — the failed test, located by its failure section |
+| `core/ci_findings_tests_jvm.py` | Finders for test runners that name a file without its directory: Surefire, Gradle, ScalaTest, Jest |
+| `core/ci_paths.py` | Resolving **CI finding** paths to the files of a commit (`tracked_paths`, `resolve_finding_paths`) |
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |

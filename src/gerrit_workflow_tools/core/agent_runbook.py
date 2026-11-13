@@ -96,7 +96,7 @@ def plan_runbook(
             continue
         open_chains = [chain for chain in item.chains if not chain.resolved and not chain.local]
         contents = item.ci_contents or []
-        findings = [finding for content in contents if not content.failed for finding in content.findings]
+        findings = [finding for content in contents if not content.failed for finding in content.leading_findings]
         stops.append(
             RunbookStop(
                 commit=commit,

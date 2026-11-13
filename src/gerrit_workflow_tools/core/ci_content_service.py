@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.ci_content import (
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore, StoredCiContent
 from gerrit_workflow_tools.core.ci_http import CiHttp, UrllibCiHttp
 from gerrit_workflow_tools.core.ci_links import CiLink
+from gerrit_workflow_tools.core.ci_paths import resolve_finding_paths, tracked_paths
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 
@@ -60,6 +61,8 @@ class CiContentService:
     settings: Settings
     store: CiContentStore | None = None
     refresh: bool = False
+    cwd: Path | str | None = None
+    """The repository whose commits finding paths are resolved against; ``None``: paths stay as logged."""
 
     @classmethod
     def from_settings(
@@ -81,6 +84,7 @@ class CiContentService:
             settings=settings,
             store=CiContentStore.for_web_base(base) if base else None,
             refresh=refresh,
+            cwd=cwd,
         )
 
     def provider_for(self, url: str) -> CiContentProvider | None:
@@ -93,12 +97,25 @@ class CiContentService:
                 logger.warning("CI content provider %r failed to match %s: %s", provider, url, exc)
         return None
 
-    def fetch(self, links: Sequence[CiLink], *, body: BodyMode = "none") -> list[CiContent]:
-        """One :class:`CiContent` per link, in order, fetched in parallel."""
-        return parallel_map(partial(self.fetch_one, link, body=body) for link in links)
+    def fetch(self, links: Sequence[CiLink], *, body: BodyMode = "none", commit: str | None = None) -> list[CiContent]:
+        """One :class:`CiContent` per link, in order, fetched in parallel.
 
-    def fetch_one(self, link: CiLink, *, body: BodyMode = "none") -> CiContent:
-        """**CI content** for *link*; a failure is recorded on the provenance, never raised."""
+        *commit* is the commit the links belong to: finding paths are resolved to its files.
+        """
+        return parallel_map(partial(self.fetch_one, link, body=body, commit=commit) for link in links)
+
+    def fetch_one(self, link: CiLink, *, body: BodyMode = "none", commit: str | None = None) -> CiContent:
+        """**CI content** for *link*; a failure is recorded on the provenance, never raised.
+
+        Paths are resolved here, after the store: what is kept is what the log said, and one
+        build's findings can be read against whichever commit asks.
+        """
+        content = self._fetch_logged(link, body)
+        if commit is None or self.cwd is None or not content.findings:
+            return content
+        return replace(content, findings=resolve_finding_paths(content.findings, tracked_paths(self.cwd, commit)))
+
+    def _fetch_logged(self, link: CiLink, body: BodyMode) -> CiContent:
         provider = self.provider_for(link.url)
         if provider is None:
             host = urlparse(link.url).hostname or link.url

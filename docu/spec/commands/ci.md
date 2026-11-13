@@ -29,6 +29,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 | `--branch NAME` | Branch for stack/upstream context (default: working branch) |
 | `-v` / `--verbose` | After each link's findings, print the last 60 log lines |
 | `--full` | After each link's findings, print the whole log (for searching the raw text) |
+| `--warnings` | List the warnings below the errors, not just their count. JSON always has them |
 | `--json` | JSON payload — the stable contract for agents |
 | `--format {human,markdown}` / `--ai` | Output format; `--ai` is Markdown |
 | `--color`, `--hyperlinks`, `--debug-log` | Standard helpers |
@@ -37,9 +38,9 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 
 ## Output
 
-**Human:** per target, the `ger show` headline, then per link `label  url  (build, cached, log truncated)` and one line per finding: `tool  path:line[:col]  message`, with pytest's `E` lines indented beneath. A target without failed links prints `(no failed CI links)`, `(not on Gerrit)`, or names the failed checks that had no link.
+**Human:** per target, the `ger show` headline, then per link `label  url  (build, cached, log truncated)` and one line per finding: `tool  path:line[:col]  message`, with pytest's `E` lines indented beneath. Errors come first; warnings below them are one line, `N warnings not listed (ger ci --warnings lists them)`, unless `--warnings` is given or no error explains the failure ([severity](../ci-content.md#severity)). A target without failed links prints `(no failed CI links)`, `(not on Gerrit)`, or names the failed checks that had no link.
 
-**Markdown (`--ai`):** `## <sha> — <subject>`, `### CI findings`, `#### <label>` per label, a bullet per finding; a fenced log with `-v` / `--full`.
+**Markdown (`--ai`):** `## <sha> — <subject>`, `### CI findings`, `#### <label>` per label, a bullet per finding, warnings as a count like the human output; a fenced log with `-v` / `--full`.
 
 **JSON:** always `{ "commits": [ … ] }`, one object per target:
 
@@ -57,14 +58,15 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
       "findings": [
         {"tool": "pytest", "kind": "failed", "path": "demo/calc.py", "line": 6, "column": null,
          "message": "tests/test_calc.py::test_divide: ZeroDivisionError: division by zero",
-         "detail": "ZeroDivisionError: division by zero", "fingerprint": "…"}
-      ]
+         "detail": "ZeroDivisionError: division by zero", "fingerprint": "…", "severity": "error"}
+      ],
+      "collapse_warnings": true
     }
   ]
 }
 ```
 
-With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_lines`. `fingerprint` ignores line numbers, so the same finding keeps its id when code moves.
+With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_lines`. `fingerprint` ignores line numbers, so the same finding keeps its id when code moves. `findings` always holds every finding, warnings included; `collapse_warnings` says whether a reader should fold them. `path` is the file of the commit where the logged path names one ([finding paths](../ci-content.md#finding-paths)).
 
 ---
 

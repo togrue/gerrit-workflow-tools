@@ -59,6 +59,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print each log in full after its findings (for searching the raw log).",
     )
+    p.add_argument(
+        "--warnings",
+        action="store_true",
+        help="List the warnings below the errors, not just their count (JSON always has them).",
+    )
     add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(
@@ -106,16 +111,16 @@ def _no_links_note(commit: LogCommit) -> str:
     return "(no failed CI links)"
 
 
-def _emit_human(commit: LogCommit, contents: list[CiContent]) -> None:
+def _emit_human(commit: LogCommit, contents: list[CiContent], *, warnings: bool) -> None:
     print(show_headline(commit))
     if not contents:
         print(color_text(f"    {_no_links_note(commit)}", ANSI_DIM))
         return
-    for line in format_ci_section_human(contents):
+    for line in format_ci_section_human(contents, warnings=warnings):
         print(color_text(line, ANSI_RED) if line.lstrip().startswith("error: ") else line)
 
 
-def _emit_markdown(commit: LogCommit, contents: list[CiContent]) -> None:
+def _emit_markdown(commit: LogCommit, contents: list[CiContent], *, warnings: bool) -> None:
     short = commit.short_sha or (commit.sha[:8] if commit.sha else "????????")
     print(f"## {short} — {commit.summary or ''}")
     if commit.gerrit_url:
@@ -125,7 +130,7 @@ def _emit_markdown(commit: LogCommit, contents: list[CiContent]) -> None:
         print(f"- {_no_links_note(commit)}")
         print()
         return
-    for line in format_ci_section_markdown(contents):
+    for line in format_ci_section_markdown(contents, warnings=warnings):
         print(line)
 
 
@@ -150,7 +155,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
 
     ci = CiContentService.from_settings(cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh)
     body = _body_mode(args)
-    per_commit = [(commit, ci.fetch(commit.ci_links, body=body)) for commit in commits]
+    per_commit = [(c, ci.fetch(c.ci_links, body=body, commit=c.sha or None)) for c in commits]
 
     if out_fmt == "json":
         payload = [_commit_json(c, contents, include_body=body != "none") for c, contents in per_commit]
@@ -159,7 +164,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         for index, (commit, contents) in enumerate(per_commit):
             if index and out_fmt == "human":
                 print()
-            (_emit_markdown if out_fmt == "markdown" else _emit_human)(commit, contents)
+            (_emit_markdown if out_fmt == "markdown" else _emit_human)(commit, contents, warnings=args.warnings)
 
     failed = [c for _commit, contents in per_commit for c in contents if c.failed]
     if failed:

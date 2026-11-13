@@ -213,6 +213,8 @@ export interface CiFinding {
   message: string;
   detail: string | null;
   fingerprint: string;
+  /** A warning ranks below an error: it is rarely why the build failed. */
+  severity: "error" | "warning";
 }
 
 export interface CiContent {
@@ -228,6 +230,8 @@ export interface CiContent {
     error: string | null;
   };
   findings: CiFinding[];
+  /** Some error explains the failure, so the warnings step back behind a count. */
+  collapse_warnings: boolean;
 }
 
 export interface ShownCommit extends CommitStatus {

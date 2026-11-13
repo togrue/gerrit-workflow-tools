@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from gerrit_workflow_tools.core.ci_content import CiFetchContext, CiFetched, CiFinding
+from gerrit_workflow_tools.core.ci_content import CiContent, CiFetchContext, CiFetched, CiFinding, CiProvenance
 from gerrit_workflow_tools.core.ci_content_service import TAIL_LINES, CiContentService, shape_body
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore, StoredCiContent
 from gerrit_workflow_tools.core.ci_jenkins import JenkinsProvider, parse_jenkins_build_url
@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_strategy import load_ci_content_providers
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache
+from gerrit_workflow_tools.render.ci_content import ci_content_json, format_ci_section_human, format_ci_section_markdown
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
 
 
@@ -259,3 +260,49 @@ def test_a_provider_that_raises_is_a_recorded_error(tmp_path: Path) -> None:
     service = CiContentService(providers=[Broken()], http=FakeCiHttp({}), settings=Settings.from_map({}))
     content = service.fetch_one(LINK)
     assert (content.provenance.provider, content.provenance.error) == ("broken", "parser exploded")
+
+
+# --- severity: errors lead, warnings step back -------------------------------------
+
+
+def _content(*findings: CiFinding) -> CiContent:
+    return CiContent(link=LINK, provenance=CiProvenance(url=LINK.url, provider="jenkins"), findings=list(findings))
+
+
+ERROR = CiFinding(tool="cc", kind="error", message="undeclared identifier", path="src/main.c", line=3)
+WARNING = CiFinding(tool="cc", kind="warning", message="unused variable", path="src/main.c", line=2, severity="warning")
+VERDICT = CiFinding(tool="generic", kind="error", message="FAILURE")
+
+
+def test_warnings_collapse_below_an_error_that_explains_the_failure() -> None:
+    content = _content(WARNING, ERROR, VERDICT)
+    assert content.collapse_warnings
+    assert content.leading_findings == [ERROR, VERDICT]
+    assert content.collapsed_warnings == [WARNING]
+    human = format_ci_section_human([content])
+    assert [line.strip() for line in human[1:]] == [
+        "cc  src/main.c:3  undeclared identifier",
+        "generic  FAILURE",
+        "1 warning not listed (ger ci --warnings lists them)",
+    ]
+    listed = format_ci_section_human([content], warnings=True)
+    assert [line.strip() for line in listed[-2:]] == ["warnings:", "cc  src/main.c:2  unused variable"]
+    assert "- 1 warning not listed (ger ci --warnings lists them)" in format_ci_section_markdown([content])
+    payload = ci_content_json(content)
+    assert payload["collapse_warnings"] is True
+    assert [f["severity"] for f in payload["findings"]] == ["warning", "error", "error"]  # type: ignore[union-attr]
+
+
+def test_warnings_stay_in_view_when_only_a_build_verdict_stands_beside_them() -> None:
+    content = _content(VERDICT, WARNING)
+    assert not content.collapse_warnings
+    assert content.leading_findings == [VERDICT, WARNING]
+    assert content.collapsed_warnings == []
+    assert all("not listed" not in line for line in format_ci_section_human([content]))
+
+
+def test_severity_is_not_part_of_the_fingerprint_and_old_entries_read_back() -> None:
+    assert replace(WARNING, severity="error", fingerprint="").fingerprint == WARNING.fingerprint
+    old = {key: value for key, value in WARNING.to_dict().items() if key != "severity"}
+    assert CiFinding.from_dict(old).severity == "warning"
+    assert CiFinding.from_dict({**ERROR.to_dict(), "severity": None}).severity == "error"

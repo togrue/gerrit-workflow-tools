@@ -414,6 +414,10 @@ select:focus {
   padding-left: 46px;
 }
 
+.finding.nested {
+  padding-left: 66px;
+}
+
 .reply .label {
   flex: none;
 }

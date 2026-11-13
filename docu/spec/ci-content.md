@@ -5,7 +5,7 @@
 | **Status** | Implemented: [`ger ci`](commands/ci.md) and opt-in [`ger show --ci`](commands/show.md#ci-content). **Introduced findings** remain a follow-up. |
 | **Vocabulary** | [CONTEXT.md](../../CONTEXT.md): **CI content provider**, **CI content**, **CI finding**, **introduced findings** (follow-up) |
 | **Depends on** | Existing **CI links** / **CI strategy** ([gerrit-ci-strategies.md](../gerrit-ci-strategies.md)) |
-| **Modules** | `core/ci_content.py` (shapes, provider seam) · `core/ci_content_service.py` (fetch, credentials, policy) · `core/ci_content_store.py` · `core/ci_findings.py` · `core/ci_jenkins.py` · `core/ci_http.py` · `render/ci_content.py` |
+| **Modules** | `core/ci_content.py` (shapes, provider seam) · `core/ci_content_service.py` (fetch, credentials, policy) · `core/ci_content_store.py` · `core/ci_findings.py` and its finder modules · `core/ci_log.py` · `core/ci_paths.py` · `core/ci_jenkins.py` · `core/ci_http.py` · `render/ci_content.py` |
 
 Goal: give a clear view of local + Gerrit state that includes *why* CI failed, so a human or agent can fix without hunting consoles. Expensive fetches stay off the default **Gerrit overlay** / `ger log` path.
 
@@ -51,33 +51,73 @@ One result per fetched **CI link**:
 | Part | Role |
 |------|------|
 | **Provenance** | Final URL, build identity when known, provider id, fetched-at, truncated?, cache verdict, error if fetch/parse failed |
-| **CI findings** | Normalized items: tool/kind, path, line (and column when known), message, optional fingerprint |
+| **CI findings** | Normalized items: tool/kind, severity (`error` / `warning`), path, line (and column when known), message, fingerprint |
 | **Body** | Raw log text, omitted or capped unless the caller asks for full |
 
 Views are projections of this result, not separate provider APIs.
 
 ### Finding extractors (built-in Jenkins)
 
-One provider; several content-driven finders, in order (pipeline output varies within a single log):
+One provider; several content-driven finders, in order (pipeline output varies within a single log). Finders are grouped by the **shape** of what they read, not by tool, so a new tool is usually one more pattern in an existing shape:
 
-1. pytest (failed tests, short traceback)
-2. ruff / mypy (`path:line:…`)
-3. gcc / clang-style (`file:line:col: error: …`), linker / clang-format-style lines as patterns mature
-4. generic fallback (`FAILURE`, `Error:`, exit-status blocks)
+| # | Shape | What the finder reads | Module |
+|---|-------|-----------------------|--------|
+| 1 | Test runner | The failed test, located by its own failure section | `core/ci_findings_tests.py`, `core/ci_findings_tests_jvm.py` |
+| 2 | Block | A header line, and its place on a line nearby | `core/ci_findings_blocks.py` |
+| 3 | Located line | `path:line[:col]: severity: msg`, all on one line | `core/ci_findings_located.py` |
+| 4 | Build verdict | A build driver saying *that* a step failed; the generic fallback | `core/ci_findings.py` |
 
-Each **CI finding** carries a tool/kind tag. Precise finders run before generic so lines are not double-counted.
+Each **CI finding** carries a tool/kind tag. Precise finders run before generic so lines are not double-counted: a line one finder claims is skipped by the later ones.
 
-| Tool | Kinds | Recognised lines |
-|------|-------|------------------|
-| `pytest` | `failed`, `error` | `FAILED` / `ERROR` summary lines, located by the raising frame of the `FAILURES` section; `detail` holds the `E` lines |
-| `ruff` | `lint`, `format` | `path:line:col: CODE msg`, `Would reformat: path` |
-| `mypy` | `error`, `warning` | `path.py:line[:col]: error: msg` |
-| `cc` | `error`, `warning` | `file.c:line[:col]: error: msg` (C/C++/ObjC/CUDA extensions) |
-| `clang-format` | `format` | the same shape tagged `-Wclang-format-violations` |
-| `ld` | `error` | `undefined reference to …`, `ld:` / `collect2:` / `lld:` errors |
-| `generic` | `error` | `Error:` lines, `make: ***`, non-zero exit statuses, `marked build as failure`, `Finished: FAILURE` |
+| Ecosystem | Tool | Kinds | Recognised |
+|-----------|------|-------|------------|
+| Python | `pytest` | `failed`, `error` | `FAILED` / `ERROR` summary lines, located by the raising frame of the `FAILURES` section; `detail` holds the `E` lines |
+| | `ruff` | `lint`, `syntax`, `format` | the default block (`CODE msg`, then `--> path:line:col`), the concise `path:line:col: CODE msg`, `Would reformat: path` |
+| | `pylint` | `convention`, `refactor`, `warning`, `error`, `fatal` | `path:line:col: C0116: msg (symbol)`; only `error` / `fatal` are errors |
+| | `mypy` | `error`, `warning` | `path.py:line[:col]: error: msg`, with end positions and `--pretty` wrapping |
+| | `python` | `error` | an uncaught `Traceback`: its last line, at the deepest frame outside installed packages |
+| C / C++ | `cc` | `error`, `warning` | `file.c:line[:col]: error: msg` (C/C++/ObjC/CUDA extensions); `gcc:` / `clang: error:` driver lines |
+| | `clang-format` | `format` | the same shape tagged `-Wclang-format-violations` |
+| | `ld` | `error` | `undefined reference to …`, `multiple definition of …`, `ld:` / `collect2:` / `lld:` errors |
+| | `cmake` | `error`, `warning` | `CMake Error at CMakeLists.txt:3 (command):` and the indented message; `Configuring incomplete` |
+| | `gtest`, `ctest` | `failed` | `[  FAILED  ] Suite.Test`, located by `file:line: Failure`; the rows under `The following tests FAILED:` |
+| | `ninja` | `error` | `FAILED: <target>` |
+| Rust | `rustc`, `clippy` | `error`, `warning` | `error[E0308]: msg`, then `--> path:line:col`; clippy by its `clippy::` lint name |
+| | `cargo-test` | `failed` | `test name ... FAILED`, located by the panic in its `---- name stdout ----` section |
+| | `rustfmt` | `format` | `Diff in path:line:`, one finding per file |
+| | `cargo` | `error` | ``could not compile `crate` `` |
+| JavaScript | `tsc` | `error`, `warning` | `a.ts(12,5): error TS2322: msg` and the pretty `a.ts:12:5 - error TS2322: msg` |
+| | `eslint` | `lint` | the default report: a file path, then `line:col  severity  msg  rule` rows |
+| | `jest`, `node-test` | `failed` | `●` headings under `FAIL file`; the entries under `✖ failing tests:` |
+| | `npm` | `error` | one finding per `npm error` / `npm ERR!` report: its code and first telling line |
+| Java | `javac` | `error`, `warning` | `Foo.java:12: error: msg`; through Maven `[ERROR] /path/Foo.java:[12,5] msg` |
+| | `junit` | `failed`, `error` | Surefire's `Failures:` / `Errors:` rows; Gradle's `Class > test FAILED` |
+| | `maven`, `gradle` | `error` | `Failed to execute goal …`, `Task :x FAILED` |
+| Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12:5: msg` and Scala 3's `-- [E007] … Error: path:line:col` |
+| | `scalatest` | `failed` | `- name *** FAILED ***` and the `(File.scala:12)` line under it |
+| | `sbt` | `error` | `[error] (Compile / compileIncremental) Compilation failed` |
+| any | `generic` | `error` | `Error:` lines, `make: ***`, non-zero exit statuses, `marked build as failure`, `Finished: FAILURE` |
 
-ANSI escapes and Jenkins timestamper prefixes are stripped first. `find_ci_findings(text)` is public so custom providers can reuse the finders. `fingerprint` hashes tool, kind, path and message (no line numbers): the key **introduced findings** will compare on.
+npm, Maven, Gradle, sbt, Ninja and Make mostly *wrap* another tool: the finding worth reading comes from what they ran, and their own line only says which step failed.
+
+**Line prefixes.** What a CI system puts in front of a tool's output is removed once, before any finder runs: ANSI escapes, Jenkins timestamper prefixes, the `[branch]` tag of a parallel pipeline stage, Docker BuildKit's `#12 3.4` step prefix. A build tool's own level tag (Maven's `[ERROR]`, sbt's `[error]`) stays, because it is the only severity those lines carry.
+
+`find_ci_findings(text)` is public so custom providers can reuse the finders. `fingerprint` hashes tool, kind, path and message (no line numbers, no severity): the key **introduced findings** compare on.
+
+### Severity
+
+Every finding is an `error` or a `warning`, by the tool's own ranking. A warning is rarely why the build failed, so it is listed below the errors and **collapsed**: one count line in human and Markdown output (`ger ci --warnings` lists them), a closed group in the *Change* view. JSON always carries every finding with its `severity`, and `collapse_warnings` per link.
+
+Warnings are collapsed only when some error explains the failure. When the only errors are build verdicts (`generic`, `ninja`, `cmake`, `cargo`, `maven`, `gradle`, `sbt`), the warnings are the best lead there is and stay in view (`CiContent.collapse_warnings`). The agent runbook hands over what is in view, not the collapsed warnings.
+
+### Finding paths
+
+A log names files as the build agent saw them. Two steps make the same file read the same from any agent, so fingerprints compare and a finding can be opened:
+
+1. **In the log.** A path under a workspace directory the log itself names (Jenkins' `Building in workspace …`, `Running on … in …`) is made relative to it. Pure text, part of `find_ci_findings`, and what the store keeps.
+2. **Against the commit.** `CiContentService.fetch(..., commit=…)` resolves each path to a file of that commit (`git ls-tree`, once per commit): the longest tail of the logged path that is a tracked file. This covers `job@2`, container mounts, a checkout in a subdirectory, and paths logged relative to a subdirectory or by bare file name (when exactly one tracked file ends with it).
+
+A file outside the repository is left as logged. So that a system header or an installed package is not taken for a file of ours, the directory a path is stripped of must be one several findings agree on, or the match must be more than a bare file name. When the commit is not in the local repository, only step 1 applies.
 
 ---
 
@@ -118,7 +158,7 @@ ger ci [options] [CHANGEISH…]
 
 | Behaviour | Choice |
 |-----------|--------|
-| Default output | Findings, grouped by link label |
+| Default output | Findings, grouped by link label; errors first, warnings as a count (`--warnings` lists them) |
 | Full log | `--full` (or `-v` for a capped tail + findings; `--full` streams the entire body for agent search) |
 | Machine / AI | `--json` is the contract; human and `--ai` markdown are projections |
 | Multiple links | Fetch all; group by label |
@@ -135,7 +175,7 @@ ger ci [options] [CHANGEISH…]
 |-----------|--------|
 | Default | Off — comments and Gerrit status only |
 | Opt-in | Settings default **and** flag override: `ger.showCiContent` + `--ci` / `--no-ci` |
-| What is attached | **Findings only** (no body) |
+| What is attached | **Findings only** (no body); warnings collapsed to a count as in `ger ci` |
 | Fetch failure | **Soft** — keep Gerrit/comment output; report link + error in the CI section |
 | JSON / `--ai` | Same findings embedded in the existing payload / markdown projection |
 

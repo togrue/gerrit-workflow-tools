@@ -99,7 +99,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 Off by default: `ger show` never fetches CI logs unless asked. `--ci` (or `ger.showCiContent=true`, overridden by `--no-ci`) fetches the **CI content** behind each listed commit's failed **CI links** and attaches its **CI findings** — findings only, never the log body (use [`ger ci --full`](ci.md) for that).
 
-- **Human:** a dim `CI findings:` block after the commit message, before the comments: `label  url  (build, cached)` and one `tool  path:line  message` line per finding. A commit with findings is not collapsed in a multi-commit view.
+- **Human:** a dim `CI findings:` block after the commit message, before the comments: `label  url  (build, cached)` and one `tool  path:line  message` line per finding, warnings as a count below the errors. A commit with findings is not collapsed in a multi-commit view.
 - **Markdown / `--ai`:** a `### CI findings` section with a `#### <label>` per label.
 - **JSON:** a `ci_content` array (same entries as `ger ci --json`, without `body`). The key is absent when CI content is off.
 

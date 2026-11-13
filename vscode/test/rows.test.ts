@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
+import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState, changeLines, changeVm } from "../src/changeRows";
 import { badges, cloud, frozen, stackLines, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
@@ -225,4 +225,24 @@ test("the commit message is read-only with the reason, and comment chains say wh
     "  Check the docs. — your private note · a.py:4  [yours]",
     "  Typo. — a.py:4 · Alice  [resolved]",
   ]);
+});
+
+test("the CI group lists errors first and keeps the warnings behind a count", () => {
+  const finding = (message: string, severity: "error" | "warning", fingerprint: string): CiFinding => ({ tool: "cc", kind: severity, path: "src/main.c", line: 3, column: 1, message, detail: null, fingerprint, severity });
+  const content = (collapse_warnings: boolean, findings: CiFinding[]): CiContent => ({
+    label: "jenkins",
+    url: "https://ci.example.org/job/Widget/55/console",
+    provenance: { url: "https://ci.example.org/job/Widget/55/console", provider: "jenkins", build: "Widget #55", fetched_at: null, truncated: false, cached: false, error: null },
+    findings,
+    collapse_warnings,
+  });
+  const failing = shown({ ci_failures: ["Verified"], attention_reasons: ["ci-failed"] });
+  const both = [finding("unused variable", "warning", "w1"), finding("undeclared identifier", "error", "e1")];
+  const vm = changeVm(state({ shown: failing, ci: { state: "loaded", contents: [content(true, both)], introduced: new Set(["w1", "e1"]) } }));
+  const [link] = vm.ci?.links ?? [];
+  assert.deepEqual([link.detail, link.findings.map((row) => row.text), link.warnings.map((row) => row.text)], ["1 finding · 1 warning", ["undeclared identifier"], ["unused variable"]]);
+  assert.deepEqual(changeLines(vm).slice(-2), ["    undeclared identifier — cc · src/main.c:3 · introduced here", "    1 warning — collapsed"]);
+  // With no error to explain the failure, the warnings are the lead and stay in view.
+  const only = changeVm(state({ shown: failing, ci: { state: "loaded", contents: [content(false, [both[0]])], introduced: null } }));
+  assert.deepEqual([only.ci?.links[0].findings.length, only.ci?.links[0].warnings.length], [1, 0]);
 });
