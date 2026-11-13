@@ -191,6 +191,33 @@ def test_overwrite_does_not_remove_a_reviewer_it_was_asked_to_keep() -> None:
     service.changes.set_reviewers.assert_called_once_with(triplet, add=["admin"], remove=[7])
 
 
+def test_overwrite_keeps_a_reviewer_gerrit_does_not_let_you_remove() -> None:
+    """Issue #32: a change owner may not remove a negative vote; overwrite keeps that reviewer and says so."""
+    triplet_a, triplet_b = _triplet(_cid("a")), _triplet(_cid("b"))
+    reviewers = {"REVIEWER": [{"_account_id": 5, "username": "vetoer"}, {"_account_id": 7, "username": "bob"}]}
+    service = MagicMock()
+    service.changes.get_payloads.return_value = {
+        triplet_a: {"reviewers": reviewers, "removable_reviewers": [{"_account_id": 7}]},
+        triplet_b: {"reviewers": reviewers, "removable_reviewers": [{"_account_id": 7}]},
+    }
+
+    res = apply_reviewer_strategy_after_push_service(
+        service, ReviewerStrategy.OVERWRITE, ["alice"], [triplet_a, triplet_b]
+    )
+
+    assert res.ok is True
+    service.changes.set_reviewers.assert_has_calls(
+        [call(triplet_a, add=["alice"], remove=[7]), call(triplet_b, add=["alice"], remove=[7])]
+    )
+    assert [(issue.level, issue.message) for issue in res.issues] == [
+        (
+            "warning",
+            "kept vetoer on 2 changes: Gerrit does not let you remove them "
+            "(a negative vote needs the Remove Reviewer right)",
+        )
+    ]
+
+
 def test_lazy_says_so_when_it_skipped_every_change() -> None:
     triplet = _triplet(_cid("a"))
     service = MagicMock()

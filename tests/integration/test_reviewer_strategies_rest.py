@@ -480,3 +480,50 @@ def test_overwrite_same_reviewer_on_chain_with_partial_existing_reviewers(
     assert after[oldest.change_id] == {ctx.admin_user}
     assert after[middle.change_id] == {ctx.admin_user}
     assert after[tip.change_id] == {ctx.admin_user}
+
+
+def _vote(session: GerritHttpSession, change_id: str, label: str, value: int) -> None:
+    session.post_json(
+        f"changes/{quote_change_id(change_id)}/revisions/current/review",
+        body={"labels": {label: value}},
+    )
+
+
+def test_overwrite_when_existing_reviewer_voted_negatively(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #32: an existing reviewer with a negative vote must not make overwrite fail.
+
+    The change owner (not an admin) may only remove reviewers whose vote is zero or positive.
+    """
+    ctx = gerrit_integration_context
+    topic = f"ow_neg_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(repo, ["feat: overwrite with a -1 on the change"])
+
+    code1, _o1, e1 = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
+    assert code1 == 0, e1
+    (only,) = chain_commits_oldest_first(repo)
+    _vote(gerrit_admin_session, only.change_id, "Code-Review", -1)
+
+    code2, _o2, e2 = run_cli(
+        repo,
+        ger_push_main,
+        [
+            "--yes",
+            "--no-rebase-check",
+            "--reviewer-strategy",
+            "overwrite",
+            "--reviewers",
+            ctx.rev_alt_user,
+        ],
+        monkeypatch,
+    )
+    assert code2 == 0, e2
+    assert "could not update reviewers" not in e2
+    assert f"kept {ctx.admin_user} on 1 change" in e2
+    after = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+    assert after[only.change_id] == {ctx.admin_user, ctx.rev_alt_user}

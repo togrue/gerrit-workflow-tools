@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resol
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
+    removable_reviewer_ids,
     reviewer_accounts_from_change_info,
 )
 from gerrit_workflow_tools.core.stack import Commit
@@ -139,6 +140,7 @@ def apply_reviewer_strategy_after_push_service(
 
     outcomes: list[ReviewerApplyChangeOutcome] = []
     issues: list[ReviewerApplyIssue] = []
+    kept: dict[str, list[str]] = {}
     try:
         details_by_triplet = service.changes.get_payloads(change_refs)
     except GerritApiError as error:
@@ -165,11 +167,16 @@ def apply_reviewer_strategy_after_push_service(
         remove: list[int] = []
         if strategy == ReviewerStrategy.OVERWRITE:
             reviewers_only = reviewer_accounts_from_change_info(detail, roles=("REVIEWER",))
-            remove = [
-                account.account_id
-                for account in reviewers_only
-                if account.account_id is not None and account.slug.casefold() not in wanted
-            ]
+            # Gerrit refuses the delete for a reviewer the caller may not remove
+            # (a negative vote, for a change owner): keep them and say so.
+            removable = removable_reviewer_ids(detail)
+            for account in reviewers_only:
+                if account.account_id is None or account.slug.casefold() in wanted:
+                    continue
+                if removable is None or account.account_id in removable:
+                    remove.append(account.account_id)
+                else:
+                    kept.setdefault(account.slug, []).append(footer_change_id)
         try:
             service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
         except GerritApiError as error:
@@ -178,6 +185,15 @@ def apply_reviewer_strategy_after_push_service(
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
     ok = not issues
+    for slug, change_ids in kept.items():
+        where = "1 change" if len(change_ids) == 1 else f"{len(change_ids)} changes"
+        issues.append(
+            ReviewerApplyIssue(
+                "warning",
+                f"kept {slug} on {where}: Gerrit does not let you remove them "
+                "(a negative vote needs the Remove Reviewer right)",
+            )
+        )
     if strategy == ReviewerStrategy.LAZY and ok and not any(outcome.reviewers_assigned for outcome in outcomes):
         names = ", ".join(reviewers)
         issues.append(

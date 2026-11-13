@@ -116,6 +116,19 @@ def reviewer_accounts_from_change_info(
     return []
 
 
+def removable_reviewer_ids(detail: Mapping[str, object]) -> set[int] | None:
+    """Account ids Gerrit lets the caller remove from the change, or ``None`` when the payload does not say.
+
+    ``removable_reviewers`` comes with ``DETAILED_LABELS``. A change owner may remove only
+    reviewers whose vote is zero or positive; removing a negative vote needs the
+    *Remove Reviewer* right.
+    """
+    rows = detail.get("removable_reviewers")
+    if not isinstance(rows, list):
+        return None
+    return {row["_account_id"] for row in rows if isinstance(row, dict) and isinstance(row.get("_account_id"), int)}
+
+
 def parse_reviewer_names(raw: str) -> list[str]:
     """Split a comma- or space-separated reviewer list, dropping blanks and duplicates."""
     return list(dict.fromkeys(raw.replace(",", " ").split()))
