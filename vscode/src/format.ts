@@ -4,7 +4,7 @@ import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState,
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
-const ERRORS = ["ci-failed", "merged-drift", "abandoned", "missing-change-id"];
+const ERRORS = ["ci-failed", "merged-drift", "abandoned", "missing-change-id", "invalid-change-id"];
 const WARNINGS = ["unresolved-comments", "review-issues", "outdated-patchset", "merged-unknown"];
 const PENDING = ["not-pushed", "ahead-of-gerrit", "awaiting-review", "no-reviewers", "chain-blocked", "wip"];
 
@@ -19,6 +19,7 @@ const WORDS: Record<string, string> = {
   "no-reviewers": "no reviewers",
   "chain-blocked": "blocked by an earlier change",
   "missing-change-id": "no Change-Id",
+  "invalid-change-id": "invalid Change-Id",
   "merged-drift": "merged, but differs locally",
   "merged-unknown": "merged, equivalence unknown",
   abandoned: "abandoned",

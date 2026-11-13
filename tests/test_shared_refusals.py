@@ -7,11 +7,13 @@ prompt with no terminal to answer it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_changeid import main as change_id_main
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_edit import main as edit_main, main_reword
 from gerrit_workflow_tools.cli_fix import main as fix_main
@@ -133,6 +135,27 @@ def test_log_and_push_agree_on_an_unsquashed_fixup(stack_repo: Path, monkeypatch
     # The plain-text boundary marker sits right above the commit push stops at.
     lines = log_out.splitlines()
     assert lines[lines.index(fixup_line) - 1].startswith("---- ready boundary")
+
+
+def test_log_push_and_change_id_agree_on_an_invalid_change_id(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A garbage footer is *invalid*, not missing: ``ger log`` says so in the words push and change-id use."""
+    _configure(stack_repo)
+    git("config", "gerrit.stopPattern", "^nomatch$", cwd=stack_repo)
+    git("commit", "--allow-empty", "-q", "--no-verify", "-m", "garbage footer\n\nChange-Id: Ibad", cwd=stack_repo)
+
+    _code, log_out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
+    _code, json_out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore({}))
+    _code, push_out, push_err = run_cli(stack_repo, push_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore({}))
+    _code, _out, cid_err = run_cli(stack_repo, change_id_main, ["--check"], monkeypatch)
+
+    line = next(line for line in log_out.splitlines() if "garbage footer" in line)
+    assert line.rstrip().endswith("# invalid Change-Id")
+    row = next(c for c in json.loads(json_out)["commits"] if c["summary"] == "garbage footer")
+    assert row["attention_reasons"] == ["invalid-change-id"]
+    assert "invalid Change-Id: 'Ibad'" in push_out + push_err
+    assert "invalid Change-Id: 'Ibad'" in cid_err
 
 
 def _stop_on_a_conflict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:

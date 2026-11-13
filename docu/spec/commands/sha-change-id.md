@@ -72,7 +72,7 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range 
 | `--fix` | Assign missing Change-Ids on last message line (message-only rewrite via `commit-tree`) |
 | `--color`, `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
-`--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`.
+`--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`. It names every problem it finds, one `error: commit <sha>: …` line each, oldest commit first; the exit code is that of the first line.
 
 ### Exit codes (`--check`)
 
@@ -89,5 +89,5 @@ Shared table: **[exit-codes.md](../exit-codes.md)**.
 ## See also
 
 - [`ger push`](push.md) (Change-Id errors tighten the ready boundary in Gerrit mode)
-- [`ger log`](log.md) (surfaces missing Change-Id in attention hints)
+- [`ger log`](log.md) (surfaces missing and invalid Change-Ids in attention hints)
 - [`ger show`](show.md)

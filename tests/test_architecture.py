@@ -240,7 +240,7 @@ CONCEPTS = [
     ),
     Concept(
         name="attention reason literal",
-        pattern=r"""["'](ci-failed|unresolved-comments|no-reviewers|missing-change-id|chain-blocked|review-issues|awaiting-review|not-pushed|ahead-of-gerrit|outdated-patchset)["']""",
+        pattern=r"""["'](ci-failed|unresolved-comments|no-reviewers|missing-change-id|invalid-change-id|chain-blocked|review-issues|awaiting-review|not-pushed|ahead-of-gerrit|outdated-patchset)["']""",
         owners={"core/attention.py": "decides attention and names its reasons"},
         fix="Use core.attention.Attention. Render maps attention_reasons to text; it never re-derives them.",
     ),

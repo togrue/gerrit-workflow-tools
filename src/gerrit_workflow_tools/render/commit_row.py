@@ -228,6 +228,7 @@ def extra_detail_lines(commit: LogCommit) -> list[str]:
 # Reasons that replace every other hint: the change cannot be reviewed as it stands.
 _TERMINAL_TOKENS = (
     (Attention.MISSING_CHANGE_ID, "missing Change-Id", ANSI_YELLOW),
+    (Attention.INVALID_CHANGE_ID, "invalid Change-Id", ANSI_YELLOW),
     (Attention.UNSQUASHED_FIXUP, UNSQUASHED_FIXUP_TEXT, ANSI_YELLOW),
     (Attention.GERRIT_UNKNOWN, GERRIT_UNKNOWN_TEXT, ANSI_YELLOW),
     (Attention.ABANDONED, "abandoned", ANSI_RED),

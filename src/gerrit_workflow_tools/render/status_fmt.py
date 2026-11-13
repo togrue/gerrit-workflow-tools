@@ -64,6 +64,7 @@ UNSQUASHED_FIXUP_TEXT = "unsquashed fixup commit"
 
 _TERMINAL_TEXT = (
     (Attention.MISSING_CHANGE_ID, "missing Change-Id"),
+    (Attention.INVALID_CHANGE_ID, "invalid Change-Id"),
     (Attention.UNSQUASHED_FIXUP, UNSQUASHED_FIXUP_TEXT),
     (Attention.GERRIT_UNKNOWN, GERRIT_UNKNOWN_TEXT),
     (Attention.ABANDONED, "abandoned"),

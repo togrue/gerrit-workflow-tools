@@ -298,6 +298,19 @@ def test_gcid_check_fails_on_dup(dup_repo, monkeypatch):
     assert "duplicate" in err.lower()
 
 
+def test_gcid_check_reports_every_issue_oldest_first(stack_repo, monkeypatch):
+    """Show what you can: one line per bad commit, not just the newest one."""
+    git("commit", "--allow-empty", "-q", "--no-verify", "-m", "no footer", cwd=stack_repo)
+    git("commit", "--allow-empty", "-q", "--no-verify", "-m", "garbage\n\nChange-Id: Ibad", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, gcid_main, ["--check"], monkeypatch)
+    assert code == ExitCode.MISSING_CHANGE_ID
+    assert out == ""
+    lines = err.strip().splitlines()
+    assert len(lines) == 2, err
+    assert lines[0].endswith("no Change-Id in commit message")
+    assert lines[1].endswith("invalid Change-Id: 'Ibad'")
+
+
 def test_gcid_check_rejects_rev_or_range(stack_repo, monkeypatch):
     code, out, err = run_cli(stack_repo, gcid_main, ["--check", "HEAD~2"], monkeypatch)
     assert code == ExitCode.USAGE

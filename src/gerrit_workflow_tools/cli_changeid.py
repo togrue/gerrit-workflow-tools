@@ -45,13 +45,15 @@ class ChangeIdError(Exception):
 
 
 def _audit_change_ids(commits: Iterable[Commit]) -> None:
-    """Raise :class:`ChangeIdError` for the first missing, malformed or duplicate Change-Id."""
+    """Raise :class:`ChangeIdError` naming every missing, malformed or duplicate Change-Id.
+
+    One line per issue in *commits* order; the exit code is the first issue's.
+    """
     issues, _exit = classify_issues(ChangeIdRow(c.sha, c.short_sha, c.change_id) for c in commits)
     if issues:
-        issue = issues[0]
-        duplicate = issue.kind == ChangeIdIssueKind.DUPLICATE
+        duplicate = issues[0].kind == ChangeIdIssueKind.DUPLICATE
         raise ChangeIdError(
-            f"error: commit {color_short_sha(issue.short_sha)}: {issue.detail}",
+            "\n".join(f"error: commit {color_short_sha(i.short_sha)}: {i.detail}" for i in issues),
             code=int(ExitCode.DUPLICATE_CHANGE_ID if duplicate else ExitCode.MISSING_CHANGE_ID),
         )
 
@@ -59,9 +61,9 @@ def _audit_change_ids(commits: Iterable[Commit]) -> None:
 def check_stack_change_ids(cwd) -> None:
     """Raise :class:`ChangeIdError` when the current stack has missing/invalid/duplicate Change-Ids.
 
-    Always scans ``upstream_tip..HEAD`` (the full local stack).
+    Always scans ``upstream_tip..HEAD`` (the full local stack), oldest first, and names every issue.
     """
-    _audit_change_ids(read_commit_rows(cwd, rev_spec_stack_base_to_end(cwd, "HEAD")))
+    _audit_change_ids(read_commit_rows(cwd, "--reverse", rev_spec_stack_base_to_end(cwd, "HEAD")))
 
 
 def _rev_arg(arg: str) -> str:

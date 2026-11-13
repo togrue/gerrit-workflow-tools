@@ -167,6 +167,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     diverged: bool = False
     """``newer``, and Gerrit's current patch set is a commit this repository never had: somebody
     else (or another checkout) uploaded it, so a push would put this commit over work it was not built on."""
+    invalid_footer: str | None = None
+    """The **footer value** when the commit has one that is not a valid **Change-Id** (``change_id``
+    is then ``None``): what lets attention call the footer invalid rather than missing."""
 
 
 def _is_merge_commit(cwd: Path | str | None, sha: str) -> bool:
@@ -258,6 +261,7 @@ def local_log_commit(row: Commit, status: PatchsetStatus) -> LogCommit:
 
     A commit without a valid Change-Id is ``ABSENT`` either way: Gerrit cannot hold it.
     """
+    footer = (row.change_id or "").strip()
     return LogCommit(
         sha=row.sha,
         short_sha=row.short_sha,
@@ -269,6 +273,7 @@ def local_log_commit(row: Commit, status: PatchsetStatus) -> LogCommit:
         verified=None,
         code_review=None,
         comments_unresolved=0,
+        invalid_footer=footer if footer and not row.valid_change_id else None,
     )
 
 
