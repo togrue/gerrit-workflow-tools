@@ -132,7 +132,6 @@ def test_substrate_stays_at_the_bottom() -> None:
         {
             # Backlog: "Cache-clear hub" — clear_git_cache reaches up to clear caches it does not own.
             "core/git_run.py -> core/git_state.py": "cache-clear hub",
-            "core/git_run.py -> core/gerrit/stack_context.py": "cache-clear hub",
         },
         f"{', '.join(sorted(SUBSTRATE))} must not import anything above them.",
     )

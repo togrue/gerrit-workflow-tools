@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
@@ -79,7 +78,7 @@ def credential_error(strategy: ReviewerStrategy, reviewers: Sequence[str], setti
 
 def push_marks(run: RunContext, rows: Sequence[Commit]) -> dict[str, PushMark]:
     settings = run.settings
-    stack = resolve_stack_context(run.cwd, settings=settings)
+    stack = run.stack
     triplets = {
         row.change_id: build_triplet(stack.project, stack.push_branch, row.change_id) for row in rows if row.change_id
     }
@@ -107,8 +106,8 @@ def push_marks(run: RunContext, rows: Sequence[Commit]) -> dict[str, PushMark]:
     return marks
 
 
-def change_refs_for_commits(cwd: Path, commits: Sequence[Commit], *, settings: Settings) -> list[str]:
-    stack = resolve_stack_context(cwd, settings=settings)
+def change_refs_for_commits(run: RunContext, commits: Sequence[Commit]) -> list[str]:
+    stack = run.stack
     triplets = (build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id)
     return list(dict.fromkeys(triplets))
 

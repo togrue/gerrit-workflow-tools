@@ -437,7 +437,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `core/run_context.py` | The **run context**: `RunContext` (cwd, `Settings`, the Gerrit service of one command run or one request) |
+| `core/run_context.py` | The **run context**: `RunContext` (cwd, `Settings`, the Gerrit service of one command run or one request, and its **stack context**, `run.stack`, resolved once) |
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE` |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
@@ -530,7 +530,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/change_resolution.py` | Changeish resolution: narrowing a changeish to one change, and to a local stack commit |
 | `core/gerrit/narrowing.py` | Change-Id narrowing (spec §3.1): `narrow_matches`, `resolution_from_change_rows` — picking one of a Change-Id's changes by push branch, without contacting Gerrit |
 | `core/gerrit/resolution.py` | The resolution model: `Resolution`, `SelectedChange`, `ChangeAmbiguousError`, resolution notes |
-| `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), its memo, triplets |
+| `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), resolving it, triplets. Kept per run (`run.stack`), never per process |
 | `core/gerrit/paths.py` | Cache DB path and host key |
 
 ### Presentation (`render/` and package root)
@@ -579,7 +579,7 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 2. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
 3. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
-4. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
+4. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` to clear the process-wide `Worktree` memo, which it guesses stale from the git subcommand. The stack context already lives on the run; the worktree follows when core reads repository state through the run. *Tracked by:* `test_substrate_stays_at_the_bottom`.
 5. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
 
 ---

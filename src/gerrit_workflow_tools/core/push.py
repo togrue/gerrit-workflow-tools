@@ -12,7 +12,7 @@ from typing import Any
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
     LAST_PUSH_PREFIX,
@@ -214,9 +214,8 @@ def prepare(
         remove_private=remove_private,
     )
     ready = _ready(
-        cwd,
+        run,
         branch,
-        settings=settings,
         all_commits=all_commits,
         until=until,
         until_sha=until_sha,
@@ -287,23 +286,23 @@ def _forget_pushed_changes(run: RunContext, plan: PushPlan) -> None:
     drops it by itself. A failure here must not turn a successful push into a failed one.
     """
     with contextlib.suppress(ValueError, OSError, sqlite3.Error, ChangeResolutionError):
-        refs = change_refs_for_commits(run.cwd, sent_commits(plan), settings=run.settings)
+        refs = change_refs_for_commits(run, sent_commits(plan))
         run.gerrit.cache.invalidate_changes(refs)
 
 
 def _ready(
-    cwd: Path,
+    run: RunContext,
     branch: str,
     *,
-    settings: Settings,
     all_commits: bool,
     until: str | None,
     until_sha: str | None,
     first_parent: bool,
 ) -> ReadyResult:
+    cwd, settings = run.cwd, run.settings
     project = settings.gerrit_project or ""
     with contextlib.suppress(Exception):
-        project = resolve_stack_context(cwd, settings=settings).project
+        project = run.stack.project
     return compute_ready(
         cwd,
         branch=branch,
@@ -336,7 +335,7 @@ def _apply_reviewers(run: RunContext, plan: PushPlan) -> tuple[ReviewerApplyResu
         run.gerrit,
         plan.options.strategy,
         list(plan.options.reviewers),
-        change_refs_for_commits(run.cwd, plan.commits, settings=run.settings),
+        change_refs_for_commits(run, plan.commits),
     )
     return result, None
 

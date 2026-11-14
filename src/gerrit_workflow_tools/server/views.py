@@ -20,7 +20,6 @@ from gerrit_workflow_tools.core.comment_write import new_comment_state
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
-from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, repo_toplevel, resolve_working_branch
@@ -76,7 +75,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     view = load_annotated_stack(
         ctx.run, resolve_rev_range(cwd, None, settings=settings), fetch_ci_pipelines=req.flag("pipelines")
     )
-    context = resolve_stack_context(cwd, settings=settings)
+    context = ctx.run.stack
     blocked = (
         blocked_shas_for_stack(
             cwd,

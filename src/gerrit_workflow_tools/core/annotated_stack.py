@@ -28,7 +28,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit.narrowing import resolution_from_change_rows
 from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context, stack_project
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
@@ -133,7 +132,7 @@ def annotate(
     annotate_attention(
         commits,
         cwd=cwd,
-        project=stack_project(cwd, settings=service.settings),
+        project=_project(service),
         settings=service.settings,
         web_base=service.web_base,
     )
@@ -166,7 +165,7 @@ def _multi_branch_notes(
     footer_ids = [row.valid_change_id for row in rows if row.valid_change_id]
     if not footer_ids:
         return {}
-    stack = resolve_stack_context(cwd, settings=service.settings)
+    stack = service.stack_context()
     by_footer = service.changes.find_by_footer_change_ids(footer_ids)
     notes: dict[str, str] = {}
     for row in rows:
@@ -186,6 +185,14 @@ def _multi_branch_notes(
         if note:
             notes[row.sha] = note
     return notes
+
+
+def _project(service: GerritService) -> str:
+    """The run's project, else ``gerrit.project`` when the stack has no context to give one."""
+    try:
+        return service.stack_context().project
+    except ChangeResolutionError:
+        return service.settings.gerrit_project or ""
 
 
 def load_annotated_stack(

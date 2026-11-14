@@ -61,6 +61,8 @@ class GerritService:
         # known. A property of the host, not of any change, so it is answered from the
         # cache and only rediscovered once that verdict expires.
         self._checks_endpoint_available: bool | None = None
+        # The stack context of the run this service belongs to: asked once, kept for the run.
+        self._stack_context: StackContext | None = None
         self.changes = ChangeApi(self)
         self.comments = CommentApi(self)
 
@@ -114,8 +116,14 @@ class GerritService:
         return asked
 
     def stack_context(self) -> StackContext:
-        """The stack context for this service (memoised by :func:`resolve_stack_context`)."""
-        return resolve_stack_context(self.cwd, settings=self.settings)
+        """The stack context of this service's repository and working branch, resolved once.
+
+        Raises :class:`ChangeResolutionError` when there is none (no project, no destination);
+        that answer is not kept, so a caller that can do without one may ask again.
+        """
+        if self._stack_context is None:
+            self._stack_context = resolve_stack_context(self.cwd, settings=self.settings)
+        return self._stack_context
 
     def cache_key(self, change_ref: str, ctx: StackContext | None = None) -> str:
         """Map a change ref to its cache key: triplets and numbers verbatim, Change-Ids via the stack context."""

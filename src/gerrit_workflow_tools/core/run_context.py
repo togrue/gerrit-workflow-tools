@@ -15,6 +15,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
 
 
 @dataclass(frozen=True)
@@ -42,3 +43,8 @@ class RunContext:
         path = Path(cwd)
         snapshot = settings if settings is not None else Settings.from_cwd(path)
         return cls(path, snapshot, GerritService(gerrit, cwd=path, settings=snapshot, refresh=refresh))
+
+    @property
+    def stack(self) -> StackContext:
+        """The stack context of the working branch: project, target and push branch. Resolved once per run."""
+        return self.gerrit.stack_context()

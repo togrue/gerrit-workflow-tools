@@ -17,7 +17,6 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
     build_triplet,
-    resolve_stack_context,
 )
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target, resolve_working_branch
@@ -119,7 +118,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
     if not service.credentials_configured:
         return ExistingChanges()
     try:
-        stack = resolve_stack_context(run.cwd, settings=run.settings)
+        stack = run.stack
         triplets = {c.sha: build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id}
         payloads = service.changes.get_payloads(list(triplets.values()))
     except GerritUnavailableError as error:

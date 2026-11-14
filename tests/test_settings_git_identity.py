@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit import stack_context as cr
 from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
@@ -98,61 +97,3 @@ def test_checkout_invalidates_worktree_memo(tmp_path: Path) -> None:
         c for c in run.call_args_list if c.args and c.args[0] == "rev-parse" and "--show-toplevel" in c.args
     ]
     assert len(toplevel_parses) == 2
-
-
-def test_resolve_stack_context_memoized(tmp_path: Path) -> None:
-    settings = Settings.from_map(
-        {
-            "gerrit.project": "proj",
-            "branch.feature.remote": "origin",
-            "branch.feature.merge": "refs/heads/main",
-            "branch.feature.gerrittarget": "main",
-        }
-    )
-    calls = {"n": 0}
-    original = cr._resolve_stack_context_uncached
-
-    def counting(*args: object, **kwargs: object) -> cr.StackContext:
-        calls["n"] += 1
-        return original(*args, **kwargs)  # type: ignore[arg-type]
-
-    with patch.object(cr, "_resolve_stack_context_uncached", side_effect=counting):
-        a = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings)
-        b = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings)
-    assert a == b
-    assert calls["n"] == 1
-
-
-def test_resolve_stack_context_cache_is_keyed_by_settings_values(tmp_path: Path) -> None:
-    def settings_for(target: str) -> Settings:
-        return Settings.from_map({"gerrit.project": "proj", "branch.feature.gerrittarget": target})
-
-    clear_git_cache()
-    first = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings_for("main"))
-    # A distinct but equal snapshot hits the memo; a snapshot with other values must not.
-    with patch.object(cr, "_resolve_stack_context_uncached", side_effect=AssertionError("memo miss")):
-        assert cr.resolve_stack_context(tmp_path, branch="feature", settings=settings_for("main")) == first
-    other = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings_for("dev"))
-    assert other != first
-
-
-def test_config_write_and_set_upstream_clear_stack_context_cache(tmp_path: Path) -> None:
-    repo = tmp_path / "r"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    settings = Settings.from_map({"gerrit.project": "proj", "branch.main.gerrittarget": "main"})
-    for args in (("config", "user.name", "x"), ("branch", "--set-upstream-to=origin/main", "main")):
-        cr.resolve_stack_context(repo, branch="main", settings=settings)
-        assert cr._STACK_CONTEXT_CACHE
-        git(*args, cwd=repo, check=False)
-        assert not cr._STACK_CONTEXT_CACHE, args
-
-
-def test_config_read_keeps_stack_context_cache(tmp_path: Path) -> None:
-    repo = tmp_path / "r"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    settings = Settings.from_map({"gerrit.project": "proj", "branch.main.gerrittarget": "main"})
-    cr.resolve_stack_context(repo, branch="main", settings=settings)
-    git("config", "--list", cwd=repo)
-    assert cr._STACK_CONTEXT_CACHE

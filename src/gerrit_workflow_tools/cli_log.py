@@ -32,7 +32,6 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
@@ -250,7 +249,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         print_note("note: a rebase is in progress; this shows the branch as it was before the rebase.")
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
-    stack = resolve_stack_context(cwd, settings=settings)
+    stack = run.stack
     summary_highlighter = build_summary_highlighter(
         settings,
         cwd=cwd,

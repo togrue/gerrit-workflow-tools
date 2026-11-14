@@ -22,8 +22,8 @@ _LOG_IO_CAP = 1000
 # Read-only subcommands safe to cache for the lifetime of a single CLI run.
 _CACHEABLE_SUBCOMMANDS = frozenset({"rev-parse", "log"})
 
-# Commands that change the current branch or HEAD identity. Worktree / stack-context
-# snapshots must not outlive them (same-process CLI and the long-running service).
+# Commands that change the current branch or HEAD identity. The Worktree snapshot must not
+# outlive them (same-process CLI and the long-running service).
 _HEAD_IDENTITY_SUBCOMMANDS = frozenset(
     {
         "checkout",
@@ -36,17 +36,12 @@ _HEAD_IDENTITY_SUBCOMMANDS = frozenset(
     }
 )
 
-# `git branch` flags that rename a branch or change its upstream.
-_BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move", "-u", "--unset-upstream", "-t", "--track"})
+# `git branch` flags that rename a branch.
+_BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move"})
 
 _UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
 
 _NAMED_REVISION_RE = re.compile(r"(?:ambiguous argument|bad revision|no such branch:) '([^']+)'")
-
-# `git config` flags that only read. Anything else may write, and upstream config is stack context.
-_CONFIG_READ_FLAGS = frozenset(
-    {"-l", "--list", "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--show-origin", "--show-scope"}
-)
 
 
 class GitError(RuntimeError):
@@ -83,12 +78,10 @@ def unknown_revision_error(cwd: Path | str | None, stderr: str, returncode: int)
 
 
 def _clear_semantic_snapshots() -> None:
-    """Drop Worktree and stack-context memos (lazy imports: this module is substrate)."""
-    from gerrit_workflow_tools.core.gerrit.stack_context import clear_stack_context_cache
+    """Drop the Worktree memo (lazy import: this module is substrate)."""
     from gerrit_workflow_tools.core.git_state import clear_worktree_cache
 
     clear_worktree_cache()
-    clear_stack_context_cache()
 
 
 def _invalidates_head_identity(args: tuple[str, ...]) -> bool:
@@ -98,14 +91,12 @@ def _invalidates_head_identity(args: tuple[str, ...]) -> bool:
     if args[0] in _HEAD_IDENTITY_SUBCOMMANDS:
         return True
     if args[0] == "branch":
-        return any(a in _BRANCH_IDENTITY_FLAGS or a.startswith("--set-upstream-to") for a in args[1:])
-    if args[0] == "config":
-        return not any(a in _CONFIG_READ_FLAGS for a in args[1:])
+        return any(a in _BRANCH_IDENTITY_FLAGS for a in args[1:])
     return False
 
 
 def clear_git_cache() -> None:
-    """Drop all cached ``rev-parse`` / ``log`` results and semantic git snapshots."""
+    """Drop all cached ``rev-parse`` / ``log`` results and the Worktree snapshot."""
     _git_cached.cache_clear()
     _clear_semantic_snapshots()
 
