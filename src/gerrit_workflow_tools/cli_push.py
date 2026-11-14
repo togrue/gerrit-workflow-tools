@@ -21,7 +21,7 @@ from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode, is_detached_head
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode
 from gerrit_workflow_tools.core.push import (
     PushPlan,
     PushRefusal,
@@ -372,8 +372,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.i and not stdin_is_terminal():
         raise UsageError("-i requires an interactive terminal (stdin is not a TTY)")
 
-    detached = is_detached_head(cwd)
-    branch = resolve_push_branch(cwd, args.branch, settings=settings)
+    detached = run.worktree.branch is None
+    branch = resolve_push_branch(run, args.branch)
     mode = ger_push_mode(cwd, branch, settings=settings)
     if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):

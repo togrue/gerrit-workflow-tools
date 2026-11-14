@@ -9,9 +9,9 @@ from gerrit_workflow_tools.core import upstream
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import (
+    Worktree,
     effective_gerrit_destination_branch,
     head_is_linear_on_remote_gerrit_target,
-    rebase_in_progress_branch,
     resolve_rebase_onto_remote_ref,
     resolve_working_branch,
 )
@@ -19,16 +19,16 @@ from gerrit_workflow_tools.core.upstream import infer_nearest_remote_tracking_br
 from tests.helpers import write_rebase_head
 
 
-def test_rebase_in_progress_branch_reads_git_rebase_state(stack_repo: Path) -> None:
+def test_the_rebasing_branch_is_read_from_git_rebase_state(stack_repo: Path) -> None:
     write_rebase_head(stack_repo, "feature", state_dir="rebase-merge")
-    assert rebase_in_progress_branch(stack_repo) == "feature"
+    assert Worktree.from_cwd(stack_repo).rebasing_branch() == "feature"
 
     git_dir = Path(git_out("rev-parse", "--git-dir", cwd=stack_repo))
     if not git_dir.is_absolute():
         git_dir = stack_repo / git_dir
     shutil.rmtree(git_dir / "rebase-merge")
     write_rebase_head(stack_repo, "apply-branch", state_dir="rebase-apply")
-    assert rebase_in_progress_branch(stack_repo) == "apply-branch"
+    assert Worktree.from_cwd(stack_repo).rebasing_branch() == "apply-branch"
 
 
 def test_resolve_working_branch_prefers_checked_out_branch(stack_repo: Path) -> None:

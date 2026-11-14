@@ -144,11 +144,6 @@ def git_dir(cwd: Path | str | None) -> Path | None:
     return Worktree.from_cwd(cwd).repository_dir
 
 
-def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
-    """Branch currently being rebased, if Git has an in-progress rebase state."""
-    return Worktree.from_cwd(cwd).rebasing_branch()
-
-
 LAST_PUSH_PREFIX = "lastPush/"
 """ger's own marker branches, ``lastPush/<branch>``: bookkeeping, never a branch you work on."""
 

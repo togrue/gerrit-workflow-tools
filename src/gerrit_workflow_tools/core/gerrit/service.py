@@ -69,9 +69,9 @@ class GerritService:
         return self.repo.settings
 
     @property
-    def cwd(self) -> str:
+    def cwd(self) -> Path:
         """The repository this service reports on."""
-        return str(self.repo.cwd)
+        return self.repo.cwd
 
     @property
     def configured(self) -> bool:
