@@ -264,10 +264,10 @@ class StackCommit:
 
 
 def _stack_commit(
-    cwd: Path | str | None, branch: str | None, raw: str, sha: str, *, require_in_stack: bool
+    cwd: Path | str | None, branch: str | None, raw: str, sha: str, *, require_in_stack: bool, settings: Settings
 ) -> StackCommit:
     """Wrap *sha*, which *raw* named, optionally insisting it is one of the **local stack**'s commits."""
-    if require_in_stack and sha not in {c.sha for c in get_stack_snapshot(cwd, branch).commits}:
+    if require_in_stack and sha not in {c.sha for c in get_stack_snapshot(cwd, branch, settings=settings).commits}:
         raise ChangeResolutionError(not_in_stack_message(raw, sha))
     return StackCommit(sha=sha)
 
@@ -299,14 +299,14 @@ def resolve_to_stack_sha(
 
     if parsed.kind == "git-rev":
         sha = local_commit_sha(cwd, parsed.raw)
-        return _stack_commit(cwd, branch, parsed.raw, sha, require_in_stack=require_in_stack)
+        return _stack_commit(cwd, branch, parsed.raw, sha, require_in_stack=require_in_stack, settings=settings)
 
     if parsed.kind == "change-ref":
         # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a
         # ref the repository can resolve on its own would be a round trip for nothing.
         local = commit_sha_or_none(cwd, parsed.raw)
         if local is not None:
-            return _stack_commit(cwd, branch, parsed.raw, local, require_in_stack=require_in_stack)
+            return _stack_commit(cwd, branch, parsed.raw, local, require_in_stack=require_in_stack, settings=settings)
 
     # A Change-Id or triplet already carries the id, so the stack can be searched offline.
     # The remaining kinds address a change by number, so Gerrit has to name the id first.
@@ -324,7 +324,7 @@ def resolve_to_stack_sha(
 
     # Searching the stack for the Change-Id already guarantees membership, so this path needs
     # no separate require_in_stack check.
-    matches = get_stack_snapshot(cwd, branch).carrying(change_id)
+    matches = get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id)
     if not matches:
         raise ChangeResolutionError(not_in_stack_message(parsed.raw))
     if len(matches) > 1:
@@ -364,13 +364,14 @@ def resolve_stack_changeish(
     The single entry point for ``ger fix``, ``ger edit``, ``ger reword`` and ``ger rebase``.
 
     *service* is only asked when *ref* names a change Gerrit has to look up; a purely local
-    resolution never builds its client, so ``gerrit.webUrl`` stays irrelevant to it.
+    resolution never builds its client, so ``gerrit.webUrl`` stays irrelevant to it. The stack
+    is *branch*'s, by default the working branch of the service's run.
     """
     return resolve_to_stack_sha(
         ref,
         cwd=cwd,
         settings=service.settings,
-        branch=branch,
+        branch=branch if branch is not None else service.repo.working_branch,
         service=service,
         require_in_stack=require_in_stack,
     )

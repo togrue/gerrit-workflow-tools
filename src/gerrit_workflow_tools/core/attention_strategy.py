@@ -28,7 +28,7 @@ clear_attention_strategy_cache = _REGISTRY.clear_cache
 
 
 def attention_reasons_via_registry(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     project: str,
     commit: LogCommit,
@@ -44,11 +44,11 @@ def attention_reasons_via_registry(
     def _builtin() -> list[str]:
         return determine_attention(commit, chain_blocked=chain_blocked)
 
-    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
+    return _REGISTRY.run(root, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
 
 
 def commit_blocks_chain_via_registry(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     project: str,
     commit: LogCommit,
@@ -64,5 +64,5 @@ def commit_blocks_chain_via_registry(
         return commit_blocks_chain_for_submittability(commit)
 
     return _CHAIN_BLOCK_REGISTRY.run(
-        cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base
+        root, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base
     )

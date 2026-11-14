@@ -23,7 +23,6 @@ from gerrit_workflow_tools.core.config_editor_file import (
 from gerrit_workflow_tools.core.config_form import resolve_config_form
 from gerrit_workflow_tools.core.config_write import apply_config_write
 from gerrit_workflow_tools.core.git_editor import run_git_editor
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -66,7 +65,7 @@ def _run(argv: list[str] | None) -> int:
     if not _stream_is_tty(sys.stdin) or not _stream_is_tty(sys.stdout):
         raise UsageError("ger config requires an interactive terminal")
 
-    branch = resolve_working_branch(cwd, settings=settings)
+    branch = run.repo.working_branch
     sections = resolve_config_form(settings, branch=branch)
     text = render_config_editor_text(sections)
 

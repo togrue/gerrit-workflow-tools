@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_paths import resolve_finding_paths, tracked_paths
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
+from gerrit_workflow_tools.core.git_state import repo_toplevel
 
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ class CiContentService:
 
         base = web_base or settings.gerrit_web_url
         return cls(
-            providers=load_ci_content_providers(cwd, settings=settings, web_base=base),
+            providers=load_ci_content_providers(repo_toplevel(cwd), settings=settings, web_base=base),
             http=http if http is not None else UrllibCiHttp(),
             settings=settings,
             store=CiContentStore.for_web_base(base) if base else None,

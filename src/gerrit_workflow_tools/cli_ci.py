@@ -24,7 +24,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.ci_content import (
     ci_content_json,
@@ -139,7 +138,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
     run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     out_fmt = output_format(args)
-    branch = args.branch or resolve_working_branch(cwd, settings=settings)
+    branch = args.branch or run.repo.working_branch
     if args.stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
         return int(ExitCode.ATTENTION)
 

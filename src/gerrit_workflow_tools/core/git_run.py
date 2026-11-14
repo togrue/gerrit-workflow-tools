@@ -22,23 +22,6 @@ _LOG_IO_CAP = 1000
 # Read-only subcommands safe to cache for the lifetime of a single CLI run.
 _CACHEABLE_SUBCOMMANDS = frozenset({"rev-parse", "log"})
 
-# Commands that change the current branch or HEAD identity. The Worktree snapshot must not
-# outlive them (same-process CLI and the long-running service).
-_HEAD_IDENTITY_SUBCOMMANDS = frozenset(
-    {
-        "checkout",
-        "switch",
-        "rebase",
-        "reset",
-        "symbolic-ref",
-        "worktree",
-        "bisect",
-    }
-)
-
-# `git branch` flags that rename a branch.
-_BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move"})
-
 _UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
 
 _NAMED_REVISION_RE = re.compile(r"(?:ambiguous argument|bad revision|no such branch:) '([^']+)'")
@@ -77,28 +60,9 @@ def unknown_revision_error(cwd: Path | str | None, stderr: str, returncode: int)
     return UnknownRevisionError(unresolved_rev_message(rev), returncode=returncode)
 
 
-def _clear_semantic_snapshots() -> None:
-    """Drop the Worktree memo (lazy import: this module is substrate)."""
-    from gerrit_workflow_tools.core.git_state import clear_worktree_cache
-
-    clear_worktree_cache()
-
-
-def _invalidates_head_identity(args: tuple[str, ...]) -> bool:
-    """True when *args* can change the current branch name or HEAD attachment."""
-    if not args:
-        return False
-    if args[0] in _HEAD_IDENTITY_SUBCOMMANDS:
-        return True
-    if args[0] == "branch":
-        return any(a in _BRANCH_IDENTITY_FLAGS for a in args[1:])
-    return False
-
-
 def clear_git_cache() -> None:
-    """Drop all cached ``rev-parse`` / ``log`` results and the Worktree snapshot."""
+    """Drop all cached ``rev-parse`` / ``log`` results."""
     _git_cached.cache_clear()
-    _clear_semantic_snapshots()
 
 
 def abs_cwd(cwd: Path | str | None) -> str:
@@ -191,8 +155,6 @@ def git(
     """
     if input is not None or not args or args[0] not in _CACHEABLE_SUBCOMMANDS:
         _git_cached.cache_clear()
-        if _invalidates_head_identity(args):
-            _clear_semantic_snapshots()
         p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
     else:
         env_key = tuple(sorted(env.items())) if env else None

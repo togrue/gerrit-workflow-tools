@@ -107,11 +107,8 @@ def test_follow_merges_would_have_found_the_side_branch_commit(tmp_path: Path) -
     payload = change_info_for_sha("0" * 40, cid, number=200, unresolved_comment_count=3)
     store = ChangeStore({str(payload["id"]): payload}, web_base="https://g.example")
 
-    stack = load_annotated_stack(
-        RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store),
-        resolve_rev_range(repo, None, settings=Settings.from_cwd(repo)),
-        first_parent=False,
-    )
+    run = RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store)
+    stack = load_annotated_stack(run, resolve_rev_range(None, branch=run.repo.stack_branch), first_parent=False)
 
     flagged = [c for c in stack.commits if c.comments_unresolved > 0]
     assert [c.change_id for c in flagged] == [cid]

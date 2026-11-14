@@ -154,7 +154,7 @@ def test_a_lone_commit_is_never_chain_blocked(stack_repo: Path) -> None:
 
 
 def _range(repo: Path) -> str:
-    return resolve_rev_range(repo, None, settings=Settings.from_cwd(repo))
+    return resolve_rev_range(None, branch=RunContext.open(repo).repo.stack_branch)
 
 
 @pytest.mark.parametrize(
@@ -166,7 +166,7 @@ def _range(repo: Path) -> str:
     ],
 )
 def test_resolve_rev_range_expands_bare_refs_only(stack_repo: Path, arg: str, expected: str) -> None:
-    assert resolve_rev_range(stack_repo, arg, settings=Settings.from_cwd(stack_repo)) == expected
+    assert resolve_rev_range(arg, branch="unused") == expected
 
 
 # ---------------------------------------------------------------------------

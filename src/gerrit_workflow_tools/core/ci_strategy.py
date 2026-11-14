@@ -80,7 +80,7 @@ def default_extract_ci_links(
 
 
 def extract_ci_links_via_registry(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     project: str,
     checks: list[dict[str, Any]],
@@ -105,11 +105,11 @@ def extract_ci_links_via_registry(
         )
         return prefer_checks_links(raw)
 
-    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
+    return _REGISTRY.run(root, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
 
 
 def load_ci_content_providers(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     settings: Settings | None = None,
     web_base: str | None = None,
@@ -123,7 +123,7 @@ def load_ci_content_providers(
     from gerrit_workflow_tools.core.ci_jenkins import JenkinsProvider
 
     providers: list[CiContentProvider] = []
-    for module in _REGISTRY.tier_modules(cwd, settings=settings, web_base=web_base):
+    for module in _REGISTRY.tier_modules(root, settings=settings, web_base=web_base):
         for candidate in getattr(module, "CONTENT_PROVIDERS", None) or ():
             if all(callable(getattr(candidate, attr, None)) for attr in ("matches", "fetch")):
                 providers.append(candidate)

@@ -136,7 +136,7 @@ def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
 def annotate_attention(
     commits: list[LogCommit],
     *,
-    cwd: Path | str | None = None,
+    root: Path | None = None,
     project: str = "",
     settings: Settings | None = None,
     web_base: str | None = None,
@@ -156,7 +156,7 @@ def annotate_attention(
     for commit in commits:
         chain_blocked = commit.pushed and prefix_chain_blocks
         commit.attention_reasons = attention_reasons_via_registry(
-            cwd,
+            root,
             project=project,
             commit=commit,
             chain_blocked=chain_blocked,
@@ -164,7 +164,7 @@ def annotate_attention(
             web_base=web_base,
         )
         if commit.pushed and commit_blocks_chain_via_registry(
-            cwd,
+            root,
             project=project,
             commit=commit,
             settings=settings,

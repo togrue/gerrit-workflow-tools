@@ -12,6 +12,7 @@ from gerrit_workflow_tools.core.changeish import not_in_stack_message
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import local_commit_sha
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
     find_ready_boundary_via_registry,
@@ -175,7 +176,7 @@ def compute_ready(
         strategy = BoundaryResult(block_index=None, reason="ignored (--all)")
     else:
         strategy = find_ready_boundary_via_registry(
-            cwd,
+            repo_toplevel(cwd),
             project=project,
             commits=ready_rows,
             stop_pattern=stop_pattern,

@@ -28,7 +28,6 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.render.comments import (
@@ -299,7 +298,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         comment_id, change = _chain_ref(p, args)
     run, _ = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
-    branch = args.branch or resolve_working_branch(cwd, settings=settings)
+    branch = args.branch or run.repo.working_branch
     searches_stack = change is None and not (args.publish and args.targets)
     if searches_stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
         return int(ExitCode.ATTENTION)

@@ -22,10 +22,9 @@ from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.git_state import checked_out_branch_name, repo_toplevel, resolve_working_branch
 from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, project_scope, section_summary
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import rebase_in_progress, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import rebase_progress, rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
@@ -57,13 +56,13 @@ def error_json(error: BaseException) -> dict[str, str]:
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
     """Who is answering, for which repository, and whether Gerrit's event stream is followed."""
-    top = repo_toplevel(ctx.cwd)
+    top = ctx.run.repo.root
     return {
         "name": "ger",
         "version": __version__,
         "api": API_VERSION,
         "repo": str(top) if top else None,
-        "branch": checked_out_branch_name(ctx.cwd),
+        "branch": ctx.run.worktree.branch,
         "host": host_from_web_base(ctx.service.web_base),
         **ctx.activity.json(),
     }
@@ -73,12 +72,12 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     """The **annotated stack** of the working branch, with the ready boundary: ``ger log`` as JSON."""
     cwd, settings = ctx.cwd, ctx.settings
     view = load_annotated_stack(
-        ctx.run, resolve_rev_range(cwd, None, settings=settings), fetch_ci_pipelines=req.flag("pipelines")
+        ctx.run, resolve_rev_range(None, branch=ctx.run.repo.stack_branch), fetch_ci_pipelines=req.flag("pipelines")
     )
     context = ctx.run.stack
     blocked = (
         blocked_shas_for_stack(
-            cwd,
+            ctx.run.repo.root,
             project=context.project,
             commits=view.rows,
             stop_pattern=settings.stop_pattern,
@@ -109,9 +108,9 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         for c in view.commits
     ]
     return {
-        "branch": checked_out_branch_name(cwd),
+        "branch": ctx.run.worktree.branch,
         "head": head,
-        "rebase_in_progress": rebase_in_progress(cwd),
+        "rebase_in_progress": rebase_underway(ctx.run.worktree.repository_dir),
         "rebase": {"applied": progress.applied} if progress else None,
         "stack": {
             "project": context.project,
@@ -157,7 +156,7 @@ def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
 
 def stack_upstream(ctx: Context, _req: Request) -> dict[str, Any]:
     """The working branch's upstream, and which to offer when it has none: the best guess first."""
-    branch = checked_out_branch_name(ctx.cwd)
+    branch = ctx.run.worktree.branch
     if branch is None:
         return {"branch": None, "upstream": None, "suggested": None, "why": None, "candidates": []}
     choice = upstream_choice(ctx.cwd, branch, settings=ctx.settings)
@@ -209,7 +208,7 @@ def overview(ctx: Context, req: Request) -> dict[str, Any]:
     """
     local = _soft(stack, ctx, req)
     if "error" in local:
-        branch = checked_out_branch_name(ctx.cwd)
+        branch = ctx.run.worktree.branch
         local["needs_upstream"] = branch is not None and not branch_has_upstream(ctx.cwd, branch)
     inbox = _soft(_inbox, ctx, req)
     sha_by_change = {
@@ -249,7 +248,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     if selection not in COMMENT_SELECTIONS:
         raise BadRequest(f"comments must be one of {', '.join(COMMENT_SELECTIONS)}")
     revs = [safe_rev(rev) for rev in req.many("rev")]
-    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    branch = ctx.run.repo.working_branch
     targets = resolve_show_targets(
         ctx.cwd,
         revs,
@@ -317,13 +316,13 @@ def agent_runbook(ctx: Context, req: Request) -> dict[str, Any]:
     ``rev`` (a commit id or Change-Id of the stack) narrows it to one commit. Fetches CI content.
     """
     only = req.one("rev")
-    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    branch = ctx.run.repo.working_branch
     targets = resolve_show_targets(
         ctx.cwd, [], ctx.service.rest, settings=ctx.settings, stack=True, branch=branch, changes=ctx.service.changes
     )
     shown = load_shown_commits(targets, service=ctx.service, context_padding=3, ci=ctx.ci()) if targets else []
     stops = plan_runbook(shown, load_holds(ctx.cwd), only=safe_rev(only) if only else None)
-    return runbook_json(stops, branch=checked_out_branch_name(ctx.cwd))
+    return runbook_json(stops, branch=ctx.run.worktree.branch)
 
 
 def review(ctx: Context, _req: Request) -> dict[str, Any]:

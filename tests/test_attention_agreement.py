@@ -94,7 +94,7 @@ def test_project_strategy_decides_what_is_printed(stack_repo: Path) -> None:
     clear_attention_strategy_cache()
 
     commit = replace(_STABLE, verified=-1, comments_unresolved=2)
-    annotate_attention([commit], cwd=stack_repo, project="p", settings=Settings.from_map({}))
+    annotate_attention([commit], root=stack_repo, project="p", settings=Settings.from_map({}))
 
     assert commit.attention_reasons == [Attention.UNRESOLVED_COMMENTS]
     assert _texts(commit) == ["2 unresolved comments"]

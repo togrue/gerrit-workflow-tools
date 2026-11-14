@@ -31,8 +31,12 @@ An immutable snapshot of the repository's effective `git config`, read once per 
 _Avoid_: config, config cache, options
 
 **Run context**:
-One command run, or one request `ger serve` answers: the repository it works in, its **Settings** snapshot, and the Gerrit service it asks, built once at the entry point and handed down. Whatever a run reads once and shares lives on it, for exactly as long as the run.
+One command run, or one request `ger serve` answers: the repository it works in — its **Settings** snapshot, its worktree, its **working branch** and the **stack context** on it — and the Gerrit service it asks, built once at the entry point and handed down. Whatever a run reads once and shares lives on it, for exactly as long as the run; work that changes what it read (switching branches) reads again itself.
 _Avoid_: session, environment, runtime (for the object)
+
+**Working branch**:
+The branch a command works on: the checked-out branch; while a rebase is underway, the branch being rebased; on any other detached HEAD, a local branch pointing at it (preferring one with a Gerrit upstream). Its `branch.<name>.*` config applies, and its upstream defines the stack. There may be none.
+_Avoid_: current branch (that is only the checked-out one)
 
 **Repository state**:
 What the repository looks like right now — branch, detached HEAD, in-progress rebase, upstream, remote-tracking refs, the Gerrit push destination. Answered by running git, not by reading **Settings**, though interpreting the answer may consult them (e.g. whether the upstream's remote is `gerrit.remote`). The dependency runs one way: **Settings** never asks about **repository state**.

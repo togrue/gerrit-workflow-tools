@@ -21,7 +21,7 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_underway
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
@@ -136,7 +136,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
     # `git rebase --autosquash` can actually place (ADR-0003).
     target = resolve_stack_changeish(cwd, args.target, service=run.gerrit, require_in_stack=True)
-    snapshot = get_stack_snapshot(cwd, settings=settings)
+    snapshot = get_stack_snapshot(cwd, run.repo.working_branch, settings=settings)
     fixup_sha = fixup_target_sha(snapshot.commits, target.sha)
     logger.info("fixup target commit: %s", fixup_sha)
 
@@ -172,7 +172,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     else:
         print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
         # The same advice `ger push` and `ger log` give for this commit.
-        first = "finish the rebase (`git rebase --continue`), then " if rebase_in_progress(cwd) else ""
+        rebasing = rebase_underway(run.worktree.repository_dir)
+        first = "finish the rebase (`git rebase --continue`), then " if rebasing else ""
         print(f"next: {first}{UNSQUASHED_FIXUP_ADVICE}", file=sys.stderr)
     return 0
 

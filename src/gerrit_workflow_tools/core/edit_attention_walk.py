@@ -49,7 +49,7 @@ def load_edit_attention_stack(run: RunContext):
     from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
     from gerrit_workflow_tools.core.git_run import GitError
 
-    rev_range = resolve_rev_range(run.cwd, None, settings=run.settings)
+    rev_range = resolve_rev_range(None, branch=run.repo.stack_branch)
     stack_view = load_annotated_stack(run, rev_range)
     if not stack_view.commits:
         raise GitError("no commits in stack")

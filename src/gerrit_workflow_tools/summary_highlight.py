@@ -9,6 +9,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
+from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 
@@ -47,7 +48,7 @@ class SummaryHighlighter:
 def build_summary_highlighter(
     settings: Settings,
     *,
-    cwd: Path | str | None = None,
+    root: Path | None = None,
     commits: list[Commit] | None = None,
     project: str = "",
     web_base: str | None = None,
@@ -55,9 +56,9 @@ def build_summary_highlighter(
     """Build a highlighter using the same ready boundary rules as ``ger push``."""
 
     blocked = frozenset[str]()
-    if commits and cwd is not None:
+    if commits:
         blocked = blocked_shas_for_stack(
-            cwd,
+            root,
             project=project,
             commits=commits,
             stop_pattern=settings.stop_pattern,
@@ -83,7 +84,7 @@ def branch_summary_highlighter(
     snap = get_stack_snapshot(cwd, branch, head=branch, first_parent=first_parent, settings=settings)
     return build_summary_highlighter(
         settings,
-        cwd=cwd,
+        root=repo_toplevel(cwd),
         commits=list(snap.commits),
         project=stack_project(cwd, branch, settings=settings),
         web_base=settings.gerrit_web_url,

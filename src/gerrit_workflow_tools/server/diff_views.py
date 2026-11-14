@@ -13,7 +13,6 @@ from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, file_text, show_c
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.review_delta import last_reviewed_patch_set, load_review_delta
 from gerrit_workflow_tools.render.review_json import iso_utc
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
@@ -65,7 +64,7 @@ def diff(ctx: Context, req: Request) -> dict[str, Any]:
     wanted = req.number("patchset")
     if wanted is not None:
         return commit_files(ctx, rev, patchset=wanted)
-    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    branch = ctx.run.repo.working_branch
     [target] = resolve_show_targets(
         ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
     )

@@ -47,16 +47,16 @@ def test_opening_a_run_asks_nothing_of_gerrit(tmp_path: Path) -> None:
 
 
 def test_a_run_resolves_its_stack_context_once(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from gerrit_workflow_tools.core.gerrit import service as service_module
+    from gerrit_workflow_tools.core import repository as repository_module
 
     calls: list[object] = []
-    resolve = service_module.resolve_stack_context
+    resolve = repository_module.resolve_stack_context
 
     def counting(*args: object, **kwargs: object) -> object:
         calls.append(args)
         return resolve(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(service_module, "resolve_stack_context", counting)
+    monkeypatch.setattr(repository_module, "resolve_stack_context", counting)
     run = RunContext.open(stack_repo, gerrit=ChangeStore())
 
     assert run.stack == run.stack == run.gerrit.stack_context()

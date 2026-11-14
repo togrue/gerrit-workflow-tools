@@ -23,14 +23,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import annotate_attention
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, format_resolution_note
 from gerrit_workflow_tools.core.gerrit.narrowing import resolution_from_change_rows
 from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
 
@@ -63,29 +61,28 @@ class AnnotatedStack:
         return self.commits
 
 
-def resolve_rev_range(cwd: Path | str | None, arg_rev_range: str | None, *, settings: Settings) -> str:
+def resolve_rev_range(arg_rev_range: str | None, *, branch: str) -> str:
     """Return the revision range to inspect.
 
     A bare ref becomes ``<ref>@{upstream}..<ref>``; a range is taken as given. With no
-    argument, the working branch's upstream range is used. Raises :class:`GitError` when the
-    working branch cannot be determined.
+    argument, the stack of *branch* (the run's ``stack_branch``): its upstream range.
     """
     if arg_rev_range:
         if ".." in arg_rev_range:
             return arg_rev_range
         return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}"
-    branch = resolve_branch_for_branch_config(cwd, settings=settings)
     if branch == "HEAD":
         return "@{upstream}..HEAD"
     return f"{branch}@{{upstream}}..{branch}"
 
 
-def branches_needing_upstream(cwd: Path | str | None, rev_range: str, *, settings: Settings) -> list[str]:
+def branches_needing_upstream(rev_range: str, *, branch: str) -> list[str]:
     """Return branch names in *rev_range* whose ``@{upstream}`` the caller must ensure exists.
 
-    Reports only; resolving an upstream is interactive and stays with the caller.
+    A bare ``@{upstream}`` or ``HEAD`` stands for *branch*, the stack's branch. Reports
+    only; resolving an upstream is interactive and stays with the caller.
     """
-    current = resolve_branch_for_branch_config(cwd, settings=settings)
+    current = branch
     required: list[str] = []
     seen: set[str] = set()
     for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):
@@ -131,7 +128,7 @@ def annotate(
             commit.merged_equivalent = True
     annotate_attention(
         commits,
-        cwd=cwd,
+        root=service.repo.root,
         project=_project(service),
         settings=service.settings,
         web_base=service.web_base,
@@ -139,17 +136,15 @@ def annotate(
     return AnnotatedStack(commits=commits, rows=list(rows), gerrit_unavailable=unavailable)
 
 
-def _commits_on_target(
-    cwd: Path | str | None, rows: list[Commit], rev_range: str, *, settings: Settings
-) -> frozenset[str]:
+def _commits_on_target(run: RunContext, rows: list[Commit], rev_range: str) -> frozenset[str]:
     """SHAs in *rows* the upstream already contains. Only an explicit range can name any."""
     if "@{upstream}" in rev_range:
         return frozenset()
     try:
-        tip, _display = upstream_tracking_tip_and_display(cwd, settings=settings)
+        tip, _display = upstream_tracking_tip_and_display(run.cwd, run.repo.stack_branch, settings=run.settings)
     except GitError:
         return frozenset()
-    upstream_shas = git("rev-list", f"{rows[0].sha}^..{tip}", cwd=cwd, check=False).stdout.split()
+    upstream_shas = git("rev-list", f"{rows[0].sha}^..{tip}", cwd=run.cwd, check=False).stdout.split()
     return frozenset(upstream_shas) & {row.sha for row in rows}
 
 
@@ -216,7 +211,7 @@ def load_annotated_stack(
     rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
     if not rows:
         return AnnotatedStack()
-    on_target = _commits_on_target(cwd, rows, rev_range, settings=run.settings)
+    on_target = _commits_on_target(run, rows, rev_range)
     annotated = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target)
     if annotated.gerrit_unavailable is not None:
         return annotated

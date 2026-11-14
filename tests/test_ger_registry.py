@@ -291,7 +291,7 @@ STRATEGIES = {"testproj": _boundary}
     rows = ready_rows = list(get_stack_snapshot(stack_repo, first_parent=True).commits)
     highlighter = build_summary_highlighter(
         Settings.from_cwd(stack_repo),
-        cwd=stack_repo,
+        root=stack_repo,
         commits=ready_rows,
         project="testproj",
     )

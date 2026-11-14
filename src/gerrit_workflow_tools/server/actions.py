@@ -18,7 +18,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
-from gerrit_workflow_tools.core.git_state import checked_out_branch_name, resolve_working_branch
 from gerrit_workflow_tools.core.reorder import STEP_ACTIONS, StackStep, rewrite_stack, undo_rewrite
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
@@ -84,7 +83,7 @@ def reply(ctx: Context, req: Request) -> dict[str, Any]:
     resolved = req.body_field("resolved", bool)
     if not message:
         raise BadRequest("message is empty")
-    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    branch = ctx.run.repo.working_branch
     [target] = resolve_show_targets(
         ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
     )
@@ -162,7 +161,7 @@ def set_upstream(ctx: Context, req: Request) -> dict[str, Any]:
     Answers ``branch`` and its new ``upstream``; ``GET /stack`` can show the stack from then on.
     """
     upstream = safe_rev(req.body_field("upstream", str, required=True).strip(), "upstream")
-    branch = checked_out_branch_name(ctx.cwd)
+    branch = ctx.run.worktree.branch
     if branch is None:
         raise BadRequest("HEAD is detached: there is no branch to give an upstream")
     set_branch_upstream(ctx.cwd, branch, upstream)
@@ -186,7 +185,7 @@ def new_comment(ctx: Context, req: Request) -> dict[str, Any]:
         raise BadRequest("message is empty")
     if state is not None and state not in _NEW_COMMENT_STATES:
         raise BadRequest(f"state must be one of {', '.join(_NEW_COMMENT_STATES)}")
-    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    branch = ctx.run.repo.working_branch
     target = resolve_comment_target(ctx.service, ctx.cwd, rev, branch=branch)
     try:
         location = locate(ctx.cwd, req.body_field("location", str, required=True), target)

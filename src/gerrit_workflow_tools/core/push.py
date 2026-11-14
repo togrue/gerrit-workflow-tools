@@ -40,7 +40,7 @@ from gerrit_workflow_tools.core.push_unchanged import (
     unreached_options_warning,
 )
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
-from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
@@ -184,7 +184,7 @@ def prepare(
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
         raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
-    if rebase_in_progress(cwd):
+    if rebase_underway(run.worktree.repository_dir):
         # The branch ref moves only when the rebase finishes: a push now sends the stack as it was before.
         raise UsageError(
             f"a rebase is in progress, and '{branch}' still points at the commits from before it; "

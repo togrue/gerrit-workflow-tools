@@ -29,7 +29,6 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
 from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human
@@ -225,7 +224,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     cwd, settings = run.cwd, run.settings
     out_fmt = output_format(args)
     verbose_level = int(args.verbose)
-    branch = args.branch or resolve_working_branch(cwd, settings=settings)
+    branch = args.branch or run.repo.working_branch
 
     if (
         (args.stack or args.first_attention or args.next_attention)
@@ -277,7 +276,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             snap = get_stack_snapshot(cwd, branch, first_parent=True, settings=settings)
             summary_highlighter = build_summary_highlighter(
                 settings,
-                cwd=cwd,
+                root=run.repo.root,
                 commits=list(snap.commits),
                 project=stack.project,
                 web_base=settings.gerrit_web_url,

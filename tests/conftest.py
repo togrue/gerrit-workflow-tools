@@ -28,7 +28,7 @@ _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)
 
 @pytest.fixture(autouse=True)
 def _clear_git_semantic_caches() -> Generator[None]:
-    """Process-lifetime Worktree / stack-context memos must not leak between tests."""
+    """The process-lifetime git memo (``rev-parse`` / ``log`` answers) must not leak between tests."""
     from gerrit_workflow_tools.core.git_run import clear_git_cache
 
     clear_git_cache()

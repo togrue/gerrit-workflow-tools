@@ -28,7 +28,6 @@ from gerrit_workflow_tools.core.attention_cursor import (
     load_branch_cursor,
     write_branch_cursor,
 )
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.edit_attention_walk import (
     change_id_for_stack_sha,
     resolve_edit_attention_commit,
@@ -36,7 +35,6 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.rebase_state import edit_stop_next_step, rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
@@ -59,10 +57,10 @@ def _stack_change_ids(cwd: Path, branch: str | None) -> set[str]:
     return {commit.change_id for commit in get_stack_snapshot(cwd, branch).commits if commit.change_id}
 
 
-def _has_upstreams(cwd: Path, settings: Settings, branch: str | None) -> bool:
-    if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
+def _has_upstreams(run: RunContext, branch: str | None) -> bool:
+    if branch is not None and not require_branch_upstream(run.cwd, branch, settings=run.settings):
         return False
-    return require_stack_upstream(cwd, settings)
+    return require_stack_upstream(run)
 
 
 def _build_parser(*, prog: str, description: str, default_action: Literal["edit", "reword"]) -> argparse.ArgumentParser:
@@ -241,13 +239,13 @@ def _run_interactive_stack_rebase(
     cwd, settings = run.cwd, run.settings
     _validate_targeting_args(p, args)
 
-    branch = resolve_working_branch(cwd, settings=settings)
+    branch = run.repo.working_branch
 
     if args.cursor_history:
         return print_cursor_history(cwd)
     if args.cursor and load_branch_cursor(settings, branch or "HEAD") is None:
         return print_cursor_status(run, branch=branch)
-    if not _has_upstreams(cwd, settings, branch):
+    if not _has_upstreams(run, branch):
         return int(ExitCode.ATTENTION)
     if args.cursor:
         return print_cursor_status(run, branch=branch)

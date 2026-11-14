@@ -9,7 +9,6 @@ answer (e.g. whether the upstream's remote is ``gerrit.remote``). The dependency
 from __future__ import annotations
 
 import logging
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -20,32 +19,26 @@ from gerrit_workflow_tools.core.git_run import GitError, abs_cwd, git, git_out
 
 logger = logging.getLogger(__name__)
 
-_WORKTREE_LOCK = threading.Lock()
-_WORKTREE_BY_CWD: dict[str, Worktree] = {}
-
 
 @dataclass(frozen=True)
 class Worktree:
-    """Live repository identity from one ``git rev-parse`` (toplevel, HEAD branch, git-dir)."""
+    """The repository at a directory as one ``git rev-parse`` answered: toplevel, HEAD branch, git-dir.
+
+    A value, read when asked for (:meth:`from_cwd`), never remembered here. A run reads its
+    own once (``run.worktree``); work that switches branches reads again after it does.
+    """
 
     toplevel: Path | None
     checked_out_branch: str | None
     """Named branch at HEAD, or ``None`` when detached (``abbrev-ref`` is ``HEAD``)."""
     git_dir: Path | None
+    cwd: Path | str | None = None
+    """Where it was read; git runs here when a reader needs more than the snapshot."""
 
     @classmethod
     def from_cwd(cls, cwd: Path | str | None) -> Worktree:
+        """The repository at *cwd* as it is now."""
         cwd_abs = abs_cwd(cwd)
-        with _WORKTREE_LOCK:
-            cached = _WORKTREE_BY_CWD.get(cwd_abs)
-            if cached is not None:
-                return cached
-            loaded = cls._load(cwd, cwd_abs)
-            _WORKTREE_BY_CWD[cwd_abs] = loaded
-            return loaded
-
-    @classmethod
-    def _load(cls, cwd: Path | str | None, cwd_abs: str) -> Worktree:
         p = git(
             "rev-parse",
             "--show-toplevel",
@@ -56,7 +49,7 @@ class Worktree:
             check=False,
         )
         if p.returncode != 0 or not (p.stdout or "").strip():
-            return cls(toplevel=None, checked_out_branch=None, git_dir=None)
+            return cls(toplevel=None, checked_out_branch=None, git_dir=None, cwd=cwd)
         lines = [line.strip() for line in p.stdout.splitlines() if line.strip()]
         top_raw = lines[0] if lines else ""
         abbrev = lines[1] if len(lines) > 1 else ""
@@ -64,13 +57,60 @@ class Worktree:
         toplevel = Path(top_raw) if top_raw else None
         checked = abbrev if abbrev and abbrev != "HEAD" else None
         git_dir = Path(cwd_abs) / git_dir_raw if git_dir_raw else None
-        return cls(toplevel=toplevel, checked_out_branch=checked, git_dir=git_dir)
+        return cls(toplevel=toplevel, checked_out_branch=checked, git_dir=git_dir, cwd=cwd)
 
+    @property
+    def branch(self) -> str | None:
+        """The named branch checked out, or ``None`` when HEAD is detached (unborn HEAD too)."""
+        if self.toplevel is not None:
+            return self.checked_out_branch
+        p = git("branch", "--show-current", cwd=self.cwd, check=False)
+        if p.returncode != 0:
+            return None
+        return (p.stdout or "").strip() or None
 
-def clear_worktree_cache() -> None:
-    """Drop memoized :class:`Worktree` snapshots (tests and :func:`clear_git_cache`)."""
-    with _WORKTREE_LOCK:
-        _WORKTREE_BY_CWD.clear()
+    @property
+    def repository_dir(self) -> Path | None:
+        """The git dir, also when HEAD is unborn; ``None`` outside a repository."""
+        if self.toplevel is not None:
+            return self.git_dir
+        p = git("rev-parse", "--git-dir", cwd=self.cwd, check=False)
+        raw = (p.stdout or "").strip()
+        return Path(abs_cwd(self.cwd)) / raw if p.returncode == 0 and raw else None
+
+    def rebasing_branch(self) -> str | None:
+        """Branch git is rebasing, from its rebase state on disk (read now, not from the snapshot)."""
+        repo_dir = self.repository_dir
+        if repo_dir is None:
+            return None
+        for state_dir in ("rebase-merge", "rebase-apply"):
+            head_name = repo_dir / state_dir / "head-name"
+            if not head_name.exists():
+                continue
+            try:
+                branch = head_name.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            return branch.removeprefix("refs/heads/") or None
+        return None
+
+    def working_branch(self, *, settings: Settings) -> str | None:
+        """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
+
+        The checked-out branch when there is one. During a rebase, the branch git is
+        rebasing. Otherwise on a detached HEAD, a local branch that points at ``HEAD``
+        (preferring a Gerrit upstream, then any upstream).
+        """
+        checked = self.branch
+        if checked:
+            return checked
+        rebasing = self.rebasing_branch()
+        if rebasing:
+            return rebasing
+        candidates = _branches_pointing_at_head(self.cwd)
+        if not candidates:
+            return None
+        return min(candidates, key=lambda b: _push_context_branch_rank(self.cwd, b, settings=settings))
 
 
 def repo_toplevel(cwd: Path | str | None) -> Path | None:
@@ -96,40 +136,17 @@ def is_detached_head(cwd: Path | str | None) -> bool:
 
 def checked_out_branch_name(cwd: Path | str | None) -> str | None:
     """Named branch checked out, or ``None`` when HEAD is detached."""
-    wt = Worktree.from_cwd(cwd)
-    if wt.toplevel is None:
-        p = git("branch", "--show-current", cwd=cwd, check=False)
-        if p.returncode != 0:
-            return None
-        return (p.stdout or "").strip() or None
-    return wt.checked_out_branch
+    return Worktree.from_cwd(cwd).branch
 
 
 def git_dir(cwd: Path | str | None) -> Path | None:
     """The repository's git dir, also when HEAD is unborn; ``None`` outside a repository."""
-    wt = Worktree.from_cwd(cwd)
-    if wt.toplevel is not None:
-        return wt.git_dir
-    p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
-    raw = (p.stdout or "").strip()
-    return Path(abs_cwd(cwd)) / raw if p.returncode == 0 and raw else None
+    return Worktree.from_cwd(cwd).repository_dir
 
 
 def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
     """Branch currently being rebased, if Git has an in-progress rebase state."""
-    repo_dir = git_dir(cwd)
-    if repo_dir is None:
-        return None
-    for state_dir in ("rebase-merge", "rebase-apply"):
-        head_name = repo_dir / state_dir / "head-name"
-        if not head_name.exists():
-            continue
-        try:
-            branch = head_name.read_text(encoding="utf-8").strip()
-        except OSError:
-            continue
-        return branch.removeprefix("refs/heads/") or None
-    return None
+    return Worktree.from_cwd(cwd).rebasing_branch()
 
 
 LAST_PUSH_PREFIX = "lastPush/"
@@ -163,22 +180,8 @@ def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: 
 
 
 def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
-    """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
-
-    Uses the checked-out branch when present. During rebase, uses Git's recorded rebased
-    branch. Otherwise on detached HEAD, picks a local branch that points at ``HEAD``
-    (preferring Gerrit upstream, then any upstream).
-    """
-    checked = checked_out_branch_name(cwd)
-    if checked:
-        return checked
-    rebasing = rebase_in_progress_branch(cwd)
-    if rebasing:
-        return rebasing
-    candidates = _branches_pointing_at_head(cwd)
-    if not candidates:
-        return None
-    return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b, settings=settings))
+    """The working branch of the repository at *cwd* as it is now (:meth:`Worktree.working_branch`)."""
+    return Worktree.from_cwd(cwd).working_branch(settings=settings)
 
 
 def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_SECONDS, GerritCache
@@ -22,8 +21,12 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     parallel_map,
     self_account_id as account_id_of_self,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet
 from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains, missing_parent_shas
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.repository import Repository
 
 
 logger = logging.getLogger(__name__)
@@ -42,29 +45,33 @@ class GerritService:
         *,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
-        cwd: Path | str | None = None,
-        settings: Settings | None = None,
+        repo: Repository,
     ) -> None:
         # Both are built on first use when not supplied: a service that is never asked
         # anything never needs ``gerrit.webUrl``, credentials or the cache file.
         self._rest = rest
         self._cache = cache
-        # Settings for *cwd*, read once. Explicit for the same reason cwd is: nothing
-        # below this layer may reach for process-wide configuration.
-        self.settings = settings if settings is not None else Settings.from_cwd(cwd)
-        # The repo this service reports on. Explicit, because GerritRest has no cwd to
-        # scavenge it from; defaults to the process cwd for callers that don't care.
-        self.cwd = str(cwd) if cwd is not None else os.getcwd()
+        # The repository of the run this service belongs to: its settings, its working
+        # branch and the stack context on it, each read once for the run.
+        self.repo = repo
         self.trust_window_seconds = trust_window_seconds
         self.refresh = refresh
         # Whether this host serves the Checks plugin: True / False / None when not yet
         # known. A property of the host, not of any change, so it is answered from the
         # cache and only rediscovered once that verdict expires.
         self._checks_endpoint_available: bool | None = None
-        # The stack context of the run this service belongs to: asked once, kept for the run.
-        self._stack_context: StackContext | None = None
         self.changes = ChangeApi(self)
         self.comments = CommentApi(self)
+
+    @property
+    def settings(self) -> Settings:
+        """The run's **Settings** snapshot."""
+        return self.repo.settings
+
+    @property
+    def cwd(self) -> str:
+        """The repository this service reports on."""
+        return str(self.repo.cwd)
 
     @property
     def configured(self) -> bool:
@@ -116,14 +123,8 @@ class GerritService:
         return asked
 
     def stack_context(self) -> StackContext:
-        """The stack context of this service's repository and working branch, resolved once.
-
-        Raises :class:`ChangeResolutionError` when there is none (no project, no destination);
-        that answer is not kept, so a caller that can do without one may ask again.
-        """
-        if self._stack_context is None:
-            self._stack_context = resolve_stack_context(self.cwd, settings=self.settings)
-        return self._stack_context
+        """The stack context of the run's working branch (:attr:`Repository.stack`)."""
+        return self.repo.stack
 
     def cache_key(self, change_ref: str, ctx: StackContext | None = None) -> str:
         """Map a change ref to its cache key: triplets and numbers verbatim, Change-Ids via the stack context."""
@@ -324,7 +325,7 @@ class GerritService:
             else:
                 messages_arg = message_rows
             links = extract_ci_links_via_registry(
-                self.cwd,
+                self.repo.root,
                 project=project,
                 checks=check_rows,
                 messages=messages_arg,

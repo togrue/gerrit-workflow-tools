@@ -10,7 +10,6 @@ from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
     configured_upstream_abbrev,
-    repo_toplevel,
     resolve_upstream_abbrev_ref,
 )
 
@@ -60,26 +59,8 @@ def test_resolve_upstream_abbrev_ref_settings_first(tmp_path: Path) -> None:
         assert resolve_upstream_abbrev_ref(tmp_path, "feature", settings=settings) == "origin/main"
 
 
-def test_worktree_memo_survives_non_cacheable_git(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    (repo / "f").write_text("x\n", encoding="utf-8")
-    git("add", "f", cwd=repo)
-    git("commit", "-m", "init", cwd=repo)
-
-    clear_git_cache()
-    with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
-        first = repo_toplevel(repo)
-        git("remote", "add", "origin", repo.as_uri(), cwd=repo)
-        second = repo_toplevel(repo)
-    assert first == second == repo.resolve()
-    combined = [c for c in run.call_args_list if c.args and c.args[0] == "rev-parse" and "--show-toplevel" in c.args]
-    assert len(combined) == 1
-
-
-def test_checkout_invalidates_worktree_memo(tmp_path: Path) -> None:
-    """``git checkout`` in-process must drop the Worktree snapshot (second CLI command)."""
+def test_the_checked_out_branch_is_read_anew_after_a_checkout(tmp_path: Path) -> None:
+    """Nothing remembers the worktree across reads: after ``git checkout`` the next read sees the new branch."""
     repo = tmp_path / "repo"
     repo.mkdir()
     git("init", "-b", "main", cwd=repo)

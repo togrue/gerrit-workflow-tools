@@ -17,7 +17,11 @@ from gerrit_workflow_tools.core.git_state import git_dir
 
 def rebase_in_progress(cwd: Path | str | None) -> bool:
     """True while git has a rebase underway, including one stopped at a commit."""
-    repo_dir = git_dir(cwd)
+    return rebase_underway(git_dir(cwd))
+
+
+def rebase_underway(repo_dir: Path | None) -> bool:
+    """:func:`rebase_in_progress` for a git dir already known (``run.worktree.repository_dir``)."""
     return repo_dir is not None and any((repo_dir / d).exists() for d in ("rebase-merge", "rebase-apply"))
 
 

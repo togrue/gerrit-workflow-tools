@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
+from gerrit_workflow_tools.core.repository import Repository
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.core.stack import Commit
 
@@ -45,7 +48,7 @@ def _make_service(detail: dict[str, Any] | None = None) -> tuple[GerritService, 
         {"Iabc1230000000000000000000000000000000000": detail} if detail is not None else {}
     )
     cache.capability.return_value = None  # host capability not yet discovered
-    return GerritService(rest, cache), rest, cache
+    return GerritService(rest, cache, repo=Repository(Path.cwd(), Settings.from_map({}))), rest, cache
 
 
 def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
@@ -56,7 +59,7 @@ def test_fetch_gerrit_data_continues_when_comments_follow_up_fails() -> None:
 
     with (
         patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            "gerrit_workflow_tools.core.repository.resolve_stack_context",
             return_value=_STACK,
         ),
         patch.object(service.comments, "get_file_map", side_effect=RuntimeError("boom")),
@@ -83,7 +86,7 @@ def test_reviewers_follow_up_skipped_when_payload_carries_an_empty_reviewer_list
     service, rest, _cache = _make_service(detail)
 
     with patch(
-        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        "gerrit_workflow_tools.core.repository.resolve_stack_context",
         return_value=_STACK,
     ):
         commits = service.fetch_gerrit_data([_row()])
@@ -101,7 +104,7 @@ def test_reviewers_follow_up_runs_when_payload_omits_the_field() -> None:
 
     with (
         patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            "gerrit_workflow_tools.core.repository.resolve_stack_context",
             return_value=_STACK,
         ),
         patch.object(
@@ -129,7 +132,7 @@ def test_comments_follow_up_passes_freshness_as_the_cache_key() -> None:
 
     with (
         patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            "gerrit_workflow_tools.core.repository.resolve_stack_context",
             return_value=_STACK,
         ),
         patch.object(service.comments, "get_file_map", return_value={}) as get_file_map,
@@ -149,7 +152,7 @@ def test_comments_follow_up_falls_back_to_updated_when_meta_rev_id_is_absent() -
 
     with (
         patch(
-            "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+            "gerrit_workflow_tools.core.repository.resolve_stack_context",
             return_value=_STACK,
         ),
         patch.object(service.comments, "get_file_map", return_value={}) as get_file_map,

@@ -14,7 +14,6 @@ from gerrit_workflow_tools.core.attention_cursor import (
     read_cursor_history,
     write_branch_cursor,
 )
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.edit_attention_walk import (
     change_id_for_stack_sha,
     describe_cursor_status,
@@ -47,12 +46,13 @@ def add_attention_query_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def require_stack_upstream(cwd: Path, settings: Settings, rev_range: str | None = None) -> bool:
+def require_stack_upstream(run: RunContext, rev_range: str | None = None) -> bool:
     """Prompt for upstream on *rev_range*'s branches (default: the stack); False if declined."""
-    rev_range = rev_range or resolve_rev_range(cwd, None, settings=settings)
+    branch = run.repo.stack_branch
+    rev_range = rev_range or resolve_rev_range(None, branch=branch)
     return all(
-        require_branch_upstream(cwd, branch, settings=settings)
-        for branch in branches_needing_upstream(cwd, rev_range, settings=settings)
+        require_branch_upstream(run.cwd, name, settings=run.settings)
+        for name in branches_needing_upstream(rev_range, branch=branch)
     )
 
 
@@ -64,7 +64,7 @@ def resolve_attention_query_or_exit(
     after_changeish: str | None,
 ) -> LogCommit | int:
     """Resolve an attention query, or return an :class:`ExitCode` int on upstream decline."""
-    if not require_stack_upstream(run.cwd, run.settings):
+    if not require_stack_upstream(run):
         return int(ExitCode.ATTENTION)
     mode: EditAttentionMode = "first" if args.first_attention else "next"
     target, notes = resolve_attention_query(run, branch=branch, mode=mode, after_changeish=after_changeish)

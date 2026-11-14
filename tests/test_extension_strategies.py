@@ -100,7 +100,7 @@ STRATEGIES = {"p": _attn}
     )
     clear_attention_strategy_cache()
     commit = _commit()
-    annotate_attention([commit], cwd=stack_repo, project="p", settings=Settings.from_map({}))
+    annotate_attention([commit], root=stack_repo, project="p", settings=Settings.from_map({}))
     assert commit.attention_reasons == ["from-annotate"]
 
 

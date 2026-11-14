@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
+from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.rebase_run import require_history_rewrite, run_interactive_rebase
@@ -114,7 +114,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     drop_merged = bool(args.drop_merged_equivalent or rdef["drop_merged_equivalent"])
 
-    branch = resolve_working_branch(cwd, settings=settings)
+    branch = run.repo.working_branch
     if use_onto_remote:
         base = resolve_rebase_onto_remote_ref(cwd, branch, settings=settings)
     elif args.rev:

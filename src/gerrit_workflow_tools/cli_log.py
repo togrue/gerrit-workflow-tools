@@ -34,7 +34,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
@@ -227,15 +227,15 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     parser = _build_parser()
     args = parser.parse_args(argv)
     run, summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
-    cwd, settings = run.cwd, run.settings
+    settings = run.settings
 
     gdef = settings.log_defaults
     verbose_level = int(args.verbose)
     show_url = bool(args.url) or gdef["show_url"] or is_hyperlink_enabled()
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
 
-    rev_range = resolve_rev_range(cwd, settings=settings, arg_rev_range=args.rev_range)
-    if not require_stack_upstream(cwd, settings, rev_range):
+    rev_range = resolve_rev_range(args.rev_range, branch=run.repo.stack_branch)
+    if not require_stack_upstream(run, rev_range):
         return int(ExitCode.ATTENTION)
 
     stack_view = load_annotated_stack(
@@ -245,14 +245,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         print("(no commits in range)")
         return int(ExitCode.OK)
 
-    if rebase_in_progress(cwd):
+    if rebase_underway(run.worktree.repository_dir):
         print_note("note: a rebase is in progress; this shows the branch as it was before the rebase.")
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
     stack = run.stack
     summary_highlighter = build_summary_highlighter(
         settings,
-        cwd=cwd,
+        root=run.repo.root,
         commits=stack_view.rows,
         project=stack.project,
         web_base=settings.gerrit_web_url,
@@ -286,7 +286,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     # The same boundary `ger push` stops at, so the two commands cannot disagree.
     blocked = blocked_shas_for_stack(
-        cwd,
+        run.repo.root,
         project=stack.project,
         commits=stack_view.rows,
         stop_pattern=settings.stop_pattern,

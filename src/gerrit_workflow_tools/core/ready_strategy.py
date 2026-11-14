@@ -60,7 +60,7 @@ def default_find_ready_boundary(
 
 
 def blocked_shas_for_stack(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     project: str,
     commits: list[Commit],
@@ -75,7 +75,7 @@ def blocked_shas_for_stack(
     from gerrit_workflow_tools.core.ready_calc import compose_ready_boundary
 
     strategy = find_ready_boundary_via_registry(
-        cwd,
+        root,
         project=project,
         commits=commits,
         stop_pattern=stop_pattern,
@@ -90,7 +90,7 @@ def blocked_shas_for_stack(
 
 
 def find_ready_boundary_via_registry(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     project: str,
     commits: list[Commit],
@@ -107,4 +107,4 @@ def find_ready_boundary_via_registry(
     def _builtin() -> BoundaryResult:
         return default_find_ready_boundary(commits=commits, stop_pattern=stop_pattern, overlay=overlay)
 
-    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
+    return _REGISTRY.run(root, project, invoke=_invoke, builtin=_builtin, settings=settings, web_base=web_base)
