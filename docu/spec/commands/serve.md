@@ -58,9 +58,10 @@ reach it:
 
 ### Requests are serialised
 
-One request runs at a time. Core memoises git answers per process, and each request starts by
-dropping that memo and taking a fresh **Settings** snapshot, so an answer always describes the
-repository as it is now. A slow request (first CI log fetch) delays the next one.
+One request runs at a time, because a request may move the working tree (a reorder, a rebase
+step) under another that reads it. Each request opens its own run: a fresh **Settings**
+snapshot and a fresh read of the repository, so an answer always describes the repository as
+it is now. A slow request (first CI log fetch) delays the next one.
 
 Gerrit data is served through the **trust window**, as for any command; add `refresh=1` to a
 request to bypass it, like `ger --refresh`. What a poll of `/overview` and `/stack` costs the

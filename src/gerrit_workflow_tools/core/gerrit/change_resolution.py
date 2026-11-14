@@ -43,7 +43,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
     resolve_stack_context,
 )
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_rows
+from gerrit_workflow_tools.core.stack import StackSnapshot, get_stack_snapshot, read_commit_rows
 
 
 if TYPE_CHECKING:
@@ -264,10 +264,10 @@ class StackCommit:
 
 
 def _stack_commit(
-    cwd: Path | str | None, branch: str | None, raw: str, sha: str, *, require_in_stack: bool, settings: Settings
+    local_stack: Callable[[], StackSnapshot], raw: str, sha: str, *, require_in_stack: bool
 ) -> StackCommit:
     """Wrap *sha*, which *raw* named, optionally insisting it is one of the **local stack**'s commits."""
-    if require_in_stack and sha not in {c.sha for c in get_stack_snapshot(cwd, branch, settings=settings).commits}:
+    if require_in_stack and sha not in {c.sha for c in local_stack().commits}:
         raise ChangeResolutionError(not_in_stack_message(raw, sha))
     return StackCommit(sha=sha)
 
@@ -280,6 +280,7 @@ def resolve_to_stack_sha(
     branch: str | None = None,
     service: GerritService | None = None,
     require_in_stack: bool = False,
+    stack: StackSnapshot | None = None,
 ) -> StackCommit:
     """Resolve a changeish to a full SHA on the current local stack.
 
@@ -294,19 +295,25 @@ def resolve_to_stack_sha(
     that rewrite a stack commit (``ger edit``, ``ger reword``, ``ger fix``) want that; the one
     that takes a commit to rebase *from* (``ger rebase``) does not, because its argument is
     normally below the stack.
+
+    *stack* is the local stack when the caller has loaded it already; else it is loaded here,
+    and only on the paths that need it.
     """
     parsed = parse_changeish(ref)
 
+    def local_stack() -> StackSnapshot:
+        return stack if stack is not None else get_stack_snapshot(cwd, branch, settings=settings)
+
     if parsed.kind == "git-rev":
         sha = local_commit_sha(cwd, parsed.raw)
-        return _stack_commit(cwd, branch, parsed.raw, sha, require_in_stack=require_in_stack, settings=settings)
+        return _stack_commit(local_stack, parsed.raw, sha, require_in_stack=require_in_stack)
 
     if parsed.kind == "change-ref":
         # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a
         # ref the repository can resolve on its own would be a round trip for nothing.
         local = commit_sha_or_none(cwd, parsed.raw)
         if local is not None:
-            return _stack_commit(cwd, branch, parsed.raw, local, require_in_stack=require_in_stack, settings=settings)
+            return _stack_commit(local_stack, parsed.raw, local, require_in_stack=require_in_stack)
 
     # A Change-Id or triplet already carries the id, so the stack can be searched offline.
     # The remaining kinds address a change by number, so Gerrit has to name the id first.
@@ -324,7 +331,7 @@ def resolve_to_stack_sha(
 
     # Searching the stack for the Change-Id already guarantees membership, so this path needs
     # no separate require_in_stack check.
-    matches = get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id)
+    matches = local_stack().carrying(change_id)
     if not matches:
         raise ChangeResolutionError(not_in_stack_message(parsed.raw))
     if len(matches) > 1:
@@ -358,6 +365,7 @@ def resolve_stack_changeish(
     service: GerritService,
     branch: str | None = None,
     require_in_stack: bool = False,
+    stack: StackSnapshot | None = None,
 ) -> StackCommit:
     """Resolve *ref* to a stack commit the way every stack-rewriting command should.
 
@@ -374,4 +382,5 @@ def resolve_stack_changeish(
         branch=branch if branch is not None else service.repo.working_branch,
         service=service,
         require_in_stack=require_in_stack,
+        stack=stack,
     )

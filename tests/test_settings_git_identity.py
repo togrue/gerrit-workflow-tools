@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
+from gerrit_workflow_tools.core.git_run import _run_git, git
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
     configured_upstream_abbrev,
@@ -69,7 +69,6 @@ def test_the_checked_out_branch_is_read_anew_after_a_checkout(tmp_path: Path) ->
     git("commit", "-m", "init", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
 
-    clear_git_cache()
     with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
         assert checked_out_branch_name(repo) == "feature"
         git("checkout", "main", cwd=repo)

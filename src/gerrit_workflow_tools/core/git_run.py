@@ -7,7 +7,6 @@ import os
 import re
 import subprocess
 import time
-from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.core.call_trace import record_call
@@ -18,9 +17,6 @@ logger = logging.getLogger(__name__)
 
 # Cap logged stdout/stderr so huge blobs (e.g. binary mis-invocation) do not flood the log.
 _LOG_IO_CAP = 1000
-
-# Read-only subcommands safe to cache for the lifetime of a single CLI run.
-_CACHEABLE_SUBCOMMANDS = frozenset({"rev-parse", "log"})
 
 _UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
 
@@ -58,11 +54,6 @@ def unknown_revision_error(cwd: Path | str | None, stderr: str, returncode: int)
     missing = [part for part in re.split(r"\.{2,3}", name) if part and commit_sha_or_none(cwd, part) is None]
     rev = (missing[0] if missing else name).split("@{")[0] or name
     return UnknownRevisionError(unresolved_rev_message(rev), returncode=returncode)
-
-
-def clear_git_cache() -> None:
-    """Drop all cached ``rev-parse`` / ``log`` results."""
-    _git_cached.cache_clear()
 
 
 def abs_cwd(cwd: Path | str | None) -> str:
@@ -114,17 +105,6 @@ def _as_text(output: bytes | None) -> str:
     return output.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
-@lru_cache(maxsize=512)
-def _git_cached(
-    args: tuple[str, ...],
-    cwd_abs: str,
-    env_key: tuple[tuple[str, str], ...] | None,
-) -> subprocess.CompletedProcess[str]:
-    """One run per *args* until a git that can change the repository clears it, failures included."""
-    env = dict(env_key) if env_key else None
-    return _run_git(*args, cwd=cwd_abs, env=env)
-
-
 def _raise_if_failed(
     args: tuple[str, ...],
     p: subprocess.CompletedProcess[str],
@@ -150,15 +130,13 @@ def git(
 ) -> subprocess.CompletedProcess[str]:
     """Run git with given args; cwd defaults to current directory.
 
-    Pass *input* to feed stdin (disables the rev-parse/log cache for that call). Pass
-    ``capture=False`` for a git that talks to the terminal itself, such as ``rebase -i``.
+    Every call runs git: nothing here remembers an answer, so nothing has to guess when one
+    went stale. What a run reads once it keeps itself (``core/repository.py``).
+
+    Pass *input* to feed stdin. Pass ``capture=False`` for a git that talks to the terminal
+    itself, such as ``rebase -i``.
     """
-    if input is not None or not args or args[0] not in _CACHEABLE_SUBCOMMANDS:
-        _git_cached.cache_clear()
-        p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
-    else:
-        env_key = tuple(sorted(env.items())) if env else None
-        p = _git_cached(args, abs_cwd(cwd), env_key)
+    p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
     _raise_if_failed(args, p, check=check)
     return p
 

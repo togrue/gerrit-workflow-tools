@@ -13,7 +13,6 @@ from typing import Any
 
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_run import clear_git_cache
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server import actions, diff_views, views
 from gerrit_workflow_tools.server.activity import Activity
@@ -64,8 +63,8 @@ UNLOCKED_ROUTES: tuple[tuple[str, str, Callable[[Activity, Request], dict[str, A
 class GerApi:
     """The endpoints over one repository.
 
-    Not safe for concurrent calls: core memoises git answers per process. The HTTP layer
-    serialises requests.
+    Not safe for concurrent calls: a request may move the working tree (a reorder, a
+    rebase step) under another that is reading it. The HTTP layer serialises requests.
     """
 
     def __init__(
@@ -83,7 +82,6 @@ class GerApi:
 
     def _context(self, *, refresh: bool) -> Context:
         """A fresh run per request: the repository may have changed since the last one."""
-        clear_git_cache()
         run = RunContext.open(self.cwd, gerrit=self._gerrit, refresh=refresh)
         return Context(run=run, ci_http=self._ci_http, activity=self.activity)
 

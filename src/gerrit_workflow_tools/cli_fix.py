@@ -135,8 +135,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         raise UsageError(f"the index has unresolved conflicts, and a fixup would commit them; {step}")
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
     # `git rebase --autosquash` can actually place (ADR-0003).
-    target = resolve_stack_changeish(cwd, args.target, service=run.gerrit, require_in_stack=True)
     snapshot = get_stack_snapshot(cwd, run.repo.working_branch, settings=settings)
+    target = resolve_stack_changeish(cwd, args.target, service=run.gerrit, require_in_stack=True, stack=snapshot)
     fixup_sha = fixup_target_sha(snapshot.commits, target.sha)
     logger.info("fixup target commit: %s", fixup_sha)
 

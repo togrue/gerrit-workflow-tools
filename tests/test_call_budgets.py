@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_fix import main as fix_main
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as show_main
-from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git, git_out
+from gerrit_workflow_tools.core.git_run import _run_git, git, git_out
 from tests.change_store import ChangeStore, RecordedCall
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -71,7 +71,6 @@ def _configure_web(repo: Path) -> None:
 @contextmanager
 def _count_git() -> Iterator[MagicMock]:
     """Wrap the git subprocess seam for the duration of one CLI invocation."""
-    clear_git_cache()
     with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
         yield run
 

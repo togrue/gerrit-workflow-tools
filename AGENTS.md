@@ -69,6 +69,11 @@ Fixed obligations on every command:
 - Exit with the shared codes in `cli_common.ExitCode`
   ([spec/exit-codes.md](docu/spec/exit-codes.md)). One reason, one code, every command.
 
+What a run reads once (settings, worktree, working branch, stack context) lives on the run
+(`run.repo`); pass it, or the answer, down. Never add a process-wide memo of git or config
+answers: only a key that cannot change, such as an object id, may be memoised
+([ADR-0014](docu/adr/0014-memos-live-on-the-run.md)).
+
 Across the `core/` boundary, pass dataclasses and enums, not tuples or raw REST dicts.
 Normalise a REST payload once, in `core/`, and reuse the result everywhere.
 

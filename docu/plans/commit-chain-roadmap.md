@@ -65,8 +65,8 @@ cross-repository topics.
   files), review checkout active. Every mutation endpoint and command refuses or offers
   continue/abort from it, instead of each checking `rebase_in_progress` itself.
 - **Cache what is keyed by object ids.** Merge results, diffs and trees for given SHAs never
-  change, so memoise them for the life of the service. Keep the per-request clear only for what
-  reads refs. That makes repeated previews (`/stack/moves` after an undo) close to free.
+  change, so memoise them for the life of the service: a key that names an object id never goes
+  stale ([ADR-0014](../adr/0014-memos-live-on-the-run.md)). That makes repeated previews (`/stack/moves` after an undo) close to free.
 - **Reads off the request lock.** `ger serve` serialises every request (`api_lock` in
   `server/httpd.py`). A slow read, such as a long preview or a CI log, then blocks a quick one.
   Reads on immutable inputs can run outside the lock; writes stay serialised.
