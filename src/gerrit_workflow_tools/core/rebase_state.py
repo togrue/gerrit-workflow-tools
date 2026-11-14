@@ -136,11 +136,12 @@ def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
     """Why rewriting the local stack cannot start here, or ``None``: the one wording every rewrite shares.
 
     Git refuses an interactive rebase over a rebase underway or uncommitted changes to tracked
-    files; asking first replaces git's bare refusal with what to do about it.
+    files; asking first replaces git's bare refusal with what to do about it. Like git's own check
+    (and ``git stash``), it leaves submodules out: a dirty submodule neither stops a rebase nor stashes.
     """
     if refusal := rebase_refusal(cwd):
         return refusal
-    if git_out("status", "--porcelain", "--untracked-files=no", cwd=cwd):
+    if git_out("status", "--porcelain", "--untracked-files=no", "--ignore-submodules", cwd=cwd):
         return (
             "you have uncommitted changes; commit them (`ger fix REV` folds them into a stack commit) "
             "or `git stash` them first"

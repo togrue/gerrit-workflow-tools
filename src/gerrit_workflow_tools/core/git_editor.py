@@ -1,4 +1,4 @@
-"""Resolve and run the user's git editor (``GIT_EDITOR`` / ``core.editor`` / …), and an editor's own CLI."""
+"""Resolve and run the user's git editor (``GIT_EDITOR`` / ``core.editor`` / …), an editor's CLI and its build tools."""
 
 from __future__ import annotations
 
@@ -66,6 +66,7 @@ def run_git_editor(
         raise FileNotFoundError(editor) from None
 
 
-def run_editor_cli(argv: list[str]) -> int:
-    """Run an editor's command-line program (``code --install-extension …``) on this terminal; return its exit code."""
-    return subprocess.run(argv, check=False).returncode
+def run_editor_cli(argv: list[str], cwd: Path | None = None) -> int:
+    """Run an editor's command-line program (``code --install-extension …``), or the tooling that
+    builds its extension (``npm``), in *cwd* on this terminal; return its exit code."""
+    return subprocess.run(argv, cwd=cwd, check=False).returncode

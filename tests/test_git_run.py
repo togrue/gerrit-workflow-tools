@@ -86,6 +86,19 @@ def test_mutating_commands_not_cached(tmp_path: Path) -> None:
     assert run.call_count == 2
 
 
+def test_a_failed_lookup_keeps_the_others_cached(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git("init", "-b", "main", cwd=repo)
+    git("commit", "--allow-empty", "-m", "init", cwd=repo)
+
+    with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
+        git_out("rev-parse", "HEAD", cwd=repo)
+        assert git("rev-parse", "--verify", "HEAD^2", cwd=repo, check=False).returncode != 0
+        git_out("rev-parse", "HEAD", cwd=repo)
+    assert run.call_count == 2
+
+
 def test_cache_respects_check_flag(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

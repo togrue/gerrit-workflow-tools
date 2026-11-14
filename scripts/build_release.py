@@ -21,6 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.core.editor_extension import build_extension
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "gerrit_workflow_tools"
@@ -65,19 +67,6 @@ def run(program: str, *args: str, cwd: Path) -> None:
     subprocess.run([found, *args], cwd=cwd, check=True)
 
 
-def build_extension() -> None:
-    if not (VSCODE / "node_modules").is_dir():
-        run("npm", "ci", "--no-audit", "--no-fund", cwd=VSCODE)
-    BUNDLED.parent.mkdir(parents=True, exist_ok=True)
-    licence = VSCODE / "LICENSE"  # the package must carry it; the repository keeps one copy, at the root
-    shutil.copyfile(ROOT / "LICENSE", licence)
-    try:
-        run("npm", "run", "compile", cwd=VSCODE)
-        run("npm", "run", "package", "--", "--out", str(BUNDLED), cwd=VSCODE)
-    finally:
-        licence.unlink()
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     parser.add_argument("--tag", help="The release tag; the build fails unless it is v<version>.")
@@ -87,7 +76,8 @@ def main() -> int:
         shutil.rmtree(RELEASE)
     RELEASE.mkdir(parents=True)
     try:
-        build_extension()
+        if build_extension(VSCODE, BUNDLED):  # the same build a ger installed from a checkout runs
+            raise SystemExit("error: building the VS Code extension failed")
         run("uv", "build", "--out-dir", str(RELEASE), cwd=ROOT)
         shutil.copyfile(BUNDLED, RELEASE / BUNDLED.name)
     finally:

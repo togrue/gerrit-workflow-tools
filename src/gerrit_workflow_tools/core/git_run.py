@@ -165,11 +165,9 @@ def _git_cached(
     cwd_abs: str,
     env_key: tuple[tuple[str, str], ...] | None,
 ) -> subprocess.CompletedProcess[str]:
+    """One run per *args* until a git that can change the repository clears it, failures included."""
     env = dict(env_key) if env_key else None
-    p = _run_git(*args, cwd=cwd_abs, env=env)
-    if p.returncode != 0:
-        _git_cached.cache_clear()
-    return p
+    return _run_git(*args, cwd=cwd_abs, env=env)
 
 
 def _raise_if_failed(

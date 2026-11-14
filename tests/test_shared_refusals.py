@@ -80,6 +80,28 @@ def test_every_history_rewrite_refuses_a_dirty_tree_the_same_way(
     )
 
 
+def test_a_dirty_submodule_does_not_stop_a_history_rewrite(
+    stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Git rebases over it and ``git stash`` has nothing to save, so ger does not ask for either (#35)."""
+    _configure(stack_repo)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    git("init", "-b", "main", cwd=lib)
+    (lib / "a.txt").write_text("a\n", encoding="utf-8")
+    git("add", ".", cwd=lib)
+    git("commit", "-m", "lib", cwd=lib)
+    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), "lib", cwd=stack_repo)
+    git("commit", "-m", "add lib", cwd=stack_repo)
+    (stack_repo / "lib" / "a.txt").write_text("dirty\n", encoding="utf-8")
+    (stack_repo / "lib" / "untracked.txt").write_text("new\n", encoding="utf-8")
+    assert git("status", "--porcelain", "--untracked-files=no", cwd=stack_repo).stdout.strip() == "M lib"
+
+    code, _out, err = run_cli(stack_repo, edit_main, ["HEAD~1"], monkeypatch, gerrit=ChangeStore({}))
+    assert "uncommitted changes" not in err
+    assert code == ExitCode.OK, err
+
+
 def test_unknown_command_suggests_the_close_one(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, ger_main, ["lgo"], monkeypatch)
     assert code == ExitCode.USAGE

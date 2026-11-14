@@ -144,7 +144,7 @@ class GerritService:
         *triplets* (one per row) names the change for it: a change shown for itself.
         """
 
-        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
+        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit, overlay_code_facts
 
         stack = self.stack_context()
         keys = [
@@ -161,11 +161,12 @@ class GerritService:
             if view.key:
                 by_triplet[view.key] = view
 
+        changes = [by_triplet.get(key) if key else None for key in keys]
+        facts = overlay_code_facts(cwd, zip(commits, changes, strict=True))
         result: list[Any] = []
         follow_ups: list[Callable[[], None]] = []
-        for row, key in zip(commits, keys, strict=True):
-            change = by_triplet.get(key) if key else None
-            lc, needed = build_log_commit(row, change, self.web_base, cwd)
+        for row, change in zip(commits, changes, strict=True):
+            lc, needed = build_log_commit(row, change, self.web_base, facts)
             if fetch_ci_pipelines and lc.pushed:
                 needed = needed | frozenset({"checks"})
             result.append(lc)

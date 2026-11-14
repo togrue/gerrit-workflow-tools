@@ -215,7 +215,7 @@ sequenceDiagram
   Svc->>REST: batch project:P (change:I OR …) on miss
   REST-->>Svc: ChangeInfo JSON (all branches)
   Note over Svc: alias to target-branch triplets
-  Svc->>Status: build_log_commit per row
+  Svc->>Status: overlay_code_facts (one git batch), then build_log_commit per row
   Svc->>Status: parallel follow-ups (comments, checks, reviewers)
   Svc-->>CLI: list[LogCommit]
   CLI->>Attn: annotate_attention
@@ -431,7 +431,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_cache.py` | `ger cache` |
 | `cli_fetch_api.py` | `ger fetch-api` (debug) |
 | `cli_bash_completion.py` | `ger bash-completion` |
-| `cli_vscode.py` | `ger vscode install`: put the bundled VS Code extension into the editor |
+| `cli_vscode.py` | `ger vscode install`: put the bundled VS Code extension (or one built from the checkout) into the editor |
 
 ### Core domain (`core/`)
 
@@ -443,8 +443,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
-| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program |
-| `core/editor_extension.py` | The VS Code extension a release ships: where it is (`bundled_extension`), the editor's CLI (`find_editor_cli`), installing it, and release download addresses (`release_url`) |
+| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension |
+| `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/rebase_state.py` | A rebase underway: whether one is, how far it got (`rebase_progress`, `RebaseProgress`), the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`) and the one next step after a conflict (`conflict_next_step`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |

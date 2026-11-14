@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
+from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 
@@ -172,34 +173,46 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     is then ``None``): what lets attention call the footer invalid rather than missing."""
 
 
-def _is_merge_commit(cwd: Path | str | None, sha: str) -> bool:
-    """True if *sha* has a second parent (merge commit)."""
-    p = git("rev-parse", "--verify", f"{sha}^2", cwd=cwd, check=False)
-    return p.returncode == 0
+@dataclass(frozen=True)
+class CodeFacts:
+    """What the repository knows about the commits an overlay compares, read for all of them at once."""
+
+    present: frozenset[str] = frozenset()
+    """Which of the asked commits exist here."""
+    patch_ids: dict[str, str] = field(default_factory=dict)
+    """``git patch-id`` of each present single-parent commit with a non-empty diff."""
 
 
-def _patch_id_single_parent(cwd: Path | str | None, sha: str) -> str | None:
-    """Return ``git patch-id`` first token for the single-commit diff against its first parent."""
-    p = git("rev-parse", "--verify", f"{sha}^", cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    parent = p.stdout.strip()
-    diff_p = git("diff", f"{parent}..{sha}", cwd=cwd, check=False)
-    if diff_p.returncode != 0 or not diff_p.stdout.strip():
-        return None
-    pid = git("patch-id", cwd=cwd, input=diff_p.stdout, check=False)
-    if pid.returncode != 0 or not pid.stdout.strip():
-        return None
-    line = pid.stdout.strip().splitlines()[0]
-    parts = line.split()
-    return parts[0] if parts else None
+def read_code_facts(cwd: Path | str | None, shas: Iterable[str | None]) -> CodeFacts:
+    """:class:`CodeFacts` for *shas*: three git calls however many there are, none for none."""
+    wanted = sorted({norm_sha(s) for s in shas if s})
+    if not wanted:
+        return CodeFacts()
+    listed = git("cat-file", "--batch-check=%(objectname) %(objecttype)", cwd=cwd, input="\n".join(wanted) + "\n")
+    present = frozenset(line.split()[0] for line in listed.stdout.splitlines() if line.endswith(" commit"))
+    if not present:
+        return CodeFacts()
+    # diff-tree shows nothing for a merge or a root commit: neither gets a patch-id.
+    diffs = git("diff-tree", "-p", "--stdin", cwd=cwd, input="\n".join(sorted(present)) + "\n", check=False)
+    if not diffs.stdout.strip():
+        return CodeFacts(present)
+    ids = git("patch-id", cwd=cwd, input=diffs.stdout, check=False).stdout
+    pairs = (line.split() for line in ids.splitlines())
+    return CodeFacts(present, {commit: pid for pid, commit, *_ in pairs})
 
 
-def compute_merged_equivalent(
-    local_sha: str,
-    change: ChangeView,
-    cwd: Path | str | None,
-) -> bool | None:
+def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, ChangeView | None]]) -> CodeFacts:
+    """The :class:`CodeFacts` :func:`build_log_commit` needs for *pairs*: only commits Gerrit has moved past."""
+    shas: list[str | None] = []
+    for row, change in pairs:
+        if change is None or not row.valid_change_id or norm_sha(row.sha) == norm_sha(change.current_revision or ""):
+            continue
+        if (change.status or "").upper() == "MERGED" or patchset_status(row.sha, change) == PatchsetStatus.NEWER:
+            shas += [row.sha, change.current_revision]
+    return read_code_facts(cwd, shas)
+
+
+def merged_equivalent(local_sha: str, change: ChangeView, facts: CodeFacts) -> bool | None:
     """
     v1 conservative equivalence: SHA match, else patch-id match when both sides are single-parent
     and the Gerrit ``current_revision`` exists locally. Merge commits and missing objects → ``None``.
@@ -209,12 +222,10 @@ def compute_merged_equivalent(
         return None
     if norm_sha(local_sha) == norm_sha(cur):
         return True
-    if commit_sha_or_none(cwd, cur) is None:
+    if norm_sha(cur) not in facts.present:
         return None
-    if _is_merge_commit(cwd, local_sha) or _is_merge_commit(cwd, cur):
-        return None
-    pl = _patch_id_single_parent(cwd, local_sha)
-    pg = _patch_id_single_parent(cwd, cur)
+    pl = facts.patch_ids.get(norm_sha(local_sha))
+    pg = facts.patch_ids.get(norm_sha(cur))
     if pl is None or pg is None:
         return None
     return pl == pg
@@ -281,9 +292,11 @@ def build_log_commit(
     row: Commit,
     change: ChangeView | None,
     web_base: str,
-    cwd: Path | str | None,
+    facts: CodeFacts,
 ) -> tuple[LogCommit, frozenset[str]]:
     """Build one ``LogCommit`` from the Gerrit change matching *row*.
+
+    *facts* is :func:`overlay_code_facts` over every row of the overlay, read once for all of them.
 
     Returns ``(commit, follow_up_kinds)`` where *follow_up_kinds* names REST
     calls the caller should make to fill absent data: ``'comments'``,
@@ -310,7 +323,7 @@ def build_log_commit(
 
     merged_eq: bool | None = None
     if st == "MERGED":
-        merged_eq = compute_merged_equivalent(sha, change, Path.cwd() if cwd is None else Path(cwd))
+        merged_eq = merged_equivalent(sha, change, facts)
         if merged_eq is True:
             ps = PatchsetStatus.MERGED_SAME
         elif merged_eq is False:
@@ -323,11 +336,11 @@ def build_log_commit(
     # Votes and submittability belong to the patch set on Gerrit, not to a commit it has not seen.
     newer = ps == PatchsetStatus.NEWER
     # Unless the commit's own code is the same (only rebased): Gerrit carries the votes over
-    # on such a push, so they stay. Two git calls, and only for commits ahead of Gerrit.
-    same_code = newer and compute_merged_equivalent(sha, change, Path.cwd() if cwd is None else Path(cwd)) is True
+    # on such a push, so they stay.
+    same_code = newer and merged_equivalent(sha, change, facts) is True
     votes_moved_on = newer and not same_code
     current = change.current_revision
-    diverged = newer and current is not None and commit_sha_or_none(cwd, current) is None
+    diverged = newer and current is not None and norm_sha(current) not in facts.present
     if votes_moved_on:
         needed.discard("checks")
 

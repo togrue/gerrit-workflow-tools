@@ -4,12 +4,15 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_vscode.py` |
-| **Requires** | A ger installed from a release; the editor's command-line program (`code`) |
+| **Requires** | The editor's command-line program (`code`); for a ger installed from a checkout, npm |
 
-Install the VS Code extension that came with this ger into your editor.
+Install the VS Code extension that goes with this ger into your editor.
 
 A release of ger carries the extension built from the same commit, so the extension an editor
-gets always matches the `ger serve` it starts. Works outside a git repository.
+gets always matches the `ger serve` it starts. A ger installed from a checkout
+(`uv tool install -e <clone>`) carries none; it builds one from the checkout's `vscode/` folder
+with npm (`npm ci` when `node_modules/` is missing, then the same packaging a release runs) and
+installs that. Works outside a git repository.
 
 ---
 
@@ -24,18 +27,20 @@ ger vscode install [--editor COMMAND]
 | (none) | Install into the first of `code`, `code-insiders`, `codium`, `cursor` found on `PATH` |
 | `--editor COMMAND` | The editor's command-line program, by name or path |
 
-It runs `<editor> --install-extension <bundled .vsix> --force`; the editor prints the result, and
-its exit code is the command's. `--force` makes the same command the update: run it again after
+It runs `<editor> --install-extension <.vsix> --force`; the editor prints the result, and
+its exit code is the command's. When the extension is built first, a failed npm step installs
+nothing and its exit code is the command's. `--force` makes the same command the update: run it again after
 updating ger.
 
 ## Refusals
 
-Both exit `2` ([exit codes](../exit-codes.md)):
+All exit `2` ([exit codes](../exit-codes.md)):
 
 | Situation | Message says |
 |-----------|--------------|
 | No editor command on `PATH`, or `--editor` names none | which names were tried, and where the bundled `.vsix` is, for *Extensions: Install from VSIX…* |
-| ger was installed from source (no bundled extension) | where the release of ger and the `.vsix` of this version are |
+| Building from a checkout, and no `npm` on `PATH` | that npm is needed, and which checkout it would build |
+| Neither a bundled extension nor a checkout (installed from a git URL, say) | the releases page, and how to install ger from a clone instead |
 
 ## How a release is built
 

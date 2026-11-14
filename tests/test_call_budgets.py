@@ -146,6 +146,25 @@ def test_log_git_and_rest_do_not_scale_with_stack_size(
     _assert_log_git_budget(run)
 
 
+def test_log_ahead_of_gerrit_does_not_scale_with_stack_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every commit rebased past its patch set: whether its code is the same is asked in one batch."""
+    counts: list[int] = []
+    for n in (5, 20):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / f"cache{n}"))
+        repo = _make_linear_stack(tmp_path / f"n{n}", n)
+        store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(repo)))
+        git("rebase", "--force-rebase", "main", cwd=repo, env={"GIT_COMMITTER_DATE": "2001-01-01T00:00:00"})
+        with _count_git() as run:
+            code, out, err = run_cli(repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        assert code in (0, 1), err
+        assert "commit 1" in out
+        counts.append(run.call_count)
+    assert counts[1] == counts[0] <= _LOG_GIT_BUDGET + 3, counts
+
+
 def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger show HEAD`` resolves one change — a handful of git + REST calls, not a stack storm."""
     _configure_web(stack_repo)
