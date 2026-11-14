@@ -51,6 +51,7 @@ Read [adr/](adr/) before "simplifying" something that looks odd — that is what
 |-------|----------|
 | Install & unit tests | [../README.md](../README.md) (Development) |
 | Integration tests (Docker Gerrit) | [../tests/integration/README.md](../tests/integration/README.md) |
+| Which tests are redundant, and why | [test-redundancy.md](test-redundancy.md) |
 | Coding agents | [../AGENTS.md](../AGENTS.md) |
 
 ---
