@@ -126,5 +126,5 @@ an ADR.
 | What is still duplicated? | [architecture.md § Consolidation backlog](docu/architecture.md#consolidation-backlog) |
 | How should this command behave? | [docu/SPEC.md](docu/SPEC.md), [docu/spec/commands/](docu/spec/commands/) |
 | Why is it done this odd way? | [docu/adr/](docu/adr/). Read before "simplifying" |
-| What does Gerrit's API return? | [docu/gerrit/md/](docu/gerrit/md/) |
+| What does Gerrit's API return? | [Gerrit REST API](https://gerrit-review.googlesource.com/Documentation/rest-api.html) |
 | Which git config keys exist? | [docu/Configuration.md](docu/Configuration.md) |
