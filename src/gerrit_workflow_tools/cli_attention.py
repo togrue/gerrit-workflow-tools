@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
@@ -126,7 +127,13 @@ def resolve_in_stack(
     branch: str | None,
     gerrit: GerritRest | None,
 ) -> StackCommit:
-    target = resolve_stack_changeish(cwd, rev, settings=settings, gerrit=gerrit, branch=branch, require_in_stack=True)
+    target = resolve_stack_changeish(
+        cwd,
+        rev,
+        service=GerritService.from_cwd(cwd, settings=settings, rest=gerrit),
+        branch=branch,
+        require_in_stack=True,
+    )
     print_stack_commit_notes(target)
     return target
 

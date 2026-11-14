@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.comment_target import (
     target_for_commit,
 )
 from gerrit_workflow_tools.core.comment_write import WrittenComment, default_state, locate, write_comment
-from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
@@ -157,12 +157,8 @@ def _discard(
 
 def _service(cwd: Path, settings: Settings, gerrit: GerritRest | None, *, local_only: bool) -> GerritService | None:
     """The Gerrit service; ``None`` when Gerrit is not configured and the comment stays local anyway."""
-    try:
-        return GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    except ConfigError:
-        if local_only:
-            return None
-        raise
+    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    return None if local_only and not service.configured else service
 
 
 def _target(args: argparse.Namespace, cwd: Path, settings: Settings, service: GerritService | None) -> CommentTarget:

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from gerrit_workflow_tools.core.change_id import extract_valid_change_id
 from gerrit_workflow_tools.core.changeish import (
-    KINDS_NEEDING_GERRIT,
     Changeish,
     ChangeishKind,
     address_problem,
@@ -20,7 +19,6 @@ from gerrit_workflow_tools.core.changeish import (
 )
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.narrowing import narrow_matches
 from gerrit_workflow_tools.core.gerrit.resolution import (
     ChangeAmbiguousError,
@@ -50,6 +48,7 @@ from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_row
 
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
+    from gerrit_workflow_tools.core.gerrit.service import GerritService
 
 
 # The changeish grammar lives in core.changeish; this module decides what a parsed changeish
@@ -279,7 +278,7 @@ def resolve_to_stack_sha(
     cwd: Path | str | None,
     settings: Settings,
     branch: str | None = None,
-    client_factory: Callable[[], GerritRest] | None = None,
+    service: GerritService | None = None,
     require_in_stack: bool = False,
 ) -> StackCommit:
     """Resolve a changeish to a full SHA on the current local stack.
@@ -287,9 +286,9 @@ def resolve_to_stack_sha(
     Never fetches. Kinds that carry a Change-Id resolve without touching the network; kinds
     that address a change by number cost one Gerrit round trip to learn the id first.
 
-    *client_factory* is called only on the paths that genuinely need Gerrit, so a caller can
-    defer resolving ``gerrit.webUrl`` — a ``refs/changes/…`` ref the repository already has
-    must not require Gerrit configuration to use.
+    *service* is asked only on the paths that genuinely need Gerrit, and it builds its client
+    on first use, so a ``refs/changes/…`` ref the repository already has needs no Gerrit
+    configuration to use.
 
     *require_in_stack* additionally insists the answer is a commit *in* the stack. Commands
     that rewrite a stack commit (``ger edit``, ``ger reword``, ``ger fix``) want that; the one
@@ -314,10 +313,10 @@ def resolve_to_stack_sha(
     change_id = parsed.change_id
     resolution: Resolution | None = None
     if change_id is None:
-        if client_factory is None:
+        if service is None:
             raise ChangeResolutionError(f"cannot resolve {parsed.kind!r} to a stack commit without a Gerrit client")
         resolution = resolve_changeish(
-            parsed.raw, client=client_factory(), cwd=cwd, settings=settings, branch=branch, explicit_target=True
+            parsed.raw, client=service.rest, cwd=cwd, settings=settings, branch=branch, explicit_target=True
         )
         if resolution.selected is None:
             raise ChangeResolutionError(unresolved_change_message(parsed.raw))
@@ -356,8 +355,7 @@ def resolve_stack_changeish(
     cwd: Path | str | None,
     ref: str,
     *,
-    settings: Settings,
-    gerrit: GerritRest | None = None,
+    service: GerritService,
     branch: str | None = None,
     require_in_stack: bool = False,
 ) -> StackCommit:
@@ -365,22 +363,14 @@ def resolve_stack_changeish(
 
     The single entry point for ``ger fix``, ``ger edit``, ``ger reword`` and ``ger rebase``.
 
-    Pass *gerrit* to supply an implementation; otherwise one is built from *settings* — but
-    only on the paths that need it, so ``gerrit.webUrl`` stays irrelevant to a purely local
-    resolution.
+    *service* is only asked when *ref* names a change Gerrit has to look up; a purely local
+    resolution never builds its client, so ``gerrit.webUrl`` stays irrelevant to it.
     """
-    needs_gerrit = parse(ref).kind in KINDS_NEEDING_GERRIT
-
-    def _build_client() -> GerritRest:
-        if gerrit is not None:
-            return gerrit
-        return HttpGerritRest.from_settings(settings)
-
     return resolve_to_stack_sha(
         ref,
         cwd=cwd,
-        settings=settings,
+        settings=service.settings,
         branch=branch,
-        client_factory=_build_client if needs_gerrit else None,
+        service=service,
         require_in_stack=require_in_stack,
     )

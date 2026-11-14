@@ -187,14 +187,14 @@ def resolve_attention_query(
     Does not update the attention cursor. *after_changeish* is optional for ``next``.
     """
     from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, resolve_stack_changeish
+    from gerrit_workflow_tools.core.gerrit.service import GerritService
 
     after_change_id: str | None = None
     if after_changeish:
         after = resolve_stack_changeish(
             cwd,
             after_changeish,
-            settings=settings,
-            gerrit=gerrit,  # type: ignore[arg-type]
+            service=GerritService.from_cwd(cwd, settings=settings, rest=gerrit),  # type: ignore[arg-type]
             branch=branch,
             require_in_stack=True,
         )

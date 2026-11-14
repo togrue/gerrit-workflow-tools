@@ -347,7 +347,7 @@ flowchart LR
 | `HttpGerritRest` | Talks to a real Gerrit over HTTP; credentials resolved at construction |
 | `ChangeStore` (`tests/change_store.py`) | Answers from ChangeInfo payloads, with stateful writes. Test-only — nothing in `src/` constructs one |
 
-Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd(cwd, rest=…)`, the single construction path. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose), `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)), and `resolve_stack_changeish` (builds a client lazily so a purely local resolution never needs `gerrit.webUrl`).
+Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd(cwd, rest=…)`, the single construction path. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
 
 ---
 

@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_in_progress
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
@@ -134,7 +135,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         raise UsageError(f"the index has unresolved conflicts, and a fixup would commit them; {step}")
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later
     # `git rebase --autosquash` can actually place (ADR-0003).
-    target = resolve_stack_changeish(cwd, args.target, settings=settings, gerrit=gerrit, require_in_stack=True)
+    target = resolve_stack_changeish(
+        cwd, args.target, service=GerritService.from_cwd(cwd, settings=settings, rest=gerrit), require_in_stack=True
+    )
     snapshot = get_stack_snapshot(cwd, settings=settings)
     fixup_sha = fixup_target_sha(snapshot.commits, target.sha)
     logger.info("fixup target commit: %s", fixup_sha)

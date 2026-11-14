@@ -226,7 +226,6 @@ CONCEPTS = [
         owners={
             "core/gerrit/http_rest.py": "defines it",
             "core/gerrit/service.py": "GerritService.from_cwd is the construction path",
-            "core/gerrit/change_resolution.py": "built lazily so local-only resolution never needs gerrit.webUrl",
             "cli_fetch_api.py": "GETs raw paths from the real server by purpose",
             "reviewer_catalog.py": "background worker in the push prompt (ADR-0006)",
         },

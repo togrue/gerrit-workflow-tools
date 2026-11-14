@@ -6,10 +6,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, batch_load_change_details
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
+from gerrit_workflow_tools.core.git_run import git
 from tests.change_store import ChangeStore
 
 
@@ -176,3 +180,14 @@ def test_find_by_footer_change_ids_returns_every_branch_after_an_overlay_fetch(t
     assert sorted(row["branch"] for row in found[cid]) == ["dev", "main"]
     # The lookup itself is local: the only query issued was the overlay's batch fetch.
     assert len(store.queries()) == 1
+
+
+def test_service_builds_its_client_only_when_asked(tmp_path: Path) -> None:
+    """Constructing a service asks nothing of the Gerrit config; the first use of its client does."""
+    git("init", "-q", cwd=tmp_path)
+    service = GerritService.from_cwd(tmp_path, settings=Settings.from_cwd(tmp_path))
+
+    with pytest.raises(ConfigError):
+        _ = service.rest
+    with pytest.raises(ConfigError):
+        _ = service.cache

@@ -153,8 +153,8 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
     def _gerrit_must_not_run(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("Gerrit must not be consulted for a bare integer changeish")
 
-    # Guards the shared resolver now, since that is where the client gets built.
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.change_resolution.HttpGerritRest", _gerrit_must_not_run)
+    # The service builds its client on first use, so this trips on any attempt to ask Gerrit.
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest", _gerrit_must_not_run)
 
     (stack_repo / "a.txt").write_text("bare int\n", encoding="utf-8")
     git("add", "a.txt", cwd=stack_repo)

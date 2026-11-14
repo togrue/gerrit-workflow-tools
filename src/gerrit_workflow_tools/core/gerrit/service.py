@@ -37,16 +37,18 @@ class GerritService:
 
     def __init__(
         self,
-        rest: GerritRest,
-        cache: GerritCache,
+        rest: GerritRest | None = None,
+        cache: GerritCache | None = None,
         *,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
         cwd: Path | str | None = None,
         settings: Settings | None = None,
     ) -> None:
-        self.rest = rest
-        self.cache = cache
+        # Both are built on first use when not supplied: a service that is never asked
+        # anything never needs ``gerrit.webUrl``, credentials or the cache file.
+        self._rest = rest
+        self._cache = cache
         # Settings for *cwd*, read once. Explicit for the same reason cwd is: nothing
         # below this layer may reach for process-wide configuration.
         self.settings = settings if settings is not None else Settings.from_cwd(cwd)
@@ -75,28 +77,46 @@ class GerritService:
     ) -> GerritService:
         """Construct a service from git-configured Gerrit settings.
 
-        Pass *rest* to supply the Gerrit implementation instead of building an
-        :class:`HttpGerritRest`. Doing so also skips ``gerrit.webUrl`` resolution — the web
-        base comes from the implementation — so callers that inject need no Gerrit config.
-        *settings* defaults to one read from
-        *cwd*; pass it when the caller has already taken a snapshot, so the whole command
-        works from a single ``git config --list --show-scope``.
+        Pass *rest* to supply the Gerrit implementation instead of an :class:`HttpGerritRest`
+        built from *settings*. Nothing is built here: the client and the cache come into
+        being on first use (see :attr:`rest`). *settings* defaults to one read from *cwd*;
+        pass it when the caller has already taken a snapshot, so the whole command works
+        from a single ``git config --list --show-scope``.
         """
 
         if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
             refresh = True
-        resolved = settings if settings is not None else Settings.from_cwd(cwd)
-        if rest is None:
-            rest = HttpGerritRest.from_settings(resolved)
-        web_base = rest.web_base
         return cls(
             rest,
-            cache if cache is not None else GerritCache.for_web_base(web_base),
+            cache,
             refresh=refresh,
             trust_window_seconds=trust_window_seconds,
             cwd=cwd,
-            settings=resolved,
+            settings=settings if settings is not None else Settings.from_cwd(cwd),
         )
+
+    @property
+    def configured(self) -> bool:
+        """Whether this service can reach a Gerrit: a client was supplied, or ``gerrit.webUrl`` is set."""
+        return self._rest is not None or bool(self.settings.gerrit_web_url)
+
+    @property
+    def rest(self) -> GerritRest:
+        """The Gerrit seam. Built from :attr:`settings` on first use when none was supplied.
+
+        Raises :class:`ConfigError` then when ``gerrit.webUrl`` is unset, so only the work
+        that genuinely asks Gerrit needs it configured.
+        """
+        if self._rest is None:
+            self._rest = HttpGerritRest.from_settings(self.settings)
+        return self._rest
+
+    @property
+    def cache(self) -> GerritCache:
+        """The Gerrit cache for this host. Opened on first use when none was supplied."""
+        if self._cache is None:
+            self._cache = GerritCache.for_web_base(self.rest.web_base)
+        return self._cache
 
     @property
     def web_base(self) -> str:

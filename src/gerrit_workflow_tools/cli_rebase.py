@@ -17,6 +17,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
@@ -120,7 +121,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     elif args.rev:
         # Same changeish resolution as `ger fix` / `ger edit`, but without require_in_stack:
         # this argument is the commit to rebase *from*, which normally sits below the stack.
-        target = resolve_stack_changeish(cwd, args.rev, settings=settings, gerrit=gerrit, branch=branch)
+        target = resolve_stack_changeish(
+            cwd, args.rev, service=GerritService.from_cwd(cwd, settings=settings, rest=gerrit), branch=branch
+        )
         base = target.sha
         print_resolution_note(target.resolution)
     else:

@@ -11,12 +11,14 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     resolve_stack_changeish,
 )
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git_out
 from tests.fixtures import _cid
 
 
-def _resolve(repo, ref, **kwargs):
-    return resolve_stack_changeish(repo, ref, settings=Settings.from_cwd(repo), **kwargs).sha
+def _resolve(repo, ref, *, gerrit=None, **kwargs):
+    service = GerritService.from_cwd(repo, settings=Settings.from_cwd(repo), rest=gerrit)
+    return resolve_stack_changeish(repo, ref, service=service, **kwargs).sha
 
 
 def test_resolve_by_change_id(stack_repo, monkeypatch):
