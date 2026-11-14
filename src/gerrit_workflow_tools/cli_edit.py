@@ -19,11 +19,8 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_verbose_and_debug_log_args,
     changeish_help,
-    continue_rebase,
     init_cli_runtime,
-    require_history_rewrite,
     run_cli_command,
-    run_interactive_rebase,
 )
 from gerrit_workflow_tools.core.attention_cursor import (
     CursorAction,
@@ -43,6 +40,7 @@ from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.rebase_state import edit_stop_next_step, rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.rebase_run import continue_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
 
 

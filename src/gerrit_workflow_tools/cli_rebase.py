@@ -11,9 +11,7 @@ from gerrit_workflow_tools.cli_common import (
     changeish_help,
     init_cli_runtime,
     print_resolution_note,
-    require_history_rewrite,
     run_cli_command,
-    run_interactive_rebase,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -21,6 +19,7 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref, resolve_working_branch
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.rebase_run import require_history_rewrite, run_interactive_rebase
 
 
 logger = logging.getLogger(__name__)

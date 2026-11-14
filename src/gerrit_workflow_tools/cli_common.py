@@ -41,9 +41,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
-from gerrit_workflow_tools.core.git_editor import module_editor_command
-from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git
-from gerrit_workflow_tools.core.rebase_state import conflict_next_step, history_rewrite_refusal
+from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -354,43 +352,3 @@ def init_cli_runtime(args: argparse.Namespace, *, repository: bool = True) -> tu
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")
     return cwd, settings, build_summary_highlighter(settings)
-
-
-def require_history_rewrite(cwd: Path) -> None:
-    """Refuse to start rewriting the local stack where git would refuse: one message per reason."""
-    if refusal := history_rewrite_refusal(cwd):
-        raise UsageError(refusal)
-
-
-def run_interactive_rebase(
-    cwd: Path,
-    base: str,
-    *,
-    sequence_editor: str,
-    env: dict[str, str],
-    walk_on: str | None = None,
-    autosquash: bool | None = False,
-) -> int:
-    """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code.
-
-    *autosquash* ``False`` keeps every ``fixup!`` commit where it is whatever ``rebase.autosquash``
-    says, ``True`` folds them, ``None`` leaves it to git config. A stop on a conflict ends with the
-    shared next step, naming *walk_on* as the way on to the next attention stop.
-    """
-    env = {**env, "GIT_SEQUENCE_EDITOR": module_editor_command(f"gerrit_workflow_tools.{sequence_editor}")}
-    squash = [] if autosquash is None else ["--autosquash" if autosquash else "--no-autosquash"]
-    code = git("rebase", "-i", *squash, base, cwd=cwd, env=env, check=False, capture=False).returncode
-    _print_conflict_next_step(cwd, walk_on)
-    return code
-
-
-def continue_rebase(cwd: Path, *, walk_on: str | None = None) -> int:
-    """``git rebase --continue``; return git's exit code. Output goes to the terminal."""
-    code = git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode
-    _print_conflict_next_step(cwd, walk_on)
-    return code
-
-
-def _print_conflict_next_step(cwd: Path, walk_on: str | None) -> None:
-    if step := conflict_next_step(cwd, walk_on=walk_on):
-        print(f"next: {step}", file=sys.stderr)

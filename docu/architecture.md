@@ -408,7 +408,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm`, `run_interactive_rebase` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
@@ -554,6 +554,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |
+| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `continue_rebase` and the conflict next step after |
 | `bash_completion_generator.py` | Bash completion generated from live argparse definitions |
 
 ### Local service (`server/`)
