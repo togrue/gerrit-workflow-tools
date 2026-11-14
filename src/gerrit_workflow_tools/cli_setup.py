@@ -192,5 +192,6 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    cwd, _settings, _summary_highlighter = init_cli_runtime(args, repository=False)
+    run, _summary_highlighter = init_cli_runtime(args, repository=False)
+    cwd = run.cwd
     return _run_interactive_setup(global_config=not args.local, cwd=cwd)

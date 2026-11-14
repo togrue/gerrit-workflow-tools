@@ -40,6 +40,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     set_staged,
 )
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
 from gerrit_workflow_tools.render.review_json import review_state_json
@@ -225,9 +226,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     _check_args(p, args)
-    cwd, settings, _ = init_cli_runtime(args)
+    run, _ = init_cli_runtime(args, gerrit=gerrit)
     try:
-        return _act(args, p, cwd, settings, gerrit)
+        return _act(args, p, run)
     except ReviewRefusal as refusal:
         print(f"error: {refusal}", file=sys.stderr)
         return int(ExitCode.ATTENTION)
@@ -239,10 +240,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         return int(ExitCode.NO_EDIT_ATTENTION)
 
 
-def _act(
-    args: argparse.Namespace, p: argparse.ArgumentParser, cwd: Path, settings: Settings, gerrit: GerritRest | None
-) -> int:
-    state = find_review(cwd, settings)
+def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) -> int:
+    cwd = run.cwd
+    state = find_review(cwd, run.settings)
     if args.status:
         if state is None:
             print(json.dumps({"review": None}) if args.json_ else "no review going on")
@@ -265,7 +265,7 @@ def _act(
             raise ReviewUsageError("no review going on here: name a CHANGEISH first")
         _emit_state(set_staged(state, bool(args.stage)), chain=None, url=None, as_json=args.json_)
         return int(ExitCode.OK)
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     if args.vote is not None:
         return _vote(args, p, service, cwd)
     return _open(args, service, cwd, state)

@@ -27,7 +27,6 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.inbox import (
     OUTGOING,
     TO_REVIEW,
@@ -262,8 +261,9 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, settings, highlighter = init_cli_runtime(args, repository=False)
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    run, highlighter = init_cli_runtime(args, repository=False, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
+    service = run.gerrit
     projects = project_scope(cwd, settings, projects=list(args.project), all_projects=bool(args.all_projects))
     now = datetime.now(timezone.utc)
     limit = args.limit if args.limit is not None else settings.inbox_limit

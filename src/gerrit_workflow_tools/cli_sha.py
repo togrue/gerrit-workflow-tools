@@ -127,7 +127,8 @@ def main(argv: list[str] | None = None) -> int:
 def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,too-many-locals
     ap = _build_parser()
     args = ap.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    run, _summary_highlighter = init_cli_runtime(args)
+    cwd, settings = run.cwd, run.settings
 
     if (args.first_attention or args.next_attention) and (args.rev_range or args.all_commits):
         ap.error("cannot combine attention targeting with --range / --all")

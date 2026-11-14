@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from collections.abc import Callable, Mapping
 from enum import IntEnum
@@ -40,8 +41,9 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_resolution_note,
 )
 from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_bodies
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -331,8 +333,20 @@ def configure_logging(verbosity: int | bool) -> None:
         _CONFIGURED = True
 
 
-def init_cli_runtime(args: argparse.Namespace, *, repository: bool = True) -> tuple[Path, Settings, SummaryHighlighter]:
-    """Configure logging/color from parsed *args*; return ``(cwd, settings, summary_highlighter)``.
+# Set by `ger --refresh` (cli_ger) for this process and the git-run editors it starts,
+# such as the rebase enricher. Read here, once per run, and nowhere below.
+REFRESH_ENV = "GER_CACHE_REFRESH"
+
+
+def refresh_requested() -> bool:
+    """Whether this process runs under ``ger --refresh``."""
+    return os.environ.get(REFRESH_ENV, "").strip().lower() in ("1", "true", "yes")
+
+
+def init_cli_runtime(
+    args: argparse.Namespace, *, repository: bool = True, gerrit: GerritRest | None = None
+) -> tuple[RunContext, SummaryHighlighter]:
+    """Configure logging/color from parsed *args*; return the **run context** and the summary highlighter.
 
     Commands without ``--debug-log`` or ``--color`` get logging off and color on ``auto``.
     Outside a git repository a command that needs one (*repository*, the default) fails here,
@@ -340,7 +354,8 @@ def init_cli_runtime(args: argparse.Namespace, *, repository: bool = True) -> tu
 
     This is where a command's :class:`Settings` snapshot is taken: once, at the entry
     point, from a single ``git config --list --show-scope``. Everything below receives it as an
-    argument rather than reading configuration again.
+    argument rather than reading configuration again. *gerrit* replaces the configured host
+    (tests); ``ger --refresh`` reaches the run's service from here.
     """
 
     ensure_utf8_stdio()
@@ -351,4 +366,5 @@ def init_cli_runtime(args: argparse.Namespace, *, repository: bool = True) -> tu
     settings = Settings.from_cwd(cwd)
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")
-    return cwd, settings, build_summary_highlighter(settings)
+    run = RunContext.open(cwd, settings=settings, gerrit=gerrit, refresh=refresh_requested())
+    return run, build_summary_highlighter(settings)

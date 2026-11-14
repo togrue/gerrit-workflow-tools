@@ -26,7 +26,6 @@ from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
@@ -222,7 +221,8 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 ) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, summary_highlighter = init_cli_runtime(args)
+    run, summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
     out_fmt = output_format(args)
     verbose_level = int(args.verbose)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
@@ -238,7 +238,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     if isinstance(revs_or_code, int):
         return revs_or_code
 
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     targets = resolve_show_targets(
         cwd,
         revs_or_code,

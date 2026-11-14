@@ -33,7 +33,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    _cwd, settings, _summary_highlighter = init_cli_runtime(args, repository=False)
+    run, _summary_highlighter = init_cli_runtime(args, repository=False)
+    settings = run.settings
 
     web_base = resolve_gerrit_web_base(settings)
     cache = GerritCache.for_web_base(web_base)

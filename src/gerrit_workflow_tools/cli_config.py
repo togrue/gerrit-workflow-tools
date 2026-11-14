@@ -61,7 +61,8 @@ def _format_parse_errors(errors: tuple[ParseError, ...]) -> str:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args, repository=False)
+    run, _summary_highlighter = init_cli_runtime(args, repository=False)
+    cwd, settings = run.cwd, run.settings
     if not _stream_is_tty(sys.stdin) or not _stream_is_tty(sys.stdout):
         raise UsageError("ger config requires an interactive terminal")
 

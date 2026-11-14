@@ -31,6 +31,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.local_comments import LocalCommentStore
 from gerrit_workflow_tools.core.review_checkout import load_state
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.comments import first_line
 from gerrit_workflow_tools.render.show_json import written_comment_json
 
@@ -155,10 +156,9 @@ def _discard(
     _emit(payload, f'discarded {_LABELS[state]} on {where}: "{first_line(message)}"', as_json=as_json)
 
 
-def _service(cwd: Path, settings: Settings, gerrit: GerritRest | None, *, local_only: bool) -> GerritService | None:
-    """The Gerrit service; ``None`` when Gerrit is not configured and the comment stays local anyway."""
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    return None if local_only and not service.configured else service
+def _service(run: RunContext, *, local_only: bool) -> GerritService | None:
+    """The run's Gerrit service; ``None`` when Gerrit is not configured and the comment stays local anyway."""
+    return None if local_only and not run.gerrit.configured else run.gerrit
 
 
 def _target(args: argparse.Namespace, cwd: Path, settings: Settings, service: GerritService | None) -> CommentTarget:
@@ -183,8 +183,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     message = _check_args(p, args)
-    cwd, settings, _ = init_cli_runtime(args)
-    service = _service(cwd, settings, gerrit, local_only=args.note or args.local or args.discard is not None)
+    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
+    service = _service(run, local_only=args.note or args.local or args.discard is not None)
     target = _target(args, cwd, settings, service)
     if args.discard is not None:
         _discard(cwd, service, target, args.discard.strip(), as_json=args.json_)

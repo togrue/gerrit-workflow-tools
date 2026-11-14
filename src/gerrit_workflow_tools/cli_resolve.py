@@ -22,7 +22,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     resolve_changeish,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 
 
 _EXIT_USAGE = 2
@@ -66,9 +65,10 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
 
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     resolution = resolve_changeish(
         args.changeish,
         client=service.rest,

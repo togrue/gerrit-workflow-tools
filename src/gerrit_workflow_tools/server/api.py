@@ -14,10 +14,9 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.ci_http import CiHttp
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import clear_git_cache
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server import actions, diff_views, views
 from gerrit_workflow_tools.server.activity import Activity
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
@@ -68,7 +67,11 @@ _REFRESH_ENV = "GER_CACHE_REFRESH"
 
 @contextmanager
 def _cache_refresh(on: bool) -> Iterator[None]:
-    """Run one request the way ``ger --refresh`` runs a command."""
+    """Run one request the way ``ger --refresh`` runs a command.
+
+    The request's own run already carries *on*; this reaches the core functions that still
+    build a Gerrit service of their own, and goes when they take the run instead.
+    """
     if not on:
         yield
         return
@@ -103,12 +106,11 @@ class GerApi:
         self._ci_http = ci_http
         self.activity = activity if activity is not None else Activity()
 
-    def _context(self) -> Context:
-        """A fresh view per request: the repository may have changed since the last one."""
+    def _context(self, *, refresh: bool) -> Context:
+        """A fresh run per request: the repository may have changed since the last one."""
         clear_git_cache()
-        settings = Settings.from_cwd(self.cwd)
-        service = GerritService.from_cwd(self.cwd, settings=settings, rest=self._gerrit)
-        return Context(cwd=self.cwd, settings=settings, service=service, ci_http=self._ci_http, activity=self.activity)
+        run = RunContext.open(self.cwd, gerrit=self._gerrit, refresh=refresh)
+        return Context(run=run, ci_http=self._ci_http, activity=self.activity)
 
     def handle_unlocked(
         self, method: str, path: str, query: Mapping[str, list[str]] | None = None
@@ -135,6 +137,7 @@ class GerApi:
             if match is None or route_method != method:
                 continue
             request = Request(query=query or {}, body=body or {}, path_args=match.groups())
-            with _cache_refresh(request.flag("refresh")):
-                return endpoint(self._context(), request)
+            refresh = request.flag("refresh")
+            with _cache_refresh(refresh):
+                return endpoint(self._context(refresh=refresh), request)
         raise NoRoute(f"no such endpoint: {method} {path}")

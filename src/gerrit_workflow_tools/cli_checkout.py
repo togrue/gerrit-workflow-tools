@@ -27,7 +27,6 @@ from gerrit_workflow_tools.core.change_checkout import (
     plan_checkout,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
 from gerrit_workflow_tools.core.rebase_state import rebase_refusal
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
@@ -128,10 +127,11 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     args = _build_parser().parse_args(argv)
-    cwd, settings, _ = init_cli_runtime(args)
+    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
     if refusal := rebase_refusal(cwd):
         raise UsageError(refusal)
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     change = resolve_change(service, cwd, args.changeish)
     print_resolution_note(change.resolution)
     try:

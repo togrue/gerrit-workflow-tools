@@ -22,7 +22,6 @@ from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
@@ -137,13 +136,14 @@ def _emit_markdown(commit: LogCommit, contents: list[CiContent], *, warnings: bo
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
     out_fmt = output_format(args)
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
     if args.stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
         return int(ExitCode.ATTENTION)
 
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     targets = resolve_show_targets(
         cwd, args.revs, service.rest, settings=settings, stack=args.stack, branch=branch, changes=service.changes
     )

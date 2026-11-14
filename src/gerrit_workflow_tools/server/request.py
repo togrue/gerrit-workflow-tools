@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server.activity import Activity
 
 
@@ -78,13 +79,26 @@ def safe_rev(value: str | None, name: str = "rev") -> str:
 
 @dataclass(frozen=True)
 class Context:
-    """One request's view: the repository, a fresh **Settings** snapshot, and the service over it."""
+    """One request's view: its **run context** (the repository, a fresh **Settings** snapshot, the service over it)."""
 
-    cwd: Path
-    settings: Settings
-    service: GerritService
+    run: RunContext
     ci_http: CiHttp | None = None
     activity: Activity = field(default_factory=Activity)
+
+    @property
+    def cwd(self) -> Path:
+        """The repository this request runs in."""
+        return self.run.cwd
+
+    @property
+    def settings(self) -> Settings:
+        """The request's **Settings** snapshot."""
+        return self.run.settings
+
+    @property
+    def service(self) -> GerritService:
+        """The request's Gerrit service."""
+        return self.run.gerrit
 
     def ci(self) -> CiContentService:
         """The CI content service for this repository and host."""

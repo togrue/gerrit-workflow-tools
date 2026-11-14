@@ -30,6 +30,10 @@ _Avoid_: using either name for the other
 An immutable snapshot of the repository's effective `git config`, read once per command with a single `git config --list --show-scope`. Carries each key's value and the scope that won (`local`, `global`, …). Values written after the snapshot are not visible in it; the answer is a new snapshot, not an invalidation. Settings only — nothing in it asks what the repository currently looks like.
 _Avoid_: config, config cache, options
 
+**Run context**:
+One command run, or one request `ger serve` answers: the repository it works in, its **Settings** snapshot, and the Gerrit service it asks, built once at the entry point and handed down. Whatever a run reads once and shares lives on it, for exactly as long as the run.
+_Avoid_: session, environment, runtime (for the object)
+
 **Repository state**:
 What the repository looks like right now — branch, detached HEAD, in-progress rebase, upstream, remote-tracking refs, the Gerrit push destination. Answered by running git, not by reading **Settings**, though interpreting the answer may consult them (e.g. whether the upstream's remote is `gerrit.remote`). The dependency runs one way: **Settings** never asks about **repository state**.
 _Avoid_: git config (for these), environment, context

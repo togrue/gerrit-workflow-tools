@@ -126,11 +126,11 @@ sequenceDiagram
     ger->>ger: GER_CACHE_REFRESH=1
   end
   ger->>cmd: lazy import + main(args)
-  cmd->>common: init_cli_runtime (logging, color, Settings)
+  cmd->>common: init_cli_runtime (logging, color, run context)
   cmd->>common: run_cli_command (errors → exit codes)
 ```
 
-Every command module owns its argparse schema, builds its runtime with `init_cli_runtime`, and wraps its body in `run_cli_command` — the only place errors map to exit codes ([spec/exit-codes.md](spec/exit-codes.md)).
+Every command module owns its argparse schema, builds its runtime with `init_cli_runtime` — which returns the **run context** (`core/run_context.py`: cwd, `Settings`, the Gerrit service) and is the one place `ger --refresh` is read — and wraps its body in `run_cli_command` — the only place errors map to exit codes ([spec/exit-codes.md](spec/exit-codes.md)).
 
 ---
 
@@ -347,7 +347,7 @@ flowchart LR
 | `HttpGerritRest` | Talks to a real Gerrit over HTTP; credentials resolved at construction |
 | `ChangeStore` (`tests/change_store.py`) | Answers from ChangeInfo payloads, with stateful writes. Test-only — nothing in `src/` constructs one |
 
-Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd(cwd, rest=…)`, the single construction path. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
+Commands take a `gerrit` keyword argument and pass it to `init_cli_runtime`; the run context's `gerrit` is the command's one service. Core functions that do not take the run yet still build theirs with `GerritService.from_cwd(cwd, rest=…)`. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
 
 ---
 
@@ -393,7 +393,7 @@ flowchart LR
 
 The long-running caller core was kept terminal-free for. An endpoint is a command without a terminal: it parses a request, calls the core function the matching command calls, and returns the JSON that command prints with `--json` (`render/show_json.py`, `render/review_json.py`). `GerApi.handle` is transport-free, so tests drive endpoints without a socket.
 
-Each request gets a fresh `Context`: the git memo is cleared and a new `Settings` snapshot is taken, because the repository changes between requests. Requests are serialised for the same reason. Failures map to HTTP statuses through `cli_common.failure_exit`, so the error code a client sees is the exit code's name. Contract: [spec/commands/serve.md](spec/commands/serve.md).
+Each request gets a fresh `Context` over its own **run context**: the git memo is cleared and a new `Settings` snapshot is taken, because the repository changes between requests; `refresh=1` is the run's refresh flag. Requests are serialised for the same reason. Failures map to HTTP statuses through `cli_common.failure_exit`, so the error code a client sees is the exit code's name. Contract: [spec/commands/serve.md](spec/commands/serve.md).
 
 When it can, the service also follows Gerrit's **event stream** (`core/gerrit/event_stream.py`, over `core/gerrit/event_source.py`): one background reader applies each event to the Gerrit cache under the request lock (dropping that change's rows, ADR-0012) and raises the **activity sequence** (`server/activity.py`) that clients long-poll. Without it nothing changes but the sequence, which then never moves.
 
@@ -408,7 +408,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
@@ -437,6 +437,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
+| `core/run_context.py` | The **run context**: `RunContext` (cwd, `Settings`, the Gerrit service of one command run or one request) |
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE` |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |

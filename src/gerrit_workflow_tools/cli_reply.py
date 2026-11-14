@@ -297,13 +297,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     else:
         message, unresolved = _message_and_flag(p, args)
         comment_id, change = _chain_ref(p, args)
-    cwd, settings, _ = init_cli_runtime(args)
+    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
     branch = args.branch or resolve_working_branch(cwd, settings=settings)
     searches_stack = change is None and not (args.publish and args.targets)
     if searches_stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
         return int(ExitCode.ATTENTION)
 
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     if args.publish:
         return _publish(args, service, cwd, branch)
     match, change_url = _find(service, cwd, comment_id, change=change, branch=branch)

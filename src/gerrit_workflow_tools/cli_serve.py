@@ -114,7 +114,8 @@ def _start(
     has, so it can tell "not in a git checkout" from a crash without reading stderr.
     """
     try:
-        cwd, settings, _highlighter = init_cli_runtime(args)
+        run, _highlighter = init_cli_runtime(args, gerrit=gerrit)
+        cwd, settings = run.cwd, run.settings
         top = repo_toplevel(cwd)
         if top is None:
             raise GitError("not inside a git worktree")
