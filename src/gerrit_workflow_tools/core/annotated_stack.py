@@ -26,12 +26,13 @@ from gerrit_workflow_tools.core.attention import annotate_attention
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, format_resolution_note
 from gerrit_workflow_tools.core.gerrit.narrowing import resolution_from_change_rows
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError
+from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context, stack_project
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
 
 
@@ -188,12 +189,10 @@ def _multi_branch_notes(
 
 
 def load_annotated_stack(
-    cwd: Path,
+    run: RunContext,
     rev_range: str,
     *,
-    settings: Settings,
     first_parent: bool = True,
-    gerrit: GerritRest | None = None,
     fetch_ci_pipelines: bool = False,
 ) -> AnnotatedStack:
     """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
@@ -206,11 +205,11 @@ def load_annotated_stack(
     :class:`ValueError` when ``gerrit.webUrl`` is unset. A Gerrit that cannot be asked at all
     does not raise: see :attr:`AnnotatedStack.gerrit_unavailable`.
     """
+    cwd, service = run.cwd, run.gerrit
     rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
     if not rows:
         return AnnotatedStack()
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    on_target = _commits_on_target(cwd, rows, rev_range, settings=settings)
+    on_target = _commits_on_target(cwd, rows, rev_range, settings=run.settings)
     annotated = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target)
     if annotated.gerrit_unavailable is not None:
         return annotated

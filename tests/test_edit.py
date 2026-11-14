@@ -17,6 +17,7 @@ from gerrit_workflow_tools.cli_edit import (
 from gerrit_workflow_tools.cli_rebase import main as grebase_main
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -54,7 +55,7 @@ def test_resolve_first_edit_attention_oldest_ci_failed(stack_repo: Path, monkeyp
         overrides[-1] = {"unresolved_comment_count": 3}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     sha = resolve_first_edit_attention_sha(
-        stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore(details)
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore(details))
     )
     assert sha == rows[0].sha
 
@@ -67,7 +68,7 @@ def test_resolve_first_edit_attention_none_when_green(stack_repo: Path, monkeypa
     details = build_details_by_change_id(rows)
     with pytest.raises(GitError, match="no commit needs edit attention"):
         resolve_first_edit_attention_sha(
-            stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore(details)
+            RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore(details))
         )
 
 

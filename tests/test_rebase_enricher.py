@@ -11,6 +11,7 @@ import pytest
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
@@ -224,7 +225,7 @@ def test_enrich_todo_passthrough_without_gerrit_url(tmp_path: Path):
 
     text = "pick abc1234 some commit\n# comment\n"
     with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
-        result = _enrich_todo(text, tmp_path)
+        result = _enrich_todo(text, RunContext.open(tmp_path))
 
     assert result == text
 
@@ -235,7 +236,7 @@ def test_enrich_todo_preserves_comment_and_blank_lines(tmp_path: Path):
 
     text = "\n# some comment\n\n"
     with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
-        result = _enrich_todo(text, tmp_path)
+        result = _enrich_todo(text, RunContext.open(tmp_path))
 
     assert result == text
 
@@ -246,7 +247,7 @@ def test_enrich_todo_passthrough_when_no_commit_lines(tmp_path: Path):
 
     text = "# pick abc no pick lines here\n"
     with patch.object(Settings, "gerrit_web_url", property(lambda self: "https://g.example")):
-        result = _enrich_todo(text, tmp_path)
+        result = _enrich_todo(text, RunContext.open(tmp_path))
 
     assert result == text
 
@@ -264,7 +265,7 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
     details = build_details_by_change_id(rows)
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     # Each original pick line must now contain enriched subject markers.
     for c in rows:
@@ -287,7 +288,7 @@ def test_enrich_todo_preserves_action_and_sha(stack_repo: Path):
     details = build_details_by_change_id(rows)
     text = _make_todo(rows).replace("pick ", "drop ", 1)  # first line: drop
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     first_short = rows[0].short_sha
     assert result.startswith(f"drop {first_short} # ")
@@ -300,7 +301,7 @@ def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
     details = build_details_by_change_id(rows, per_index_overrides=[{"unresolved_comment_count": 3}])
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     assert "com" in result
     assert "unresolved comment" in result
@@ -313,7 +314,7 @@ def test_enrich_todo_build_failed_shown(stack_repo: Path):
     details = build_details_by_change_id(rows, per_index_overrides=[{"verified": -1}])
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     assert "v-1" in result
     assert "build failed" in result
@@ -328,7 +329,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     rows = stack_rows_mb_to_head(stack_repo)
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_FailingStore({}))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_FailingStore({})))
 
     # Must not raise; each pick line must still be enriched (degraded to not-pushed).
     for c in rows:
@@ -657,7 +658,7 @@ def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monke
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED", "submittable": False}] * n)
     text = _make_todo(rows)
     monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     for c in rows:
         assert f"drop {c.short_sha} #" in result
@@ -670,7 +671,7 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED"}])
     text = _make_todo(rows).replace("pick ", "reword ", 1)
     monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     first_short = rows[0].short_sha
     assert result.startswith(f"reword {first_short} #")

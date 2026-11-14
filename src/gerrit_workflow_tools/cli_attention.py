@@ -21,10 +21,9 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
     resolve_attention_query,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, resolve_stack_changeish
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
 
@@ -58,26 +57,17 @@ def require_stack_upstream(cwd: Path, settings: Settings, rev_range: str | None 
 
 
 def resolve_attention_query_or_exit(
-    cwd: Path,
+    run: RunContext,
     args: argparse.Namespace,
     *,
-    settings: Settings,
     branch: str | None,
     after_changeish: str | None,
-    gerrit: GerritRest | None = None,
 ) -> LogCommit | int:
     """Resolve an attention query, or return an :class:`ExitCode` int on upstream decline."""
-    if not require_stack_upstream(cwd, settings):
+    if not require_stack_upstream(run.cwd, run.settings):
         return int(ExitCode.ATTENTION)
     mode: EditAttentionMode = "first" if args.first_attention else "next"
-    target, notes = resolve_attention_query(
-        cwd,
-        settings=settings,
-        branch=branch,
-        mode=mode,
-        after_changeish=after_changeish,
-        gerrit=gerrit,
-    )
+    target, notes = resolve_attention_query(run, branch=branch, mode=mode, after_changeish=after_changeish)
     for note in notes:
         print(note, file=sys.stderr)
     return target
@@ -87,10 +77,8 @@ def show_revs_with_attention(
     parser: argparse.ArgumentParser,
     args: argparse.Namespace,
     *,
-    cwd: Path,
-    settings: Settings,
+    run: RunContext,
     branch: str | None,
-    gerrit: GerritRest | None = None,
 ) -> list[str] | int:
     """Return REV list for ``ger show``, applying attention flags when set.
 
@@ -106,40 +94,20 @@ def show_revs_with_attention(
     if args.next_attention and len(revs) > 1:
         parser.error("--next-attention accepts at most one REV (AFTER)")
     after = revs[0] if args.next_attention and revs else None
-    resolved = resolve_attention_query_or_exit(
-        cwd,
-        args,
-        settings=settings,
-        branch=branch,
-        after_changeish=after,
-        gerrit=gerrit,
-    )
+    resolved = resolve_attention_query_or_exit(run, args, branch=branch, after_changeish=after)
     if isinstance(resolved, int):
         return resolved
     return [resolved.sha]
 
 
-def resolve_in_stack(
-    cwd: Path,
-    rev: str,
-    *,
-    settings: Settings,
-    branch: str | None,
-    gerrit: GerritRest | None,
-) -> StackCommit:
-    target = resolve_stack_changeish(
-        cwd,
-        rev,
-        service=GerritService.from_cwd(cwd, settings=settings, rest=gerrit),
-        branch=branch,
-        require_in_stack=True,
-    )
+def resolve_in_stack(run: RunContext, rev: str, *, branch: str | None) -> StackCommit:
+    target = resolve_stack_changeish(run.cwd, rev, service=run.gerrit, branch=branch, require_in_stack=True)
     print_stack_commit_notes(target)
     return target
 
 
-def print_cursor_status(cwd: Path, *, settings: Settings, branch: str | None, gerrit: GerritRest | None) -> int:
-    status = describe_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+def print_cursor_status(run: RunContext, *, branch: str | None) -> int:
+    status = describe_cursor_status(run, branch=branch)
     if status.change_id is None:
         print(f"attention cursor: (none) on branch {status.branch}")
         if status.last_attention_change_id:
@@ -166,24 +134,17 @@ def print_cursor_history(cwd: Path) -> int:
     return 0
 
 
-def set_cursor_from_changeish(
-    cwd: Path,
-    changeish: str,
-    *,
-    settings: Settings,
-    branch: str | None,
-    gerrit: GerritRest | None,
-) -> int:
+def set_cursor_from_changeish(run: RunContext, changeish: str, *, branch: str | None) -> int:
     if branch is None:
         raise GitError("detached HEAD: cannot set attention cursor without a branch")
-    target = resolve_in_stack(cwd, changeish, settings=settings, branch=branch, gerrit=gerrit)
-    change_id = change_id_for_stack_sha(cwd, target.sha, settings=settings, gerrit=gerrit)
+    target = resolve_in_stack(run, changeish, branch=branch)
+    change_id = change_id_for_stack_sha(run, target.sha)
     if not change_id:
         raise GitError("target commit has no Change-Id; cannot set attention cursor")
-    current = load_branch_cursor(settings, branch)
+    current = load_branch_cursor(run.settings, branch)
     if current is not None and current.change_id == change_id:
         print(f"attention cursor already at {change_id}")
         return 0
-    write_branch_cursor(cwd, branch, change_id, action="set", sha=target.sha)
+    write_branch_cursor(run.cwd, branch, change_id, action="set", sha=target.sha)
     print(f"attention cursor set to {change_id}")
     return 0

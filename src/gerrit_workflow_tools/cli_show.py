@@ -234,7 +234,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     ):
         return int(ExitCode.ATTENTION)
 
-    revs_or_code = show_revs_with_attention(p, args, cwd=cwd, settings=settings, branch=branch, gerrit=gerrit)
+    revs_or_code = show_revs_with_attention(p, args, run=run, branch=branch)
     if isinstance(revs_or_code, int):
         return revs_or_code
 

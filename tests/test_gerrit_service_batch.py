@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_r
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 
 
@@ -185,7 +186,7 @@ def test_find_by_footer_change_ids_returns_every_branch_after_an_overlay_fetch(t
 def test_service_builds_its_client_only_when_asked(tmp_path: Path) -> None:
     """Constructing a service asks nothing of the Gerrit config; the first use of its client does."""
     git("init", "-q", cwd=tmp_path)
-    service = GerritService.from_cwd(tmp_path, settings=Settings.from_cwd(tmp_path))
+    service = RunContext.open(tmp_path, settings=Settings.from_cwd(tmp_path)).gerrit
 
     with pytest.raises(ConfigError):
         _ = service.rest

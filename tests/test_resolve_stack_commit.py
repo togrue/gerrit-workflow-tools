@@ -11,13 +11,13 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     resolve_stack_changeish,
 )
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.fixtures import _cid
 
 
 def _resolve(repo, ref, *, gerrit=None, **kwargs):
-    service = GerritService.from_cwd(repo, settings=Settings.from_cwd(repo), rest=gerrit)
+    service = RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=gerrit).gerrit
     return resolve_stack_changeish(repo, ref, service=service, **kwargs).sha
 
 

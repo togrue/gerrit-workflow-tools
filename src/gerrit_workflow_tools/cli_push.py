@@ -37,6 +37,7 @@ from gerrit_workflow_tools.core.push import (
 from gerrit_workflow_tools.core.push_checks import resolve_push_branch
 from gerrit_workflow_tools.core.push_result import PushResult
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
@@ -200,8 +201,9 @@ def _require_confirmable(args: argparse.Namespace) -> None:
         raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
 
 
-def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, settings: Settings) -> int:
+def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: str) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
+    cwd, settings = run.cwd, run.settings
     if _gerrit_flags_set(args):
         print(
             "warning: --until, --all, --reviewers, --topic, --wip, --ready, --private, --no-private "
@@ -232,7 +234,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
             print("Push cancelled.", file=sys.stderr)
             return 1
     logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
-    return _finish_push(execute(cwd, cmd, settings=settings), None)
+    return _finish_push(execute(run, cmd), None)
 
 
 def _confirm_gerrit_push(
@@ -293,24 +295,16 @@ def _confirm_gerrit_push(
         return plan
 
 
-def _push_gerrit(
-    cwd: Path,
-    args: argparse.Namespace,
-    *,
-    branch: str,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> int:
+def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> int:
+    cwd, settings = run.cwd, run.settings
     defaults = settings.push_defaults
     first_parent = not args.follow_merges
     prepared = prepare(
-        cwd,
+        run,
         branch,
-        settings=settings,
-        gerrit=gerrit,
         all_commits=bool(args.all_),
         until=args.until,
-        until_sha=args.until and resolve_in_stack(cwd, args.until, settings=settings, branch=branch, gerrit=gerrit).sha,
+        until_sha=args.until and resolve_in_stack(run, args.until, branch=branch).sha,
         first_parent=first_parent,
         reviewer_flags=tuple(args.reviewers),
         strategy=args.reviewer_strategy,
@@ -333,12 +327,12 @@ def _push_gerrit(
     if args.i:
         plan = prompt_initial_options(cwd, plan, args, settings=settings)
     if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
-        return _finish_push(execute(cwd, plan, settings=settings, gerrit=gerrit), plan)
+        return _finish_push(execute(run, plan), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed
-    code = _finish_push(execute(cwd, confirmed, settings=settings, gerrit=gerrit), confirmed)
+    code = _finish_push(execute(run, confirmed), confirmed)
     if code == 0 and confirmed.options != prepared.options:
         from gerrit_workflow_tools.push_options_history import remember_push_options
 
@@ -390,8 +384,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.i and mode == "vanilla":
         raise UsageError("-i applies only to Gerrit push (upstream on gerrit.remote)")
     if mode == "vanilla":
-        return _handle_vanilla_push(cwd, args, branch=branch, settings=settings)
-    return _push_gerrit(cwd, args, branch=branch, settings=settings, gerrit=gerrit)
+        return _handle_vanilla_push(run, args, branch=branch)
+    return _push_gerrit(run, args, branch=branch)
 
 
 if __name__ == "__main__":

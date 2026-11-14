@@ -15,7 +15,7 @@ from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi
-from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest, gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
@@ -64,41 +64,15 @@ class GerritService:
         self.changes = ChangeApi(self)
         self.comments = CommentApi(self)
 
-    @classmethod
-    def from_cwd(
-        cls,
-        cwd: Path | str | None,
-        *,
-        settings: Settings | None = None,
-        refresh: bool = False,
-        trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-        rest: GerritRest | None = None,
-        cache: GerritCache | None = None,
-    ) -> GerritService:
-        """Construct a service from git-configured Gerrit settings.
-
-        Pass *rest* to supply the Gerrit implementation instead of an :class:`HttpGerritRest`
-        built from *settings*. Nothing is built here: the client and the cache come into
-        being on first use (see :attr:`rest`). *settings* defaults to one read from *cwd*;
-        pass it when the caller has already taken a snapshot, so the whole command works
-        from a single ``git config --list --show-scope``.
-        """
-
-        if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
-            refresh = True
-        return cls(
-            rest,
-            cache,
-            refresh=refresh,
-            trust_window_seconds=trust_window_seconds,
-            cwd=cwd,
-            settings=settings if settings is not None else Settings.from_cwd(cwd),
-        )
-
     @property
     def configured(self) -> bool:
         """Whether this service can reach a Gerrit: a client was supplied, or ``gerrit.webUrl`` is set."""
         return self._rest is not None or bool(self.settings.gerrit_web_url)
+
+    @property
+    def credentials_configured(self) -> bool:
+        """Whether asking this Gerrit can authenticate: a client was supplied, or credentials are set."""
+        return self._rest is not None or gerrit_auth_from_settings(self.settings) is not None
 
     @property
     def rest(self) -> GerritRest:

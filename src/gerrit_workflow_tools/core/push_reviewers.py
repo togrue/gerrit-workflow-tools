@@ -8,7 +8,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.reviewer import (
@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.reviewer import (
     removable_reviewer_ids,
     reviewer_accounts_from_change_info,
 )
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 
 
@@ -76,14 +77,9 @@ def credential_error(strategy: ReviewerStrategy, reviewers: Sequence[str], setti
     return None
 
 
-def push_marks(
-    cwd: Path,
-    rows: Sequence[Commit],
-    *,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> dict[str, PushMark]:
-    stack = resolve_stack_context(cwd, settings=settings)
+def push_marks(run: RunContext, rows: Sequence[Commit]) -> dict[str, PushMark]:
+    settings = run.settings
+    stack = resolve_stack_context(run.cwd, settings=settings)
     triplets = {
         row.change_id: build_triplet(stack.project, stack.push_branch, row.change_id) for row in rows if row.change_id
     }
@@ -95,8 +91,7 @@ def push_marks(
             "Gerrit credentials are not configured; set gerrit.user and "
             "gerrit.token (or gerrit.password) for REST access."
         )
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    by_triplet = service.changes.get_payloads(list(triplets.values()))
+    by_triplet = run.gerrit.changes.get_payloads(list(triplets.values()))
     marks: dict[str, PushMark] = {}
     for change_id, triplet in triplets.items():
         detail = by_triplet.get(triplet)

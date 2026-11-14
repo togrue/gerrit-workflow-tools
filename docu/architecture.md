@@ -102,7 +102,7 @@ Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which
 - `render/` does not import `cli_*`.
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
-- One owner per concept: git runs through `core/git_run.py` (ssh, for the event stream, only in `core/gerrit/event_source.py`), commit rows are read by `core/stack.py`, and `HttpGerritRest` is built by `GerritService.from_cwd` plus the few owners the test names.
+- One owner per concept: git runs through `core/git_run.py` (ssh, for the event stream, only in `core/gerrit/event_source.py`), commit rows are read by `core/stack.py`, `HttpGerritRest` is built by `GerritService` (on first use) plus the few owners the test names, and a `GerritService` only by `RunContext.open`.
 - Every command builds its runtime with `init_cli_runtime` and wraps its body in `run_cli_command`. `cli_bash_completion.py` is exempt: it runs from shell startup and must not load `core/`.
 - Modules stay at or under 400 lines. Larger ones are pinned at their size and only shrink; so do counts of `# pylint: disable=too-many-*`.
 
@@ -347,7 +347,7 @@ flowchart LR
 | `HttpGerritRest` | Talks to a real Gerrit over HTTP; credentials resolved at construction |
 | `ChangeStore` (`tests/change_store.py`) | Answers from ChangeInfo payloads, with stateful writes. Test-only — nothing in `src/` constructs one |
 
-Commands take a `gerrit` keyword argument and pass it to `init_cli_runtime`; the run context's `gerrit` is the command's one service. Core functions that do not take the run yet still build theirs with `GerritService.from_cwd(cwd, rest=…)`. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
+Commands take a `gerrit` keyword argument and pass it to `init_cli_runtime`; the run context's `gerrit` is the command's one service, and core functions that ask Gerrit take the run. `RunContext.open` is the single construction path: the rebase enricher, a process of its own, opens its run the same way. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
 
 ---
 

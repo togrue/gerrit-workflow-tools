@@ -225,11 +225,17 @@ CONCEPTS = [
         pattern=r"HttpGerritRest(\.from_settings)?\(",
         owners={
             "core/gerrit/http_rest.py": "defines it",
-            "core/gerrit/service.py": "GerritService.from_cwd is the construction path",
+            "core/gerrit/service.py": "builds its client on first use",
             "cli_fetch_api.py": "GETs raw paths from the real server by purpose",
             "reviewer_catalog.py": "background worker in the push prompt (ADR-0006)",
         },
-        fix="Reach Gerrit through GerritService.from_cwd(...).",
+        fix="Reach Gerrit through the run context's service (run.gerrit).",
+    ),
+    Concept(
+        name="GerritService construction",
+        pattern=r"\bGerritService\(",
+        owners={"core/run_context.py": "one service per run, opened at the entry point"},
+        fix="Take the run context and use run.gerrit; a command gets its run from init_cli_runtime.",
     ),
     Concept(
         name="ChangeInfo field read",

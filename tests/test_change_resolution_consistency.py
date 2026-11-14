@@ -20,6 +20,7 @@ from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as gshow_main
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     change_info_for_sha,
@@ -191,7 +192,6 @@ def test_push_and_edit_take_rev_as_the_same_stack_changeish(
     """``ger push REV`` resolves REV like every focus command: to the local stack commit of that change."""
     from gerrit_workflow_tools.core.config import Settings
     from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
-    from gerrit_workflow_tools.core.gerrit.service import GerritService
     from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id
 
     _configure_web(stack_repo)
@@ -211,7 +211,7 @@ def test_push_and_edit_take_rev_as_the_same_stack_changeish(
     target = resolve_stack_changeish(
         stack_repo,
         changeish,
-        service=GerritService.from_cwd(stack_repo, settings=settings, rest=store),
+        service=RunContext.open(stack_repo, settings=settings, gerrit=store).gerrit,
         require_in_stack=True,
     )
     code, out, err = run_cli(stack_repo, push_main, ["--dry-run", changeish], monkeypatch, gerrit=store)

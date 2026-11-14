@@ -38,6 +38,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.rebase_state import edit_stop_next_step, rebase_in_progress, unmerged_paths
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.rebase_run import continue_rebase, require_history_rewrite, run_interactive_rebase
@@ -161,12 +162,10 @@ def _validate_targeting_args(p: argparse.ArgumentParser, args: argparse.Namespac
 
 
 def _resolve_target(
-    cwd: Path,
+    run: RunContext,
     args: argparse.Namespace,
     *,
-    settings: Settings,
     branch: str | None,
-    gerrit: GerritRest | None,
     action: str,
 ) -> tuple[str, str | None, CursorAction]:
     """Resolve the SHA to stop on, plus the Change-Id and action for the cursor move it earns."""
@@ -174,8 +173,8 @@ def _resolve_target(
     after_change_id: str | None = None
 
     if args.next_attention and rev_arg is not None:
-        after_target = resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
-        after_change_id = change_id_for_stack_sha(cwd, after_target.sha, settings=settings, gerrit=gerrit)
+        after_target = resolve_in_stack(run, rev_arg, branch=branch)
+        after_change_id = change_id_for_stack_sha(run, after_target.sha)
         if not after_change_id:
             raise GitError("REV has no Change-Id; cannot use --next AFTER")
         rev_arg = None
@@ -187,17 +186,11 @@ def _resolve_target(
     elif rev_arg is None:
         mode = "resume"
     else:
-        target_res = resolve_in_stack(cwd, rev_arg, settings=settings, branch=branch, gerrit=gerrit)
-        return target_res.sha, change_id_for_stack_sha(cwd, target_res.sha, settings=settings, gerrit=gerrit), "set"
+        target_res = resolve_in_stack(run, rev_arg, branch=branch)
+        return target_res.sha, change_id_for_stack_sha(run, target_res.sha), "set"
 
     target, notes = resolve_edit_attention_commit(
-        cwd,
-        settings=settings,
-        mode=mode,
-        branch=branch,
-        after_change_id=after_change_id,
-        gerrit=gerrit,
-        update_cursor=False,
+        run, mode=mode, branch=branch, after_change_id=after_change_id, update_cursor=False
     )
     for note in notes:
         print(note, file=sys.stderr)
@@ -253,13 +246,13 @@ def _run_interactive_stack_rebase(
     if args.cursor_history:
         return print_cursor_history(cwd)
     if args.cursor and load_branch_cursor(settings, branch or "HEAD") is None:
-        return print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+        return print_cursor_status(run, branch=branch)
     if not _has_upstreams(cwd, settings, branch):
         return int(ExitCode.ATTENTION)
     if args.cursor:
-        return print_cursor_status(cwd, settings=settings, branch=branch, gerrit=gerrit)
+        return print_cursor_status(run, branch=branch)
     if args.set_cursor:
-        return set_cursor_from_changeish(cwd, args.set_cursor, settings=settings, branch=branch, gerrit=gerrit)
+        return set_cursor_from_changeish(run, args.set_cursor, branch=branch)
 
     action = args.action_override or default_action
     logger.debug(
@@ -276,9 +269,7 @@ def _run_interactive_stack_rebase(
         if continued != 0:
             return continued
     require_history_rewrite(cwd)
-    full, cursor_change_id, cursor_action = _resolve_target(
-        cwd, args, settings=settings, branch=branch, gerrit=gerrit, action=action
-    )
+    full, cursor_change_id, cursor_action = _resolve_target(run, args, branch=branch, action=action)
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
 

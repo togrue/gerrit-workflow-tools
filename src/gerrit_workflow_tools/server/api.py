@@ -6,10 +6,8 @@ a path, query parameters and a JSON body, and returns a JSON value or raises.
 
 from __future__ import annotations
 
-import os
 import re
-from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -62,35 +60,12 @@ UNLOCKED_ROUTES: tuple[tuple[str, str, Callable[[Activity, Request], dict[str, A
     ("GET", "/activity", _activity),
 )
 
-_REFRESH_ENV = "GER_CACHE_REFRESH"
-
-
-@contextmanager
-def _cache_refresh(on: bool) -> Iterator[None]:
-    """Run one request the way ``ger --refresh`` runs a command.
-
-    The request's own run already carries *on*; this reaches the core functions that still
-    build a Gerrit service of their own, and goes when they take the run instead.
-    """
-    if not on:
-        yield
-        return
-    before = os.environ.get(_REFRESH_ENV)
-    os.environ[_REFRESH_ENV] = "1"
-    try:
-        yield
-    finally:
-        if before is None:
-            os.environ.pop(_REFRESH_ENV, None)
-        else:
-            os.environ[_REFRESH_ENV] = before
-
 
 class GerApi:
     """The endpoints over one repository.
 
-    Not safe for concurrent calls: core memoises git answers per process, and a request
-    may set the refresh environment. The HTTP layer serialises requests.
+    Not safe for concurrent calls: core memoises git answers per process. The HTTP layer
+    serialises requests.
     """
 
     def __init__(
@@ -137,7 +112,5 @@ class GerApi:
             if match is None or route_method != method:
                 continue
             request = Request(query=query or {}, body=body or {}, path_args=match.groups())
-            refresh = request.flag("refresh")
-            with _cache_refresh(refresh):
-                return endpoint(self._context(refresh=refresh), request)
+            return endpoint(self._context(refresh=request.flag("refresh")), request)
         raise NoRoute(f"no such endpoint: {method} {path}")

@@ -145,9 +145,8 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
             return int(ExitCode.ATTENTION)
         resolved = resolve_attention_query_or_exit(
-            cwd,
+            run,
             args,
-            settings=settings,
             branch=branch,
             after_changeish=args.change_id if args.next_attention else None,
         )

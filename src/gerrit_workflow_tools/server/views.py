@@ -74,11 +74,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     """The **annotated stack** of the working branch, with the ready boundary: ``ger log`` as JSON."""
     cwd, settings = ctx.cwd, ctx.settings
     view = load_annotated_stack(
-        cwd,
-        resolve_rev_range(cwd, None, settings=settings),
-        settings=settings,
-        gerrit=ctx.service.rest,
-        fetch_ci_pipelines=req.flag("pipelines"),
+        ctx.run, resolve_rev_range(cwd, None, settings=settings), fetch_ci_pipelines=req.flag("pipelines")
     )
     context = resolve_stack_context(cwd, settings=settings)
     blocked = (

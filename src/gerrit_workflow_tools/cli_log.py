@@ -240,12 +240,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         return int(ExitCode.ATTENTION)
 
     stack_view = load_annotated_stack(
-        cwd,
-        rev_range,
-        settings=settings,
-        first_parent=not args.follow_merges,
-        gerrit=gerrit,
-        fetch_ci_pipelines=verbose_level >= 1,
+        run, rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
     )
     if not stack_view.commits:
         print("(no commits in range)")

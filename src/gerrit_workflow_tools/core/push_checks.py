@@ -11,7 +11,6 @@ from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     LIGHT_QUERY_OPTIONS,
     GerritApiError,
-    GerritRest,
     GerritUnavailableError,
 )
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -23,7 +22,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target, resolve_working_branch
 from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
-from gerrit_workflow_tools.core.reviewer import gerrit_credentials_configured
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 
 
@@ -111,23 +110,17 @@ class ExistingChanges(NamedTuple):
     """Gerrit could not be asked at all; :attr:`warnings` says why. Nothing else here is known."""
 
 
-def check_existing_changes(
-    cwd: Path,
-    commits: Sequence[Commit],
-    *,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> ExistingChanges:
+def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> ExistingChanges:
     """Warn about abandoned changes and list the commits Gerrit will not see as new.
 
     Best effort: a push works without REST, so no credentials or a failed lookup finds nothing.
     """
-    if gerrit is None and not gerrit_credentials_configured(settings):
+    service = run.gerrit
+    if not service.credentials_configured:
         return ExistingChanges()
     try:
-        stack = resolve_stack_context(cwd, settings=settings)
+        stack = resolve_stack_context(run.cwd, settings=run.settings)
         triplets = {c.sha: build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id}
-        service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
         payloads = service.changes.get_payloads(list(triplets.values()))
     except GerritUnavailableError as error:
         return ExistingChanges(

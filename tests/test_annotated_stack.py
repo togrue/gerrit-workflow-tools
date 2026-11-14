@@ -15,6 +15,7 @@ from gerrit_workflow_tools.core.annotated_stack import (
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import commits_in_range
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, change_info_for_sha, stack_rows_mb_to_head
@@ -25,7 +26,7 @@ def _configure(repo: Path) -> None:
 
 
 def _service(repo: Path, store: ChangeStore) -> GerritService:
-    return GerritService.from_cwd(repo, settings=Settings.from_cwd(repo), rest=store)
+    return RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store).gerrit
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +40,7 @@ def test_empty_range_returns_an_empty_stack_not_an_error(stack_repo: Path) -> No
     head = git_out("rev-parse", "HEAD", cwd=stack_repo)
 
     stack = load_annotated_stack(
-        stack_repo, f"{head}..{head}", settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore({})
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore({})), f"{head}..{head}"
     )
 
     assert stack.commits == []
@@ -52,7 +53,9 @@ def test_loads_commits_with_overlay_and_attention(stack_repo: Path) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
-    stack = load_annotated_stack(stack_repo, _range(stack_repo), settings=Settings.from_cwd(stack_repo), gerrit=store)
+    stack = load_annotated_stack(
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=store), _range(stack_repo)
+    )
 
     assert [c.short_sha for c in stack.commits] == [r.short_sha for r in rows]
     assert all(c.pushed for c in stack.commits)
@@ -71,10 +74,12 @@ def test_multi_branch_change_id_produces_a_resolution_note(stack_repo: Path) -> 
     payloads[str(other_branch["id"])] = other_branch
 
     stack = load_annotated_stack(
-        stack_repo,
+        RunContext.open(
+            stack_repo,
+            settings=Settings.from_cwd(stack_repo),
+            gerrit=ChangeStore(payloads, web_base="https://g.example"),
+        ),
         _range(stack_repo),
-        settings=Settings.from_cwd(stack_repo),
-        gerrit=ChangeStore(payloads, web_base="https://g.example"),
     )
 
     assert target.sha in stack.notes_by_sha
@@ -86,7 +91,9 @@ def test_single_branch_change_ids_produce_no_notes(stack_repo: Path) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
-    stack = load_annotated_stack(stack_repo, _range(stack_repo), settings=Settings.from_cwd(stack_repo), gerrit=store)
+    stack = load_annotated_stack(
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=store), _range(stack_repo)
+    )
 
     assert stack.notes_by_sha == {}
 
@@ -176,7 +183,7 @@ def _dated(payloads: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 def _load_at(repo: Path, store: ChangeStore, monkeypatch: pytest.MonkeyPatch, now: int):  # type: ignore[no-untyped-def]
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: now)
-    return load_annotated_stack(repo, _range(repo), settings=Settings.from_cwd(repo), gerrit=store)
+    return load_annotated_stack(RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store), _range(repo))
 
 
 def test_a_sibling_that_appears_after_the_stack_was_cached_is_noticed(

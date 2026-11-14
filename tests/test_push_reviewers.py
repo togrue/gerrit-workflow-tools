@@ -9,9 +9,9 @@ import pytest
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, change_id_for_gerrit_rest_path
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.fixtures import _cid
 
@@ -168,7 +168,7 @@ def test_set_reviewers_keeps_existing_reviewers_when_the_add_is_rejected(tmp_pat
 
     triplet = _triplet(_cid("a"))
     store = _RejectsAdds({triplet: _detail_payload(_cid("a"), reviewers=[_reviewer_entry("admin")])})
-    service = GerritService.from_cwd(tmp_path, settings=Settings.from_map({}), rest=store)
+    service = RunContext.open(tmp_path, settings=Settings.from_map({}), gerrit=store).gerrit
 
     with pytest.raises(GerritApiError):
         service.changes.set_reviewers(triplet, add=["nosuchuser"], remove=[5])

@@ -10,10 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.comments import publish_blocked
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
-from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
@@ -44,6 +42,7 @@ from gerrit_workflow_tools.core.push_unchanged import (
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.core.usage import UsageError
 
@@ -163,11 +162,9 @@ def prepare_vanilla(
 
 
 def prepare(
-    cwd: Path,
+    run: RunContext,
     branch: str,
     *,
-    settings: Settings,
-    gerrit: GerritRest | None = None,
     all_commits: bool = False,
     until: str | None = None,
     until_sha: str | None = None,
@@ -184,6 +181,7 @@ def prepare(
     update_last_pushed: bool = True,
     publish_comments: bool = False,
 ) -> PushPlan | PushRefusal:
+    cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
         raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
     if rebase_in_progress(cwd):
@@ -229,9 +227,9 @@ def prepare(
         return PushRefusal("error: nothing to push (empty ready prefix)", boundary=boundary, warnings=warnings)
     try:
         commits = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
-        existing = check_existing_changes(cwd, commits, settings=settings, gerrit=gerrit)
+        existing = check_existing_changes(run, commits)
         ask_marks = show_attributes and not existing.gerrit_unavailable
-        marks = push_marks(cwd, commits, settings=settings, gerrit=gerrit) if ask_marks else None
+        marks = push_marks(run, commits) if ask_marks else None
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
     plan = PushPlan(
@@ -252,13 +250,8 @@ def prepare(
     return publish_drafts_with(plan, publish_comments)
 
 
-def execute(
-    cwd: Path,
-    plan: PushPlan | Sequence[str],
-    *,
-    settings: Settings,
-    gerrit: GerritRest | None = None,
-) -> PushResult:
+def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
+    cwd = run.cwd
     if not isinstance(plan, PushPlan):
         return result_of(run_git_push(list(plan), cwd))
     sent = bool(sent_commits(plan))  # else Gerrit says "no new changes": not run
@@ -268,10 +261,10 @@ def execute(
         return replace(captured, error_message=gerrit_rejection(captured.stderr))
     if rejected:
         captured = PushResult(returncode=0, nothing_sent=True)
-    _forget_pushed_changes(cwd, plan, settings=settings, gerrit=gerrit)
-    reviewers, error = _apply_reviewers(cwd, plan, settings=settings, gerrit=gerrit)
+    _forget_pushed_changes(run, plan)
+    reviewers, error = _apply_reviewers(run, plan)
     updates = state_updates(plan)
-    failures = apply_updates(GerritService.from_cwd(cwd, settings=settings, rest=gerrit), updates) if updates else []
+    failures = apply_updates(run.gerrit, updates) if updates else []
     failed_updates = {failure.update for failure in failures}
     unreached = unreached_options_warning(plan.options, plan.unchanged, rejected=rejected)
     note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), unreached)))
@@ -287,16 +280,15 @@ def execute(
     )
 
 
-def _forget_pushed_changes(cwd: Path, plan: PushPlan, *, settings: Settings, gerrit: GerritRest | None) -> None:
+def _forget_pushed_changes(run: RunContext, plan: PushPlan) -> None:
     """Drop what the cache knows about the changes this push sent, "no such change" verdicts included.
 
     Only those: a commit Gerrit already had did not move, and what is set on it over REST
     drops it by itself. A failure here must not turn a successful push into a failed one.
     """
     with contextlib.suppress(ValueError, OSError, sqlite3.Error, ChangeResolutionError):
-        web_base = gerrit.web_base if gerrit is not None else resolve_gerrit_web_base(settings)
-        refs = change_refs_for_commits(cwd, sent_commits(plan), settings=settings)
-        GerritCache.for_web_base(web_base).invalidate_changes(refs)
+        refs = change_refs_for_commits(run.cwd, sent_commits(plan), settings=run.settings)
+        run.gerrit.cache.invalidate_changes(refs)
 
 
 def _ready(
@@ -337,20 +329,14 @@ def _boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     return PushBoundary(sha, ready.boundary_reason, short_sha, subject, remaining)
 
 
-def _apply_reviewers(
-    cwd: Path,
-    plan: PushPlan,
-    *,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> tuple[ReviewerApplyResult | None, str | None]:
+def _apply_reviewers(run: RunContext, plan: PushPlan) -> tuple[ReviewerApplyResult | None, str | None]:
     if not needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
         return None, None
     result = apply_reviewer_strategy_after_push_service(
-        GerritService.from_cwd(cwd, settings=settings, rest=gerrit),
+        run.gerrit,
         plan.options.strategy,
         list(plan.options.reviewers),
-        change_refs_for_commits(cwd, plan.commits, settings=settings),
+        change_refs_for_commits(run.cwd, plan.commits, settings=run.settings),
     )
     return result, None
 

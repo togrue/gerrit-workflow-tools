@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.inbox import (
     build_to_review_query,
     project_scope,
 )
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.conftest import json_stdout, run_cli
 
@@ -201,7 +202,7 @@ def test_follow_up_commit_query_fills_chain_parent(tmp_path: Path, monkeypatch: 
         attention_since="2026-08-17 12:00:00.000000000",
     )
     store = _store(parent, child, stub=[child])
-    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    service = RunContext.open(tmp_path, gerrit=store, settings=Settings.from_map({})).gerrit
     chains = service.fetch_review_chains(TO_REVIEW_QUERY)
     assert len(chains) == 1
     assert chains[0].depth == 2
@@ -458,7 +459,7 @@ def test_a_listing_asked_again_is_one_light_query(tmp_path: Path) -> None:
     Not asked again: who you are, and the commit the chain sits on (history, never a change).
     """
     store = _store(_waiting(1, "aaa", "history"), _waiting(2, "bbb", "aaa"))
-    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    service = RunContext.open(tmp_path, gerrit=store, settings=Settings.from_map({})).gerrit
     first = _listing_calls(service, store)
     assert ("get_account", "self") in first
     assert any(method == "query_changes" and "commit:history" in query for method, query in first)
@@ -471,7 +472,7 @@ def test_a_listing_asked_again_is_one_light_query(tmp_path: Path) -> None:
 def test_a_listing_fetches_details_only_for_the_change_that_moved(tmp_path: Path) -> None:
     one, two = _waiting(1, "aaa", "history"), _waiting(2, "bbb", "aaa")
     store = _store(one, two)
-    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    service = RunContext.open(tmp_path, gerrit=store, settings=Settings.from_map({})).gerrit
     _listing_calls(service, store)
 
     moved = dict(two, updated="2026-08-18 09:00:00.000000000", subject="change 2, reworded")
@@ -485,7 +486,7 @@ def test_an_open_parent_outside_the_listing_is_asked_about_every_time(tmp_path: 
     """It is someone's open change: it can get a new patchset, so only history is remembered as settled."""
     parent, child = _waiting(1, "aaa", "history"), _waiting(2, "bbb", "aaa")
     store = _store(parent, child, stub=[child])
-    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    service = RunContext.open(tmp_path, gerrit=store, settings=Settings.from_map({})).gerrit
     _listing_calls(service, store)
     again = _listing_calls(service, store)
     assert again == [("query_changes", TO_REVIEW_QUERY), ("query_changes", "commit:aaa")]
@@ -494,8 +495,8 @@ def test_an_open_parent_outside_the_listing_is_asked_about_every_time(tmp_path: 
 def test_refresh_asks_for_everything_again(tmp_path: Path) -> None:
     store = _store(_waiting(1, "aaa", "history"))
     settings = Settings.from_map({})
-    _listing_calls(GerritService.from_cwd(tmp_path, rest=store, settings=settings), store)
-    fresh = _listing_calls(GerritService.from_cwd(tmp_path, rest=store, settings=settings, refresh=True), store)
+    _listing_calls(RunContext.open(tmp_path, gerrit=store, settings=settings).gerrit, store)
+    fresh = _listing_calls(RunContext.open(tmp_path, gerrit=store, settings=settings, refresh=True).gerrit, store)
     # The listing, its details, who you are, and the commit below the chain.
     assert sorted(method for method, _ in fresh) == ["get_account", "query_changes", "query_changes", "query_changes"]
 
@@ -507,7 +508,7 @@ def test_what_a_chain_sits_on_is_remembered_by_how_final_it_is(tmp_path: Path, m
     merged = dict(_waiting(1, "aaa", "root"), status="MERGED")
     on_merged, on_unknown = _waiting(2, "bbb", "aaa"), _waiting(3, "ccc", "history")
     store = _store(merged, on_merged, on_unknown, stub=[on_merged, on_unknown])
-    service = GerritService.from_cwd(tmp_path, rest=store, settings=Settings.from_map({}))
+    service = RunContext.open(tmp_path, gerrit=store, settings=Settings.from_map({})).gerrit
 
     def commits_asked() -> list[str]:
         return sorted(query for method, query in _listing_calls(service, store) if "commit:" in str(query))
