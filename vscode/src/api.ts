@@ -244,6 +244,8 @@ export interface ShownCommit extends CommitStatus {
   new_comment?: "draft" | "local-draft";
   /** With `markdown`: the commit as `ger show --ai` prints it, for an agent. */
   markdown?: string;
+  /** With `files`: what `/diff` answers for the commit. */
+  files?: Diff;
 }
 
 export interface FileChange {
@@ -327,6 +329,8 @@ export interface ShowOptions {
   context?: number;
   /** Add `markdown`: what `ger show --ai` prints. */
   markdown?: boolean;
+  /** Add `files`: the commit's files against its parent, as `/diff` answers them, in the same call. */
+  files?: boolean;
 }
 
 type Params = Record<string, string | string[] | number | boolean | undefined>;

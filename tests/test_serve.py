@@ -24,6 +24,7 @@ from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core import reorder, reorder_preview
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
+from gerrit_workflow_tools.core.commit_diff import commit_diff, show_commit_diff
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git, git_out
@@ -32,7 +33,7 @@ from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict, swap_conflicts
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.stack import Commit, read_commit_meta
 from gerrit_workflow_tools.server.api import GerApi
 from gerrit_workflow_tools.server.httpd import GerHttpServer, _Handler, failure_response
 from gerrit_workflow_tools.server.request import BadRequest, NoRoute
@@ -342,6 +343,42 @@ def test_diff_fetches_a_change_that_is_not_in_the_local_stack(stack_repo: Path) 
     diff = _get(GerApi(stack_repo, gerrit=store), "/diff", rev="change:102")
     assert (diff["commit"], diff["local_commit"]) == (rows[2].sha, False)
     assert [f["path"] for f in diff["files"]] == ["c.txt"]
+
+
+def test_show_with_files_answers_what_diff_does_in_the_same_call(stack_repo: Path) -> None:
+    store, _keys, _rows = _gerrit(stack_repo)
+    git("mv", "b.txt", "renamed.txt", cwd=stack_repo)
+    git("commit", "-qm", "Rename\n\nWhy it moved.", cwd=stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    [shown] = _get(api, "/show", rev="HEAD", files="1")["commits"]
+    assert shown["files"] == _get(api, "/diff", rev="HEAD")
+    assert shown["files"]["message"] == "Rename\n\nWhy it moved."
+    assert "files" not in _get(api, "/show", rev="HEAD")["commits"][0]
+
+
+def test_show_with_files_fetches_a_change_that_is_not_in_the_local_stack(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    for number, row in enumerate(rows, start=100):
+        git("update-ref", changes_ref(number, 1), row.sha, cwd=stack_repo)
+    git("reset", "-q", "--hard", "main", cwd=stack_repo)  # reviewing someone else's work: no local stack
+    [shown] = _get(GerApi(stack_repo, gerrit=store), "/show", rev="change:102", files="1")["commits"]
+    assert (shown["files"]["commit"], shown["files"]["local_commit"]) == (rows[2].sha, False)
+    assert [f["path"] for f in shown["files"]["files"]] == ["c.txt"]
+
+
+def test_one_git_show_reads_a_merge_against_its_first_parent_and_a_root_against_nothing(stack_repo: Path) -> None:
+    git("checkout", "-qb", "side", "main", cwd=stack_repo)
+    (stack_repo / "side.txt").write_text("side\n", encoding="utf-8")
+    git("add", "side.txt", cwd=stack_repo)
+    git("commit", "-qm", "Side", cwd=stack_repo)
+    git("checkout", "-q", "feature", cwd=stack_repo)
+    git("merge", "-q", "--no-ff", "-m", "Merge side", "side", cwd=stack_repo)
+    for rev in ("HEAD", git_out("rev-list", "--max-parents=0", "HEAD", cwd=stack_repo).split()[0]):
+        shown = show_commit_diff(stack_repo, rev)
+        assert (shown.diff, shown.meta) == (commit_diff(stack_repo, rev), read_commit_meta(stack_repo, rev))
+    assert [f.path for f in show_commit_diff(stack_repo, "HEAD").diff.files] == ["side.txt"]
+    with pytest.raises(UnknownRevisionError):
+        show_commit_diff(stack_repo, "nosuchrev")
 
 
 def test_diff_since_reviewed_is_the_current_patchset_against_the_one_you_voted_on(stack_repo: Path) -> None:

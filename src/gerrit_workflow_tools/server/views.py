@@ -37,6 +37,7 @@ from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
+from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
@@ -247,6 +248,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     With ``stack=1``, or ``chain=1`` (the ``rev`` values are one chain, base first), each
     commit also carries ``ci_introduced``: fingerprints of its **introduced findings**, or
     ``null`` where that cannot be told. ``markdown=1`` adds ``markdown``: what ``ger show --ai`` prints.
+    ``files=1`` adds ``files``: what ``/diff`` answers for the commit, so a viewer asks once.
     """
     selection = req.one("comments", "unresolved")
     if selection not in COMMENT_SELECTIONS:
@@ -297,6 +299,16 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
                 comments=selection,  # type: ignore[arg-type]
             )
             payload["markdown"] = "".join(f"{line}\n" for line in lines)
+        if req.flag("files"):
+            target = item.target
+            selected = target.resolution.selected
+            payload["files"] = commit_files(
+                ctx,
+                selected.triplet if selected is not None else target.row.sha,
+                sha=target.row.sha,
+                subject=target.row.subject,
+                is_local=target.is_local_commit,
+            )
         if introduced is not None:
             found = introduced[index]
             payload["ci_introduced"] = sorted(found) if found is not None else None

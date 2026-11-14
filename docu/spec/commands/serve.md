@@ -275,6 +275,7 @@ when Gerrit has that very commit as a patchset (or the change is only on Gerrit)
 | `chain=1` | The `rev` values are one chain, base first. |
 | `pipelines=1` | Add `ci_pipelines`. |
 | `markdown=1` | Add `markdown`: what `ger show --ai` prints for the commit, with the same `comments`, `context` and `ci`. A client hands it to an agent without running `ger` itself. |
+| `files=1` | Add `files`: what `GET /diff` without `since` or `patchset` answers for the commit, fetched the same way. One request instead of two, and the commit is resolved once — as `git show` gives the commit with its diff. |
 
 With `ci=1` and `stack=1` or `chain=1`, each commit also carries `ci_introduced`: the
 fingerprints of its **introduced findings**. It is `null` where that cannot be told — the

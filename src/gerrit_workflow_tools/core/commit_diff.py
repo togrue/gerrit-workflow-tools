@@ -6,7 +6,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.git_run import UnknownRevisionError, commit_sha_or_none, git
+from gerrit_workflow_tools.core.git_run import (
+    GitError,
+    UnknownRevisionError,
+    commit_sha_or_none,
+    git,
+    is_unknown_revision,
+)
+from gerrit_workflow_tools.core.stack import CommitMeta
 
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -90,6 +97,51 @@ def commit_diff(cwd: Path | str | None, rev: str) -> CommitDiff:
         raise UnknownRevisionError(f"unknown revision {rev!r}")
     base = commit_sha_or_none(cwd, f"{commit}^") or EMPTY_TREE
     return CommitDiff(commit=commit, base=base, files=diff_between(cwd, base, commit))
+
+
+@dataclass(frozen=True)
+class ShownCommitDiff:
+    """A commit's files against its first parent, with its author and message."""
+
+    diff: CommitDiff
+    meta: CommitMeta
+
+
+# Commit id, parents, author name, email and date, message: NUL-separated, as the -z diff after them.
+_SHOW_FORMAT = "%H%x00%P%x00%an%x00%ae%x00%ad%x00%B%x00"
+
+
+def show_commit_diff(cwd: Path | str | None, rev: str) -> ShownCommitDiff:
+    """:func:`commit_diff` and :func:`~gerrit_workflow_tools.core.stack.read_commit_meta` in one ``git show``.
+
+    Starting git is what costs on Windows: one call instead of four (resolve, parent, diff, message).
+    A merge is diffed against its first parent, a root commit against the empty tree.
+    """
+    shown = git(
+        "show",
+        "--raw",
+        "--numstat",
+        "--root",
+        "--diff-merges=first-parent",
+        *_DIFF_FLAGS,
+        f"--format={_SHOW_FORMAT}",
+        f"{rev}^{{commit}}",
+        "--",
+        cwd=cwd,
+        check=False,
+    )
+    if shown.returncode != 0:
+        unknown = is_unknown_revision(shown.stderr) or "bad revision" in shown.stderr
+        raise (UnknownRevisionError if unknown else GitError)(
+            f"unknown revision {rev!r}" if unknown else f"git show {rev} failed: {shown.stderr.strip()}",
+            stderr=shown.stderr,
+            returncode=shown.returncode,
+        )
+    commit, parents, author, email, date, message, rest = shown.stdout.split("\0", 6)
+    base = parents.split(" ", 1)[0] or EMPTY_TREE
+    files = _changed_files(rest.lstrip("\0\n").split("\0"))
+    meta = CommitMeta(author_line=f"{author} <{email}>" if email else author, date=date, body=message.rstrip("\n"))
+    return ShownCommitDiff(CommitDiff(commit=commit, base=base, files=files), meta)
 
 
 def file_text(cwd: Path | str | None, rev: str, path: str) -> str | None:

@@ -124,12 +124,14 @@ export class ChangeView extends WebView<ChangeVm> {
     const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
       try {
         const client = await this.model.client();
-        const [commits, diff, delta] = await Promise.all([
-          client.show([target.rev], { comments: "all", context: 3 }, signal),
-          this.baseDiff(client, target, generation, signal).catch(() => undefined),
+        // The commit against its parent comes with the commit: one request, and ger serve resolves it once.
+        const together = !this.patchsetDiff(target);
+        const [[shown, files], diff, delta] = await Promise.all([
+          this.fetchCommit(client, target, together, signal),
+          together ? undefined : this.baseDiff(client, target, generation, signal).catch(() => undefined),
           this.deltaDiff(client, target, signal).catch(() => undefined),
         ]);
-        return [commits[0], diff, delta, undefined] as const;
+        return [shown, diff ?? files, delta, undefined] as const;
       } catch (error) {
         return [undefined, undefined, undefined, describeError(error)] as const;
       }
@@ -145,7 +147,29 @@ export class ChangeView extends WebView<ChangeVm> {
     void this.loadPatchsets(generation, signal);
   }
 
-  /** The version looked at against its parent. */
+  /** The commit, and with `files` its files against its parent. Files that cannot be had (a change that cannot be fetched) leave the commit shown without them. */
+  private async fetchCommit(client: GerClient, target: ChangeTarget, files: boolean, signal: AbortSignal): Promise<[ShownCommit, Diff | undefined]> {
+    const options = { comments: "all", context: 3 } as const;
+    if (files) {
+      try {
+        const [shown] = await client.show([target.rev], { ...options, files: true }, signal);
+        return [shown, shown.files];
+      } catch (error) {
+        if (signal.aborted) {
+          throw error;
+        }
+      }
+    }
+    const [shown] = await client.show([target.rev], options, signal);
+    return [shown, undefined];
+  }
+
+  /** Whether the version looked at is a patchset of the change, not the commit `/show` resolves: `/diff` is asked for it. */
+  private patchsetDiff(target: ChangeTarget): boolean {
+    return this.change(target) !== undefined && (typeof this.version === "number" || (this.version === "current" && Boolean(target.local)));
+  }
+
+  /** A patchset looked at against its parent. */
   private async baseDiff(client: GerClient, target: ChangeTarget, generation: number, signal: AbortSignal): Promise<Diff> {
     const change = this.change(target);
     let version = this.version;

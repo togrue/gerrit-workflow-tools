@@ -9,13 +9,12 @@ import re
 from dataclasses import asdict
 from typing import Any
 
-from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, commit_diff, file_text
+from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, file_text, show_commit_diff
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import resolve_working_branch
 from gerrit_workflow_tools.core.review_delta import last_reviewed_patch_set, load_review_delta
-from gerrit_workflow_tools.core.stack import read_commit_meta
 from gerrit_workflow_tools.render.review_json import iso_utc
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
@@ -64,28 +63,43 @@ def diff(ctx: Context, req: Request) -> dict[str, Any]:
     if req.one("since"):
         return _review_delta(ctx, req, rev)
     wanted = req.number("patchset")
-    sha, subject, is_local = None, None, False
-    if wanted is None:
-        branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
-        [target] = resolve_show_targets(
-            ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
-        )
-        sha, subject, is_local = target.row.sha, target.row.subject, target.is_local_commit
+    if wanted is not None:
+        return commit_files(ctx, rev, patchset=wanted)
+    branch = resolve_working_branch(ctx.cwd, settings=ctx.settings)
+    [target] = resolve_show_targets(
+        ctx.cwd, [rev], ctx.service.rest, settings=ctx.settings, branch=branch, changes=ctx.service.changes
+    )
+    return commit_files(ctx, rev, sha=target.row.sha, subject=target.row.subject, is_local=target.is_local_commit)
+
+
+def commit_files(
+    ctx: Context,
+    changeish: str,
+    *,
+    sha: str | None = None,
+    subject: str | None = None,
+    is_local: bool = False,
+    patchset: int | None = None,
+) -> dict[str, Any]:
+    """The answer of ``/diff`` without ``since``, and ``files`` of ``/show?files=1``.
+
+    *sha* is the commit when it is known; one that is not here, or *patchset*, is fetched
+    as the patchset of the change *changeish* names.
+    """
     if not sha or commit_sha_or_none(ctx.cwd, sha) is None:
-        patchset, _url = resolve_patchset(ctx.service, ctx.cwd, rev, wanted)
-        if commit_sha_or_none(ctx.cwd, patchset.commit) is None:
-            fetch_patchset(ctx.cwd, ctx.settings.gerrit_remote, patchset)
-        sha, subject = patchset.commit, subject or patchset.subject
-    changed = commit_diff(ctx.cwd, sha)
-    meta = read_commit_meta(ctx.cwd, changed.commit)
+        found, _url = resolve_patchset(ctx.service, ctx.cwd, changeish, patchset)
+        if commit_sha_or_none(ctx.cwd, found.commit) is None:
+            fetch_patchset(ctx.cwd, ctx.settings.gerrit_remote, found)
+        sha, subject = found.commit, subject or found.subject
+    shown = show_commit_diff(ctx.cwd, sha)
     return {
-        "commit": changed.commit,
-        "base": changed.base,
+        "commit": shown.diff.commit,
+        "base": shown.diff.base,
         "subject": subject,
-        "message": meta.body,
-        "author": meta.author_line,
+        "message": shown.meta.body,
+        "author": shown.meta.author_line,
         "local_commit": is_local,
-        "files": [asdict(change) for change in changed.files],
+        "files": [asdict(change) for change in shown.diff.files],
     }
 
 
