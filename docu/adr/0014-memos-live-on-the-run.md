@@ -24,7 +24,9 @@ switched; nothing tries to notice from the outside.
 
 A process-wide memo stays allowed only when its key names something that cannot change, so
 there is nothing to invalidate: the tracked paths of a commit by its object id
-(`core/ci_paths.py`), cached Gerrit data under its own freshness rules (ADR-0001, ADR-0007).
+(`core/ci_paths.py`), cached Gerrit data under its own freshness rules (ADR-0001, ADR-0007). A hint that every use checks is
+allowed too: the address a host last answered on (`core/http_connect.py`) is tried first, and
+when it does not connect the addresses are raced anew.
 
 ## Considered options
 

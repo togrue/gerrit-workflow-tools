@@ -14,9 +14,10 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from gerrit_workflow_tools.core.call_trace import record_call
+from gerrit_workflow_tools.core.http_connect import urlopen
 
 
 logger = logging.getLogger(__name__)

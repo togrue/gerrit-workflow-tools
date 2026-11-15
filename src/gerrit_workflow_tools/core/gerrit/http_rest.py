@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url, record_call
 from gerrit_workflow_tools.core.config import Settings
@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     gerrit_error_reason,
     resolve_gerrit_web_base,
 )
+from gerrit_workflow_tools.core.http_connect import urlopen
 
 
 logger = logging.getLogger(__name__)
