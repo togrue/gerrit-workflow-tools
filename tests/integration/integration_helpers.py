@@ -418,7 +418,11 @@ def push_sibling_changes(
     assert change_id
     ger_push(repo, monkeypatch)
     git("checkout", "-q", "-b", "feat_dev", "origin/dev", cwd=repo)
-    git("cherry-pick", sha, cwd=repo)
+    # The seed's main and dev start at the same commit, so a cherry-pick in the same second
+    # would be byte-identical to the main commit and leave nothing for dev to push.
+    committed_at = int(git_out("log", "-1", "--format=%ct", sha, cwd=repo))
+    git("cherry-pick", sha, cwd=repo, env={"GIT_COMMITTER_DATE": f"@{committed_at + 1}"})
+    assert git_out("rev-parse", "HEAD", cwd=repo) != sha
     ger_push(repo, monkeypatch)
     git("checkout", "-q", "feat_main", cwd=repo)
 

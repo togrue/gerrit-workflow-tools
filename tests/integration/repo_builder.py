@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -89,11 +90,16 @@ def build_linear_chain(
     *,
     env: dict[str, str] | None = None,
 ) -> list[str]:
-    """Create one commit per subject; subjects are full commit messages (hook adds Change-Id)."""
+    """Create one commit per subject; subjects are full commit messages (hook adds Change-Id).
+
+    Each file gets a random second line: two tests that build the same subjects on the same
+    base in the same second would otherwise make byte-identical commits, and Gerrit creates
+    no change for a commit it already has.
+    """
     shas: list[str] = []
     for i, msg in enumerate(subjects):
         fname = f"chain_{i}.txt"
-        (repo / fname).write_text(f"{msg}\n", encoding="utf-8")
+        (repo / fname).write_text(f"{msg}\n{secrets.token_hex(8)}\n", encoding="utf-8")
         git("add", fname, cwd=repo, env=env)
         git("commit", "-m", msg, cwd=repo, env=env)
         shas.append(git_out("rev-parse", "HEAD", cwd=repo).strip())
