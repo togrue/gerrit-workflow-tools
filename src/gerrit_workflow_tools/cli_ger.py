@@ -124,18 +124,51 @@ def _usage() -> str:
     ]
     for name, (desc, _) in sorted(_COMMANDS.items()):
         lines.append(f"  {name:12} {desc}")
+    lines.extend(["", "common tasks:", *(f"  {task:38} {how}" for task, how in _TASKS)])
     lines.extend(
         [
             "",
+            "Without a terminal pass -y (or set GER_ASSUME_YES=1); log, show, inbox and reply take --json.",
             "Run ger <command> --help for command-specific options.",
         ]
     )
     return "\n".join(lines)
 
 
+# The job to command index of `ger --help`: what someone who knows Gerrit but not ger looks for.
+_TASKS = (
+    ("state of my stack, what blocks it", "ger log  |  ger show [REV] (votes, comments; --ai for agents)"),
+    ("upload my stack", "ger push -y  (--wip-from REV: only the top WIP)"),
+    ("change an older commit of the stack", "edit the files, ger fix REV -a, ger rebase --autosquash"),
+    ("bottom merged / target moved on", "ger rebase --onto-remote --drop-merged-equivalent"),
+    ("take over newer patchsets from Gerrit", "ger checkout CHANGE --update (merges a local amend)"),
+    ("answer a comment", "ger reply ID -m TEXT [--resolve]; sent by ger push or ger reply --publish"),
+    ("post a note or vote, publish drafts", "ger reply --publish CHANGE -m TEXT [--vote CR+1] [--only ID]"),
+    ("review someone else's change", "ger inbox  |  ger review CHANGE  |  ger comment PATH:LINE -m TEXT"),
+    ("why did CI fail", "ger ci [REV]"),
+)
+
+# Words people (and agents) try that are not commands, and the command that does the job.
+_SYNONYMS = {
+    "status": "log",
+    "st": "log",
+    "list": "inbox",
+    "incoming": "inbox",
+    "changes": "inbox",
+    "comments": "show",
+    "vote": "review",
+    "publish": "reply",
+    "upload": "push",
+    "amend": "fix",
+    "sync": "checkout",
+}
+
+
 def _did_you_mean(cmd: str) -> str:
     import difflib
 
+    if cmd in _SYNONYMS:
+        return f"; did you mean {_SYNONYMS[cmd]!r}?"
     close = difflib.get_close_matches(cmd, [*_COMMANDS, *_ALIASES], n=1)
     return f"; did you mean {close[0]!r}?" if close else ""
 

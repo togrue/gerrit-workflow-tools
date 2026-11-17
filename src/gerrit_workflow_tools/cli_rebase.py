@@ -17,7 +17,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_ch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
 from gerrit_workflow_tools.core.stack import merge_base_with_target
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.rebase_run import require_history_rewrite, run_interactive_rebase
 
 
@@ -31,7 +31,10 @@ def _build_parser() -> argparse.ArgumentParser:
         description=(
             "Start an interactive rebase with Gerrit status annotations in the sequence editor.\n\n"
             "Each pick line is enriched with the commit's patchset status, Verified and Code-Review\n"
-            "labels, unresolved comment count, and an actionable attention note."
+            "labels, unresolved comment count, and an actionable attention note.\n\n"
+            "Without a terminal (scripts, agents) no editor opens: the todo runs as annotated, so\n"
+            "`ger rebase --autosquash` folds `ger fix` commits and `--onto-remote --drop-merged-equivalent`\n"
+            "drops commits Gerrit has merged, unattended."
         ),
     )
     p.add_argument(
@@ -134,6 +137,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         env["GREBASE_DEBUG_LOG"] = "1"
     if drop_merged:
         env["GREBASE_DROP_MERGED_EQUIVALENT"] = "1"
+    if not stdin_is_terminal():
+        env["GIT_EDITOR"] = "true"  # nobody to edit the todo: run it as annotated
 
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
     autosquash = True if args.autosquash else None
