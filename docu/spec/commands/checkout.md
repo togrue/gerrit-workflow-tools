@@ -15,7 +15,7 @@ Check a Gerrit change out to work on it: rework a change of yours on another mac
 ## Usage
 
 ```
-ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force]
+ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force] [-y]
 ```
 
 `CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a change number, `change:N`, a Gerrit URL, a triplet, a `refs/changes/…` ref, a Change-Id. A bare number is a change number here, not a git revision, as in `ger review`. A Change-Id that exists on several target branches is narrowed to your push branch with a resolution note; when that leaves more than one, or none on your push branch and several elsewhere, `ger checkout` exits `4` and lists each candidate as `change:N (triplet, status)`, so you can name one.
@@ -44,7 +44,7 @@ When the change has a local version, `ger checkout` does not make a second copy.
 | **Another patchset of the change** (its commit is a revision Gerrit knows, so it was pushed) | Ask `Update it to patchset N?` (default yes). Yes updates it, no switches to the branch unchanged. `--update` and `--no-update` answer without asking |
 | **Never pushed in that form** (Gerrit has no revision with its commit: you edited it) | Never overwritten silently. With `--update`, when the repository has an older patchset of the change (the one your edits were most likely made on), your edits are **merged** into the patchset: a three-way merge (base: that older patchset) with your commit's message and author, sitting where the patchset sits, the commits above rebased onto it. Push it as the next patchset. A merge that conflicts changes nothing and exits `1`, naming the files. Otherwise `ger checkout` exits `1`, names the commit, and offers the ways out: `--no-update` switches to it as it is, `--update` merges (when it can), `-b NAME` checks the patchset out on another branch, `--force` replaces your version (the old tip is printed) |
 
-**Without a terminal**, the update question is not guessed: `ger checkout` exits `1` without changing anything and says to pass `--update` or `--no-update`.
+**Without a terminal**, the update question is not guessed: `ger checkout` exits `1` without changing anything and says to pass `--update` or `--no-update`. `-y` (or `GER_ASSUME_YES=1`) answers it yes, as `--update` does.
 
 **Several local versions** (the change sits on more than one branch): the first rule that leaves exactly one decides — a branch whose tip is the change (the current branch's first), then the branch named for it (`change-<number>`), then the current branch's, then the one that already is the patchset. So after `ger checkout 885` and `ger checkout 886` (stacked on 885), `ger checkout 885` goes back to `change-885`. Only when no rule decides does `ger checkout` exit `1` and list the branches; `-b BRANCH` names the one to use. With `-b NAME`, only the local version on `NAME` counts; local versions on other branches are mentioned in a note.
 

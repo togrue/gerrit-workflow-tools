@@ -9,6 +9,7 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
+    assume_yes,
     changeish_help,
     confirm,
     init_cli_runtime,
@@ -37,7 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger checkout``."""
     p = argparse.ArgumentParser(
         prog="ger checkout",
-        usage="ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force]",
+        usage="ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force] [-y]",
         description=(
             "Check a Gerrit change out on a local branch whose upstream is the change's target branch, "
             "so ger log and ger push work on it. A local version of the change is switched to, or updated: "
@@ -72,6 +73,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Replace a local version Gerrit never had, or reset an existing branch NAME.",
+    )
+    p.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Answer the update question with yes, as --update does (GER_ASSUME_YES=1 too).",
     )
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
@@ -143,7 +150,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     print_resolution_note(change.resolution)
     try:
         plan = plan_checkout(cwd, change, args.patchset, settings=settings, branch=args.branch)
-        action = choose_action(plan, update=args.update, force=args.force) or _ask_update(plan)
+        update = True if args.update is None and (args.yes or assume_yes()) else args.update
+        action = choose_action(plan, update=update, force=args.force) or _ask_update(plan)
         result = apply_checkout(cwd, plan, action, settings=settings)
     except CheckoutRefusal as refusal:
         print(f"error: {refusal}", file=sys.stderr)

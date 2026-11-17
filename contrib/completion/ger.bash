@@ -83,7 +83,7 @@ _ger_checkout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --patchset -b --branch --update --no-update --force --color --hyperlinks --debug-log
+        __gwt_flags "$cur" -h --help --patchset -b --branch --update --no-update --force -y --yes --color --hyperlinks --debug-log
         return
     fi
     case "$prev" in

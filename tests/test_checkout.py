@@ -386,3 +386,11 @@ def test_update_refuses_a_merge_that_conflicts_and_changes_nothing(
     assert code == ExitCode.ATTENTION
     assert "change the same lines (same.txt); nothing was changed" in err
     assert git_out("rev-parse", "mine", cwd=stack_repo) == mine
+
+
+def test_yes_answers_the_update_question(stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch) -> None:
+    ps2 = gerrit.upload(stack_repo, 2, 2, "test! reworded experiment")
+    code, out, err = _checkout(stack_repo, gerrit, ["102", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "updated feature from patchset 1 to change 102 patchset 2" in out
+    assert git_out("rev-parse", "feature~1", cwd=stack_repo) == ps2
