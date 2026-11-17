@@ -353,6 +353,14 @@ def configure_logging(verbosity: int | bool) -> None:
 REFRESH_ENV = "GER_CACHE_REFRESH"
 
 
+ASSUME_YES_ENV = "GER_ASSUME_YES"
+
+
+def assume_yes() -> bool:
+    """Whether ``GER_ASSUME_YES`` answers every confirmation with yes, as ``-y`` does (agent sandboxes)."""
+    return os.environ.get(ASSUME_YES_ENV, "").strip().lower() in ("1", "true", "yes")
+
+
 def refresh_requested() -> bool:
     """Whether this process runs under ``ger --refresh``."""
     return os.environ.get(REFRESH_ENV, "").strip().lower() in ("1", "true", "yes")

@@ -348,3 +348,11 @@ def test_publish_with_a_vote(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert code == ExitCode.OK, err
     (call,) = store.calls_to("publish_drafts")
     assert (call.args[0], call.kwargs["labels"], call.kwargs["draft_ids"]) == (key, {"Code-Review": 1}, None)
+
+
+def test_ger_assume_yes_publishes_without_a_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _key = _store_with_draft(stack_repo)
+    monkeypatch.setenv("GER_ASSUME_YES", "1")
+    code, _out, err = run_cli(stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert len(store.calls_to("publish_drafts")) == 1

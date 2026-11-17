@@ -16,6 +16,7 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_json_arg,
     add_verbose_and_debug_log_args,
+    assume_yes,
     confirm,
     init_cli_runtime,
     read_message,
@@ -100,7 +101,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--vote", action="append", default=None, metavar="LABEL=N", help=f"With --publish: {VOTE_HELP}"
     )
     publish.add_argument("--dry-run", action="store_true", help="With --publish: list the drafts, publish nothing.")
-    publish.add_argument("-y", "--yes", action="store_true", help="With --publish: skip the confirmation.")
+    publish.add_argument(
+        "-y", "--yes", action="store_true", help="With --publish: skip the confirmation (GER_ASSUME_YES=1 too)."
+    )
     add_json_arg(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
@@ -248,7 +251,7 @@ def _pending_drafts(service: GerritService, changes: list[_Change]) -> list[tupl
 
 def _confirmed(args: argparse.Namespace, what: str) -> bool:
     """Whether to go ahead: ``-y``, or a yes at a prompt. JSON output and no terminal never prompt."""
-    if args.yes:
+    if args.yes or assume_yes():
         return True
     if args.json_ or not stdin_is_terminal():
         raise UsageError("no prompt to answer (non-interactive or --json): pass -y to publish")

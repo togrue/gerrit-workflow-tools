@@ -24,6 +24,7 @@ Each command spec lists its **implementation module** (e.g. `cli_log.py`) so rev
 - **Entry:** `ger <command> [options]` — see `cli_ger.py` for the authoritative command list.
 - **`ger --help`** — lists registered commands (sorted).
 - **`ger --refresh`** — sets `GER_CACHE_REFRESH=1` for the invoked command (bypass stale Gerrit cache reads).
+- **`GER_ASSUME_YES=1`** — answers every confirmation as `-y` does (`ger push`, `ger reply --publish`, `ger review --vote`), for agent sandboxes and scripts that have no terminal. It decides nothing a prompt would not ask: drafts still need `--publish-comments` to go out with a push, a diverged change still needs `--force`, and `GER_NO_PUBLISH` still blocks publishing.
 - **Aliases** (not shown in `ger --help`): `changeid` → `change-id`; `restack` / `stack` → `rebase`.
 - **Per-command help:** `ger <command> --help` — options there override narrative spec if they differ (then fix the spec).
 

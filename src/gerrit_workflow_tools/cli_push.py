@@ -12,6 +12,7 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
+    assume_yes,
     confirm,
     init_cli_runtime,
     run_cli_command,
@@ -83,7 +84,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "-y",
         "--yes",
         action="store_true",
-        help="Push without confirmation (required when stdin is not a terminal).",
+        help="Push without confirmation (required when stdin is not a terminal; GER_ASSUME_YES=1 sets it).",
     )
     parser.add_argument(
         "--publish-comments",
@@ -346,6 +347,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     )
     if args.i and args.yes:
         parser.error("-i cannot be used with --yes (-y)")
+    args.yes = args.yes or (assume_yes() and not args.i)
     if args.publish_comments and publish_blocked():
         parser.error(f"--publish-comments is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     if args.i and not stdin_is_terminal():

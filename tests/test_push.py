@@ -1460,3 +1460,13 @@ def test_gpush_wip_from_outside_the_push_is_a_usage_error(stack_repo: Path, monk
     code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--wip-from", rows[3].sha], monkeypatch)
     assert code == ExitCode.USAGE
     assert "is not among the commits this push sends" in err
+
+
+def test_ger_assume_yes_stands_in_for_y_without_a_terminal(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An agent sandbox sets GER_ASSUME_YES=1 once instead of retrying every push with -y."""
+    mock_run = _push_calls(monkeypatch)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    monkeypatch.setenv("GER_ASSUME_YES", "1")
+    code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
+    assert code == 0, err
+    assert mock_run.call_count == 1

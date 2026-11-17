@@ -14,6 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     add_json_arg,
     add_verbose_and_debug_log_args,
     ask_choice,
+    assume_yes,
     changeish_help,
     confirm,
     init_cli_runtime,
@@ -90,7 +91,9 @@ def _build_parser() -> argparse.ArgumentParser:
     add_change_option(vote, "With --vote: vote on this change.")
     vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
     vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
-    vote.add_argument("-y", "--yes", action="store_true", help="With --vote: skip the confirmation.")
+    vote.add_argument(
+        "-y", "--yes", action="store_true", help="With --vote: skip the confirmation (GER_ASSUME_YES=1 too)."
+    )
     add_json_arg(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
@@ -195,7 +198,7 @@ def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritS
         print("\n".join(format_pending_drafts(f"change {number}: {count} draft(s), {voted}", chains)))
     if args.dry_run:
         return int(ExitCode.OK)
-    if not args.yes:
+    if not (args.yes or assume_yes()):
         if args.json_ or not stdin_is_terminal():
             print("not publishing: pass -y to publish without a prompt", file=sys.stderr)
             return int(ExitCode.ATTENTION)
