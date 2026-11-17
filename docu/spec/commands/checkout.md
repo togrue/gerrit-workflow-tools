@@ -42,7 +42,7 @@ When the change has a local version, `ger checkout` does not make a second copy.
 |---|---|
 | **Is the patchset** | Switch to its branch and say so (`already on …` when you are there) |
 | **Another patchset of the change** (its commit is a revision Gerrit knows, so it was pushed) | Ask `Update it to patchset N?` (default yes). Yes updates it, no switches to the branch unchanged. `--update` and `--no-update` answer without asking |
-| **Never pushed in that form** (Gerrit has no revision with its commit: you edited it) | Never overwritten silently. `ger checkout` exits `1`, names the commit, and offers the ways out: `--no-update` switches to it as it is, `-b NAME` checks the patchset out on another branch, `--force` replaces your version (the old tip is printed) |
+| **Never pushed in that form** (Gerrit has no revision with its commit: you edited it) | Never overwritten silently. With `--update`, when the repository has an older patchset of the change (the one your edits were most likely made on), your edits are **merged** into the patchset: a three-way merge (base: that older patchset) with your commit's message and author, sitting where the patchset sits, the commits above rebased onto it. Push it as the next patchset. A merge that conflicts changes nothing and exits `1`, naming the files. Otherwise `ger checkout` exits `1`, names the commit, and offers the ways out: `--no-update` switches to it as it is, `--update` merges (when it can), `-b NAME` checks the patchset out on another branch, `--force` replaces your version (the old tip is printed) |
 
 **Without a terminal**, the update question is not guessed: `ger checkout` exits `1` without changing anything and says to pass `--update` or `--no-update`.
 
@@ -89,7 +89,7 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 | Code | When |
 |------|------|
 | `0` | Done, including switching to a local version you chose not to update |
-| `1` | Needs your decision: the local version holds edits Gerrit never had; the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly |
+| `1` | Needs your decision: the local version holds edits Gerrit never had (and `--update` was not given, or its merge conflicts); the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly |
 | `2` | Bad usage; a rebase is in progress; changes to tracked files are in the way |
 | `3` | The changeish or patchset resolves to nothing |
 | `4` | The Change-Id names changes on several target branches and narrowing could not pick one |

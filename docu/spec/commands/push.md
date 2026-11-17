@@ -30,6 +30,7 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 |--------|-------------|
 | `--dry-run` | Print preview only. Writes nothing, so a missing upstream is an error instead of a prompt |
 | `-y`, `--yes` | Skip confirmation (required when stdin is not a TTY) |
+| `--force` | Push even over a **diverged** change: one whose current patchset was uploaded from elsewhere (a web edit, another checkout) and is not in your history. Without it such a push is refused (check 5) |
 | `--publish-comments` | Publish your drafts on the updated changes with the push. Needed with `-y`; on a TTY the prompt asks. Exits `2` while `GER_NO_PUBLISH` is set |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
 | `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip) |
@@ -124,6 +125,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
 3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
 4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset, and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
+5. No **diverged** change: when an open change's current patchset is a commit this repository never had, the push would replace somebody's upload with a commit not built on it. It refuses (exit `1`) and names the commit, the change and patchset, and the two ways on: merge it in with `ger checkout change:<n> --update`, or `--force`.
 
 ---
 
@@ -142,7 +144,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | Code | Meaning |
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
-| `1` | Nothing to push (empty ready prefix), or you declined the upstream prompt |
+| `1` | Nothing to push (empty ready prefix), a **diverged** change without `--force`, or you declined the upstream prompt |
 | `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
 | `4` | `REV` names a Change-Id that more than one stack commit carries |

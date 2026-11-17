@@ -40,7 +40,7 @@ from gerrit_workflow_tools.server.request import BadRequest, Context, Request, s
 
 
 API_VERSION = 1
-_NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT})
+_NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
 
 
 def error_json(error: BaseException) -> dict[str, str]:

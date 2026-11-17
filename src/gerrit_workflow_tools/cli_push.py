@@ -94,6 +94,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Publish your drafts on the updated changes with the push (needed with -y; the prompt asks).",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Push even over a patchset that was uploaded from elsewhere and is not in your history (diverged).",
+    )
+    parser.add_argument(
         "--all",
         action="store_true",
         dest="all_",
@@ -317,6 +322,7 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
         show_attributes=defaults["show_attributes"],
         update_last_pushed=defaults["last_pushed_branch"],
         publish_comments=bool(args.publish_comments),
+        force=bool(args.force),
     )
     if isinstance(prepared, PushRefusal):
         _print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)

@@ -60,7 +60,10 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="update",
         action="store_true",
         default=None,
-        help="Update an older patchset of the change to this one without asking.",
+        help=(
+            "Update an older patchset of the change to this one without asking; a local version Gerrit "
+            "never had gets the patchset merged in (a conflict changes nothing)."
+        ),
     )
     update.add_argument(
         "--no-update", dest="update", action="store_false", help="Switch to the local version as it is."
@@ -101,6 +104,10 @@ def _report(plan: CheckoutPlan, result: CheckoutResult, url: str | None) -> None
         old = plan.local.patch_set if plan.local else None
         verb = "moved" if old and old > patchset.patch_set else "updated"  # back to an older patchset
         print(f"{verb} {branch} {f'from patchset {old} ' if old else ''}to {change}{rebased}")
+    elif result.action is CheckoutAction.MERGE:
+        rebased = f", rebased the {result.rebased} commit(s) above it" if result.rebased else ""
+        base = f" (your edits against patchset {result.merged_from})" if result.merged_from else ""
+        print(f"merged your version on {branch} into {change}{base}{rebased}; push it as the next patchset")
     elif plan.state is LocalState.SAME:
         above = len(plan.local.above) if plan.local else 0  # the branch tip, where HEAD is now
         where_it_is = f"{change} is {above} commit(s) below HEAD" if above else f"it has {change}"

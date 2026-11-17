@@ -906,7 +906,7 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
         gpush_main,
         ["--dry-run", "--reviewers", "alice"],
         monkeypatch,
-        gerrit=ChangeStore(at_older_patchsets(details)),
+        gerrit=ChangeStore(at_older_patchsets(details, stack_repo)),
     )
     assert code == 0
     assert "About to push commits:" in out
@@ -936,7 +936,7 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
         gpush_main,
         ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
         monkeypatch,
-        gerrit=ChangeStore(at_older_patchsets(details)),
+        gerrit=ChangeStore(at_older_patchsets(details, stack_repo)),
     )
     assert code == 0
     assert "->" in out
@@ -999,7 +999,7 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
         gpush_main,
         ["--dry-run", "--reviewers", "alice"],
         monkeypatch,
-        gerrit=ChangeStore(at_older_patchsets(details)),
+        gerrit=ChangeStore(at_older_patchsets(details, stack_repo)),
     )
     assert code == 0
     assert "`r=alice,wip`" in out
@@ -1374,8 +1374,9 @@ def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: p
     kept, sent = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id([kept, sent])
     stale = details[list(details)[1]]
-    stale["current_revision"] = "0" * 40
-    stale["revisions"] = {"0" * 40: {"_number": 1}}
+    older = git_out("rev-parse", "main", cwd=stack_repo)  # a patchset you pushed: one this repository has
+    stale["current_revision"] = older
+    stale["revisions"] = {older: {"_number": 1}}
     store = ChangeStore(details)
     run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
 
@@ -1390,3 +1391,34 @@ def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: p
     full = [c for c in store.calls[before:] if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
     assert len(full) == 1
     assert sent.change_id in full[0].args[0] and kept.change_id not in full[0].args[0]
+
+
+def test_gpush_refuses_to_replace_a_patchset_it_never_had(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A web edit (or another checkout's upload) is Gerrit's current patchset: pushing over it would drop it."""
+    rows = commits_in_range(stack_repo, "main..feature")
+    elsewhere = "e" * 40
+    details = build_details_by_change_id(rows)
+    first = details[next(iter(details))]
+    first["current_revision"], first["revisions"] = elsewhere, {elsewhere: {"_number": 2}}
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 1
+    assert f"{rows[0].short_sha} would replace patchset 2 of change 100" in err
+    assert "`ger checkout change:100 --update`" in err and "--force" in err
+    assert "About to push" not in out
+
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, ["--dry-run", "--force"], monkeypatch, gerrit=ChangeStore(details)
+    )
+    assert code == 0 and "About to push" in out
+
+
+def test_glog_names_a_diverged_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")
+    elsewhere = "e" * 40
+    details = build_details_by_change_id(rows)
+    first = details[next(iter(details))]
+    first["current_revision"], first["revisions"] = elsewhere, {elsewhere: {"_number": 2}}
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
+    line = next(line for line in out.splitlines() if line.startswith(rows[0].short_sha))
+    assert "diverged: Gerrit has a patchset you never had" in line
+    assert "ahead of gerrit" not in line

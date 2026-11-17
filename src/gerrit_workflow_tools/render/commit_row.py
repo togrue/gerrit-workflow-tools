@@ -242,6 +242,7 @@ _TERMINAL_TOKENS = (
 # print it on nearly every line. `ger show` and JSON list it.
 _STATE_TOKENS = (
     (Attention.AHEAD_OF_GERRIT, "ahead of gerrit", ANSI_YELLOW),
+    (Attention.DIVERGED, "diverged: Gerrit has a patchset you never had", ANSI_RED),
     (Attention.OUTDATED_PATCHSET, "outdated patchset", ANSI_RED),
     (Attention.REVIEW_ISSUES, "review issues", ANSI_YELLOW),
     (Attention.CHAIN_BLOCKED, "chain blocked", ANSI_DIM_GRAY),

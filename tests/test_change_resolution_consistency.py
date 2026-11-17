@@ -196,7 +196,7 @@ def test_push_and_edit_take_rev_as_the_same_stack_changeish(
 
     _configure_web(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
-    details = at_older_patchsets(build_details_by_change_id(rows))
+    details = at_older_patchsets(build_details_by_change_id(rows), stack_repo)
     store = ChangeStore(details)
     row = rows[0]
     assert row.change_id is not None

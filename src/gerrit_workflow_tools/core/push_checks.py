@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
     build_triplet,
 )
-from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
+from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
 from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -97,6 +97,20 @@ def _rebase_detail(cwd: Path, head: str, onto: str) -> str:
     return f"tip of `{short_onto}` is not an ancestor of HEAD"
 
 
+class DivergedChange(NamedTuple):
+    """A commit whose change's current patchset this repository never had (CONTEXT.md: **diverged**)."""
+
+    short_sha: str
+    number: int | None
+    patch_set: int | None
+
+    def describe(self) -> str:
+        return (
+            f"{self.short_sha} would replace patchset {self.patch_set} of change {self.number}, "
+            "which was uploaded from elsewhere and is not in your history"
+        )
+
+
 class ExistingChanges(NamedTuple):
     """What Gerrit already holds for the commits about to be pushed."""
 
@@ -107,6 +121,8 @@ class ExistingChanges(NamedTuple):
     """``(short SHA, count)`` of your unpublished drafts, for commits whose change has any."""
     gerrit_unavailable: bool = False
     """Gerrit could not be asked at all; :attr:`warnings` says why. Nothing else here is known."""
+    diverged: tuple[DivergedChange, ...] = ()
+    """Commits whose push would replace a patchset not built on: somebody else's upload."""
 
 
 def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> ExistingChanges:
@@ -129,6 +145,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         return ExistingChanges()
     warnings: list[str] = []
     unchanged: list[UnchangedChange] = []
+    diverged: list[DivergedChange] = []
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
     for commit in commits:
@@ -140,7 +157,14 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
             )
         elif view is not None and view.current_revision == commit.sha.lower():
             unchanged.append(UnchangedChange.of(commit, triplets[commit.sha], view))
-    return ExistingChanges(tuple(warnings), tuple(unchanged), drafts)
+        elif (
+            view is not None
+            and view.is_open
+            and view.current_revision
+            and not commit_sha_or_none(run.cwd, view.current_revision)
+        ):
+            diverged.append(DivergedChange(commit.short_sha, view.number, view.current_revision_number))
+    return ExistingChanges(tuple(warnings), tuple(unchanged), drafts, diverged=tuple(diverged))
 
 
 def _draft_counts(

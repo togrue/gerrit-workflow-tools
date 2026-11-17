@@ -13,7 +13,7 @@ from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from tests.change_store import ChangeStore
-from tests.cli_gerrit_mocks import build_details_by_change_id
+from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id
 from tests.conftest import run_cli
 
 
@@ -27,9 +27,7 @@ def _pushed(stack_repo: Path, *, updated: bool = True) -> tuple[ChangeStore, lis
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id(rows)
     if updated:
-        for payload in details.values():
-            payload["current_revision"] = "0" * 40
-            payload["revisions"] = {"0" * 40: {"_number": 1}}
+        at_older_patchsets(details, stack_repo)
     return ChangeStore(details), rows, list(details)
 
 

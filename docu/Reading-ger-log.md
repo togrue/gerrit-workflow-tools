@@ -117,6 +117,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `N unresolved comment(s)` | Open review threads |
 | `no reviewers` | Change has no reviewers assigned |
 | `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
+| `diverged: Gerrit has a patchset you never had` | Ahead of Gerrit, but Gerrit's current patch set was uploaded from elsewhere (a web edit, another checkout) and is not in your history; JSON reason `diverged`. `ger push` refuses to replace it; `ger checkout <change> --update` merges it into your commit |
 | `outdated patchset` | Gerrit has a newer patch set than this commit |
 | `review issues` | A negative Code-Review vote |
 | `chain blocked` | An earlier commit in the stack keeps this one from being submitted |

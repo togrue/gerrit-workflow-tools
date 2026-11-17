@@ -35,6 +35,9 @@ class Attention:  # pylint: disable=too-few-public-methods
     MERGED_UNKNOWN = "merged-unknown"
     CHAIN_BLOCKED = "chain-blocked"
     AHEAD_OF_GERRIT = "ahead-of-gerrit"
+    DIVERGED = "diverged"
+    """Ahead of Gerrit, and Gerrit's current patch set is one this repository never had: a push
+    would replace somebody's upload with a commit not built on it."""
     OUTDATED_PATCHSET = "outdated-patchset"
     CI_FAILED = "ci-failed"
     NO_REVIEWERS = "no-reviewers"
@@ -92,7 +95,7 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
         return settled
     reasons: list[str] = [Attention.WIP] if commit.wip else []
     if commit.patchset_status == PatchsetStatus.NEWER:
-        reasons.append(Attention.AHEAD_OF_GERRIT)
+        reasons.append(Attention.DIVERGED if commit.diverged else Attention.AHEAD_OF_GERRIT)
     if commit.patchset_status == PatchsetStatus.OUTDATED:
         reasons.append(Attention.OUTDATED_PATCHSET)
     if ci_failed(commit.verified, commit.ci_failures):

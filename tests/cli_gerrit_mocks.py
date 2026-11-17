@@ -106,11 +106,16 @@ def build_details_by_change_id(
     return out
 
 
-def at_older_patchsets(details: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """*details* with Gerrit at an older patchset of each change, so a push sends every local commit."""
+def at_older_patchsets(details: dict[str, dict[str, Any]], repo: Path) -> dict[str, dict[str, Any]]:
+    """*details* with Gerrit at an older patchset of each change, so a push sends every local commit.
+
+    The older patchset is a commit *repo* has (its ``main``), as a patchset you pushed is: one it
+    never had would make the change **diverged**, which a push refuses.
+    """
+    older = git_out("rev-parse", "main", cwd=repo)
     for detail in details.values():
-        detail["current_revision"] = "0" * 40
-        detail["revisions"] = {"0" * 40: {"_number": 1}}
+        detail["current_revision"] = older
+        detail["revisions"] = {older: {"_number": 1}}
     return details
 
 

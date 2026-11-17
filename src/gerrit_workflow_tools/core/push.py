@@ -180,6 +180,7 @@ def prepare(
     show_attributes: bool = False,
     update_last_pushed: bool = True,
     publish_comments: bool = False,
+    force: bool = False,
 ) -> PushPlan | PushRefusal:
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
@@ -231,6 +232,14 @@ def prepare(
         marks = push_marks(run, commits) if ask_marks else None
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
+    if existing.diverged and not force:
+        first = existing.diverged[0]
+        return PushRefusal(
+            f"error: {'; '.join(d.describe() for d in existing.diverged)}. Merge it into yours first "
+            f"(`ger checkout change:{first.number} --update`), or replace it anyway with --force",
+            boundary=boundary,
+            warnings=warnings,
+        )
     plan = PushPlan(
         branch=branch,
         push_branch=refs_for_push_branch_name(destination, settings=settings),

@@ -339,3 +339,50 @@ def test_help_states_which_branch_a_change_on_a_branch_goes_to(
     assert code == 0
     assert "a branch whose tip is the change wins" in " ".join(out.split())
     assert "commits below HEAD" in " ".join(out.split())
+
+
+def _diverged(repo: Path, g: Gerrit, *, theirs: str, mine: str) -> tuple[str, str]:
+    """Change 102 amended here on 'mine' (adds *mine*), while somebody uploaded patchset 2 (adds *theirs*)."""
+    ps1 = g.shas[2]
+    _fresh_clone(repo)
+    git("switch", "-q", "-c", "other", ps1, cwd=repo)
+    name, _, text = theirs.partition("=")
+    (repo / name).write_text(text + "\n", encoding="utf-8")
+    git("add", name, cwd=repo)
+    git("commit", "-q", "--amend", "-m", f"their take\n\nChange-Id: {g.change_ids[2]}", cwd=repo)
+    ps2 = git_out("rev-parse", "HEAD", cwd=repo)
+    git("push", "-q", "origin", f"{ps2}:{changes_ref(102, 2)}", cwd=repo)
+    g.store.upload_patchset(g.keys[2], ps2, 2)
+    git("switch", "-q", "-c", "mine", "--track", "origin/main", cwd=repo)
+    git("reset", "-q", "--hard", ps1, cwd=repo)
+    name, _, text = mine.partition("=")
+    (repo / name).write_text(text + "\n", encoding="utf-8")
+    git("add", name, cwd=repo)
+    git("commit", "-q", "--amend", "-m", f"my take\n\nChange-Id: {g.change_ids[2]}", cwd=repo)
+    git("branch", "-q", "-D", "other", cwd=repo)
+    return ps2, git_out("rev-parse", "HEAD", cwd=repo)
+
+
+def test_update_merges_a_patchset_somebody_else_uploaded_into_your_amend(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ps2, _mine = _diverged(stack_repo, gerrit, theirs="theirs.txt=bob", mine="mine.txt=me")
+    code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "merged your version on mine into change 102 patchset 2" in out
+    assert "your edits against patchset 1" in out
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    assert git_out("show", f"{head}:theirs.txt", cwd=stack_repo) == "bob"
+    assert git_out("show", f"{head}:mine.txt", cwd=stack_repo) == "me"
+    assert git_out("rev-parse", f"{head}^", cwd=stack_repo) == git_out("rev-parse", f"{ps2}^", cwd=stack_repo)
+    assert git_out("log", "-1", "--format=%s", head, cwd=stack_repo) == "my take"
+
+
+def test_update_refuses_a_merge_that_conflicts_and_changes_nothing(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ps2, mine = _diverged(stack_repo, gerrit, theirs="same.txt=bob", mine="same.txt=me")
+    code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.ATTENTION
+    assert "change the same lines (same.txt); nothing was changed" in err
+    assert git_out("rev-parse", "mine", cwd=stack_repo) == mine
