@@ -7,7 +7,7 @@ from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.render.ci_content import format_ci_section_markdown
 from gerrit_workflow_tools.render.comments import format_unresolved_section_markdown
-from gerrit_workflow_tools.render.commit_row import attention_summary
+from gerrit_workflow_tools.render.commit_row import attention_summary, votes_text
 
 
 def commit_markdown(
@@ -22,6 +22,8 @@ def commit_markdown(
     lines = [f"## {short} — {commit.summary or ''}", f"- {attention_summary(commit)}"]
     if commit.gerrit_url:
         lines.append(f"- Gerrit: {commit.gerrit_url}")
+    if votes := votes_text(commit):
+        lines.append(f"- Votes: {votes}")
     lines.append("")
     lines += format_unresolved_section_markdown(chains, commit.gerrit_url, pushed=commit.pushed, comments=comments)
     if ci_contents:

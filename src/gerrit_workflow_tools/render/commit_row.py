@@ -335,6 +335,14 @@ def attention_summary(commit: LogCommit) -> str:
     return "ok"
 
 
+def votes_text(commit: LogCommit) -> str:
+    """Who voted what: ``Code-Review +2 Alice, -1 Bob · Verified +1 CI``; empty without votes."""
+    by_label: dict[str, list[str]] = {}
+    for vote in commit.votes:
+        by_label.setdefault(vote.label, []).append(f"{vote.value:+d} {vote.by}")
+    return " · ".join(f"{label} {', '.join(votes)}" for label, votes in by_label.items())
+
+
 def show_headline(commit: LogCommit) -> str:
     """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
     sha = color_short_sha(commit.short_sha)

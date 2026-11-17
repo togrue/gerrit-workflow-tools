@@ -98,6 +98,8 @@ class Vote:
     account_id: int | None
     value: int
     date: datetime | None
+    who: str | None = None
+    """The voter for display (full name, else username, else email), when Gerrit sent accounts."""
 
 
 @dataclass(frozen=True)
@@ -142,14 +144,26 @@ def _votes(labels: Mapping[str, Any], label_name: str) -> tuple[Vote, ...]:
             continue
         account_id = row.get("_account_id")
         value = row.get("value")
+        name = _owner_name(row)
         out.append(
             Vote(
                 account_id=account_id if isinstance(account_id, int) else None,
                 value=value if isinstance(value, int) else 0,
                 date=parse_gerrit_time(row.get("date")),
+                who=None if name == "?" else name,
             )
         )
     return tuple(out)
+
+
+def _label_votes(labels: Mapping[str, Any]) -> dict[str, tuple[Vote, ...]]:
+    """Every label's non-zero votes, by label name (``DETAILED_LABELS``)."""
+    out: dict[str, tuple[Vote, ...]] = {}
+    for name in labels:
+        votes = tuple(vote for vote in _votes(labels, name) if vote.value)
+        if votes:
+            out[name] = votes
+    return out
 
 
 def _attention_set(raw: object) -> dict[int, datetime | None]:
@@ -208,6 +222,8 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     owner_name: str
     owner_email: str | None
     code_review_votes: tuple[Vote, ...]
+    label_votes: Mapping[str, tuple[Vote, ...]] = field(default_factory=dict)
+    """Non-zero votes per label: who voted what on the current patch set."""
     revision_info: bool = False
     """Gerrit sent ``current_revision`` and a ``revisions`` map (``CURRENT_REVISION`` asked)."""
     attention_set: Mapping[int, datetime | None] = field(default_factory=dict)
@@ -263,6 +279,7 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             owner_name=_owner_name(owner),
             owner_email=email.strip() if isinstance(email, str) and email.strip() else None,
             code_review_votes=_votes(labels, "Code-Review"),
+            label_votes=_label_votes(labels),
             revision_info=isinstance(payload.get("current_revision"), str) and isinstance(raw_revisions, dict),
             attention_set=_attention_set(payload.get("attention_set")),
             freshness=change_freshness_key(payload),

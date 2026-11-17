@@ -36,7 +36,7 @@ from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
     format_unresolved_section_human,
 )
-from gerrit_workflow_tools.render.commit_row import attention_summary, continuation_lines, show_headline
+from gerrit_workflow_tools.render.commit_row import attention_summary, continuation_lines, show_headline, votes_text
 from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.wrap import wrap_lines
@@ -170,6 +170,8 @@ def _emit_human_commit(
 
     if commit.gerrit_url:
         print(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(commit.gerrit_url), ANSI_YELLOW)}")
+    if votes := votes_text(commit):
+        print(f"{color_text('votes:', ANSI_DIM)} {votes}")
     for line in continuation_lines(commit, verbose_level=1):
         print(line)
 

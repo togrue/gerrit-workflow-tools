@@ -1339,3 +1339,27 @@ def test_gshow_fetches_drafts_every_time(stack_repo: Path, monkeypatch: pytest.M
     _code, out, _err = run_cli(stack_repo, gshow_main, ["--json", "change:42"], monkeypatch, gerrit=store)
     (chain,) = json_stdout(out)["comment_chains"]
     assert [c["draft"] for c in chain["comments"]] == [False]
+
+
+def test_show_says_who_voted_what(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Votes per account, in text, --ai and --json: no REST detour to learn who blocks a change."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    head = details[list(details)[-1]]
+    head["labels"] = {
+        "Code-Review": {
+            "all": [{"value": 2, "name": "Alice"}, {"value": -1, "username": "bob"}, {"value": 0, "name": "Carol"}]
+        },
+        "Verified": {"all": [{"value": 1, "name": "CI Bot"}]},
+    }
+    store = ChangeStore(details)
+    code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch, gerrit=store)
+    assert code in (ExitCode.OK, ExitCode.ATTENTION), err
+    assert "votes: Code-Review +2 Alice, -1 bob · Verified +1 CI Bot" in out
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--ai"], monkeypatch, gerrit=store)
+    assert "- Votes: Code-Review +2 Alice, -1 bob · Verified +1 CI Bot" in out
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch, gerrit=store)
+    data = json_stdout(out)
+    votes = data.get("commits", [data])[-1]["votes"]
+    assert {"label": "Code-Review", "value": -1, "by": "bob"} in votes and len(votes) == 3

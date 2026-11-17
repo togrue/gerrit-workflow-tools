@@ -126,6 +126,15 @@ class CommentChain:
         return not self.comments[-1].unresolved if self.comments else self.resolved
 
 
+@dataclass(frozen=True)
+class LabelVote:
+    """One non-zero vote on a change: ``Code-Review +2 by Alice``."""
+
+    label: str
+    value: int
+    by: str
+
+
 @dataclass
 class LogCommit:  # pylint: disable=too-many-instance-attributes
     """Aggregated local+Gerrit status for a commit shown by CLI status commands."""
@@ -152,6 +161,8 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     commit that is only rebased (same patch-id) keeps its votes in ``verified``/``code_review``.
     """
     submittable: bool = False
+    votes: tuple[LabelVote, ...] = ()
+    """Who voted what on the current patch set; empty while this commit is ahead of it with other code."""
     attention_reasons: list[str] = field(default_factory=list)
     change_status: str | None = None  # raw Gerrit ``status`` (e.g. NEW, MERGED)
     merged_equivalent: bool | None = None  # MERGED only: proved same / different / unknown
@@ -360,6 +371,15 @@ def build_log_commit(
             number=change.number,
             last_pushed_votes=(change.verified, change.code_review) if votes_moved_on else None,
             submittable=change.submittable and not newer,
+            votes=()
+            if votes_moved_on
+            else tuple(
+                LabelVote(
+                    label, vote.value, vote.who or (f"account {vote.account_id}" if vote.account_id else "unknown")
+                )
+                for label, votes in sorted(change.label_votes.items())
+                for vote in votes
+            ),
             change_status=change.status,
             merged_equivalent=merged_eq,
             reviewers=list(change.reviewers or ()),
