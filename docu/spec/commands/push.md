@@ -33,11 +33,12 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 | `--force` | Push even over a **diverged** change: one whose current patchset was uploaded from elsewhere (a web edit, another checkout) and is not in your history. Without it such a push is refused (check 5) |
 | `--publish-comments` | Publish your drafts on the updated changes with the push. Needed with `-y`; on a TTY the prompt asks. Exits `2` while `GER_NO_PUBLISH` is set |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
-| `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip) |
+| `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip). What the stop pattern or ready strategy held back goes up as **work-in-progress** (as `--wip-from <boundary>`), unless `--wip` or `--ready` says otherwise for all |
 | `--reviewers ACCOUNTS` | Comma-separated reviewers (repeatable; merged, deduped) |
 | `--reviewer-strategy` | `push` \| `lazy` \| `overwrite` (see below) |
 | `--topic NAME` | Magic ref `%topic=…`. A comma is refused: it separates push options |
 | `--wip` | Magic ref `%wip` |
+| `--wip-from REV` | The commits from `REV` up go `%wip`, those below it ready. Gerrit applies `%wip` to every change one push creates or updates, so this is **two** `git push` runs: the ready part first, then the tip with `%wip` (where the lower commits are already Gerrit's, unchanged). Other options go with both. The preview marks the WIP commits `[WIP]` and the status line says `WIP from <sha> (k of n)`. A `REV` that this push does not send exits `2`. Changes Gerrit already has at that commit are not touched by it. Excludes `--wip` / `--ready` |
 | `--ready` | Magic ref `%ready`: mark the changes ready for review again, the way back from `--wip`. Mutually exclusive with `--wip`. The interactive options line cannot say it, so a typed line keeps it unless the line asks for `wip`; the status line shows `WIP: no (--ready)` |
 | `--private` | Magic ref `%private` |
 | `--no-private` | Magic ref `%remove-private`: make the changes public again, the way back from `--private`. Mutually exclusive with `--private`. As with `--ready`, a typed options line keeps it unless the line asks for `private`; the status line shows `Private: no (--no-private)` |

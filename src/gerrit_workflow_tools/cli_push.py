@@ -137,6 +137,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         (private, "--no-private", "not private, the way back from --private (magic ref %%remove-private"),
     ):
         group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
+    state.add_argument(
+        "--wip-from",
+        metavar="REV",
+        default=None,
+        help="Push the commits from REV up as work-in-progress and those below it ready (two pushes). "
+        "--all does this at the ready boundary by itself.",
+    )
     add_verbose_and_debug_log_args(
         parser,
         debug_log_help="Log git commands and push steps to stderr.",
@@ -158,6 +165,7 @@ def _gerrit_flags_set(args: argparse.Namespace) -> bool:
         or args.reviewers
         or args.topic is not None
         or args.wip
+        or args.wip_from
         or args.ready
         or args.private
         or args.no_private
@@ -287,6 +295,7 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
         update_last_pushed=defaults["last_pushed_branch"],
         publish_comments=bool(args.publish_comments),
         force=bool(args.force),
+        wip_from=args.wip_from and resolve_in_stack(run, args.wip_from, branch=branch).sha,
     )
     if isinstance(prepared, PushRefusal):
         print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)

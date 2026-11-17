@@ -69,6 +69,9 @@ class PushPlan:
     """Commits Gerrit already has as current patchsets: push options reach them over REST."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
+    wip_from: str | None = None
+    """The first commit pushed as work-in-progress; those below it go up ready. ``None``: the options
+    decide for every commit."""
 
 
 @dataclass(frozen=True)
@@ -80,6 +83,34 @@ class PushRefusal:
 
 def push_argv(plan: PushPlan) -> list[str]:
     return ["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, plan.options)]
+
+
+def wip_commits(plan: PushPlan) -> tuple[Commit, ...]:
+    """The commits *plan* pushes as work-in-progress: from :attr:`PushPlan.wip_from` up, else all or none."""
+    if plan.wip_from is None:
+        return plan.commits if plan.options.wip else ()
+    shas = [commit.sha for commit in plan.commits]
+    return plan.commits[shas.index(plan.wip_from) :]
+
+
+def push_argvs(plan: PushPlan) -> list[list[str]]:
+    """The ``git push`` runs for *plan*: one, or two when only its top is WIP.
+
+    Gerrit applies ``%wip`` to every change a push creates or updates, so a ready lower part
+    goes first and the WIP top second (where the lower commits are already Gerrit's, unchanged).
+    """
+    wip = wip_commits(plan)
+    if plan.wip_from is None or not wip:
+        return [push_argv(plan)]
+    as_wip = replace(plan.options, wip=True, ready=False)
+    if len(wip) == len(plan.commits):
+        return [["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, as_wip)]]
+    ready_tip = plan.commits[len(plan.commits) - len(wip) - 1].sha
+    as_ready = replace(plan.options, wip=False)
+    return [
+        ["git", "push", plan.remote, push_refspec(ready_tip, plan.push_branch, as_ready)],
+        ["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, as_wip)],
+    ]
 
 
 def run_git_push(cmd: list[str], cwd: Path | str | None) -> Any:
@@ -177,6 +208,7 @@ def prepare(
     update_last_pushed: bool = True,
     publish_comments: bool = False,
     force: bool = False,
+    wip_from: str | None = None,
 ) -> PushPlan | PushRefusal:
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
@@ -219,6 +251,10 @@ def prepare(
         first_parent=first_parent,
     )
     boundary = push_boundary(cwd, ready, head=branch)
+    if all_commits and wip_from is None and not (wip or ready_for_review):
+        # Past the ready boundary on purpose: what it held back goes up, but as work-in-progress.
+        held = push_ready(run, branch, all_commits=False, until=until, until_sha=until_sha, first_parent=first_parent)
+        wip_from = held.boundary_sha
     if not ready.push_tip_sha or not ready.push_range:
         return PushRefusal("error: nothing to push (empty ready prefix)", boundary=boundary, warnings=warnings)
     try:
@@ -228,6 +264,10 @@ def prepare(
         marks = push_marks(run, commits) if ask_marks else None
     except (ValueError, GerritApiError) as exc:
         return PushRefusal(f"error: {exc}", warnings=warnings)
+    if wip_from is not None and wip_from not in {commit.sha for commit in commits}:
+        if not all_commits:
+            raise UsageError(f"--wip-from {wip_from[:8]} is not among the commits this push sends")
+        wip_from = None
     if existing.diverged and not force:
         first = existing.diverged[0]
         return PushRefusal(
@@ -250,6 +290,7 @@ def prepare(
         update_last_pushed=update_last_pushed,
         unchanged=existing.unchanged,
         drafts=dict(existing.drafts),
+        wip_from=wip_from,
     )
     return publish_drafts_with(plan, publish_comments)
 
@@ -259,10 +300,14 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
     if not isinstance(plan, PushPlan):
         return result_of(run_git_push(list(plan), cwd))
     sent = bool(sent_commits(plan))  # else Gerrit says "no new changes": not run
-    captured = result_of(run_git_push(push_argv(plan), cwd)) if sent else PushResult(0)
-    rejected = not sent or push_rejected_no_new_changes(captured.stdout, captured.stderr)
-    if captured.returncode != 0 and not rejected:  # git's code passes through (spec/exit-codes.md)
-        return replace(captured, error_message=gerrit_rejection(captured.stderr))
+    captured, rejected = PushResult(0), True
+    for argv in push_argvs(plan) if sent else []:
+        result = result_of(run_git_push(argv, cwd))
+        if push_rejected_no_new_changes(result.stdout, result.stderr):
+            continue  # this run had nothing new; another may have
+        if result.returncode != 0:  # git's code passes through (spec/exit-codes.md)
+            return replace(result, error_message=gerrit_rejection(result.stderr))
+        captured, rejected = result, False
     if rejected:
         captured = PushResult(returncode=0, nothing_sent=True)
     _forget_pushed_changes(run, plan)

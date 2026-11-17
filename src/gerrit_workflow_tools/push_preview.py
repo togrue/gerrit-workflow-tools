@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ask_choice, confirm
@@ -25,11 +26,12 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushPlan,
-    push_argv,
+    push_argvs,
     revise,
     sent_commits,
     state_updates,
     unchanged_short_shas,
+    wip_commits,
 )
 from gerrit_workflow_tools.core.push_checks import PushBoundary
 from gerrit_workflow_tools.core.push_options import PushOptions
@@ -113,6 +115,7 @@ def print_ready_boundary_notice(boundary: PushBoundary, *, summary_highlighter: 
 
 def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> list[str]:
     lines: list[str] = []
+    wip = {c.sha for c in wip_commits(plan)} if plan.wip_from else set()
     for commit in sent_commits(plan):
         disp = summary_highlighter.highlight(commit.subject, sha=commit.sha)
         sha_p = commit.short_sha.ljust(8)
@@ -120,6 +123,8 @@ def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> li
         if plan.marks is not None and commit.change_id:
             mark = plan.marks.get(commit.change_id, PushMark(False, (), False, False))
             line += _attribute_suffix(mark, plan.options.reviewers)
+        if commit.sha in wip:
+            line += color_text("  [WIP]", ANSI_YELLOW)
         lines.append(line)
     return lines
 
@@ -158,6 +163,13 @@ def update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | N
     return f"{color_short_sha(commit.short_sha.ljust(8))}{color_text(' # ', ANSI_DIM)}{subject}  {update.describe()}"
 
 
+def _wip_field(plan: PushPlan, yes_no: Callable[[bool], str]) -> str:
+    if plan.wip_from:
+        wip = wip_commits(plan)
+        return color_text(f"from {wip[0].short_sha} ({len(wip)} of {len(plan.commits)})", ANSI_YELLOW)
+    return color_text("no (--ready)", ANSI_GREEN) if plan.options.ready else yes_no(plan.options.wip)
+
+
 def print_plan_status(plan: PushPlan) -> None:
     """One-line summary before the push confirmation prompt."""
     options = plan.options
@@ -171,7 +183,7 @@ def print_plan_status(plan: PushPlan) -> None:
         ("Target", color_text(f"refs/for/{plan.push_branch}", ANSI_GREEN)),
         ("Reviewers", color_text(", ".join(options.reviewers), ANSI_LIGHT_GREEN) if options.reviewers else none),
         ("Topic", color_text(options.topic, ANSI_CYAN) if options.topic else none),
-        ("WIP", color_text("no (--ready)", ANSI_GREEN) if options.ready else _yes_no(options.wip)),
+        ("WIP", _wip_field(plan, _yes_no)),
         (
             "Private",
             color_text("no (--no-private)", ANSI_GREEN) if options.remove_private else _yes_no(options.private),
@@ -231,7 +243,8 @@ def print_dry_run(plan: PushPlan) -> None:
     if not sent_commits(plan):  # what the real run does: no git push, REST only
         print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
     else:
-        print(color_text(" ".join(push_argv(plan)), ANSI_DIM_GRAY))
+        for argv in push_argvs(plan):
+            print(color_text(" ".join(argv), ANSI_DIM_GRAY))
     if needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
         label = strategy_status_label(plan.options.strategy)
         print(

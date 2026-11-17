@@ -1422,3 +1422,41 @@ def test_glog_names_a_diverged_commit(stack_repo: Path, monkeypatch: pytest.Monk
     line = next(line for line in out.splitlines() if line.startswith(rows[0].short_sha))
     assert "diverged: Gerrit has a patchset you never had" in line
     assert "ahead of gerrit" not in line
+
+
+def _push_calls(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    return mock_run
+
+
+def test_gpush_all_sends_what_the_ready_boundary_held_back_as_wip(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--all`` crosses the boundary on purpose: the part above it goes up, as work-in-progress."""
+    rows = commits_in_range(stack_repo, "main..feature")
+    mock_run = _push_calls(monkeypatch)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--all"], monkeypatch)
+    assert code == 0, err
+    ready, wip = (call.args[0][-1] for call in mock_run.call_args_list)
+    assert ready == f"{rows[1].sha}:refs/for/main"
+    assert wip.startswith(f"{rows[3].sha}:refs/for/main%") and "wip" in wip.split("%")[1]
+
+
+def test_gpush_wip_from_marks_only_the_top(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")
+    mock_run = _push_calls(monkeypatch)
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y", "--wip-from", rows[1].sha, "--topic", "t"], monkeypatch)
+    assert code == 0, err
+    ready, wip = (call.args[0][-1] for call in mock_run.call_args_list)
+    assert ready == f"{rows[0].sha}:refs/for/main%topic=t"
+    assert wip.startswith(f"{rows[1].sha}:refs/for/main%") and {"wip", "topic=t"} <= set(wip.split("%")[1].split(","))
+    assert f"{rows[1].short_sha}" in out and "[WIP]" in out
+
+
+def test_gpush_wip_from_outside_the_push_is_a_usage_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")
+    _push_calls(monkeypatch)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--wip-from", rows[3].sha], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert "is not among the commits this push sends" in err
