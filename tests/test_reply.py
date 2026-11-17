@@ -312,7 +312,7 @@ def test_publish_only_an_unknown_draft_is_not_found(stack_repo: Path, monkeypatc
     store, _key = _store_with_draft(stack_repo)
     code, _out, err = run_cli(stack_repo, reply_main, ["--publish", "--only", "nope", "-y"], monkeypatch, gerrit=store)
     assert code == ExitCode.NOT_FOUND
-    assert "no draft of yours with id nope" in err
+    assert "no draft of yours in a chain with id nope" in err
     assert store.calls_to("publish_drafts") == []
 
 
@@ -372,3 +372,14 @@ def test_publish_takes_a_bare_change_number(stack_repo: Path, monkeypatch: pytes
     assert code == ExitCode.OK, err
     (call,) = store.calls_to("publish_drafts")
     assert (call.args[0], call.kwargs["draft_ids"]) == (key, [])
+
+
+def test_publish_only_takes_the_chain_you_replied_to(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ger reply c-root …`` then ``--only c-root``: the id you just used names your draft there."""
+    store, key = _store_with_draft(stack_repo)
+    code, _out, err = run_cli(
+        stack_repo, reply_main, ["--publish", "--only", "c-root", "-y"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert (call.args[0], call.kwargs["draft_ids"]) == (key, ["d-1"])

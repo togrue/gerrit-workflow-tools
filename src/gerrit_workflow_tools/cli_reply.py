@@ -98,8 +98,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         metavar="ID",
-        help="With --publish: publish only this draft (a comment id from ger show --json); repeat for more. "
-        "Your other drafts stay drafts.",
+        help="With --publish: publish only your draft in this chain (the CHAIN id you replied to, or the "
+        "draft's own id); repeat for more. Your other drafts stay drafts.",
     )
     publish.add_argument(
         "--keep-drafts",
@@ -270,15 +270,23 @@ def _confirmed(args: argparse.Namespace, what: str) -> bool:
 def _selected(
     pending: list[tuple[_Change, list[CommentChain]]], only: list[str] | None, where: str
 ) -> list[tuple[_Change, list[CommentChain]]]:
-    """*pending* narrowed to the chains holding the drafts *only* names; all of it without ``--only``."""
+    """*pending* narrowed to the chains *only* names; all of it without ``--only``.
+
+    An id is a draft's own id, or any comment id in its chain: the CHAIN that ``ger reply``
+    answered names the draft it wrote there.
+    """
     if only is None:
         return pending
     wanted = {draft_id.strip() for draft_id in only}
-    found = {d.comment_id for _, chains in pending for _, d in drafts_in(chains)}
+
+    def ids(chain: CommentChain) -> set[str]:
+        return {chain.root_id, *(c.comment_id for c in chain.comments if c.comment_id)}
+
+    found = {i for _, chains in pending for chain, _ in drafts_in(chains) for i in ids(chain)}
     if missing := sorted(wanted - found):
-        raise ChangeResolutionError(f"no draft of yours with id {', '.join(missing)} on {where}")
+        raise ChangeResolutionError(f"no draft of yours in a chain with id {', '.join(missing)} on {where}")
     narrowed = [
-        (change, [chain for chain, d in drafts_in(chains) if d.comment_id in wanted]) for change, chains in pending
+        (change, [chain for chain, _ in drafts_in(chains) if ids(chain) & wanted]) for change, chains in pending
     ]
     return [(change, chains) for change, chains in narrowed if chains]
 
