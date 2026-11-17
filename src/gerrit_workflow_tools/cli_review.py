@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -24,9 +25,10 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
+from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
     ReviewChainEndError,
@@ -40,6 +42,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     open_review,
     set_staged,
 )
+from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
@@ -132,9 +135,46 @@ def _mode(args: argparse.Namespace, cwd: Path, settings: Settings) -> ReviewMode
     return answer
 
 
-def _emit_state(state: ReviewState, *, chain: list[int] | None, url: str | None, as_json: bool) -> None:
+def _since_reviewed(service: GerritService, cwd: Path, state: ReviewState) -> ReviewDelta | None:
+    """What changed since the patchset you last reviewed, when that is an older one; else ``None``."""
+    if state.patch_set <= 1:
+        return None  # nothing older to have reviewed: no second read of the change
+    try:
+        delta = load_review_delta(service, cwd, f"change:{state.number}", upto=state.patch_set)
+    except (GerritApiError, GitError):
+        return None  # a hint, not the review: never fail opening it
+    return delta if delta.base is not None and not delta.up_to_date else None
+
+
+def _delta_lines(delta: ReviewDelta) -> list[str]:
+    files = ", ".join(
+        f"{f.path} ({'binary' if f.insertions is None else f'+{f.insertions} -{f.deletions}'})" for f in delta.files
+    )
+    rebased = ", rebased" if delta.rebased else ""
+    return [
+        f"  since your review of patchset {delta.reviewed_patch_set}{rebased}: {files or 'no file changes'}",
+        f"    git diff {delta.base[:12] if delta.base else ''} {delta.commit[:12]}",
+    ]
+
+
+def _emit_state(
+    state: ReviewState,
+    *,
+    chain: list[int] | None,
+    url: str | None,
+    as_json: bool,
+    delta: ReviewDelta | None = None,
+) -> None:
     if as_json:
-        print(json.dumps(review_state_json(state, chain=chain, url=url), indent=2))
+        payload = review_state_json(state, chain=chain, url=url)
+        if delta is not None:
+            payload["since_reviewed"] = {
+                "patch_set": delta.reviewed_patch_set,
+                "base": delta.base,
+                "rebased": delta.rebased,
+                "files": [asdict(f) for f in delta.files],
+            }
+        print(json.dumps(payload, indent=2))
         return
     staged = " (staged)" if state.staged else ""
     print(f'reviewing {state.number} patchset {state.patch_set} "{state.change.subject}"{staged}')
@@ -143,6 +183,8 @@ def _emit_state(state: ReviewState, *, chain: list[int] | None, url: str | None,
         print("  chain: " + " <- ".join(f"[{n}]" if n == state.number else str(n) for n in chain))
     if url:
         print(f"  {url}")
+    for line in _delta_lines(delta) if delta else ():
+        print(line)
 
 
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:
@@ -163,7 +205,8 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     new, moved_from = open_review(cwd, target, settings=settings, options=options)
     if moved_from is not None:
         print(f"moved {new.branch} off your commits; its old tip was {moved_from}", file=sys.stderr)
-    _emit_state(new, chain=related_chain_numbers(service, new.key, new.patch_set), url=url, as_json=args.json_)
+    chain = related_chain_numbers(service, new.key, new.patch_set)
+    _emit_state(new, chain=chain, url=url, as_json=args.json_, delta=_since_reviewed(service, cwd, new))
     return int(ExitCode.OK)
 
 

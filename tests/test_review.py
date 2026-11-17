@@ -291,3 +291,26 @@ def test_a_vote_on_a_named_change_reads_it_once(
     assert code == ExitCode.OK, err
     assert len(store.calls_to("get_change")) == 1
     assert len(store.calls_to("publish_drafts")) == 1
+
+
+def test_review_says_what_changed_since_your_last_review(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-reviewing patchset 2 after voting on 1: which files moved, and the diff to run."""
+    store, keys, shas = gerrit
+    git("config", "gerrit.user", "me", cwd=stack_repo)
+    store._accounts[7] = {"_account_id": 7, "username": "me"}  # pylint: disable=protected-access
+    store._self_account_id = 7  # pylint: disable=protected-access
+    (stack_repo / "late.txt").write_text("added in patchset 2\n", encoding="utf-8")
+    git("add", "late.txt", cwd=stack_repo)
+    tree = git_out("write-tree", cwd=stack_repo)
+    git("reset", "-q", cwd=stack_repo)
+    (stack_repo / "late.txt").unlink()
+    ps2 = git_out("commit-tree", tree, "-p", f"{shas[2]}^", "-m", "ps2", cwd=stack_repo)
+    git("update-ref", changes_ref(102, 2), ps2, cwd=stack_repo)
+    store.upload_patchset(keys[2], ps2, 2)
+    store.set_messages(keys[2], [{"author": {"_account_id": 7}, "_revision_number": 1, "message": "Code-Review+1"}])
+    code, out, err = _review(stack_repo, store, ["102", "--in-place"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "since your review of patchset 1: " in out and "late.txt" in out
+    assert f"git diff {shas[2][:12]} {ps2[:12]}" in out

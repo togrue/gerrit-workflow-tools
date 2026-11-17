@@ -125,9 +125,13 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
   worktree: /home/me/src/proj-review
   chain: 1233 <- [1234] <- 1235
   https://host/c/proj/+/1234
+  since your review of patchset 2: src/router.py (+12 -3), tests/test_router.py (+20 -0)
+    git diff 1a2b3c4d5e6f 9f8e7d6c5b4a
 ```
 
-**JSON** (`--json`): the review state, plus `chain` (change numbers, base first) and `url`.
+When you have reviewed an older patchset of the change (posted a vote, comment or reply on it), the last two lines say what changed since: the **review delta** (`core/review_delta.py`, the one the VS Code extension shows), narrowed to the files either patchset touched when it was rebased, and the `git diff` that shows it. Nothing is said for patchset 1 or a patchset you already reviewed, and a failure to compute it never fails the review.
+
+**JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta.
 
 ---
 
