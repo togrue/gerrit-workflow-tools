@@ -380,6 +380,80 @@ export async function run(): Promise<void> {
       exec("ger.comment.saveNote", { thread: { ...newThread }, text: "Remember to check the docs." }),
     );
     await press(
+      "Inline Edit… on your comment \"Should this be configurable?\" in the Change view",
+      "b.txt opens at its line and the comment turns into a text box in its thread, with Save and Cancel; nothing is saved yet.",
+      exec("ger.chain.edit", await threadRow(/^Should this be configurable/)),
+    );
+    await press(
+      "Change the text in that box › Save",
+      "Your comment says the new text, in the thread and in the Change view; the status bar says it was updated. It is still yours and not published.",
+      () => {
+        const own = api.threads.ownInThread(chain(/^Should this be configurable/));
+        assert.ok(own && own.mode === vscode.CommentMode.Editing, "the comment is being edited in its thread");
+        own.body = "Should this be a setting?\n\nWith a default.";
+        return vscode.commands.executeCommand("ger.comment.save", own);
+      },
+    );
+    await press(
+      "Pencil on your private note in its editor thread, change the text › Cancel",
+      "The note says what it said before; nothing is saved and nothing is said.",
+      async () => {
+        const own = api.threads.ownInThread(chain(/^Remember to check the docs/));
+        assert.ok(own, "the note has a thread in the editor");
+        await vscode.commands.executeCommand("ger.comment.edit", own);
+        assert.equal(own.mode, vscode.CommentMode.Editing);
+        own.body = "Something else entirely.";
+        await vscode.commands.executeCommand("ger.comment.cancel", own);
+        assert.equal(own.text, "Remember to check the docs.");
+      },
+    );
+    await press(
+      "Inline Delete Your Draft Reply… on \"Is this the right design?\" › Cancel",
+      "A dialog shows the draft reply and asks before deleting it; Cancel leaves it.",
+      exec("ger.chain.delete", await threadRow(/^Is this the right design/)),
+      [{ dismiss: true }],
+    );
+    await press(
+      "Trash on your private note in its editor thread › Delete",
+      "A dialog shows the note and asks; Delete removes it from the thread and from the Change view, and the status bar says so.",
+      () => vscode.commands.executeCommand("ger.comment.delete", api.threads.ownInThread(chain(/^Remember to check the docs/))),
+      [{ button: "Delete" }],
+    );
+    await press(
+      "Command palette › ger: Add Comment, with your own b.txt in the editor",
+      "The file in the editor is yours as it is now, not change 101 as shown (its menu does not offer Add Comment): it says where a comment on 101 goes, and opens no box.",
+      exec("ger.comment.add"),
+    );
+    await press(
+      "Open b.txt of the commit, cursor on line 1 › Add Comment (Ctrl+Alt+C), type › Save",
+      "A comment box opens on that line with the same Save buttons as the \"+\" in the gutter; saving it adds your comment to the change.",
+      async () => {
+        await vscode.window.showTextDocument(fileUri(commit, "b.txt"), { selection: new vscode.Range(0, 0, 0, 0) });
+        await vscode.commands.executeCommand("ger.comment.add");
+        const [box] = api.threads.openBoxes;
+        assert.ok(box && box.comments.length === 0 && box.range?.start.line === 0, "an empty comment box on line 1");
+        await vscode.commands.executeCommand(save, { thread: box, text: "Added from the keyboard." });
+        assert.deepEqual(api.threads.openBoxes, [], "the box closed once the comment was saved");
+      },
+    );
+    await press(
+      "Add Comment again › Cancel",
+      "The box closes; nothing is saved.",
+      async () => {
+        await vscode.commands.executeCommand("ger.comment.add");
+        const [box] = api.threads.openBoxes;
+        assert.ok(box, "a comment box opened");
+        await vscode.commands.executeCommand("ger.comment.cancelNew", { thread: box, text: "never mind" });
+        assert.deepEqual(api.threads.openBoxes, []);
+      },
+    );
+    await press(
+      "Inline Comment on This File… on b.txt under Files",
+      "An input box asks for a comment about the whole file; after Enter it is saved like any new comment and shows under Comments as yours.",
+      exec("ger.comment.file", "b.txt"),
+      [{ type: "This file needs a header." }],
+    );
+    await press(
       "Change › Edit Commit Here",
       "ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.",
       exec("ger.stack.edit"),

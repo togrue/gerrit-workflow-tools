@@ -222,7 +222,7 @@ test("the commit message is read-only with the reason, and comment chains say wh
     state({
       chains: [
         chain("open", [comment("Please rename this."), comment("Renamed it.", { state: "draft", author: undefined })], { held: true }),
-        chain("note", [comment("Check the docs.", { state: "note", author: undefined })]),
+        chain("note", [comment("Check the docs.", { state: "note", author: undefined, comment_id: "n1" })]),
         chain("done", [comment("Typo.")], { resolved: true }),
       ],
     }),
@@ -230,6 +230,10 @@ test("the commit message is read-only with the reason, and comment chains say wh
   const rows = vm.comments?.threads ?? [];
   assert.deepEqual(rows.map((row) => [row.id, row.reply, row.open, row.held, row.icon]), [["open", true, true, true, "person"], ["note", false, false, false, "note"], ["done", true, false, false, "pass"]]);
   assert.deepEqual(rows[0].replies, [{ author: "you", state: "draft", text: "Renamed it." }]);
+  // What you have not published can be edited and deleted; a draft Gerrit gave no id cannot be named, so neither.
+  assert.deepEqual(rows.map((row) => [row.edit, row.discard]), [[false, ""], [true, "Delete Your Private Note…"], [false, ""]]);
+  const replied = changeVm(state({ chains: [chain("open", [comment("Please rename this."), comment("Renamed it.", { state: "draft", comment_id: "d1" })])] }));
+  assert.deepEqual([replied.comments?.threads[0].edit, replied.comments?.threads[0].discard], [false, "Delete Your Draft Reply…"]);
   assert.equal(vm.comments?.summary, "1 unresolved of 2 · 1 of yours, not published");
   assert.deepEqual(changeLines(vm).slice(-5), [
     "Comments — 1 unresolved of 2 · 1 of yours, not published",

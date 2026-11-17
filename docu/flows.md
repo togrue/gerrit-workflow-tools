@@ -51,7 +51,9 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Step to the next issue, comments and CI findings alike | `ger show -n` (next commit with attention) | *Next Unresolved Comment* (comments only) | `tests/test_attention_cursor.py` | partial: no single walk over comments and findings |
 | Reply to comments | `ger reply CHAIN -m MSG` | *Reply as Draft…*, editor threads | `tests/test_reply.py` | ships |
 | Add a private comment | `ger comment --note`, `ger comment --local` | *Save Private Note*, *Save Local Draft* | `tests/test_comment.py`, `tests/test_local_comments.py` | ships |
-| Remove a private comment | `ger comment --discard` | — | `tests/test_comment.py` | partial: CLI only |
+| Add a comment from the keyboard or on a whole file | `ger comment PATH[:LINE]` | *Add Comment* (Ctrl+Alt+C, the editor's menus), *Comment on This File…* | `tests/test_comment.py` | ships |
+| Edit a comment you have not published | `ger comment --edit ID -m MSG` | *Edit Comment* in its editor thread, *Edit…* in the *Change* view | `tests/test_comment.py`, `tests/test_serve.py` | ships |
+| Remove a comment you have not published | `ger comment --discard`, `ger reply CHAIN --discard` | *Delete Comment…* in its editor thread, the trash in the *Change* view | `tests/test_comment.py`, `tests/test_serve.py` | ships |
 | Fold a fix into a stack commit | `ger fix CHANGEISH` | — | `tests/test_fix.py` | ships |
 | Reorder, squash, drop | `ger rebase` (interactive), `ger edit --drop REV` | move, drag and drop, *Squash*, *Drop*, with a conflict preview and *Undo* | `tests/test_serve.py` | partial: no non-interactive CLI, no CLI preview or undo ([roadmap](plans/commit-chain-roadmap.md)) |
 | Push | `ger push` | *Push to Gerrit…* (runs in the terminal) | `tests/test_push.py` | ships |
@@ -108,6 +110,15 @@ A **gap** names the work that would close it.
 | `ger.comment.saveDraft` | `ger comment PATH:LINE -m MSG` | |
 | `ger.comment.saveLocalDraft` | `ger comment --local PATH:LINE -m MSG` | |
 | `ger.comment.saveNote` | `ger comment --note PATH:LINE -m MSG` | |
+| `ger.comment.add` | `ger comment PATH:LINE -m MSG` | opens the comment box on the selected lines |
+| `ger.comment.cancelNew` | UI only | closes a comment box |
+| `ger.comment.file` | `ger comment PATH -m MSG` | |
+| `ger.comment.edit` | `ger comment --edit ID -m MSG` | turns your comment into a text box; *Save* writes it |
+| `ger.comment.save` | `ger comment --edit ID -m MSG` | |
+| `ger.comment.cancel` | UI only | |
+| `ger.comment.delete` | `ger comment --discard ID` | |
+| `ger.chain.edit` | `ger comment --edit ID -m MSG` | |
+| `ger.chain.delete` | `ger comment --discard ID` | |
 | `ger.setUpstream` | `ger log` | prompts for a missing upstream on a terminal |
 | `ger.agentBrief` | `ger show --ai --comments unresolved --ci --context REV` | for a change of someone else; on a stack commit it uses the runbook |
 | `ger.agentWalk` | **gap** | agent runbook, `GET /agent/runbook` only |

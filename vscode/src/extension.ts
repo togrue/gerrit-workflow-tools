@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange } from "./api";
 import { ChangeView, FILE_SCHEME, Location, ThreadArg } from "./changeView";
-import { CommentThreads } from "./comments";
+import { CommentThreads, ThreadComment } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
@@ -18,7 +18,7 @@ import { Poller } from "./poller";
 import { RepoWatcher } from "./repoWatcher";
 import { checkout, editCommit, leaveReview, review } from "./review";
 import { GerProcess } from "./server";
-import { CommitArg, StackView } from "./stackView";
+import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, ui, useUi } from "./ui";
@@ -146,6 +146,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   };
 
   stackView.onOpen = openChange;
+  threads.showHead = async () => {
+    const head = model.stack?.commits.find((commit) => commit.is_head);
+    if (head) {
+      await openChange(commitTarget(head), true);
+    }
+  };
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
 
   const setHold = async (arg: unknown, held: boolean) => {
@@ -216,6 +222,21 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.comment.saveDraft": (reply: vscode.CommentReply) => threads.saveNew(reply, "draft"),
     "ger.comment.saveLocalDraft": (reply: vscode.CommentReply) => threads.saveNew(reply, "local-draft"),
     "ger.comment.saveNote": (reply: vscode.CommentReply) => threads.saveNew(reply, "note"),
+    "ger.comment.add": (arg?: { lineNumber?: number }) => threads.add(typeof arg?.lineNumber === "number" ? arg.lineNumber - 1 : undefined),
+    "ger.comment.cancelNew": (reply: vscode.CommentReply) => threads.cancelNew(reply),
+    "ger.comment.file": (file: string) => threads.commentOnFile(file),
+    "ger.comment.edit": (comment: ThreadComment) => threads.startEdit(comment),
+    "ger.comment.save": (comment: ThreadComment) => threads.saveEdit(comment),
+    "ger.comment.cancel": (comment: ThreadComment) => threads.cancelEdit(comment),
+    "ger.comment.delete": (comment: ThreadComment) => threads.discardInThread(comment),
+    "ger.chain.edit": (arg: unknown) => {
+      const chain = threadOf(arg);
+      return chain ? threads.editChain(chain) : undefined;
+    },
+    "ger.chain.delete": (arg: unknown) => {
+      const chain = threadOf(arg);
+      return chain ? threads.discardChain(chain) : undefined;
+    },
     "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply, undefined),
     "ger.thread.resolve": (reply: vscode.CommentReply) => threads.replyInThread(reply, true),
     "ger.agentBrief": (arg: unknown) => handToAgent(model, targetOf(arg)),

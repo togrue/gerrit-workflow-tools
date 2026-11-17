@@ -40,6 +40,8 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("POST", "/review/done", actions.review_done),
     ("POST", "/comments/reply", actions.reply),
     ("POST", "/comments/new", actions.new_comment),
+    ("POST", "/comments/edit", actions.edit_own_comment),
+    ("POST", "/comments/discard", actions.discard_own_comment),
     ("POST", "/comments/hold", actions.hold),
     ("POST", "/stack/upstream", actions.set_upstream),
     ("POST", "/stack/rewrite", actions.rewrite),

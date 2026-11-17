@@ -44,7 +44,16 @@ KNOWN_GAPS = frozenset(
 
 # Extension commands that only make sense in an editor.
 UI_ONLY = frozenset(
-    {"ger.showLog", "ger.openDiff", "ger.openLocation", "ger.nextComment", "ger.prevComment", "ger.sortChains"}
+    {
+        "ger.showLog",
+        "ger.openDiff",
+        "ger.openLocation",
+        "ger.nextComment",
+        "ger.prevComment",
+        "ger.sortChains",
+        "ger.comment.cancel",
+        "ger.comment.cancelNew",
+    }
 )
 
 # Spec files that do not describe exactly the command of their name.

@@ -126,6 +126,36 @@ class CommentApi:
         draft_id = row.get("id")
         return draft_id if isinstance(draft_id, str) else None
 
+    def edit_draft(
+        self, change_id: str, draft_id: str, message: str, *, unresolved: bool | None = None
+    ) -> InlineComment | None:
+        """Give your draft *draft_id* the text *message* and return it as it was; ``None`` if absent.
+
+        Everything else it says goes back as Gerrit has it (place, side, what it answers), so
+        the draft stays where it is. *unresolved* ``None`` keeps its flag.
+        """
+        for path, rows in self.get_drafts(change_id).items():
+            for row in rows:
+                if row.get("id") != draft_id:
+                    continue
+                flag = bool(row.get("unresolved")) if unresolved is None else unresolved
+                body: dict[str, Any] = {"path": path, "message": message, "unresolved": flag}
+                body.update({key: row[key] for key in ("line", "range", "side", "in_reply_to") if key in row})
+                patch_set = row.get("patch_set")
+                revision = patch_set if isinstance(patch_set, int) else "current"
+                self._service.rest.put_draft(change_id, revision, body, draft_id=draft_id)
+                line = row.get("line")
+                return InlineComment(
+                    path=path,
+                    line=line if isinstance(line, int) else None,
+                    message=str(row.get("message", "")),
+                    comment_id=draft_id,
+                    patch_set=patch_set if isinstance(patch_set, int) else None,
+                    unresolved=bool(row.get("unresolved")),
+                    draft=True,
+                )
+        return None
+
     def discard_draft(self, change_id: str, draft_id: str) -> InlineComment | None:
         """Delete your draft *draft_id* on any patchset of *change_id* and return it; ``None`` if absent."""
         for chain in self.get_chains(change_id, comments="all"):

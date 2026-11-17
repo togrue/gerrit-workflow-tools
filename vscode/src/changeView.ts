@@ -323,6 +323,10 @@ export class ChangeView extends WebView<ChangeVm> {
         const file = diff?.files[message.index as number];
         return file ? this.openDiff(file, diff) : undefined;
       }
+      case "fileComment": {
+        const file = diff?.files[message.index as number];
+        return file ? vscode.commands.executeCommand("ger.comment.file", file.path) : undefined;
+      }
       case "thread": {
         const chain = this.chains().find((c) => c.root_id === message.id);
         if (!chain) {

@@ -4,7 +4,7 @@
 
 import * as path from "node:path";
 
-import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
+import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
 import { Severity, commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
 import { Tone } from "./stackRows";
 import { Waiting } from "./state";
@@ -80,6 +80,10 @@ export interface ThreadRow extends Icon {
   open: boolean;
   held: boolean;
   resolved: boolean;
+  /** A chain you started and have not published: its text can be edited. */
+  edit: boolean;
+  /** What deleting your unpublished comment in it is called; empty when you have none there. */
+  discard: string;
   replies: ReplyRow[];
 }
 
@@ -138,6 +142,14 @@ const YOURS: Record<string, string> = { note: "your private note", "local-draft"
 export function isYours(chain: CommentChain): boolean {
   return (chain.comments[0]?.state ?? "published") !== "published";
 }
+
+/** Your unpublished comment in `chain` that can be edited or deleted: the chain itself when you started it, else your draft reply. */
+export function ownComment(chain: CommentChain): Comment | undefined {
+  const own = isYours(chain) ? chain.comments[0] : chain.comments.slice(1).find((comment) => comment.state === "draft");
+  return own?.comment_id ? own : undefined;
+}
+
+const DISCARD: Record<string, string> = { note: "Delete Your Private Note…", "local-draft": "Delete Your Local Draft…", draft: "Delete Your Draft…" };
 
 function versions(state: ChangeState): { options: Option[]; selected: string } {
   const { shown, patchsets } = state;
@@ -219,6 +231,7 @@ function thread(chain: CommentChain): ThreadRow {
   const mine = isYours(chain) ? YOURS[first?.state ?? ""] : undefined;
   const answered = !chain.resolved && chain.resolved_after_publish;
   const held = chain.held && !chain.resolved;
+  const own = ownComment(chain);
   const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", where, mine ? "" : (first?.author ?? "")];
   const icon: Icon = mine
     ? { icon: first?.state === "note" ? "note" : "edit" }
@@ -240,6 +253,8 @@ function thread(chain: CommentChain): ThreadRow {
     open: !mine && !chain.resolved,
     held: Boolean(chain.held),
     resolved: chain.resolved,
+    edit: Boolean(mine && own),
+    discard: own ? (mine ? DISCARD[own.state] : "Delete Your Draft Reply…") : "",
     replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: c.message })),
   };
 }

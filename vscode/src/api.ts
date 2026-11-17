@@ -462,6 +462,16 @@ export class GerClient {
     return this.call("POST", "/comments/new", undefined, { rev, location, message, state });
   }
 
+  /** Give one of your unpublished comments (a draft, a local draft or a note) a new text; `message` is what it said. */
+  editComment(rev: string, commentId: string, message: string): Promise<{ state: NewCommentState; message: string }> {
+    return this.call("POST", "/comments/edit", undefined, { rev, comment_id: commentId, message });
+  }
+
+  /** Delete one of your unpublished comments; `message` is what it said. */
+  discardComment(rev: string, commentId: string): Promise<{ state: NewCommentState; message: string }> {
+    return this.call("POST", "/comments/discard", undefined, { rev, comment_id: commentId });
+  }
+
   /** The working branch's upstream and the one to suggest. */
   upstream(): Promise<UpstreamChoice> {
     return this.call("GET", "/stack/upstream");

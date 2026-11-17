@@ -1,4 +1,4 @@
-"""CLI for ``ger comment``: start a comment chain on a line, a range or a file of a change."""
+"""CLI for ``ger comment``: start a comment chain on a line, a range or a file of a change, edit or discard yours."""
 
 from __future__ import annotations
 
@@ -22,16 +22,21 @@ from gerrit_workflow_tools.core.comment_target import (
     resolve_comment_target,
     target_for_commit,
 )
-from gerrit_workflow_tools.core.comment_write import WrittenComment, default_state, locate, write_comment
+from gerrit_workflow_tools.core.comment_write import (
+    WrittenComment,
+    default_state,
+    discard_comment,
+    edit_comment,
+    locate,
+    write_comment,
+)
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentState
-from gerrit_workflow_tools.core.local_comments import LocalCommentStore
 from gerrit_workflow_tools.core.review_checkout import load_state
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.comments import first_line
-from gerrit_workflow_tools.render.show_json import written_comment_json
+from gerrit_workflow_tools.render.show_json import changed_comment_json, written_comment_json
 
 
 _LABELS: dict[str, str] = {"note": "note", "local-draft": "local draft", "draft": "draft"}
@@ -43,6 +48,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger comment",
         usage=(
             "ger comment [options] LOCATION (-m MSG | -F FILE) [--note | --local]\n"
+            "       ger comment --edit ID (-m MSG | -F FILE) [--change CHANGEISH] [--resolved] [--json]\n"
             "       ger comment --discard ID [--change CHANGEISH] [--json]"
         ),
         description=(
@@ -70,6 +76,9 @@ def _build_parser() -> argparse.ArgumentParser:
     local = p.add_mutually_exclusive_group()
     local.add_argument("--note", action="store_true", help="A note: local and private, never uploaded.")
     local.add_argument("--local", action="store_true", help="A local draft, even on a patchset Gerrit has.")
+    p.add_argument(
+        "--edit", metavar="ID", default=None, help="Give your unpublished comment with this id a new message instead."
+    )
     p.add_argument("--discard", metavar="ID", default=None, help="Delete your comment with this id instead.")
     add_json_arg(p)
     add_color_args(p)
@@ -81,10 +90,13 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> str:
     """The message (empty with ``--discard``). Exits 2 on conflicting or missing arguments."""
     given = args.message is not None or args.file is not None
     if args.discard is not None:
-        if args.location or given or args.resolved or args.note or args.local:
+        if args.location or given or args.resolved or args.note or args.local or args.edit is not None:
             p.error("--discard takes only an ID (and --change)")
         return ""
-    if not args.location:
+    if args.edit is not None:
+        if args.location or args.note or args.local:
+            p.error("--edit takes an ID and the new message; the comment stays where and what it is")
+    elif not args.location:
         p.error("name a LOCATION to comment on")
     if args.message is not None and args.file is not None:
         p.error("give the comment with one of -m or -F")
@@ -134,24 +146,25 @@ def _discard(
     cwd: Path, service: GerritService | None, target: CommentTarget, comment_id: str, *, as_json: bool
 ) -> None:
     """Delete your local comment, else your Gerrit draft, with *comment_id*; print what it said."""
-    local = LocalCommentStore(cwd).remove(comment_id, key=target.key)
-    state: CommentState
-    if local is not None:
-        where, message, state, change = local.anchor.location.describe(), local.message, local.state, local.change
-    else:
-        removed = service.comments.discard_draft(target.key, comment_id) if service and target.change_url else None
-        if removed is None:
-            raise ChangeResolutionError(f"no comment {comment_id} of yours on {target.key}")
-        where = removed.path if removed.line is None else f"{removed.path}:{removed.line}"
-        message, state, change = removed.message, "draft", target.key
-    payload: dict[str, object] = {
-        "action": "discarded",
-        "state": state,
-        "id": comment_id,
-        "change": change,
-        "message": message,
-    }
-    _emit(payload, f'discarded {_LABELS[state]} on {where}: "{first_line(message)}"', as_json=as_json)
+    gone = discard_comment(cwd, service, target, comment_id)
+    text = f'discarded {_LABELS[gone.state]} on {gone.where}: "{first_line(gone.message)}"'
+    _emit(changed_comment_json("discarded", gone), text, as_json=as_json)
+
+
+def _edit(
+    cwd: Path,
+    service: GerritService | None,
+    target: CommentTarget,
+    comment_id: str,
+    message: str,
+    *,
+    resolved: bool,
+    as_json: bool,
+) -> None:
+    """Give your unpublished comment *comment_id* the text *message*; print what it says now."""
+    was = edit_comment(cwd, service, target, comment_id, message, unresolved=False if resolved else None)
+    text = f'updated {_LABELS[was.state]} on {was.where}: "{first_line(message)}"'
+    _emit(changed_comment_json("updated", was), text, as_json=as_json)
 
 
 def _service(run: RunContext, *, local_only: bool) -> GerritService | None:
@@ -174,7 +187,7 @@ def _target(args: argparse.Namespace, run: RunContext, service: GerritService | 
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
-    """Start a comment chain (a draft, local draft or note), or discard one of your comments."""
+    """Start a comment chain (a draft, local draft or note), or edit or discard one of your comments."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit))
 
 
@@ -184,10 +197,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     message = _check_args(p, args)
     run, _ = init_cli_runtime(args, gerrit=gerrit)
     cwd = run.cwd
-    service = _service(run, local_only=args.note or args.local or args.discard is not None)
+    by_id = args.discard is not None or args.edit is not None
+    service = _service(run, local_only=args.note or args.local or by_id)
     target = _target(args, run, service)
     if args.discard is not None:
         _discard(cwd, service, target, args.discard.strip(), as_json=args.json_)
+        return int(ExitCode.OK)
+    if args.edit is not None:
+        _edit(cwd, service, target, args.edit.strip(), message, resolved=args.resolved, as_json=args.json_)
         return int(ExitCode.OK)
     location = _located(p, cwd, args.location, target)
     written = write_comment(

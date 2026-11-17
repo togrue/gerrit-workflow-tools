@@ -563,7 +563,117 @@ status bar message: $(check) Private note saved here. It never leaves this repos
 + change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
-## 38. Change › Edit Commit Here
+## 38. Inline Edit… on your comment "Should this be configurable?" in the Change view
+
+**Expect:** b.txt opens at its line and the comment turns into a text box in its thread, with Save and Cancel; nothing is saved yet.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ editor | b.txt (file)
+- editor | Preview ger-runbook-<id>.md (webview)
+```
+
+## 39. Change the text in that box › Save
+
+**Expect:** Your comment says the new text, in the thread and in the Change view; the status bar says it was updated. It is still yours and not published.
+
+```
+status bar message: $(check) Draft updated.
+--- on screen:
++ change |   Should this be a setting? — your draft · b.txt:1  [yours]
+- change |   Should this be configurable? — your draft · b.txt:1  [yours]
++ editor | b.txt (file, line 1)
+- editor | b.txt (file)
+```
+
+## 40. Pencil on your private note in its editor thread, change the text › Cancel
+
+**Expect:** The note says what it said before; nothing is saved and nothing is said.
+
+```
+(nothing said or done outside the views)
+--- on screen:
+(no change)
+```
+
+## 41. Inline Delete Your Draft Reply… on "Is this the right design?" › Cancel
+
+**Expect:** A dialog shows the draft reply and asks before deleting it; Cancel leaves it.
+
+```
+dialog (warning): Delete your draft reply on b.txt:1?  [Delete] [Cancel]
+    detail: Done
+    → cancelled
+--- on screen:
+(no change)
+```
+
+## 42. Trash on your private note in its editor thread › Delete
+
+**Expect:** A dialog shows the note and asks; Delete removes it from the thread and from the Change view, and the status bar says so.
+
+```
+dialog (warning): Delete your private note on b.txt:1?  [Delete] [Cancel]
+    detail: Remember to check the docs.
+    → pressed "Delete"
+status bar message: $(check) Private note deleted.
+--- on screen:
++ change | Comments — 2 unresolved of 2 · 1 of yours, not published
+- change | Comments — 2 unresolved of 2 · 2 of yours, not published
+- change |   Remember to check the docs. — your private note · b.txt:1  [yours]
+```
+
+## 43. Command palette › ger: Add Comment, with your own b.txt in the editor
+
+**Expect:** The file in the editor is yours as it is now, not change 101 as shown (its menu does not offer Add Comment): it says where a comment on 101 goes, and opens no box.
+
+```
+notification (info): These are not the lines of "Extract command routing", the change shown. Open one of its files from the Change view (the right-hand side of a diff) and add the comment there.
+--- on screen:
+(no change)
+```
+
+## 44. Open b.txt of the commit, cursor on line 1 › Add Comment (Ctrl+Alt+C), type › Save
+
+**Expect:** A comment box opens on that line with the same Save buttons as the "+" in the gutter; saving it adds your comment to the change.
+
+```
+status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+--- on screen:
++ change | Comments — 2 unresolved of 2 · 2 of yours, not published
+- change | Comments — 2 unresolved of 2 · 1 of yours, not published
++ change |   Added from the keyboard. — your draft · b.txt:1  [yours]
++ editor | b.txt (ger-file, line 1)
+- editor | b.txt (file, line 1)
+```
+
+## 45. Add Comment again › Cancel
+
+**Expect:** The box closes; nothing is saved.
+
+```
+(nothing said or done outside the views)
+--- on screen:
+(no change)
+```
+
+## 46. Inline Comment on This File… on b.txt under Files
+
+**Expect:** An input box asks for a comment about the whole file; after Enter it is saved like any new comment and shows under Comments as yours.
+
+```
+input box: Comment on b.txt
+    prompt: About the whole file. Saved as a draft on Gerrit, visible only to you until it is published.
+    → typed "This file needs a header." and pressed Enter
+status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+--- on screen:
++ change | Comments — 2 unresolved of 2 · 3 of yours, not published
++ change |   This file needs a header. — your draft · b.txt  [yours]
+- change | Comments — 2 unresolved of 2 · 2 of yours, not published
+```
+
+## 47. Change › Edit Commit Here
 
 **Expect:** ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.
 
@@ -574,7 +684,7 @@ status bar message: ger edit runs in the terminal: once the rebase stops at "Ext
 (no change)
 ```
 
-## 39. Change › Open in Gerrit
+## 48. Change › Open in Gerrit
 
 **Expect:** The browser opens change 101 on Gerrit.
 
@@ -584,7 +694,7 @@ browser opens: https://g.example/c/testproj/+/101
 (no change)
 ```
 
-## 40. Click "test! temporary experiment" in Local stack
+## 49. Click "test! temporary experiment" in Local stack
 
 **Expect:** The Change view says CI failed; the CI group lists the findings, the ones this commit introduced first.
 
@@ -604,16 +714,17 @@ browser opens: https://g.example/c/testproj/+/101
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 + change |     FAILURE — generic · introduced here
 - change |   b.txt — added +1 −0
-- change | Comments — 2 unresolved of 2 · 2 of yours, not published
+- change | Comments — 2 unresolved of 2 · 3 of yours, not published
+- change |   This file needs a header. — your draft · b.txt  [yours]
 - change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |     you — [draft] Renamed it to route().
 - change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 - change |     you — [draft] Done
-- change |   Should this be configurable? — your draft · b.txt:1  [yours]
-- change |   Remember to check the docs. — your private note · b.txt:1  [yours]
+- change |   Should this be a setting? — your draft · b.txt:1  [yours]
+- change |   Added from the keyboard. — your draft · b.txt:1  [yours]
 ```
 
-## 41. Right-click it › Hand to Agent › Cancel
+## 50. Right-click it › Hand to Agent › Cancel
 
 **Expect:** A runbook for this one commit and a dialog to start or copy it; Cancel does nothing more.
 
@@ -623,10 +734,11 @@ dialog (info): 1 commit: 0 comments and 2 CI findings for the agent.  [Copy to C
     detail: The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.
     → cancelled
 --- on screen:
-(no change)
++ editor | Preview ger-runbook-<id>.md (webview)
+- editor | b.txt (ger-file, line 1)
 ```
 
-## 42. Local stack › Push to Gerrit…
+## 51. Local stack › Push to Gerrit…
 
 **Expect:** ger push runs in a new terminal of its own (never typed into one that is busy), which shows what it will push and asks first.
 
@@ -636,7 +748,7 @@ terminal "ger push": runs `ger push`
 (no change)
 ```
 
-## 43. Right-click "Refactor parser init" › Copy Commit Hash
+## 52. Right-click "Refactor parser init" › Copy Commit Hash
 
 **Expect:** The commit's full id is on the clipboard; the status bar says so.
 
@@ -647,7 +759,7 @@ status bar message: $(check) Copied the commit hash
 (no change)
 ```
 
-## 44. Select two rows, right-click › Copy Change-Id
+## 53. Select two rows, right-click › Copy Change-Id
 
 **Expect:** Both Change-Ids are on the clipboard, one per line, newest first as shown.
 
@@ -658,7 +770,7 @@ status bar message: $(check) Copied 2 Change-Ids
 (no change)
 ```
 
-## 45. Drag "Refactor parser init" to the line above "Extract command routing"
+## 54. Drag "Refactor parser init" to the line above "Extract command routing"
 
 **Expect:** It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.
 
@@ -684,7 +796,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - change |     FAILURE — generic · introduced here
 ```
 
-## 46. Drag "Refactor parser init" to the bottom, then Undo
+## 55. Drag "Refactor parser init" to the bottom, then Undo
 
 **Expect:** It swaps back with the commit below; Undo puts the stack back as it was before this move.
 
@@ -696,7 +808,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 (no change)
 ```
 
-## 47. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
+## 56. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
 
 **Expect:** Both land under the last row, together and in the order they had; Undo puts the stack back.
 
@@ -713,7 +825,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 ```
 ```
 
-## 48. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
+## 57. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
 
 **Expect:** A dialog asks whether to stash the uncommitted changes and continue; Cancel leaves the stack and the edit as they were.
 
@@ -726,7 +838,7 @@ dialog (warning): You have uncommitted changes. Stash them and continue?  [Stash
 (no change)
 ```
 
-## 49. The same drag › Stash and Continue, then Undo
+## 58. The same drag › Stash and Continue, then Undo
 
 **Expect:** The commits swap, and the edit to a.txt is back in the worktree afterwards; Undo puts the stack back and keeps the edit.
 
@@ -747,7 +859,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 ```
 ```
 
-## 50. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
+## 59. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
 
 **Expect:** The commit gets the new message and keeps its Change-Id, though the text typed had none; the commits above get new ids, nothing else changes. Undo puts the old message back.
 
@@ -767,7 +879,7 @@ notification (info): Commit message of "test! temporary experiment" changed. Pus
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · changed here since the last push  [review +2, ci bad]
 ```
 
-## 51. Drag "Rework d.txt" to the line under "Cleanup after experiment"
+## 60. Drag "Rework d.txt" to the line under "Cleanup after experiment"
 
 **Expect:** One place down: the conflict preview already knows the two cannot swap, so it says at once which commit would conflict, and that nothing changed.
 
@@ -777,7 +889,7 @@ notification (info): "Rework d.txt" cannot change places with "Cleanup after exp
 (no change)
 ```
 
-## 52. Drag "Rework d.txt" to the bottom
+## 61. Drag "Rework d.txt" to the bottom
 
 **Expect:** Refused before anything is touched, saying which commit does not apply in its new place; the stack stays as it was.
 
@@ -788,7 +900,7 @@ notification (warning): "Rework d.txt" (<sha>) does not apply in its new place (
 (no change)
 ```
 
-## 53. Drag "Cleanup after experiment" to the line under "Extract command routing"
+## 62. Drag "Cleanup after experiment" to the line under "Extract command routing"
 
 **Expect:** It lands there, and the commits between move up one; Undo is offered.
 
@@ -801,7 +913,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 + stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci bad]
 ```
 
-## 54. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
+## 63. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
 
 **Expect:** It folds into the commit below, keeping that commit's message; Undo brings it back.
 
@@ -813,7 +925,7 @@ notification (info): Squashed into "test! temporary experiment". Push to update 
 (no change)
 ```
 
-## 55. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
+## 64. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
 
 **Expect:** Folds, keeping this commit's message, with a note that the Gerrit change of the one below stays open; Undo brings both back, and the Change view shows again what it showed.
 
@@ -825,7 +937,7 @@ notification (info): Squashed into "Rework d.txt". The Gerrit change of "test! t
 (no change)
 ```
 
-## 56. Right-click "Rework d.txt" › Drop Commit… › Cancel
+## 65. Right-click "Rework d.txt" › Drop Commit… › Cancel
 
 **Expect:** A dialog asks to confirm; Cancel leaves everything as it was.
 
@@ -837,7 +949,7 @@ dialog (warning): Drop "Rework d.txt" from the stack?  [Drop] [Cancel]
 (no change)
 ```
 
-## 57. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
+## 66. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
 
 **Expect:** The commit goes; Undo brings it back. It was never pushed, so there is nothing to push.
 
@@ -852,7 +964,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 (no change)
 ```
 
-## 58. Right-click "Rework d.txt" › Drop Commit… › Drop
+## 67. Right-click "Rework d.txt" › Drop Commit… › Drop
 
 **Expect:** The commit is gone from the stack and from the checkout; nothing to push, as Gerrit never had it.
 
@@ -886,7 +998,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 - change |     FAILURE — generic
 ```
 
-## 59. Local stack › … › Set Upstream Branch… › Escape
+## 68. Local stack › … › Set Upstream Branch… › Escape
 
 **Expect:** A picker lists the branches it could track, the current one marked; Escape changes nothing.
 

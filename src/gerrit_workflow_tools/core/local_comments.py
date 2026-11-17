@@ -13,7 +13,7 @@ import os
 import tempfile
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -137,10 +137,36 @@ class LocalCommentStore:
 
         self._update(comment.change, append, anchor=comment.anchor.blob, message=f"add {comment.id}")
 
+    def _find(self, comment_id: str, key: str | None) -> LocalComment | None:
+        """The comment *comment_id*, looked up on change *key* first, then everywhere."""
+        found = next((c for c in self.for_change(key) if c.id == comment_id), None) if key else None
+        return found or next((c for c in self.all() if c.id == comment_id), None)
+
+    def edit(
+        self, comment_id: str, message: str, *, unresolved: bool | None = None, key: str | None = None
+    ) -> LocalComment | None:
+        """Give the comment *comment_id* the text *message* and return it as it was; ``None`` if absent.
+
+        *unresolved* ``None`` keeps its flag. Its anchor stays: the comment is about the same lines.
+        """
+        found = self._find(comment_id, key)
+        if found is None:
+            return None
+
+        def rewrite(rows: list[LocalComment]) -> list[LocalComment]:
+            return [
+                replace(c, message=message, unresolved=c.unresolved if unresolved is None else unresolved)
+                if c.id == comment_id
+                else c
+                for c in rows
+            ]
+
+        self._update(found.change, rewrite, anchor=None, message=f"edit {comment_id}")
+        return found
+
     def remove(self, comment_id: str, *, key: str | None = None) -> LocalComment | None:
         """Delete the comment *comment_id* (looked up on *key* first) and return it; ``None`` if absent."""
-        found = next((c for c in self.for_change(key) if c.id == comment_id), None) if key else None
-        found = found or next((c for c in self.all() if c.id == comment_id), None)
+        found = self._find(comment_id, key)
         if found is None:
             return None
 

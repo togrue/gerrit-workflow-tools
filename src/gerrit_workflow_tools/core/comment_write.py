@@ -1,7 +1,8 @@
-"""Writing a new comment chain: a Gerrit **draft**, a **local draft** or a **note**.
+"""Writing your own comments: a Gerrit **draft**, a **local draft** or a **note**.
 
-``ger comment`` and ``POST /comments/new`` both come here; they differ only in how they parse
-their input and show the answer.
+Starting a chain, and editing or discarding a comment of yours that is not published yet.
+``ger comment`` and ``POST /comments/new``, ``/comments/edit`` and ``/comments/discard`` all
+come here; they differ only in how they parse their input and show the answer.
 """
 
 from __future__ import annotations
@@ -98,6 +99,63 @@ def write_comment(
     )
     LocalCommentStore(cwd).add(comment)
     return WrittenComment(state, comment.id, target.key, target.commit, comment.anchor.location, None, unresolved, None)
+
+
+@dataclass(frozen=True)
+class ChangedComment:
+    """One of your unpublished comments, as an edit or a discard found it."""
+
+    state: CommentState
+    id: str
+    change: str
+    where: str
+    """``PATH`` or ``PATH:LINE``, as the comment says it."""
+    message: str
+    """What it said before: the text an edit replaced, or a discard deleted."""
+
+
+def _where(path: str, line: int | None) -> str:
+    return path if line is None else f"{path}:{line}"
+
+
+def _not_yours(target: CommentTarget, comment_id: str) -> ChangeResolutionError:
+    return ChangeResolutionError(f"no comment {comment_id} of yours on {target.key}")
+
+
+def edit_comment(
+    cwd: Path,
+    service: GerritService | None,
+    target: CommentTarget,
+    comment_id: str,
+    message: str,
+    *,
+    unresolved: bool | None = None,
+) -> ChangedComment:
+    """Give your unpublished comment *comment_id* the text *message*; it stays where it is.
+
+    A note or local draft in the local comment store, else your Gerrit draft with that id on
+    the target change. A published comment is nobody's to edit. *unresolved* ``None`` keeps its flag.
+    """
+    local = LocalCommentStore(cwd).edit(comment_id, message, unresolved=unresolved, key=target.key)
+    if local is not None:
+        return ChangedComment(local.state, comment_id, local.change, local.anchor.location.describe(), local.message)
+    was = None
+    if service and target.change_url:
+        was = service.comments.edit_draft(target.key, comment_id, message, unresolved=unresolved)
+    if was is None:
+        raise _not_yours(target, comment_id)
+    return ChangedComment("draft", comment_id, target.key, _where(was.path, was.line), was.message)
+
+
+def discard_comment(cwd: Path, service: GerritService | None, target: CommentTarget, comment_id: str) -> ChangedComment:
+    """Delete your local comment, else your Gerrit draft, with *comment_id*; the answer keeps its text."""
+    local = LocalCommentStore(cwd).remove(comment_id, key=target.key)
+    if local is not None:
+        return ChangedComment(local.state, comment_id, local.change, local.anchor.location.describe(), local.message)
+    removed = service.comments.discard_draft(target.key, comment_id) if service and target.change_url else None
+    if removed is None:
+        raise _not_yours(target, comment_id)
+    return ChangedComment("draft", comment_id, target.key, _where(removed.path, removed.line), removed.message)
 
 
 _PATCHSETS_GERRIT_HAS = frozenset({PatchsetStatus.ACTIVE, PatchsetStatus.OUTDATED})

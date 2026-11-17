@@ -2,9 +2,9 @@
 
 | | |
 |--|--|
-| **Status** | **Partial**: Gerrit drafts, notes, local drafts, `--discard` and re-anchoring ship. [Later slices](#later-slices) (uploading, orphans, `ger log`) are planned |
+| **Status** | **Partial**: Gerrit drafts, notes, local drafts, `--edit`, `--discard` and re-anchoring ship. [Later slices](#later-slices) (uploading, orphans, `ger log`) are planned |
 | **Module** | `cli_comment.py`; the LOCATION grammar in `core/comment_anchor.py`; which patchset in `core/comment_target.py`; writing in `core/comment_write.py`; Gerrit drafts on `CommentApi` in `core/gerrit/comments.py`; the local comment store in `core/local_comments.py`; chain assembly in `core/comment_chains.py`; re-anchoring in `core/anchor_mapping.py` |
-| **Requires** | A git repository. `gerrit.webUrl` and credentials, except for `--note`, `--local` and `--discard` of a local comment, which work without Gerrit configured |
+| **Requires** | A git repository. `gerrit.webUrl` and credentials, except for `--note`, `--local`, and `--edit` and `--discard` of a local comment, which work without Gerrit configured |
 
 Write a new comment on a line, a range or a file of a change. `ger reply` answers a chain that already exists; `ger comment` starts one.
 
@@ -25,6 +25,7 @@ A comment has one of four **comment states**:
 
 ```
 ger comment LOCATION (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--note | --local] [--json]
+ger comment --edit ID (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--json]
 ger comment --discard ID [--change CHANGEISH] [--json]
 ```
 
@@ -67,6 +68,10 @@ Without `--note` or `--local`, the commit decides:
 - **Anything else**: a **local draft**. That covers a change Gerrit does not have yet, and a commit you rewrote locally (`ger log` shows `v?`): its lines may not exist in any patchset.
 
 A change named by `--change` that has no local commit gets a Gerrit draft on its current patchset.
+
+### Editing
+
+`--edit ID` gives one of your comments a new message: a note or local draft in the local store, else your Gerrit draft with that id on the target change, whether it starts a chain or answers one. The comment stays where it is and as open as it was; `--resolved` resolves it. A published comment is not yours to edit: it, and an unknown id, exit `3`.
 
 ### Discarding
 
@@ -148,6 +153,8 @@ note on src/app.py (commit 1a2b3c4) id 0b6e2d7f8c9a4b13
 }
 ```
 
+`--edit` prints `updated <state> on <location>: "<first line>"` with the new message, or JSON with `"action": "updated"` and, in `message`, what the comment said before.
+
 `--discard` prints `discarded <state> on <location>: "<first line>"`, or JSON with `"action": "discarded"` and the message.
 
 ---
@@ -156,9 +163,9 @@ note on src/app.py (commit 1a2b3c4) id 0b6e2d7f8c9a4b13
 
 | Code | When |
 |------|------|
-| `0` | Written or discarded |
+| `0` | Written, edited or discarded |
 | `2` | Bad usage: no message, a malformed or backwards LOCATION, a line past the end of the file, `--note` with `--local` |
-| `3` | The path is not in the commit; the changeish or discard id resolves to nothing |
+| `3` | The path is not in the commit; the changeish, or the id to edit or discard, resolves to nothing |
 | `5` | Gerrit rejected the draft |
 | `7` | Writing the local store failed (including five lost races in a row) |
 | `9` | The commit has no Change-Id |

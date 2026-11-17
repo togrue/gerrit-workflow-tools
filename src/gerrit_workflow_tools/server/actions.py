@@ -13,7 +13,13 @@ from gerrit_workflow_tools.core.agent_runbook import set_hold
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_anchor import LocationError
 from gerrit_workflow_tools.core.comment_target import resolve_comment_target
-from gerrit_workflow_tools.core.comment_write import default_state, locate, write_comment
+from gerrit_workflow_tools.core.comment_write import (
+    default_state,
+    discard_comment,
+    edit_comment,
+    locate,
+    write_comment,
+)
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
@@ -30,7 +36,7 @@ from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.reword import reword_commit
 from gerrit_workflow_tools.core.upstream import set_branch_upstream
 from gerrit_workflow_tools.render.review_json import review_state_json
-from gerrit_workflow_tools.render.show_json import written_comment_json
+from gerrit_workflow_tools.render.show_json import changed_comment_json, written_comment_json
 from gerrit_workflow_tools.server import views
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
@@ -197,3 +203,30 @@ def new_comment(ctx: Context, req: Request) -> dict[str, Any]:
     resolved = bool(req.body_field("resolved", bool))
     written = write_comment(ctx.cwd, ctx.service, target, location, message, state=chosen, unresolved=not resolved)
     return written_comment_json(written)
+
+
+def edit_own_comment(ctx: Context, req: Request) -> dict[str, Any]:
+    """Give one of your unpublished comments a new text (``ger comment --edit``): a draft, a local draft or a note.
+
+    Body: ``rev`` (the change), ``comment_id``, ``message``, and optional ``resolved`` (omit to
+    leave it as it is). ``message`` in the answer is what the comment said before.
+    """
+    rev = safe_rev(req.body_field("rev", str, required=True))
+    comment_id = req.body_field("comment_id", str, required=True)
+    message = req.body_field("message", str, required=True).strip()
+    resolved = req.body_field("resolved", bool)
+    if not message:
+        raise BadRequest("message is empty")
+    target = resolve_comment_target(ctx.service, ctx.cwd, rev, branch=ctx.run.repo.working_branch)
+    edited = edit_comment(
+        ctx.cwd, ctx.service, target, comment_id, message, unresolved=None if resolved is None else not resolved
+    )
+    return changed_comment_json("updated", edited)
+
+
+def discard_own_comment(ctx: Context, req: Request) -> dict[str, Any]:
+    """Delete one of your unpublished comments (``ger comment --discard``); answers what it said."""
+    rev = safe_rev(req.body_field("rev", str, required=True))
+    comment_id = req.body_field("comment_id", str, required=True)
+    target = resolve_comment_target(ctx.service, ctx.cwd, rev, branch=ctx.run.repo.working_branch)
+    return changed_comment_json("discarded", discard_comment(ctx.cwd, ctx.service, target, comment_id))

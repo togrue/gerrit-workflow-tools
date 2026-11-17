@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProven
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.commit_diff import commit_diff, show_commit_diff
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
@@ -866,3 +867,39 @@ def test_a_commit_gerrit_does_not_have_gets_a_local_draft(stack_repo: Path) -> N
         _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:99", "message": "x"})
     with pytest.raises(BadRequest, match="state must be one of"):
         _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:1", "message": "x", "state": "published"})
+
+
+def test_your_unpublished_comments_can_be_edited_and_discarded(stack_repo: Path) -> None:
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    draft = _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:1", "message": "Why?"})
+    note = _post(api, "/comments/new", {"rev": "HEAD", "location": "d.txt:1", "message": "mine", "state": "note"})
+
+    def yours() -> dict[str, str]:
+        [commit] = _get(api, "/show", rev="HEAD", comments="all")["commits"]
+        return {c["state"]: c["message"] for chain in commit["comment_chains"] for c in chain["comments"]}
+
+    edited = _post(api, "/comments/edit", {"rev": "HEAD", "comment_id": draft["id"], "message": " Why so? "})
+    assert (edited["action"], edited["state"], edited["message"]) == ("updated", "draft", "Why?")
+    call = store.calls_to("put_draft")[-1]
+    # The draft itself is updated, where it is and as open as it was.
+    assert call.kwargs["draft_id"] == draft["id"]
+    assert (call.args[2]["line"], call.args[2]["unresolved"], call.args[2]["message"]) == (1, True, "Why so?")
+    body = {"rev": "HEAD", "comment_id": note["id"], "message": "ours", "resolved": True}
+    edited = _post(api, "/comments/edit", body)
+    assert (edited["state"], edited["message"]) == ("note", "mine")
+    assert yours() == {"draft": "Why so?", "note": "ours"}
+    assert len(store.calls_to("put_draft")) == 2, "a note never reaches Gerrit"
+
+    with pytest.raises(BadRequest, match="message is empty"):
+        _post(api, "/comments/edit", {"rev": "HEAD", "comment_id": note["id"], "message": "  "})
+    with pytest.raises(ChangeResolutionError, match="no comment nope of yours"):
+        _post(api, "/comments/edit", {"rev": "HEAD", "comment_id": "nope", "message": "x"})
+
+    gone = _post(api, "/comments/discard", {"rev": "HEAD", "comment_id": draft["id"]})
+    assert (gone["action"], gone["state"], gone["message"]) == ("discarded", "draft", "Why so?")
+    assert _post(api, "/comments/discard", {"rev": "HEAD", "comment_id": note["id"]})["message"] == "ours"
+    assert yours() == {}
+    assert store.calls_to("publish_drafts") == []
+    with pytest.raises(ChangeResolutionError):
+        _post(api, "/comments/discard", {"rev": "HEAD", "comment_id": note["id"]})

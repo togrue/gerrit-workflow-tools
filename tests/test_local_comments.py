@@ -194,3 +194,14 @@ def test_a_writer_that_loses_the_race_reapplies_its_change(stack_repo: Path, mon
     monkeypatch.setattr(LocalCommentStore, "_tree", tree_then_lose)
     store.add(_note(stack_repo, "second"))
     assert [c.message for c in store.all()] == ["first", "the other writer", "second"]
+
+
+def test_edit_rewrites_a_local_comment_and_keeps_its_anchor(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _nothing_on_gerrit(stack_repo)
+    _code, out, _ = _comment(stack_repo, ["d.txt:1", "-m", "never mind", "--note", "--json"], monkeypatch, store)
+    comment_id = json_stdout(out)["id"]
+    [before] = LocalCommentStore(stack_repo).all()
+    code, out, _ = _comment(stack_repo, ["--edit", comment_id, "-m", "do mind"], monkeypatch, store)
+    assert code == ExitCode.OK and 'updated note on d.txt:1: "do mind"' in out
+    [after] = LocalCommentStore(stack_repo).all()
+    assert (after.message, after.state, after.anchor, after.unresolved) == ("do mind", "note", before.anchor, True)

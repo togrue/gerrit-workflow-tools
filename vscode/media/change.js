@@ -123,6 +123,18 @@
       h("span", { class: "label" }, file.name),
       h("span", { class: "detail" }, [file.dir, file.state].filter(Boolean).join(" · ")),
       file.added === null ? h("span", { class: "counts detail" }, "binary") : counts(file.added, file.deleted),
+      h(
+        "span",
+        { class: "actions" },
+        h("button", {
+          class: "codicon codicon-comment",
+          title: "Comment on This File…",
+          onclick: (event) => {
+            event.stopPropagation();
+            post("fileComment", { index });
+          },
+        }),
+      ),
     );
   }
 
@@ -156,10 +168,12 @@
       h(
         "span",
         { class: "actions" },
+        thread.edit ? h("button", { class: "codicon codicon-edit", title: "Edit…", onclick: act("chain.edit") }) : null,
         thread.reply ? h("button", { class: "codicon codicon-reply", title: "Reply as Draft…", onclick: act("reply") }) : null,
         thread.open ? h("button", { class: "codicon codicon-check", title: "Reply Done and Resolve as Draft", onclick: act("replyDone") }) : null,
         thread.open && !thread.held ? h("button", { class: "codicon codicon-person", title: "Keep for Me (Not for the Agent)", onclick: act("hold") }) : null,
         thread.open && thread.held ? h("button", { class: "codicon codicon-hubot", title: "Let the Agent Handle It", onclick: act("release") }) : null,
+        thread.discard ? h("button", { class: "codicon codicon-trash", title: thread.discard, onclick: act("chain.delete") }) : null,
       ),
     );
     const replies = open

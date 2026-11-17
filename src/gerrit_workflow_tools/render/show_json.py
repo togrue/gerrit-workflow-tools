@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.ci_content import CiContent
-from gerrit_workflow_tools.core.comment_write import WrittenComment
+from gerrit_workflow_tools.core.comment_write import ChangedComment, WrittenComment
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
     LogCommit,
@@ -128,6 +128,17 @@ def commit_json_payload(
         "local_commit": is_local,
         "resolution": resolution.to_json_dict(),  # type: ignore[attr-defined]
         **ci_payload,
+    }
+
+
+def changed_comment_json(action: str, changed: ChangedComment) -> dict[str, object]:
+    """One of your comments edited or discarded; ``message`` is what it said before."""
+    return {
+        "action": action,
+        "state": changed.state,
+        "id": changed.id,
+        "change": changed.change,
+        "message": changed.message,
     }
 
 

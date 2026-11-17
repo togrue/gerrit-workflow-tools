@@ -164,3 +164,20 @@ def test_discard_deletes_your_draft_and_prints_it(stack_repo: Path, monkeypatch:
     assert code == ExitCode.OK and 'discarded draft on d.txt:1: "why?"' in out
     assert _drafts(store, key) == []
     assert _comment(stack_repo, store, ["--discard", draft_id], monkeypatch)[0] == ExitCode.NOT_FOUND
+
+
+def test_edit_gives_your_draft_a_new_message_where_it_is(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, key = _store(stack_repo)
+    _code, out, _ = _comment(stack_repo, store, ["d.txt:1", "-m", "why?", "--json"], monkeypatch)
+    draft_id = json_stdout(out)["id"]
+    code, out, _ = _comment(stack_repo, store, ["--edit", draft_id, "-m", "why so?"], monkeypatch)
+    assert code == ExitCode.OK and 'updated draft on d.txt:1: "why so?"' in out
+    [draft] = _drafts(store, key)
+    assert (draft["id"], draft["line"], draft["message"], draft["unresolved"]) == (draft_id, 1, "why so?", True)
+    # --json says what it replaced; --resolved closes the chain it starts.
+    code, out, _ = _comment(stack_repo, store, ["--edit", draft_id, "-m", "fyi", "--resolved", "--json"], monkeypatch)
+    assert (code, json_stdout(out)["action"], json_stdout(out)["message"]) == (ExitCode.OK, "updated", "why so?")
+    assert _drafts(store, key)[0]["unresolved"] is False
+    assert _comment(stack_repo, store, ["--edit", "nope", "-m", "x"], monkeypatch)[0] == ExitCode.NOT_FOUND
+    assert _comment(stack_repo, store, ["--edit", draft_id], monkeypatch)[0] == ExitCode.USAGE
+    assert _comment(stack_repo, store, ["--edit", draft_id, "d.txt:1", "-m", "x"], monkeypatch)[0] == ExitCode.USAGE
