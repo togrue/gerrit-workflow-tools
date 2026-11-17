@@ -175,7 +175,7 @@ def test_ger_show_reads_back_what_ger_reply_wrote(stack_repo: Path, monkeypatch:
     run_cli(stack_repo, reply_main, ["c-root", "--done"], monkeypatch, gerrit=store)
     number = store.get_change(key)["_number"]
     code, out, _err = run_cli(stack_repo, show_main, ["--json", f"change:{number}"], monkeypatch, gerrit=store)
-    assert code in (ExitCode.OK, ExitCode.ATTENTION)
+    assert code in (ExitCode.OK, ExitCode.REFUSED)
     (chain,) = json_stdout(out)["comment_chains"]
     assert (chain["resolved"], chain["resolved_after_publish"]) == (False, True)
     assert [c["draft"] for c in chain["comments"]] == [False, True]
@@ -233,7 +233,7 @@ def test_publish_prompt_defaults_to_no(
     monkeypatch.setattr("gerrit_workflow_tools.cli_reply.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("sys.stdin", io.StringIO(answer))
     code, _out, _err = run_cli(stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
-    assert code == (ExitCode.OK if published else ExitCode.ATTENTION)
+    assert code == (ExitCode.OK if published else ExitCode.REFUSED)
     assert bool(store.calls_to("publish_drafts")) is published
 
 

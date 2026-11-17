@@ -64,16 +64,17 @@ class ExitCode(IntEnum):
     """One exit code per distinct failure reason, shared by every ``ger`` command.
 
     Codes are semantic, not per-command: the same reason exits the same way whichever
-    command hit it. ``0``-``2`` are fixed by convention (argparse exits ``2`` on bad
+    command hit it. ``0`` means the command did what was asked, whatever state it reports;
+    every other code is a reason it did not. ``0``-``2`` are fixed by convention (argparse exits ``2`` on bad
     arguments); the rest split what used to be lumped together or reused.
 
     Contract: [docu/spec/exit-codes.md](../../docu/spec/exit-codes.md).
     """
 
     OK = 0
-    ATTENTION = 1
-    """Ran fine, but something wants the user: unresolved comments, failed CI, or the
-    user declining a prompt. Not a failure."""
+    REFUSED = 1
+    """Did not go ahead: the user declined a prompt, or ger will not proceed without the
+    user's decision. A command that ran and merely reports attention exits ``OK``."""
     USAGE = 2
     NOT_FOUND = 3
     """A changeish, Change-Id or git revision resolved to nothing."""
@@ -105,7 +106,7 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ConfigError, ExitCode.CONFIG, "error"),
     (UsageError, ExitCode.USAGE, "error"),
     (UnknownRevisionError, ExitCode.NOT_FOUND, "error"),
-    # The normal end of a walk, not a failure: reported without an "error:" prefix.
+    # A walk with nowhere left to go: reported without an "error:" prefix, since scripts loop on it.
     (NoEditAttentionError, ExitCode.NO_EDIT_ATTENTION, ""),
     (CiContentError, ExitCode.CI_CONTENT, "ci error"),
     (GitError, ExitCode.GIT, "error"),

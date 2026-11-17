@@ -259,7 +259,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
 
     rev_range = resolve_rev_range(args.rev_range, branch=run.repo.stack_branch)
     if not require_stack_upstream(run, rev_range):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
 
     stack_view = load_annotated_stack(
         run, rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
@@ -283,8 +283,6 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     for commit in commits:
         print_note(notes_by_sha.get(commit.sha))
 
-    exit_code = ExitCode.ATTENTION if any(c.attention_reasons for c in commits) else ExitCode.OK
-
     # JSON output
     if args.json_:
         stack_payload = {
@@ -305,7 +303,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         print(json.dumps(payload, indent=2))
         if stack_view.gerrit_unavailable is not None:
             raise stack_view.gerrit_unavailable
-        return int(exit_code)
+        return int(ExitCode.OK)
 
     # The same boundary `ger push` stops at, so the two commands cannot disagree.
     blocked = blocked_shas_for_stack(
@@ -330,7 +328,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         print(color_text(line, ANSI_DIM))
     if stack_view.gerrit_unavailable is not None:
         raise stack_view.gerrit_unavailable
-    return int(exit_code)
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

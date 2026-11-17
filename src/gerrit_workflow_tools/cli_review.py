@@ -233,7 +233,7 @@ def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritS
             f"change {number} is at patchset {current}, you reviewed {reviewed}: run ger review {number} first",
             file=sys.stderr,
         )
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
     chains = service.comments.chains_with_drafts(key)
     count = len(drafts_in(chains))
     voted = ", ".join(f"{label}{value:+d}" for label, value in votes.items())
@@ -244,9 +244,9 @@ def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritS
     if not (args.yes or assume_yes()):
         if args.json_ or not stdin_is_terminal():
             print("not publishing: pass -y to publish without a prompt", file=sys.stderr)
-            return int(ExitCode.ATTENTION)
+            return int(ExitCode.REFUSED)
         if not confirm(f"Publish {count} draft(s) and {voted} on {number}?", default=False):
-            return int(ExitCode.ATTENTION)
+            return int(ExitCode.REFUSED)
     message = "\n\n".join(args.message) if args.message else None
     service.comments.publish_drafts(key, message=message, labels=votes)
     if args.json_:
@@ -270,7 +270,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         return _act(args, p, run)
     except ReviewRefusal as refusal:
         print(f"error: {refusal}", file=sys.stderr)
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
     except ReviewUsageError as error:
         print(f"error: {error}", file=sys.stderr)
         return int(ExitCode.USAGE)

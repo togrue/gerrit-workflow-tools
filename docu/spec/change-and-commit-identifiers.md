@@ -311,8 +311,8 @@ Exit codes are shared across every command: see **[exit-codes.md](exit-codes.md)
 
 | Code | Meaning |
 |------|---------|
-| `0` | Resolved to exactly one target (no attention required, where applicable) |
-| `1` | Resolved, but attention/no-op condition |
+| `0` | Resolved to exactly one target, whatever attention it reports |
+| `1` | Did not go ahead: you declined a prompt |
 | `2` | Usage error — malformed changeish, unknown prefix |
 | `3` | Not found — the changeish resolved to nothing |
 | `4` | **Ambiguous** — multiple matches survived narrowing; `alternatives` lists them |

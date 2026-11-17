@@ -246,7 +246,7 @@ def _run_interactive_stack_rebase(
     if args.cursor and load_branch_cursor(settings, branch or "HEAD") is None:
         return print_cursor_status(run, branch=branch)
     if not _has_upstreams(run, branch):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
     if args.cursor:
         return print_cursor_status(run, branch=branch)
     if args.set_cursor:
@@ -309,7 +309,7 @@ def _run_interactive_stack_rebase(
         from gerrit_workflow_tools.cli_ger import run_show
 
         show_code = run_show([full], gerrit=gerrit)
-        if show_code not in (int(ExitCode.OK), int(ExitCode.ATTENTION)):
+        if show_code not in (int(ExitCode.OK), int(ExitCode.REFUSED)):
             return show_code
     return returncode
 

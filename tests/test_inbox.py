@@ -146,7 +146,7 @@ def test_to_review_shows_unreviewed_age_activity_and_top_url(
         monkeypatch,
         gerrit=_store(base, top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert "to review (1)" in out
     assert "c4321" in out
     assert "2c" in out
@@ -169,7 +169,7 @@ def test_json_contract_includes_ages_and_top_url(tmp_path: Path, monkeypatch: py
         comments=2,
     )
     code, out, err = run_cli(tmp_path, inbox_main, ["--json"], monkeypatch, gerrit=_store(top))
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     data = json_stdout(out)
     assert data["host"] == "gerrit.example.com"
     assert data["sections"][0]["name"] == "to-review"
@@ -223,7 +223,7 @@ def test_does_not_resolve_stack_context(tmp_path: Path, monkeypatch: pytest.Monk
         attention_since="2026-08-17 12:00:00.000000000",
     )
     code, out, err = run_cli(tmp_path, inbox_main, ["--json"], monkeypatch, gerrit=_store(top))
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert json_stdout(out)["sections"][0]["chains"][0]["top"]["number"] == 9
 
 
@@ -263,7 +263,7 @@ def test_indents_members_with_attention(tmp_path: Path, monkeypatch: pytest.Monk
         monkeypatch,
         gerrit=_store(base, top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert "└ c4376" in out
     assert "build failed" in out
 
@@ -294,7 +294,7 @@ def test_inbox_colorizes_identity_status_wait_and_context(
         monkeypatch,
         gerrit=_store(top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert _painted(f"{ANSI_BOLD}{ANSI_CYAN}", "to review (1)") in out
     assert _painted(ANSI_CYAN, "c4400") in out
     assert _painted(ANSI_DIM, "1c") in out
@@ -340,7 +340,7 @@ def test_inbox_colorizes_attention_notes_like_log(
         monkeypatch,
         gerrit=_store(base, top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert _painted(ANSI_RED, "v-1") in out
     assert _painted(ANSI_RED, "build failed") in out
     assert _painted(ANSI_DIM, "CI ") in out
@@ -367,7 +367,7 @@ def test_inbox_hyperlinks_always_shows_open_in_gerrit(
         monkeypatch,
         gerrit=_store(top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert "\x1b]8;;https://gerrit.example.com/c/myproject/+/4321" in out
     visible = strip_ansi(out)
     assert GERRIT_LINK_LABEL in visible
@@ -393,7 +393,7 @@ def test_inbox_hyperlinks_never_keeps_raw_url(
         monkeypatch,
         gerrit=_store(top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     assert "\x1b]8;" not in out
     assert "https://gerrit.example.com/c/myproject/+/4321" in out
     assert GERRIT_LINK_LABEL not in out
@@ -418,7 +418,7 @@ def test_inbox_json_keeps_raw_url_with_hyperlinks(
         monkeypatch,
         gerrit=_store(top),
     )
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     data = json_stdout(out)
     assert data["sections"][0]["chains"][0]["top"]["url"] == ("https://gerrit.example.com/c/myproject/+/4321")
     assert GERRIT_LINK_LABEL not in out
@@ -568,7 +568,7 @@ def test_inside_a_clone_both_sections_are_its_project(tmp_path: Path, monkeypatc
     store.stub_query(f"{TO_REVIEW_QUERY} project:myproject", [theirs])
     store.stub_query(f"{DEFAULT_OUTGOING_QUERY} project:myproject", [_mine(8, "myproject")])
     code, out, err = run_cli(clone, inbox_main, ["--json"], monkeypatch, gerrit=store)
-    assert code == int(ExitCode.ATTENTION), err
+    assert code == int(ExitCode.OK), err
     data = json_stdout(out)
     assert data["projects"] == ["myproject"]
     to_review, outgoing = data["sections"]

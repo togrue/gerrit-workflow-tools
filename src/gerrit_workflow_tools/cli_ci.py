@@ -140,7 +140,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
     out_fmt = output_format(args)
     branch = args.branch or run.repo.working_branch
     if args.stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
 
     service = run.gerrit
     targets = resolve_show_targets(
@@ -171,8 +171,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
             f"could not fetch CI content for {len(failed)} link(s): "
             + "; ".join(f"{c.link.url}: {c.provenance.error}" for c in failed)
         )
-    needs_attention = any(contents or commit.ci_failures for commit, contents in per_commit)
-    return int(ExitCode.ATTENTION) if needs_attention else int(ExitCode.OK)
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

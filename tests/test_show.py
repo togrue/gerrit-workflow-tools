@@ -129,7 +129,7 @@ def test_gshow_stack_prompts_for_missing_upstream_and_aborts(stack_repo: Path, m
         monkeypatch,
         gerrit=ChangeStore({}),
     )
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.REFUSED
     assert out == ""
     p = git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo, check=False)
     assert p.returncode != 0
@@ -213,7 +213,7 @@ def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPa
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     assert "## " in out
     assert "### `epsilon.txt:908`" in out
     assert "**alice (Alice)**" in out or "**Alice**" in out or "alice" in out.lower()
@@ -256,7 +256,7 @@ def test_gshow_multi_human_lists_clean_commits_briefly(stack_repo: Path, monkeyp
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "needs fix" in out
     assert "╭─ x.py:2" in out
     assert tip_subj in out
@@ -301,7 +301,7 @@ def test_gshow_multi_markdown_lists_clean_commits(stack_repo: Path, monkeypatch:
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "> needs fix" in out
     assert "### `x.py:2`" in out
     assert tip_subj in out
@@ -347,7 +347,7 @@ def test_gshow_multi_human_comments_all_includes_resolved_only_commits(
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "needs fix" in out
     assert "please fix" in out
     assert "╭─ f.py:1 (resolved)" in out
@@ -393,7 +393,7 @@ def test_gshow_human_thread_gutter(stack_repo: Path, monkeypatch: pytest.MonkeyP
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     assert "f.py:1" in out
     assert "╭─ f.py:1" in out
     assert "╰" in out
@@ -491,7 +491,7 @@ def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.Monke
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     data = json_stdout(out)
     assert "awaiting-review" in data["attention_reasons"]
 
@@ -654,7 +654,7 @@ def test_gshow_comments_resolved_hides_open_threads(stack_repo: Path, monkeypatc
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "nit: done" in out
     assert "╭─ done.py:3 (resolved)" in out
     assert "still broken" not in out
@@ -737,7 +737,7 @@ def test_gshow_omits_context_lines_by_default(stack_repo: Path, monkeypatch: pyt
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "please fix" in out
     assert "alpha()" not in out
     assert "beta()" not in out
@@ -758,7 +758,7 @@ def test_gshow_context_prints_source_lines(stack_repo: Path, monkeypatch: pytest
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "please fix" in out
     assert "   1  alpha()" in out
     assert "   2  beta()" in out
@@ -779,7 +779,7 @@ def test_gshow_context_padding_implies_context(stack_repo: Path, monkeypatch: py
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "   1  alpha()" in out
 
 
@@ -798,7 +798,7 @@ def test_gshow_context_json_includes_context_lines(stack_repo: Path, monkeypatch
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     data = json_stdout(out)
     assert data["comments"][0]["context_lines"] == [
         {"line_number": 1, "context_line": "alpha()"},
@@ -832,7 +832,7 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     assert "epsilon.txt:908" in out
     assert "grt (Tobias Grün)" in out
     assert "some comment" in out
@@ -994,7 +994,7 @@ def test_gshow_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.Monke
     )
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch, gerrit=ChangeStore({}))
-    assert code == 1, err
+    assert code == 0, err
     assert "commit " in out
     assert git_out("rev-parse", "--short", sha, cwd=stack_repo) in out
     assert "local only wip" in out
@@ -1015,7 +1015,7 @@ def test_gshow_json_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.
         cwd=stack_repo,
     )
     code, out, err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch, gerrit=ChangeStore({}))
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     assert data["pushed"] is False
     assert data["patchset_status"] == "absent"
@@ -1219,7 +1219,7 @@ def test_gshow_picks_up_resolved_comments_when_updated_is_unchanged(
     )
 
     code, out, err = run_cli(stack_repo, gshow_main, ["--json", "HEAD"], monkeypatch, gerrit=store)
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     assert any(c.get("message") == "please fix" for c in data.get("comments") or [])
 
@@ -1355,7 +1355,7 @@ def test_show_says_who_voted_what(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     }
     store = ChangeStore(details)
     code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch, gerrit=store)
-    assert code in (ExitCode.OK, ExitCode.ATTENTION), err
+    assert code == ExitCode.OK, err
     assert "votes: Code-Review +2 Alice, -1 bob · Verified +1 CI Bot" in out
     _code, out, _err = run_cli(stack_repo, gshow_main, ["--ai"], monkeypatch, gerrit=store)
     assert "- Votes: Code-Review +2 Alice, -1 bob · Verified +1 CI Bot" in out

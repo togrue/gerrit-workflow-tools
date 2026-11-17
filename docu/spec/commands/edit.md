@@ -84,7 +84,7 @@ codes [`ger fix`](fix.md) uses for the same failures.
 | Code | Meaning |
 |------|---------|
 | `0` | Rebase completed (or git's own exit code) |
-| `1` | `ATTENTION` — declined the upstream prompt |
+| `1` | `REFUSED` — declined the upstream prompt |
 | `2` | Usage error (bad arguments) |
 | `3` | `NOT_FOUND` — no commit in the stack matches `REV` |
 | `4` | `AMBIGUOUS` — several stack commits share the Change-Id |

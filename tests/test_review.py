@@ -137,7 +137,7 @@ def test_a_change_branch_with_your_commits_is_not_moved_without_force(
     mine = _head(worktree)
     _review(stack_repo, store, ["101"], monkeypatch)
     code, _, err = _review(stack_repo, store, ["102"], monkeypatch)
-    assert code == ExitCode.ATTENTION and "change-102 has 1 commit(s)" in err
+    assert code == ExitCode.REFUSED and "change-102 has 1 commit(s)" in err
     code, _, err = _review(stack_repo, store, ["102", "--force"], monkeypatch)
     assert code == ExitCode.OK and f"old tip was {mine}" in err
     assert git_out("rev-parse", "change-102", cwd=worktree) == shas[2]
@@ -219,7 +219,7 @@ def test_vote_asks_first_and_never_publishes_without_yes_off_a_terminal(
 ) -> None:
     store, _keys, _shas = gerrit
     _review(stack_repo, store, ["102"], monkeypatch)
-    assert _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)[0] == ExitCode.ATTENTION
+    assert _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)[0] == ExitCode.REFUSED
     assert _review(stack_repo, store, ["--vote", "CR+2", "--dry-run"], monkeypatch)[0] == ExitCode.OK
     monkeypatch.setenv("GER_NO_PUBLISH", "1")
     assert _review(stack_repo, store, ["--vote", "CR+2", "-y"], monkeypatch)[0] == ExitCode.USAGE
@@ -233,7 +233,7 @@ def test_vote_refuses_when_gerrit_has_a_newer_patchset(
     _review(stack_repo, store, ["102"], monkeypatch)
     store.upload_patchset(keys[2], "f" * 40, 2)
     code, _, err = _review(stack_repo, store, ["--vote", "CR+1", "-y"], monkeypatch)
-    assert code == ExitCode.ATTENTION and "at patchset 2, you reviewed 1" in err
+    assert code == ExitCode.REFUSED and "at patchset 2, you reviewed 1" in err
     assert store.calls_to("publish_drafts") == []
 
 

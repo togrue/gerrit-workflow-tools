@@ -50,7 +50,7 @@ Editor: `GIT_EDITOR` → `core.editor` → `VISUAL` → `EDITOR` → `vi`. GUI e
 | Comment out a stored key | `git config --unset` at that scope |
 | Leave an active line unchanged (including an explicit stored default) | no write |
 
-Empty file after the editor exits → abort (`ATTENTION`). Parse errors → usage exit `2` with line numbers. Every catalog key must appear exactly once (active or commented).
+Empty file after the editor exits → abort (`REFUSED`). Parse errors → usage exit `2` with line numbers. Every catalog key must appear exactly once (active or commented).
 
 Resolution lives in `resolve_config_form` (`core/config_form.py`); file format in `render_config_editor_text` / `parse_config_editor_text` (`core/config_editor_file.py`). Scope comes from `Settings.scope` (`git config --list --show-scope`).
 
@@ -63,7 +63,7 @@ Resolution lives in `resolve_config_form` (`core/config_form.py`); file format i
 | Code | Meaning |
 |------|---------|
 | `0` | Applied (or no changes) |
-| `1` | `ATTENTION` — not a TTY, empty file abort, or editor non-zero exit |
+| `1` | `REFUSED` — not a TTY, empty file abort, or editor non-zero exit |
 | `2` | Usage / parse error |
 | `7` | `GIT` — editor binary not found |
 

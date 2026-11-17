@@ -87,7 +87,7 @@ def _run(argv: list[str] | None) -> int:
             return int(ExitCode.GIT)
         if editor_rc != 0:
             print(f"error: editor exited with status {editor_rc}", file=sys.stderr)
-            return int(ExitCode.ATTENTION)
+            return int(ExitCode.REFUSED)
 
         edited = path.read_text(encoding="utf-8")
     finally:
@@ -95,7 +95,7 @@ def _run(argv: list[str] | None) -> int:
 
     if not edited.strip():
         print("Aborted: empty config file.", file=sys.stderr)
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
 
     parsed, parse_errors = parse_config_editor_text(edited, sections)
     if parse_errors:

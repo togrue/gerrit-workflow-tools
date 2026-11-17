@@ -233,7 +233,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         and branch is not None
         and not require_branch_upstream(cwd, branch, settings=settings)
     ):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
 
     revs_or_code = show_revs_with_attention(p, args, run=run, branch=branch)
     if isinstance(revs_or_code, int):
@@ -284,15 +284,11 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
                 web_base=settings.gerrit_web_url,
             )
 
-    any_attention = False
     json_payloads: list[dict[str, object]] = []
     multi = len(targets) > 1
 
     for item in shown:
         resolved, commit, chains, ci_contents = item.target, item.commit, item.chains, item.ci_contents
-        if commit.attention_reasons:
-            any_attention = True
-
         if out_fmt == "json":
             json_payloads.append(
                 commit_json_payload(
@@ -333,7 +329,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
     # Shown what is known locally; now say, once, why the rest is not.
     if unavailable := next((item.gerrit_unavailable for item in shown if item.gerrit_unavailable), None):
         raise unavailable
-    return int(ExitCode.ATTENTION) if any_attention else int(ExitCode.OK)
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

@@ -234,13 +234,12 @@ Shared table ([exit-codes.md](../exit-codes.md)) — no new codes.
 
 | Code | Meaning |
 |------|---------|
-| `0` | Ran fine; nothing wants you |
-| `1` | `ATTENTION` — something wants you: a chain to review, or an outgoing chain with failed CI, unresolved comments or a negative vote (the **headline** exists) |
+| `0` | Ran fine, whether or not something wants you (a **headline** exists) |
 | `2` | `USAGE` — bad arguments |
 | `5` | `GERRIT` — query failed, auth, unreachable |
 | `6` | `CONFIG` — `gerrit.webUrl` or credentials missing |
 
-Consistent with `ger log` / `ger show`: exit `1` reports a *state*, not a failure.
+Consistent with `ger log` / `ger show`: a reported *state* is not a failure, so it exits `0`.
 
 ---
 

@@ -116,7 +116,7 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
     base_args = ["--color=never", "--hyperlinks", "always"]
     code_plain, out_plain, err_plain = run_cli(stack_repo, log_main, base_args, monkeypatch, gerrit=store)
     code, out, err = run_cli(stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store)
-    assert code == 1, err
+    assert code == 0, err
     assert code_plain in (0, 1), err_plain
     assert _primary_log_lines(out_plain) == _primary_log_lines(out)
     assert "v? " in out
@@ -278,10 +278,10 @@ def test_log_no_reviewers_shown_in_attention(stack_repo: Path, monkeypatch: pyte
     overrides[0] = {"reviewers": []}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     assert "no reviewers" in out
     code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     assert any("no-reviewers" in item.get("attention_reasons", []) for item in data["commits"])
 
@@ -383,7 +383,7 @@ def test_log_verbose_shows_only_failing_checks_at_v(
         monkeypatch,
         gerrit=store,
     )
-    assert code_v == 1, err_v
+    assert code_v == 0, err_v
     assert "verify" in out_v
     assert "lint" not in out_v
     assert ANSI_RED in out_v
@@ -395,7 +395,7 @@ def test_log_verbose_shows_only_failing_checks_at_v(
         monkeypatch,
         gerrit=store,
     )
-    assert code_vv == 1, err_vv
+    assert code_vv == 0, err_vv
     assert "verify" in out_vv
     assert "lint" in out_vv
     assert ANSI_GREEN in out_vv
@@ -437,7 +437,7 @@ def test_log_verbose_shows_outdated_message_ci_in_grey(
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "jenkins" in out
     assert ANSI_DIM_GRAY in out
     assert "Widget/job/Widget/10" in out
@@ -456,7 +456,7 @@ def test_log_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.Mon
         overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     assert _unicode_strikethrough(rows[-1].subject) in out
 
 
@@ -487,7 +487,7 @@ def test_log_file_redirect_encodes_unicode(
         monkeypatch.setattr(sys, "stdout", out_f)
         code = log_main(["--color=never"], gerrit=ChangeStore(details))
 
-    assert code == 1, err_buf.getvalue()
+    assert code == 0, err_buf.getvalue()
     text = out_path.read_text(encoding="utf-8")
     assert "summary:" in text
     assert _unicode_strikethrough(rows[-1].subject) in text
@@ -500,7 +500,7 @@ def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.Monke
     overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     commits = data["commits"]
     assert commits[-1]["abandoned"] is True
@@ -843,7 +843,7 @@ def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
     store = ChangeStore(details)
 
     code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     tip_row = next(item for item in data["commits"] if item.get("change_id") == tip.change_id)
     assert tip_row["comments_unresolved"] == 1

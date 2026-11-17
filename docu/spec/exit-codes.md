@@ -1,13 +1,13 @@
 # Exit codes
 
-One code per failure **reason**, shared by every `ger` command. The same reason exits the same way whichever command hit it — so a script can branch on the code without knowing which command produced it.
+`0` when the command did what was asked; one non-zero code per failure **reason**, shared by every `ger` command. The same reason exits the same way whichever command hit it — so a script can branch on the code without knowing which command produced it.
 
 Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which is the only place the error-to-code mapping lives.
 
 | Code | Name | Meaning |
 |------|------|---------|
 | `0` | `OK` | Success |
-| `1` | `ATTENTION` | Ran fine, but something wants you: unresolved comments, failed CI, you declined a prompt, or ger will not go on without your decision because your commits or branches are in the way (`ger review`, `ger checkout`). Uncommitted changes in the way are `2`: you fix that state and rerun. **Not a failure.** |
+| `1` | `REFUSED` | Did not go ahead: you declined a prompt, or ger will not go on without your decision because your commits or branches are in the way (`ger review`, `ger checkout`). Uncommitted changes in the way are `2`: you fix that state and rerun |
 | `2` | `USAGE` | The command cannot run as asked: bad arguments, an invalid input format, an unknown command (`ger lgo` suggests `log`), or a state it refuses to start from and that you fix before running it again: no terminal for a required prompt (pass `-y`), nothing staged or unresolved conflicts (`ger fix`), changes to tracked files under `ger checkout` / `ger review`, a rebase in progress (`ger push`, `ger checkout`) or, under a history rewrite, a rebase in progress or uncommitted changes (`ger edit`, `ger reword`, `ger rebase`). Also what argparse itself exits with. Raised as `core.usage.UsageError` |
 | `3` | `NOT_FOUND` | A changeish, Change-Id or git revision resolved to nothing |
 | `4` | `AMBIGUOUS` | Several candidates survived narrowing; the message lists them as `change:N (triplet, status)`, `--json` under `alternatives` |
@@ -16,7 +16,7 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | `7` | `GIT` | A git command failed, or the command runs outside a git repository (`error: not a git repository`, checked once in `init_cli_runtime`; `ger inbox`, `setup`, `config`, `cache` and `fetch-api` run anywhere) |
 | `8` | `DUPLICATE_CHANGE_ID` | The same Change-Id appears on more than one local commit |
 | `9` | `MISSING_CHANGE_ID` | A local commit has no Change-Id footer |
-| `10` | `NO_EDIT_ATTENTION` | Not a failure, so printed without `error:`. An attention walk (`ger edit`, `show` or `sha` with `-n` or first-attention targeting) has nothing left to visit. Also the end of a review chain walk (`ger review --next` / `--prev`), so scripts loop on one code |
+| `10` | `NO_EDIT_ATTENTION` | Printed without `error:`, since scripts loop until they see it. An attention walk (`ger edit`, `show` or `sha` with `-n` or first-attention targeting) has nothing left to visit. Also the end of a review chain walk (`ger review --next` / `--prev`), so scripts loop on one code |
 | `11` | `CI_CONTENT` | A **CI link**'s content could not be fetched or parsed where the command required it (`ger ci`; `ger show --ci` reports it and carries on) |
 
 ## What is not remapped
@@ -27,10 +27,12 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 
 ## Attention is not failure
 
-`ger log` and `ger show` exit `1` when a commit needs attention. That is the command working correctly and reporting a state, which is why it shares a code with "you said no at a prompt" rather than with the error codes. Scripts that treat any non-zero as failure will see attention as an error; branch on `1` explicitly.
+`ger log`, `ger show`, `ger ci` and `ger inbox` exit `0` when a commit or change needs attention. That is the command working correctly and reporting a state; the state is in the output (`--json` for scripts), not the exit code. Any non-zero exit means the command did not do what was asked.
 
 ## History
 
 This replaces three separate and mutually contradictory tables. `3` used to mean "Gerrit API / git resolution error" for resolution commands but "duplicate Change-Id" for `ger sha`; `4` meant "ambiguous" in one and "git error" in the other; `ger change-id --check` (formerly `--check-duplicates`) had a third scheme again. Codes for `ger sha` and `ger change-id` therefore **changed** when this table landed.
 
 Related: [change-and-commit-identifiers.md](change-and-commit-identifiers.md) for how changeishes resolve, and what `NOT_FOUND` and `AMBIGUOUS` mean in that context.
+
+Attention used to exit `1` (`ATTENTION`) from `ger log`, `show`, `ci` and `inbox`. It now exits `0`, so that `0` always means success; `1` was renamed `REFUSED` and keeps only its "did not go ahead" meanings.

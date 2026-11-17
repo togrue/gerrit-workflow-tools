@@ -59,8 +59,8 @@ Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when co
 
 | Code | Meaning |
 |------|---------|
-| `0` | No commit requires attention |
-| `1` | At least one commit requires attention |
+| `0` | Success, whether or not a commit requires attention |
+| `1` | `REFUSED` — you declined the upstream prompt |
 | `2` | Invalid usage |
 | `3` | A revision in the range does not exist |
 | `5` | Gerrit API error, or Gerrit could not be asked at all (see below) |

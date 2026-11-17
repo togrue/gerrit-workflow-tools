@@ -173,7 +173,7 @@ Drafts are shown inside their chain, so the human review step reads them where t
 
 When every unresolved chain on a commit has a draft that resolves it, the comments token (`com`) turns **blue** in `ger log` and `ger show`, and that commit's reason `unresolved-comments` becomes `unpublished-drafts`:
 
-- `ger log` still exits `1`. Something still waits on you: publishing.
+- `ger log` still flags the commit. Something still waits on you: publishing.
 - **Edit attention** does not count `unpublished-drafts`. The code is fixed and nothing is left to edit, so `ger edit --first-attention-commit` and `ger show --first-attention` move past the commit. Without this, the walk would keep landing on chains the author has already answered.
 - A chain that still has no resolving draft keeps `unresolved-comments`, so a commit with both reasons stays in the walk.
 

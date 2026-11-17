@@ -333,9 +333,9 @@ def run_ger(
 
 
 def ger_json(repo: Path, main_fn: Callable[..., int], argv: list[str], monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Run ``ger <command> --json …`` and parse stdout; attention (exit 1) is not a failure."""
+    """Run ``ger <command> --json …`` that must succeed, and parse stdout."""
     code, out, err = run_ger(repo, main_fn, ["--json", *argv], monkeypatch)
-    assert code in (0, 1), f"exit {code}: {err}"
+    assert code == 0, f"exit {code}: {err}"
     return json.loads(out)
 
 

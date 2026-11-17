@@ -143,7 +143,7 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
     if args.first_attention or args.next_attention:
         branch = run.repo.working_branch
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-            return int(ExitCode.ATTENTION)
+            return int(ExitCode.REFUSED)
         resolved = resolve_attention_query_or_exit(
             run,
             args,

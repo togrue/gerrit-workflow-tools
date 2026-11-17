@@ -277,7 +277,7 @@ def test_attention_labels_on_pushed_chain(
         ["--color", "never"],
         monkeypatch,
     )
-    assert code_log == 1, elog
+    assert code_log == 0, elog
 
     code_json, out_json, ejson = run_cli(
         repo,
@@ -285,7 +285,7 @@ def test_attention_labels_on_pushed_chain(
         ["--json"],
         monkeypatch,
     )
-    assert code_json == 1, ejson
+    assert code_json == 0, ejson
     json_rows = _json_by_subject_tag(out_json)
     first_block = _first_blocking_index(_json_commits(out_json))
 

@@ -32,7 +32,6 @@ from gerrit_workflow_tools.core.inbox import (
     TO_REVIEW,
     InboxSection,
     load_inbox,
-    pick_headline,
     project_scope,
     section_summary,
 )
@@ -302,7 +301,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
             show_url=bool(args.url),
             verbose=bool(args.verbose),
         )
-    return int(ExitCode.ATTENTION) if pick_headline(sections) else int(ExitCode.OK)
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

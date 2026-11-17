@@ -325,7 +325,7 @@ def _publish(
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
     what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
     if posts and not args.dry_run and not _confirmed(args, what):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
 
     failed = False
     for change in posts:
@@ -376,7 +376,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     branch = args.branch or run.repo.working_branch
     searches_stack = change is None and not (args.publish and args.targets)
     if searches_stack and branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
 
     service = run.gerrit
     if args.publish:

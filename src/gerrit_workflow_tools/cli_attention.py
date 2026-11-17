@@ -65,7 +65,7 @@ def resolve_attention_query_or_exit(
 ) -> LogCommit | int:
     """Resolve an attention query, or return an :class:`ExitCode` int on upstream decline."""
     if not require_stack_upstream(run):
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
     mode: EditAttentionMode = "first" if args.first_attention else "next"
     target, notes = resolve_attention_query(run, branch=branch, mode=mode, after_changeish=after_changeish)
     for note in notes:

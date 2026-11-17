@@ -128,7 +128,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         print_resolution_note(target.resolution)
     else:
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-            return int(ExitCode.ATTENTION)
+            return int(ExitCode.REFUSED)
         base, _, _ = merge_base_with_target(cwd, branch)
 
     # The enricher reads GIT_EDITOR / core.editor / EDITOR to find the actual editor to open.

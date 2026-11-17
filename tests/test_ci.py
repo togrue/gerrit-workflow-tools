@@ -48,7 +48,7 @@ def test_ci_lists_findings_grouped_by_link_label(stack_repo: Path, monkeypatch: 
     code, out, err = run_cli(
         stack_repo, ci_main, ["--color=never"], monkeypatch, gerrit=_store(stack_repo), ci_http=http
     )
-    assert code == ExitCode.ATTENTION, err
+    assert code == int(ExitCode.OK), err
     assert f"jenkins  {JENKINS}  (log: {CONSOLE})  (Widget #55)" in out
     assert "pytest  demo/calc.py:6  tests/test_calc.py::test_divide: ZeroDivisionError" in out
     assert "Started by Gerrit" not in out, "no body without -v / --full"
@@ -58,7 +58,7 @@ def test_ci_json_is_the_contract(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     code, out, err = run_cli(
         stack_repo, ci_main, ["--json"], monkeypatch, gerrit=_store(stack_repo), ci_http=FakeCiHttp(jenkins_build())
     )
-    assert code == ExitCode.ATTENTION, err
+    assert code == int(ExitCode.OK), err
     [commit] = _json(out)["commits"]
     [content] = commit["ci_content"]
     assert (content["label"], content["url"], content["source"]) == ("jenkins", CONSOLE, "message")
@@ -79,7 +79,7 @@ def test_ci_verbose_tail_and_full_body(stack_repo: Path, monkeypatch: pytest.Mon
     store = _store(stack_repo)
     http = FakeCiHttp(jenkins_build(log=long_log))
     code, out, _err = run_cli(stack_repo, ci_main, ["-v", "--color=never"], monkeypatch, gerrit=store, ci_http=http)
-    assert code == ExitCode.ATTENTION
+    assert code == int(ExitCode.OK)
     assert "earlier omitted, --full for all" in out
     assert "line 0\n" not in out
     code, out, _err = run_cli(stack_repo, ci_main, ["--full", "--json"], monkeypatch, gerrit=store, ci_http=http)
@@ -121,7 +121,7 @@ def test_ci_markdown(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = run_cli(
         stack_repo, ci_main, ["--ai"], monkeypatch, gerrit=_store(stack_repo), ci_http=FakeCiHttp(jenkins_build())
     )
-    assert code == ExitCode.ATTENTION
+    assert code == int(ExitCode.OK)
     assert "### CI findings" in out
     assert "#### jenkins" in out
     assert "- **pytest** (failed) `demo/calc.py:6`" in out
@@ -133,7 +133,7 @@ def test_ci_markdown(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_show_does_not_fetch_ci_content_by_default(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     http = FakeCiHttp(jenkins_build())
     code, out, _err = run_cli(stack_repo, show_main, ["--json"], monkeypatch, gerrit=_store(stack_repo), ci_http=http)
-    assert code == ExitCode.ATTENTION
+    assert code == int(ExitCode.OK)
     assert http.calls == []
     assert "ci_content" not in _json(out)
 
@@ -165,7 +165,7 @@ def test_show_ci_fetch_failure_is_soft(stack_repo: Path, monkeypatch: pytest.Mon
         gerrit=_store(stack_repo),
         ci_http=FakeCiHttp({}),
     )
-    assert code == ExitCode.ATTENTION, err
+    assert code == int(ExitCode.OK), err
     assert f"jenkins  {JENKINS}  (log: {CONSOLE})" in out
     assert "error: HTTP 404" in out
 

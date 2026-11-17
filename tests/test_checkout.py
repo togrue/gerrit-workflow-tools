@@ -144,7 +144,7 @@ def test_without_a_terminal_an_update_is_never_guessed(
     gerrit.upload(stack_repo, 2, 2, "reworded")
     git("switch", "-q", "main", cwd=stack_repo)
     code, _, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.REFUSED
     assert "feature has patchset 1 of change 102, Gerrit has patchset 2" in err
     assert "--update" in err and "--no-update" in err
     assert _on(stack_repo) == ("main", git_out("rev-parse", "main", cwd=stack_repo))
@@ -188,7 +188,7 @@ def test_a_local_version_gerrit_never_had_is_not_overwritten(
 ) -> None:
     mine = _edited_version(stack_repo, gerrit)
     code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.REFUSED
     assert "mine holds a version of change 102 that Gerrit never had" in err
     assert "--no-update" in err and "-b NAME" in err and "--force" in err
     assert git_out("rev-parse", "mine", cwd=stack_repo) == mine
@@ -219,7 +219,7 @@ def test_a_branch_name_that_is_taken_is_not_reset_without_force(
     _fresh_clone(stack_repo)
     git("branch", "-q", "change-102", "main", cwd=stack_repo)
     code, _, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
-    assert code == ExitCode.ATTENTION and "branch change-102 already exists" in err
+    assert code == ExitCode.REFUSED and "branch change-102 already exists" in err
     assert git_out("rev-parse", "change-102", cwd=stack_repo) == git_out("rev-parse", "main", cwd=stack_repo)
     assert _checkout(stack_repo, gerrit, ["102", "--force"], monkeypatch)[0] == ExitCode.OK
     assert _on(stack_repo) == ("change-102", gerrit.shas[2])
@@ -383,7 +383,7 @@ def test_update_refuses_a_merge_that_conflicts_and_changes_nothing(
 ) -> None:
     _ps2, mine = _diverged(stack_repo, gerrit, theirs="same.txt=bob", mine="same.txt=me")
     code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.REFUSED
     assert "change the same lines (same.txt); nothing was changed" in err
     assert git_out("rev-parse", "mine", cwd=stack_repo) == mine
 

@@ -62,7 +62,7 @@ def test_push_ready_readies_the_reworked_and_the_unchanged_wip_change(
 ) -> None:
     repo, _branch, (base, top) = _pushed_stack(gerrit_integration_context, tmp_path, monkeypatch, "draft", "--wip")
     code, out, _err = run_ger(repo, ger_log_main, ["--color", "never"], monkeypatch)
-    assert code == 1
+    assert code == 0
     assert "WIP 2" in out and "ger push --ready" in out
 
     _amend_top(repo, "reworked\n")

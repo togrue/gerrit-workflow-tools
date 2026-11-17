@@ -155,7 +155,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         result = apply_checkout(cwd, plan, action, settings=settings)
     except CheckoutRefusal as refusal:
         print(f"error: {refusal}", file=sys.stderr)
-        return int(ExitCode.ATTENTION)
+        return int(ExitCode.REFUSED)
     _report(plan, result, change.view.url(service.web_base))
     return int(ExitCode.OK)
 
