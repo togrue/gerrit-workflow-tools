@@ -51,7 +51,7 @@ Publishing with the push matters. A "Done" that arrives before the patchset that
 ger reply                                      (TTY, planned) step through the open chains of HEAD's change
 ger reply [--change CHANGEISH] CHAIN (-m MSG ... | -F FILE | --done) [--resolve | --unresolve] [--json]
 ger reply [--change CHANGEISH] CHAIN --discard [--json]
-ger reply --publish [REV ...] [-m MSG] [--dry-run] [-y] [--json]
+ger reply --publish [REV ...] [--only ID ...] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y] [--json]
 ```
 
 ### Guided reply
@@ -97,7 +97,13 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 ### Publishing
 
-`ger reply --publish` publishes **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with no `REV`. Changes without drafts are skipped and listed as such.
+`ger reply --publish` sends your review: by default **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with no `REV`. Changes without drafts are skipped and listed as such.
+
+- `--only ID` (repeatable) publishes just those drafts (comment ids, as `ger show --json` lists them); your other drafts stay drafts. An id that is none of your drafts on the targets exits `3` before anything is sent. This is how an agent sends its own answers without publishing a draft the human keeps for later.
+- `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`) votes with the review.
+- `-m MSG` is the change message. On a change you **named** as `REV`, `-m` or `--vote` alone posts even with no draft to publish: a change-level note or a vote, with every draft kept (Gerrit's `drafts: KEEP`). With no `REV` it never goes to every change of the stack: only changes that have drafts to publish get it.
+
+`ger review --vote` is the reviewer-flow spelling of the same review POST (`GerritComments.publish_drafts`): it publishes every draft on the change under review.
 
 | Option | Effect |
 |--------|--------|
@@ -105,7 +111,7 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 | `--dry-run` | List what would be published and exit `0`. Allowed under the publish guard |
 | `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json`, which never prompts |
 
-Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s) on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, or `--json`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
+Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, or `--json`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
 
 Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
 
@@ -116,7 +122,7 @@ Add retry helper  https://host/c/proj/+/123
   src/retry.py:80: "The table is 8 entries..."
 ```
 
-With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "status": ...}]}`, where `status` is `published`, `dry-run`, `no-drafts` or `failed` (then with `error`).
+With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "labels": {...}, "status": ...}]}`, where `status` is `published`, `dry-run`, `no-drafts` or `failed` (then with `error`).
 
 ### Publishing with `ger push`
 

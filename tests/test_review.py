@@ -210,7 +210,7 @@ def test_vote_publishes_your_drafts_with_the_votes(
     code, out, _ = _review(worktree, store, ["--vote", "CR+1", "--vote", "V=-1", "-y", "-m", "lgtm"], monkeypatch)
     assert code == ExitCode.OK and "published 1 draft(s) and Code-Review+1, Verified-1 on 102" in out
     [call] = store.calls_to("publish_drafts")
-    assert call.kwargs == {"message": "lgtm", "labels": {"Code-Review": 1, "Verified": -1}}
+    assert call.kwargs == {"message": "lgtm", "labels": {"Code-Review": 1, "Verified": -1}, "draft_ids": None}
     assert store.list_drafts(keys[2]) == {}
 
 

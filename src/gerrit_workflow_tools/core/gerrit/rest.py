@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 from urllib.parse import quote, unquote
@@ -162,9 +162,18 @@ class GerritRest(Protocol):
         """Delete one of the caller's drafts."""
 
     def publish_drafts(
-        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """Publish all the caller's drafts on every patchset, with an optional message and votes."""
+        """Post a review: the caller's drafts, an optional message and votes.
+
+        *draft_ids* ``None`` publishes every draft on every patchset; a sequence publishes only
+        those drafts, and an empty one none (a message or vote alone).
+        """
 
     def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
         """Return RelatedChangesInfo: the relation chain of *revision*, newest first."""

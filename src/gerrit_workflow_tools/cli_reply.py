@@ -31,6 +31,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, Inline
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import (
     chain_location,
     draft_transition,
@@ -50,11 +51,13 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger reply",
         usage=(
             "ger reply [options] CHAIN (-m MSG | -F FILE | --done | --discard)\n"
-            "       ger reply --publish [-m MSG] [--dry-run] [-y] [REV ...]"
+            "       ger reply --publish [REV ...] [--only ID ...] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y]"
         ),
         description=(
             "Answer a comment chain with a draft. Drafts are visible only to you until published "
-            "(ger push publishes them with the patchset)."
+            "(ger push publishes them with the patchset). --publish sends your review: every draft, or "
+            "only --only ones, with --vote votes and a -m change message. On the changes you name, -m "
+            "or --vote alone posts without publishing any draft: a change-level note."
         ),
     )
     p.add_argument(
@@ -82,7 +85,20 @@ def _build_parser() -> argparse.ArgumentParser:
     state.add_argument("--unresolve", action="store_true", help="Keep or reopen the chain once published.")
     p.add_argument("--discard", action="store_true", help="Delete your draft in the chain instead of writing one.")
     publish = p.add_argument_group("publishing")
-    publish.add_argument("--publish", action="store_true", help="Publish all your drafts on the target changes.")
+    publish.add_argument(
+        "--publish", action="store_true", help="Publish your drafts on the target changes (all, unless --only)."
+    )
+    publish.add_argument(
+        "--only",
+        action="append",
+        default=None,
+        metavar="ID",
+        help="With --publish: publish only this draft (a comment id from ger show --json); repeat for more. "
+        "Your other drafts stay drafts.",
+    )
+    publish.add_argument(
+        "--vote", action="append", default=None, metavar="LABEL=N", help=f"With --publish: {VOTE_HELP}"
+    )
     publish.add_argument("--dry-run", action="store_true", help="With --publish: list the drafts, publish nothing.")
     publish.add_argument("-y", "--yes", action="store_true", help="With --publish: skip the confirmation.")
     add_json_arg(p)
@@ -94,8 +110,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def _message_and_flag(p: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[str, bool | None]:
     """The reply text and the requested state (``None``: keep or inherit). Exits 2 on conflicts."""
     sources = [name for name, given in (("-m", args.message), ("-F", args.file), ("--done", args.done)) if given]
-    if args.dry_run or args.yes:
-        p.error("--dry-run and -y belong to --publish")
+    if args.dry_run or args.yes or args.only or args.vote:
+        p.error("--only, --vote, --dry-run and -y belong to --publish")
     if args.discard:
         if sources or args.resolve or args.unresolve:
             p.error("--discard takes no message and no --resolve/--unresolve")
@@ -130,7 +146,7 @@ def _chain_ref(p: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[st
 def _check_publish_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Exit 2 on reply-only flags with ``--publish``, and while the publish guard is set."""
     if args.file or args.done or args.discard or args.resolve or args.unresolve or args.change:
-        p.error("--publish takes only -m (the change message), --dry-run, -y and REVs")
+        p.error("--publish takes only -m (the change message), --only, --vote, --dry-run, -y and REVs")
     if publish_blocked() and not args.dry_run:
         p.error(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
 
@@ -230,44 +246,82 @@ def _pending_drafts(service: GerritService, changes: list[_Change]) -> list[tupl
     return out
 
 
-def _confirmed(args: argparse.Namespace, count: int, changes: int) -> bool:
+def _confirmed(args: argparse.Namespace, what: str) -> bool:
     """Whether to go ahead: ``-y``, or a yes at a prompt. JSON output and no terminal never prompt."""
     if args.yes:
         return True
     if args.json_ or not stdin_is_terminal():
         raise UsageError("no prompt to answer (non-interactive or --json): pass -y to publish")
-    return confirm(f"Publish {count} draft(s) on {changes} change(s)?", default=False)
+    return confirm(f"Publish {what}?", default=False)
 
 
-def _publish(args: argparse.Namespace, service: GerritService, cwd: Path, branch: str | None) -> int:
-    """List your drafts on the targets, confirm, and publish them change by change."""
-    changes, where = _gerrit_changes(service, cwd, list(args.targets), branch=branch)
-    pending = _pending_drafts(service, changes)
-    with_drafts = {change.key for change, _ in pending}
-    results: list[dict[str, object]] = [
-        {"change": c.key, "url": c.url, "drafts": 0, "status": "no-drafts"} for c in changes if c.key not in with_drafts
+def _selected(
+    pending: list[tuple[_Change, list[CommentChain]]], only: list[str] | None, where: str
+) -> list[tuple[_Change, list[CommentChain]]]:
+    """*pending* narrowed to the chains holding the drafts *only* names; all of it without ``--only``."""
+    if only is None:
+        return pending
+    wanted = {draft_id.strip() for draft_id in only}
+    found = {d.comment_id for _, chains in pending for _, d in drafts_in(chains)}
+    if missing := sorted(wanted - found):
+        raise ChangeResolutionError(f"no draft of yours with id {', '.join(missing)} on {where}")
+    narrowed = [
+        (change, [chain for chain, d in drafts_in(chains) if d.comment_id in wanted]) for change, chains in pending
     ]
+    return [(change, chains) for change, chains in narrowed if chains]
+
+
+def _publish(
+    args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path, branch: str | None
+) -> int:
+    """List what goes out on the targets, confirm, and post it change by change.
+
+    Your drafts (all, or ``--only`` ones), ``--vote`` votes and the ``-m`` message. A change
+    without drafts to publish gets the message and votes only when it was named: a note
+    nobody asked for never goes to every change of the stack.
+    """
+    votes = parse_votes(args.vote)
+    changes, where = _gerrit_changes(service, cwd, list(args.targets), branch=branch)
+    pending = _selected(_pending_drafts(service, changes), args.only, where)
+    message = "\n\n".join(args.message) if args.message else None
+    with_drafts = {change.key: chains for change, chains in pending}
+    named = bool(args.targets) and bool(message or votes)
+    posts = [c for c in changes if c.key in with_drafts or named]
+    results: list[dict[str, object]] = [
+        {"change": c.key, "url": c.url, "drafts": 0, "status": "no-drafts"} for c in changes if c not in posts
+    ]
+    extras = ", ".join([*(f"{label}{value:+d}" for label, value in votes.items()), *(["a message"] if message else [])])
     if not args.json_:
-        for change, chains in pending:
-            print("\n".join(format_pending_drafts(f"{change.summary}  {change.url or change.key}", chains)))
-        if not pending:
+        for change in posts:
+            heading = f"{change.summary}  {change.url or change.key}"
+            print("\n".join(format_pending_drafts(heading, with_drafts.get(change.key, []))))
+            if extras:
+                print(f"  + {extras}")
+        if not posts:
             print(f"no drafts to publish on {where}")
-    count = sum(len(drafts_in(chains)) for _, chains in pending)
-    if pending and not args.dry_run and not _confirmed(args, count, len(pending)):
+    count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
+    what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
+    if posts and not args.dry_run and not _confirmed(args, what):
         return int(ExitCode.ATTENTION)
 
-    message = "\n\n".join(args.message) if args.message else None
     failed = False
-    for change, chains in pending:
-        row: dict[str, object] = {"change": change.key, "url": change.url, "drafts": len(drafts_in(chains))}
+    for change in posts:
+        chains = with_drafts.get(change.key, [])
+        drafts = [d.comment_id for _, d in drafts_in(chains) if d.comment_id]
+        row: dict[str, object] = {"change": change.key, "url": change.url, "drafts": len(drafts), "labels": votes}
         if args.dry_run:
             row["status"] = "dry-run"
         else:
             try:
-                service.comments.publish_drafts(change.key, message=message)
+                service.comments.publish_drafts(
+                    change.key,
+                    message=message,
+                    labels=votes or None,
+                    draft_ids=None if args.only is None and change.key in with_drafts else drafts,
+                )
                 row["status"] = "published"
                 if not args.json_:
-                    print(f"published {row['drafts']} draft(s) on {change.summary}")
+                    print(f"published {row['drafts']} draft(s){f' and {extras}' if extras else ''} on {change.summary}")
             except GerritApiError as error:
                 failed = True
                 row.update(status="failed", error=str(error))
@@ -301,7 +355,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     service = run.gerrit
     if args.publish:
-        return _publish(args, service, cwd, branch)
+        return _publish(args, p, service, cwd, branch)
     match, change_url = _find(service, cwd, comment_id, change=change, branch=branch)
     url = gerrit_inline_comment_url(change_url, match.chain.root_id)
     if args.discard:

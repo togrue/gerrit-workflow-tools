@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -43,12 +42,9 @@ from gerrit_workflow_tools.core.review_checkout import (
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
+from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
 from gerrit_workflow_tools.render.review_json import review_state_json
-
-
-_VOTE_RE = re.compile(r"^([A-Za-z][\w-]*)\s*(?:=\s*([+-]?\d+)|([+-]\d+))$")
-_LABEL_ALIASES = {"cr": "Code-Review", "v": "Verified"}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -83,7 +79,14 @@ def _build_parser() -> argparse.ArgumentParser:
     where.add_argument("--in-place", dest="mode", action="store_const", const="branch", help="This checkout.")
     p.add_argument("--force", action="store_true", help="Move a change-<n> branch that has commits of yours.")
     vote = p.add_argument_group("voting")
-    vote.add_argument("--vote", action="append", default=None, metavar="LABEL=N", help="Vote, e.g. CR+1, V=-1.")
+    vote.add_argument(
+        "--vote",
+        action="append",
+        default=None,
+        metavar="LABEL=N",
+        help=f"{VOTE_HELP} Publishes all your drafts on the change; to publish only some, or to post a "
+        "message without a vote: ger reply --publish.",
+    )
     add_change_option(vote, "With --vote: vote on this change.")
     vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
     vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
@@ -92,17 +95,6 @@ def _build_parser() -> argparse.ArgumentParser:
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
     return p
-
-
-def _parse_votes(p: argparse.ArgumentParser, raw: list[str]) -> dict[str, int]:
-    votes: dict[str, int] = {}
-    for item in raw:
-        match = _VOTE_RE.match(item.strip())
-        if match is None:
-            p.error(f"not a vote: {item!r} (use LABEL=N, LABEL+N or LABEL-N)")
-        label = _LABEL_ALIASES.get(match.group(1).lower(), match.group(1))
-        votes[label] = int(match.group(2) or match.group(3))
-    return votes
 
 
 def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -184,7 +176,7 @@ def _vote_target(args: argparse.Namespace, service: GerritService, cwd: Path) ->
 
 
 def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path) -> int:
-    votes = _parse_votes(p, args.vote)
+    votes = parse_votes(args.vote)
     if publish_blocked() and not args.dry_run:
         p.error(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     key, number, reviewed = _vote_target(args, service, cwd)

@@ -26,7 +26,7 @@ questions; deciding what is stale is the cache's job, above the seam.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -413,19 +413,37 @@ class ChangeStore:
             rows[:] = [row for row in rows if row.get("id") != draft_id]
 
     def publish_drafts(
-        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """Move every draft into the published comments and apply *labels*, as Gerrit's review POST does."""
-        self._record("publish_drafts", change_id, message=message, labels=dict(labels) if labels else None)
+        """Move the drafts (all, or *draft_ids*) into the published comments and apply *labels*, as Gerrit does."""
+        self._record(
+            "publish_drafts",
+            change_id,
+            message=message,
+            labels=dict(labels) if labels else None,
+            draft_ids=list(draft_ids) if draft_ids is not None else None,
+        )
         key = self._payload_id(change_id)
         payload_labels = self._row_or_raise(change_id).setdefault("labels", {})
         for name, value in (labels or {}).items():
             payload_labels[name] = {"value": value, "all": [{"value": value}]}
         published = self._comments.setdefault(key, {})
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f000")
-        for path, rows in self._drafts.pop(key, {}).items():
+        if message:
+            self._messages.setdefault(key, []).append({"message": message})
+        drafts = self._drafts.pop(key, {})
+        for path, rows in drafts.items():
+            chosen = [row for row in rows if draft_ids is None or row.get("id") in draft_ids]
+            kept = [row for row in rows if row not in chosen]
+            if kept:
+                self._drafts.setdefault(key, {})[path] = kept
             # Gerrit stamps publish time: a published draft becomes its chain's newest comment.
-            published.setdefault(path, []).extend({**row, "updated": stamp} for row in rows)
+            published.setdefault(path, []).extend({**row, "updated": stamp} for row in chosen)
         return {}
 
     def upload_patchset(self, change_ref: str, sha: str, number: int) -> None:

@@ -7,7 +7,7 @@ import json
 import logging
 import socket
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -357,10 +357,17 @@ class HttpGerritRest:
         self._request_json(_draft_path(change_id, revision, draft_id), method="DELETE")
 
     def publish_drafts(
-        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """POST a review that publishes the caller's drafts on all revisions, as the web UI's Send."""
-        review: dict[str, Any] = {"drafts": "PUBLISH_ALL_REVISIONS"}
+        """POST a review, as the web UI's Send: every draft (*draft_ids* ``None``), only those, or none."""
+        review: dict[str, Any] = {"drafts": "PUBLISH_ALL_REVISIONS" if draft_ids is None else "KEEP"}
+        if draft_ids:
+            review["draft_ids_to_publish"] = list(draft_ids)
         if message:
             review["message"] = message
         if labels:

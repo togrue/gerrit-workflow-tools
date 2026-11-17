@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
@@ -176,16 +176,21 @@ class CommentApi:
         return existing
 
     def publish_drafts(
-        self, change_id: str, *, message: str | None = None, labels: Mapping[str, int] | None = None
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
     ) -> None:
-        """Publish your drafts on *change_id*, with *labels* voted, then drop its cached rows.
+        """Publish your drafts on *change_id* (all, or *draft_ids*) with *labels* voted; drop its cached rows.
 
         Publishing moves the change's meta ref, but inside the trust window the probe is
         skipped; invalidating makes the next read see the published chains straight away.
         Callers check :func:`publish_blocked` first: the guard is policy, this is the act.
         """
         service = self._service
-        service.rest.publish_drafts(change_id, message=message, labels=labels)
+        service.rest.publish_drafts(change_id, message=message, labels=labels, draft_ids=draft_ids)
         service.cache.invalidate_changes([service.cache_key(change_id)])
 
     def get_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
