@@ -49,7 +49,7 @@ def test_ci_lists_findings_grouped_by_link_label(stack_repo: Path, monkeypatch: 
         stack_repo, ci_main, ["--color=never"], monkeypatch, gerrit=_store(stack_repo), ci_http=http
     )
     assert code == ExitCode.ATTENTION, err
-    assert f"jenkins  {CONSOLE}  (Widget #55)" in out
+    assert f"jenkins  {JENKINS}  (log: {CONSOLE})  (Widget #55)" in out
     assert "pytest  demo/calc.py:6  tests/test_calc.py::test_divide: ZeroDivisionError" in out
     assert "Started by Gerrit" not in out, "no body without -v / --full"
 
@@ -62,6 +62,7 @@ def test_ci_json_is_the_contract(stack_repo: Path, monkeypatch: pytest.MonkeyPat
     [commit] = _json(out)["commits"]
     [content] = commit["ci_content"]
     assert (content["label"], content["url"], content["source"]) == ("jenkins", CONSOLE, "message")
+    assert content["build_url"] == JENKINS, "the URL as the CI message gave it, to quote"
     prov = content["provenance"]
     assert prov["provider"] == "jenkins"
     assert prov["cache_verdict"] == "body"
@@ -165,7 +166,7 @@ def test_show_ci_fetch_failure_is_soft(stack_repo: Path, monkeypatch: pytest.Mon
         ci_http=FakeCiHttp({}),
     )
     assert code == ExitCode.ATTENTION, err
-    assert f"jenkins  {CONSOLE}" in out
+    assert f"jenkins  {JENKINS}  (log: {CONSOLE})" in out
     assert "error: HTTP 404" in out
 
 

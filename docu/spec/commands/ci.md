@@ -38,7 +38,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 
 ## Output
 
-**Human:** per target, the `ger show` headline, then per link `label  url  (build, cached, log truncated)` and one line per finding: `tool  path:line[:col]  message`, with pytest's `E` lines indented beneath. Errors come first; warnings below them are one line, `N warnings not listed (ger ci --warnings lists them)`, unless `--warnings` is given or no error explains the failure ([severity](../ci-content.md#severity)). A target without failed links prints `(no failed CI links)`, `(not on Gerrit)`, or names the failed checks that had no link.
+**Human:** per target, the `ger show` headline, then per link `label  build-url  (log: log-url)  (build, cached, log truncated)`: the build URL exactly as the CI message or Checks row gave it (what to quote when naming the build), and the log URL ger derived and read when that is another one and one line per finding: `tool  path:line[:col]  message`, with pytest's `E` lines indented beneath. Errors come first; warnings below them are one line, `N warnings not listed (ger ci --warnings lists them)`, unless `--warnings` is given or no error explains the failure ([severity](../ci-content.md#severity)). A target without failed links prints `(no failed CI links)`, `(not on Gerrit)`, or names the failed checks that had no link.
 
 **Markdown (`--ai`):** `## <sha> — <subject>`, `### CI findings`, `#### <label>` per label, a bullet per finding, warnings as a count like the human output; a fenced log with `-v` / `--full`.
 
@@ -50,7 +50,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
   "gerrit_url": "…", "ci_failures": ["…"],
   "ci_content": [
     {
-      "label": "jenkins", "url": "https://ci/…/55/console", "source": "message",
+      "label": "jenkins", "url": "https://ci/…/55/console", "build_url": "https://ci/…/55/", "source": "message",
       "provenance": {
         "url": "…", "provider": "jenkins", "build": "Widget #55", "fetched_at": "2026-11-09T10:00:00Z",
         "truncated": false, "cache_verdict": "body", "cached": false, "error": null

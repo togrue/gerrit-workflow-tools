@@ -18,6 +18,7 @@ def ci_content_json(content: CiContent, *, include_body: bool = False) -> dict[s
     payload: dict[str, object] = {
         "label": content.link.label,
         "url": content.link.url,
+        "build_url": content.link.build_url,
         "source": content.link.source,
         "provenance": content.provenance.to_dict(),
         "findings": [f.to_dict() for f in content.findings],
@@ -57,6 +58,12 @@ def warnings_note(count: int) -> str:
     return f"{count} warning{'' if count == 1 else 's'} not listed (ger ci --warnings lists them)"
 
 
+def _build_and_log(content: CiContent) -> str:
+    """The build URL as CI reported it, and the log URL ger read when that is another one."""
+    build, log = content.link.build_url, content.provenance.url
+    return build if not log or log.rstrip("/") == build.rstrip("/") else f"{build}  (log: {log})"
+
+
 def format_ci_section_human(
     contents: Sequence[CiContent], *, indent: str = "    ", warnings: bool = False
 ) -> list[str]:
@@ -68,7 +75,7 @@ def format_ci_section_human(
     for label, group in group_by_label(contents):
         for content in group:
             note = provenance_note(content)
-            lines.append(f"{indent}{label}  {content.provenance.url}" + (f"  ({note})" if note else ""))
+            lines.append(f"{indent}{label}  {_build_and_log(content)}" + (f"  ({note})" if note else ""))
             if content.failed:
                 lines.append(f"{indent}  error: {content.provenance.error}")
                 continue
@@ -116,7 +123,7 @@ def format_ci_section_markdown(
         lines.append(f"{heading}# {label}")
         for content in group:
             note = provenance_note(content)
-            lines.append(f"- CI: {content.provenance.url}" + (f" ({note})" if note else ""))
+            lines.append(f"- CI: {_build_and_log(content)}" + (f" ({note})" if note else ""))
             if content.failed:
                 lines.append(f"- error: {content.provenance.error}")
                 continue

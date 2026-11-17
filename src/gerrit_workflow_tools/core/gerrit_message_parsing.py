@@ -133,6 +133,7 @@ def ci_links_from_failed_checks(checks: Sequence[Mapping[str, Any]]) -> list[CiL
                 label=str(name),
                 url=jenkins_job_url_to_console(raw),
                 source="checks",
+                origin_url=raw,
             )
         )
     return out
@@ -160,6 +161,7 @@ def ci_links_from_build_failed_messages(
                     label="jenkins",
                     url=jenkins_job_url_to_console(parsed.build_url),
                     source="message",
+                    origin_url=parsed.build_url,
                 ),
             )
         )

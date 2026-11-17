@@ -82,7 +82,10 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "code_review": commit.code_review,
         "comments_unresolved": commit.comments_unresolved,
         "ci_failures": commit.ci_failures,
-        "ci_links": [{"label": link.label, "url": link.url, "source": link.source} for link in commit.ci_links],
+        "ci_links": [
+            {"label": link.label, "url": link.url, "build_url": link.build_url, "source": link.source}
+            for link in commit.ci_links
+        ],
         "ci_pipelines": [
             {
                 "label": pipe.label,
