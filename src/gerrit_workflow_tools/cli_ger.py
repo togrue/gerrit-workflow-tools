@@ -128,7 +128,8 @@ def _usage() -> str:
     lines.extend(
         [
             "",
-            "Without a terminal pass -y (or set GER_ASSUME_YES=1); log, show, inbox and reply take --json.",
+            "Without a terminal, commands that ask (push, checkout, reply --publish, review --vote) take -y,",
+            "or set GER_ASSUME_YES=1 once; log, show, inbox and reply take --json.",
             "Run ger <command> --help for command-specific options.",
         ]
     )

@@ -32,7 +32,7 @@ from gerrit_workflow_tools.cli_style import (
 from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.render.commit_row import (
@@ -95,6 +95,29 @@ def _format_summary_dashboard_line(
     if summary.get(Attention.WIP):
         stats.append(color_text("ready them with `ger push --ready`", ANSI_DIM))
     return f"{color_text('summary:', f'{ANSI_BOLD}{ANSI_CYAN}')} {color_text(' · ', ANSI_DIM).join(stats)}"
+
+
+def next_steps(commits: list[LogCommit]) -> list[str]:
+    """One ``next:`` line per state the stack is in that has a ger command for it, oldest commit first."""
+    lines: list[str] = []
+    merged = [c for c in commits if c.patchset_status in (PatchsetStatus.MERGED_SAME, PatchsetStatus.MERGED_DRIFT)]
+    if merged:
+        lines.append(
+            f"next: {merged[0].short_sha} is merged on Gerrit; drop it and rebase onto the target with "
+            "`ger rebase --onto-remote --drop-merged-equivalent`"
+        )
+    for reason, how in (
+        (Attention.DIVERGED, "merge Gerrit's patchset into yours with `ger checkout change:{n} --update`"),
+        (Attention.OUTDATED_PATCHSET, "take Gerrit's newer patchset with `ger checkout change:{n} --update`"),
+    ):
+        hit = next((c for c in commits if reason in c.attention_reasons and c.number), None)
+        if hit is not None:
+            lines.append(f"next: {hit.short_sha} {reason}: {how.format(n=hit.number)}")
+    if any(Attention.CHAIN_BLOCKED in c.attention_reasons for c in commits):
+        lines.append(
+            "chain blocked: a change below is not submittable yet (votes, CI, comments); it clears when that one is"
+        )
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +326,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     )
     print()
     print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
+    for line in next_steps(commits):
+        print(color_text(line, ANSI_DIM))
     if stack_view.gerrit_unavailable is not None:
         raise stack_view.gerrit_unavailable
     return int(exit_code)

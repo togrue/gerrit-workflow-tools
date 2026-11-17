@@ -937,3 +937,15 @@ def test_log_names_the_unknown_side_of_a_range(stack_repo: Path, monkeypatch: py
     code, _out, err = run_cli(stack_repo, log_main, ["nosuch..HEAD"], monkeypatch)
     assert code == ExitCode.NOT_FOUND
     assert err.strip() == "error: cannot resolve 'nosuch': no commit by that name"
+
+
+def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ "chain blocked" alone left agents guessing; the log says what it means."""
+    from tests.change_store import ChangeStore
+    from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
+
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows, per_index_overrides=[{"cr": 1, "submittable": False}])
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
+    assert "chain blocked: a change below is not submittable yet" in out
