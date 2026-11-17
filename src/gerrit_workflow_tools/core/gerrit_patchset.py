@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.changeish import parse as parse_changeish, unresolved_change_message
+from gerrit_workflow_tools.core.changeish import as_change_only, parse as parse_changeish, unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import Resolution, resolve_changeish
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -78,10 +78,10 @@ def changes_ref(number: int, patch_set: int) -> str:
 def resolve_change(service: GerritService, cwd: Path | str, changeish: str) -> ResolvedChange:
     """The one Gerrit change *changeish* names, read once.
 
-    A bare number is a change number here: nobody checks a commit out by an all-digit SHA.
+    A bare number (or ``ger inbox``'s ``c<n>``) is a change number here: nobody checks a commit
+    out by an all-digit SHA.
     """
-    if changeish.isdigit():
-        changeish = f"change:{changeish}"
+    changeish = as_change_only(changeish)
     branch = resolve_working_branch(cwd, settings=service.settings)
     changes = service.changes.exact()  # a patchset to act on: as Gerrit has it now, asked once
     resolution = resolve_changeish(

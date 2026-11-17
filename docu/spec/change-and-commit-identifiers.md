@@ -108,9 +108,12 @@ it as follows.
   commit has that name, every command says so the same way and points there: `cannot resolve
   '120045': no commit by that name; did you mean change:120045?` (exit `3`). An `I…` token
   that is not a valid Change-Id gets `…, and no Change-Id either (I plus 40 hex digits)`.
-- Where the argument can only ever be a Gerrit change — `ger checkout CHANGEISH` and
-  `ger review CHANGEISH` — a bare integer **is** the change number: nobody checks out or
-  reviews a commit by an all-digit SHA. One place decides it, `gerrit_patchset.resolve_change`.
+- Where the argument can only ever be a Gerrit change — `ger checkout CHANGEISH`,
+  `ger review CHANGEISH` and every `--change` option (`ger comment`, `ger reply`,
+  `ger review --vote`) — a bare integer **is** the change number: nobody checks out or
+  reviews a commit by an all-digit SHA. `ger inbox`'s `c<n>` token is accepted there too. One
+  rule decides it, `changeish.as_change_only`: `gerrit_patchset.resolve_change` applies it to
+  the positionals, `cli_common.add_change_option` to every `--change`.
   Every command's help says which of the two its argument is, from one shared wording
   (`cli_common.changeish_help`).
 - **Not found reads the same everywhere**: `cannot resolve '<input>': <what is missing>`, with

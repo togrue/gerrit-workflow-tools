@@ -12,6 +12,7 @@ from urllib.parse import unquote
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
+    add_change_option,
     add_color_args,
     add_json_arg,
     add_verbose_and_debug_log_args,
@@ -65,12 +66,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "With --publish: changeishes whose drafts to publish (default: the local stack)."
         ),
     )
-    p.add_argument(
-        "--change",
-        metavar="CHANGEISH",
-        default=None,
-        help="Look for CHAIN on this change only (default: every change in the local stack).",
-    )
+    add_change_option(p, "Look for CHAIN on this change only (default: every change in the local stack).")
     p.add_argument(
         "--branch",
         metavar="NAME",

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from gerrit_workflow_tools.core.changeish import Changeish, is_change_id, parse
+from gerrit_workflow_tools.core.changeish import Changeish, as_change_only, is_change_id, parse
 from tests.fixtures import _cid
 
 
@@ -156,3 +156,20 @@ def test_changeish_is_frozen() -> None:
 
 def test_parse_round_trips_through_raw() -> None:
     assert parse("  HEAD~1  ") == Changeish(raw="HEAD~1", kind="git-rev", rev="HEAD~1")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("692", "change:692"),
+        (" 692 ", "change:692"),
+        ("c692", "change:692"),
+        ("C692", "change:692"),
+        ("change:692", "change:692"),
+        ("I" + "a" * 40, "I" + "a" * 40),
+        ("cafe12", "cafe12"),
+        ("https://g/c/p/+/692", "https://g/c/p/+/692"),
+    ],
+)
+def test_as_change_only_reads_numbers_as_changes(raw: str, expected: str) -> None:
+    assert as_change_only(raw) == expected

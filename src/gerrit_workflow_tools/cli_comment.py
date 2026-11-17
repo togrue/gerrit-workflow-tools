@@ -8,6 +8,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
+    add_change_option,
     add_color_args,
     add_json_arg,
     add_verbose_and_debug_log_args,
@@ -62,12 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="LOCATION",
         help="PATH, PATH:LINE, PATH:START-END or PATH:LINE.COL-LINE.COL (lines and columns from 1).",
     )
-    p.add_argument(
-        "--change",
-        metavar="CHANGEISH",
-        default=None,
-        help="Comment on this change (default: the change under review here, else the commit at HEAD).",
-    )
+    add_change_option(p, "Comment on this change (default: the change under review here, else the commit at HEAD).")
     p.add_argument("--branch", metavar="NAME", default=None, help="Local branch whose stack to resolve in.")
     text = p.add_argument_group("message")
     text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")

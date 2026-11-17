@@ -10,6 +10,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
+    add_change_option,
     add_color_args,
     add_json_arg,
     add_verbose_and_debug_log_args,
@@ -83,7 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="Move a change-<n> branch that has commits of yours.")
     vote = p.add_argument_group("voting")
     vote.add_argument("--vote", action="append", default=None, metavar="LABEL=N", help="Vote, e.g. CR+1, V=-1.")
-    vote.add_argument("--change", metavar="CHANGEISH", default=None, help="With --vote: vote on this change.")
+    add_change_option(vote, "With --vote: vote on this change.")
     vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
     vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
     vote.add_argument("-y", "--yes", action="store_true", help="With --vote: skip the confirmation.")

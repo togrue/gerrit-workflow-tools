@@ -405,3 +405,33 @@ def test_fix_of_the_dev_sibling_fixes_the_stack_commit_and_says_it_targets_main(
     assert code == 0, err
     assert json_stdout(out)["fixup_sha"] == sha
     assert f"local stack commit {sha[:7]} carries the same Change-Id but targets 'main'" in err
+
+
+@pytest.mark.parametrize(
+    ("command", "argv"),
+    [
+        ("comment", ["a.txt:1", "-m", "x", "--change", "99999"]),
+        ("comment", ["a.txt:1", "-m", "x", "--change", "c99999"]),
+        ("reply", ["abc_123", "-m", "x", "--change", "99999"]),
+        ("review", ["--vote", "CR+1", "--change", "99999", "-y"]),
+        ("checkout", ["c99999"]),
+    ],
+)
+def test_a_bare_number_names_a_change_wherever_only_a_change_fits(
+    command: str, argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--change N`` (and inbox's ``cN``) is change N in every command, as ``ger checkout N`` always was."""
+    from gerrit_workflow_tools import cli_checkout, cli_comment, cli_reply, cli_review
+
+    mains = {
+        "comment": cli_comment.main,
+        "reply": cli_reply.main,
+        "review": cli_review.main,
+        "checkout": cli_checkout.main,
+    }
+    _configure_web(stack_repo)
+    git("config", "gerrit.user", "u", cwd=stack_repo)
+    git("config", "gerrit.token", "t", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, mains[command], argv, monkeypatch, gerrit=ChangeStore({}))
+    assert code == ExitCode.NOT_FOUND, err
+    assert err.strip() == "error: cannot resolve 'change:99999': Gerrit has no such change"

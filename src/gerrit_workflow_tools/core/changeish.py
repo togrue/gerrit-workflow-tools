@@ -143,6 +143,24 @@ class Changeish:
         return None
 
 
+_INBOX_NUMBER_RE = re.compile(r"^[cC](\d+)$")
+
+
+def as_change_only(raw: str) -> str:
+    """*raw* as written for an argument that can only name a Gerrit change.
+
+    Where the argument cannot be a commit (``--change``, ``ger review CHANGEISH``), a bare
+    number is that change, and so is ``ger inbox``'s ``c<n>`` token: both become
+    ``change:<n>``. Everything else is returned unchanged for :func:`parse`. Arguments that
+    may be a commit keep the git-revision-first rule; see :func:`unresolved_rev_message`.
+    """
+    s = raw.strip()
+    if _DIGITS_RE.fullmatch(s):
+        return f"change:{s}"
+    inbox = _INBOX_NUMBER_RE.fullmatch(s)
+    return f"change:{inbox[1]}" if inbox else s
+
+
 def address_problem(parsed: Changeish, *, web_base: str | None) -> str | None:
     """Why *parsed* cannot be the address it looks like, or ``None`` when it can be."""
     if parsed.kind == "change-ref" and parsed.number is not None:

@@ -29,6 +29,7 @@ from gerrit_workflow_tools.cli_style import (
 )
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
+from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
@@ -226,6 +227,20 @@ def changeish_help(what: str, *, change_only: bool = False) -> str:
     if change_only:
         return f"{what}: a change number, {_CHANGEISH_FORMS}."
     return f"{what}: a git revision (a bare number too: write change:<n> for a change), {_CHANGEISH_FORMS}."
+
+
+def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str) -> None:
+    """Register ``--change CHANGEISH``: it only ever names a Gerrit change, so a bare number is one.
+
+    One registration for every command, so ``--change 692`` means change 692 everywhere.
+    """
+    parser.add_argument(
+        "--change",
+        metavar="CHANGEISH",
+        default=None,
+        type=as_change_only,
+        help=f"{help_text} A change number, {_CHANGEISH_FORMS}.",
+    )
 
 
 def add_json_arg(parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGroup) -> None:
