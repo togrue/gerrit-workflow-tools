@@ -20,7 +20,13 @@ from gerrit_workflow_tools.core.git_state import (
     refs_for_push_branch_name,
     resolve_upstream_parsed,
 )
-from gerrit_workflow_tools.core.push_checks import check_existing_changes, git_or_none, rebase_check
+from gerrit_workflow_tools.core.push_checks import (
+    PushBoundary,
+    check_existing_changes,
+    push_boundary,
+    push_ready,
+    rebase_check,
+)
 from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
 from gerrit_workflow_tools.core.push_result import PushResult, gerrit_rejection, push_rejected_no_new_changes, result_of
 from gerrit_workflow_tools.core.push_reviewers import (
@@ -39,21 +45,11 @@ from gerrit_workflow_tools.core.push_unchanged import (
     planned_updates,
     unreached_options_warning,
 )
-from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.core.usage import UsageError
-
-
-@dataclass(frozen=True)
-class PushBoundary:
-    sha: str | None
-    reason: str
-    short_sha: str | None
-    subject: str | None
-    remaining_unpushed: int
 
 
 @dataclass(frozen=True)
@@ -214,7 +210,7 @@ def prepare(
         private=private,
         remove_private=remove_private,
     )
-    ready = _ready(
+    ready = push_ready(
         run,
         branch,
         all_commits=all_commits,
@@ -222,7 +218,7 @@ def prepare(
         until_sha=until_sha,
         first_parent=first_parent,
     )
-    boundary = _boundary(cwd, ready, head=branch)
+    boundary = push_boundary(cwd, ready, head=branch)
     if not ready.push_tip_sha or not ready.push_range:
         return PushRefusal("error: nothing to push (empty ready prefix)", boundary=boundary, warnings=warnings)
     try:
@@ -297,44 +293,6 @@ def _forget_pushed_changes(run: RunContext, plan: PushPlan) -> None:
     with contextlib.suppress(ValueError, OSError, sqlite3.Error, ChangeResolutionError):
         refs = change_refs_for_commits(run, sent_commits(plan))
         run.gerrit.cache.invalidate_changes(refs)
-
-
-def _ready(
-    run: RunContext,
-    branch: str,
-    *,
-    all_commits: bool,
-    until: str | None,
-    until_sha: str | None,
-    first_parent: bool,
-) -> ReadyResult:
-    cwd, settings = run.cwd, run.settings
-    project = settings.gerrit_project or ""
-    with contextlib.suppress(Exception):
-        project = run.stack.project
-    return compute_ready(
-        cwd,
-        branch=branch,
-        head=branch,
-        all_commits=all_commits,
-        until=until,
-        until_sha=until_sha,
-        first_parent=first_parent,
-        stop_pattern=settings.stop_pattern,
-        project=project,
-        settings=settings,
-        web_base=settings.gerrit_web_url,
-    )
-
-
-def _boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
-    sha = ready.boundary_sha
-    short_sha = git_or_none(cwd, "rev-parse", "--short", sha) if sha else None
-    subject = git_or_none(cwd, "show", "-s", "--format=%s", sha) if sha else None
-    count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
-    # The boundary commit itself stays unpushed, and `sha..head` leaves it out.
-    remaining = int(count) + 1 if count and count.isdigit() else 0
-    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, remaining)
 
 
 def _apply_reviewers(run: RunContext, plan: PushPlan) -> tuple[ReviewerApplyResult | None, str | None]:

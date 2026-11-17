@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -21,6 +23,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
 from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
+from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 
@@ -185,3 +188,52 @@ def _draft_counts(
     except GerritApiError:
         return ()
     return tuple((c.short_sha, counts[c.sha]) for c in commits if counts.get(c.sha))
+
+
+@dataclass(frozen=True)
+class PushBoundary:
+    sha: str | None
+    reason: str
+    short_sha: str | None
+    subject: str | None
+    remaining_unpushed: int
+
+
+def push_ready(
+    run: RunContext,
+    branch: str,
+    *,
+    all_commits: bool,
+    until: str | None,
+    until_sha: str | None,
+    first_parent: bool,
+) -> ReadyResult:
+    """The ready prefix of *branch* as ``ger push`` sees it: stop pattern, ready strategy, Change-Ids."""
+    cwd, settings = run.cwd, run.settings
+    project = settings.gerrit_project or ""
+    with contextlib.suppress(Exception):
+        project = run.stack.project
+    return compute_ready(
+        cwd,
+        branch=branch,
+        head=branch,
+        all_commits=all_commits,
+        until=until,
+        until_sha=until_sha,
+        first_parent=first_parent,
+        stop_pattern=settings.stop_pattern,
+        project=project,
+        settings=settings,
+        web_base=settings.gerrit_web_url,
+    )
+
+
+def push_boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
+    """Where *ready* stops, and how many commits stay behind there."""
+    sha = ready.boundary_sha
+    short_sha = git_or_none(cwd, "rev-parse", "--short", sha) if sha else None
+    subject = git_or_none(cwd, "show", "-s", "--format=%s", sha) if sha else None
+    count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
+    # The boundary commit itself stays unpushed, and `sha..head` leaves it out.
+    remaining = int(count) + 1 if count and count.isdigit() else 0
+    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, remaining)

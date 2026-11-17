@@ -24,7 +24,6 @@ from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
-    PushBoundary,
     PushPlan,
     push_argv,
     revise,
@@ -32,6 +31,7 @@ from gerrit_workflow_tools.core.push import (
     state_updates,
     unchanged_short_shas,
 )
+from gerrit_workflow_tools.core.push_checks import PushBoundary
 from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
