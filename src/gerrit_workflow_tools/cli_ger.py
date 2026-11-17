@@ -143,7 +143,11 @@ _TASKS = (
     ("bottom merged / target moved on", "ger rebase --onto-remote --drop-merged-equivalent"),
     ("take over newer patchsets from Gerrit", "ger checkout CHANGE --update (merges a local amend)"),
     ("answer a comment", "ger reply ID -m TEXT [--resolve]; sent by ger push or ger reply --publish"),
-    ("post a note or vote, publish drafts", "ger reply --publish CHANGE -m TEXT [--vote CR+1] [--only ID]"),
+    ("post a note or vote", "ger reply --publish CHANGE --keep-drafts -m TEXT [--vote CR+1]"),
+    (
+        "publish your drafts",
+        "ger reply --publish [CHANGE] [--only ID]  (or with the push: ger push --publish-comments)",
+    ),
     ("review someone else's change", "ger inbox  |  ger review CHANGE  |  ger comment PATH:LINE -m TEXT"),
     ("why did CI fail", "ger ci [REV]"),
 )

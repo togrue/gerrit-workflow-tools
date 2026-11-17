@@ -205,3 +205,39 @@ def test_an_edited_draft_stays_where_it_is(
         code, _out, err = run_cli(repo, ger_comment_main, ["--discard", draft_id], monkeypatch)
         assert code == 0, err
     assert _drafts(gerrit_dev_session, change_id) == []
+
+
+def test_publish_only_named_drafts_and_a_message_alone(
+    tmp_path: Path,
+    gerrit_integration_context: Any,
+    gerrit_admin_session: GerritHttpSession,
+    gerrit_dev_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--only`` publishes the named draft and keeps the others; ``-m`` alone on a named change is a note."""
+    repo, change_id = _pushed_change_with_comment(
+        tmp_path, gerrit_integration_context, gerrit_admin_session, monkeypatch, "only"
+    )
+    root = _root_id(repo, monkeypatch)
+    code, out, err = run_cli(repo, ger_reply_main, [root, "--done", "--json"], monkeypatch)
+    assert code == 0, err
+    reply_id = json.loads(out)["draft_id"]
+    code, _out, err = run_cli(repo, ger_comment_main, ["chain_0.txt:1", "-m", "my own note, not yet"], monkeypatch)
+    assert code == 0, err
+
+    code, _out, err = run_cli(repo, ger_reply_main, ["--publish", "--only", reply_id, "-y"], monkeypatch)
+    assert code == 0, err
+    assert [d["message"] for d in _drafts(gerrit_dev_session, change_id)] == ["my own note, not yet"]
+    assert [c.message for c in _published_chain(gerrit_admin_session, change_id).comments][-1] == "Done"
+
+    number = gerrit_admin_session.get_json(f"changes/{quote_change_id(change_id)}")["_number"]
+    code, _out, err = run_cli(
+        repo,
+        ger_reply_main,
+        ["--publish", f"change:{number}", "--keep-drafts", "-m", "a plain note", "-y"],
+        monkeypatch,
+    )
+    assert code == 0, err
+    messages = gerrit_admin_session.get_json(f"changes/{quote_change_id(change_id)}/messages")
+    assert any("a plain note" in m["message"] for m in messages)
+    assert [d["message"] for d in _drafts(gerrit_dev_session, change_id)] == ["my own note, not yet"]

@@ -23,6 +23,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, ChainMatch, DraftReply, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
@@ -52,13 +53,15 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger reply",
         usage=(
             "ger reply [options] CHAIN (-m MSG | -F FILE | --done | --discard)\n"
-            "       ger reply --publish [REV ...] [--only ID ...] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y]"
+            "       ger reply --publish [REV ...] [--only ID ... | --keep-drafts] [--vote LABEL=N ...] [-m MSG] "
+            "[--dry-run] [-y]"
         ),
         description=(
             "Answer a comment chain with a draft. Drafts are visible only to you until published "
             "(ger push publishes them with the patchset). --publish sends your review: every draft, or "
             "only --only ones, with --vote votes and a -m change message. On the changes you name, -m "
-            "or --vote alone posts without publishing any draft: a change-level note."
+            "or --vote alone posts when there is no draft to publish; --keep-drafts posts them without "
+            "publishing any: a change-level note."
         ),
     )
     p.add_argument(
@@ -67,7 +70,8 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="CHAIN",
         help=(
             "Any comment id in the chain (from ger show --json), or the comment's Gerrit URL. "
-            "With --publish: changeishes whose drafts to publish (default: the local stack)."
+            "With --publish: the changes whose drafts to publish (default: the local stack): a change "
+            "number, commit, Change-Id, change:<n>, triplet or URL."
         ),
     )
     add_change_option(p, "Look for CHAIN on this change only (default: every change in the local stack).")
@@ -98,6 +102,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "Your other drafts stay drafts.",
     )
     publish.add_argument(
+        "--keep-drafts",
+        action="store_true",
+        help="With --publish: publish no drafts, only the -m message and --vote votes (a note on a named change).",
+    )
+    publish.add_argument(
         "--vote", action="append", default=None, metavar="LABEL=N", help=f"With --publish: {VOTE_HELP}"
     )
     publish.add_argument("--dry-run", action="store_true", help="With --publish: list the drafts, publish nothing.")
@@ -113,8 +122,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def _message_and_flag(p: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[str, bool | None]:
     """The reply text and the requested state (``None``: keep or inherit). Exits 2 on conflicts."""
     sources = [name for name, given in (("-m", args.message), ("-F", args.file), ("--done", args.done)) if given]
-    if args.dry_run or args.yes or args.only or args.vote:
-        p.error("--only, --vote, --dry-run and -y belong to --publish")
+    if args.dry_run or args.yes or args.only or args.vote or args.keep_drafts:
+        p.error("--only, --keep-drafts, --vote, --dry-run and -y belong to --publish")
     if args.discard:
         if sources or args.resolve or args.unresolve:
             p.error("--discard takes no message and no --resolve/--unresolve")
@@ -284,8 +293,11 @@ def _publish(
     nobody asked for never goes to every change of the stack.
     """
     votes = parse_votes(args.vote)
-    changes, where = _gerrit_changes(service, cwd, list(args.targets), branch=branch)
-    pending = _selected(_pending_drafts(service, changes), args.only, where)
+    if args.keep_drafts and args.only:
+        raise UsageError("--keep-drafts publishes no drafts; it cannot be combined with --only")
+    # Publishing acts on Gerrit changes, so a bare number names one (as for --change).
+    changes, where = _gerrit_changes(service, cwd, [as_change_only(t) for t in args.targets], branch=branch)
+    pending = [] if args.keep_drafts else _selected(_pending_drafts(service, changes), args.only, where)
     message = "\n\n".join(args.message) if args.message else None
     with_drafts = {change.key: chains for change, chains in pending}
     named = bool(args.targets) and bool(message or votes)
@@ -320,7 +332,9 @@ def _publish(
                     change.key,
                     message=message,
                     labels=votes or None,
-                    draft_ids=None if args.only is None and change.key in with_drafts else drafts,
+                    draft_ids=None
+                    if args.only is None and not args.keep_drafts and change.key in with_drafts
+                    else drafts,
                 )
                 row["status"] = "published"
                 if not args.json_:

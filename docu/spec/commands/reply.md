@@ -51,7 +51,7 @@ Publishing with the push matters. A "Done" that arrives before the patchset that
 ger reply                                      (TTY, planned) step through the open chains of HEAD's change
 ger reply [--change CHANGEISH] CHAIN (-m MSG ... | -F FILE | --done) [--resolve | --unresolve] [--json]
 ger reply [--change CHANGEISH] CHAIN --discard [--json]
-ger reply --publish [REV ...] [--only ID ...] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y] [--json]
+ger reply --publish [REV ...] [--only ID ... | --keep-drafts] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y] [--json]
 ```
 
 ### Guided reply
@@ -100,6 +100,7 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 `ger reply --publish` sends your review: by default **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with no `REV`. Changes without drafts are skipped and listed as such.
 
 - `--only ID` (repeatable) publishes just those drafts (comment ids, as `ger show --json` lists them); your other drafts stay drafts. An id that is none of your drafts on the targets exits `3` before anything is sent. This is how an agent sends its own answers without publishing a draft the human keeps for later.
+- `--keep-drafts` publishes no draft at all: only the `-m` message and `--vote` votes go out, with every draft kept. What an agent uses for a change-level note on a change where the human has drafts pending.
 - `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`) votes with the review.
 - `-m MSG` is the change message. On a change you **named** as `REV`, `-m` or `--vote` alone posts even with no draft to publish: a change-level note or a vote, with every draft kept (Gerrit's `drafts: KEEP`). With no `REV` it never goes to every change of the stack: only changes that have drafts to publish get it.
 

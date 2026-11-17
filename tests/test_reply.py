@@ -356,3 +356,19 @@ def test_ger_assume_yes_publishes_without_a_prompt(stack_repo: Path, monkeypatch
     code, _out, err = run_cli(stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
     assert code == ExitCode.OK, err
     assert len(store.calls_to("publish_drafts")) == 1
+
+
+def test_publish_takes_a_bare_change_number(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publishing acts on changes: ``ger reply --publish 100`` names change 100, not a commit."""
+    store, key = _store_with_open_chain(stack_repo)
+    number = store.get_change(key)["_number"]
+    code, _out, err = run_cli(
+        stack_repo,
+        reply_main,
+        ["--publish", str(number), "--keep-drafts", "-m", "note", "-y"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert (call.args[0], call.kwargs["draft_ids"]) == (key, [])
