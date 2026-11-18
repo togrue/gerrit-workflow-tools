@@ -549,7 +549,7 @@ def test_overwrite_after_push_with_a_reviewer_keeps_or_replaces_them(
     A is named by username or by email: overwrite compares account ids, not the typed name.
     """
     ctx = gerrit_integration_context
-    reviewer_a, reviewer_b = ctx.dev_user, ctx.rev_alt_user
+    reviewer_a, reviewer_b = ctx.rev_alt_user, ctx.admin_user  # the dev user pushes: Gerrit never adds the owner
     typed_a = reviewer_a if name_a_by == "username" else f"{reviewer_a}@example.com"
     topic = f"ow_again_{name_a_by}_{secrets.token_hex(4)}"
     repo = prepare_topic_repo(ctx, tmp_path, topic)
