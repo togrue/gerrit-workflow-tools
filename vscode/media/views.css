@@ -280,6 +280,21 @@ button.twist:hover {
   padding-bottom: 4px;
 }
 
+/* The box, and over its first line an invisible mark the page watches (change.js watchFirstLine). */
+.message-frame {
+  position: relative;
+}
+
+.first-line {
+  position: absolute;
+  top: 5px; /* the box's border and padding */
+  left: 12px;
+  width: 1px;
+  height: calc(var(--vscode-editor-font-size, 13px) * 1.4);
+  pointer-events: none;
+  visibility: hidden;
+}
+
 .heading .label,
 .section-head .label {
   flex: none;

@@ -359,7 +359,8 @@ export function changeVm(state: ChangeState): ChangeVm {
     comments: { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map(thread) },
     ci: hasCi
       ? {
-          summary: commit.ci_failures.join(", ") || "failed",
+          // The head already says "CI failed": the section names the failing builds, or nothing.
+          summary: commit.ci_failures.join(", "),
           state: state.ci.state,
           error: state.ci.state === "error" ? state.ci.error : "",
           links: ciLinks(state.ci),
@@ -368,9 +369,19 @@ export function changeVm(state: ChangeState): ChangeVm {
   };
 }
 
-/** The view's title bar: `Change <number>`, and the subject only while the commit message, whose first line it is, is not shown. */
-export function changeHeading(number: number | null | undefined, subject: string | undefined, vm: ChangeVm): { title: string; description: string | undefined } {
-  return { title: number ? `Change ${number}` : "Change", description: vm.message ? undefined : subject };
+/** Where the view is seen: whether it is open (not collapsed, nor in a hidden container), and whether the commit message's first line is scrolled into it. */
+export interface HeadingSeen {
+  viewVisible: boolean;
+  firstLineVisible: boolean;
+}
+
+/**
+ * The view's title bar: `Change <number>`, and the subject while nothing on screen says it. The
+ * subject is the commit message's first line, so it is left out exactly while that line is in view.
+ */
+export function changeHeading(number: number | null | undefined, subject: string | undefined, vm: ChangeVm, seen: HeadingSeen): { title: string; description: string | undefined } {
+  const said = Boolean(vm.message) && seen.viewVisible && seen.firstLineVisible;
+  return { title: number ? `Change ${number}` : "Change", description: said ? undefined : subject };
 }
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */

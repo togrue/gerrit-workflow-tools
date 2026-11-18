@@ -38,7 +38,7 @@ editor | (none)
 + change | Files — 1 · +1 −0
 + change |   c.txt — added +1 −0
 + change | Comments — none
-+ change | CI — failed
++ change | CI
 + change |   Widget #55 — 2 findings
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 + change |     FAILURE — generic · introduced here
@@ -124,7 +124,7 @@ status bar message: $(check) Refreshed from Gerrit
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 - change |   c.txt — added +1 −0
 - change | Comments — none
-- change | CI — failed
+- change | CI
 - change |   Widget #55 — 2 findings
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 - change |     FAILURE — generic · introduced here
@@ -775,7 +775,7 @@ browser opens: https://g.example/c/testproj/+/101
 - change | Commit message — Extract command routing  (editable)
 + change |   c.txt — added +1 −0
 + change | Comments — none
-+ change | CI — failed
++ change | CI
 + change |   Widget #55 — 2 findings
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 + change |     FAILURE — generic · introduced here
@@ -1068,7 +1068,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 + change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Local changes not pushed, CI failed — V-1 CR+2
 - change | This commit is ahead of Gerrit — only rebased: the votes stay when you push
-- change | CI — failed
+- change | CI
 - change |   Widget #55 — 2 findings
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
 - change |     FAILURE — generic

@@ -175,15 +175,25 @@ test("the change view shows the message, the files with their line counts, and w
   ]);
 });
 
-test("the change view shows the subject once: in the commit message, or in the title bar when there is none", () => {
+test("the change view shows the subject once: in the commit message while its first line is on screen, in the title bar otherwise", () => {
   const vm = changeVm(state());
-  assert.deepEqual(changeHeading(7, "Extract routing", vm), { title: "Change 7", description: undefined }, "the message's first line already says it");
-  const without = changeVm(state({ base: undefined }));
-  assert.deepEqual(changeHeading(7, "Extract routing", without), { title: "Change 7", description: "Extract routing" });
+  const onScreen = { viewVisible: true, firstLineVisible: true };
+  const heading = (seen: { viewVisible: boolean; firstLineVisible: boolean }, model = vm) => changeHeading(7, "Extract routing", model, seen);
+  assert.deepEqual(heading(onScreen), { title: "Change 7", description: undefined }, "the message's first line already says it");
+  assert.deepEqual(heading({ viewVisible: true, firstLineVisible: false }).description, "Extract routing", "scrolled past the message's first line");
+  assert.deepEqual(heading({ viewVisible: false, firstLineVisible: true }).description, "Extract routing", "the view is collapsed: only its title bar is on screen");
+  assert.deepEqual(heading(onScreen, changeVm(state({ base: undefined }))).description, "Extract routing", "no message is drawn");
   const says = (subject: string, text: string) => text.split(subject).length - 1;
-  const lines = [changeHeading(7, "Extract routing", vm).description ?? "", ...changeLines(vm)].join("\n");
+  const lines = [heading(onScreen).description ?? "", ...changeLines(vm)].join("\n");
   assert.equal(says("Extract routing", lines), 1);
   assert.equal(says("Extract routing", JSON.stringify(vm)), 1, "nor a tooltip that repeats it");
+});
+
+test("the CI section does not repeat the head's \"CI failed\": it names the failing builds, or nothing", () => {
+  const failed = (ci_failures: string[]) => changeVm(state({ shown: shown({ ci_failures, verified: -1, attention_reasons: ["ci-failed"] }) }));
+  assert.equal(failed(["Verified"]).ci?.summary, "Verified");
+  assert.equal(failed([]).ci?.summary, "");
+  assert.equal(changeLines(failed([])).at(-1), "CI");
 });
 
 test("the change view shows the votes as the Local stack's badges, the same ones", () => {

@@ -32,8 +32,11 @@
     const note = h("span", { class: "detail" });
     const author = h("span", { class: "detail" });
     const bar = h("div", { class: "message-bar" }, apply, revert, note);
-    const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), box, bar);
-    const state = { key, base: "", block, box, author };
+    // Marks the box's first line, the subject: the title bar names it only while this is out of view.
+    const firstLine = h("div", { class: "first-line", "aria-hidden": "true" });
+    const frame = h("div", { class: "message-frame" }, box, firstLine);
+    const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), frame, bar);
+    const state = { key, base: "", block, box, author, firstLine };
     const fit = () => {
       box.rows = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
     };
@@ -70,9 +73,41 @@
     return state;
   }
 
+  /**
+   * Tell the extension whether the message's first line is on screen: at least half of it inside
+   * the page's viewport, and the box itself not scrolled past it. Said only when it changes.
+   */
+  let subjectSaid;
+  function watchFirstLine(state) {
+    let inViewport = false;
+    const report = () => {
+      const visible = inViewport && state.box.scrollTop < state.firstLine.offsetHeight / 2;
+      if (visible !== subjectSaid) {
+        subjectSaid = visible;
+        post("subjectVisible", { visible });
+      }
+    };
+    state.observer = new IntersectionObserver(
+      (entries) => {
+        if (!state.firstLine.isConnected) {
+          return; // the message is not drawn (waiting, a problem): not scrolled away, and the title bar names the change anyway
+        }
+        inViewport = entries[entries.length - 1].intersectionRatio >= 0.5;
+        report();
+      },
+      { threshold: [0, 0.5, 1] },
+    );
+    state.observer.observe(state.firstLine);
+    state.box.addEventListener("scroll", report);
+  }
+
   function messageBlock(message) {
     if (!editor || editor.key !== message.key) {
+      if (editor) {
+        editor.observer.disconnect();
+      }
       editor = buildEditor(message.key);
+      watchFirstLine(editor);
       editor.box.value = drafts[message.key] ?? message.text;
     } else if (editor.box.value === editor.base || drafts[message.key] === undefined) {
       // Nothing typed: follow the commit. Something typed stays, whatever happened underneath.
@@ -327,7 +362,7 @@
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
       const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
-      parts.push(h("div", { class: "head" }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
+      parts.push(h("div", { class: "head", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
@@ -360,7 +395,7 @@
     }
     if (vm.ci) {
       const ci = vm.ci;
-      const summary = [icon("error", "bad"), h("span", { class: "detail" }, ci.state === "closed" ? `${ci.summary} — open to fetch the findings` : ci.summary)];
+      const summary = [icon("error", "bad"), h("span", { class: "detail" }, ci.state === "closed" ? [ci.summary, "open to fetch the findings"].filter(Boolean).join(" — ") : ci.summary)];
       parts.push(section("ci", "CI", summary, ci.state !== "closed", () => ciBody(ci), () => post("ci")));
     }
     root.replaceChildren(...parts);
