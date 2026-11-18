@@ -2,8 +2,9 @@
 
 How to tell which tests catch bugs no other test catches, which ones only repeat others, and
 how to keep the suite orthogonal: every behaviour checked once, by the tests of the module that
-owns it. The tooling is in [`scripts/test_redundancy/`](../scripts/test_redundancy/); the first
-full run is in [results/2026-11-14](../scripts/test_redundancy/results/2026-11-14/).
+owns it. The tooling is in [`scripts/test_redundancy/`](../scripts/test_redundancy/); the
+runs are in [results/](../scripts/test_redundancy/results/), the latest in
+[2026-11-18](../scripts/test_redundancy/results/2026-11-18/).
 
 ## The metric
 
@@ -106,6 +107,30 @@ else catches, and 340 removable.
 
 41 tests the plain rule called removable are the owner's only check. Per test, with an example
 mutant for each KEEP and MISPLACED: [verdicts.md](../scripts/test_redundancy/results/2026-11-14/verdicts.md).
+
+## Results, 2026-11-18
+
+Recorded on the tree of dadb761.
+
+**Tier 2.** 1581 unit tests (1546 exercise package logic), 16379 covered arcs; 402 cover an arc no
+other test does; 539 candidates. 5 timing tests fail under coverage tracing and were left out.
+
+**Tier 4.** 5380 mutants; 4378 assessed. 1002 could not be compiled ("AST node line range is not
+valid"); this run counted them as crashed because `compile_def` let the error end the worker
+(since fixed: such a mutant is skipped). Owner check on 509 mutants.
+
+| Verdict | Tests | Change since 2026-11-14 |
+|---------|------:|---------|
+| KEEP | 110 | +10 |
+| MISPLACED | 13 | +1 |
+| REMOVE | 392 | +86 |
+| NO_KILLS | 24 | +2 |
+
+Of the 419 tests in both runs, 20 changed verdict, most between KEEP and REMOVE as tests were
+added or moved. Of the 120 new candidates, 98 are REMOVE. New ones to read first: three
+`test_suggested_edits.py` cases are NO_KILLS (`test_replacement_describes_the_range_it_replaces`
+pins a string, which no operator mutates); four are MISPLACED, three there and one in
+`test_log.py`.
 
 ## Before removing a test
 

@@ -174,7 +174,11 @@ def compile_def(fn: ast.FunctionDef, cls: str | None, filename: str) -> types.Co
             lineno=fn.lineno, col_offset=0,
         )  # fmt: skip
     mod = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
-    return _find_code(compile(mod, filename, "exec"), fn.name, fn.lineno)
+    try:
+        compiled = compile(mod, filename, "exec")
+    except ValueError:  # e.g. "AST node line range is not valid": the mutant cannot be applied
+        return None
+    return _find_code(compiled, fn.name, fn.lineno)
 
 
 # --- runner ----------------------------------------------------------------------------
