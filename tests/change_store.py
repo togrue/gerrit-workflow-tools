@@ -17,7 +17,9 @@ call records.
 
 It also **records calls** (:attr:`calls`), for the few tests that care about *how* Gerrit was
 asked rather than what came back — e.g. proving the stack overlay never falls back to
-per-Change-Id queries.
+per-Change-Id queries. Core sends some requests concurrently (``parallel_map``), so the raw
+:attr:`calls` order is not deterministic there: under the ``parallel_jobs`` fixture
+:meth:`ChangeStore.ordered_calls` gives the order that is.
 
 Freshness is deliberately not modelled: writes do not bump ``updated``. The store answers
 questions; deciding what is stale is the cache's job, above the seam.
@@ -26,11 +28,14 @@ questions; deciding what is stale is the cache's job, above the seam.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+import threading
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 
+from gerrit_workflow_tools.core.gerrit import rest
 from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError, change_path_id
 
 
@@ -110,13 +115,95 @@ def _row_account_id(row: dict[str, Any]) -> object:
     return account.get("_account_id") if isinstance(account, dict) else None
 
 
+# --- Which parallel job made a call -----------------------------------------------------
+
+JobPath = tuple[tuple[int, int], ...]
+"""Where a call ran: one ``(batch, job)`` step per ``parallel_map`` it is nested in; ``()`` outside.
+
+*job* is the submission index, which ``parallel_map`` fixes from its input order. While the
+store records, *batch* is an id unique to the executor; :meth:`ChangeStore.ordered_calls`
+renumbers it to the batch's position among the batches its caller started.
+"""
+
+_job = threading.local()
+_batch_ids = iter(range(1 << 62))
+
+
+def _current_job() -> JobPath:
+    return getattr(_job, "path", ())
+
+
+class _JobTaggingExecutor(ThreadPoolExecutor):
+    """A ``ThreadPoolExecutor`` that marks each submitted job's thread with its :data:`JobPath`."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._parent = _current_job()
+        self._batch = next(_batch_ids)
+        self._submitted = 0
+
+    def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Future[Any]:
+        path = (*self._parent, (self._batch, self._submitted))
+        self._submitted += 1
+
+        def run() -> Any:
+            outer = _current_job()
+            _job.path = path
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                _job.path = outer
+
+        return super().submit(run)
+
+
+def tag_parallel_jobs(monkeypatch: Any) -> None:
+    """Make every ``parallel_map`` job tag the calls it makes (the ``parallel_jobs`` fixture)."""
+    monkeypatch.setattr(rest, "ThreadPoolExecutor", _JobTaggingExecutor)
+
+
 @dataclass(frozen=True)
 class RecordedCall:
-    """One call made through the store."""
+    """One call made through the store.
+
+    *job* says which ``parallel_map`` job made it and *thread* where it ran; neither is part
+    of equality.
+    """
 
     method: str
     args: tuple[Any, ...] = ()
     kwargs: dict[str, Any] = field(default_factory=dict)
+    job: JobPath = field(default=(), compare=False)
+    thread: str = field(default="", compare=False)
+
+
+def _in_deterministic_order(calls: Sequence[RecordedCall], depth: int = 0) -> Iterator[RecordedCall]:
+    """*calls* (all in one job at *depth*) with each nested batch's jobs in submission order.
+
+    The job at *depth* runs sequentially, and it waits for a batch it starts, so its own calls
+    and its batches keep their recorded order; only the calls of a batch's jobs interleave.
+    """
+    batches = 0
+    i = 0
+    while i < len(calls):
+        job = calls[i].job
+        if len(job) == depth:
+            yield calls[i]
+            i += 1
+            continue
+        batch = job[depth][0]
+        end = i
+        while end < len(calls) and len(calls[end].job) > depth and calls[end].job[depth][0] == batch:
+            end += 1
+        by_job: dict[int, list[RecordedCall]] = {}
+        for call in calls[i:end]:
+            by_job.setdefault(call.job[depth][1], []).append(call)
+        for index in sorted(by_job):
+            for call in _in_deterministic_order(by_job[index], depth + 1):
+                path = call.job
+                yield replace(call, job=(*path[:depth], (batches, path[depth][1]), *path[depth + 1 :]))
+        batches += 1
+        i = end
 
 
 class ChangeStore:
@@ -188,10 +275,23 @@ class ChangeStore:
         """Every Gerrit search query string this store was asked, in order."""
         return [str(call.args[0]) for call in self.calls_to("query_changes") if call.args]
 
+    def ordered_calls(self) -> list[RecordedCall]:
+        """:attr:`calls` in the order that does not depend on thread timing, each with its *job*.
+
+        Calls a caller makes itself keep their order; the jobs of a ``parallel_map`` it starts
+        follow in submission order, each job's own calls in order. Two runs that asked Gerrit
+        the same way give equal lists, *job* included. Needs the ``parallel_jobs`` fixture.
+        """
+        untagged = [call for call in self.calls if not call.job and call.thread.startswith("ThreadPoolExecutor")]
+        if untagged:
+            raise AssertionError(f"calls from an untagged pool thread; use the parallel_jobs fixture: {untagged}")
+        return list(_in_deterministic_order(self.calls))
+
     # -- internals -------------------------------------------------------------
 
     def _record(self, method: str, *args: Any, **kwargs: Any) -> None:
-        self.calls.append(RecordedCall(method=method, args=args, kwargs=kwargs))
+        thread = threading.current_thread().name
+        self.calls.append(RecordedCall(method, args, kwargs, job=_current_job(), thread=thread))
 
     def _lookup_rows(self, ref: str) -> list[dict[str, Any]]:
         """Rows matching a Gerrit id, numeric change id, triplet, or bare Change-Id."""

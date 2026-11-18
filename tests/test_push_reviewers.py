@@ -395,13 +395,15 @@ def test_overwrite_removes_no_one_when_a_reviewer_cannot_be_looked_up(tmp_path: 
     assert _reviewer_ids(store) == {1000000, 1000001}
 
 
+@pytest.mark.usefixtures("parallel_jobs")
 def test_overwrite_looks_up_only_names_no_present_reviewer_answers_to(tmp_path: Path) -> None:
     """Id, username and email of someone on the change resolve locally; a full name or a stranger is a GET."""
     store, res = _overwrite_on_gerrit_like_store(
         tmp_path, ["admin", "ROBERT@example.com", "1000000", "Carol", "nosuchuser"], present=(_ADMIN, _BOB)
     )
 
-    assert [c.args for c in store.calls_to("get_account")] == [("Carol",), ("nosuchuser",)]
+    lookups = [c.args for c in store.ordered_calls() if c.method == "get_account"]
+    assert lookups == [("Carol",), ("nosuchuser",)]  # asked in parallel: compared in submission order
     assert res.ok is False  # nosuchuser: Gerrit rejects the add
 
 

@@ -54,6 +54,7 @@ def _without_clock(answer: Any) -> Any:
     return [_without_clock(item) for item in answer] if isinstance(answer, list) else answer
 
 
+@pytest.mark.usefixtures("parallel_jobs")
 def test_without_a_live_stream_ger_serve_answers_and_asks_gerrit_exactly_as_before(stack_repo: Path) -> None:
     plain_store, _keys, _rows = _gerrit(stack_repo)
     plain = [_without_clock(_get(GerApi(stack_repo, gerrit=plain_store), "/overview")) for _ in range(2)]
@@ -69,7 +70,8 @@ def test_without_a_live_stream_ger_serve_answers_and_asks_gerrit_exactly_as_befo
     stream.stop()
 
     assert following == plain
-    assert [(c.method, c.args) for c in store.calls] == [(c.method, c.args) for c in plain_store.calls]
+    # The overview's listings run in parallel: compare in the order that does not depend on timing.
+    assert [(c.job, c) for c in store.ordered_calls()] == [(c.job, c) for c in plain_store.ordered_calls()]
 
 
 def test_an_event_drops_that_change_only_and_raises_the_activity_sequence(stack_repo: Path) -> None:

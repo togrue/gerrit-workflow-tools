@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.core.git_run import git
+from tests.change_store import tag_parallel_jobs
 from tests.fixtures import (
     configure_gerrit_target,
     finalize_git_template,
@@ -163,6 +164,13 @@ def _isolate_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     """Keep Gerrit API cache rows from leaking between tests that share mock hosts."""
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+
+
+@pytest.fixture
+def parallel_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tag each ``parallel_map`` job's calls, so ``ChangeStore.ordered_calls`` can order them."""
+
+    tag_parallel_jobs(monkeypatch)
 
 
 @pytest.fixture

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import inspect
+import threading
+from collections.abc import Callable
+from functools import partial
 
 import pytest
 
-from gerrit_workflow_tools.core.gerrit.rest import BareChangeIdError, GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import BareChangeIdError, GerritApiError, GerritRest, parallel_map
 from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
@@ -189,6 +192,81 @@ def test_queries_are_recorded_in_order() -> None:
     store.query_changes(f"change:{CID_A}")
     store.query_changes(f"project:testproj change:{CID_B}")
     assert store.queries() == [f"change:{CID_A}", f"project:testproj change:{CID_B}"]
+
+
+def _interleaved(store: ChangeStore, turns: list[str], jobs: dict[str, list[str]]) -> None:
+    """Ask *store* a root query, then run *jobs* in a ``parallel_map`` whose calls land in *turns* order."""
+    turn = threading.Condition()
+    order = iter(turns)
+    current = [next(order)]
+
+    def ask(query: str) -> None:
+        with turn:
+            turn.wait_for(lambda: current[0] == query, timeout=5)
+            store.query_changes(query)
+            current[0] = next(order, "")
+            turn.notify_all()
+
+    def job(queries: list[str]) -> None:
+        for query in queries:
+            ask(query)
+
+    store.query_changes("before")
+    parallel_map(partial(job, queries) for queries in jobs.values())
+    store.query_changes("after")
+
+
+def _query_order(store: ChangeStore) -> list[tuple[object, str]]:
+    return [(call.job, call.args[0]) for call in store.ordered_calls()]
+
+
+@pytest.mark.usefixtures("parallel_jobs")
+def test_ordered_calls_do_not_depend_on_how_parallel_jobs_interleave() -> None:
+    jobs = {"a": ["a1", "a2"], "b": ["b1", "b2"]}
+    one, other = _store(), _store()
+    _interleaved(one, ["a1", "b1", "a2", "b2"], jobs)
+    _interleaved(other, ["b1", "b2", "a1", "a2"], jobs)
+
+    assert one.queries() == ["before", "a1", "b1", "a2", "b2", "after"]
+    assert other.queries() == ["before", "b1", "b2", "a1", "a2", "after"]
+    expected = [
+        ((), "before"),
+        (((0, 0),), "a1"),
+        (((0, 0),), "a2"),
+        (((0, 1),), "b1"),
+        (((0, 1),), "b2"),
+        ((), "after"),
+    ]
+    assert _query_order(one) == _query_order(other) == expected
+
+
+@pytest.mark.usefixtures("parallel_jobs")
+def test_ordered_calls_keep_batches_apart_and_number_nested_ones_per_caller() -> None:
+    store = _store()
+
+    def nested(name: str) -> Callable[[], object]:
+        return lambda: parallel_map(
+            [partial(store.query_changes, f"{name}.0"), partial(store.query_changes, f"{name}.1")]
+        )
+
+    parallel_map([partial(store.query_changes, "first")])
+    parallel_map([nested("x"), nested("y")])
+
+    order = _query_order(store)
+    assert order[0] == (((0, 0),), "first")
+    assert order[1:] == [
+        (((1, 0), (0, 0)), "x.0"),
+        (((1, 0), (0, 1)), "x.1"),
+        (((1, 1), (0, 0)), "y.0"),
+        (((1, 1), (0, 1)), "y.1"),
+    ]
+
+
+def test_ordered_calls_refuse_pool_calls_that_are_not_tagged() -> None:
+    store = _store()
+    parallel_map([partial(store.query_changes, "q")])
+    with pytest.raises(AssertionError, match="parallel_jobs fixture"):
+        store.ordered_calls()
 
 
 def test_calls_to_records_arguments() -> None:
