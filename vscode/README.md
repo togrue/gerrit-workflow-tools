@@ -90,7 +90,7 @@ The commits above your upstream, newest first. One row per commit:
 - **Files**: added and removed lines per file, in the colours git gives them. Click for the
   diff of what is compared. The commit you are standing on diffs against the real file, so you
   can fix things in the diff editor.
-- **Comments**: unresolved first. Click to jump to the line; *Next / Previous Unresolved Comment* (the arrows in the view's title bar) step
+- **Comments**: unresolved first. Click to jump to the line; *Next / Previous Unresolved Comment* (command palette) step
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the

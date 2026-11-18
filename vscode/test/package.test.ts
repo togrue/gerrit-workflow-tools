@@ -161,3 +161,12 @@ test("every ger.* context key a when clause reads is set by the code", () => {
   assert.deepEqual([...read].filter((key) => !set.has(key)).sort(), [], "read in package.json, never set: the menu or welcome text can never show");
   assert.deepEqual([...set].filter((key) => !read.has(key)).sort(), [], "set, never read in package.json");
 });
+
+test("stepping through comments is a command and a key, not an icon in the Change view's title bar", () => {
+  const title = menus["view/title"].filter((entry) => /view == ger\.change\b/.test(entry.when ?? "")).map((entry) => entry.command);
+  const palette = menus.commandPalette.filter((entry) => entry.when !== "false").map((entry) => entry.command);
+  for (const command of ["ger.nextComment", "ger.prevComment"]) {
+    assert.ok(!title.includes(command), `${command} is back in the Change view's title bar`);
+    assert.ok(palette.includes(command), `${command} is not in the command palette`);
+  }
+});
