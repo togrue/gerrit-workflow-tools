@@ -23,7 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 def _is_windows_console(stream: TextIO) -> bool:
-    """Ask Windows itself: ``isatty`` is also true for ``NUL``, which ``/dev/null`` maps to."""
+    """Ask Windows itself: ``isatty`` is also true for ``NUL``, which ``/dev/null`` maps to.
+
+    Elsewhere ``isatty`` is trusted, so the answer is always yes. The ``sys.platform`` guard
+    (not ``os.name``) is what lets mypy skip the Windows-only APIs below on other platforms.
+    """
+    if sys.platform != "win32":
+        return True
     import ctypes
     import msvcrt
 

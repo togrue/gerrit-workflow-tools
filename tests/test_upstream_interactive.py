@@ -10,9 +10,12 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, read_recent_upstream_abbrevs
 from gerrit_workflow_tools.core.upstream_interactive import (
+    _is_windows_console,
     ensure_branch_upstream_interactive,
+    prompt_toolkit_can_run,
     prompt_upstream_abbrev_interactive,
     require_branch_upstream,
+    stdin_is_terminal,
 )
 
 
@@ -134,3 +137,13 @@ def test_missing_upstream_without_a_console_reports_instead_of_prompting(
 
     with pytest.raises(ConfigError, match="No upstream configured"):
         require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
+
+
+def test_off_windows_a_tty_is_trusted_without_asking_the_console_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    monkeypatch.setattr(sys, "stdout", _StdinTTY())
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    assert _is_windows_console(sys.stdin)
+    assert stdin_is_terminal()
+    assert prompt_toolkit_can_run()
