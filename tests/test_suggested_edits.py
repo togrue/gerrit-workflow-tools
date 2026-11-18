@@ -129,28 +129,6 @@ def test_show_json_carries_a_fix_suggestion_and_a_suggestion_block(
     assert chained["4f0a1c2b_8d9e7f60"]["suggested_edits"] == fix["suggested_edits"]
 
 
-def test_show_human_box_shows_the_suggested_fix_and_the_block(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    out = strip_ansi(_show(stack_repo, monkeypatch, "--color=never"))
-    assert "suggested fix: Use the LIMIT constant" in out
-    assert "epsilon.txt:2-3 becomes:" in out
-    assert "+ LIMIT = 10" in out
-    assert "+ use(LIMIT)" in out
-    # The block is shown once, as the reviewer wrote it, not again as a fix.
-    assert "```suggestion" in out
-    assert "    return total" in out
-    assert out.count("suggested fix") == 1
-
-
-def test_show_markdown_quotes_the_suggested_fix_fenced(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    out = _show(stack_repo, monkeypatch, "--ai")
-    assert "> **Suggested fix:** Use the LIMIT constant" in out
-    assert "> `epsilon.txt:2-3` becomes:\n> ```\n> LIMIT = 10\n> use(LIMIT)\n> ```" in out
-    assert "> ```suggestion\n>     return total\n> ```" in out
-    assert out.count("Suggested fix") == 1
-
-
 def test_a_block_a_fix_suggestion_already_carries_is_one_edit() -> None:
     both = dict(FIX_COMMENT, message="Name it:\n```suggestion\nLIMIT = 10\nuse(LIMIT)\n```")
     [chain] = build_comment_chains({"epsilon.txt": [both]})
@@ -189,13 +167,6 @@ def test_the_first_fence_line_ends_a_suggestion_block() -> None:
     message = "```suggestion\na\n```\nb\n```\n"
     [edit] = message_suggestions("f.py", message, start_line=None, line=3)
     assert edit.replacements[0].replacement == "a\n"
-
-
-def test_markdown_fence_is_longer_than_any_backtick_run_in_the_replacement(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    out = _show(stack_repo, monkeypatch, "--ai", fix_comment=_with_replacement("```\nx = `y`\n```\n"))
-    assert "> ````\n> ```\n> x = `y`\n> ```\n> ````" in out
 
 
 def test_human_box_does_not_wrap_a_suggested_code_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.review_chain import (
     ReviewChain,
     assemble_review_chains,
@@ -84,11 +84,6 @@ def _change(
             }
         }
     return payload
-
-
-def test_parse_gerrit_time_strips_nanos_and_assumes_utc() -> None:
-    stamp = parse_gerrit_time("2026-08-15 12:00:00.269000000")
-    assert stamp == datetime(2026, 8, 15, 12, 0, 0, 269000, tzinfo=timezone.utc)
 
 
 def test_format_age_uses_compact_units() -> None:

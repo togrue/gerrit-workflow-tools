@@ -89,19 +89,15 @@ def test_apply_ci_strategy_does_not_materialize_lazy_messages() -> None:
         calls += 1
         return [{"message": "unused"}]
 
+    link = CiLink(label="verify", url="https://ci.example/job/1/console", source="checks")
+
     def strategy(*, project: str, checks: list, messages) -> list[CiLink]:
         del project, messages
-        return [
-            CiLink(
-                label="verify",
-                url="https://ci.example/job/1/console",
-                source="checks",
-            )
-        ]
+        return [link]
 
     checks = [{"state": "FAILED", "checker_name": "verify", "url": "https://ci.example/job/1/"}]
-    apply_ci_strategy(strategy, project="p", checks=checks, messages=LazyRows(fetch=fetch))
-    assert calls == 0
+    links = apply_ci_strategy(strategy, project="p", checks=checks, messages=LazyRows(fetch=fetch))
+    assert (links, calls) == ([link], 0)
 
 
 def _write_registry(repo: Path, body: str) -> None:

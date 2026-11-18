@@ -147,6 +147,15 @@ def test_a_commit_without_change_id_exits_9(stack_repo: Path, monkeypatch: pytes
     assert code == ExitCode.MISSING_CHANGE_ID and "no Change-Id" in err
 
 
+def test_an_unpushed_commit_gets_a_local_draft(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.webUrl", WEB, cwd=stack_repo)
+    store = ChangeStore({}, web_base=WEB)
+    code, out, _ = _comment(stack_repo, store, ["d.txt:1", "-m", "fix later"], monkeypatch)
+    assert code == ExitCode.OK
+    assert out.startswith("local draft on d.txt:1 (commit ") and "not on Gerrit) id " in out
+    assert store.calls_to("put_draft") == []
+
+
 def test_the_new_draft_shows_as_its_own_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, _ = _store(stack_repo)
     assert _comment(stack_repo, store, ["d.txt:1", "-m", "why?"], monkeypatch)[0] == ExitCode.OK

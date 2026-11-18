@@ -30,6 +30,12 @@ def test_ger_unknown_command(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "unknown command" in err
 
 
+def test_unknown_command_suggests_the_close_one(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, _out, err = _run_ger(stack_repo, ["lgo"], monkeypatch)
+    assert code == 2
+    assert "error: unknown command 'lgo'; did you mean 'log'?" in err
+
+
 def test_ger_log_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = _run_ger(stack_repo, ["log", "--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0

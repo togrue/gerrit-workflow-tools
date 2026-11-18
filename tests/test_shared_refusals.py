@@ -18,7 +18,6 @@ from gerrit_workflow_tools.cli_changeid import main as change_id_main
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_edit import main as edit_main, main_reword
 from gerrit_workflow_tools.cli_fix import main as fix_main
-from gerrit_workflow_tools.cli_ger import main as ger_main
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_rebase import main as rebase_main
@@ -238,12 +237,6 @@ def test_reorder_refuses_a_staged_submodule_even_with_autostash(
         rewrite_stack(stack_repo, steps, settings=settings, autostash=True)
     assert not isinstance(refused.value, UncommittedChanges)
     assert git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip() == head
-
-
-def test_unknown_command_suggests_the_close_one(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = run_cli(stack_repo, ger_main, ["lgo"], monkeypatch)
-    assert code == ExitCode.USAGE
-    assert "error: unknown command 'lgo'; did you mean 'log'?" in err
 
 
 def test_ready_boundary_rev_is_a_usage_error_that_names_the_way_out(

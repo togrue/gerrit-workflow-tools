@@ -23,10 +23,7 @@ from gerrit_workflow_tools.cli_style import (
     GERRIT_LINK_LABEL,
     strip_ansi,
 )
-from gerrit_workflow_tools.core.annotated_stack import (
-    branches_needing_upstream,
-    resolve_rev_range,
-)
+from gerrit_workflow_tools.core.annotated_stack import resolve_rev_range
 from gerrit_workflow_tools.core.attention import determine_attention
 from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
@@ -724,25 +721,6 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     ]
 
 
-@pytest.mark.parametrize(
-    ("rev_range", "head_branch", "want"),
-    [
-        ("@{upstream}..HEAD", "feat/x", ["feat/x"]),
-        ("feat/topic@{upstream}..feat/topic", "unused", ["feat/topic"]),
-        ("origin/main..HEAD", "feat/x", []),
-        ("one@{upstream}...two@{upstream}", "unused", ["one", "two"]),
-    ],
-)
-def test_branches_needing_upstream(
-    monkeypatch: pytest.MonkeyPatch,
-    rev_range: str,
-    head_branch: str,
-    want: list[str],
-) -> None:
-    got = branches_needing_upstream(rev_range, branch=head_branch)
-    assert got == want
-
-
 # ---------------------------------------------------------------------------
 # --follow-merges flag (first-parent / relation-chain semantics)
 # ---------------------------------------------------------------------------
@@ -931,12 +909,6 @@ def test_log_says_when_a_rebase_is_stopped(stack_repo: Path, monkeypatch: pytest
     _code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
 
     assert "note: a rebase is in progress" in err
-
-
-def test_log_names_the_unknown_side_of_a_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = run_cli(stack_repo, log_main, ["nosuch..HEAD"], monkeypatch)
-    assert code == ExitCode.NOT_FOUND
-    assert err.strip() == "error: cannot resolve 'nosuch': no commit by that name"
 
 
 def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

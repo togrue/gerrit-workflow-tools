@@ -171,7 +171,7 @@ def compile_def(fn: ast.FunctionDef, cls: str | None, filename: str) -> types.Co
     if cls:
         node = ast.ClassDef(
             name=cls, bases=[], keywords=[], body=[fn], decorator_list=[], type_params=[],
-            lineno=fn.lineno, col_offset=0,
+            lineno=fn.lineno, col_offset=0, end_lineno=fn.end_lineno, end_col_offset=fn.end_col_offset,
         )  # fmt: skip
     mod = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
     try:

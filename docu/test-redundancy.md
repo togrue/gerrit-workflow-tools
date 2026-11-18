@@ -45,10 +45,11 @@ There is no explicit test-to-module mapping, so `verdicts.py owners` derives one
 test file owns the module of its name, the command of that name and modules split off from it
 (`test_push.py` owns `core/push.py`, `cli_push.py` and `core/push_checks.py`; `test_gerrit_cache.py`
 owns `core/gerrit/cache_rows.py`). A module with no such name is owned by the test files that
-import it directly. It is a heuristic. Some MISPLACED
-verdicts in the 2026-11-14 run come from it (`test_ci_findings_tools.py` also owns the
-`ci_findings_*` modules; `config_editor_file.py` belongs with `test_config_form.py`). An explicit
-mapping would make tier 1 checkable and the verdicts exact.
+import it directly. It is a heuristic, and `OWNER_OVERRIDES` in `verdicts.py` replaces its guess
+where the names mislead: `test_ci_findings_tools.py` also owns the `ci_findings_*` modules,
+`config_editor_file.py` belongs with `test_config_form.py`, and `push_options_history.py` is unit
+tested in `test_push_input_prompt.py`. Before the overrides these made some MISPLACED verdicts in
+both runs. A full explicit mapping would make tier 1 checkable and the verdicts exact.
 
 A mutant counts as guarded only when an owner test kills it. A bystander that kills it as a side
 effect is not a reason to keep a test, and not a reason to delete the owner's test either.
@@ -117,7 +118,9 @@ other test does; 539 candidates. 5 timing tests fail under coverage tracing and 
 
 **Tier 4.** 5380 mutants; 4378 assessed. 1002 could not be compiled ("AST node line range is not
 valid"); this run counted them as crashed because `compile_def` let the error end the worker
-(since fixed: such a mutant is skipped). Owner check on 509 mutants.
+(since fixed: such a mutant is skipped). They were every mutant inside a class: the class
+`compile_def` wraps a method in had no end line. That is fixed too, so methods were not assessed
+in this run or the one before. Owner check on 509 mutants.
 
 | Verdict | Tests | Change since 2026-11-14 |
 |---------|------:|---------|
@@ -129,8 +132,15 @@ valid"); this run counted them as crashed because `compile_def` let the error en
 Of the 419 tests in both runs, 20 changed verdict, most between KEEP and REMOVE as tests were
 added or moved. Of the 120 new candidates, 98 are REMOVE. New ones to read first: three
 `test_suggested_edits.py` cases are NO_KILLS (`test_replacement_describes_the_range_it_replaces`
-pins a string, which no operator mutates); four are MISPLACED, three there and one in
-`test_log.py`.
+only reaches a method, which this run could not mutate); four are MISPLACED, three there and one
+in `test_log.py`.
+
+**Acted on.** MISPLACED: 8 tests moved to their owner's file, 4 were misjudged ownership (now
+`OWNER_OVERRIDES`), and the `ger log` case of `test_gerrit_unavailable.py` stays where it is, as one
+case of a test that pins agreement between commands. NO_KILLS: 1 strengthened (`apply_ci_strategy`'s
+result is pinned) and 1 merged into the parametrisation of the test it repeated. 14 left as they
+are: they reach only methods, and each fails on a mutant applied by hand. 8 left because no
+operator reaches what they pin (the Change-Id regex, a line that is not JSON).
 
 ## Before removing a test
 

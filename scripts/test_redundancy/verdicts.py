@@ -7,6 +7,7 @@
 
 Owner of a module: the test file named after it (test_x.py owns x.py, cli_x.py, and split-off
 modules such as x_rows.py or gerrit/x_rows.py), else every test file importing it directly.
+``OWNER_OVERRIDES`` corrects the cases where the names mislead.
 
 A mutant a candidate kills is guarded, in this order:
   1. by a non-candidate owner test that kills it      -> no candidate needed
@@ -30,6 +31,18 @@ from typing import Any
 
 
 PKG = "gerrit_workflow_tools"
+
+# Where the name heuristic picks the wrong owner: module -> its owner test files, replacing the guess.
+_CI_FINDINGS_OWNERS = ["tests/test_ci_findings.py", "tests/test_ci_findings_tools.py"]
+OWNER_OVERRIDES: dict[str, list[str]] = {
+    "core/ci_findings.py": _CI_FINDINGS_OWNERS,
+    "core/ci_findings_blocks.py": _CI_FINDINGS_OWNERS,
+    "core/ci_findings_located.py": _CI_FINDINGS_OWNERS,
+    "core/ci_findings_tests.py": _CI_FINDINGS_OWNERS,
+    "core/ci_findings_tests_jvm.py": _CI_FINDINGS_OWNERS,
+    "core/config_editor_file.py": ["tests/test_config_form.py"],
+    "push_options_history.py": ["tests/test_push.py", "tests/test_push_input_prompt.py"],
+}
 
 
 def owners(repo: Path) -> dict[str, list[str]]:
@@ -58,7 +71,7 @@ def owners(repo: Path) -> dict[str, list[str]]:
                 rel = name.removeprefix(PKG).lstrip(".").replace(".", "/") + ".py"
                 if rel in mods and rel not in by_name:
                     out[rel].add(f"tests/{t.name}")
-    return {k: sorted(v) for k, v in out.items()}
+    return {k: sorted(v) for k, v in out.items()} | {k: v for k, v in OWNER_OVERRIDES.items() if k in mods}
 
 
 def load_rows(path: Path) -> list[dict[str, Any]]:

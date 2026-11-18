@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from gerrit_workflow_tools.cli_style import (
@@ -13,6 +15,7 @@ from gerrit_workflow_tools.cli_style import (
     set_hyperlink_mode,
     strip_ansi,
 )
+from gerrit_workflow_tools.core.comment_chains import build_comment_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
@@ -20,6 +23,7 @@ from gerrit_workflow_tools.render.comments import (
     format_comment_chain_human,
     format_comment_chain_markdown,
 )
+from tests.test_suggested_edits import BLOCK_COMMENT, FIX_COMMENT, _with_replacement
 
 
 def test_parse_show_range_two_and_three_dots() -> None:
@@ -265,3 +269,39 @@ def test_draft_reply_markdown_is_marked_unpublished() -> None:
     lines = format_comment_chain_markdown(_answered_chain(), "https://g.example/c/p/+/1")
     assert "**Draft reply (unpublished) -> resolves**" in lines
     assert "> Done" in lines
+
+
+# --- Suggested edits (docu/spec/commands/show.md) ------------------------------------------
+
+
+def _chain_of(path: str, comment: dict[str, Any]) -> CommentChain:
+    [chain] = build_comment_chains({path: [comment]})
+    return chain
+
+
+def test_show_human_box_shows_the_suggested_fix_and_the_block() -> None:
+    fix = strip_ansi("\n".join(format_comment_chain_human(_chain_of("epsilon.txt", FIX_COMMENT), None)))
+    assert "suggested fix: Use the LIMIT constant" in fix
+    assert "epsilon.txt:2-3 becomes:" in fix
+    assert "+ LIMIT = 10" in fix
+    assert "+ use(LIMIT)" in fix
+    # The block is shown once, as the reviewer wrote it, not again as a fix.
+    block = strip_ansi("\n".join(format_comment_chain_human(_chain_of("zeta.py", BLOCK_COMMENT), None)))
+    assert "```suggestion" in block
+    assert "    return total" in block
+    assert "suggested fix" not in block
+
+
+def test_show_markdown_quotes_the_suggested_fix_fenced() -> None:
+    fix = "\n".join(format_comment_chain_markdown(_chain_of("epsilon.txt", FIX_COMMENT), None))
+    assert "> **Suggested fix:** Use the LIMIT constant" in fix
+    assert "> `epsilon.txt:2-3` becomes:\n> ```\n> LIMIT = 10\n> use(LIMIT)\n> ```" in fix
+    block = "\n".join(format_comment_chain_markdown(_chain_of("zeta.py", BLOCK_COMMENT), None))
+    assert "> ```suggestion\n>     return total\n> ```" in block
+    assert "Suggested fix" not in block
+
+
+def test_markdown_fence_is_longer_than_any_backtick_run_in_the_replacement() -> None:
+    comment = _with_replacement("```\nx = `y`\n```\n")
+    out = "\n".join(format_comment_chain_markdown(_chain_of("epsilon.txt", comment), None))
+    assert "> ````\n> ```\n> x = `y`\n> ```\n> ````" in out

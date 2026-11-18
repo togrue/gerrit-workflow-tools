@@ -9,6 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.core.annotated_stack import (
     annotate,
+    branches_needing_upstream,
     load_annotated_stack,
     resolve_rev_range,
 )
@@ -167,6 +168,19 @@ def _range(repo: Path) -> str:
 )
 def test_resolve_rev_range_expands_bare_refs_only(stack_repo: Path, arg: str, expected: str) -> None:
     assert resolve_rev_range(arg, branch="unused") == expected
+
+
+@pytest.mark.parametrize(
+    "rev_range, head_branch, want",
+    [
+        ("@{upstream}..HEAD", "feat/x", ["feat/x"]),
+        ("feat/topic@{upstream}..feat/topic", "unused", ["feat/topic"]),
+        ("origin/main..HEAD", "feat/x", []),
+        ("one@{upstream}...two@{upstream}", "unused", ["one", "two"]),
+    ],
+)
+def test_branches_needing_upstream(rev_range: str, head_branch: str, want: list[str]) -> None:
+    assert branches_needing_upstream(rev_range, branch=head_branch) == want
 
 
 # ---------------------------------------------------------------------------

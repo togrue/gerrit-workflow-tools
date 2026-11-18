@@ -58,14 +58,6 @@ def test_a_note_needs_no_gerrit_and_never_touches_the_index(stack_repo: Path, mo
     assert git_out("ls-tree", "--name-only", f"{REF}:anchors", cwd=stack_repo) == head_blob
 
 
-def test_an_unpushed_commit_gets_a_local_draft(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _nothing_on_gerrit(stack_repo)
-    code, out, _ = _comment(stack_repo, ["d.txt:1", "-m", "fix later"], monkeypatch, store)
-    assert code == ExitCode.OK
-    assert out.startswith("local draft on d.txt:1 (commit ") and "not on Gerrit) id " in out
-    assert store.calls_to("put_draft") == []
-
-
 def test_a_commit_rewritten_locally_gets_a_local_draft(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _on_gerrit(stack_repo)
     git("commit", "-q", "--amend", "--no-edit", "--date=2001-01-01T00:00:00", cwd=stack_repo)
