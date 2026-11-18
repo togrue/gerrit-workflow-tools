@@ -6,9 +6,10 @@ Counts are calibrated on ``stack_repo`` (and a larger synthetic stack for scalin
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,7 +20,7 @@ from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.git_run import _run_git, git, git_out
 from tests.change_store import ChangeStore, RecordedCall
-from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
+from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
 
@@ -35,10 +36,7 @@ _RESOLVE_GIT_BUDGET = 10
 def _git_subcommand_counts(run: MagicMock) -> dict[str, int]:
     counts: dict[str, int] = {}
     for call in run.call_args_list:
-        args = call.args
-        if not args or args[0] != "git":
-            continue
-        git_args = args[1:]
+        git_args = call.args  # what follows ``git``: the seam is handed no program name
         if not git_args:
             continue
         if git_args[0] == "remote" and len(git_args) >= 2 and git_args[1] == "get-url":
@@ -162,6 +160,54 @@ def test_log_ahead_of_gerrit_does_not_scale_with_stack_size(
         assert "commit 1" in out
         counts.append(run.call_count)
     assert counts[1] == counts[0] <= _LOG_GIT_BUDGET + 3, counts
+
+
+def _rev_parse_calls(run: MagicMock) -> list[tuple[str, ...]]:
+    return [call.args for call in run.call_args_list if call.args[:1] == ("rev-parse",)]
+
+
+def _all_merged(details: dict[str, dict[str, Any]], _repo: Path) -> dict[str, dict[str, Any]]:
+    for detail in details.values():
+        detail["status"] = "MERGED"
+    return details
+
+
+@pytest.mark.parametrize(
+    ("argv", "gerrit_state"),
+    [
+        pytest.param([], None, id="pushed"),
+        pytest.param(["-vv", "--show-change-id"], None, id="verbose"),
+        pytest.param(["--json"], None, id="json"),
+        pytest.param([], at_older_patchsets, id="ahead-of-gerrit"),
+        pytest.param([], _all_merged, id="merged"),
+        pytest.param(["main..feature"], None, id="explicit-range"),
+        pytest.param(["--follow-merges"], None, id="follow-merges"),
+    ],
+)
+def test_log_rev_parse_does_not_scale_with_stack_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    gerrit_state: Callable[[dict[str, dict[str, Any]], Path], dict[str, dict[str, Any]]] | None,
+) -> None:
+    """``ger log`` resolves its range and upstream with the same ``git rev-parse`` calls on any stack.
+
+    Nothing about a commit is looked up with a ``rev-parse`` of its own: the stack's rows come
+    from one ``git log``, and what the overlay asks about them is asked in batches.
+    """
+    rev_parses: list[list[tuple[str, ...]]] = []
+    for n in (3, 12):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / f"cache{n}"))
+        repo = _make_linear_stack(tmp_path / f"n{n}", n)
+        details = build_details_by_change_id(stack_rows_mb_to_head(repo))
+        store = ChangeStore(gerrit_state(details, repo) if gerrit_state else details)
+        with _count_git() as run:
+            code, out, err = run_cli(repo, log_main, ["--color=never", *argv], monkeypatch, gerrit=store)
+        assert code in (0, 1), err
+        assert "commit 1" in out
+        rev_parses.append(_rev_parse_calls(run))
+    small, large = rev_parses
+    assert len(large) == len(small) <= 2, rev_parses
 
 
 def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
