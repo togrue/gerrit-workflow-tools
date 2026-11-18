@@ -24,6 +24,9 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - *Outgoing*: your open chains. *To review*: chains waiting on you.
 - One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
   it for the chain's changes. A `●` marks new activity.
+- The icon in front is the most urgent thing about the chain or change: an error for failed CI, a
+  comment bubble for unresolved comments (the ones the Change view lists as open), a warning for
+  a negative vote or a newer patchset on Gerrit, a clock while it waits, a check when nothing does.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
 - Right-click a change (or a chain, for its top change) › **Copy Change-Id** or **Copy SHA**: the
   local commit for a change in your stack, else the commit of its current patch set.

@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 
 import { Chain, Headline, Member, Section } from "./api";
 import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, severity, sortedChains, votes } from "./format";
-import { icon, severityIcon } from "./icons";
+import { attentionThemeIcon, icon } from "./icons";
 import { ChangeTarget, Model } from "./model";
 import { changeRowContext } from "./rows";
 import { feedback, ui } from "./ui";
@@ -181,8 +181,8 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     }
     item.description = `${active ? "● new activity · " : ""}${chainDescription(chain, section.name)}`;
     // To review, a clean chain is what wants you; outgoing, a clean chain is waiting on others.
-    const state = severity(chain.attention_reasons);
-    item.iconPath = section.name === "to-review" && state === "ok" ? icon("eye") : severityIcon(state);
+    const clean = severity(chain.attention_reasons) === "ok";
+    item.iconPath = section.name === "to-review" && clean ? icon("eye") : attentionThemeIcon(chain.attention_reasons);
     const lines = [
       `**${chain.top.subject}**`,
       `${chain.project} · ${chain.branch} · ${chain.owner.name}`,
@@ -204,7 +204,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     const item = new vscode.TreeItem(member.subject);
     item.id = `${chain.key}/${member.number}`;
     item.description = `${member.number} · ${votes(member)}${member.local_sha ? " · in your stack" : ""}`;
-    item.iconPath = severityIcon(severity(member.attention_reasons));
+    item.iconPath = attentionThemeIcon(member.attention_reasons);
     item.tooltip = reasonWords(member.attention_reasons) || "no open issues";
     item.contextValue = changeRowContext({ kind: "change", url: Boolean(member.url), local: member.local_sha !== null });
     item.command = { command: "ger.openChange", title: "Show Change", arguments: [memberTarget(member, chain)] };

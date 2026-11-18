@@ -183,6 +183,29 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
     assert overview["local"]["summary"]["commits"] == 4
 
 
+def test_a_review_chain_member_has_unresolved_comments_exactly_when_show_lists_an_open_chain(stack_repo: Path) -> None:
+    # Review chains draws its comment icon from the member's reasons; the Change view lists /show's chains.
+    # 100: a negative vote and no comment (A4). 101: an open comment. 102: only a resolved one.
+    store, keys, rows = _gerrit(stack_repo, [{"cr": -1}, {"unresolved_comment_count": 1}, {}, {}])
+    store.set_comments(
+        keys[1], {"b.txt": [{"id": "c1", "line": 1, "message": "rename", "unresolved": True, "patch_set": 1}]}
+    )
+    store.set_comments(
+        keys[2], {"c.txt": [{"id": "c2", "line": 1, "message": "typo", "unresolved": False, "patch_set": 1}]}
+    )
+    api = GerApi(stack_repo, gerrit=store)
+    [chain] = _get(api, "/overview")["sections"][1]["chains"]
+    flagged = {m["number"]: "unresolved-comments" in m["attention_reasons"] for m in chain["members"]}
+    listed = {
+        100 + i: any(
+            not c["resolved"] for c in _get(api, "/show", rev=row.sha, comments="all")["commits"][0]["comment_chains"]
+        )
+        for i, row in enumerate(rows)
+    }
+    assert flagged == listed == {100: False, 101: True, 102: False, 103: False}
+    assert "review-issues" in chain["members"][0]["attention_reasons"]
+
+
 def test_headline_falls_back_to_the_longest_waiting_review(stack_repo: Path) -> None:
     store, keys, _rows = _gerrit(stack_repo)
     settings = Settings.from_cwd(stack_repo)

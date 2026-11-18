@@ -6,6 +6,7 @@ import { test } from "node:test";
 
 import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState, changeLines, changeVm } from "../src/changeRows";
+import { attentionIcon } from "../src/format";
 import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 
@@ -287,4 +288,37 @@ test("the CI group lists errors first and keeps the warnings behind a count", ()
   // With no error to explain the failure, the warnings are the lead and stay in view.
   const only = changeVm(state({ shown: failing, ci: { state: "loaded", contents: [content(false, [both[0]])], introduced: null } }));
   assert.deepEqual([only.ci?.links[0].findings.length, only.ci?.links[0].warnings.length], [1, 0]);
+});
+
+// A4: Review chains showed a comment icon for a negative vote, where the Change view listed no comment.
+test("a change wears the comment icon exactly when the Change view lists an open comment", () => {
+  const published = (patch_set: number, extra: Partial<CommentChain> = {}): CommentChain => ({
+    root_id: `c${patch_set}`,
+    path: "a.py",
+    line: 4,
+    start_line: null,
+    url: null,
+    resolved: false,
+    resolved_after_publish: false,
+    outdated: patch_set < 3,
+    held: false,
+    comments: [{ path: "a.py", line: 4, message: "Rename this.", patch_set, state: "published", url: null, author: "Alice" }],
+    ...extra,
+  });
+  const cases: [string, Partial<StackCommit>, CommentChain[]][] = [
+    // The ger-playground change of A4: a negative vote and no comment at all.
+    ["negative vote, no comment", { code_review: -1, attention_reasons: ["review-issues", "awaiting-review"] }, []],
+    ["Gerrit has a newer patchset", { patchset_status: "outdated", attention_reasons: ["outdated-patchset", "awaiting-review"] }, []],
+    ["only resolved comments", { attention_reasons: ["awaiting-review"] }, [published(3, { resolved: true })]],
+    ["open comment on an older patchset", { comments_unresolved: 1, attention_reasons: ["awaiting-review", "unresolved-comments"] }, [published(1)]],
+    ["open comment and a negative vote", { code_review: -1, comments_unresolved: 1, attention_reasons: ["review-issues", "unresolved-comments"] }, [published(3)]],
+  ];
+  for (const [name, extra, chains] of cases) {
+    const vm = changeVm(state({ shown: shown(extra), chains }));
+    const listsOpen = (vm.comments?.threads ?? []).some((row) => row.open);
+    assert.equal(vm.head?.icon === "comment-unresolved", listsOpen, `${name}: Change view head`);
+    // Review chains draws a change and its chain from the same attention reasons.
+    assert.equal(attentionIcon(extra.attention_reasons ?? []).icon === "comment-unresolved", listsOpen, `${name}: Review chains row`);
+    assert.equal(attentionIcon(extra.attention_reasons ?? []).icon, vm.head?.icon, `${name}: both views draw the same icon`);
+  }
 });

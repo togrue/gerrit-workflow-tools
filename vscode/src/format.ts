@@ -37,6 +37,19 @@ export function severity(reasons: readonly string[]): Severity {
   return reasons.some((r) => PENDING.includes(r)) ? "pending" : "ok";
 }
 
+const SEVERITY_ICONS: Record<Severity, string> = { error: "error", warning: "warning", pending: "clock", ok: "pass" };
+
+/**
+ * The codicon for a change with these attention reasons, and how urgent it is. The comment icon
+ * means unresolved comments, which the Change view lists; a negative vote or a newer patchset on
+ * Gerrit is a warning without one.
+ */
+export function attentionIcon(reasons: readonly string[]): { icon: string; severity: Severity } {
+  const level = severity(reasons);
+  const comments = level === "warning" && reasons.includes("unresolved-comments");
+  return { icon: comments ? "comment-unresolved" : SEVERITY_ICONS[level], severity: level };
+}
+
 export function reasonWords(reasons: readonly string[]): string {
   return reasons.map((r) => WORDS[r] ?? r).join(", ");
 }

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { Chain, CommitStatus, EventsStatus, Overview } from "../src/api";
 import {
   age,
+  attentionIcon,
   blockedMove,
   blockedSwaps,
   chainDescription,
@@ -57,6 +58,9 @@ test("severity takes the most urgent reason", () => {
   assert.equal(severity(["awaiting-review", "unresolved-comments"]), "warning");
   assert.equal(severity(["not-pushed"]), "pending");
   assert.equal(severity([]), "ok");
+  assert.deepEqual(attentionIcon(["review-issues"]), { icon: "warning", severity: "warning" });
+  assert.deepEqual(attentionIcon(["review-issues", "unresolved-comments"]), { icon: "comment-unresolved", severity: "warning" });
+  assert.deepEqual(attentionIcon(["ci-failed", "unresolved-comments"]), { icon: "error", severity: "error" });
 });
 
 test("votes and ages read like ger's own output", () => {

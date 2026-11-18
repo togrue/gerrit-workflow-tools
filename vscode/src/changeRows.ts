@@ -5,7 +5,7 @@
 import * as path from "node:path";
 
 import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
-import { Severity, commentPlainText, commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
+import { Severity, attentionIcon, commentPlainText, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
 import { Badge, Tone, badges } from "./stackRows";
 import { Waiting } from "./state";
 
@@ -135,12 +135,14 @@ export interface ChangeVm {
   ci?: { summary: string; state: CiView["state"]; error: string; links: CiLinkRow[] };
 }
 
-const SEVERITY_ICON: Record<Severity, Icon> = {
-  error: { icon: "error", tone: "bad" },
-  warning: { icon: "comment-unresolved", tone: "warn" },
-  pending: { icon: "clock" },
-  ok: { icon: "pass", tone: "good" },
-};
+const SEVERITY_TONE: Record<Severity, Tone | undefined> = { error: "bad", warning: "warn", pending: undefined, ok: "good" };
+
+/** The head's icon: the one the change wears in Review chains (`attentionIcon`). */
+function headIcon(reasons: readonly string[]): Icon {
+  const { icon, severity } = attentionIcon(reasons);
+  const tone = SEVERITY_TONE[severity];
+  return tone ? { icon, tone } : { icon };
+}
 
 const YOURS: Record<string, string> = { note: "your private note", "local-draft": "your local draft", draft: "your draft" };
 
@@ -334,7 +336,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.verified === -1;
   return {
     head: {
-      ...SEVERITY_ICON[severity(commit.attention_reasons)],
+      ...headIcon(commit.attention_reasons),
       text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       tooltip: commit.summary,

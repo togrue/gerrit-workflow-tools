@@ -1,17 +1,18 @@
 import * as vscode from "vscode";
 
-import { Severity } from "./format";
+import { Severity, attentionIcon } from "./format";
 
-const ICONS: Record<Severity, [string, string | undefined]> = {
-  error: ["error", "list.errorForeground"],
-  warning: ["comment-unresolved", "list.warningForeground"],
-  pending: ["clock", undefined],
-  ok: ["pass", "testing.iconPassed"],
+const COLORS: Record<Severity, string | undefined> = {
+  error: "list.errorForeground",
+  warning: "list.warningForeground",
+  pending: undefined,
+  ok: "testing.iconPassed",
 };
 
-export function severityIcon(severity: Severity): vscode.ThemeIcon {
-  const [id, color] = ICONS[severity];
-  return new vscode.ThemeIcon(id, color ? new vscode.ThemeColor(color) : undefined);
+/** The icon of a change or chain with these attention reasons (`attentionIcon`), coloured by urgency. */
+export function attentionThemeIcon(reasons: readonly string[]): vscode.ThemeIcon {
+  const { icon: id, severity } = attentionIcon(reasons);
+  return icon(id, COLORS[severity]);
 }
 
 export function icon(id: string, color?: string): vscode.ThemeIcon {
