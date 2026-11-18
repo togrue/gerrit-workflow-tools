@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,6 +19,7 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as gshow_main
+from gerrit_workflow_tools.core.comment_chains import collect_comment_chains
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -435,3 +437,129 @@ def test_a_bare_number_names_a_change_wherever_only_a_change_fits(
     code, _out, err = run_cli(stack_repo, mains[command], argv, monkeypatch, gerrit=ChangeStore({}))
     assert code == ExitCode.NOT_FOUND, err
     assert err.strip() == "error: cannot resolve 'change:99999': Gerrit has no such change"
+
+
+# --- Every Change-Id of the stack on main and on dev ---------------------------------
+
+_NOT_PER_CHANGE = frozenset({"query_changes", "query_accounts", "get_account", "get_plugin_project_reviewers"})
+"""Store operations that do not address one change by ``/changes/{id}``."""
+
+
+def _stack_with_dev_siblings(repo: Path) -> tuple[ChangeStore, dict[str, int]]:
+    """Every stack commit is a change on ``main`` and has a sibling on ``dev`` (another number).
+
+    Each main change carries one unresolved comment, so ``ger show`` fetches comments. Returns
+    the store and, per Change-Id, the number of the change on ``main`` (the push branch).
+    """
+    _configure_web(repo)
+    store = ChangeStore()
+    on_main: dict[str, int] = {}
+    for i, row in enumerate(stack_rows_mb_to_head(repo)):
+        assert row.change_id is not None
+        main_row = change_info_for_sha(row.sha, row.change_id, number=300 + i, unresolved_comment_count=1)
+        dev_row = change_info_for_sha(_DEV_SHA, row.change_id, number=400 + i, branch="dev")
+        store.add_change(main_row)
+        store.add_change(dev_row)
+        comment = {"id": f"c{i}", "line": 1, "message": f"main {i}", "unresolved": True, "patch_set": 1}
+        store.set_comments(str(main_row["id"]), {"a.txt": [comment]})
+        on_main[row.change_id] = 300 + i
+    return store, on_main
+
+
+def _per_change_refs(store: ChangeStore) -> list[str]:
+    """The ``{id}`` of every ``/changes/{id}/…`` request the store was asked."""
+    return [str(call.args[0]) for call in store.calls if call.method not in _NOT_PER_CHANGE and call.args]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["log", "--json"],
+        ["log", "-v", "--json"],
+        ["show", "--stack", "--json"],
+        ["show", "--stack", "--comments", "all", "-v", "--color=never"],
+        ["show", "HEAD", "--json"],
+        ["show", "--json", "HEAD~1..HEAD"],
+        ["resolve", "--json", "HEAD"],
+        ["reply", "c0", "-m", "on it"],
+        ["reply", "--publish", "--dry-run"],
+    ],
+    ids=lambda argv: " ".join(argv),
+)
+def test_every_command_addresses_a_change_on_two_branches_by_one_unique_id(
+    argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No ``/changes/{id}`` request carries a bare Change-Id that Gerrit would answer 404.
+
+    Every Change-Id of the stack is also on ``dev``, as after a cherry-pick: Gerrit then
+    answers a bare Change-Id with "Multiple changes found" (the store 404s alike). Every
+    command resolves a change once, by the stack's push branch, and every later request
+    (comments, drafts, reviewers, checks, …) names that change, the one on ``main``.
+    """
+    from gerrit_workflow_tools.cli_reply import main as reply_main
+
+    mains = {"log": log_main, "show": gshow_main, "resolve": resolve_main, "reply": reply_main}
+    store, on_main = _stack_with_dev_siblings(stack_repo)
+    code, _out, err = run_cli(stack_repo, mains[argv[0]], argv[1:], monkeypatch, gerrit=store)
+    assert code in (0, 1), err
+    assert "Multiple changes found" not in err
+    refs = _per_change_refs(store)
+    assert all(ref not in on_main for ref in refs), refs
+    named = {ref: store.get_change(ref)["_number"] for ref in refs}
+    assert set(named.values()) <= set(on_main.values()), named
+
+
+def test_show_stack_shows_the_stack_branch_change_of_a_change_id_on_two_branches(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger show --stack`` reports, for each commit, the change on the stack's own branch, comments and all."""
+    store, on_main = _stack_with_dev_siblings(stack_repo)
+    code, out, err = run_cli(
+        stack_repo, gshow_main, ["--stack", "--json", "--comments", "all"], monkeypatch, gerrit=store
+    )
+    assert code in (0, 1), err
+    shown = json_stdout(out)
+    payloads = shown if isinstance(shown, list) else shown["commits"]
+    assert {p["change_id"]: p["number"] for p in payloads} == on_main
+    for p in payloads:
+        assert [c["comments"][0]["message"] for c in p["comment_chains"]] == [f"main {on_main[p['change_id']] - 300}"]
+
+
+def _service_entry_points(cid: str) -> dict[str, Callable[[Any], object]]:
+    """Every per-change operation of :class:`GerritService`'s APIs, called with a bare *cid*."""
+    root = {"id": "c0", "path": "a.txt", "line": 1, "message": "main 0", "unresolved": True, "patch_set": 1}
+    chain = collect_comment_chains({"a.txt": [root]}, comments="all")[0]
+    return {
+        "comments.get_chains": lambda s: s.comments.get_chains(cid, comments="all"),
+        "comments.get_drafts": lambda s: s.comments.get_drafts(cid),
+        "comments.find_chain": lambda s: s.comments.find_chain({cid: None}, "c0"),
+        "comments.save_reply": lambda s: s.comments.save_reply(cid, chain, "on it", unresolved=None),
+        "comments.create_draft": lambda s: s.comments.create_draft(cid, 1, {"path": "a.txt", "message": "x"}),
+        "comments.edit_draft": lambda s: s.comments.edit_draft(cid, "d0", "x"),
+        "comments.discard_draft": lambda s: s.comments.discard_draft(cid, "d0"),
+        "comments.publish_drafts": lambda s: s.comments.publish_drafts(cid, message="lgtm"),
+        "changes.get": lambda s: s.changes.get(cid),
+        "changes.set_reviewers": lambda s: s.changes.set_reviewers(cid, add=["bob"]),
+    }
+
+
+@pytest.mark.parametrize("entry", list(_service_entry_points(_cid("00"))))
+def test_every_service_entry_point_narrows_a_bare_change_id_to_the_push_branch(
+    entry: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Handed a bare Change-Id, core asks Gerrit for the push branch's change, never by the bare id.
+
+    Core is called without a terminal too (``ger serve``), so the guarantee is the service's,
+    not each command's: a caller that passes a footer Change-Id cannot reach Gerrit's
+    "Multiple changes found" 404.
+    """
+    store, on_main = _stack_with_dev_siblings(stack_repo)
+    cid = next(iter(on_main))
+    draft = {"id": "d0", "line": 1, "message": "draft", "unresolved": True, "patch_set": 1}
+    store.set_drafts(build_triplet("testproj", "main", cid), {"a.txt": [draft]})
+    monkeypatch.chdir(stack_repo)
+    _service_entry_points(cid)[entry](RunContext.open(stack_repo, gerrit=store).gerrit)
+    refs = _per_change_refs(store)
+    assert refs, "expected a per-change request"
+    assert cid not in refs, refs
+    assert {store.get_change(ref)["_number"] for ref in refs} == {on_main[cid]}

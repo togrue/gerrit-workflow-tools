@@ -198,6 +198,14 @@ matches **more than one** open Gerrit change:
 - **Never overwrite silently.** Two changes with the same Change-Id are two rows,
   cached and displayed independently. The disk cache keys on the **triplet /
   `ChangeInfo.id`**, never on the bare Change-Id.
+- **Resolved once, addressed uniquely after.** Once a change is resolved (by a query scoped
+  to project and branch), every later request for it (detail, comments, drafts, reviewers,
+  checks, messages, review) names it by a unique id, the triplet, Gerrit's `ChangeInfo.id`
+  or its number, never by the bare Change-Id: Gerrit answers `/changes/<Change-Id>/…` with
+  404 ("Multiple changes found") as soon as the Change-Id is on a second branch. The
+  service's change and comment APIs (`ChangeApi`, `CommentApi`) narrow a bare Change-Id
+  they are handed to the push branch's triplet (`GerritService.cache_key`), so no caller,
+  command or `ger serve`, can put one into a URL.
 - **The guess is always visible.** Any time `ger` narrows an ambiguous input, it
   tells you what it picked and why, and how to override. Silence is only allowed
   when the input was already unique.

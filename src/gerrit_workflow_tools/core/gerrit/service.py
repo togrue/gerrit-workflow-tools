@@ -127,7 +127,12 @@ class GerritService:
         return self.repo.stack
 
     def cache_key(self, change_ref: str, ctx: StackContext | None = None) -> str:
-        """Map a change ref to its cache key: triplets and numbers verbatim, Change-Ids via the stack context."""
+        """The one key a change is cached by and addressed by in every ``/changes/{id}`` request.
+
+        Triplets, Gerrit ids and numbers verbatim; a bare Change-Id becomes the push branch's
+        triplet. A bare Change-Id is never a key: Gerrit answers it with 404 ("Multiple changes
+        found") once the Change-Id is on a second branch.
+        """
         if "~" in change_ref or change_ref.isdigit():
             return change_ref
         ctx = ctx or self.stack_context()

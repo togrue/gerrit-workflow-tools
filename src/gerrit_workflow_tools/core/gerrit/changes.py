@@ -17,7 +17,6 @@ from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     LIGHT_QUERY_OPTIONS,
     LOG_QUERY_OPTIONS,
-    change_id_for_gerrit_rest_path,
     parallel_map,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet
@@ -107,13 +106,15 @@ class ChangeApi:
         return rows
 
     def get(self, ref: str) -> dict[str, Any]:
-        """The details of the one change *ref* names (triplet, Gerrit id or number).
+        """The details of the one change *ref* names (triplet, Gerrit id, number, or a Change-Id).
 
+        A bare Change-Id names the push branch's change (:meth:`GerritService.cache_key`).
         From the cache while Gerrit confirmed that row inside the trust window (an
         :meth:`exact` view: confirmed it to this view); else asked for, and kept. Gerrit's 404
         for an unknown change passes through.
         """
         service = self._service
+        ref = service.cache_key(ref)
         if self._exact:
             known = self._seen.get(ref)
         else:
@@ -194,10 +195,9 @@ class ChangeApi:
         cached row instead.
         """
         service = self._service
-        rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = service.cache_key(change_id)
-        service.cache.invalidate_changes([cache_key])
+        key = service.cache_key(change_id)
+        service.cache.invalidate_changes([key])
         if add or ccs:
-            service.rest.set_reviewers_batch(rest_ref, reviewers=add or [], ccs=ccs or [])
-        parallel_map([partial(service.rest.delete_reviewer, rest_ref, account_id) for account_id in remove or []])
-        service.cache.upsert_changes({cache_key: service.rest.get_change(rest_ref)})
+            service.rest.set_reviewers_batch(key, reviewers=add or [], ccs=ccs or [])
+        parallel_map([partial(service.rest.delete_reviewer, key, account_id) for account_id in remove or []])
+        service.cache.upsert_changes({key: service.rest.get_change(key)})

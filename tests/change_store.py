@@ -224,13 +224,22 @@ class ChangeStore:
         return ref
 
     def _require_unique_change_ref(self, ref: str) -> str:
-        """Resolve *ref* to one change id, mirroring Gerrit's 404 on ambiguous bare Change-Ids."""
-        rows = self._lookup_rows(ref)
-        if len(rows) > 1 and "~" not in ref and not ref.isdigit():
+        """Resolve *ref* to one change id, mirroring Gerrit's 404 on ambiguous bare Change-Ids.
+
+        Gerrit answers every ``/changes/{id}/…`` request whose ``{id}`` is a bare Change-Id
+        carried by more than one change with 404 ("Multiple changes found"), so every
+        per-change operation of the store goes through here.
+        """
+        if len(self._lookup_rows(ref)) > 1 and "~" not in ref and not ref.isdigit():
             raise GerritApiError(
-                f"Gerrit HTTP 404 for changes/{ref}/comments: Not Found (Multiple changes found for {ref})", status=404
+                f"Gerrit HTTP 404 for changes/{ref}: Not Found (Multiple changes found for {ref})", status=404
             )
         return self._payload_id(ref)
+
+    def _unique_row_or_raise(self, ref: str) -> dict[str, Any]:
+        """:meth:`_row_or_raise` for a ``/changes/{id}`` request: an ambiguous bare Change-Id 404s."""
+        self._require_unique_change_ref(ref)
+        return self._row_or_raise(ref)
 
     def _query_rows(self, query: str) -> list[dict[str, Any]]:
         """Evaluate the query shapes this project actually issues.
@@ -378,7 +387,7 @@ class ChangeStore:
     def get_change(self, change_id: str) -> dict[str, Any]:
         """Return one ChangeInfo, shaped like :class:`HttpGerritRest`'s ``LOG_QUERY_OPTIONS`` fetch."""
         self._record("get_change", change_id)
-        return shape_change_info(self._row_or_raise(change_id), LOG_QUERY_OPTIONS)
+        return shape_change_info(self._unique_row_or_raise(change_id), LOG_QUERY_OPTIONS)
 
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
@@ -424,7 +433,7 @@ class ChangeStore:
     ) -> dict[str, Any]:
         """Create or update a draft the way Gerrit does: the reply lands on *revision*."""
         self._record("put_draft", change_id, revision, comment, draft_id=draft_id)
-        file_map = self._drafts.setdefault(self._payload_id(change_id), {})
+        file_map = self._drafts.setdefault(self._require_unique_change_ref(change_id), {})
         if draft_id is not None:
             for rows in file_map.values():
                 rows[:] = [row for row in rows if row.get("id") != draft_id]
@@ -435,7 +444,7 @@ class ChangeStore:
     def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
         """Delete one draft."""
         self._record("delete_draft", change_id, revision, draft_id)
-        for rows in self._drafts.get(self._payload_id(change_id), {}).values():
+        for rows in self._drafts.get(self._require_unique_change_ref(change_id), {}).values():
             rows[:] = [row for row in rows if row.get("id") != draft_id]
 
     def publish_drafts(
@@ -454,8 +463,8 @@ class ChangeStore:
             labels=dict(labels) if labels else None,
             draft_ids=list(draft_ids) if draft_ids is not None else None,
         )
-        key = self._payload_id(change_id)
-        payload_labels = self._row_or_raise(change_id).setdefault("labels", {})
+        key = self._require_unique_change_ref(change_id)
+        payload_labels = self._unique_row_or_raise(change_id).setdefault("labels", {})
         for name, value in (labels or {}).items():
             payload_labels[name] = {"value": value, "all": [{"value": value}]}
         published = self._comments.setdefault(key, {})
@@ -485,22 +494,22 @@ class ChangeStore:
     def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
         """Return the seeded relation chain; a change with none seeded is alone (``changes: []``)."""
         self._record("get_related", change_id, revision)
-        return {"changes": self._related.get(self._payload_id(change_id), [])}
+        return {"changes": self._related.get(self._require_unique_change_ref(change_id), [])}
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
         self._record("get_checks", change_id)
-        return self._checks.get(self._payload_id(change_id), [])
+        return self._checks.get(self._require_unique_change_ref(change_id), [])
 
     def get_messages(self, change_id: str) -> list[dict[str, Any]]:
         """Return change message rows for one change."""
         self._record("get_messages", change_id)
-        return self._messages.get(self._payload_id(change_id), [])
+        return self._messages.get(self._require_unique_change_ref(change_id), [])
 
     def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
         """Return reviewer rows for one change."""
         self._record("list_change_reviewers", change_id)
-        return self._reviewer_rows(self._row_or_raise(change_id))
+        return self._reviewer_rows(self._unique_row_or_raise(change_id))
 
     def suggest_change_reviewers(
         self,
@@ -536,7 +545,7 @@ class ChangeStore:
         whole request is a 400 and nothing changes); a group adds its members.
         """
         self._record("set_reviewers_batch", change_id, reviewers=reviewers, ccs=ccs)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         rows = self._reviewer_rows(payload)
         # Like Gerrit: the change owner is never added as its reviewer or CC; the request
         # still succeeds.
@@ -575,7 +584,7 @@ class ChangeStore:
     def delete_reviewer(self, change_id: str, account_id: int) -> Any:
         """Remove one reviewer or CC from a change."""
         self._record("delete_reviewer", change_id, account_id)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         rows = self._reviewer_rows(payload)
         if all(_row_account_id(row) != account_id for row in rows):
             raise GerritApiError(f"Gerrit HTTP 404: Not found: {account_id}", status=404)
@@ -590,18 +599,18 @@ class ChangeStore:
     def set_topic(self, change_id: str, topic: str | None) -> None:
         """Set or clear the change topic."""
         self._record("set_topic", change_id, topic)
-        self._row_or_raise(change_id)["topic"] = topic or None
+        self._unique_row_or_raise(change_id)["topic"] = topic or None
 
     def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
         """Mark a change work-in-progress or ready for review."""
         self._record("set_wip", change_id, on)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         payload["work_in_progress"] = on
         return payload
 
     def set_private(self, change_id: str, on: bool) -> dict[str, Any]:
         """Set or clear the private flag on a change."""
         self._record("set_private", change_id, on)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         payload["is_private"] = on
         return payload

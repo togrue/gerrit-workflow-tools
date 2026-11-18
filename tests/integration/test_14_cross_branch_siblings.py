@@ -100,6 +100,29 @@ def test_a_bare_change_id_is_narrowed_to_the_branch_or_refused_as_ambiguous(
         assert f"change:{s.main['_number']} (" in err and f"change:{s.dev['_number']} (" in err
 
 
+@pytest.mark.parametrize(("branch", "messages"), [("feat_main", []), ("feat_dev", ["only on dev"])])
+def test_show_stack_shows_each_branchs_own_change_and_its_comments(
+    branch: str, messages: list[str], reviewed_siblings: SiblingChanges, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger show --stack`` asks Gerrit by the stack branch's change, never by the bare Change-Id.
+
+    Gerrit answers ``/changes/<Change-Id>/…`` with 404 ("Multiple changes found") once the
+    Change-Id is on two branches (GitHub #31: ``ger show --stack`` failed on the comments fetch).
+    """
+    s = reviewed_siblings
+    repo = _on(s, branch)
+    expected = (s.main if branch == "feat_main" else s.dev)["_number"]
+    for argv in (["--stack", "--comments", "all"], ["--stack", "-v", "--color=never"]):
+        code, out, err = run_ger(repo, ger_show_main, argv, monkeypatch)
+        assert code in (0, 1), err
+        assert "Multiple changes found" not in err and "HTTP 404" not in err, err
+        assert f"/+/{expected}" in out
+    shown = ger_json(repo, ger_show_main, ["--stack", "--comments", "all"], monkeypatch)
+    [commit] = shown.get("commits", [shown])
+    assert commit["change_id"] == s.change_id and commit["number"] == expected
+    assert [chain["comments"][0]["message"] for chain in commit["comment_chains"]] == messages
+
+
 @pytest.mark.parametrize("form", ["triplet", "change-number"])
 def test_a_triplet_or_change_number_names_the_other_branchs_sibling_exactly(
     form: str, reviewed_siblings: SiblingChanges, monkeypatch: pytest.MonkeyPatch
