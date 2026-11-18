@@ -172,7 +172,7 @@ button.twist:hover {
 /* Not there yet: still to be replayed by the rebase, or stopped part-way on a conflict. */
 .row.dim .label,
 .row.dim .detail,
-.row.dim .cloud,
+.row.dim .sync,
 .row.dim .badges {
   opacity: 0.5;
 }
@@ -204,31 +204,31 @@ button.twist:hover {
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 
-/* The cloud says how the commit relates to Gerrit. */
-.cloud-same {
+/* The sync icon says how the commit relates to Gerrit. */
+.sync-same {
   color: inherit;
 }
-.cloud-changed {
+.sync-changed {
   color: var(--vscode-charts-yellow);
 }
-.cloud-outdated {
+.sync-outdated {
   color: var(--vscode-charts-red);
 }
-.cloud-diverged {
+.sync-diverged {
   color: var(--vscode-charts-blue);
 }
-.cloud-not-pushed,
-.cloud-unknown {
+.sync-not-pushed,
+.sync-unknown {
   color: var(--vscode-disabledForeground);
 }
 .row.merge .codicon-git-merge {
   color: var(--vscode-descriptionForeground);
 }
-.cloud-merged {
+.sync-merged {
   color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
 }
 
-/* The selection colours a row's text; the cloud and the votes keep their own meaning. */
+/* The selection colours a row's text; the sync icon and the votes keep their own meaning. */
 .badges {
   display: flex;
   flex: none;

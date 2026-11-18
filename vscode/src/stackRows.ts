@@ -6,10 +6,10 @@ import { MoveConflict, Overview, Stack, StackCommit, UpstreamChoice } from "./ap
 import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
-/** How a commit relates to what Gerrit has: the colour of its cloud. */
-export type Cloud = "same" | "changed" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
+/** How a commit relates to what Gerrit has: its icon and its colour. */
+export type Sync = "same" | "changed" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
 
-const CLOUD_WORDS: Record<Cloud, string> = {
+const SYNC_WORDS: Record<Sync, string> = {
   same: "the same as on Gerrit",
   changed: "changed here since the last push",
   outdated: "outdated: Gerrit has a newer patchset",
@@ -19,7 +19,21 @@ const CLOUD_WORDS: Record<Cloud, string> = {
   unknown: "Gerrit could not be asked",
 };
 
-export function cloud(commit: StackCommit): Cloud {
+/**
+ * The codicon for each: a commit is no cloud. A full circle is in step with Gerrit, an empty one
+ * is not there yet; an arrow points to the side that is newer (up: here, to push; down: Gerrit).
+ */
+export const SYNC_ICONS: Record<Sync, string> = {
+  same: "circle-filled",
+  changed: "arrow-circle-up",
+  outdated: "arrow-circle-down",
+  diverged: "arrow-swap",
+  "not-pushed": "circle-outline",
+  merged: "pass-filled",
+  unknown: "question",
+};
+
+export function sync(commit: StackCommit): Sync {
   switch (commit.patchset_status) {
     case "active":
       return "same";
@@ -105,8 +119,10 @@ export interface StackRow {
   summary: string;
   changeId: string | null;
   url: string | null;
-  cloud: Cloud;
-  cloudTitle: string;
+  sync: Sync;
+  /** The codicon that shows `sync`. */
+  syncIcon: string;
+  syncTitle: string;
   /** The rebase underway stands here: stopped with the commit applied (`rebase`), or on a conflict. */
   marker: "rebase" | "conflict" | null;
   /** Not (wholly) there yet: still to be replayed by the rebase, or stopped part-way. */
@@ -169,7 +185,7 @@ export function pinnedWhy(stack: Stack): string {
 function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: number, conflicts: Conflicts): StackRow {
   const [below, above] = [stack.commits[index - 1], stack.commits[index + 1]];
   const isPinned = index < pinnedBelow;
-  const state = cloud(commit);
+  const state = sync(commit);
   const stopped = commit.rebase === "current";
   const conflict = stopped && stack.rebase?.applied === false;
   const marker = stopped ? (conflict ? "conflict" : "rebase") : null;
@@ -178,7 +194,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   const notes = [commit.is_head ? "HEAD" : "", commit.short_sha, commit.merge ? "merge" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
   const tooltip = [
     commit.summary,
-    `${commit.number ? `Change ${commit.number}: ` : ""}${CLOUD_WORDS[state]}`,
+    `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
     reasonWords(commit.attention_reasons) || "no open issues",
     marker ? MARKER_WORDS[marker] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
@@ -195,8 +211,9 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     summary: commit.summary,
     changeId: commit.change_id,
     url: commit.gerrit_url,
-    cloud: state,
-    cloudTitle: CLOUD_WORDS[state],
+    sync: state,
+    syncIcon: SYNC_ICONS[state],
+    syncTitle: SYNC_WORDS[state],
     marker,
     dim: commit.rebase === "todo" || conflict,
     merge: Boolean(commit.merge),
@@ -282,7 +299,7 @@ export function stackLines(vm: StackVm): string[] {
     ...vm.rows.map((r) => {
       const marker = r.marker ? `▶${r.marker === "conflict" ? "!" : ""} ` : "";
       const right = r.badges.map(said).filter(Boolean).join(", ");
-      return `${marker}${r.summary} — ${[...r.notes, r.cloudTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
+      return `${marker}${r.summary} — ${[...r.notes, r.syncTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
     }),
   ];
 }

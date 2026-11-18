@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState, changeLines, changeVm } from "../src/changeRows";
-import { badges, cloud, frozen, pinned, pinnedWhy, stackLines, stackVm } from "../src/stackRows";
+import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 
 function commit(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
@@ -54,8 +54,8 @@ function stack(commits: StackCommit[], extra: Partial<Stack> = {}): Stack {
 
 const never = () => undefined;
 
-test("the cloud says how a commit relates to Gerrit", () => {
-  const states = (extra: Partial<StackCommit>) => cloud(commit("c", extra));
+test("the icon says how a commit relates to Gerrit", () => {
+  const states = (extra: Partial<StackCommit>) => sync(commit("c", extra));
   assert.equal(states({ patchset_status: "active" }), "same");
   assert.equal(states({ patchset_status: "newer" }), "changed");
   assert.equal(states({ patchset_status: "newer", diverged: true }), "diverged");
@@ -63,6 +63,10 @@ test("the cloud says how a commit relates to Gerrit", () => {
   assert.equal(states({ patchset_status: "absent", pushed: false }), "not-pushed");
   assert.equal(states({ patchset_status: "merged-same" }), "merged");
   assert.equal(states({ patchset_status: "unknown" }), "unknown");
+  // A local commit is no cloud: every state has its own icon, and none is one.
+  const icons = Object.values(SYNC_ICONS);
+  assert.equal(new Set(icons).size, icons.length);
+  assert.ok(icons.every((name) => !name.includes("cloud")));
 });
 
 test("a row carries comments, the review vote and the CI vote as badges, in that order", () => {

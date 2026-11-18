@@ -35,11 +35,12 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 
 The commits above your upstream, newest first. One row per commit:
 
-- A **cloud** in front says how the commit relates to Gerrit, by colour: the text colour when it
-  is the same as on Gerrit, **yellow** when you changed it since the last push, **red** when
-  Gerrit has a newer patchset than this commit (outdated), **blue** when both happened
-  (diverged: you changed it, and Gerrit's current patchset came from somewhere else). A dimmed
-  upload cloud is a commit Gerrit does not have yet; a check, one that is merged.
+- An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
+  same as on Gerrit; a **yellow arrow up** when you changed it since the last push (yours is
+  newer: push it); a **red arrow down** when Gerrit has a newer patchset than this commit
+  (outdated); **blue arrows both ways** when both happened (diverged: you changed it, and
+  Gerrit's current patchset came from somewhere else). A dimmed **empty circle** is a commit
+  Gerrit does not have yet; a green check, one that is merged. Hover it for the words.
 - On the right, as icons: **unresolved comments** (with their number), the **review vote** and the
   **CI vote**. Dimmed, they are the last pushed patchset's: the commit's code changed since, and
   Gerrit may not keep them. Hover any of them for the words.

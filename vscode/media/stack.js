@@ -16,7 +16,6 @@
   let dragging = false;
   let openTimer;
 
-  const CLOUD_ICON = { "not-pushed": "cloud-upload", merged: "check" };
   const rowOf = (key) => vm.rows.find((row) => row.key === key);
   const indexOf = (key) => vm.rows.findIndex((row) => row.key === key);
   const selectedRows = () => vm.rows.filter((row) => selected.has(row.key));
@@ -62,7 +61,7 @@
         "data-vscode-context": context(row),
       },
       h("span", { class: "marker" }, marker),
-      h("span", { class: `codicon codicon-${CLOUD_ICON[row.cloud] || "cloud"} cloud cloud-${row.cloud}`, title: row.cloudTitle }),
+      h("span", { class: `codicon codicon-${row.syncIcon} sync sync-${row.sync}`, title: row.syncTitle }),
       row.merge ? icon("git-merge", undefined, "A merge commit: what it brings in is not listed") : null,
       h("span", { class: "label" }, row.summary),
       h("span", { class: "detail" }, row.notes.join(" · ")),
