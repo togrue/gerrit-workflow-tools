@@ -53,6 +53,8 @@ UI_ONLY = frozenset(
         "ger.sortChains",
         "ger.comment.cancel",
         "ger.comment.cancelNew",
+        "ger.comment.escape",
+        "ger.comment.close",
     }
 )
 

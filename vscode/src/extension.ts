@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange } from "./api";
 import { ChangeView, FILE_SCHEME, Location, ThreadArg } from "./changeView";
-import { CommentThreads, ThreadComment } from "./comments";
+import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
@@ -153,6 +153,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
   };
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
+  changeView.showThread = (chain) => threads.show(chain);
+  changeView.replyWith = (chain, text, resolved) => threads.replyWith(chain, text, resolved);
 
   /** Copy the Change-Ids or the SHAs of what a command was invoked on: one per line, newest first. */
   const copyIds = async (arg: unknown, what: "changeId" | "sha") => {
@@ -258,6 +260,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.comment.save": (comment: ThreadComment) => threads.saveEdit(comment),
     "ger.comment.cancel": (comment: ThreadComment) => threads.cancelEdit(comment),
     "ger.comment.delete": (comment: ThreadComment) => threads.discardInThread(comment),
+    "ger.comment.escape": () => leaveCommentBox(),
+    "ger.comment.close": () => closeComment(),
     "ger.chain.edit": (arg: unknown) => {
       const chain = threadOf(arg);
       return chain ? threads.editChain(chain) : undefined;

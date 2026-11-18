@@ -316,9 +316,11 @@ def load_shown_commits(
     commits = annotated.commits
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
+    per_commit: list[list[CiContent] | None] = [None] * len(commits)
+    if ci is not None:
+        per_commit = list(ci.fetch_each([(commit.ci_links, commit.sha or None) for commit in commits]))
     shown: list[ShownCommit] = []
-    for target, commit in zip(targets, commits, strict=True):
-        ci_contents = ci.fetch(commit.ci_links, commit=commit.sha or None) if ci is not None else None
+    for target, commit, ci_contents in zip(targets, commits, per_commit, strict=True):
         rest_key = gerrit_rest_key(commit, target.resolution, service)
         chains: list[CommentChain] = []
         if commit.pushed and rest_key:

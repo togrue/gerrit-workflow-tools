@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import time
+
 from gerrit_workflow_tools.core.ci_content import CiFinding
 from gerrit_workflow_tools.core.ci_findings import find_ci_findings
 from gerrit_workflow_tools.core.ci_log import clean_log_lines
@@ -141,3 +143,13 @@ def test_clean_log_has_no_findings() -> None:
 def test_finding_round_trips_through_its_json_shape() -> None:
     [finding] = find_ci_findings(PYTEST_LONG.split("Build step")[0])
     assert CiFinding.from_dict(finding.to_dict()) == finding
+
+
+def test_a_line_of_many_level_tags_is_read_in_linear_time() -> None:
+    """Each tag used to be retried against the rest of the line: 200 kB of tags took 25 s."""
+    started = time.perf_counter()
+    assert find_ci_findings("[ERROR] x " * 20_000 + "\n") == []
+    assert time.perf_counter() - started < 2.0
+    # The first tag still reads a Maven position, whatever follows it.
+    [finding] = find_ci_findings("[ERROR] [WARN] /w/src/A.java:[3,7] cannot find symbol\n")
+    assert (finding.tool, finding.severity, finding.line) == ("javac", "error", 3)

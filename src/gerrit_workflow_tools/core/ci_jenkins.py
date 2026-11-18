@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from gerrit_workflow_tools.core.ci_content import CacheVerdict, CiFetchContext, CiFetched
@@ -89,13 +90,16 @@ class JenkinsProvider:
         return f"{ref.base}/" if ref else url
 
     def fetch(self, link: CiLink, ctx: CiFetchContext) -> CiFetched:
-        """``api/json`` for state, then ``consoleText``; parse with the built-in finders."""
+        """``api/json`` for state and ``consoleText``, at once; parse with the built-in finders."""
         ref = parse_jenkins_build_url(link.url)
         if ref is None:
             raise CiHttpError(f"not a Jenkins build URL: {link.url}")
         headers = authorization_header(ctx.credential)
-        state = _read_build_state(ctx, ref, headers)
-        log = ctx.http.get_text(f"{ref.base}/consoleText", headers=headers)
+        # Independent requests: the state's round trip hides behind the log's download.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(_read_build_state, ctx, ref, headers)
+            log = ctx.http.get_text(f"{ref.base}/consoleText", headers=headers)
+            state = pending.result()
         verdict: CacheVerdict = "body" if ref.numbered and state.building is False and not log.truncated else "none"
         return CiFetched(
             url=f"{state.url or ref.base}/console",

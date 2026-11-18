@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.ci_content import (
     CiProvenance,
 )
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore, StoredCiContent
-from gerrit_workflow_tools.core.ci_http import CiHttp, UrllibCiHttp
+from gerrit_workflow_tools.core.ci_http import CiHttp, Progress, UrllibCiHttp
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_paths import resolve_finding_paths, tracked_paths
 from gerrit_workflow_tools.core.config import Settings
@@ -74,14 +74,18 @@ class CiContentService:
         web_base: str | None = None,
         http: CiHttp | None = None,
         refresh: bool = False,
+        progress: Progress | None = None,
     ) -> CiContentService:
-        """Providers from ``.ger/ci/`` plus built-ins; the store beside *web_base*'s Gerrit cache."""
+        """Providers from ``.ger/ci/`` plus built-ins; the store beside *web_base*'s Gerrit cache.
+
+        *progress* hears the bytes of each download as they arrive (unless *http* is given).
+        """
         from gerrit_workflow_tools.core.ci_strategy import load_ci_content_providers
 
         base = web_base or settings.gerrit_web_url
         return cls(
             providers=load_ci_content_providers(repo_toplevel(cwd), settings=settings, web_base=base),
-            http=http if http is not None else UrllibCiHttp(),
+            http=http if http is not None else UrllibCiHttp(progress=progress),
             settings=settings,
             store=CiContentStore.for_web_base(base) if base else None,
             refresh=refresh,
@@ -103,7 +107,19 @@ class CiContentService:
 
         *commit* is the commit the links belong to: finding paths are resolved to its files.
         """
-        return parallel_map(partial(self.fetch_one, link, body=body, commit=commit) for link in links)
+        return self.fetch_each([(links, commit)], body=body)[0]
+
+    def fetch_each(
+        self, groups: Sequence[tuple[Sequence[CiLink], str | None]], *, body: BodyMode = "none"
+    ) -> list[list[CiContent]]:
+        """:meth:`fetch` for each ``(links, commit)`` group, every link of every group in parallel.
+
+        A stack's commits each have their own builds: fetching them one commit after the other
+        would make the slowest log of each commit add up.
+        """
+        jobs = [partial(self.fetch_one, link, body=body, commit=commit) for links, commit in groups for link in links]
+        flat = iter(parallel_map(jobs))
+        return [[next(flat) for _ in links] for links, _commit in groups]
 
     def fetch_one(self, link: CiLink, *, body: BodyMode = "none", commit: str | None = None) -> CiContent:
         """**CI content** for *link*; a failure is recorded on the provenance, never raised.

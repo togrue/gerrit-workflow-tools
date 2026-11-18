@@ -3,7 +3,7 @@
 // files, comment chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, post, panel, listen, getState, setState } = window.ger;
+  const { h, icon, badge, post, panel, listen, getState, setState } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -11,8 +11,10 @@
   const drafts = getState().drafts || {};
   /** Sections the user opened or closed, by name: their choice wins over the default. */
   const toggled = {};
-  /** Comment chains whose replies are shown. */
+  /** Comment chains shown in full: every comment's whole text, and (with no line in a file) a reply box. */
   const expanded = new Set();
+  /** Reply boxes by chain, kept across redraws so typing is never interrupted. */
+  const replyBoxes = new Map();
   /** The message block, kept across redraws so typing is never interrupted. */
   let editor = null;
   let revealed = null;
@@ -144,23 +146,31 @@
       post("thread", { id: thread.id, action });
     };
     const open = expanded.has(thread.id);
-    const twist = thread.replies.length
-      ? h("button", {
-          class: `codicon codicon-chevron-${open ? "down" : "right"} twist`,
-          title: `${thread.replies.length} ${thread.replies.length === 1 ? "reply" : "replies"}`,
-          onclick: (event) => {
-            event.stopPropagation();
-            if (open) {
-              expanded.delete(thread.id);
-            } else {
-              expanded.add(thread.id);
-            }
-            draw(vm);
-          },
-        })
-      : h("span", { class: "twist" });
+    const toggle = (event) => {
+      event.stopPropagation();
+      if (open) {
+        expanded.delete(thread.id);
+      } else {
+        expanded.add(thread.id);
+      }
+      draw(vm);
+    };
+    const count = thread.replies.length ? ` and ${thread.replies.length} ${thread.replies.length === 1 ? "reply" : "replies"}` : "";
+    // Every chain opens: a long comment is cut on its row, and here it can be read whole.
+    const twist = h("button", {
+      class: `codicon codicon-chevron-${open ? "down" : "right"} twist`,
+      title: open ? "Hide the full text" : `Show the full text${count}`,
+      "aria-expanded": open ? "true" : "false",
+      onclick: toggle,
+    });
     const row = item(
-      { class: `thread${revealed === thread.id ? " revealed" : ""}`, title: thread.tooltip, "data-id": thread.id, onclick: act("open") },
+      {
+        class: `thread${revealed === thread.id ? " revealed" : ""}`,
+        title: thread.tooltip,
+        "data-id": thread.id,
+        // On a line of a file: open it there, in its thread. About the whole change: read and answer it here.
+        onclick: thread.file ? act("open") : toggle,
+      },
       twist,
       icon(thread.icon, thread.tone),
       h("span", { class: "label" }, thread.text),
@@ -176,18 +186,51 @@
         thread.discard ? h("button", { class: "codicon codicon-trash", title: thread.discard, onclick: act("chain.delete") }) : null,
       ),
     );
-    const replies = open
-      ? thread.replies.map((reply) =>
-          h(
-            "div",
-            { class: "reply", title: reply.text },
-            icon(reply.state ? "edit" : "account"),
-            h("span", { class: "label" }, reply.author),
-            h("span", { class: "detail" }, `${reply.state ? `[${reply.state}] ` : ""}${reply.text.split("\n")[0]}`),
-          ),
-        )
-      : [];
-    return [row, ...replies];
+    if (!open) {
+      return [row];
+    }
+    const comment = (author, state, text) =>
+      h(
+        "div",
+        { class: "comment" },
+        h("div", { class: "reply" }, icon(state ? "edit" : "account"), h("span", { class: "label" }, author), state ? h("span", { class: "detail" }, `[${state}]`) : null),
+        h("div", { class: "comment-text" }, text),
+      );
+    return [
+      row,
+      comment(thread.author, "", thread.body),
+      thread.replies.map((reply) => comment(reply.author, reply.state, reply.text)),
+      thread.reply && !thread.file ? replyBox(thread) : null,
+    ];
+  }
+
+  /** A box to answer a chain that has no line in a file, saved as a draft reply as an editor thread's reply box saves it. */
+  function replyBox(thread) {
+    let box = replyBoxes.get(thread.id);
+    if (!box) {
+      const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: "Reply… (Ctrl+Enter saves it as a draft)" });
+      const save = h("button", { class: "button", title: "Save as your draft reply on Gerrit (Ctrl+Enter)" }, "Save Draft Reply");
+      const resolve = h("button", { class: "button secondary", title: "Save as your draft reply, resolving the comment" }, "Save and Resolve");
+      const note = h("span", { class: "detail" });
+      const send = (resolved) => {
+        if (text.value.trim()) {
+          note.textContent = "saving…";
+          post("thread", { id: thread.id, action: "replyText", text: text.value, resolved });
+        }
+      };
+      text.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          send(undefined);
+        }
+      });
+      save.addEventListener("click", () => send(undefined));
+      resolve.addEventListener("click", () => send(true));
+      box = { block: h("div", { class: "reply-box" }, text, h("div", { class: "message-bar" }, save, resolve, note)), text, note, resolve };
+      replyBoxes.set(thread.id, box);
+    }
+    box.resolve.hidden = !thread.open;
+    return box.block;
   }
 
   function ciBody(ci) {
@@ -276,11 +319,15 @@
       shownKey = key;
       delete toggled.ci;
       expanded.clear();
+      replyBoxes.clear();
       revealed = null;
     }
     const parts = [];
     if (vm.head) {
-      parts.push(h("div", { class: "head", title: vm.head.tooltip }, icon(vm.head.icon, vm.head.tone), h("span", { class: "label" }, vm.head.text), h("span", { class: "detail" }, vm.head.detail)));
+      const head = vm.head;
+      // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
+      const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
+      parts.push(h("div", { class: "head", title: head.tooltip }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
@@ -350,6 +397,13 @@
       if (editor && editor.key === message.key) {
         editor.base = editor.box.value;
         editor.sync();
+      }
+    } else if (message.type === "replied") {
+      // Saved: the draft shows in the chain now. Not saved: the text stays, to try again.
+      const box = replyBoxes.get(message.id);
+      if (box) {
+        box.text.value = message.saved ? "" : box.text.value;
+        box.note.textContent = message.saved ? "" : "not saved";
       }
     } else if (message.type === "reveal") {
       revealed = message.id;

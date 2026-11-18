@@ -3,14 +3,17 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFetchContext, CiFetched, CiFinding, CiProvenance
 from gerrit_workflow_tools.core.ci_content_service import TAIL_LINES, CiContentService, shape_body
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore, StoredCiContent
+from gerrit_workflow_tools.core.ci_http import HttpText
 from gerrit_workflow_tools.core.ci_jenkins import JenkinsProvider, parse_jenkins_build_url
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_strategy import load_ci_content_providers
@@ -308,3 +311,38 @@ def test_severity_is_not_part_of_the_fingerprint_and_old_entries_read_back() -> 
     old = {key: value for key, value in WARNING.to_dict().items() if key != "severity"}
     assert CiFinding.from_dict(old).severity == "warning"
     assert CiFinding.from_dict({**ERROR.to_dict(), "severity": None}).severity == "error"
+
+
+# --- fetching many links at once ---------------------------------------------------
+
+
+class _Gate(FakeCiHttp):
+    """Lets no request through until *width* are in flight: a serial fetch would time out."""
+
+    def __init__(self, pages: dict[str, str | int], width: int) -> None:
+        super().__init__(pages)
+        self.barrier = threading.Barrier(width, timeout=5)
+
+    def get_text(self, url: str, **kwargs: Any) -> HttpText:
+        self.barrier.wait()
+        return super().get_text(url, **kwargs)
+
+
+def test_jenkins_asks_state_and_log_at_once() -> None:
+    fetched = JenkinsProvider().fetch(LINK, CiFetchContext(http=_Gate(jenkins_build(), width=2)))
+    assert fetched.cache_verdict == "body"
+
+
+def test_every_commit_of_a_stack_is_fetched_at_once_and_comes_back_in_order(tmp_path: Path) -> None:
+    bases = [f"https://ci.example.org/job/Widget/{n}" for n in (1, 2, 3)]
+    pages: dict[str, str | int] = {}
+    for n, base in enumerate(bases):
+        pages.update(jenkins_build(base, name=f"Widget #{n}"))
+    links = [CiLink(label="jenkins", url=f"{base}/console", source="checks") for base in bases]
+    service = _service(_Gate(pages, width=2 * len(bases)), tmp_path)
+    per_commit = service.fetch_each([([links[0]], None), ([], None), (links[1:], None)])
+    assert [[c.provenance.build for c in contents] for contents in per_commit] == [
+        ["Widget #0"],
+        [],
+        ["Widget #1", "Widget #2"],
+    ]

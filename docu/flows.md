@@ -117,6 +117,8 @@ A **gap** names the work that would close it.
 | `ger.comment.save` | `ger comment --edit ID -m MSG` | |
 | `ger.comment.cancel` | UI only | |
 | `ger.comment.delete` | `ger comment --discard ID` | |
+| `ger.comment.escape` | UI only | Esc in a reply box: the focus steps back to the thread's comments |
+| `ger.comment.close` | UI only | Esc on a comment or in the editor: closes the open threads in view |
 | `ger.chain.edit` | `ger comment --edit ID -m MSG` | |
 | `ger.chain.delete` | `ger comment --discard ID` | |
 | `ger.setUpstream` | `ger log` | prompts for a missing upstream on a terminal |

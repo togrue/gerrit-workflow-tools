@@ -123,8 +123,16 @@ _TAGS = r"(?:\s*\[[\w .:-]+\]\s+)*"
 _JAVAC = re.compile(
     rf"^{_TAGS}(?P<path>{PATH}\.(?P<ext>java|scala)):(?P<line>\d+): (?P<sev>error|warning): (?P<msg>.*)$"
 )
-_MAVEN = re.compile(rf"^.*?{LEVEL} (?P<path>.+?\.(?P<ext>java|scala|kt)):\[(?P<line>\d+),(?P<col>\d+)\] (?P<msg>.*)$")
-_SBT = re.compile(rf"^.*?{LEVEL} (?P<path>.+?\.(?P<ext>scala|sc|java)):(?P<line>\d+)(?::(?P<col>\d+))?: (?P<msg>.*)$")
+_FIRST_LEVEL = rf"^(?=(?P<lead>.*?{LEVEL}))(?P=lead)"
+"""Anything, then the line's first level tag. A lookahead does not backtrack, so a later tag is
+never retried: the path after it may be anything (``.+?``), so if any tag fits the first does,
+and retrying each would make a line of many tags quadratic."""
+_MAVEN = re.compile(
+    rf"{_FIRST_LEVEL} (?P<path>.+?\.(?P<ext>java|scala|kt)):\[(?P<line>\d+),(?P<col>\d+)\] (?P<msg>.*)$"
+)
+_SBT = re.compile(
+    rf"{_FIRST_LEVEL} (?P<path>.+?\.(?P<ext>scala|sc|java)):(?P<line>\d+)(?::(?P<col>\d+))?: (?P<msg>.*)$"
+)
 _SCALA3 = re.compile(
     rf"^(?:.*?{LEVEL} )?-- (?:\[(?P<code>E\d+)\] )?(?P<title>[^:\[\]]*): "
     rf"(?P<path>.+?\.(?:scala|sc)):(?P<line>\d+):(?P<col>\d+)[\s-]*$"
@@ -208,8 +216,8 @@ def find_located(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
     """Every one-line located diagnostic, in log order."""
     findings: list[CiFinding] = []
     for i, line in enumerate(lines):
-        if i in claimed:
-            continue
+        if i in claimed or ":" not in line:
+            continue  # every rule puts a colon after the place or the tool: most log lines skip them all
         for pattern, read in _RULES:
             m = pattern.match(line)
             if m is None:

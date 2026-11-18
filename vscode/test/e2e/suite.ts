@@ -212,6 +212,8 @@ export async function run(): Promise<void> {
     /** A comment chain of the Change view, as its buttons hand it to a command. */
     const threadRow = async (first: RegExp) => ({ kind: "thread" as const, chain: chain(first) });
     const exec = (command: string, ...args: unknown[]) => () => vscode.commands.executeCommand(command, ...args);
+    /** What the Change view's page posts when a row is clicked or typed in: the message its extension side acts on. */
+    const page = api.changeView as unknown as { receive(message: { type: string; [field: string]: unknown }): Promise<unknown> };
 
     // --- The overview -------------------------------------------------------------
     await press("Click the status bar item", "The Change view opens on the change the status bar names (CI failed on 102).", exec("ger.openHeadline"));
@@ -329,6 +331,15 @@ export async function run(): Promise<void> {
     await press("Next Unresolved Comment a third time", "It wraps around to Comment 1 of 2.", exec("ger.nextComment"));
     await press("Change › Previous Unresolved Comment", "Back to Comment 2 of 2.", exec("ger.prevComment"));
     await press(
+      "Click \"Please rename this.\" in the Change view",
+      "b.txt opens at line 1 with that comment's thread expanded there, the other one closed.",
+      async () => {
+        await page.receive({ type: "thread", id: chain(/^Please rename this/).root_id, action: "open" });
+        const expanded = (first: RegExp) => api.threads.threadOf(chain(first))?.collapsibleState === vscode.CommentThreadCollapsibleState.Expanded;
+        assert.deepEqual([expanded(/^Please rename this/), expanded(/^Is this the right design/)], [true, false]);
+      },
+    );
+    await press(
       "Click b.txt under Files",
       "A diff opens: the parent on the left, the commit on the right.",
       exec("ger.openDiff", api.changeView.diff?.files[0], api.changeView.diff),
@@ -370,6 +381,11 @@ export async function run(): Promise<void> {
       "Inline Reply Done and Resolve as Draft on \"Please rename this.\", which has your draft",
       "Your draft stays as you wrote it and now resolves the thread.",
       exec("ger.replyDone", await threadRow(/^Please rename this/)),
+    );
+    await press(
+      "Expand \"Looks good overall.\" (about the whole change) in the Change view, type a reply › Save Draft Reply",
+      "The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved.",
+      () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "replyText", text: "Added a test for the parser." }),
     );
     const rename = api.threads.threadOf(chain(/^Please rename this/));
     await press(
