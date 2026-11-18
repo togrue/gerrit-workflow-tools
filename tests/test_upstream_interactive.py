@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TextIO, cast
 
 import pytest
 
@@ -12,10 +13,8 @@ from gerrit_workflow_tools.core.upstream import branch_has_upstream, read_recent
 from gerrit_workflow_tools.core.upstream_interactive import (
     _is_windows_console,
     ensure_branch_upstream_interactive,
-    prompt_toolkit_can_run,
     prompt_upstream_abbrev_interactive,
     require_branch_upstream,
-    stdin_is_terminal,
 )
 
 
@@ -139,11 +138,14 @@ def test_missing_upstream_without_a_console_reports_instead_of_prompting(
         require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
 
 
+class _NoConsoleApi(_StdinTTY):
+    """A tty whose handle must not be asked for: reaching the console API is the failure."""
+
+    def fileno(self) -> int:
+        raise AssertionError("the Windows console API was consulted off Windows")
+
+
 def test_off_windows_a_tty_is_trusted_without_asking_the_console_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    monkeypatch.setattr(sys, "stdout", _StdinTTY())
     monkeypatch.setattr(sys, "platform", "linux")
 
-    assert _is_windows_console(sys.stdin)
-    assert stdin_is_terminal()
-    assert prompt_toolkit_can_run()
+    assert _is_windows_console(cast(TextIO, _NoConsoleApi()))
