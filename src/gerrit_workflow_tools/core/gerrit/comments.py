@@ -88,8 +88,14 @@ class CommentApi:
         context_padding: int | None = None,
         comments: CommentSelection = "unresolved",
     ) -> list[CommentChain]:
-        file_map = self._file_map(key, change_updated=change_updated, context_padding=context_padding)
-        return collect_comment_chains(file_map, comments=comments, drafts=self._drafts(key))
+        # Two independent round trips (drafts are never cached): asked side by side, not one after the other.
+        file_map, drafts = parallel_map(
+            [
+                partial(self._file_map, key, change_updated=change_updated, context_padding=context_padding),
+                partial(self._drafts, key),
+            ]
+        )
+        return collect_comment_chains(file_map, comments=comments, drafts=drafts)
 
     def chains_with_drafts(self, change_id: str, *, change_updated: str | None = None) -> list[CommentChain]:
         """The chains of *change_id* that hold a draft of yours: what a publish would send."""

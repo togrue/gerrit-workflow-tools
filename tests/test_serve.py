@@ -6,6 +6,8 @@ from __future__ import annotations
 import dataclasses
 import io
 import json
+import logging
+import re
 import socket
 import sys
 import threading
@@ -21,7 +23,7 @@ import pytest
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_serve import main as serve_main
 from gerrit_workflow_tools.cli_show import main as show_main
-from gerrit_workflow_tools.core import reorder, reorder_preview
+from gerrit_workflow_tools.core import call_trace, reorder, reorder_preview
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, CiProvenance, introduced_fingerprints
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.commit_diff import commit_diff, show_commit_diff
@@ -258,6 +260,30 @@ def test_show_carries_comment_chains_and_a_draft_reply_lands_in_its_chain(stack_
     [chain] = _get(api, "/show", rev="HEAD", comments="all")["commits"][0]["comment_chains"]
     assert [c["state"] for c in chain["comments"]] == ["published", "draft"]
     assert chain["resolved_after_publish"] is True
+
+
+def test_show_asks_gerrit_for_the_published_comments_and_your_drafts_at_once(stack_repo: Path) -> None:
+    """The Change view's ``/show``: the two comment round trips run side by side, each once.
+
+    Each call waits until the other has started; asked one after the other, the first one
+    would wait in vain and the barrier breaks.
+    """
+    store, keys, _rows = _gerrit(stack_repo)
+    store.set_comments(keys[3], {"d.txt": [{"id": "c1", "line": 1, "message": "rename", "unresolved": True}]})
+    both = threading.Barrier(2, timeout=5)
+
+    def meeting(fetch: Any) -> Any:
+        def call(*args: Any, **kwargs: Any) -> Any:
+            both.wait()
+            return fetch(*args, **kwargs)
+
+        return call
+
+    store.get_comments = meeting(store.get_comments)  # type: ignore[method-assign]
+    store.list_drafts = meeting(store.list_drafts)  # type: ignore[method-assign]
+    [commit] = _get(GerApi(stack_repo, gerrit=store), "/show", rev="HEAD", comments="all", files="1")["commits"]
+    assert [chain["root_id"] for chain in commit["comment_chains"]] == ["c1"]
+    assert (len(store.calls_to("get_comments")), len(store.calls_to("list_drafts"))) == (1, 1)
 
 
 def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -770,6 +796,28 @@ def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServ
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.
     assert _http(served, f"{V1}/health", host="evil.example")[0] == 403
+
+
+def test_debug_log_times_each_request_with_its_git_and_gerrit_calls(
+    served: GerHttpServer, caplog: pytest.LogCaptureFixture
+) -> None:
+    """``--debug-log``: one line per request, how long it ran and queued, and the calls it made."""
+    log = logging.getLogger("gerrit_workflow_tools.server.httpd")
+    log.addHandler(caplog.handler)
+    level = log.level
+    log.setLevel(logging.DEBUG)
+    call_trace.set_call_trace_enabled(True)
+    try:
+        assert _http(served, f"{V1}/health")[0] == 200
+    finally:
+        call_trace.set_call_trace_enabled(False)
+        log.setLevel(level)
+        log.removeHandler(caplog.handler)
+    # The handler may see each record twice: as added here, and through the root logger.
+    [timing] = {record.getMessage() for record in caplog.records if " ms queued" in record.getMessage()}
+    assert re.match(rf"GET {V1}/health: \d+ ms, after \d+ ms queued\nrequest trace", timing), timing
+    assert "  git " in timing
+    assert call_trace.format_call_trace_summary() == "", "each request's calls are its own"
 
 
 def test_http_maps_failures_to_statuses_and_shared_codes(served: GerHttpServer) -> None:

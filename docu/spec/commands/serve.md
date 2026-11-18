@@ -45,6 +45,7 @@ until it is set (`ger setup`).
 |--------|---------|
 | `--port N` | Listen on port `N`. Default: any free port (read it from the JSON line). |
 | `--exit-with-stdin` | Stop when stdin closes, so the service ends with the process that started it. The service keeps that stdin to itself: the git processes it runs get an empty one. |
+| `--debug-log` | Log requests, git and Gerrit calls to stderr. Each request gets one line with how long it ran and how long it queued behind the one before it ([Requests are serialised](#requests-are-serialised)), followed by its git and Gerrit calls with their times. |
 
 ### Access
 
