@@ -95,7 +95,7 @@ The commits above your upstream, newest first. One row per commit:
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later by
-  `ger push` or `ger review --vote`.
+  `ger push` or `ger review --vote`. In a thread, Esc in the reply box steps back to its comments; Esc again (or Esc in the editor) closes it.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
   the shown commit is HEAD — and click **+**. Save it as:
   - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published;

@@ -53,6 +53,24 @@ export class ThreadComment implements vscode.Comment {
   }
 }
 
+/**
+ * Esc in a thread's reply box: the box gives up the keyboard to the thread's comments, so a
+ * second Esc closes it (`closeComment`). VS Code has no API to focus a comment; its widget
+ * navigation does exactly this step. Where it is missing, Esc closes the thread at once.
+ */
+export async function leaveCommentBox(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand("widgetNavigation.focusPrevious");
+  } catch {
+    await closeComment();
+  }
+}
+
+/** Esc on a comment, or in the editor while a thread is open there: close the open threads in view, as VS Code's Hide Comment does. */
+export async function closeComment(): Promise<void> {
+  await vscode.commands.executeCommand("workbench.action.hideComment");
+}
+
 /** Your unpublished reply in `chain`: a chain holds at most one. */
 function yourDraft(chain: CommentChain): Comment | undefined {
   return chain.comments.slice(1).find((comment) => comment.state === "draft");

@@ -170,3 +170,14 @@ test("stepping through comments is a command and a key, not an icon in the Chang
     assert.ok(palette.includes(command), `${command} is not in the command palette`);
   }
 });
+
+test("Esc in a ger comment box first leaves the box, then closes the thread; edit boxes and new comments keep VS Code's Esc", () => {
+  const esc: Entry[] = manifest.contributes.keybindings.filter((entry: Entry) => entry.key === "escape");
+  const box = esc.find((entry) => entry.command === "ger.comment.escape")?.when ?? "";
+  assert.ok(box.includes("commentEditorFocused") && box.includes("commentController == ger"));
+  assert.ok(box.includes("!commentThreadIsEmpty") && box.includes("!comment"), "a new comment box or an edit box has no comment to step back to");
+  const close = esc.filter((entry) => entry.command === "ger.comment.close").map((entry) => entry.when ?? "");
+  assert.equal(close.length, 2);
+  assert.ok(close.every((when) => when.includes("!commentEditorFocused")), "Esc in a box never closes the thread at once");
+  assert.deepEqual(esc.map((entry) => entry.command).filter((command) => !/^ger\.comment\.(escape|close)$/.test(command ?? "")), []);
+});

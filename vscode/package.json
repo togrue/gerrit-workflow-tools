@@ -181,6 +181,8 @@
       { "command": "ger.comment.save", "title": "Save", "category": "ger" },
       { "command": "ger.comment.cancel", "title": "Cancel", "category": "ger" },
       { "command": "ger.comment.delete", "title": "Delete Comment…", "category": "ger", "icon": "$(trash)" },
+      { "command": "ger.comment.escape", "title": "Leave the Comment Box", "category": "ger" },
+      { "command": "ger.comment.close", "title": "Close the Comment", "category": "ger" },
       { "command": "ger.chain.edit", "title": "Edit Your Comment…", "category": "ger", "icon": "$(edit)" },
       { "command": "ger.chain.delete", "title": "Delete Your Comment…", "category": "ger", "icon": "$(trash)" },
       { "command": "ger.setUpstream", "title": "Set Upstream Branch…", "category": "ger", "icon": "$(git-branch)" },
@@ -231,6 +233,8 @@
         { "command": "ger.comment.save", "when": "false" },
         { "command": "ger.comment.cancel", "when": "false" },
         { "command": "ger.comment.delete", "when": "false" },
+        { "command": "ger.comment.escape", "when": "false" },
+        { "command": "ger.comment.close", "when": "false" },
         { "command": "ger.chain.edit", "when": "false" },
         { "command": "ger.chain.delete", "when": "false" }
       ],
@@ -294,6 +298,9 @@
     },
     "keybindings": [
       { "command": "ger.comment.add", "key": "ctrl+alt+c", "when": "ger.ready && ger.canComment && editorTextFocus" },
+      { "command": "ger.comment.escape", "key": "escape", "when": "commentEditorFocused && commentController == ger && !commentThreadIsEmpty && !comment" },
+      { "command": "ger.comment.close", "key": "escape", "when": "commentFocused && !commentEditorFocused && commentController == ger" },
+      { "command": "ger.comment.close", "key": "escape", "when": "editorTextFocus && !commentEditorFocused && !commentFocused && commentWidgetVisible && ger.canComment && !editorHasSelection && !editorHasMultipleSelections && !findWidgetVisible && !suggestWidgetVisible && !parameterHintsVisible && !inlineSuggestionVisible && !renameInputVisible && !referenceSearchVisible && !markersNavigationVisible && !inSnippetMode && !editorHoverVisible && !isInEmbeddedEditor" },
       { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" },
       { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" }
     ]
