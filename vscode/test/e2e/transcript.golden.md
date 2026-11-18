@@ -162,7 +162,7 @@ progress (notification): Collecting comments and CI findings
 dialog (info): The comments and CI findings of 900: Add retry to the uploader, as a brief for the agent.  [Copy to Clipboard] [Check Out to Work On] [Cancel]
     detail: This change is not checked out here, so the agent starts on your current branch and can only read the brief: its comments and CI findings. To have it amend the change, check it out to work on it first, then hand the commit over. Nothing is pushed or published.
     → pressed "Check Out to Work On"
-terminal "ger checkout": runs `ger checkout change:900`
+terminal "ger": runs `ger checkout change:900`
 status bar message: ger checkout change:900 runs in the terminal: it may ask before it changes anything
 --- on screen:
 (no change)
@@ -170,10 +170,10 @@ status bar message: ger checkout change:900 runs in the terminal: it may ask bef
 
 ## 10. Inline Check Out to Work On on change 900
 
-**Expect:** ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.
+**Expect:** ger checkout change:900 runs in the ger terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.
 
 ```
-terminal "ger checkout": runs `ger checkout change:900`
+terminal "ger": runs `ger checkout change:900`
 status bar message: ger checkout change:900 runs in the terminal: it may ask before it changes anything
 --- on screen:
 (no change)
@@ -184,7 +184,7 @@ status bar message: ger checkout change:900 runs in the terminal: it may ask bef
 **Expect:** Your own commit is edited where it is: ger edit runs in the terminal, and the status bar says what to do once it stops (not a review checkout, not a notification).
 
 ```
-terminal "ger edit": runs `ger edit <sha>`
+terminal "ger": runs `ger edit <sha>`
 status bar message: ger edit runs in the terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then git rebase --continue
 --- on screen:
 (no change)
@@ -275,7 +275,7 @@ progress (notification): Restarting ger serve
 **Expect:** A terminal opens and installs the ger release with this extension's version, with uv (the suite needs uv, so it is there); nothing else changes until Retry.
 
 ```
-terminal "install ger": runs `uv tool install --force https://github.com/togrue/gerrit-workflow-tools/releases/download/v0.1.0/ger.tar.gz`
+terminal "ger": runs `uv tool install --force https://github.com/togrue/gerrit-workflow-tools/releases/download/v0.1.0/ger.tar.gz`
 --- on screen:
 (no change)
 ```
@@ -678,7 +678,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 **Expect:** ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.
 
 ```
-terminal "ger edit": runs `ger edit <sha>`
+terminal "ger": runs `ger edit <sha>`
 status bar message: ger edit runs in the terminal: once the rebase stops at "Extract command routing", amend it, then git rebase --continue
 --- on screen:
 (no change)
@@ -740,10 +740,10 @@ dialog (info): 1 commit: 0 comments and 2 CI findings for the agent.  [Copy to C
 
 ## 51. Local stack › Push to Gerrit…
 
-**Expect:** ger push runs in a new terminal of its own (never typed into one that is busy), which shows what it will push and asks first.
+**Expect:** ger push runs in the ger terminal (a new one when a command still runs there), which shows what it will push and asks first.
 
 ```
-terminal "ger push": runs `ger push`
+terminal "ger": runs `ger push`
 --- on screen:
 (no change)
 ```

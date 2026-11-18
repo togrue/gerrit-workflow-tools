@@ -250,7 +250,7 @@ export async function run(): Promise<void> {
     );
     await press(
       "Inline Check Out to Work On on change 900",
-      "ger checkout change:900 runs in a new terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.",
+      "ger checkout change:900 runs in the ger terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.",
       exec("ger.checkout", theirs),
     );
     const mine = api.overviewView.getChildren(await chainRow("Cleanup after experiment"))[0]; // 103, the newest of the chain
@@ -475,7 +475,7 @@ export async function run(): Promise<void> {
     );
 
     // --- Rewriting the stack ----------------------------------------------------------
-    await press("Local stack › Push to Gerrit…", "ger push runs in a new terminal of its own (never typed into one that is busy), which shows what it will push and asks first.", exec("ger.push"));
+    await press("Local stack › Push to Gerrit…", "ger push runs in the ger terminal (a new one when a command still runs there), which shows what it will push and asks first.", exec("ger.push"));
     await press(
       "Right-click \"Refactor parser init\" › Copy Commit Hash",
       "The commit's full id is on the clipboard; the status bar says so.",

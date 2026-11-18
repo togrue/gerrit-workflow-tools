@@ -32,12 +32,12 @@ export function gerCommandLine(args: string[]): string {
   return shellCommandLine([...gerProgram(), ...args], shellKind(vscode.env.shell));
 }
 
-/**
- * Run a ger command that needs a human in front of it (it prompts, or opens an editor). Each
- * gets a terminal of its own: typing into one where a command still runs would answer its prompt.
- */
+/** The one terminal every ger command the extension starts runs in. */
+export const GER_TERMINAL = "ger";
+
+/** Run a ger command that needs a human in front of it (it prompts, or opens an editor), in the ger terminal. */
 export function runInTerminal(repo: string, args: string[]): void {
-  ui().terminal({ name: `ger ${args[0]}`, cwd: repo }, gerCommandLine(args));
+  ui().terminal({ name: GER_TERMINAL, cwd: repo }, gerCommandLine(args));
 }
 
 /**
@@ -47,7 +47,7 @@ export function runInTerminal(repo: string, args: string[]): void {
 export async function installGer(cwd: string, manifest: { version: string; repository: { url: string } }): Promise<void> {
   const argv = installArgv(releaseUrl(manifest.repository.url, manifest.version), (program) => !!onPath(program, process.env, process.platform, isFile));
   if (argv) {
-    ui().terminal({ name: "install ger", cwd }, shellCommandLine(argv, shellKind(vscode.env.shell)));
+    ui().terminal({ name: GER_TERMINAL, cwd }, shellCommandLine(argv, shellKind(vscode.env.shell)));
     return;
   }
   const guide = "Open Install Guide";

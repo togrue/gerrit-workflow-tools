@@ -66,7 +66,9 @@ The commits above your upstream, newest first. One row per commit:
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where
   they are — the view says so when you try to move, squash or drop one; `ger rebase` does it by
   hand. The commits above it reorder, squash and drop as usual. Rewording works everywhere.
-- Push (`ger push` in a new terminal of its own, where it can ask you).
+- Push (`ger push` in the *ger* terminal, where it can ask you). Every ger command the extension
+  starts runs in that one terminal, shown when it starts; closed or exited, the next command opens it
+  again. When a command still runs there (VS Code 1.93+ can tell), a new *ger* terminal takes over.
 - **No upstream** (typical after checking a change out with Gerrit's download commands; `ger
   checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
   the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
@@ -111,13 +113,13 @@ The commits above your upstream, newest first. One row per commit:
   this checkout to a `change-<n>` branch instead, the message says so, and *Leave Review Checkout*
   switches back. For reading someone's work.
 - **Check Out to Work On** (download icon, changes that are not in your stack): `ger checkout` in
-  a new terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
+  the *ger* terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
   the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it
   changes anything (update a branch you already have to the newest patchset?), which is why it runs
   in a terminal. The views follow by themselves once it has switched branches (see *Your repository* below).
   For changing a change of yours that exists only on Gerrit, or taking over a colleague's.
 - **Edit Commit Here** (pencil icon, your local stack commits, also where they appear in *Review
-  chains*): `ger edit` runs in this checkout, in a new terminal: an interactive rebase that stops
+  chains*): `ger edit` runs in this checkout, in the *ger* terminal: an interactive rebase that stops
   at the commit, so you amend it in place and `git rebase --continue`. No worktree, nothing fetched.
 - **Hand to Agent**: for one commit, the same runbook as below, narrowed to it. For a change that
   is not in your checkout it is a brief (the change's comments and CI findings) the agent can read
