@@ -42,6 +42,21 @@ export function standIn(known: RowStatus, local: boolean): ShownCommit {
   return { ...known, submittable: known.submittable ?? false, local_commit: local, comment_chains: [] };
 }
 
+/**
+ * Whether two targets name the same change, seen the same way (your commit, or Gerrit's): every
+ * click builds a new target, so the change already shown is recognised by its Change-Id or
+ * number, not by the object.
+ */
+export function sameChange(a: ChangeTarget, b: ChangeTarget): boolean {
+  if (a.local !== b.local) {
+    return false;
+  }
+  if (a.changeId && b.changeId) {
+    return a.changeId === b.changeId;
+  }
+  return a.number !== undefined && b.number !== undefined ? a.number === b.number : a.rev === b.rev;
+}
+
 export class ChangeDetail {
   target: ChangeTarget | undefined;
   /** `/show`'s answer; undefined until it has come. */
@@ -58,11 +73,11 @@ export class ChangeDetail {
 
   /**
    * Show `target`; the token its answers must carry. Another change starts empty, drawn from
-   * what its row knows; `keep` (a reload, or the same change under a new commit id) leaves what
-   * is shown until the answers replace it.
+   * what its row knows. The change already shown (`sameChange`), or with `keep` the same change
+   * under a new commit id, keeps what is drawn until the answers replace it: no loading frame.
    */
   select(target: ChangeTarget, keep: boolean): number {
-    if (!keep) {
+    if (!keep && !(this.target && sameChange(this.target, target))) {
       [this.shown, this.diff, this.delta, this.problem] = [undefined, undefined, undefined, undefined];
       this.waiting.clear();
       (["commit", "base", "delta"] as const).forEach((part) => this.waiting.add(part));

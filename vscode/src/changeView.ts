@@ -7,7 +7,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail } from "./changeLoad";
+import { ChangeDetail, sameChange } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOT_FILES, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
@@ -108,16 +108,24 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /**
-   * Show `target`; with no argument, reload the change that is shown. Another change starts on
-   * its local commit against its base; `keep` (a reload, or the same change under a new commit
-   * id) leaves the version and the comparison as you chose them.
+   * Show `target`; with no argument, reload the change that is shown. A click starts on the
+   * change's local commit against its base; `keep` (a reload, or the same change under a new
+   * commit id) leaves the version and the comparison as you chose them. What is drawn stays
+   * until the answers replace it whenever the change is the one shown (`sameChange`), however
+   * it was opened: clicking it again draws no loading frame.
    */
   open(target: ChangeTarget | undefined = this.target, keep: boolean = target === this.target): Promise<void> {
     if (!target) {
       return this.loading;
     }
+    const same = keep || (this.target !== undefined && sameChange(this.target, target));
     if (!keep) {
-      [this.version, this.mode, this.patchsets] = [target.local ? "local" : "current", "base", undefined];
+      [this.version, this.mode] = [target.local ? "local" : "current", "base"];
+    }
+    if (!same) {
+      this.patchsets = undefined;
+      // Another change: no save button of the one before until its own `/show` says which.
+      void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
     }
     const token = this.supersede(() => this.detail.select(target, keep));
     this.ci = { state: "closed" };
@@ -164,7 +172,7 @@ export class ChangeView extends WebView<ChangeVm> {
       try {
         client = await this.model.client();
       } catch (error) {
-        return this.detail.fail(token, describeError(error)) && this.render();
+        return this.fail(token, error);
       }
       // The commit against its parent comes with the commit: one request, and ger serve resolves it once.
       const together = !this.patchsetDiff(target);
@@ -176,7 +184,7 @@ export class ChangeView extends WebView<ChangeVm> {
             this.render();
           }
         },
-        (error: unknown) => this.detail.fail(token, describeError(error)) && this.render(),
+        (error: unknown) => this.fail(token, error),
       );
       const base = together
         ? undefined
@@ -193,6 +201,14 @@ export class ChangeView extends WebView<ChangeVm> {
     }
     this.loaded.fire();
     void this.loadPatchsets(token, signal);
+  }
+
+  /** The change cannot be shown: say why, with no save button for a new comment. Only for the change selected now. */
+  private fail(token: number, error: unknown): void {
+    if (this.detail.fail(token, describeError(error))) {
+      void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
+      this.render();
+    }
   }
 
   /** The commit, and with `files` its files against its parent. Files that cannot be had (a change that cannot be fetched) leave the commit shown without them. */

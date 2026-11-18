@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Diff, Member, ShownCommit, StackCommit } from "../src/api";
-import { ChangeDetail, memberStatus } from "../src/changeLoad";
+import { ChangeDetail, memberStatus, sameChange } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
@@ -80,7 +80,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
   assert.equal(vm.head?.text, "Unresolved comments");
   assert.deepEqual(vm.head?.badges, badges(commit).filter(Boolean), "the badges the row wears");
   assert.equal(vm.message, undefined);
-  assert.deepEqual(vm.loading, { message: true });
+  assert.deepEqual(vm.loading, { message: true, readOnly: "" }, "the message block's place, its read-only note included");
   assert.deepEqual([vm.files?.note, vm.comments?.summary], ["loading…", "loading…"]);
   assert.equal(vm.key, commit.change_id, "the page keeps what you opened per change from the first frame on");
   assert.deepEqual(changeLines(vm), [
@@ -155,4 +155,78 @@ test("a reload keeps what is shown until its answers replace it", () => {
   assert.equal(detail.loading(), undefined);
   assert.ok(detail.arrive(again, "base", files("Extract routing, reworded")));
   assert.equal(drawn(detail).message?.text, "Extract routing, reworded\n\nChange-Id: I1");
+});
+
+test("clicking the change already shown keeps what is drawn: a new target naming the same change draws no loading frame", () => {
+  const commit = row("Extract routing");
+  const detail = new ChangeDetail();
+  const token = detail.select(target(commit), false);
+  detail.arrive(token, "commit", answer(commit));
+  detail.arrive(token, "base", files("Extract routing"));
+  detail.arrive(token, "delta", undefined);
+  // Every click builds a new target: Review chains, the threads' head, a headline.
+  assert.ok(sameChange(target(commit), target(commit)));
+  detail.select(target(commit), false);
+  const vm = drawn(detail);
+  assert.equal(vm.message?.text, "Extract routing\n\nChange-Id: I1", "the message stays drawn");
+  assert.equal(vm.loading, undefined);
+  assert.equal(changeHeading(7, detail.commit()?.summary, vm, onScreen).description, undefined, "the subject does not come back into the title bar");
+
+  // Another change, or the same change seen from the other side (Gerrit's, not your commit), starts over.
+  assert.equal(sameChange(target(commit), { ...target(commit), local: false }), false);
+  detail.select({ ...target(commit), local: false, rev: "change:7" }, false);
+  assert.equal(drawn(detail, { version: "current" }).message, undefined);
+});
+
+test("a part that cannot be had clears its loading mark and says so, while the others are drawn", () => {
+  const commit = row("Extract routing");
+  const detail = new ChangeDetail();
+  const token = detail.select(target(commit), false);
+  assert.ok(detail.arrive(token, "base", undefined), "the patchset's /diff failed");
+  assert.ok(detail.arrive(token, "commit", answer(commit)));
+  const vm = drawn(detail);
+  assert.equal(vm.loading, undefined, "no message placeholder left");
+  assert.equal(vm.files?.note, "the commit is not available here");
+  assert.equal(vm.comments?.summary, "1 unresolved of 1");
+  assert.deepEqual(detail.loading(), { commit: false, base: false, delta: true, ready: true });
+});
+
+test("a /show failure stays shown when a late answer of another part comes", () => {
+  const commit = row("Extract routing");
+  const detail = new ChangeDetail();
+  const token = detail.select(target(commit), false);
+  assert.ok(detail.fail(token, "change 7 is gone"));
+  assert.ok(detail.arrive(token, "base", files("Extract routing")));
+  assert.equal(detail.loading(), undefined, "the late answer brings no loading mark back");
+  assert.equal(detail.state({ chains: [], patchsets: undefined, version: "local", mode: "base", readOnly: "", ci: { state: "closed" } })?.loading, undefined);
+  assert.equal(detail.problem, "change 7 is gone");
+});
+
+test("answers out of order: the review delta before the commit fills in its hint, the rest still loading", () => {
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const detail = new ChangeDetail();
+  const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
+  const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, up_to_date: false, rebased: false } };
+  assert.ok(detail.arrive(token, "delta", delta));
+  let vm = drawn(detail, { version: "current" });
+  assert.equal(vm.hint?.text, "Since your review: patchset 1 → 2 · 1 file");
+  assert.deepEqual([vm.loading, vm.comments?.summary, vm.head?.text], [{ message: true, readOnly: "" }, "loading…", "Loading…"]);
+  const shown: ShownCommit = { ...memberStatus(member), submittable: true, local_commit: false, comment_chains: [] };
+  assert.ok(detail.arrive(token, "commit", shown));
+  assert.ok(detail.arrive(token, "base", files("Add cache")));
+  vm = drawn(detail, { version: "current" });
+  assert.deepEqual([vm.loading, vm.message?.text, vm.head?.text, vm.hint?.show], [undefined, "Add cache\n\nChange-Id: I1", "Ready to submit", true]);
+  assert.equal(detail.loading(), undefined);
+});
+
+test("while it is not known whether the change is ready to submit, the head wears a loading icon, not the green check", () => {
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const detail = new ChangeDetail();
+  const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
+  let head = drawn(detail, { version: "current" }).head;
+  assert.deepEqual([head?.text, head?.icon, head?.tone], ["Loading…", "loading", undefined]);
+  detail.arrive(token, "commit", { ...memberStatus(member), submittable: false, local_commit: false, comment_chains: [] });
+  head = drawn(detail, { version: "current" }).head;
+  assert.equal(head?.text, "Nothing to do");
+  assert.notEqual(head?.icon, "loading");
 });

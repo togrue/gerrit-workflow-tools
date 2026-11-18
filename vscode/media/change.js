@@ -121,6 +121,18 @@
     return editor.block;
   }
 
+  /**
+   * The message's place until it comes: the block drawn empty, as tall as a change's shortest
+   * message (subject, blank line, Change-Id), its bar saying what the real one will. A longer
+   * message grows the box when it comes. No first-line mark, so the title bar names the subject meanwhile.
+   */
+  function messagePlace(readOnly) {
+    const box = h("textarea", { class: "message", rows: "4", readonly: "", disabled: "", tabindex: "-1", "aria-hidden": "true" });
+    const bar = h("div", { class: "message-bar" }, h("span", { class: "detail" }, readOnly || ""));
+    const heading = h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, "loading…"));
+    return h("div", { class: "message-block loading" }, heading, h("div", { class: "message-frame" }, box), bar);
+  }
+
   // --- Rows -------------------------------------------------------------------------
 
   /** A row that does something: clickable, and reachable with the keyboard. */
@@ -370,8 +382,7 @@
     if (vm.message) {
       parts.push(messageBlock(vm.message));
     } else if (vm.loading && vm.loading.message) {
-      // Its place, until it comes: the rows below stay where they will be. No first-line mark, so the title bar names the subject meanwhile.
-      parts.push(h("div", { class: "message-block loading" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, "loading…"))));
+      parts.push(messagePlace(vm.loading.readOnly));
     }
     if (vm.versions && vm.modes) {
       parts.push(h("div", { class: "pickers" }, picker("Show", vm.versions, "version"), picker("Compare", vm.modes, "mode")));

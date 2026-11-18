@@ -139,8 +139,8 @@ export interface ChangeVm {
   problem?: string;
   /** Which change is drawn (its Change-Id, else its commit): the page keeps what you opened and typed per change. */
   key?: string;
-  /** What is on its way: the page holds the commit message's place. */
-  loading?: { message: boolean };
+  /** What is on its way: the page holds the commit message's place, its read-only note (as `message.readOnly` will say) included. */
+  loading?: { message: boolean; readOnly: string };
   /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). */
   head?: Icon & { text: string; detail: string; badges: Badge[] };
   notes?: (Icon & { text: string; detail: string })[];
@@ -356,13 +356,15 @@ export function changeVm(state: ChangeState): ChangeVm {
   const counts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.verified === -1;
   const loading = state.loading;
-  const unsure = loading?.commit && !loading.ready;
+  const words = sentence(reasonWords(commit.attention_reasons));
+  // Nothing calls for attention, and whether it is ready to submit is not known yet: no green check meanwhile.
+  const unsure = !words && !commit.submittable && loading?.commit && !loading.ready;
   return {
     key: commit.change_id ?? commit.sha ?? "",
-    loading: loading?.base && !state.base ? { message: true } : undefined,
+    loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly } : undefined,
     head: {
-      ...headIcon(commit.attention_reasons),
-      text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
+      ...(unsure ? { icon: "loading" } : headIcon(commit.attention_reasons)),
+      text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
     },

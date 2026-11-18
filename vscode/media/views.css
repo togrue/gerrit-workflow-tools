@@ -280,6 +280,17 @@ button.twist:hover {
   padding-bottom: 4px;
 }
 
+/* Not known yet whether the change is ready to submit (changeVm): the head's icon turns, as codicon's own spinner does. */
+.head > .codicon-loading {
+  animation: codicon-spin 1.5s steps(30) infinite;
+}
+
+/* The message's place while it loads (change.js messagePlace): the real block's box, empty. */
+.message-block.loading .message {
+  resize: none;
+  cursor: default;
+}
+
 /* The box, and over its first line an invisible mark the page watches (change.js watchFirstLine). */
 .message-frame {
   position: relative;
