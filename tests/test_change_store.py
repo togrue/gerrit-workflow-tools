@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.rest import BareChangeIdError, GerritApiError, GerritRest
 from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_change_info
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
@@ -102,10 +102,9 @@ def test_get_change_carries_the_batch_row_fields() -> None:
     [
         (f"testproj~dev~{CID_A}", 2),
         ("3", 3),
-        (CID_B, 3),
     ],
 )
-def test_get_change_accepts_triplet_number_and_change_id(ref: str, expected_number: int) -> None:
+def test_get_change_accepts_triplet_and_number(ref: str, expected_number: int) -> None:
     assert _store().get_change(ref)["_number"] == expected_number
 
 
@@ -222,13 +221,19 @@ def test_comments_seeded_by_number_are_found_by_triplet() -> None:
     assert store.get_comments(f"testproj~main~{CID_A}")["a.py"][0]["message"] == "hi"
 
 
-def test_comments_reject_ambiguous_bare_change_id() -> None:
-    """Follow-up REST with a bare Change-Id must fail when it matches multiple changes."""
+@pytest.mark.parametrize("bare", [CID_A, CID_B])
+def test_every_per_change_operation_refuses_a_bare_change_id(bare: str) -> None:
+    """Like HttpGerritRest's URL seam: a bare Change-Id, ambiguous (CID_A) or not (CID_B), is a bug."""
     store = _store()
-    with pytest.raises(GerritApiError, match="Multiple changes found"):
-        store.get_comments(CID_A)
-    with pytest.raises(GerritApiError, match="Multiple changes found"):
-        store.list_drafts(CID_A)
+    for call in (
+        lambda: store.get_change(bare),
+        lambda: store.get_comments(bare),
+        lambda: store.list_drafts(bare),
+        lambda: store.suggest_change_reviewers(bare, query="al"),
+        lambda: store.set_reviewers_batch(bare, reviewers=["alice"]),
+    ):
+        with pytest.raises(BareChangeIdError, match="bare Change-Id"):
+            call()
 
 
 # ---------------------------------------------------------------------------

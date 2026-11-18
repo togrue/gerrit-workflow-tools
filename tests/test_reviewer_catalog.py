@@ -54,7 +54,7 @@ def test_catalog_completion_candidates_dedupe() -> None:
 
 def test_complete_prefix_uses_suggest_query_with_change_id() -> None:
     client = _FakeClient()
-    c = ReviewerCatalog(client=client, candidates=[], change_id_hint="id/123")
+    c = ReviewerCatalog(client=client, candidates=[], change_ref="proj~main~I123")
     try:
         assert c.complete_prefix("ben") == []
         assert c.wait_until_idle(timeout=2.0)
@@ -68,7 +68,7 @@ def test_complete_prefix_uses_suggest_query_with_change_id() -> None:
 
 def test_complete_prefix_falls_back_to_account_query_without_change() -> None:
     client = _FakeClient()
-    c = ReviewerCatalog(client=client, candidates=[], change_id_hint=None)
+    c = ReviewerCatalog(client=client, candidates=[], change_ref=None)
     try:
         assert c.complete_prefix("ben") == []
         assert c.wait_until_idle(timeout=2.0)
@@ -90,7 +90,7 @@ def test_complete_prefix_does_not_block_on_rest() -> None:
             assert release.wait(timeout=2.0)
             return super().suggest_change_reviewers(change_id, query=query, n=n)
 
-    c = ReviewerCatalog(client=SlowClient(), candidates=[], change_id_hint="id/123")
+    c = ReviewerCatalog(client=SlowClient(), candidates=[], change_ref="proj~main~I123")
     try:
         t0 = time.monotonic()
         assert c.complete_prefix("ben") == []
@@ -143,7 +143,7 @@ def test_shared_rate_limit_spaces_requests() -> None:
                 starts.append(time.monotonic())
             return super().query_accounts(query, n=n)
 
-    c = ReviewerCatalog(client=TimingClient(), candidates=[], change_id_hint="id/1")
+    c = ReviewerCatalog(client=TimingClient(), candidates=[], change_ref="proj~main~I1")
     try:
         assert c.complete_prefix("ben") == []
         assert c.complete_prefix("ali") == []
@@ -156,7 +156,7 @@ def test_shared_rate_limit_spaces_requests() -> None:
 
 def test_stale_complete_generation_is_ignored() -> None:
     client = _FakeClient()
-    c = ReviewerCatalog(client=client, candidates=[], change_id_hint="id/1", start_worker=False)
+    c = ReviewerCatalog(client=client, candidates=[], change_ref="proj~main~I1", start_worker=False)
     try:
         from gerrit_workflow_tools.reviewer_catalog import _Job
 

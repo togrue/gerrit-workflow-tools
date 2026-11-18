@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest, gerrit_a
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
+    change_id_for_gerrit_rest_path,
     parallel_map,
     self_account_id as account_id_of_self,
 )
@@ -130,13 +131,15 @@ class GerritService:
         """The one key a change is cached by and addressed by in every ``/changes/{id}`` request.
 
         Triplets, Gerrit ids and numbers verbatim; a bare Change-Id becomes the push branch's
-        triplet. A bare Change-Id is never a key: Gerrit answers it with 404 ("Multiple changes
-        found") once the Change-Id is on a second branch.
+        triplet, spelled with Gerrit's leading ``I`` even when given as ``i…``. A bare Change-Id is
+        never a key: Gerrit answers it with 404 ("Multiple changes found") once the Change-Id is on
+        a second branch, and the ``/changes/{id}`` seam refuses it (:func:`change_path_id`).
+        Without a stack context (*ctx* or the run's) a bare Change-Id raises ``ChangeResolutionError``.
         """
         if "~" in change_ref or change_ref.isdigit():
             return change_ref
         ctx = ctx or self.stack_context()
-        return build_triplet(ctx.project, ctx.push_branch, change_ref)
+        return build_triplet(ctx.project, ctx.push_branch, change_id_for_gerrit_rest_path(change_ref))
 
     def fetch_gerrit_data(
         self,

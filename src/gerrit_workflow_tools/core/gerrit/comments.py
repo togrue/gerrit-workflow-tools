@@ -55,9 +55,10 @@ class DraftReply:
 class CommentApi:
     """Comment chains for one change: published comments through the cache, drafts live.
 
-    Every method takes a change as a triplet, a Gerrit id, a number or a bare Change-Id, and
-    asks Gerrit by :meth:`GerritService.cache_key`: a Change-Id on several branches names the
-    push branch's change, never Gerrit's ambiguous-id 404 ("Multiple changes found").
+    Every public method takes a change as a triplet, a Gerrit id or a number. A bare Change-Id
+    is narrowed once, on entry, to the push branch's change (:meth:`GerritService.cache_key`);
+    without a stack context that raises ``ChangeResolutionError``. Gerrit is never asked by the
+    bare Change-Id: that 404s ("Multiple changes found") once it is on a second branch.
     """
 
     def __init__(self, service: GerritService) -> None:
@@ -75,9 +76,20 @@ class CommentApi:
         comments: CommentSelection = "unresolved",
     ) -> list[CommentChain]:
         """Comment chains of *change_id* selected by *comments*, with your drafts in their chains."""
-        change_id = self._key(change_id)
-        file_map = self.get_file_map(change_id, change_updated=change_updated, context_padding=context_padding)
-        return collect_comment_chains(file_map, comments=comments, drafts=self.get_drafts(change_id))
+        return self._chains(
+            self._key(change_id), change_updated=change_updated, context_padding=context_padding, comments=comments
+        )
+
+    def _chains(
+        self,
+        key: str,
+        *,
+        change_updated: str | None = None,
+        context_padding: int | None = None,
+        comments: CommentSelection = "unresolved",
+    ) -> list[CommentChain]:
+        file_map = self._file_map(key, change_updated=change_updated, context_padding=context_padding)
+        return collect_comment_chains(file_map, comments=comments, drafts=self._drafts(key))
 
     def chains_with_drafts(self, change_id: str, *, change_updated: str | None = None) -> list[CommentChain]:
         """The chains of *change_id* that hold a draft of yours: what a publish would send."""
@@ -91,7 +103,7 @@ class CommentApi:
         """
 
         def matches(change: str, freshness: str | None) -> list[ChainMatch]:
-            chains = self.get_chains(change, change_updated=freshness, comments="all")
+            chains = self._chains(change, change_updated=freshness, comments="all")
             return [
                 ChainMatch(change, chain) for chain in chains if any(c.comment_id == comment_id for c in chain.comments)
             ]
@@ -144,8 +156,8 @@ class CommentApi:
         Everything else it says goes back as Gerrit has it (place, side, what it answers), so
         the draft stays where it is. *unresolved* ``None`` keeps its flag.
         """
-        change_id = self._key(change_id)
-        for path, rows in self.get_drafts(change_id).items():
+        key = self._key(change_id)
+        for path, rows in self._drafts(key).items():
             for row in rows:
                 if row.get("id") != draft_id:
                     continue
@@ -154,7 +166,7 @@ class CommentApi:
                 body.update({key: row[key] for key in ("line", "range", "side", "in_reply_to") if key in row})
                 patch_set = row.get("patch_set")
                 revision = patch_set if isinstance(patch_set, int) else "current"
-                self._service.rest.put_draft(change_id, revision, body, draft_id=draft_id)
+                self._service.rest.put_draft(key, revision, body, draft_id=draft_id)
                 line = row.get("line")
                 return InlineComment(
                     path=path,
@@ -169,12 +181,12 @@ class CommentApi:
 
     def discard_draft(self, change_id: str, draft_id: str) -> InlineComment | None:
         """Delete your draft *draft_id* on any patchset of *change_id* and return it; ``None`` if absent."""
-        change_id = self._key(change_id)
-        for chain in self.get_chains(change_id, comments="all"):
+        key = self._key(change_id)
+        for chain in self._chains(key, comments="all"):
             for comment in chain.comments:
                 if comment.draft and comment.comment_id == draft_id:
                     revision = comment.patch_set if comment.patch_set is not None else "current"
-                    self._service.rest.delete_draft(change_id, revision, draft_id)
+                    self._service.rest.delete_draft(key, revision, draft_id)
                     return comment
         return None
 
@@ -211,7 +223,10 @@ class CommentApi:
         Never cached: drafts live in All-Users, not in the change's NoteDb meta ref, so the
         follow-up freshness token (ADR-0007) does not move when a draft does.
         """
-        return self._service.rest.list_drafts(self._key(change_id))
+        return self._drafts(self._key(change_id))
+
+    def _drafts(self, key: str) -> dict[str, list[dict[str, Any]]]:
+        return self._service.rest.list_drafts(key)
 
     def get_file_map(
         self,
@@ -221,8 +236,11 @@ class CommentApi:
         context_padding: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Return raw published Gerrit comments grouped by file path."""
+        return self._file_map(self._key(change_id), change_updated=change_updated, context_padding=context_padding)
 
-        key = self._key(change_id)
+    def _file_map(
+        self, key: str, *, change_updated: str | None, context_padding: int | None
+    ) -> dict[str, list[dict[str, Any]]]:
         rest = self._service.rest
         fetch = rest.get_comments
         if context_padding is not None:

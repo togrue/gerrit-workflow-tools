@@ -20,7 +20,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     LOG_QUERY_OPTIONS,
     GerritApiError,
     GerritUnavailableError,
-    change_id_for_gerrit_rest_path,
+    change_path_id,
     encode_gerrit_path_segment,
     gerrit_error_reason,
     resolve_gerrit_web_base,
@@ -40,8 +40,8 @@ def set_log_gerrit_response_bodies(enabled: bool) -> None:
 
 
 def _change_path(change_id: str, suffix: str = "") -> str:
-    """``changes/<id><suffix>``, with the id in the form and encoding Gerrit expects."""
-    return f"changes/{encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))}{suffix}"
+    """``changes/<id><suffix>`` for a triplet, Gerrit id or number; a bare Change-Id raises (:func:`change_path_id`)."""
+    return f"changes/{encode_gerrit_path_segment(change_path_id(change_id))}{suffix}"
 
 
 def _draft_path(change_id: str, revision: int | str, draft_id: str | None) -> str:

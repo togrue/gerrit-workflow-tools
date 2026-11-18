@@ -21,11 +21,11 @@ from gerrit_workflow_tools.cli_style import (
     color_short_sha,
     color_text,
 )
-from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushPlan,
+    change_ref_of,
     push_argvs,
     revise,
     sent_commits,
@@ -263,7 +263,7 @@ def prompt_reviewers_line(
     branch: str | None = None,
     *,
     settings: Settings,
-    change_id_hint: str | None = None,
+    change_ref: str | None = None,
     reviewer_flag_segments: list[str] | None = None,
     session_strategy: ReviewerStrategy | None = None,
     message: str = "Push options: ",
@@ -276,7 +276,7 @@ def prompt_reviewers_line(
         cwd,
         branch,
         settings=settings,
-        change_id_hint=change_id_hint,
+        change_ref=change_ref,
         reviewer_flag_segments=reviewer_flag_segments,
         session_strategy=session_strategy,
         message=message,
@@ -317,7 +317,7 @@ def apply_interactive_line(
         cwd,
         plan.branch,
         settings=settings,
-        change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
+        change_ref=change_ref_of(cwd, plan, plan.tip_sha, settings=settings),
         reviewer_flag_segments=list(args.reviewers),
         session_strategy=_session_strategy(args),
     )
@@ -354,7 +354,7 @@ def confirm_with_options_line(
             cwd,
             plan.branch,
             settings=settings,
-            change_id_hint=change_id_of_rev(cwd, plan.tip_sha),
+            change_ref=change_ref_of(cwd, plan, plan.tip_sha, settings=settings),
             reviewer_flag_segments=list(args.reviewers),
             session_strategy=_session_strategy(args),
             message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
@@ -378,7 +378,7 @@ def prompt_initial_options(
         cwd,
         plan.branch,
         settings=settings,
-        change_id_hint=change_id_of_rev(cwd, plan.branch),
+        change_ref=change_ref_of(cwd, plan, plan.branch, settings=settings),
         reviewer_flag_segments=list(args.reviewers),
         session_strategy=_session_strategy(args),
     )

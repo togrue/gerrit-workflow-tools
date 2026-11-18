@@ -202,10 +202,14 @@ matches **more than one** open Gerrit change:
   to project and branch), every later request for it (detail, comments, drafts, reviewers,
   checks, messages, review) names it by a unique id, the triplet, Gerrit's `ChangeInfo.id`
   or its number, never by the bare Change-Id: Gerrit answers `/changes/<Change-Id>/…` with
-  404 ("Multiple changes found") as soon as the Change-Id is on a second branch. The
-  service's change and comment APIs (`ChangeApi`, `CommentApi`) narrow a bare Change-Id
-  they are handed to the push branch's triplet (`GerritService.cache_key`), so no caller,
-  command or `ger serve`, can put one into a URL.
+  404 ("Multiple changes found") as soon as the Change-Id is on a second branch. This is
+  enforced at the URL seam: `change_path_id` refuses any `{id}` of a `/changes/{id}`
+  request that has no `~` and is not all digits, with an internal error and before Gerrit
+  is asked (a bug in `ger`, not a Gerrit failure). `ChangeApi` and `CommentApi` accept a bare
+  Change-Id from their callers and narrow it once, on entry, to the push branch's triplet
+  (`GerritService.cache_key`, spelling a leading `i` as Gerrit's `I`); without a stack
+  context that narrowing fails with a resolution error. Reviewer completion on the
+  `ger push` options line asks about the push branch's triplet of the pushed tip.
 - **The guess is always visible.** Any time `ger` narrows an ambiguous input, it
   tells you what it picked and why, and how to override. Silence is only allowed
   when the input was already unique.

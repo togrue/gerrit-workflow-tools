@@ -15,6 +15,8 @@ from urllib.parse import quote
 
 import pytest
 
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 from gerrit_workflow_tools.core.reviewer import account_slug_from_gerrit, reviewer_accounts_from_change_info
 from gerrit_workflow_tools.core.stack import commits_in_range, merge_base_with_target
@@ -33,11 +35,14 @@ class ChainCommit:
     subject: str
     change_id: str
     chain_index: int
+    triplet: str
+    """``project~branch~Change-Id`` of the commit's change on the stack's push branch."""
 
 
 def chain_commits_oldest_first(repo: Path) -> list[ChainCommit]:
     """Return pushed-ready commits on the current stack, oldest first."""
     _fork, _, target_tip = merge_base_with_target(repo)
+    stack = resolve_stack_context(repo, settings=Settings.from_cwd(repo))
     rows = commits_in_range(repo, f"{target_tip}..HEAD")
     out: list[ChainCommit] = []
     for i, row in enumerate(rows):
@@ -49,20 +54,31 @@ def chain_commits_oldest_first(repo: Path) -> list[ChainCommit]:
                 subject=row.subject.strip(),
                 change_id=row.change_id,
                 chain_index=i,
+                triplet=build_triplet(stack.project, stack.push_branch, row.change_id),
             )
         )
     return out
 
 
+def change_path_segment(change_ref: str) -> str:
+    """*change_ref* quoted for ``changes/{id}``: a triplet or a number, as ger itself requires.
+
+    A bare Change-Id 404s ("Multiple changes found") on the shared test Gerrit once a
+    Change-Id is on two branches, so the helpers refuse one up front.
+    """
+    assert "~" in change_ref or change_ref.isdigit(), f"pass a triplet or change number, not {change_ref!r}"
+    return quote_change_id(change_ref)
+
+
 def add_change_reviewer(session: GerritHttpSession, change_id: str, reviewer: str) -> None:
-    """Add *reviewer* to a change via REST (same endpoint as lazy push strategy)."""
-    enc = quote_change_id(change_id)
+    """Add *reviewer* to a change (triplet or number) via REST (same endpoint as lazy push strategy)."""
+    enc = change_path_segment(change_id)
     session.post_json(f"changes/{enc}/reviewers", body={"reviewer": reviewer})
 
 
 def clear_change_reviewers(session: GerritHttpSession, change_id: str) -> None:
-    """Remove all REVIEWER/CC accounts from a change."""
-    enc = quote_change_id(change_id)
+    """Remove all REVIEWER/CC accounts from a change (triplet or number)."""
+    enc = change_path_segment(change_id)
     rows = session.get_json(f"changes/{enc}/reviewers/")
     if not isinstance(rows, list):
         return
@@ -75,8 +91,8 @@ def clear_change_reviewers(session: GerritHttpSession, change_id: str) -> None:
 
 
 def abandon_change(session: GerritHttpSession, change_id: str) -> None:
-    """Abandon an open change."""
-    enc = quote_change_id(change_id)
+    """Abandon an open change (triplet or number)."""
+    enc = change_path_segment(change_id)
     session.post_json(f"changes/{enc}/abandon", body={})
 
 
@@ -184,9 +200,9 @@ def reviewer_slugs_on_change(detail: dict[str, Any]) -> list[str]:
 
 
 def reviewer_slugs_from_reviewers_rest(session: GerritHttpSession, change_id: str) -> list[str]:
-    """Account slugs from a live ``GET changes/<id>/reviewers/`` (Gerrit reviewer list endpoint)."""
+    """Account slugs from a live ``GET changes/<id>/reviewers/`` for a triplet or number."""
 
-    enc = quote_change_id(change_id)
+    enc = change_path_segment(change_id)
     data = session.get_json(f"changes/{enc}/reviewers/")
     if not isinstance(data, list):
         return []
@@ -237,12 +253,13 @@ def label_value(detail: dict[str, Any], name: str) -> int | None:
         return None
 
 
-def first_change_id_from_tip(session: GerritHttpSession, project: str, branch: str) -> str | None:
+def first_change_triplet_from_tip(session: GerritHttpSession, project: str, branch: str) -> str | None:
+    """Gerrit's ``id`` (the triplet) of the newest open change on *branch*: what ``changes/{id}`` takes."""
     rows = open_changes_on_branch(session, project, branch)
     if not rows:
         return None
-    cid = rows[0].get("change_id") or rows[0].get("id")
-    return str(cid) if cid else None
+    ref = rows[0].get("id")
+    return str(ref) if ref else None
 
 
 def prepare_topic_repo(

@@ -114,7 +114,7 @@ def test_show_stack_shows_each_branchs_own_change_and_its_comments(
     expected = (s.main if branch == "feat_main" else s.dev)["_number"]
     for argv in (["--stack", "--comments", "all"], ["--stack", "-v", "--color=never"]):
         code, out, err = run_ger(repo, ger_show_main, argv, monkeypatch)
-        assert code in (0, 1), err
+        assert code == 0, err  # show reports what it found: exit 0, attention or not
         assert "Multiple changes found" not in err and "HTTP 404" not in err, err
         assert f"/+/{expected}" in out
     shown = ger_json(repo, ger_show_main, ["--stack", "--comments", "all"], monkeypatch)

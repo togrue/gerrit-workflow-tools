@@ -102,14 +102,14 @@ def test_get_comments_enable_context_query_params() -> None:
         return {}
 
     client._request_json = _capture  # type: ignore[method-assign]
-    client.get_comments("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", enable_context=True, context_padding=2)
-    client.get_comments("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    client.get_comments("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", enable_context=True, context_padding=2)
+    client.get_comments("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
     assert captured[0] == (
-        "changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments",
+        "changes/proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments",
         {"enable-context": "true", "context-padding": "2"},
     )
-    assert captured[1] == ("changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments", None)
+    assert captured[1] == ("changes/proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments", None)
 
 
 def test_set_reviewers_batch_confirms_reviewers_on_the_review_request() -> None:
@@ -491,3 +491,36 @@ def test_an_http_error_says_gerrits_own_reason_on_one_line(
         client.set_reviewers_batch("p~main~I" + "a" * 40, reviewers=["nosuchuser"])
     assert str(caught.value) == f"Gerrit HTTP 400: {reason}"
     assert (caught.value.status, caught.value.reason) == (400, reason)
+
+
+@pytest.mark.parametrize("bare", ["I" + "a" * 40, "i" + "a" * 40, "Iabc", "not-a-change"])
+def test_a_bare_change_id_never_reaches_a_changes_url(bare: str) -> None:
+    """``/changes/{id}`` takes a triplet, a Gerrit id or a number: a bare Change-Id is refused before Gerrit.
+
+    Gerrit answers a bare Change-Id with 404 ("Multiple changes found") once it is on a second
+    branch (GitHub #31), so the URL seam refuses it outright, whatever the caller.
+    """
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.rest import BareChangeIdError
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    client._request_json = lambda *_a, **_k: pytest.fail("asked Gerrit by a bare Change-Id")  # type: ignore[method-assign]
+    for call in (
+        lambda: client.get_change(bare),
+        lambda: client.get_comments(bare),
+        lambda: client.suggest_change_reviewers(bare, query="al"),
+        lambda: client.put_draft(bare, 1, {"path": "a", "message": "m"}),
+    ):
+        with pytest.raises(BareChangeIdError, match="bare Change-Id"):
+            call()
+
+
+@pytest.mark.parametrize("ref", ["12345", "proj~main~I" + "a" * 40, "tools%2FSomeProject~59446"])
+def test_a_triplet_gerrit_id_or_number_reaches_its_changes_url(ref: str) -> None:
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    paths: list[str] = []
+    client._request_json = lambda path, **_k: paths.append(path) or []  # type: ignore[method-assign]
+    client.get_messages(ref)
+    assert paths == [f"changes/{encode_gerrit_path_segment(ref)}/messages"]

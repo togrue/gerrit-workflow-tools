@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError
+from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError, change_path_id
 
 
 DEFAULT_WEB_BASE = "https://gerrit.example"
@@ -224,17 +224,13 @@ class ChangeStore:
         return ref
 
     def _require_unique_change_ref(self, ref: str) -> str:
-        """Resolve *ref* to one change id, mirroring Gerrit's 404 on ambiguous bare Change-Ids.
+        """Resolve *ref*, the ``{id}`` of a ``/changes/{id}/…`` request, to one change id.
 
-        Gerrit answers every ``/changes/{id}/…`` request whose ``{id}`` is a bare Change-Id
-        carried by more than one change with 404 ("Multiple changes found"), so every
-        per-change operation of the store goes through here.
+        Every per-change operation of the store goes through here. Like
+        :class:`HttpGerritRest`'s URL seam (:func:`change_path_id`), a bare Change-Id raises
+        :class:`BareChangeIdError` whether or not it is ambiguous: ger must never send one.
         """
-        if len(self._lookup_rows(ref)) > 1 and "~" not in ref and not ref.isdigit():
-            raise GerritApiError(
-                f"Gerrit HTTP 404 for changes/{ref}: Not Found (Multiple changes found for {ref})", status=404
-            )
-        return self._payload_id(ref)
+        return self._payload_id(change_path_id(ref))
 
     def _unique_row_or_raise(self, ref: str) -> dict[str, Any]:
         """:meth:`_row_or_raise` for a ``/changes/{id}`` request: an ambiguous bare Change-Id 404s."""
@@ -520,6 +516,7 @@ class ChangeStore:
     ) -> list[dict[str, Any]]:
         """Return suggested reviewer rows for one change."""
         self._record("suggest_change_reviewers", change_id, query=query, n=n)
+        self._unique_row_or_raise(change_id)
         accounts = self.query_accounts(query, n=n) if query else list(self._accounts.values())[:n]
         return [{"account": payload} for payload in accounts]
 

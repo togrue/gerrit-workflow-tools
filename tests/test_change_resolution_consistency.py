@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
+    at_older_patchsets,
     change_info_for_sha,
     stack_rows_mb_to_head,
 )
@@ -445,19 +446,24 @@ _NOT_PER_CHANGE = frozenset({"query_changes", "query_accounts", "get_account", "
 """Store operations that do not address one change by ``/changes/{id}``."""
 
 
-def _stack_with_dev_siblings(repo: Path) -> tuple[ChangeStore, dict[str, int]]:
+def _stack_with_dev_siblings(
+    repo: Path, *, accounts: dict[int, dict[str, Any]] | None = None, older_patchsets: bool = False
+) -> tuple[ChangeStore, dict[str, int]]:
     """Every stack commit is a change on ``main`` and has a sibling on ``dev`` (another number).
 
-    Each main change carries one unresolved comment, so ``ger show`` fetches comments. Returns
+    Each main change carries one unresolved comment, so ``ger show`` fetches comments; with
+    *older_patchsets* it is at an older patchset, so ``ger push`` has commits to send. Returns
     the store and, per Change-Id, the number of the change on ``main`` (the push branch).
     """
     _configure_web(repo)
-    store = ChangeStore()
+    store = ChangeStore(accounts=accounts)
     on_main: dict[str, int] = {}
     for i, row in enumerate(stack_rows_mb_to_head(repo)):
         assert row.change_id is not None
         main_row = change_info_for_sha(row.sha, row.change_id, number=300 + i, unresolved_comment_count=1)
         dev_row = change_info_for_sha(_DEV_SHA, row.change_id, number=400 + i, branch="dev")
+        if older_patchsets:  # Gerrit has an older patchset on main: a push sends the commit.
+            at_older_patchsets({row.change_id: main_row}, repo)
         store.add_change(main_row)
         store.add_change(dev_row)
         comment = {"id": f"c{i}", "line": 1, "message": f"main {i}", "unresolved": True, "patch_set": 1}
@@ -501,7 +507,7 @@ def test_every_command_addresses_a_change_on_two_branches_by_one_unique_id(
     mains = {"log": log_main, "show": gshow_main, "resolve": resolve_main, "reply": reply_main}
     store, on_main = _stack_with_dev_siblings(stack_repo)
     code, _out, err = run_cli(stack_repo, mains[argv[0]], argv[1:], monkeypatch, gerrit=store)
-    assert code in (0, 1), err
+    assert code == ExitCode.OK, err
     assert "Multiple changes found" not in err
     refs = _per_change_refs(store)
     assert all(ref not in on_main for ref in refs), refs
@@ -517,7 +523,7 @@ def test_show_stack_shows_the_stack_branch_change_of_a_change_id_on_two_branches
     code, out, err = run_cli(
         stack_repo, gshow_main, ["--stack", "--json", "--comments", "all"], monkeypatch, gerrit=store
     )
-    assert code in (0, 1), err
+    assert code == ExitCode.OK, err
     shown = json_stdout(out)
     payloads = shown if isinstance(shown, list) else shown["commits"]
     assert {p["change_id"]: p["number"] for p in payloads} == on_main
@@ -563,3 +569,72 @@ def test_every_service_entry_point_narrows_a_bare_change_id_to_the_push_branch(
     assert refs, "expected a per-change request"
     assert cid not in refs, refs
     assert {store.get_change(ref)["_number"] for ref in refs} == {on_main[cid]}
+
+
+@pytest.mark.parametrize(
+    "entry", ["changes.get", "changes.set_reviewers", "comments.get_chains", "comments.publish_drafts"]
+)
+def test_a_lowercase_change_id_names_the_push_branch_change_as_gerrit_spells_it(
+    entry: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Change-Id read case-insensitively (``i…``) is asked for by the triplet with Gerrit's ``I…``."""
+    store, on_main = _stack_with_dev_siblings(stack_repo)
+    cid = next(iter(on_main))
+    monkeypatch.chdir(stack_repo)
+    _service_entry_points(cid.lower())[entry](RunContext.open(stack_repo, gerrit=store).gerrit)
+    assert set(_per_change_refs(store)) == {build_triplet("testproj", "main", cid)}
+
+
+class _TtyStdin:
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.parametrize("argv", [["-i", "--dry-run"], []], ids=["push -i", "push confirmation line"])
+def test_push_prompt_completes_reviewers_on_the_push_branch_change(
+    argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reviewer completion on ``ger push``'s options line asks Gerrit about the change being pushed.
+
+    The prompt hands the reviewer catalog the push branch's triplet for the tip's Change-Id.
+    With that Change-Id also on ``dev``, a bare Change-Id would 404 ("Multiple changes found")
+    and completion would silently turn off.
+    """
+    import subprocess
+    import sys
+    from unittest.mock import MagicMock
+
+    from gerrit_workflow_tools.push_input_line import ParseResult, parse as parse_push_options_line
+    from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
+
+    store, on_main = _stack_with_dev_siblings(
+        stack_repo, accounts={7: {"_account_id": 7, "username": "alice"}}, older_patchsets=True
+    )
+    completed: list[list[str]] = []
+
+    def _prompt(*_a: object, change_ref: str | None, **_k: object) -> ParseResult:
+        catalog = ReviewerCatalog(client=store, candidates=[], change_ref=change_ref)
+        try:
+            catalog.complete_prefix("al")
+            assert catalog.wait_until_idle(timeout=5.0)
+            completed.append(catalog.complete_prefix("al"))
+            assert catalog.status_note is None
+        finally:
+            catalog.close()
+        return parse_push_options_line("")
+
+    monkeypatch.setattr(sys, "stdin", _TtyStdin())
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("the options line replaces the [Y/n/r] question"))
+    pushed = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", pushed)
+
+    code, _out, err = run_cli(stack_repo, push_main, argv, monkeypatch, gerrit=store)
+
+    assert code == ExitCode.OK, err
+    assert completed == [["alice"]], (_out, err)
+    refs = [str(call.args[0]) for call in store.calls_to("suggest_change_reviewers")]
+    assert refs and all(ref not in on_main for ref in refs), refs
+    assert {store.get_change(ref)["_number"] for ref in refs} <= set(on_main.values())

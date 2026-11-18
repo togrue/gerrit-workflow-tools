@@ -9,10 +9,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
+from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
     LAST_PUSH_PREFIX,
@@ -79,6 +81,17 @@ class PushRefusal:
     message: str
     boundary: PushBoundary | None = None
     warnings: tuple[str, ...] = ()
+
+
+def change_ref_of(cwd: Path, plan: PushPlan, rev: str, *, settings: Settings) -> str | None:
+    """The push branch's triplet for the change *rev* carries; ``None`` without a Change-Id or project.
+
+    What the push prompt's reviewer completion asks Gerrit about: never the bare Change-Id,
+    which Gerrit answers with 404 ("Multiple changes found") once it is on a second branch.
+    """
+    change_id = change_id_of_rev(cwd, rev)
+    project = resolve_gerrit_project_name(cwd, settings=settings) if change_id else None
+    return build_triplet(project, plan.push_branch, change_id) if change_id and project else None
 
 
 def push_argv(plan: PushPlan) -> list[str]:

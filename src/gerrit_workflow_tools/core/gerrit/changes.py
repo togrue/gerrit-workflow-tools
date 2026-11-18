@@ -106,9 +106,10 @@ class ChangeApi:
         return rows
 
     def get(self, ref: str) -> dict[str, Any]:
-        """The details of the one change *ref* names (triplet, Gerrit id, number, or a Change-Id).
+        """The details of the one change *ref* names: a triplet, a Gerrit id or a number.
 
-        A bare Change-Id names the push branch's change (:meth:`GerritService.cache_key`).
+        A bare Change-Id is narrowed to the push branch's change (:meth:`GerritService.cache_key`);
+        without a stack context that raises ``ChangeResolutionError``, never a Gerrit request.
         From the cache while Gerrit confirmed that row inside the trust window (an
         :meth:`exact` view: confirmed it to this view); else asked for, and kept. Gerrit's 404
         for an unknown change passes through.
@@ -189,6 +190,9 @@ class ChangeApi:
         ccs: list[str] | None = None,
     ) -> None:
         """Add reviewers, then remove reviewers, via REST, and cache fresh ChangeInfo.
+
+        *change_id* is a triplet, a Gerrit id or a number; a bare Change-Id is narrowed as
+        :meth:`get` narrows it, and raises ``ChangeResolutionError`` without a stack context.
 
         Adds run first because Gerrit rejects an unknown reviewer: a failed add must leave the
         existing reviewers in place. Any failure, in the writes or the re-read, drops the

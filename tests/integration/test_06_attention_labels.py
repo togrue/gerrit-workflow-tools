@@ -56,13 +56,13 @@ class AttentionScenario:
 
 
 def _setup_submittable(session: GerritHttpSession, commit: ChainCommit, reviewer: str) -> None:
-    add_change_reviewer(session, commit.change_id, reviewer)
-    post_review_labels(session, commit.change_id, code_review=2, verified=1)
+    add_change_reviewer(session, commit.triplet, reviewer)
+    post_review_labels(session, commit.triplet, code_review=2, verified=1)
 
 
 def _setup_no_label(session: GerritHttpSession, commit: ChainCommit, reviewer: str) -> None:
-    add_change_reviewer(session, commit.change_id, reviewer)
-    post_review_labels(session, commit.change_id, code_review=1, verified=0)
+    add_change_reviewer(session, commit.triplet, reviewer)
+    post_review_labels(session, commit.triplet, code_review=1, verified=0)
 
 
 def _setup_no_reviewers(session: GerritHttpSession, commit: ChainCommit, _reviewer: str) -> None:
@@ -70,15 +70,15 @@ def _setup_no_reviewers(session: GerritHttpSession, commit: ChainCommit, _review
 
 
 def _setup_build_failed(session: GerritHttpSession, commit: ChainCommit, reviewer: str) -> None:
-    add_change_reviewer(session, commit.change_id, reviewer)
-    post_review_labels(session, commit.change_id, verified=-1)
+    add_change_reviewer(session, commit.triplet, reviewer)
+    post_review_labels(session, commit.triplet, verified=-1)
 
 
 def _setup_unresolved(session: GerritHttpSession, commit: ChainCommit, reviewer: str) -> None:
-    add_change_reviewer(session, commit.change_id, reviewer)
+    add_change_reviewer(session, commit.triplet, reviewer)
     post_unresolved_inline_comment(
         session,
-        commit.change_id,
+        commit.triplet,
         f"chain_{commit.chain_index}.txt",
         1,
         "please address",
@@ -86,15 +86,15 @@ def _setup_unresolved(session: GerritHttpSession, commit: ChainCommit, reviewer:
 
 
 def _setup_abandoned(session: GerritHttpSession, commit: ChainCommit, _reviewer: str) -> None:
-    abandon_change(session, commit.change_id)
+    abandon_change(session, commit.triplet)
 
 
 def _setup_build_failed_unresolved(session: GerritHttpSession, commit: ChainCommit, reviewer: str) -> None:
-    add_change_reviewer(session, commit.change_id, reviewer)
-    post_review_labels(session, commit.change_id, verified=-1)
+    add_change_reviewer(session, commit.triplet, reviewer)
+    post_review_labels(session, commit.triplet, verified=-1)
     post_unresolved_inline_comment(
         session,
-        commit.change_id,
+        commit.triplet,
         f"chain_{commit.chain_index}.txt",
         1,
         "please address",
@@ -103,23 +103,23 @@ def _setup_build_failed_unresolved(session: GerritHttpSession, commit: ChainComm
 
 def _setup_build_failed_no_reviewers(dev_session: GerritHttpSession, commit: ChainCommit, _reviewer: str) -> None:
     # Owner vote for Verified-1 without REST reviewer assignment (owner is not a reviewer).
-    post_review_labels(dev_session, commit.change_id, verified=-1)
+    post_review_labels(dev_session, commit.triplet, verified=-1)
 
 
 def _setup_unresolved_no_reviewers(session: GerritHttpSession, commit: ChainCommit, _reviewer: str) -> None:
     post_unresolved_inline_comment(
         session,
-        commit.change_id,
+        commit.triplet,
         f"chain_{commit.chain_index}.txt",
         1,
         "please address",
     )
-    clear_change_reviewers(session, commit.change_id)
+    clear_change_reviewers(session, commit.triplet)
 
 
 def _setup_rest_reviewers(session: GerritHttpSession, commit: ChainCommit, reviewer: str) -> None:
-    add_change_reviewer(session, commit.change_id, reviewer)
-    post_review_labels(session, commit.change_id, code_review=2, verified=1)
+    add_change_reviewer(session, commit.triplet, reviewer)
+    post_review_labels(session, commit.triplet, code_review=2, verified=1)
 
 
 SCENARIOS: tuple[AttentionScenario, ...] = (

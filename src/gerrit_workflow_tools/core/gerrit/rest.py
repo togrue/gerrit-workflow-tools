@@ -73,17 +73,40 @@ def norm_change_id(change_id: str) -> str:
 
 
 def change_id_for_gerrit_rest_path(change_id: str) -> str:
-    """
-    Return *change_id* for Gerrit ``changes/<id>/...`` URL segments.
+    """*change_id* as Gerrit spells it, for the Change-Id part of a triplet.
 
     Gerrit expects the canonical Change-Id with an uppercase ``I`` prefix; values
     taken from :func:`norm_change_id` use a lowercase ``i`` and yield HTTP 404 unless corrected.
+    Anything that is not a Change-Id passes through.
     """
 
     s = change_id.strip()
     if is_change_id(s):
         return "I" + s[1:].lower()
     return s
+
+
+class BareChangeIdError(RuntimeError):
+    """A bare Change-Id was about to become the ``{id}`` of a ``/changes/{id}`` request: a bug in ger.
+
+    Not a Gerrit failure and never mapped to an exit code: the caller should have narrowed the
+    Change-Id to a triplet first (:meth:`GerritService.cache_key`).
+    """
+
+
+def change_path_id(change_ref: str) -> str:
+    """*change_ref* as the ``{id}`` of a ``/changes/{id}`` request: a triplet, a Gerrit id or a number.
+
+    A bare Change-Id raises :class:`BareChangeIdError` before Gerrit is asked: Gerrit answers it
+    with 404 ("Multiple changes found") once the Change-Id is on a second branch (GitHub #31).
+    """
+    ref = change_ref.strip()
+    if "~" in ref or ref.isdigit():
+        return ref
+    raise BareChangeIdError(
+        f"internal error: bare Change-Id {ref!r} in a /changes/{{id}} request; "
+        "narrow it to a triplet (project~branch~Change-Id) or a change number first"
+    )
 
 
 def encode_gerrit_path_segment(segment: str | int) -> str:

@@ -336,8 +336,8 @@ def test_overwrite_on_chain_with_partial_existing_reviewers(
     chain = chain_commits_oldest_first(repo)
     assert len(chain) == 3, [c.subject for c in chain]
     oldest, middle, tip = chain
-    add_change_reviewer(gerrit_admin_session, oldest.change_id, ctx.admin_user)
-    add_change_reviewer(gerrit_admin_session, tip.change_id, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, oldest.triplet, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, tip.triplet, ctx.admin_user)
 
     before = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
     assert before[oldest.change_id] == {ctx.admin_user}
@@ -399,8 +399,8 @@ def test_lazy_on_chain_with_partial_existing_reviewers(
     chain = chain_commits_oldest_first(repo)
     assert len(chain) == 3, [c.subject for c in chain]
     oldest, middle, tip = chain
-    add_change_reviewer(gerrit_admin_session, oldest.change_id, ctx.admin_user)
-    add_change_reviewer(gerrit_admin_session, tip.change_id, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, oldest.triplet, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, tip.triplet, ctx.admin_user)
 
     before = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
     assert before[oldest.change_id] == {ctx.admin_user}
@@ -458,8 +458,8 @@ def test_overwrite_same_reviewer_on_chain_with_partial_existing_reviewers(
     chain = chain_commits_oldest_first(repo)
     assert len(chain) == 3, [c.subject for c in chain]
     oldest, middle, tip = chain
-    add_change_reviewer(gerrit_admin_session, oldest.change_id, ctx.admin_user)
-    add_change_reviewer(gerrit_admin_session, tip.change_id, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, oldest.triplet, ctx.admin_user)
+    add_change_reviewer(gerrit_admin_session, tip.triplet, ctx.admin_user)
 
     before = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
     assert before[oldest.change_id] == {ctx.admin_user}
@@ -514,7 +514,7 @@ def test_overwrite_when_existing_reviewer_voted_negatively(
     code1, _o1, e1 = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
     assert code1 == 0, e1
     (only,) = chain_commits_oldest_first(repo)
-    _vote(gerrit_admin_session, only.change_id, "Code-Review", -1)
+    _vote(gerrit_admin_session, only.triplet, "Code-Review", -1)
 
     code2, _o2, e2 = run_cli(
         repo,
