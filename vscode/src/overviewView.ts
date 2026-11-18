@@ -36,6 +36,8 @@ export function memberTarget(member: Member, chain: Chain): ChangeTarget {
     number: member.number,
     url: member.url,
     local: member.local_sha !== null,
+    changeId: member.change_id,
+    sha: member.local_sha ?? member.sha,
     chainRevs: chain.members.map(memberRev),
     chainKey: chain.key,
   };

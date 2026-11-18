@@ -213,7 +213,7 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
           "attention_reasons": ["ci-failed", "unresolved-comments"],
           "partial_chain": false,
           "members": [
-            { "number": 4317, "subject": "feat: config plumbing", "verified": 1,
+            { "number": 4317, "subject": "feat: config plumbing", "sha": "3f2a…", "verified": 1,
               "code_review": 2, "comments_unresolved": 0, "attention_reasons": [] }
           ]
         }
@@ -223,6 +223,8 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
   ]
 }
 ```
+
+A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it).
 
 `attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments`, and `review-issues` — there is no local patchset to align.
 

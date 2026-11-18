@@ -237,6 +237,12 @@ export async function run(): Promise<void> {
     );
     await press("Inline Open in Gerrit on change 900", "The browser opens change 900 on Gerrit.", exec("ger.openInGerrit", theirs));
     await press(
+      "Right-click change 900 › Copy SHA",
+      "900 is not in your stack: the SHA of its current patch set is on the clipboard; the status bar says so.",
+      exec("ger.copySha", theirs),
+    );
+    await press("Right-click change 900 › Copy Change-Id", "Its Change-Id is on the clipboard; the status bar says so.", exec("ger.copyChangeId", theirs));
+    await press(
       "Right-click change 900 › Hand to Agent",
       "The comments and CI findings of 900 open as a preview, and a dialog offers to copy them (no agent command is set). It says truthfully that 900 is not checked out, so the agent can only read the brief; it does not promise amended commits.",
       exec("ger.agentBrief", theirs),
@@ -252,6 +258,11 @@ export async function run(): Promise<void> {
       "Inline Check Out to Work On on change 900",
       "ger checkout change:900 runs in the ger terminal, where it can ask before it changes anything; the status bar says so. The views follow by themselves once the checkout moves HEAD.",
       exec("ger.checkout", theirs),
+    );
+    await press(
+      "Right-click the chain \"Cleanup after experiment\" › Copy SHA",
+      "A chain row stands for its top change, 103, which is in your stack: its local commit is on the clipboard.",
+      exec("ger.copySha", await chainRow("Cleanup after experiment")),
     );
     const mine = api.overviewView.getChildren(await chainRow("Cleanup after experiment"))[0]; // 103, the newest of the chain
     await press(
@@ -477,16 +488,16 @@ export async function run(): Promise<void> {
     // --- Rewriting the stack ----------------------------------------------------------
     await press("Local stack › Push to Gerrit…", "ger push runs in the ger terminal (a new one when a command still runs there), which shows what it will push and asks first.", exec("ger.push"));
     await press(
-      "Right-click \"Refactor parser init\" › Copy Commit Hash",
+      "Right-click \"Refactor parser init\" › Copy SHA",
       "The commit's full id is on the clipboard; the status bar says so.",
-      exec("ger.stack.copyHash", await stackRow("Refactor parser init")),
+      exec("ger.copySha", await stackRow("Refactor parser init")),
     );
     await press(
       "Select two rows, right-click › Copy Change-Id",
       "Both Change-Ids are on the clipboard, one per line, newest first as shown.",
       async () => {
         const [one, two] = [await stackRow("Refactor parser init"), await stackRow("Extract command routing")];
-        await vscode.commands.executeCommand("ger.stack.copyChangeId", { ...one, shas: [one.sha, two.sha] });
+        await vscode.commands.executeCommand("ger.copyChangeId", { ...one, shas: [one.sha, two.sha] });
       },
     );
     await press(

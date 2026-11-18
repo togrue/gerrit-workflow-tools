@@ -28,6 +28,9 @@ export interface ChangeTarget {
   url?: string | null;
   /** A commit of the local stack: its files are in this worktree. */
   local: boolean;
+  changeId?: string | null;
+  /** The commit: the local one for a commit of the local stack, else the current patch set's. */
+  sha?: string | null;
   /** The chain this change sits in, base first, when it was opened from one. */
   chainRevs?: string[];
   chainKey?: string;

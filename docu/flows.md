@@ -96,8 +96,8 @@ A **gap** names the work that would close it.
 | `ger.stack.squash` | **gap** | `ger rebase` squashes interactively only |
 | `ger.stack.squashTakeMessage` | **gap** | `ger rebase` squashes interactively only |
 | `ger.stack.drop` | `ger edit --drop REV` | |
-| `ger.stack.copyChangeId` | `ger change-id REV` | |
-| `ger.stack.copyHash` | `ger sha CHANGEISH` | |
+| `ger.copyChangeId` | `ger change-id REV` | Review chains, Local stack, and the palette for the change shown |
+| `ger.copySha` | `ger sha CHANGEISH` | the local commit; for a change not in the stack, its current patch set's |
 | `ger.sortChains` | UI only | `ger inbox` prints chains by state |
 | `ger.openDiff` | UI only | `ger review --stage` shows the diff to git's own tools |
 | `ger.openLocation` | UI only | |

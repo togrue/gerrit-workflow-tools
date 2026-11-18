@@ -42,6 +42,8 @@ export interface Member {
   url: string | null;
   /** The local stack commit carrying this Change-Id, if there is one. */
   local_sha: string | null;
+  /** The commit of the current patch set on Gerrit. */
+  sha: string | null;
 }
 
 export interface Chain {

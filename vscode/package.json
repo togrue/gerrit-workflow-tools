@@ -160,8 +160,8 @@
       { "command": "ger.stack.squash", "title": "Squash into Commit Below", "category": "ger" },
       { "command": "ger.stack.squashTakeMessage", "title": "Squash into Commit Below, Keeping This Message", "category": "ger" },
       { "command": "ger.stack.drop", "title": "Drop Commit…", "category": "ger" },
-      { "command": "ger.stack.copyChangeId", "title": "Copy Change-Id", "category": "ger" },
-      { "command": "ger.stack.copyHash", "title": "Copy Commit Hash", "category": "ger" },
+      { "command": "ger.copyChangeId", "title": "Copy Change-Id", "category": "ger" },
+      { "command": "ger.copySha", "title": "Copy SHA", "category": "ger" },
       { "command": "ger.sortChains", "title": "Sort Chains…", "category": "ger", "icon": "$(sort-precedence)" },
       { "command": "ger.openDiff", "title": "Open Diff", "category": "ger" },
       { "command": "ger.openLocation", "title": "Go to Location", "category": "ger" },
@@ -212,8 +212,8 @@
         { "command": "ger.stack.squash", "when": "false" },
         { "command": "ger.stack.squashTakeMessage", "when": "false" },
         { "command": "ger.stack.drop", "when": "false" },
-        { "command": "ger.stack.copyChangeId", "when": "false" },
-        { "command": "ger.stack.copyHash", "when": "false" },
+        { "command": "ger.copyChangeId", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.copySha", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.sortChains", "when": "ger.ready" },
         { "command": "ger.reply", "when": "false" },
         { "command": "ger.hold", "when": "false" },
@@ -273,7 +273,9 @@
         { "command": "ger.review", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@1" },
         { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@2" },
         { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.chain.*\\.local/", "group": "0_open@1" },
-        { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.change/", "group": "1_ger@1" }
+        { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.change/", "group": "1_ger@1" },
+        { "command": "ger.copyChangeId", "when": "viewItem =~ /^ger\\.(change|chain)/", "group": "9_copy@1" },
+        { "command": "ger.copySha", "when": "viewItem =~ /^ger\\.(change|chain)/", "group": "9_copy@2" }
       ],
       "webview/context": [
         { "command": "ger.stack.edit", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "0_open@1" },
@@ -282,8 +284,8 @@
         { "command": "ger.stack.squash", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@1" },
         { "command": "ger.stack.squashTakeMessage", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@2" },
         { "command": "ger.stack.drop", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "2_stack@3" },
-        { "command": "ger.stack.copyChangeId", "when": "webviewId == ger.stack && webviewSection == commit && gerChangeId", "group": "9_copy@1" },
-        { "command": "ger.stack.copyHash", "when": "webviewId == ger.stack && webviewSection == commit", "group": "9_copy@2" }
+        { "command": "ger.copyChangeId", "when": "webviewId == ger.stack && webviewSection == commit && gerChangeId", "group": "9_copy@1" },
+        { "command": "ger.copySha", "when": "webviewId == ger.stack && webviewSection == commit", "group": "9_copy@2" }
       ],
       "comments/commentThread/context": [
         { "command": "ger.thread.reply", "when": "commentController == ger && !commentThreadIsEmpty", "group": "inline@1" },

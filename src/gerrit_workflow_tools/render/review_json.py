@@ -17,7 +17,7 @@ def iso_utc(moment: datetime | None) -> str | None:
 
 
 def member_json(member: ChainMember) -> dict[str, object]:
-    """One chain member: identity, votes, unresolved comments, attention."""
+    """One chain member: identity, current patch set, votes, unresolved comments, attention."""
     return {
         "number": member.number,
         "change_id": member.change_id,
@@ -27,6 +27,7 @@ def member_json(member: ChainMember) -> dict[str, object]:
         "comments_unresolved": member.comments_unresolved,
         "attention_reasons": list(member.attention_reasons),
         "url": member.url,
+        "sha": member.sha,
     }
 
 

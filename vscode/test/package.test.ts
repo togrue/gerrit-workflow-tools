@@ -73,6 +73,9 @@ test("each row action is offered on exactly the rows it is meant for", () => {
     "ger.stack.edit": (v) => is(v, "change|chain") && local(v),
     "ger.openInGerrit": (v) => is(v, "change|chain") && /\.url\b/.test(v),
     "ger.agentBrief": (v) => is(v, "change"),
+    // Every change has a Change-Id and a commit: the local one, else its current patch set's.
+    "ger.copyChangeId": (v) => is(v, "change|chain"),
+    "ger.copySha": (v) => is(v, "change|chain"),
   };
   const offered = new Map<string, Set<string>>();
   for (const entry of itemMenu) {

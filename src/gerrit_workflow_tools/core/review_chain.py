@@ -39,6 +39,8 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     updated: datetime | None
     url: str | None
     attention_reasons: tuple[str, ...]
+    sha: str | None = None
+    """The commit of the current patch set, when Gerrit sent it."""
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,7 @@ def _to_member(change: ChangeView, web_base: str) -> ChainMember | None:
         updated=parse_gerrit_time(change.updated),
         url=change.url(web_base),
         attention_reasons=member_attention_reasons(change),
+        sha=change.current_revision,
     )
 
 

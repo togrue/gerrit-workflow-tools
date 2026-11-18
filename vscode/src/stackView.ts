@@ -14,7 +14,7 @@ import { Message, WebView } from "./webview";
 const STASH = "Stash and Continue";
 
 export function commitTarget(commit: StackCommit): ChangeTarget {
-  return { rev: commit.sha, title: commit.summary, number: commit.number ?? undefined, url: commit.gerrit_url, local: true };
+  return { rev: commit.sha, title: commit.summary, number: commit.number ?? undefined, url: commit.gerrit_url, local: true, changeId: commit.change_id, sha: commit.sha };
 }
 
 /** What a command gets from the view: the row's context (`sha`, and `shas` when several rows are selected), or a commit id. */
@@ -115,20 +115,9 @@ export class StackView extends WebView<StackVm> {
     return stack ? pinned(stack) : 0;
   }
 
-  // --- Copying ----------------------------------------------------------------------
-
-  /** Copy the commit ids, or the Change-Ids, of the selected rows: one per line, newest first as shown. */
-  async copy(arg: CommitArg, what: "hash" | "change-id"): Promise<void> {
-    const values = this.named(arg)
-      .reverse()
-      .map((commit) => (what === "hash" ? commit.sha : commit.change_id))
-      .filter((value): value is string => Boolean(value));
-    if (!values.length) {
-      return;
-    }
-    await ui().copy(values.join("\n"));
-    const noun = what === "hash" ? "commit hash" : "Change-Id";
-    ui().status(`$(check) Copied ${values.length === 1 ? `the ${noun}` : `${values.length} ${noun}${what === "hash" ? "es" : "s"}`}`, 4000);
+  /** The targets of the rows a command was invoked on (several when several are selected), newest first as shown. */
+  targets(arg: CommitArg): ChangeTarget[] {
+    return this.named(arg).reverse().map(commitTarget);
   }
 
   // --- Rewriting --------------------------------------------------------------------

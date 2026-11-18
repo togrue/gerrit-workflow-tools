@@ -173,6 +173,8 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
     # Members that are commits of the local stack say which.
     assert chain["local"] is True
     assert [m["local_sha"] for m in chain["members"]] == [row.sha for row in rows]
+    # And every member names its current patch set, local or not.
+    assert [m["sha"] for m in chain["members"]] == [row.sha for row in rows]
     # Failed CI outranks unresolved comments, wherever each sits in the chain.
     headline = overview["headline"]
     assert (headline["section"], headline["reason"], headline["number"]) == ("outgoing", "ci-failed", 102)

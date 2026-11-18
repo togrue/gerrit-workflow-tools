@@ -154,6 +154,19 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   };
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
 
+  /** Copy the Change-Ids or the SHAs of what a command was invoked on: one per line, newest first. */
+  const copyIds = async (arg: unknown, what: "changeId" | "sha") => {
+    const fromStack = stackView.targets(arg as CommitArg);
+    const one = fromStack.length ? [] : [targetOf(arg)];
+    const values = [...fromStack, ...one].map((target) => target?.[what]).filter((value): value is string => Boolean(value));
+    if (!values.length) {
+      return;
+    }
+    await ui().copy(values.join("\n"));
+    const noun = what === "sha" ? "SHA" : "Change-Id";
+    ui().status(`$(check) Copied ${values.length === 1 ? `${noun} ${values[0].slice(0, 12)}` : `${values.length} ${noun}s`}`, 4000);
+  };
+
   const setHold = async (arg: unknown, held: boolean) => {
     const chain = threadOf(arg);
     if (chain) {
@@ -204,8 +217,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.stack.squash": (arg: CommitArg) => stackView.fold(arg, false),
     "ger.stack.squashTakeMessage": (arg: CommitArg) => stackView.fold(arg, true),
     "ger.stack.drop": (arg: CommitArg) => stackView.drop(arg),
-    "ger.stack.copyChangeId": (arg: CommitArg) => stackView.copy(arg, "change-id"),
-    "ger.stack.copyHash": (arg: CommitArg) => stackView.copy(arg, "hash"),
+    "ger.copyChangeId": (arg: unknown) => copyIds(arg, "changeId"),
+    "ger.copySha": (arg: unknown) => copyIds(arg, "sha"),
     "ger.sortChains": () => overviewView.chooseSort(),
     "ger.openDiff": (file: FileChange, diff?: Diff) => changeView.openDiff(file, diff),
     "ger.openLocation": (location: Location) => changeView.openLocation(location),

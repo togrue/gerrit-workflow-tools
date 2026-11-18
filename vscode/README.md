@@ -25,6 +25,8 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
   it for the chain's changes. A `●` marks new activity.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
+- Right-click a change (or a chain, for its top change) › **Copy Change-Id** or **Copy SHA**: the
+  local commit for a change in your stack, else the commit of its current patch set.
 - **Sort Chains…** (title bar): *By chain state* — the order `ger inbox` gives, what needs you
   first — or *By last activity*, newest or oldest first. It applies to both sections and is
   remembered per workspace; the sections name an order other than by state.
@@ -55,7 +57,7 @@ The commits above your upstream, newest first. One row per commit:
   edit went with a dropped commit), they stay in `git stash` and you are told.
 - Context menu: **Edit Commit Here**, **Open in Gerrit**, **Hand to Agent…**, **Squash into the
   commit below** (keeping either message — never both, so there is always exactly one
-  Change-Id), **Drop**, **Copy Change-Id** and **Copy Commit Hash** (of every selected row, one
+  Change-Id), **Drop**, **Copy Change-Id** and **Copy SHA** (of every selected row, one
   per line). Every rewrite offers **Undo** right after.
 - **During a rebase** (a `ger edit`, a conflict) the view shows the branch as it was before it,
   with a **marker** on the commit the rebase stopped at; commits still to be replayed are
