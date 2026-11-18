@@ -6,7 +6,7 @@ import * as path from "node:path";
 
 import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
 import { Severity, commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
-import { Tone } from "./stackRows";
+import { Badge, Tone, badges } from "./stackRows";
 import { Waiting } from "./state";
 
 /** Which version of the change is looked at: your commit, Gerrit's current patchset, or patchset `n`. */
@@ -117,7 +117,8 @@ export interface ChangeVm {
   /** Nothing is shown: what to do to see a change. */
   empty?: string;
   problem?: string;
-  head?: Icon & { text: string; detail: string; tooltip: string };
+  /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). */
+  head?: Icon & { text: string; detail: string; tooltip: string; badges: Badge[] };
   notes?: (Icon & { text: string; detail: string })[];
   message?: { key: string; text: string; author: string; readOnly: string };
   versions?: { options: Option[]; selected: string };
@@ -329,6 +330,7 @@ export function changeVm(state: ChangeState): ChangeVm {
       text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       tooltip: commit.summary,
+      badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
     },
     notes,
     message: state.base?.message

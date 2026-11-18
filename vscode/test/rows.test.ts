@@ -170,6 +170,14 @@ test("the change view shows the message, the files with their line counts, and w
   ]);
 });
 
+test("the change view shows the votes as the Local stack's badges, the same ones", () => {
+  const voted = shown({ code_review: -1, verified: 1, comments_unresolved: 2 });
+  const head = changeVm(state({ shown: voted })).head;
+  assert.deepEqual(head?.badges, badges(voted).filter(Boolean));
+  assert.deepEqual(head?.badges.map((badge) => [badge.kind, badge.icon, badge.text]), [["comments", "comment-unresolved", "2"], ["review", "thumbsdown", "-1"], ["ci", "pass", ""]]);
+  assert.deepEqual(changeVm(state({ shown: shown({ pushed: false, code_review: 1 }) })).head?.badges, [], "not on Gerrit: no votes to show");
+});
+
 test("the version picker starts on the local commit and lists Gerrit's patchsets, newest first", () => {
   const before = changeVm(state()).versions;
   assert.deepEqual(before, { options: [{ value: "local", label: "Local commit extract" }, { value: "current", label: "Gerrit's current patchset" }], selected: "local" });

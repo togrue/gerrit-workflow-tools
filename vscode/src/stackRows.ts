@@ -2,7 +2,7 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { MoveConflict, Overview, Stack, StackCommit, UpstreamChoice } from "./api";
+import { CommitStatus, MoveConflict, Overview, Stack, StackCommit, UpstreamChoice } from "./api";
 import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
@@ -52,8 +52,8 @@ function signed(value: number): string {
   return `${value > 0 ? "+" : ""}${value}`;
 }
 
-/** Comments, review vote, CI vote, in that order; a slot with nothing to say is null. */
-export function badges(commit: StackCommit): (Badge | null)[] {
+/** Comments, review vote, CI vote, in that order; a slot with nothing to say is null. The Change view shows them too. */
+export function badges(commit: CommitStatus): (Badge | null)[] {
   const last = commit.last_pushed_votes;
   const stale = Boolean(last && (last.verified !== null || last.code_review !== null));
   const note = stale ? " on the last pushed patchset; Gerrit may not keep it for this code" : "";

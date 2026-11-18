@@ -257,6 +257,10 @@ button.twist:hover {
   opacity: 0.5;
 }
 
+.head .badges {
+  margin-left: auto;
+}
+
 /* --- Change ---------------------------------------------------------------------- */
 
 .head.note .label,
