@@ -97,7 +97,7 @@ crashed a worker. This section first blamed the 913 on the closure check, but th
 almost certainly the mutants inside a class. `compile()` rejects those for the reason given under
 2026-11-18, on Python 3.12, 3.13 and 3.14 alike. No example mutant in this run is in a method,
 and 913 of 4872 (18.7%) matches the 1002 of 5380 (18.6%) in that run. Methods were not assessed in
-this run. Plain Plain
+this run. Plain
 redundancy (any other test killing the mutant counts) found 57 candidates that catch a bug nothing
 else catches, and 340 removable.
 

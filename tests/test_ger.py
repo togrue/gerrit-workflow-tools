@@ -24,10 +24,20 @@ def test_ger_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "ger <command>" in out
 
 
-def test_unknown_command_suggests_the_close_one(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = _run_ger(stack_repo, ["lgo"], monkeypatch)
+@pytest.mark.parametrize(
+    ("command", "line"),
+    [
+        ("lgo", "error: unknown command 'lgo'; did you mean 'log'?"),
+        ("nope", "error: unknown command 'nope'"),
+    ],
+)
+def test_unknown_command_suggests_the_close_one(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, command: str, line: str
+) -> None:
+    """Only a close match is suggested; the whole error line is pinned."""
+    code, _out, err = _run_ger(stack_repo, [command], monkeypatch)
     assert code == 2
-    assert "error: unknown command 'lgo'; did you mean 'log'?" in err
+    assert line in err.splitlines()
 
 
 def test_ger_log_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
