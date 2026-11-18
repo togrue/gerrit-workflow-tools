@@ -24,12 +24,6 @@ def test_ger_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "ger <command>" in out
 
 
-def test_ger_unknown_command(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = _run_ger(stack_repo, ["nope"], monkeypatch)
-    assert code == 2
-    assert "unknown command" in err
-
-
 def test_unknown_command_suggests_the_close_one(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = _run_ger(stack_repo, ["lgo"], monkeypatch)
     assert code == 2

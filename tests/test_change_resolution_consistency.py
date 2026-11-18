@@ -33,23 +33,27 @@ from tests.conftest import json_stdout, run_cli
 from tests.fixtures import _cid
 
 
+_NO_COMMIT = "cannot resolve 'nosuch': no commit by that name"
+
+
 @pytest.mark.parametrize(
-    ("main_fn", "argv"),
+    ("main_fn", "argv", "message"),
     [
-        (log_main, ["nosuch..HEAD"]),
-        (change_id_main, ["nosuch"]),
-        (push_main, ["--dry-run", "nosuch"]),
-        (push_main, ["--dry-run", "--branch", "nosuch"]),
-        (gshow_main, ["nosuch"]),
-        (resolve_main, ["nosuch"]),
+        (log_main, ["nosuch..HEAD"], _NO_COMMIT),  # names the unknown side, not the range
+        (change_id_main, ["nosuch"], _NO_COMMIT),
+        (push_main, ["--dry-run", "nosuch"], _NO_COMMIT),
+        (push_main, ["--dry-run", "--branch", "nosuch"], "branch 'nosuch' not found"),
+        (gshow_main, ["nosuch"], _NO_COMMIT),
+        (resolve_main, ["nosuch"], _NO_COMMIT),
     ],
 )
 def test_every_command_exits_the_same_way_on_an_unknown_revision(
-    main_fn: Callable[..., int], argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    main_fn: Callable[..., int], argv: list[str], message: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    code, _out, _err = run_cli(stack_repo, main_fn, argv, monkeypatch)
+    code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch)
     assert code == ExitCode.NOT_FOUND
+    assert err.strip() == f"error: {message}"
 
 
 _NO_ID = "I" + "0" * 40

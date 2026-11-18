@@ -282,6 +282,7 @@ def _chain_of(path: str, comment: dict[str, Any]) -> CommentChain:
 def test_show_human_box_shows_the_suggested_fix_and_the_block() -> None:
     fix = strip_ansi("\n".join(format_comment_chain_human(_chain_of("epsilon.txt", FIX_COMMENT), None)))
     assert "suggested fix: Use the LIMIT constant" in fix
+    assert fix.count("suggested fix") == 1
     assert "epsilon.txt:2-3 becomes:" in fix
     assert "+ LIMIT = 10" in fix
     assert "+ use(LIMIT)" in fix
@@ -295,6 +296,7 @@ def test_show_human_box_shows_the_suggested_fix_and_the_block() -> None:
 def test_show_markdown_quotes_the_suggested_fix_fenced() -> None:
     fix = "\n".join(format_comment_chain_markdown(_chain_of("epsilon.txt", FIX_COMMENT), None))
     assert "> **Suggested fix:** Use the LIMIT constant" in fix
+    assert fix.count("Suggested fix") == 1
     assert "> `epsilon.txt:2-3` becomes:\n> ```\n> LIMIT = 10\n> use(LIMIT)\n> ```" in fix
     block = "\n".join(format_comment_chain_markdown(_chain_of("zeta.py", BLOCK_COMMENT), None))
     assert "> ```suggestion\n>     return total\n> ```" in block

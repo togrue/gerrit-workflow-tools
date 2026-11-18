@@ -71,7 +71,9 @@ def owners(repo: Path) -> dict[str, list[str]]:
                 rel = name.removeprefix(PKG).lstrip(".").replace(".", "/") + ".py"
                 if rel in mods and rel not in by_name:
                     out[rel].add(f"tests/{t.name}")
-    return {k: sorted(v) for k, v in out.items()} | {k: v for k, v in OWNER_OVERRIDES.items() if k in mods}
+    if unknown := sorted(set(OWNER_OVERRIDES) - set(mods)):
+        raise SystemExit(f"OWNER_OVERRIDES names modules that do not exist: {', '.join(unknown)}")
+    return {k: sorted(v) for k, v in out.items()} | OWNER_OVERRIDES
 
 
 def load_rows(path: Path) -> list[dict[str, Any]]:

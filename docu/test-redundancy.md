@@ -92,8 +92,12 @@ arc no other test does. 440 tests cover nothing that a single other, non-sibling
 also cover: the candidates. 46 tests exercise no package logic at all (architecture, docs and
 parity checks, and the tests of the `ChangeStore` fake).
 
-**Tier 4.** 4872 mutants on the lines the candidates cover; 913 could not be applied (the
-compiled mutant did not fit the function's closure) and 7 hung or crashed a worker. Plain
+**Tier 4.** 4872 mutants on the lines the candidates cover; 913 could not be applied and 7 hung or
+crashed a worker. This section first blamed the 913 on the closure check, but they were
+almost certainly the mutants inside a class. `compile()` rejects those for the reason given under
+2026-11-18, on Python 3.12, 3.13 and 3.14 alike. No example mutant in this run is in a method,
+and 913 of 4872 (18.7%) matches the 1002 of 5380 (18.6%) in that run. Methods were not assessed in
+this run. Plain Plain
 redundancy (any other test killing the mutant counts) found 57 candidates that catch a bug nothing
 else catches, and 340 removable.
 
@@ -119,8 +123,8 @@ other test does; 539 candidates. 5 timing tests fail under coverage tracing and 
 **Tier 4.** 5380 mutants; 4378 assessed. 1002 could not be compiled ("AST node line range is not
 valid"); this run counted them as crashed because `compile_def` let the error end the worker
 (since fixed: such a mutant is skipped). They were every mutant inside a class: the class
-`compile_def` wraps a method in had no end line. That is fixed too, so methods were not assessed
-in this run or the one before. Owner check on 509 mutants.
+`compile_def` wraps a method in had no end line. So methods were not assessed in this run either;
+`compile_def` now gives the class an end line. Owner check on 509 mutants.
 
 | Verdict | Tests | Change since 2026-11-14 |
 |---------|------:|---------|
@@ -140,7 +144,9 @@ in `test_log.py`.
 case of a test that pins agreement between commands. NO_KILLS: 1 strengthened (`apply_ci_strategy`'s
 result is pinned) and 1 merged into the parametrisation of the test it repeated. 14 left as they
 are: they reach only methods, and each fails on a mutant applied by hand. 8 left because no
-operator reaches what they pin (the Change-Id regex, a line that is not JSON).
+operator reaches what they pin (the Change-Id regex, a line that is not JSON). The next tier 4 run,
+the first that compiles methods, re-checks the 14. The `test_gerrit_unavailable.py` MISPLACED
+verdict will recur: the test is kept on purpose, as above.
 
 ## Before removing a test
 
