@@ -549,6 +549,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/agent_runbook.py` | The agent runbook as Markdown (`runbook_markdown`) and JSON (`runbook_json`) |
 | `render/review_json.py` | JSON for **review chains** (`chain_json`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
 | `render/ci_content.py` | **CI content** projections: JSON, human and Markdown, grouped by CI link label |
+| `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns, and the highlighter for a branch's stack |
 | `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question |
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |

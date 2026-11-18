@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -31,6 +32,7 @@ from gerrit_workflow_tools.render.ci_content import (
     format_ci_section_markdown,
 )
 from gerrit_workflow_tools.render.commit_row import show_headline
+from gerrit_workflow_tools.render.download_meter import DownloadMeter
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -152,9 +154,16 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         print_resolution_note(resolved.resolution)
     commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
 
-    ci = CiContentService.from_settings(cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh)
+    meter = DownloadMeter(sys.stderr, label="Fetching CI logs")
+    ci = CiContentService.from_settings(
+        cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh, progress=meter
+    )
     body = _body_mode(args)
-    per_commit = [(c, ci.fetch(c.ci_links, body=body, commit=c.sha or None)) for c in commits]
+    try:
+        fetched = ci.fetch_each([(c.ci_links, c.sha or None) for c in commits], body=body)
+    finally:
+        meter.close()
+    per_commit = list(zip(commits, fetched, strict=True))
 
     if out_fmt == "json":
         payload = [_commit_json(c, contents, include_body=body != "none") for c, contents in per_commit]

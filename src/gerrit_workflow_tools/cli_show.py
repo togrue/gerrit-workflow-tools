@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
@@ -37,6 +38,7 @@ from gerrit_workflow_tools.render.comments import (
     format_unresolved_section_human,
 )
 from gerrit_workflow_tools.render.commit_row import attention_summary, continuation_lines, show_headline, votes_text
+from gerrit_workflow_tools.render.download_meter import DownloadMeter
 from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.wrap import wrap_lines
@@ -256,18 +258,22 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         print_resolution_note(resolved.resolution)
 
     ci = None
+    meter = DownloadMeter(sys.stderr, label="Fetching CI logs")
     if settings.show_ci_content if args.ci is None else args.ci:
         ci = CiContentService.from_settings(
-            cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh
+            cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh, progress=meter
         )
-    shown = load_shown_commits(
-        targets,
-        service=service,
-        comments=args.comments,
-        context_padding=_requested_context_padding(args),
-        fetch_ci_pipelines=verbose_level >= 1,
-        ci=ci,
-    )
+    try:
+        shown = load_shown_commits(
+            targets,
+            service=service,
+            comments=args.comments,
+            context_padding=_requested_context_padding(args),
+            fetch_ci_pipelines=verbose_level >= 1,
+            ci=ci,
+        )
+    finally:
+        meter.close()
 
     if any(t.is_local_commit for t in targets) and branch is not None and branch_has_upstream(cwd, branch):
         try:

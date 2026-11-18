@@ -40,7 +40,9 @@ Do not merge the layers: auth and console URL shape are host properties; link di
 
 **Provider contract** (`CiContentProvider`): an object with `id`, `matches(url) -> bool`, `cache_key(url) -> str` and `fetch(link, ctx) -> CiFetched`. `ctx` carries the HTTP seam (`ctx.http.get_text(url, headers=…)`) and the host's credential. Export them as `CONTENT_PROVIDERS = [...]` from `.ger/ci/registry.py` (local tier, then global); they are tried in order before the built-in Jenkins provider. Every tier's list is used, since providers match by URL, not by `gerrit.project`. A provider that raises becomes an error on that link's provenance. Template: [gerrit-ci-strategies.md § CI content providers](../gerrit-ci-strategies.md#ci-content-providers). Copyable example: [`example/hooks/ci/`](../../example/hooks/ci/).
 
-The built-in Jenkins provider claims any `…/job/<name>[/job/<name>…]/<build>/…` URL, reads `api/json` (running? display name) and then `consoleText`.
+The built-in Jenkins provider claims any `…/job/<name>[/job/<name>…]/<build>/…` URL, reads `api/json` (running? display name) and `consoleText`, both at once.
+
+**Transfer.** Every link of every listed commit is fetched at once (a stack's builds do not queue behind each other), and a log is asked for gzip-compressed (`Accept-Encoding: gzip`), which a console log shrinks to a fraction of. The 32 MiB cap applies to the text, after inflating. While logs arrive, `ger ci` and `ger show --ci` show the bytes received so far on one stderr line (`Fetching CI logs: 12.3 MB from 2 logs`), only on a terminal, only once a fetch has taken over half a second, and erase it before printing. `ger serve` shows none: its stderr is the extension's log.
 
 ---
 
