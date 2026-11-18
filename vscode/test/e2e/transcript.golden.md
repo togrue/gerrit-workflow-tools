@@ -445,7 +445,8 @@ status bar message: Comment 1 of 2
 ```
 status bar message: Comment 2 of 2
 --- on screen:
-(no change)
++ change | title: Change 101 — Extract command routing
+- change | title: Change 101
 ```
 
 ## 28. Next Unresolved Comment a third time
@@ -770,7 +771,7 @@ browser opens: https://g.example/c/testproj/+/101
 + change | title: Change 102
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
-- change | title: Change 101
+- change | title: Change 101 — Extract command routing
 - change | Unresolved comments — V+1 CR+2 💬2
 - change | Commit message — Extract command routing  (editable)
 + change |   c.txt — added +1 −0
