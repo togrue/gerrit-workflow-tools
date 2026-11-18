@@ -327,7 +327,7 @@
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
       const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
-      parts.push(h("div", { class: "head", title: head.tooltip }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
+      parts.push(h("div", { class: "head" }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));

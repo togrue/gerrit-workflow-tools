@@ -7,7 +7,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeVm, CiView, Mode, NOT_FILES, Version, changeLines, changeVm, isYours } from "./changeRows";
+import { ChangeVm, CiView, Mode, NOT_FILES, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
 import { ui } from "./ui";
@@ -308,10 +308,13 @@ export class ChangeView extends WebView<ChangeVm> {
     return changeLines(this.vm());
   }
 
+  /** What the title bar says. */
+  heading(): { title: string; description: string | undefined } {
+    return changeHeading(this.shown?.number ?? this.target?.number, this.shown?.summary ?? this.target?.title, this.vm());
+  }
+
   protected decorate(view: vscode.WebviewView): void {
-    const number = this.shown?.number ?? this.target?.number;
-    view.title = number ? `Change ${number}` : "Change";
-    view.description = this.shown?.summary ?? this.target?.title;
+    ({ title: view.title, description: view.description } = this.heading());
   }
 
   /** Scroll to a comment chain and mark it, without taking the keyboard. */

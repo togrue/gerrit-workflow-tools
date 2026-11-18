@@ -31,7 +31,7 @@ editor | (none)
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | title: Change 102 — test! temporary experiment
++ change | title: Change 102
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
 + change | Showing — Local commit <sha> · Against its base commit
@@ -111,11 +111,11 @@ status bar message: $(check) Refreshed from Gerrit
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | title: Change 900 — Add retry to the uploader
++ change | title: Change 900
 + change | No reviewers, awaiting review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
 + change | Showing — Patchset 1 (current) · Against its base commit
-- change | title: Change 102 — test! temporary experiment
+- change | title: Change 102
 - change | CI failed — V-1 CR+2
 - change | Commit message — test! temporary experiment  (editable)
 - change | Showing — Local commit <sha> · Against its base commit
@@ -271,6 +271,8 @@ notification (info): No review checkout is open here.
 + state  | no-executable
 + events | (not said)
 + stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
++ change | title: Change 900 — Add retry to the uploader
++ change | A change shows here once ger runs. Review chains says what is missing and what to do next.
 - status bar | $(error) CI failed on 102: test! temporary experiment
 - state  | ready
 - events | live
@@ -287,7 +289,7 @@ notification (info): No review checkout is open here.
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | A change shows here once ger runs. Review chains says what is missing and what to do next.
+- change | title: Change 900
 - change | No reviewers, awaiting review — V+1
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Showing — Patchset 1 (current) · Against its base commit
@@ -341,10 +343,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
-- status bar | $(warning) Gerrit
-- state  | no-executable
-- events | (not said)
-- stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
++ change | title: Change 900
 + change | No reviewers, awaiting review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
 + change | Showing — Patchset 1 (current) · Against its base commit
@@ -352,6 +351,11 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + change |   uploader.txt — added +1 −0
 + change | Comments — 1 unresolved of 1
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
+- status bar | $(warning) Gerrit
+- state  | no-executable
+- events | (not said)
+- stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
+- change | title: Change 900 — Add retry to the uploader
 - change | A change shows here once ger runs. Review chains says what is missing and what to do next.
 ```
 
@@ -362,11 +366,11 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | title: Change 101 — Extract command routing
++ change | title: Change 101
 + change | Unresolved comments — V+1 CR+2 💬2
 + change | Commit message — Extract command routing  (editable)
 + change | Showing — Local commit <sha> · Against its base commit
-- change | title: Change 900 — Add retry to the uploader
+- change | title: Change 900
 - change | No reviewers, awaiting review — V+1
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Showing — Patchset 1 (current) · Against its base commit
@@ -763,10 +767,10 @@ browser opens: https://g.example/c/testproj/+/101
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | title: Change 102 — test! temporary experiment
++ change | title: Change 102
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
-- change | title: Change 101 — Extract command routing
+- change | title: Change 101
 - change | Unresolved comments — V+1 CR+2 💬2
 - change | Commit message — Extract command routing  (editable)
 + change |   c.txt — added +1 −0
@@ -1175,7 +1179,7 @@ stack  | test! temporary experiment — <sha> · held back · the same as on Ger
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-change | title: Change 102 — test! temporary experiment
+change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)

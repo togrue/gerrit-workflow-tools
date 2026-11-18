@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
-import { ChangeState, changeLines, changeVm } from "../src/changeRows";
+import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
 import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
@@ -173,6 +173,17 @@ test("the change view shows the message, the files with their line counts, and w
     "  logo.png — added binary",
     "Comments — none",
   ]);
+});
+
+test("the change view shows the subject once: in the commit message, or in the title bar when there is none", () => {
+  const vm = changeVm(state());
+  assert.deepEqual(changeHeading(7, "Extract routing", vm), { title: "Change 7", description: undefined }, "the message's first line already says it");
+  const without = changeVm(state({ base: undefined }));
+  assert.deepEqual(changeHeading(7, "Extract routing", without), { title: "Change 7", description: "Extract routing" });
+  const says = (subject: string, text: string) => text.split(subject).length - 1;
+  const lines = [changeHeading(7, "Extract routing", vm).description ?? "", ...changeLines(vm)].join("\n");
+  assert.equal(says("Extract routing", lines), 1);
+  assert.equal(says("Extract routing", JSON.stringify(vm)), 1, "nor a tooltip that repeats it");
 });
 
 test("the change view shows the votes as the Local stack's badges, the same ones", () => {

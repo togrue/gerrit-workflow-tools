@@ -123,7 +123,7 @@ export interface ChangeVm {
   empty?: string;
   problem?: string;
   /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). */
-  head?: Icon & { text: string; detail: string; tooltip: string; badges: Badge[] };
+  head?: Icon & { text: string; detail: string; badges: Badge[] };
   notes?: (Icon & { text: string; detail: string })[];
   message?: { key: string; text: string; author: string; readOnly: string };
   versions?: { options: Option[]; selected: string };
@@ -339,7 +339,6 @@ export function changeVm(state: ChangeState): ChangeVm {
       ...headIcon(commit.attention_reasons),
       text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
-      tooltip: commit.summary,
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
     },
     notes,
@@ -367,6 +366,11 @@ export function changeVm(state: ChangeState): ChangeVm {
         }
       : undefined,
   };
+}
+
+/** The view's title bar: `Change <number>`, and the subject only while the commit message, whose first line it is, is not shown. */
+export function changeHeading(number: number | null | undefined, subject: string | undefined, vm: ChangeVm): { title: string; description: string | undefined } {
+  return { title: number ? `Change ${number}` : "Change", description: vm.message ? undefined : subject };
 }
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */
