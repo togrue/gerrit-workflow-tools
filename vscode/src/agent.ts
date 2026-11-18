@@ -10,7 +10,7 @@ import { setting } from "./config";
 import { plural } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
 import { checkout } from "./review";
-import { ui } from "./ui";
+import { feedback, ui } from "./ui";
 
 /** What the dialog says when the agent could not change the code: the change is not checked out here. */
 const BRIEF_ONLY =
@@ -43,6 +43,7 @@ async function handOver(repo: string, markdown: string, name: string, summary: s
   }
   // GER_NO_PUBLISH makes ger refuse to publish drafts, whatever the agent decides to try.
   ui().terminal({ name: "ger agent", cwd: repo, env: { GER_NO_PUBLISH: "1" } }, template.replaceAll("{rev}", rev ?? "").replaceAll("{brief}", file));
+  feedback("The agent runs in the ger agent terminal", { icon: "terminal" });
 }
 
 /** The runbook for the local stack, or one of its commits, handed to the agent. */

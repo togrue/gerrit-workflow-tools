@@ -51,7 +51,7 @@ editor | (none)
 **Expect:** Every "● new activity" marker goes; nothing else changes.
 
 ```
-(nothing said or done outside the views)
+status bar message: $(check) All activity marked as seen
 --- on screen:
 (no change)
 ```
@@ -66,6 +66,7 @@ picker: Sort review chains — "Applies to both sections"
     By last activity, newest first
     By last activity, oldest first
     → picked "By last activity, oldest first"
+status bar message: $(check) Chains sorted by last activity, oldest first
 --- on screen:
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments · oldest first
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -83,6 +84,7 @@ picker: Sort review chains — "Applies to both sections"
     By last activity, newest first
     By last activity, oldest first — current
     → picked "By chain state"
+status bar message: $(check) Chains sorted by chain state
 --- on screen:
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments · oldest first
@@ -97,6 +99,7 @@ picker: Sort review chains — "Applies to both sections"
 ```
 progress (in view ger.overview): Refreshing from Gerrit
 progress (in view ger.stack): Refreshing from Gerrit
+status bar message: $(check) Refreshed from Gerrit
 --- on screen:
 (no change)
 ```
@@ -132,6 +135,7 @@ progress (in view ger.stack): Refreshing from Gerrit
 **Expect:** The browser opens change 900 on Gerrit.
 
 ```
+status bar message: $(check) Opened 900 in the browser
 browser opens: https://g.example/c/testproj/+/900
 --- on screen:
 (no change)
@@ -143,7 +147,7 @@ browser opens: https://g.example/c/testproj/+/900
 
 ```
 clipboard: 1 lines, starting "<sha>"
-status bar message: $(check) Copied SHA <sha>
+status bar message: $(check) Copied SHA <sha>…
 --- on screen:
 (no change)
 ```
@@ -154,7 +158,7 @@ status bar message: $(check) Copied SHA <sha>
 
 ```
 clipboard: 1 lines, starting "I0000000000000000000000000000000000000384"
-status bar message: $(check) Copied Change-Id I00000000000
+status bar message: $(check) Copied Change-Id I00000000000…
 --- on screen:
 (no change)
 ```
@@ -185,7 +189,7 @@ dialog (info): The comments and CI findings of 900: Add retry to the uploader, a
     detail: This change is not checked out here, so the agent starts on your current branch and can only read the brief: its comments and CI findings. To have it amend the change, check it out to work on it first, then hand the commit over. Nothing is pushed or published.
     → pressed "Check Out to Work On"
 terminal "ger": runs `ger checkout change:900`
-status bar message: ger checkout change:900 runs in the terminal: it may ask before it changes anything
+status bar message: $(terminal) ger checkout change:900 runs in the ger terminal: it may ask before it changes anything
 --- on screen:
 (no change)
 ```
@@ -196,7 +200,7 @@ status bar message: ger checkout change:900 runs in the terminal: it may ask bef
 
 ```
 terminal "ger": runs `ger checkout change:900`
-status bar message: ger checkout change:900 runs in the terminal: it may ask before it changes anything
+status bar message: $(terminal) ger checkout change:900 runs in the ger terminal: it may ask before it changes anything
 --- on screen:
 (no change)
 ```
@@ -207,7 +211,7 @@ status bar message: ger checkout change:900 runs in the terminal: it may ask bef
 
 ```
 clipboard: 1 lines, starting "<sha>"
-status bar message: $(check) Copied SHA <sha>
+status bar message: $(check) Copied SHA <sha>…
 --- on screen:
 (no change)
 ```
@@ -218,7 +222,7 @@ status bar message: $(check) Copied SHA <sha>
 
 ```
 terminal "ger": runs `ger edit <sha>`
-status bar message: ger edit runs in the terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then git rebase --continue
+status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then git rebase --continue
 --- on screen:
 (no change)
 ```
@@ -309,6 +313,7 @@ progress (notification): Restarting ger serve
 
 ```
 terminal "ger": runs `uv tool install --force https://github.com/togrue/gerrit-workflow-tools/releases/download/v0.1.0/ger.tar.gz`
+status bar message: $(terminal) Installing ger with uv in the ger terminal: Retry once it is done
 --- on screen:
 (no change)
 ```
@@ -474,7 +479,7 @@ status bar message: Comment 2 of 2
 **Expect:** The thread is marked as kept for you; the agent will leave it alone.
 
 ```
-(nothing said or done outside the views)
+status bar message: $(check) Kept for you: the agent leaves this comment alone
 --- on screen:
 + change |   Is this the right design? — kept for you · b.txt:1 · Bob Architect  [open, kept for you]
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
@@ -501,7 +506,7 @@ notification (info): Copied. Paste it into your agent, or set `ger.agentCommand`
 **Expect:** The thread is no longer marked as kept for you.
 
 ```
-(nothing said or done outside the views)
+status bar message: $(check) Left to the agent
 --- on screen:
 + change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 - change |   Is this the right design? — kept for you · b.txt:1 · Bob Architect  [open, kept for you]
@@ -712,7 +717,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 
 ```
 terminal "ger": runs `ger edit <sha>`
-status bar message: ger edit runs in the terminal: once the rebase stops at "Extract command routing", amend it, then git rebase --continue
+status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "Extract command routing", amend it, then git rebase --continue
 --- on screen:
 (no change)
 ```
@@ -722,6 +727,7 @@ status bar message: ger edit runs in the terminal: once the rebase stops at "Ext
 **Expect:** The browser opens change 101 on Gerrit.
 
 ```
+status bar message: $(check) Opened 101 in the browser
 browser opens: https://g.example/c/testproj/+/101
 --- on screen:
 (no change)
@@ -777,6 +783,7 @@ dialog (info): 1 commit: 0 comments and 2 CI findings for the agent.  [Copy to C
 
 ```
 terminal "ger": runs `ger push`
+status bar message: $(terminal) ger push runs in the ger terminal: it shows what it will push and asks first
 --- on screen:
 (no change)
 ```
@@ -787,7 +794,7 @@ terminal "ger": runs `ger push`
 
 ```
 clipboard: 1 lines, starting "<sha>"
-status bar message: $(check) Copied SHA <sha>
+status bar message: $(check) Copied SHA <sha>…
 --- on screen:
 (no change)
 ```
@@ -837,6 +844,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```
@@ -849,6 +857,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```
@@ -883,6 +892,7 @@ dialog (warning): You have uncommitted changes. Stash them and continue?  [Stash
 progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```
@@ -900,6 +910,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 progress (in view ger.stack): Rewriting the stack
 notification (info): Commit message of "test! temporary experiment" changed. Push to update Gerrit.  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```
@@ -954,6 +965,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 progress (in view ger.stack): Rewriting the stack
 notification (info): Squashed into "test! temporary experiment". Push to update Gerrit.  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```
@@ -966,6 +978,7 @@ notification (info): Squashed into "test! temporary experiment". Push to update 
 progress (in view ger.stack): Rewriting the stack
 notification (info): Squashed into "Rework d.txt". The Gerrit change of "test! temporary experiment" stays open: abandon it there. Push to update Gerrit.  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```
@@ -993,6 +1006,7 @@ dialog (warning): Drop "Rework d.txt" from the stack?  [Drop] [Cancel]
 progress (in view ger.stack): Rewriting the stack
 notification (info): Dropped "Rework d.txt".  [Undo]
     → pressed "Undo"
+status bar message: $(check) Undone: the stack is as it was
 --- on screen:
 (no change)
 ```

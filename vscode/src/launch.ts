@@ -7,7 +7,7 @@ import * as vscode from "vscode";
 import { programArgv, shellCommandLine, shellKind } from "./commandLine";
 import { setting } from "./config";
 import { installArgv, installedGer, onPath, releaseUrl } from "./install";
-import { ui } from "./ui";
+import { feedback, ui } from "./ui";
 
 function isFile(candidate: string): boolean {
   try {
@@ -48,6 +48,7 @@ export async function installGer(cwd: string, manifest: { version: string; repos
   const argv = installArgv(releaseUrl(manifest.repository.url, manifest.version), (program) => !!onPath(program, process.env, process.platform, isFile));
   if (argv) {
     ui().terminal({ name: GER_TERMINAL, cwd }, shellCommandLine(argv, shellKind(vscode.env.shell)));
+    feedback(`Installing ger with ${argv[0]} in the ger terminal: Retry once it is done`, { icon: "terminal", milliseconds: 8000 });
     return;
   }
   const guide = "Open Install Guide";

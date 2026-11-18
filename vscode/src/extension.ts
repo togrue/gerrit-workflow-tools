@@ -21,7 +21,7 @@ import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
-import { Ui, ui, useUi } from "./ui";
+import { Ui, feedback, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { staticView } from "./webview";
 import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
@@ -164,13 +164,14 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
     await ui().copy(values.join("\n"));
     const noun = what === "sha" ? "SHA" : "Change-Id";
-    ui().status(`$(check) Copied ${values.length === 1 ? `${noun} ${values[0].slice(0, 12)}` : `${values.length} ${noun}s`}`, 4000);
+    feedback(`Copied ${values.length === 1 ? `${noun} ${values[0].slice(0, 12)}…` : `${values.length} ${noun}s`}`);
   };
 
   const setHold = async (arg: unknown, held: boolean) => {
     const chain = threadOf(arg);
     if (chain) {
       await (await model.client()).hold(chain.root_id, held);
+      feedback(held ? "Kept for you: the agent leaves this comment alone" : "Left to the agent");
       await changeView.open();
     }
   };
@@ -192,6 +193,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         // Failed again: the views keep the last answer (marked out of date); you asked, so say why.
         void ui().message("warning", `Still out of date: ${model.stale}`, {}, []);
       } else if (model.state === "ready") {
+        feedback("Refreshed from Gerrit");
         await changeView.open(); // still failing: the change shown stays as it was, the welcome text says why
       }
     },
@@ -200,19 +202,33 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const target = headlineTarget(model);
       await (target ? openChange(target) : vscode.commands.executeCommand("ger.overview.focus"));
     },
-    "ger.markSeen": () => model.markSeen(),
+    "ger.markSeen": async () => {
+      await model.markSeen();
+      feedback("All activity marked as seen");
+    },
     "ger.openChange": (arg: unknown) => openChange(targetOf(arg)),
     "ger.openInGerrit": (arg: unknown) => {
-      const url = targetOf(arg)?.url ?? changeView.shown?.gerrit_url;
-      return url ? ui().openExternal(vscode.Uri.parse(url)) : undefined;
+      const target = targetOf(arg);
+      const url = target?.url ?? changeView.shown?.gerrit_url;
+      if (url) {
+        feedback(`Opened ${target?.number ?? "the change"} in the browser`);
+        return ui().openExternal(vscode.Uri.parse(url));
+      }
+      return undefined;
     },
     "ger.review": (arg: unknown) => review(model, targetOf(arg)),
     "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
-    "ger.push": () => runInTerminal(repo, ["push"]),
-    "ger.setup": () => runInTerminal(repo, ["setup"]),
+    "ger.push": () => {
+      runInTerminal(repo, ["push"]);
+      feedback("ger push runs in the ger terminal: it shows what it will push and asks first", { icon: "terminal", milliseconds: 8000 });
+    },
+    "ger.setup": () => {
+      runInTerminal(repo, ["setup"]);
+      feedback("ger setup runs in the ger terminal", { icon: "terminal" });
+    },
     "ger.installCli": () => installGer(repo, context.extension.packageJSON),
     "ger.stack.squash": (arg: CommitArg) => stackView.fold(arg, false),
     "ger.stack.squashTakeMessage": (arg: CommitArg) => stackView.fold(arg, true),

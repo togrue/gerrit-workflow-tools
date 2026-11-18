@@ -8,7 +8,7 @@ import { blockedMove, movedTo, sentence } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
 import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm } from "./stackRows";
 import { waitingFor } from "./state";
-import { ui } from "./ui";
+import { feedback, ui } from "./ui";
 import { Message, WebView } from "./webview";
 
 const STASH = "Stash and Continue";
@@ -255,6 +255,7 @@ export class StackView extends WebView<StackVm> {
       const undo = await ui().message("info", text, {}, ["Undo"]);
       if (undo && stack.head) {
         this.model.setStack(await client.undo(stack.head, stack.previous_head));
+        feedback("Undone: the stack is as it was");
         void this.model.refresh();
       }
     } catch (error) {

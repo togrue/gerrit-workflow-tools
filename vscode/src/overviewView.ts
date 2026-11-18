@@ -8,7 +8,7 @@ import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, severity
 import { icon, severityIcon } from "./icons";
 import { ChangeTarget, Model } from "./model";
 import { changeRowContext } from "./rows";
-import { ui } from "./ui";
+import { feedback, ui } from "./ui";
 
 type Node =
   | { kind: "headline"; headline: Headline }
@@ -87,6 +87,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     if (picked && picked.sort !== current) {
       await this.memento.update(SORT_KEY, picked.sort);
       this.changed.fire();
+      feedback(`Chains sorted ${picked.label.charAt(0).toLowerCase()}${picked.label.slice(1)}`);
     }
   }
 

@@ -114,3 +114,15 @@ export function ui(): Ui {
 export function useUi(next: Ui): void {
   current = next;
 }
+
+/** How long `feedback` stays in the status bar. */
+export const FEEDBACK_MS = 4000;
+
+/**
+ * Say in the status bar, for a few seconds, what an action just did ("Copied Change-Id I6e95…",
+ * "Chains sorted by last activity"), so every click visibly lands. `icon` is a codicon name:
+ * `check` for done, `terminal` for a command that now runs in a terminal.
+ */
+export function feedback(text: string, options: { icon?: string; milliseconds?: number } = {}): void {
+  ui().status(`$(${options.icon ?? "check"}) ${text}`, options.milliseconds ?? FEEDBACK_MS);
+}

@@ -7,7 +7,7 @@ import * as vscode from "vscode";
 import { runInTerminal } from "./launch";
 import { reviewOpened } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
-import { ui } from "./ui";
+import { feedback, ui } from "./ui";
 
 /** Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place. */
 export function editCommit(model: Model, target: ChangeTarget | undefined): void {
@@ -16,7 +16,7 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
   }
   runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
-  ui().status(`ger edit runs in the terminal: once the rebase stops at "${target.title}", amend it, then git rebase --continue`, 12000);
+  feedback(`ger edit runs in the ger terminal: once the rebase stops at "${target.title}", amend it, then git rebase --continue`, { icon: "terminal", milliseconds: 12000 });
 }
 
 /**
@@ -33,7 +33,7 @@ export function checkout(model: Model, target: ChangeTarget | undefined): void {
     return;
   }
   runInTerminal(model.repo, ["checkout", target.rev]);
-  ui().status(`ger checkout ${target.rev} runs in the terminal: it may ask before it changes anything`, 12000);
+  feedback(`ger checkout ${target.rev} runs in the ger terminal: it may ask before it changes anything`, { icon: "terminal", milliseconds: 12000 });
 }
 
 /** Someone's change on Gerrit: `ger review` checks it out for review: in the review worktree, or here when `ger.reviewCheckout` says `branch`. */

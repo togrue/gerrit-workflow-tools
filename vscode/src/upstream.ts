@@ -3,7 +3,7 @@
 import * as vscode from "vscode";
 
 import { Model, describeError } from "./model";
-import { ui } from "./ui";
+import { feedback, ui } from "./ui";
 
 /** Set `upstream` directly, else the one picked from the suggestion and the remote branches. */
 export async function setUpstream(model: Model, upstream?: string): Promise<void> {
@@ -34,7 +34,7 @@ export async function setUpstream(model: Model, upstream?: string): Promise<void
       return;
     }
     const done = await client.setUpstream(chosen);
-    ui().status(`$(check) ${done.branch} now tracks ${done.upstream}`, 6000);
+    feedback(`${done.branch} now tracks ${done.upstream}`, { milliseconds: 6000 });
     await model.refresh();
   } catch (error) {
     void ui().message("warning", `Upstream not set: ${describeError(error)}`, {}, []);
