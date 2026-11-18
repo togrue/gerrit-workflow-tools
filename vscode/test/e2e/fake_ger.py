@@ -139,7 +139,17 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
                     "patch_set": 1,
                     "author": {"name": "Bob Architect"},
                 },
-            ]
+            ],
+            # About the whole change, long enough that its row cuts it: read in full and answered in the Change view.
+            "/PATCHSET_LEVEL": [
+                {
+                    "id": "c3",
+                    "message": "Looks good overall.\n\nThe parser half still needs a test before I can vote on it.",
+                    "unresolved": False,
+                    "patch_set": 1,
+                    "author": {"name": "Alice Reviewer"},
+                }
+            ],
         },
     )
     theirs = _change(

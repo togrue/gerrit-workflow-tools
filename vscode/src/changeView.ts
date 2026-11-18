@@ -57,6 +57,10 @@ export class ChangeView extends WebView<ChangeVm> {
   private loading: Promise<void> = Promise.resolve();
   /** Gives a stack commit a new message; `applied` runs once it has it. Set by the extension. */
   reword: (sha: string, message: string, applied: () => void) => Promise<boolean> = () => Promise.resolve(false);
+  /** Opens a chain where it sits, its editor thread expanded. Set by the extension. */
+  showThread: (chain: CommentChain) => Promise<void> = (chain) => this.openLocation({ path: chain.path, line: chain.line });
+  /** Saves `text` as your draft reply in `chain`; whether it was saved. Set by the extension. */
+  replyWith: (chain: CommentChain, text: string, resolved: boolean | undefined) => Promise<boolean> = () => Promise.resolve(false);
 
   constructor(
     extensionUri: vscode.Uri,
@@ -333,9 +337,13 @@ export class ChangeView extends WebView<ChangeVm> {
           return undefined;
         }
         const arg: ThreadArg = { kind: "thread", chain };
-        return message.action === "open"
-          ? this.openLocation({ path: chain.path, line: chain.line })
-          : vscode.commands.executeCommand(`ger.${String(message.action)}`, arg);
+        if (message.action === "open") {
+          return this.showThread(chain);
+        }
+        if (message.action === "replyText") {
+          return this.replyInView(chain, String(message.text ?? ""), message.resolved === true ? true : undefined);
+        }
+        return vscode.commands.executeCommand(`ger.${String(message.action)}`, arg);
       }
       case "finding":
         return this.openLocation({ path: message.path as string, line: (message.line as number | null) ?? null });
@@ -363,6 +371,12 @@ export class ChangeView extends WebView<ChangeVm> {
     this.mode = mode === "gerrit" && moved && wanted !== "local" ? "base" : mode;
     this.version = this.mode === "gerrit" ? "local" : wanted;
     return this.open();
+  }
+
+  /** A reply typed in the view's own box (a chain with no line in a file); the page clears the box once it is saved. */
+  private async replyInView(chain: CommentChain, text: string, resolved: boolean | undefined): Promise<void> {
+    const saved = await this.replyWith(chain, text, resolved);
+    this.post({ type: "replied", id: chain.root_id, saved });
   }
 
   private async applyMessage(text: string): Promise<void> {

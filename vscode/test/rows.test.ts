@@ -240,6 +240,12 @@ test("the commit message is read-only with the reason, and comment chains say wh
   assert.deepEqual(rows[0].replies, [{ author: "you", state: "draft", text: "Renamed it." }]);
   // What you have not published can be edited and deleted; a draft Gerrit gave no id cannot be named, so neither.
   assert.deepEqual(rows.map((row) => [row.edit, row.discard]), [[false, ""], [true, "Delete Your Private Note…"], [false, ""]]);
+  // A row shows the first line; the whole text is there to expand. Only a chain on a file's line opens in the editor.
+  const long = changeVm(
+    state({ chains: [chain("whole", [comment("Looks good overall.\n\nBut the second half needs a test.", { path: "/PATCHSET_LEVEL", line: null })], { path: "/PATCHSET_LEVEL", line: null })] }),
+  ).comments?.threads[0];
+  assert.deepEqual([long?.text, long?.body, long?.author, long?.file, long?.reply], ["Looks good overall.", "Looks good overall.\n\nBut the second half needs a test.", "Alice", false, true]);
+  assert.deepEqual(rows.map((row) => row.file), [true, true, true]);
   const replied = changeVm(state({ chains: [chain("open", [comment("Please rename this."), comment("Renamed it.", { state: "draft", comment_id: "d1" })])] }));
   assert.deepEqual([replied.comments?.threads[0].edit, replied.comments?.threads[0].discard], [false, "Delete Your Draft Reply…"]);
   assert.equal(vm.comments?.summary, "1 unresolved of 2 · 1 of yours, not published");

@@ -71,7 +71,12 @@ export interface ReplyRow {
 
 export interface ThreadRow extends Icon {
   id: string;
+  /** The first line of the first comment; `body` is all of it, by `author`. Expanding the row shows each comment in full. */
   text: string;
+  body: string;
+  author: string;
+  /** It sits on a line of a file: a click opens it there, in its editor thread. Else (the whole change, the commit message) a click expands it here. */
+  file: boolean;
   notes: string[];
   tooltip: string;
   /** Somebody's chain on Gerrit: it can be answered. */
@@ -247,6 +252,9 @@ function thread(chain: CommentChain): ThreadRow {
     ...icon,
     id: chain.root_id,
     text: first?.message.split("\n")[0] ?? where,
+    body: first?.message ?? "",
+    author: first ? (first.author ?? "you") : "",
+    file: !NOT_FILES.includes(chain.path),
     notes: notes.filter(Boolean),
     tooltip: chain.comments.map((c) => `${c.author ?? "you"}${c.state === "published" ? "" : ` (${c.state})`}:\n${c.message}`).join("\n\n"),
     // Your own unpublished chain: nobody to reply to, nothing for the agent to keep from.

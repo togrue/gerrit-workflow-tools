@@ -279,12 +279,20 @@ export class CommentThreads implements vscode.Disposable {
     this.cursor = (this.cursor + direction + chains.length) % chains.length;
     const chain = chains[this.cursor];
     this.reveal(chain);
+    await this.show(chain);
+    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
+  }
+
+  /**
+   * Open the file at `chain`'s line with its thread expanded there, the other threads closed.
+   * A chain the editor shows no thread for (a resolved one) just opens its line.
+   */
+  async show(chain: CommentChain): Promise<void> {
     await this.view.openLocation({ path: chain.path, line: chain.line });
     for (const [thread, anchor] of this.anchors) {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
     }
-    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
   }
 
   /** The editor thread that shows `chain`, if the shown change has one. */
@@ -303,11 +311,18 @@ export class CommentThreads implements vscode.Disposable {
    */
   async replyInThread(reply: vscode.CommentReply, resolved: boolean | undefined): Promise<void> {
     const anchor = this.anchors.get(reply.thread);
-    if (!anchor || !reply.text.trim()) {
-      return;
+    if (anchor) {
+      await this.replyWith(anchor.chain, reply.text, resolved);
     }
-    const draft = yourDraft(anchor.chain);
-    await this.save(anchor.chain, draft ? `${draft.message}\n\n${reply.text.trim()}` : reply.text, resolved);
+  }
+
+  /** Save `text` as your draft reply in `chain`, added to the draft you have there: from a thread's reply box, or the Change view's for a chain with no line in a file. */
+  async replyWith(chain: CommentChain, text: string, resolved: boolean | undefined): Promise<boolean> {
+    if (!text.trim()) {
+      return false;
+    }
+    const draft = yourDraft(chain);
+    return this.save(chain, draft ? `${draft.message}\n\n${text.trim()}` : text, resolved);
   }
 
   /**
@@ -331,11 +346,11 @@ export class CommentThreads implements vscode.Disposable {
     }
   }
 
-  private async save(chain: CommentChain, message: string, resolved: boolean | undefined): Promise<void> {
+  private async save(chain: CommentChain, message: string, resolved: boolean | undefined): Promise<boolean> {
     const target = this.view.target;
     const anchorId = chain.comments.find((c) => c.comment_id)?.comment_id ?? chain.root_id;
     if (!target) {
-      return;
+      return false;
     }
     try {
       const client = await this.model.client();
@@ -343,8 +358,10 @@ export class CommentThreads implements vscode.Disposable {
       const what = saved.reply.action === "updated" ? "Draft updated" : "Draft saved";
       ui().status(`$(check) ${what}${resolved ? ", resolving the comment" : ""}. Publish it with ger push.`, 6000);
       await this.view.open();
+      return true;
     } catch (error) {
       void ui().message("error", `Draft not saved: ${describeError(error)}`, {}, []);
+      return false;
     }
   }
 

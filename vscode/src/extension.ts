@@ -153,6 +153,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
   };
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
+  changeView.showThread = (chain) => threads.show(chain);
+  changeView.replyWith = (chain, text, resolved) => threads.replyWith(chain, text, resolved);
 
   const setHold = async (arg: unknown, held: boolean) => {
     const chain = threadOf(arg);
