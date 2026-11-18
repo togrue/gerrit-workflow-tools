@@ -7,6 +7,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
+import { ChangeDetail } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOT_FILES, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
@@ -38,20 +39,13 @@ export class ChangeView extends WebView<ChangeVm> {
   /** Fires when a change (or its reload) has arrived. */
   readonly onDidLoad = this.loaded.event;
 
-  target: ChangeTarget | undefined;
-  shown: ShownCommit | undefined;
-  /** The version looked at against its parent: its files, and the commit whose lines comments sit on. */
-  diff: Diff | undefined;
-  /** The review delta: for the mode chosen, or (someone's change) what is new since your review. */
-  delta: Diff | undefined;
+  /** The change selected, and what of it has come: drawn at once from its row, filled in answer by answer. */
+  private readonly detail = new ChangeDetail();
   /** Which version is looked at. A change you open starts on your local commit when there is one. */
   version: Version = "current";
   mode: Mode = "base";
   private patchsets: Patchsets | undefined;
-  private problem: string | undefined;
   private ci: CiView = { state: "closed" };
-  /** Counts opens and closes: a load that finishes after a later one started is dropped. */
-  private generation = 0;
   /** Aborted with each open and close: the requests of a load nobody waits for any more are called off, so ger serve skips what it has not started. */
   private requests = new AbortController();
   private loading: Promise<void> = Promise.resolve();
@@ -69,6 +63,25 @@ export class ChangeView extends WebView<ChangeVm> {
   showThread: (chain: CommentChain) => Promise<void> = (chain) => this.openLocation({ path: chain.path, line: chain.line });
   /** Saves `text` as your draft reply in `chain`; whether it was saved. Set by the extension. */
   replyWith: (chain: CommentChain, text: string, resolved: boolean | undefined) => Promise<boolean> = () => Promise.resolve(false);
+
+  get target(): ChangeTarget | undefined {
+    return this.detail.target;
+  }
+
+  /** `/show`'s answer for the change selected; undefined until it has come. */
+  get shown(): ShownCommit | undefined {
+    return this.detail.shown;
+  }
+
+  /** The version looked at against its parent: its files, and the commit whose lines comments sit on. */
+  get diff(): Diff | undefined {
+    return this.detail.diff;
+  }
+
+  /** The review delta: for the mode chosen, or (someone's change) what is new since your review. */
+  get delta(): Diff | undefined {
+    return this.detail.delta;
+  }
 
   constructor(
     extensionUri: vscode.Uri,
@@ -106,23 +119,25 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!keep) {
       [this.version, this.mode, this.patchsets] = [target.local ? "local" : "current", "base", undefined];
     }
-    this.target = target;
+    const token = this.supersede(() => this.detail.select(target, keep));
     this.ci = { state: "closed" };
     // The title bar offers "Edit Commit" for your own stack commit, "Review Change" and "Check Out to Work On" otherwise.
     void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
+    // What the row knows is drawn now; the rest is filled in as it comes.
+    this.render();
     // ger serve answers one request at a time: a load for every commit walked past would queue
     // in front of the one you stopped on. So one load runs at a time, the one under way is
     // dropped, and of the opens asked for meanwhile only the latest is loaded.
-    const [generation, signal] = this.supersede();
-    const load = () => (generation === this.generation ? this.load(target, generation, signal) : undefined);
+    const signal = this.requests.signal;
+    const load = () => (this.detail.current(token) ? this.load(target, token, signal) : undefined);
     this.loading = this.loading.then(load, load);
     return this.loading;
   }
 
   /** The changeish the patchset endpoints take; undefined before the first push. */
   private change(target: ChangeTarget): string | undefined {
-    const number = target.number ?? (target === this.target ? this.shown?.number : undefined);
+    const number = target.number ?? (target === this.target ? (this.shown?.number ?? undefined) : undefined);
     return number ? `change:${number}` : target.local ? undefined : target.rev;
   }
 
@@ -131,38 +146,53 @@ export class ChangeView extends WebView<ChangeVm> {
     return Boolean(this.target?.local) && this.version === "local";
   }
 
-  /** A new generation: the loads of the previous ones are dropped, and their requests called off. */
-  private supersede(): [number, AbortSignal] {
+  /** A new selection token (from `select`): the loads under the previous ones are dropped, and their requests called off. */
+  private supersede(select: () => number): number {
     this.requests.abort();
     this.requests = new AbortController();
-    return [++this.generation, this.requests.signal];
+    return select();
   }
 
-  private async load(target: ChangeTarget, generation: number, signal: AbortSignal): Promise<void> {
-    const loaded = await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
+  /**
+   * Ask for the commit, its files and the review delta at once, and draw each as it comes: ger
+   * serve answers them one after the other, and the commit (message, files, comments) is asked
+   * first. An answer for a change selected before (`token` no longer current) is dropped.
+   */
+  private async load(target: ChangeTarget, token: number, signal: AbortSignal): Promise<void> {
+    await vscode.window.withProgress({ location: { viewId: "ger.change" } }, async () => {
+      let client: GerClient;
       try {
-        const client = await this.model.client();
-        // The commit against its parent comes with the commit: one request, and ger serve resolves it once.
-        const together = !this.patchsetDiff(target);
-        const [[shown, files], diff, delta] = await Promise.all([
-          this.fetchCommit(client, target, together, signal),
-          together ? undefined : this.baseDiff(client, target, generation, signal).catch(() => undefined),
-          this.deltaDiff(client, target, signal).catch(() => undefined),
-        ]);
-        return [shown, diff ?? files, delta, undefined] as const;
+        client = await this.model.client();
       } catch (error) {
-        return [undefined, undefined, undefined, describeError(error)] as const;
+        return this.detail.fail(token, describeError(error)) && this.render();
       }
+      // The commit against its parent comes with the commit: one request, and ger serve resolves it once.
+      const together = !this.patchsetDiff(target);
+      const commit = this.fetchCommit(client, target, together, signal).then(
+        ([shown, files]) => {
+          if (this.detail.arrive(token, "commit", shown) && (!together || this.detail.arrive(token, "base", files))) {
+            // Which save button a new comment box offers: "Save Draft" or "Save Local Draft" (plus "Save Private Note").
+            void vscode.commands.executeCommand("setContext", "ger.newComment", shown.new_comment ?? "none");
+            this.render();
+          }
+        },
+        (error: unknown) => this.detail.fail(token, describeError(error)) && this.render(),
+      );
+      const base = together
+        ? undefined
+        : this.baseDiff(client, target, token, signal)
+            .catch(() => undefined)
+            .then((diff) => this.detail.arrive(token, "base", diff) && this.render());
+      const delta = this.deltaDiff(client, target, signal)
+        .catch(() => undefined)
+        .then((diff) => this.detail.arrive(token, "delta", diff) && this.render());
+      await Promise.all([commit, base, delta]);
     });
-    if (generation !== this.generation) {
+    if (!this.detail.current(token)) {
       return; // a later open (or a close) owns the view now
     }
-    [this.shown, this.diff, this.delta, this.problem] = loaded;
-    // Which save button a new comment box offers: "Save Draft" or "Save Local Draft" (plus "Save Private Note").
-    void vscode.commands.executeCommand("setContext", "ger.newComment", this.shown?.new_comment ?? "none");
-    this.render();
     this.loaded.fire();
-    void this.loadPatchsets(generation, signal);
+    void this.loadPatchsets(token, signal);
   }
 
   /** The commit, and with `files` its files against its parent. Files that cannot be had (a change that cannot be fetched) leave the commit shown without them. */
@@ -188,14 +218,14 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /** A patchset looked at against its parent. */
-  private async baseDiff(client: GerClient, target: ChangeTarget, generation: number, signal: AbortSignal): Promise<Diff> {
+  private async baseDiff(client: GerClient, target: ChangeTarget, token: number, signal: AbortSignal): Promise<Diff> {
     const change = this.change(target);
     let version = this.version;
     if (version === "current" && target.local && change) {
       // Your commit carries the change, so the change alone would name your commit: ask which patchset is current.
       const patchsets = this.patchsets ?? (await client.patchsets(change, signal));
       version = patchsets.current ?? "local";
-      if (generation === this.generation) {
+      if (this.detail.current(token)) {
         [this.patchsets, this.version] = [patchsets, version]; // a load dropped meanwhile leaves the next change's choice alone
       }
     }
@@ -219,18 +249,18 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /** The patchsets to choose from. After the change itself, and only once it has stayed a moment: walking the stack with the arrow keys asks nothing. */
-  private async loadPatchsets(generation: number, signal: AbortSignal): Promise<void> {
+  private async loadPatchsets(token: number, signal: AbortSignal): Promise<void> {
     const change = this.target && this.change(this.target);
     if (!change || !this.shown?.pushed || this.patchsets) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 400));
-    if (generation !== this.generation) {
+    if (!this.detail.current(token)) {
       return;
     }
     try {
       const patchsets = await (await this.model.client()).patchsets(change, signal);
-      if (generation === this.generation) {
+      if (this.detail.current(token)) {
         this.patchsets = patchsets;
         this.render();
       }
@@ -242,7 +272,7 @@ export class ChangeView extends WebView<ChangeVm> {
   /** The shown change is (no longer) a commit of your stack: the title bar offers Edit instead of Review and Check Out, or the other way round. */
   setLocal(local: boolean): void {
     if (this.target && this.target.local !== local) {
-      this.target = { ...this.target, local };
+      this.detail.target = { ...this.target, local };
       [this.version, this.mode] = [local ? "local" : "current", "base"];
       void this.open();
     }
@@ -250,8 +280,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** Show nothing: the change that was shown is gone. */
   close(): void {
-    this.supersede();
-    [this.target, this.shown, this.diff, this.delta, this.problem, this.patchsets] = [undefined, undefined, undefined, undefined, undefined, undefined];
+    this.supersede(() => this.detail.clear());
+    this.patchsets = undefined;
     this.ci = { state: "closed" };
     void vscode.commands.executeCommand("setContext", "ger.changeShown", false);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", false);
@@ -294,24 +324,21 @@ export class ChangeView extends WebView<ChangeVm> {
     if (waiting) {
       return { waiting };
     }
-    if (this.problem) {
-      return { problem: this.problem };
+    if (this.detail.problem) {
+      return { problem: this.detail.problem };
     }
-    if (!this.target || !this.shown) {
-      return { empty: NOTHING_SHOWN };
-    }
-    return changeVm({
-      local: this.target.local,
-      shown: this.shown,
+    const state = this.detail.state({
       chains: this.chains(),
-      base: this.diff,
-      delta: this.delta,
       patchsets: this.patchsets,
       version: this.version,
       mode: this.mode,
       readOnly: this.readOnly(),
       ci: this.ci,
     });
+    if (!state) {
+      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };
+    }
+    return changeVm(state);
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */
@@ -324,7 +351,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   protected decorate(view: vscode.WebviewView, vm: ChangeVm): void {
     const seen = { viewVisible: view.visible, firstLineVisible: this.firstLineVisible };
-    this.heading = changeHeading(this.shown?.number ?? this.target?.number, this.shown?.summary ?? this.target?.title, vm, seen);
+    const commit = this.detail.commit();
+    this.heading = changeHeading(commit?.number ?? this.target?.number, commit?.summary ?? this.target?.title, vm, seen);
     ({ title: view.title, description: view.description } = this.heading);
   }
 
@@ -412,7 +440,7 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.ci.state !== "closed") {
       return;
     }
-    const generation = this.generation;
+    const token = this.detail.selection();
     this.ci = { state: "loading" };
     this.render();
     let ci: CiView;
@@ -421,7 +449,7 @@ export class ChangeView extends WebView<ChangeVm> {
     } catch (error) {
       ci = { state: "error", error: describeError(error) };
     }
-    if (generation === this.generation) {
+    if (this.detail.current(token)) {
       this.ci = ci;
       this.render();
     }

@@ -4,6 +4,7 @@
 import * as vscode from "vscode";
 
 import { Chain, Headline, Member, Section } from "./api";
+import { memberStatus } from "./changeLoad";
 import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, severity, sortedChains, votes } from "./format";
 import { attentionThemeIcon, icon } from "./icons";
 import { ChangeTarget, Model } from "./model";
@@ -40,6 +41,7 @@ export function memberTarget(member: Member, chain: Chain): ChangeTarget {
     sha: member.local_sha ?? member.sha,
     chainRevs: chain.members.map(memberRev),
     chainKey: chain.key,
+    known: memberStatus(member),
   };
 }
 

@@ -14,7 +14,7 @@ import { Message, WebView } from "./webview";
 const STASH = "Stash and Continue";
 
 export function commitTarget(commit: StackCommit): ChangeTarget {
-  return { rev: commit.sha, title: commit.summary, number: commit.number ?? undefined, url: commit.gerrit_url, local: true, changeId: commit.change_id, sha: commit.sha };
+  return { rev: commit.sha, title: commit.summary, number: commit.number ?? undefined, url: commit.gerrit_url, local: true, changeId: commit.change_id, sha: commit.sha, known: commit };
 }
 
 /** What a command gets from the view: the row's context (`sha`, and `shas` when several rows are selected), or a commit id. */

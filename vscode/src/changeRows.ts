@@ -27,10 +27,23 @@ export type CiView =
   | { state: "error"; error: string }
   | { state: "loaded"; contents: CiContent[]; introduced: Set<string> | null };
 
+/** What the view still waits for; until each comes, it is drawn as loading. */
+export interface Loading {
+  /** `/show`: the comment chains, and whatever the clicked row could not say. */
+  commit: boolean;
+  /** The version against its parent: the commit message and the files. */
+  base: boolean;
+  /** The review delta. */
+  delta: boolean;
+  /** Whether it is known if the change is ready to submit: a Review chains row does not say. */
+  ready: boolean;
+}
+
 /** Everything the view is built from. */
 export interface ChangeState {
   /** A commit of your local stack. */
   local: boolean;
+  /** As `/show` answered, or (while `loading.commit`) as the clicked row said. */
   shown: ShownCommit;
   /** Comment chains, in the order shown. */
   chains: CommentChain[];
@@ -44,6 +57,8 @@ export interface ChangeState {
   /** Why the commit message cannot be edited; empty when it can. */
   readOnly: string;
   ci: CiView;
+  /** What has not come yet; absent once everything has. */
+  loading?: Loading;
 }
 
 export interface Icon {
@@ -122,6 +137,10 @@ export interface ChangeVm {
   /** Nothing is shown: what to do to see a change. */
   empty?: string;
   problem?: string;
+  /** Which change is drawn (its Change-Id, else its commit): the page keeps what you opened and typed per change. */
+  key?: string;
+  /** What is on its way: the page holds the commit message's place. */
+  loading?: { message: boolean };
   /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). */
   head?: Icon & { text: string; detail: string; badges: Badge[] };
   notes?: (Icon & { text: string; detail: string })[];
@@ -134,6 +153,8 @@ export interface ChangeVm {
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
   ci?: { summary: string; state: CiView["state"]; error: string; links: CiLinkRow[] };
 }
+
+const LOADING = "loading…";
 
 const SEVERITY_TONE: Record<Severity, Tone | undefined> = { error: "bad", warning: "warn", pending: undefined, ok: "good" };
 
@@ -204,7 +225,7 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
         ? "What your commit changes compared with the patchset Gerrit has: what a push would upload on top."
         : "What changed after the patchset you last voted or commented on.";
     if (!diff) {
-      note = "could not be compared";
+      note = state.loading?.delta ? LOADING : "could not be compared";
     } else if (since?.patch_set === null || since?.patch_set === undefined) {
       note = "you have not reviewed this change yet";
     } else if (since.up_to_date) {
@@ -213,7 +234,7 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
       title = `${title}: patchset ${since.patch_set} → ${to}${since.rebased ? " (rebased)" : ""}`;
     }
   } else if (!diff) {
-    note = "the commit is not available here";
+    note = state.loading?.base ? LOADING : "the commit is not available here";
   }
   const rows = (diff?.files ?? []).map((file): FileRow => {
     const dir = path.posix.dirname(file.path);
@@ -334,10 +355,14 @@ export function changeVm(state: ChangeState): ChangeVm {
   const yours = chains.length - fromGerrit;
   const counts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.verified === -1;
+  const loading = state.loading;
+  const unsure = loading?.commit && !loading.ready;
   return {
+    key: commit.change_id ?? commit.sha ?? "",
+    loading: loading?.base && !state.base ? { message: true } : undefined,
     head: {
       ...headIcon(commit.attention_reasons),
-      text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : "Nothing to do"),
+      text: sentence(reasonWords(commit.attention_reasons)) || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
     },
@@ -356,7 +381,9 @@ export function changeVm(state: ChangeState): ChangeVm {
         }
       : undefined,
     files: files(state),
-    comments: { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map(thread) },
+    comments: loading?.commit
+      ? { summary: LOADING, open: false, threads: [] }
+      : { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map(thread) },
     ci: hasCi
       ? {
           // The head already says "CI failed": the section names the failing builds, or nothing.
@@ -397,6 +424,8 @@ export function changeLines(vm: ChangeVm): string[] {
   vm.notes?.forEach((note) => add(0, note.text, note.detail));
   if (vm.message) {
     add(0, "Commit message", `${vm.message.text.split("\n")[0]}${vm.message.readOnly ? "  (read-only)" : "  (editable)"}`);
+  } else if (vm.loading?.message) {
+    add(0, "Commit message", LOADING);
   }
   const version = vm.versions?.options.find((option) => option.value === vm.versions?.selected);
   if (version && vm.modes) {

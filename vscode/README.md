@@ -52,7 +52,8 @@ The commits above your upstream, newest first. One row per commit:
   Gerrit may not keep them. Hover any of them for the words.
 - `HEAD`, the short commit id, and *held back* where `ger push` would stop at the ready boundary.
 - Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
-  message, while the keyboard stays in the list. `Enter` (or a double click) moves to the Change view.
+  message, while the keyboard stays in the list. It shows what the row knows at once (what the
+  change needs, its votes) and fills in the message, files and comments as they arrive. `Enter` (or a double click) moves to the Change view.
 - **Select several** with `Ctrl`/`Cmd`+click, `Shift`+click or `Shift`+↑/↓ (`Ctrl+A`: all).
 - **Reorder by drag and drop.** While you drag, a **line between two rows** shows where the
   commits will land; selected commits move together and keep their order. All or nothing: if a
@@ -271,6 +272,7 @@ printed.
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
 | `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
+| `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |

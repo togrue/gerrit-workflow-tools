@@ -349,7 +349,7 @@
       root.replaceChildren(panel(plain.text, plain.link));
       return;
     }
-    const key = vm.message ? vm.message.key : undefined;
+    const key = vm.key;
     if (key !== shownKey) {
       shownKey = key;
       delete toggled.ci;
@@ -369,6 +369,9 @@
     }
     if (vm.message) {
       parts.push(messageBlock(vm.message));
+    } else if (vm.loading && vm.loading.message) {
+      // Its place, until it comes: the rows below stay where they will be. No first-line mark, so the title bar names the subject meanwhile.
+      parts.push(h("div", { class: "message-block loading" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, "loading…"))));
     }
     if (vm.versions && vm.modes) {
       parts.push(h("div", { class: "pickers" }, picker("Show", vm.versions, "version"), picker("Compare", vm.modes, "mode")));

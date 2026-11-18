@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 
 import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, rememberSeen, swapKey } from "./format";
+import type { RowStatus } from "./changeLoad";
 import { GerProcess } from "./server";
 import { GerState, failureState, staleReason } from "./state";
 
@@ -34,6 +35,8 @@ export interface ChangeTarget {
   /** The chain this change sits in, base first, when it was opened from one. */
   chainRevs?: string[];
   chainKey?: string;
+  /** What the clicked row says about the change: the Change view draws it until `/show` answers. */
+  known?: RowStatus;
 }
 
 export function describeError(error: unknown): string {
