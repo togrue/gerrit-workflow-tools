@@ -69,6 +69,8 @@ class PushPlan:
     update_last_pushed: bool
     unchanged: tuple[UnchangedChange, ...] = ()
     """Commits Gerrit already has as current patchsets: push options reach them over REST."""
+    outdated: tuple[Commit, ...] = ()
+    """Commits Gerrit already has as older patchsets: not sent, so Gerrit keeps its newer one."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
     wip_from: str | None = None
@@ -153,9 +155,9 @@ def changes_nothing(plan: PushPlan) -> bool:
 
 
 def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
-    """The commits *plan* gives Gerrit as new patch sets: all but those already their change's current one."""
-    unchanged = {change.commit.sha for change in plan.unchanged}
-    return tuple(commit for commit in plan.commits if commit.sha not in unchanged)
+    """The commits *plan* gives Gerrit as new patch sets: all but those already one of their change's patch sets."""
+    known = {change.commit.sha for change in plan.unchanged} | {commit.sha for commit in plan.outdated}
+    return tuple(commit for commit in plan.commits if commit.sha not in known)
 
 
 def unchanged_short_shas(plan: PushPlan) -> set[str]:
@@ -302,6 +304,7 @@ def prepare(
         warnings=(*warnings, *existing.warnings),
         update_last_pushed=update_last_pushed,
         unchanged=existing.unchanged,
+        outdated=existing.outdated,
         drafts=dict(existing.drafts),
         wip_from=wip_from,
     )

@@ -20,6 +20,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
     build_triplet,
 )
+from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
 from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
@@ -126,6 +127,8 @@ class ExistingChanges(NamedTuple):
     """Gerrit could not be asked at all; :attr:`warnings` says why. Nothing else here is known."""
     diverged: tuple[DivergedChange, ...] = ()
     """Commits whose push would replace a patchset not built on: somebody else's upload."""
+    outdated: tuple[Commit, ...] = ()
+    """Commits Gerrit already has as an older patchset of their change: a push sends them nowhere."""
 
 
 def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> ExistingChanges:
@@ -149,25 +152,33 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
     warnings: list[str] = []
     unchanged: list[UnchangedChange] = []
     diverged: list[DivergedChange] = []
+    outdated: list[Commit] = []
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
     for commit in commits:
         view = views.get(commit.sha)
-        if view is not None and (view.status or "").upper() == "ABANDONED":
+        if view is None:
+            continue
+        status = patchset_status(commit.sha, view)
+        if (view.status or "").upper() == "ABANDONED":
             warnings.append(
                 f"warning: {commit.short_sha} targets abandoned change {view.number}; "
                 "restore it on Gerrit or drop the commit"
             )
-        elif view is not None and view.current_revision == commit.sha.lower():
+        elif status == PatchsetStatus.ACTIVE:
             unchanged.append(UnchangedChange.of(commit, triplets[commit.sha], view))
+        elif status == PatchsetStatus.OUTDATED:  # Gerrit has it; its newer patchset stays
+            outdated.append(commit)
         elif (
-            view is not None
+            status == PatchsetStatus.NEWER
             and view.is_open
             and view.current_revision
             and not commit_sha_or_none(run.cwd, view.current_revision)
         ):
             diverged.append(DivergedChange(commit.short_sha, view.number, view.current_revision_number))
-    return ExistingChanges(tuple(warnings), tuple(unchanged), drafts, diverged=tuple(diverged))
+    return ExistingChanges(
+        tuple(warnings), tuple(unchanged), drafts, diverged=tuple(diverged), outdated=tuple(outdated)
+    )
 
 
 def _draft_counts(

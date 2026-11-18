@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,7 +21,7 @@ from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
-from gerrit_workflow_tools.core.stack import commits_in_range
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from gerrit_workflow_tools.push_options_history import load_push_options_history
 from tests.change_store import ChangeStore
@@ -1470,3 +1472,40 @@ def test_ger_assume_yes_stands_in_for_y_without_a_terminal(stack_repo: Path, mon
     code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
     assert code == 0, err
     assert mock_run.call_count == 1
+
+
+def _web_edited(rows: list[Commit], *, keep_local_patchset: bool) -> dict[str, dict[str, Any]]:
+    """Every change with a patchset 2 made on Gerrit; the local commit its patchset 1, or no patchset at all."""
+    elsewhere = "e" * 40
+    details = build_details_by_change_id(rows)
+    for row, change in zip(rows, details.values(), strict=True):
+        change["current_revision"] = elsewhere
+        change["revisions"] = {elsewhere: {"_number": 2}} | ({row.sha: {"_number": 1}} if keep_local_patchset else {})
+    return details
+
+
+def test_gpush_sends_nothing_where_glog_says_outdated(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gerrit has each local commit as an older patchset (a web edit came after): Gerrit keeps its newer ones."""
+    details = _web_edited(commits_in_range(stack_repo, "main..feature"), keep_local_patchset=True)
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    assert {c["patchset_status"] for c in json.loads(out)["commits"]} == {"outdated"}
+
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, out, err = run_cli(stack_repo, gpush_main, [], monkeypatch, gerrit=ChangeStore(details))
+    assert (code, err) == (0, "")
+    assert "nothing to push: Gerrit already has these commits" in out
+    mock_run.assert_not_called()
+
+
+def test_gpush_guards_where_glog_says_diverged(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = commits_in_range(stack_repo, "main..feature")
+    details = _web_edited(rows, keep_local_patchset=False)
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    shown = json.loads(out)["commits"]
+    assert {c["patchset_status"] for c in shown} == {"newer"}
+    assert all("diverged" in c["attention_reasons"] for c in shown)
+
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 1
+    assert f"{rows[0].short_sha} would replace patchset 2 of change 100" in err and "--force" in err

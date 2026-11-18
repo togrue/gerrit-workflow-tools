@@ -72,7 +72,7 @@ No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --se
 
 ### Changes Gerrit already has at that commit
 
-Gerrit applies magic-ref options only to the changes a push gives a new patch set. A commit that already is its change's current patch set gets them over REST instead (`core/push_unchanged.py`), after the push and also when Gerrit rejects it as `no new changes` (printed as `nothing to push: Gerrit already has these commits`). When Gerrit already has every commit, no `git push` runs at all, since Gerrit would refuse it; with nothing to set over REST either, `ger push` only prints that line and exits `0`: no preview, no question, and no `-y` needed off a terminal (`changes_nothing` in `core/push.py`).
+Gerrit applies magic-ref options only to the changes a push gives a new patch set. A commit that already is its change's current patch set gets them over REST instead (`core/push_unchanged.py`), after the push and also when Gerrit rejects it as `no new changes` (printed as `nothing to push: Gerrit already has these commits`). A commit Gerrit already has as an older patch set of its change (**outdated**: a web edit or a Gerrit rebase came after) is not sent either, and gets nothing over REST: Gerrit keeps its newer patch set. When Gerrit already has every commit, no `git push` runs at all, since Gerrit would refuse it; with nothing to set over REST either, `ger push` only prints that line and exits `0`: no preview, no question, and no `-y` needed off a terminal (`changes_nothing` in `core/push.py`).
 
 | Option | REST call, only where the change differs |
 |--------|------------------------------------------|
@@ -125,8 +125,8 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
 3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
-4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset, and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
-5. No **diverged** change: when an open change's current patchset is a commit this repository never had, the push would replace somebody's upload with a commit not built on it. It refuses (exit `1`) and names the commit, the change and patchset, and the two ways on: merge it in with `ger checkout change:<n> --update`, or `--force`.
+4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset or an older one (outdated), and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
+5. No **diverged** change: when a commit is new to its open change (`newer`) and that change's current patchset is a commit this repository never had, the push would replace somebody's upload with a commit not built on it. It refuses (exit `1`) and names the commit, the change and patchset, and the two ways on: merge it in with `ger checkout change:<n> --update`, or `--force`.
 
 ---
 
