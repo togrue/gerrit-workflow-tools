@@ -257,6 +257,10 @@ button.twist:hover {
   opacity: 0.5;
 }
 
+.head .badges {
+  margin-left: auto;
+}
+
 /* --- Change ---------------------------------------------------------------------- */
 
 .head.note .label,
@@ -462,4 +466,16 @@ select:focus {
 .panel .button {
   margin-top: 4px;
   padding: 4px 12px;
+}
+
+/* A comment chain opened in full: each comment's whole text, wrapped, and a reply box under it. */
+.comment-text {
+  padding: 0 8px 4px 46px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.reply-box {
+  padding: 2px 0 6px 34px;
 }

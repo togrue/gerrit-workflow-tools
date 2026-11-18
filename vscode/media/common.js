@@ -33,6 +33,18 @@
     return h("span", { class: `codicon codicon-${id}${tone ? ` tone-${tone}` : ""}`, title, "aria-hidden": title ? undefined : "true" });
   }
 
+  /**
+   * A vote or comment count as the Local stack shows it (a `Badge` of src/stackRows.ts). With no
+   * `item`, an empty slot of `kind`, so columns of badges line up.
+   */
+  function badge(item, kind = item && item.kind) {
+    const cls = `badge badge-${kind}`;
+    if (!item) {
+      return h("span", { class: cls });
+    }
+    return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, icon(item.icon), item.text);
+  }
+
   function post(type, fields) {
     vscode.postMessage({ type, ...(fields || {}) });
   }
@@ -63,6 +75,7 @@
   window.ger = {
     h,
     icon,
+    badge,
     post,
     panel,
     listen,

@@ -53,6 +53,24 @@ export class ThreadComment implements vscode.Comment {
   }
 }
 
+/**
+ * Esc in a thread's reply box: the box gives up the keyboard to the thread's comments, so a
+ * second Esc closes it (`closeComment`). VS Code has no API to focus a comment; its widget
+ * navigation does exactly this step. Where it is missing, Esc closes the thread at once.
+ */
+export async function leaveCommentBox(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand("widgetNavigation.focusPrevious");
+  } catch {
+    await closeComment();
+  }
+}
+
+/** Esc on a comment, or in the editor while a thread is open there: close the open threads in view, as VS Code's Hide Comment does. */
+export async function closeComment(): Promise<void> {
+  await vscode.commands.executeCommand("workbench.action.hideComment");
+}
+
 /** Your unpublished reply in `chain`: a chain holds at most one. */
 function yourDraft(chain: CommentChain): Comment | undefined {
   return chain.comments.slice(1).find((comment) => comment.state === "draft");
@@ -279,12 +297,20 @@ export class CommentThreads implements vscode.Disposable {
     this.cursor = (this.cursor + direction + chains.length) % chains.length;
     const chain = chains[this.cursor];
     this.reveal(chain);
+    await this.show(chain);
+    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
+  }
+
+  /**
+   * Open the file at `chain`'s line with its thread expanded there, the other threads closed.
+   * A chain the editor shows no thread for (a resolved one) just opens its line.
+   */
+  async show(chain: CommentChain): Promise<void> {
     await this.view.openLocation({ path: chain.path, line: chain.line });
     for (const [thread, anchor] of this.anchors) {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
     }
-    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
   }
 
   /** The editor thread that shows `chain`, if the shown change has one. */
@@ -303,11 +329,18 @@ export class CommentThreads implements vscode.Disposable {
    */
   async replyInThread(reply: vscode.CommentReply, resolved: boolean | undefined): Promise<void> {
     const anchor = this.anchors.get(reply.thread);
-    if (!anchor || !reply.text.trim()) {
-      return;
+    if (anchor) {
+      await this.replyWith(anchor.chain, reply.text, resolved);
     }
-    const draft = yourDraft(anchor.chain);
-    await this.save(anchor.chain, draft ? `${draft.message}\n\n${reply.text.trim()}` : reply.text, resolved);
+  }
+
+  /** Save `text` as your draft reply in `chain`, added to the draft you have there: from a thread's reply box, or the Change view's for a chain with no line in a file. */
+  async replyWith(chain: CommentChain, text: string, resolved: boolean | undefined): Promise<boolean> {
+    if (!text.trim()) {
+      return false;
+    }
+    const draft = yourDraft(chain);
+    return this.save(chain, draft ? `${draft.message}\n\n${text.trim()}` : text, resolved);
   }
 
   /**
@@ -331,11 +364,11 @@ export class CommentThreads implements vscode.Disposable {
     }
   }
 
-  private async save(chain: CommentChain, message: string, resolved: boolean | undefined): Promise<void> {
+  private async save(chain: CommentChain, message: string, resolved: boolean | undefined): Promise<boolean> {
     const target = this.view.target;
     const anchorId = chain.comments.find((c) => c.comment_id)?.comment_id ?? chain.root_id;
     if (!target) {
-      return;
+      return false;
     }
     try {
       const client = await this.model.client();
@@ -343,8 +376,10 @@ export class CommentThreads implements vscode.Disposable {
       const what = saved.reply.action === "updated" ? "Draft updated" : "Draft saved";
       ui().status(`$(check) ${what}${resolved ? ", resolving the comment" : ""}. Publish it with ger push.`, 6000);
       await this.view.open();
+      return true;
     } catch (error) {
       void ui().message("error", `Draft not saved: ${describeError(error)}`, {}, []);
+      return false;
     }
   }
 

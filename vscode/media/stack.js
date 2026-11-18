@@ -39,13 +39,7 @@
   const BADGE_KINDS = ["comments", "review", "ci"];
 
   /** One slot on the right of a row; empty when the commit has nothing to say there, so the columns line up. */
-  function badge(item, slot) {
-    const kind = `badge badge-${BADGE_KINDS[slot]}`;
-    if (!item) {
-      return h("span", { class: kind });
-    }
-    return h("span", { class: `${kind} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, icon(item.icon), item.text);
-  }
+  const badge = (item, slot) => window.ger.badge(item, BADGE_KINDS[slot]);
 
   function rowElement(row, slots) {
     const classes = ["row", selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : "", row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
