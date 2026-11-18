@@ -521,6 +521,11 @@ def test_a_triplet_gerrit_id_or_number_reaches_its_changes_url(ref: str) -> None
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     paths: list[str] = []
-    client._request_json = lambda path, **_k: paths.append(path) or []  # type: ignore[method-assign]
+
+    def record(path: str, **_k: object) -> list[object]:
+        paths.append(path)
+        return []
+
+    client._request_json = record  # type: ignore[method-assign,assignment]
     client.get_messages(ref)
     assert paths == [f"changes/{encode_gerrit_path_segment(ref)}/messages"]
