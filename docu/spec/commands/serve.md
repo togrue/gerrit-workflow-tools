@@ -405,7 +405,11 @@ in progress or a detached HEAD.
 
 A rewrite is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted
 changes (and no `autostash`: `reason` is `uncommitted-changes`), a submodule is staged at another
-commit (with or without `autostash`, which cannot stash it),
+commit (with or without `autostash`; no `reason`: the rebase would stop on it, and alone it is
+nothing the autostash saves. With other tracked changes the autostash would save it with the index,
+but the rewrite refuses it all the same rather than rely on what the replay and the unstash make of
+it. It is checked before uncommitted changes, so with both and no `autostash` the client gets this
+refusal first, not `uncommitted-changes`),
 a rebase is in progress, HEAD is detached, it would move, fold, drop or fold into the newest
 merge commit or a commit below it (git rebase cannot replay a merge, so the rewrite starts on
 top of it), or a commit does not apply in its new place. The last is found out before anything is touched, with the same

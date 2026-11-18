@@ -8,6 +8,7 @@ prompt with no terminal to answer it.
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -84,18 +85,18 @@ def test_every_history_rewrite_refuses_a_dirty_tree_the_same_way(
     )
 
 
-def _add_submodule(repo: Path, tmp_path: Path) -> Path:
-    """A submodule ``lib`` with two commits, recorded (and checked out) at the second."""
-    lib = tmp_path / "lib"
+def _add_submodule(repo: Path, tmp_path: Path, name: str = "lib") -> Path:
+    """A submodule *name* with two commits, recorded (and checked out) at the second."""
+    lib = tmp_path / name
     lib.mkdir()
     git("init", "-b", "main", cwd=lib)
     for text in ("a\n", "b\n"):
         (lib / "a.txt").write_text(text, encoding="utf-8")
         git("add", ".", cwd=lib)
         git("commit", "-m", f"lib {text.strip()}", cwd=lib)
-    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), "lib", cwd=repo)
-    git("commit", "-m", "add lib", cwd=repo)
-    return repo / "lib"
+    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), name, cwd=repo)
+    git("commit", "-m", f"add {name}", cwd=repo)
+    return repo / name
 
 
 def _modify_submodule_content(repo: Path, sub: Path) -> None:
@@ -112,7 +113,7 @@ def _check_out_another_submodule_commit(repo: Path, sub: Path) -> None:
 
 def _stage_another_submodule_commit(repo: Path, sub: Path) -> None:
     git("checkout", "-q", "HEAD~1", cwd=sub)
-    git("add", "lib", cwd=repo)
+    git("add", sub.name, cwd=repo)
 
 
 def _modify_a_tracked_file(repo: Path, sub: Path) -> None:
@@ -123,7 +124,7 @@ def _modify_a_tracked_file(repo: Path, sub: Path) -> None:
 _STASH_IT = "you have uncommitted changes"
 _STAGED_LIB = (
     "the submodule commit staged for lib is not committed; commit it or `git restore --staged lib` "
-    "first (`git stash` does not save it)"
+    "first (a rebase would stop on it, or fold it into the commit it stops at)"
 )
 
 
@@ -175,6 +176,51 @@ def test_a_submodule_staged_at_another_commit_stops_a_history_rewrite_without_as
     assert history_rewrite_refusal(stack_repo) == _STAGED_LIB
     code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=ChangeStore({}))
     assert (code, err.strip()) == (ExitCode.USAGE, f"error: {_STAGED_LIB}")
+
+
+def test_the_unstage_command_for_two_staged_submodules_runs_as_given(
+    stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One copy-pasteable command for every staged path, even one git would C-quote."""
+    _configure(stack_repo)
+    names = ["lib", "lib ü"]
+    for sub in [_add_submodule(stack_repo, tmp_path, name) for name in names]:
+        _stage_another_submodule_commit(stack_repo, sub)
+    staged = git("diff", "--cached", "--name-only", "-z", cwd=stack_repo).stdout.split("\0")
+    assert sorted(p for p in staged if p) == names
+
+    said = history_rewrite_refusal(stack_repo)
+    assert said is not None
+    assert said.startswith("the submodule commit staged for lib, lib ü is not committed;"), said
+    command = said.split("`")[1]
+    assert command == "git restore --staged lib 'lib ü'"
+    subprocess.run(["sh", "-c", command], cwd=stack_repo, check=True)
+    assert not git("diff", "--cached", "--name-only", cwd=stack_repo).stdout.strip()
+    assert history_rewrite_refusal(stack_repo) is None
+
+
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+def test_a_submodule_staged_below_the_stack_stops_a_history_rewrite_up_front(
+    main_fn: Callable[..., int], argv: list[str], stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The submodule is in the base and no stack commit touches it: git's checkout has nothing to
+    refuse, yet the rebase would stop at its first commit. ger refuses before it starts."""
+    _configure(stack_repo)
+    sub = _add_submodule(stack_repo, tmp_path)
+    git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=stack_repo)
+    for n in (1, 2):
+        (stack_repo / f"on-top-{n}.txt").write_text(f"{n}\n", encoding="utf-8")
+        git("add", f"on-top-{n}.txt", cwd=stack_repo)
+        git("commit", "-m", f"on top {n}", cwd=stack_repo)
+    stack = get_stack_snapshot(stack_repo, settings=Settings.from_cwd(stack_repo)).commits
+    assert [c.subject for c in stack] == ["on top 1", "on top 2"]
+    _stage_another_submodule_commit(stack_repo, sub)
+    head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+
+    code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=ChangeStore({}))
+    assert (code, err.strip()) == (ExitCode.USAGE, f"error: {_STAGED_LIB}")
+    assert git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip() == head
+    assert not (stack_repo / ".git" / "rebase-merge").exists()
 
 
 def test_reorder_refuses_a_staged_submodule_even_with_autostash(

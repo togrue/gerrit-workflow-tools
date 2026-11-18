@@ -8,6 +8,7 @@ Which branch a stopped rebase belongs to stays with branch resolution in
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -139,38 +140,49 @@ def edit_stop_next_step(walk_on: str) -> str:
 def staged_submodule_refusal(cwd: Path | str | None) -> str | None:
     """Why rewriting cannot start over a submodule staged at another commit, or ``None``.
 
-    The one submodule change that counts: ``git stash`` saves nothing for it (not even with
-    ``--autostash``), yet the rebase's checkout refuses to overwrite it. Dirt inside a submodule,
-    or one checked out at another commit but not staged, is neither stashed nor in the rebase's way.
+    The interactive rebase does not check for it before it starts (its own check leaves
+    submodules out), so it would start and then stop at its first commit with the rebase underway
+    ("your local changes would be overwritten"); an ``edit`` stop it did reach would take the staged
+    gitlink into the commit being amended. Alone, it is also nothing ``git stash`` saves, so it
+    cannot pass as uncommitted changes to stash.
     """
-    raw = git_out("diff", "--cached", "--raw", "--ignore-submodules=none", cwd=cwd)
-    paths = []
-    for line in raw.splitlines():
-        meta, _, path = line.partition("\t")
-        if "160000" in meta.lstrip(":").split()[:2]:  # a gitlink on either side: a submodule
-            paths.append(path)
+    raw = git_out("diff", "--cached", "--raw", "-z", "--no-renames", "--ignore-submodules=none", cwd=cwd)
+    fields = raw.split("\0")
+    # -z: each record is ``:mode mode sha sha status`` NUL ``path`` NUL, the path as is (never C-quoted).
+    paths = [
+        path
+        for meta, path in zip(fields[::2], fields[1::2], strict=False)
+        if "160000" in meta.lstrip(":").split()[:2]  # a gitlink on either side: a submodule
+    ]
     if not paths:
         return None
-    named = ", ".join(paths)
+    unstage = "git restore --staged " + " ".join(shlex.quote(path) for path in paths)
     return (
-        f"the submodule commit staged for {named} is not committed; commit it or `git restore --staged {named}` "
-        "first (`git stash` does not save it)"
+        f"the submodule commit staged for {', '.join(paths)} is not committed; commit it or `{unstage}` "
+        "first (a rebase would stop on it, or fold it into the commit it stops at)"
     )
+
+
+def uncommitted_changes_refusal(cwd: Path | str | None) -> str | None:
+    """Why rewriting cannot start over uncommitted changes to tracked files, or ``None``.
+
+    What counts is what ``git stash`` would save: submodules are left out, as git's own check
+    before a rebase leaves them out (a submodule staged at another commit is
+    :func:`staged_submodule_refusal`).
+    """
+    if git_out("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all", cwd=cwd):
+        return (
+            "you have uncommitted changes; commit them (`ger fix REV` folds them into a stack commit) "
+            "or `git stash` them first"
+        )
+    return None
 
 
 def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
     """Why rewriting the local stack cannot start here, or ``None``: the one wording every rewrite shares.
 
     Git refuses an interactive rebase over a rebase underway or uncommitted changes to tracked
-    files; asking first replaces git's bare refusal with what to do about it. What counts is what
-    ``git stash`` would save, so submodules are left out of that check, as git's own leaves them
-    out; a submodule staged at another commit is refused apart (:func:`staged_submodule_refusal`).
+    files; asking first replaces git's bare refusal with what to do about it. A submodule staged at
+    another commit is refused too, before git starts a rebase that would stop on it.
     """
-    if refusal := rebase_refusal(cwd):
-        return refusal
-    if git_out("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all", cwd=cwd):
-        return (
-            "you have uncommitted changes; commit them (`ger fix REV` folds them into a stack commit) "
-            "or `git stash` them first"
-        )
-    return staged_submodule_refusal(cwd)
+    return rebase_refusal(cwd) or uncommitted_changes_refusal(cwd) or staged_submodule_refusal(cwd)
