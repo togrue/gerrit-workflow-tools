@@ -53,24 +53,51 @@ def _divergence_at_once(cwd: Path | str | None, head: str, prefix: str) -> list[
 
 
 def _divergence_one_by_one(cwd: Path | str | None, head: str, prefix: str) -> list[tuple[str, int, int]]:
-    """:func:`_divergence_at_once` for an older git: four git calls per ref."""
-    p = git("for-each-ref", "--format=%(refname)", prefix, cwd=cwd, check=False)
+    """:func:`_divergence_at_once` for an older git: one call per ancestor ref; up to three for others.
+
+    Three calls up front: ``rev-parse`` for *head*, one ``for-each-ref`` naming every ref with its
+    short name and commit, one more (``--merged``) listing the refs that are ancestors of *head*: their
+    merge base is the ref itself, so they need no ``merge-base`` and are 0 behind. Every other ref costs
+    a ``merge-base`` and a ``rev-list`` for its behind count (none when it contains *head*); the ahead
+    count costs one ``rev-list`` per distinct merge base, shared by the refs that have it. Counts are
+    ``<merge-base>..<head>`` and ``<merge-base>..<ref>``. A ref is named by ``%(refname:short)``, as on
+    git 2.41+, also when it is a symbolic ref to another branch of the remote.
+    """
+    head_p = git("rev-parse", "-q", "--verify", f"{head}^{{commit}}", cwd=cwd, check=False)
+    fmt = "--format=%(refname) %(refname:short) %(objectname)"
+    p = git("for-each-ref", fmt, prefix, cwd=cwd, check=False)
+    if head_p.returncode != 0 or p.returncode != 0:
+        return []
+    head_sha = head_p.stdout.strip()
+    # An ancestor of head is its own (only) merge base with head.
+    merged = git("for-each-ref", "--format=%(refname)", f"--merged={head_sha}", prefix, cwd=cwd, check=False)
+    ancestors = set(merged.stdout.split()) if merged.returncode == 0 else set()
+
+    def count(mb: str, tip: str) -> int | None:
+        if mb == tip:
+            return 0
+        n = git("rev-list", "--count", f"{mb}..{tip}", cwd=cwd, check=False)
+        return int(n.stdout.strip()) if n.returncode == 0 and n.stdout.strip().isdigit() else None
+
+    ahead_by_base: dict[str, int | None] = {}
     rows: list[tuple[str, int, int]] = []
-    for line in p.stdout.splitlines() if p.returncode == 0 else []:
-        ref = line.strip()
-        if not ref or ref.endswith("/HEAD"):
+    for line in p.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or parts[0].endswith("/HEAD"):
             continue
-        mb_p = git("merge-base", head, ref, cwd=cwd, check=False)
-        if mb_p.returncode != 0:
-            continue
-        mb = mb_p.stdout.strip()
-        ahead_p = git("rev-list", "--count", f"{mb}..{head}", cwd=cwd, check=False)
-        behind_p = git("rev-list", "--count", f"{mb}..{ref}", cwd=cwd, check=False)
-        abbrev_p = git("rev-parse", "--abbrev-ref", ref, cwd=cwd, check=False)
-        counts = (ahead_p.stdout.strip(), behind_p.stdout.strip())
-        if any(c.returncode != 0 for c in (ahead_p, behind_p, abbrev_p)) or not all(n.isdigit() for n in counts):
-            continue
-        rows.append((abbrev_p.stdout.strip(), int(counts[0]), int(counts[1])))
+        ref, abbrev, ref_sha = parts
+        if ref in ancestors:
+            mb = ref_sha
+        else:
+            mb_p = git("merge-base", head_sha, ref_sha, cwd=cwd, check=False)
+            if mb_p.returncode != 0:
+                continue
+            mb = mb_p.stdout.strip()
+        if mb not in ahead_by_base:
+            ahead_by_base[mb] = count(mb, head_sha)
+        ahead, behind = ahead_by_base[mb], count(mb, ref_sha)
+        if ahead is not None and behind is not None:
+            rows.append((abbrev, ahead, behind))
     return rows
 
 
@@ -85,7 +112,7 @@ def infer_nearest_remote_tracking_branch(
     For each ref under the Gerrit remote's ``refs/remotes/<remote>/`` namespace
     (excluding ``*/HEAD``): ``ahead`` commits of *head* not in the ref, ``behind`` commits of
     the ref not in *head*; minimize ``ahead + behind``, then *ahead*, then abbreviated ref name
-    for stable tie-breaks. One git call for all refs where git can (2.41), else four per ref.
+    for stable tie-breaks. One git call for all refs where git can (2.41), else one to three per ref.
 
     Returns ``(abbrev_ref, symmetric_total, ahead, behind)`` where *abbrev_ref* is suitable for
     ``git branch --set-upstream-to`` (e.g. ``origin/main``), or ``None`` if no candidate applies.
