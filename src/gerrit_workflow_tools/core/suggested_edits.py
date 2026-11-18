@@ -17,8 +17,9 @@ from typing import Any
 from gerrit_workflow_tools.core.comment_anchor import CommentRange
 
 
-# A fence opened by ```suggestion on a line of its own, up to the next fence line.
-_SUGGESTION_BLOCK = re.compile(r"^[ \t]*```suggestion[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*$", re.MULTILINE | re.DOTALL)
+# A fence opened by ```suggestion on a line of its own, closed by the first line that is only
+# ``` (as Gerrit's web UI reads it), with LF or CRLF line endings.
+_SUGGESTION_BLOCK = re.compile(r"^[ \t]*```suggestion[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*\r?$", re.MULTILINE | re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -29,22 +30,36 @@ class FixReplacement:
     range: CommentRange
     replacement: str
 
+    @property
+    def inserts(self) -> bool:
+        """The range is empty: the text goes in before it, replacing nothing."""
+        rng = self.range
+        return (rng.start_line, rng.start_character) == (rng.end_line, rng.end_character)
+
     def describe(self) -> str:
-        """Where it applies, in the LOCATION grammar of ``ger comment``: ``path:5``, ``path:5-7``, ``path:5.3-5.9``."""
+        """The range it replaces, as a plain range with 1-based lines and columns.
+
+        ``path:5`` and ``path:5-7`` for whole lines. Otherwise ``path:L.C-L.C``: the first
+        character replaced, and the end as the number of characters of the end line it covers
+        (so ``5.3-5.9`` is characters 3 to 9 of line 5, ``5.3-7.0`` runs up to the start of
+        line 7). An insertion is the one position it goes in before: ``path:5.3``.
+        """
         rng = self.range
         start, end = rng.start_line, rng.end_line
-        if (start, rng.start_character) == (end, rng.end_character):
-            return f"{self.path}:{start}.{rng.start_character + 1} (insert)"
-        if rng.end_character == 0 and end > start:
-            # Ends at the start of a line: that line is not touched.
-            if rng.start_character == 0:
-                lines = f"{start}" if end - 1 == start else f"{start}-{end - 1}"
-                return f"{self.path}:{lines}"
-            return f"{self.path}:{start}.{rng.start_character + 1}-{end - 1}"
+        if self.inserts:
+            return f"{self.path}:{start}.{rng.start_character + 1}"
+        if rng.start_character == 0 and rng.end_character == 0 and end > start:
+            # Whole lines; the end line is not touched.
+            return f"{self.path}:{start}" if end - 1 == start else f"{self.path}:{start}-{end - 1}"
         return f"{self.path}:{start}.{rng.start_character + 1}-{end}.{rng.end_character}"
 
+    def lines(self) -> list[str]:
+        """The replacement's lines, without line endings; a final line ending adds no line."""
+        text = self.replacement.replace("\r\n", "\n")
+        return (text[:-1] if text.endswith("\n") else text).split("\n")
+
     def to_json(self) -> dict[str, Any]:
-        """Gerrit's own shape (``path``, ``range``, ``replacement``), and ``location`` as :meth:`describe` says it."""
+        """Gerrit's own shape (``path``, ``range``, ``replacement``), and ``location`` as :meth:`describe` writes it."""
         return {
             "path": self.path,
             "range": self.range.as_gerrit(),
@@ -112,7 +127,9 @@ def fix_suggestions_from_raw(raw: Any) -> tuple[SuggestedEdit, ...]:
 def message_suggestions(path: str, message: str, start_line: int | None, line: int | None) -> tuple[SuggestedEdit, ...]:
     """The ```` ```suggestion ```` blocks of *message*: each replaces the lines the comment is on.
 
-    A comment with no line (on the whole file) has no lines to replace, so it has none.
+    A block opens with a line ```` ```suggestion ```` and ends at the first line that is only
+    ```` ``` ````, as Gerrit's web UI reads it; CRLF line endings become LF. A comment with no
+    line (on the whole file) has no lines to replace, so it has none.
     """
     if line is None:
         return ()

@@ -1,6 +1,6 @@
 # Integration tests (Docker + Gerrit)
 
-These tests start the official image **`gerritcodereview/gerrit:3.10`** (or `GERRIT_IT_IMAGE`), create projects and accounts, then run `ger` commands against a real server. They cover what a real Gerrit decides and the in-memory `ChangeStore` of the unit tests cannot: relation chains, patchsets Gerrit makes itself, push rejections, permissions, HTTP failures, and one Change-Id on several branches.
+These tests start the official image **`gerritcodereview/gerrit:3.14.0-rc5-ubuntu24`** (or `GERRIT_IT_IMAGE`), create projects and accounts, then run `ger` commands against a real server. They cover what a real Gerrit decides and the in-memory `ChangeStore` of the unit tests cannot: relation chains, patchsets Gerrit makes itself, push rejections, permissions, HTTP failures, and one Change-Id on several branches.
 
 Gerrit's event stream over real ssh is **`test_19_event_stream.py`**: it uploads a throwaway ssh key (generated in a temp directory; your `~/.ssh` is neither read nor written) for two test accounts, checks that the one without the *Stream Events* capability is refused once and quietly, grants the capability to a temporary group for the other (and removes the grant afterwards), and follows its events. It needs OpenSSH (`ssh`, `ssh-keygen`) on `PATH` and the container's SSH port (`GERRIT_IT_HOST_PORT_SSH`) reachable from your machine; without OpenSSH it is skipped.
 
@@ -26,7 +26,7 @@ Unit tests (`pytest` with default config) **ignore** this directory; run integra
 | `test_16_rewrite_and_repush.py` | `ger push REV`, then the rest, then nothing to push; `ger fix` / `ger reword` / `ger edit` round trip renews only the touched change and those above, Change-Ids kept; a reordered stack |
 | `test_17_gerrit_failures.py` | Wrong token (HTTP 401) and an unreachable host for `ger log`, `ger show`, `ger edit -n`, `ger push --dry-run`: one line, exit 5 (push preview: one warning, exit 0), local state shown |
 | `test_18_serve.py` | `ger serve` `/stack` and `/overview` agree with `ger log --json`; the outgoing chain comes from Gerrit's relation data |
-| `test_20_suggested_edits.py` | A comment with `fix_suggestions` and one with a ```` ```suggestion ```` block, posted over REST, in `ger show --json` and human output |
+| `test_20_suggested_edits.py` | A comment with a ```` ```suggestion ```` block (the stored CommentInfo shape too), and one with `fix_suggestions` (needs the container's experiment flag), posted over REST, in `ger show --json` and human output |
 | `test_reviewer_strategies_rest.py` | `push` / `lazy` / `overwrite` reviewer strategies |
 
 ### Writing a test here
@@ -66,8 +66,9 @@ Resolve `lenovo-pc` (DNS or `hosts`). From the pytest machine: `docker -H ssh://
 | `GERRIT_IT_PUBLIC_HOST` | `localhost` | Hostname **your git client** uses to reach Gerrit HTTP (use with SSH `-L` when the daemon is remote). |
 | `GERRIT_IT_HOST_PORT_HTTP` | `8080` | Published HTTP port on the Docker **host**. |
 | `GERRIT_IT_HOST_PORT_SSH` | `29418` | Host port mapped to the container’s Gerrit SSH (**29418/tcp** inside the image). **Must be free** on the Docker host—if another Gerrit already uses **29418**, set e.g. **`29419`**. |
-| `GERRIT_IT_IMAGE` | `gerritcodereview/gerrit:3.10` | Override Gerrit image. |
+| `GERRIT_IT_IMAGE` | `gerritcodereview/gerrit:3.14.0-rc5-ubuntu24` | Override Gerrit image. |
 | *(container default)* | `DEVELOPMENT_BECOME_ANY_ACCOUNT=true` | Set automatically for the test container to make admin/account bootstrap reliable on newer Gerrit images. |
+| *(container default)* | `[experiments] enabled` | `docker_gerrit.EXPERIMENTS` (`GerritBackendFeature__allow_fix_suggestions_in_comments`, so a human comment may carry `fix_suggestions`) is written to `gerrit.config` before the image's own entrypoint runs. A kept container started without them is recreated. |
 | `GERRIT_IT_KEEP_CONTAINER` | `0` | If `1`, the named container is left running after the run (faster reruns). |
 | `GERRIT_IT_HTTP_ADMIN_PASS` | *(unset)* | If set, used as the admin HTTP password when REST bootstrap works. |
 | `GERRIT_IT_RUN_ID` | *(random)* | Suffix for project names (stable ID when debugging). |

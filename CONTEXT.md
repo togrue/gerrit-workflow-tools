@@ -197,7 +197,7 @@ Where a comment is in its life: **note** (local, private, never uploaded), **loc
 _Avoid_: private comment, pending comment, unsent comment
 
 **Suggested edit**:
-A reviewer's proposed change to the code a comment is on: a Gerrit **fix suggestion** (`fix_suggestions`, with a `fix_id`) or a ```` ```suggestion ```` block in the comment's text, which replaces the comment's lines. Shown with the comment; not applied by ger.
+A reviewer's proposed change to the code a comment is on: a ```` ```suggestion ```` block in the comment's text, which replaces the comment's lines (the common case), or a Gerrit **fix suggestion** (`fix_suggestions`, with a `fix_id`), which Gerrit stores on a human comment only when the experiment `GerritBackendFeature__allow_fix_suggestions_in_comments` is enabled. Shown with the comment; not applied by ger.
 _Avoid_: patch suggestion, code suggestion (unqualified), fix (alone; `ger fix` is something else)
 
 **Local comment store**:

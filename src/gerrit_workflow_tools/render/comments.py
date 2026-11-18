@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
+
 from gerrit_workflow_tools.cli_style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -112,23 +115,34 @@ def format_pending_drafts(heading: str, chains: list[CommentChain]) -> list[str]
     return lines
 
 
-def fix_suggestion_lines(edits: tuple[SuggestedEdit, ...]) -> list[str]:
-    """Plain lines for the Gerrit fix suggestions in *edits*: what each replaces, and with what.
+def _shown_fixes(
+    edits: tuple[SuggestedEdit, ...], *, where: Callable[[str], str] = str
+) -> list[tuple[str, list[tuple[str, list[str]]]]]:
+    """The Gerrit fix suggestions of *edits*, as each renderer writes them out below a comment.
 
-    A ``suggestion`` block of the comment's text is left out: its message already shows it.
+    One ``(description, replacements)`` per fix; each replacement is what it does, its
+    location passed through *where*, and the lines it writes (none for a delete). A
+    ``suggestion`` block of the comment's text is left out: its message already shows it.
     """
-    lines: list[str] = []
+    shown: list[tuple[str, list[tuple[str, list[str]]]]] = []
     for edit in edits:
         if edit.in_message:
             continue
-        lines.append(f"suggested fix: {edit.description}" if edit.description else "suggested fix:")
+        parts: list[tuple[str, list[str]]] = []
         for rep in edit.replacements:
+            location = where(rep.describe())
             if not rep.replacement:
-                lines.append(f"  {rep.describe()}: delete")
-                continue
-            lines.append(f"  {rep.describe()} becomes:")
-            lines.extend(f"  + {text}" for text in rep.replacement.rstrip("\n").split("\n"))
-    return lines
+                parts.append((f"{location}: delete", []))
+            else:
+                parts.append((f"insert at {location}:" if rep.inserts else f"{location} becomes:", rep.lines()))
+        shown.append((edit.description, parts))
+    return shown
+
+
+def _code_fence(lines: list[str]) -> str:
+    """A Markdown fence longer than any run of backticks in *lines*, so none of them closes it."""
+    longest = max((len(run) for ln in lines for run in re.findall(r"`+", ln)), default=0)
+    return "`" * max(3, longest + 1)
 
 
 def _box_border(text: str, *, resolved: bool) -> str:
@@ -196,8 +210,13 @@ def _box_content_rows(
                     rows.append(color_text(part, ANSI_DIM))
             for ln in row_item.message.splitlines() or [""]:
                 rows.extend(_prefixed_wrap(ln, width, prefix="  "))
-        for ln in fix_suggestion_lines(row_item.suggested_edits):
-            rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(ln, width, prefix="  "))
+        for description, parts in _shown_fixes(row_item.suggested_edits):
+            heading = f"suggested fix: {description}" if description else "suggested fix:"
+            rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(heading, width, prefix="  "))
+            for what, code in parts:
+                rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(what, width, prefix="    "))
+                # Code is not wrapped: its line breaks and leading spaces are part of it.
+                rows.extend(color_text(f"    + {ln}", ANSI_GREEN) for ln in code)
     chain_url = _chain_url(chain, gerrit_url)
     if chain_url:
         rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")
@@ -296,19 +315,14 @@ def format_comment_chain_markdown(
 def _fix_suggestions_markdown(edits: tuple[SuggestedEdit, ...]) -> list[str]:
     """The Gerrit fix suggestions in *edits*, quoted under the comment, each replacement fenced."""
     lines: list[str] = []
-    for edit in edits:
-        if edit.in_message:
-            continue
+    for description, parts in _shown_fixes(edits, where=lambda location: f"`{location}`"):
         lines.append(">")
-        lines.append(f"> **Suggested fix:** {edit.description}".rstrip())
-        for rep in edit.replacements:
-            if not rep.replacement:
-                lines.append(f"> `{rep.describe()}`: delete")
-                continue
-            lines.append(f"> `{rep.describe()}` becomes:")
-            lines.append("> ```")
-            lines.extend(f"> {text}".rstrip() for text in rep.replacement.rstrip("\n").split("\n"))
-            lines.append("> ```")
+        lines.append(f"> **Suggested fix:** {description}".rstrip())
+        for what, code in parts:
+            lines.append(f"> {what}")
+            if code:
+                fence = _code_fence(code)
+                lines.extend([f"> {fence}", *(f"> {text}".rstrip() for text in code), f"> {fence}"])
     return lines
 
 

@@ -22,8 +22,9 @@ from tests.conftest import run_cli
 _SHA = "abc12345678901234567890123456789012345678"
 _CID = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
-# CommentInfo as Gerrit 3.10 returns it for a comment posted with ``fix_suggestions``
-# (``POST …/revisions/current/review``, ``CommentInput.fix_suggestions``).
+# A CommentInfo with ``fix_suggestions``, in the documented CommentInfo / FixSuggestionInfo
+# shape. Gerrit stores them on a human comment only with the experiment
+# GerritBackendFeature__allow_fix_suggestions_in_comments (tests/integration/test_20_suggested_edits.py).
 FIX_COMMENT: dict[str, Any] = {
     "author": {"_account_id": 1000000, "name": "Administrator", "email": "admin@example.com", "username": "admin"},
     "change_message_id": "9b1e0f3c4b0b1a3fd8c2e6f0a0c9d1e2b3c4d5e6",
@@ -50,9 +51,11 @@ FIX_COMMENT: dict[str, Any] = {
     ],
 }
 
-# What the web UI's "Suggest edit" writes into the text of a comment on line 7.
+# A comment on line 7 whose text holds a ```suggestion block, what the web UI's "Suggest edit"
+# writes, in the shape the test Gerrit (3.14) returns it: the block is only text.
 BLOCK_COMMENT: dict[str, Any] = {
-    "author": {"_account_id": 1000001, "name": "Bob", "username": "bob"},
+    "author": {"_account_id": 1000001, "name": "Bob", "email": "bob@example.com", "username": "bob"},
+    "change_message_id": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0",
     "unresolved": True,
     "patch_set": 1,
     "id": "7c6d5e4f_3a2b1c0d",
@@ -81,9 +84,9 @@ def _store(comments: dict[str, list[dict[str, Any]]]) -> ChangeStore:
     return store
 
 
-def _show(repo: Path, monkeypatch: pytest.MonkeyPatch, *args: str) -> str:
+def _show(repo: Path, monkeypatch: pytest.MonkeyPatch, *args: str, fix_comment: dict[str, Any] = FIX_COMMENT) -> str:
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
-    store = _store({"epsilon.txt": [FIX_COMMENT], "zeta.py": [BLOCK_COMMENT]})
+    store = _store({"epsilon.txt": [fix_comment], "zeta.py": [BLOCK_COMMENT]})
     code, out, err = run_cli(repo, gshow_main, [*args, "change:42"], monkeypatch, gerrit=store)
     assert code == 0, err
     return out
@@ -169,15 +172,57 @@ def test_malformed_fix_suggestions_are_left_out() -> None:
     assert chain.comments[0].suggested_edits == ()
 
 
+def _with_replacement(text: str, rng: dict[str, int] | None = None) -> dict[str, Any]:
+    [fix] = FIX_COMMENT["fix_suggestions"]
+    [rep] = fix["replacements"]
+    new_rep = dict(rep, replacement=text, range=rng or rep["range"])
+    return dict(FIX_COMMENT, fix_suggestions=[dict(fix, replacements=[new_rep])])
+
+
+def test_a_suggestion_block_with_crlf_line_endings_is_read() -> None:
+    message = "Typo:\r\n\r\n```suggestion\r\n    return total\r\n```\r\nThanks.\r\n"
+    [edit] = message_suggestions("zeta.py", message, start_line=None, line=7)
+    assert edit.replacements[0].replacement == "    return total\n"
+
+
+def test_the_first_fence_line_ends_a_suggestion_block() -> None:
+    message = "```suggestion\na\n```\nb\n```\n"
+    [edit] = message_suggestions("f.py", message, start_line=None, line=3)
+    assert edit.replacements[0].replacement == "a\n"
+
+
+def test_markdown_fence_is_longer_than_any_backtick_run_in_the_replacement(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = _show(stack_repo, monkeypatch, "--ai", fix_comment=_with_replacement("```\nx = `y`\n```\n"))
+    assert "> ````\n> ```\n> x = `y`\n> ```\n> ````" in out
+
+
+def test_human_box_does_not_wrap_a_suggested_code_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code = "        " + " ".join(f"argument_{n}" for n in range(20))
+    out = strip_ansi(_show(stack_repo, monkeypatch, "--color=never", fix_comment=_with_replacement(code + "\n")))
+    assert f"+ {code}" in out
+
+
+def test_an_insertion_says_where_it_goes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    at = {"start_line": 2, "start_character": 4, "end_line": 2, "end_character": 4}
+    fix_comment = _with_replacement("LIMIT", at)
+    assert "insert at epsilon.txt:2.5:" in strip_ansi(
+        _show(stack_repo, monkeypatch, "--color=never", fix_comment=fix_comment)
+    )
+    assert "> insert at `epsilon.txt:2.5`:" in _show(stack_repo, monkeypatch, "--ai", fix_comment=fix_comment)
+
+
 @pytest.mark.parametrize(
     ("rng", "where"),
     [
         (CommentRange(5, 0, 6, 0), "f.py:5"),
         (CommentRange(5, 0, 8, 0), "f.py:5-7"),
         (CommentRange(5, 2, 5, 9), "f.py:5.3-5.9"),
-        (CommentRange(5, 2, 7, 0), "f.py:5.3-6"),
-        (CommentRange(5, 2, 5, 2), "f.py:5.3 (insert)"),
+        (CommentRange(5, 2, 7, 0), "f.py:5.3-7.0"),
+        (CommentRange(5, 0, 7, 3), "f.py:5.1-7.3"),
+        (CommentRange(5, 2, 5, 2), "f.py:5.3"),
     ],
 )
-def test_replacement_describes_where_it_applies_in_location_grammar(rng: CommentRange, where: str) -> None:
+def test_replacement_describes_the_range_it_replaces(rng: CommentRange, where: str) -> None:
     assert FixReplacement(path="f.py", range=rng, replacement="x").describe() == where

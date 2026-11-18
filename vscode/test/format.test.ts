@@ -9,6 +9,8 @@ import {
   chainDescription,
   chainsWithActivity,
   commentLocation,
+  codeFence,
+  commentPlainText,
   commentText,
   commitVotes,
   eventsMayCome,
@@ -184,4 +186,32 @@ test("a comment's text shows the Gerrit fix it suggests, and a suggestion block 
   const inMessage = { ...fix, fix_id: null, in_message: true };
   assert.equal(commentText({ message: block, suggested_edits: [inMessage] }), block);
   assert.equal(commentText({ message: "plain" }), "plain");
+});
+
+test("a fix is fenced longer than any backtick run in it, so a ``` line of the code cannot close the fence", () => {
+  assert.equal(codeFence(["x = 1"]), "```");
+  assert.equal(codeFence(["```", "x = `y`", "```"]), "````");
+  const range = { start_line: 2, start_character: 0, end_line: 3, end_character: 0 };
+  const fix = { fix_id: "f1", description: "", in_message: false, replacements: [{ path: "a.md", range, replacement: "```\ncode\n```\n", location: "a.md:2" }] };
+  assert.equal(commentText({ message: "", suggested_edits: [fix] }), "**Suggested fix:**\n`a.md:2` becomes:\n````\n```\ncode\n```\n````");
+});
+
+test("the Change view and tooltips get a comment's fixes as plain text, an insertion said as one", () => {
+  const range = { start_line: 2, start_character: 0, end_line: 4, end_character: 0 };
+  const at = { start_line: 5, start_character: 2, end_line: 5, end_character: 2 };
+  const fix = {
+    fix_id: "a6b3c2d1_0e9f8a7b",
+    description: "Use the LIMIT constant",
+    in_message: false,
+    replacements: [
+      { path: "epsilon.txt", range, replacement: "LIMIT = 10\r\n    use(LIMIT)\r\n", location: "epsilon.txt:2-3" },
+      { path: "epsilon.txt", range: at, replacement: "x", location: "epsilon.txt:5.3" },
+      { path: "epsilon.txt", range, replacement: "", location: "epsilon.txt:2-3" },
+    ],
+  };
+  assert.equal(
+    commentPlainText({ message: "Name the limit.", suggested_edits: [fix] }),
+    "Name the limit.\n\nsuggested fix: Use the LIMIT constant\n  epsilon.txt:2-3 becomes:\n  + LIMIT = 10\n  +     use(LIMIT)\n  insert at epsilon.txt:5.3:\n  + x\n  epsilon.txt:2-3: delete",
+  );
+  assert.equal(commentPlainText({ message: "plain" }), "plain");
 });
