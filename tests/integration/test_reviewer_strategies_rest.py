@@ -13,13 +13,23 @@ from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.integration_helpers import (
     add_change_reviewer,
     chain_commits_oldest_first,
-    first_change_id_from_tip,
     open_changes_on_branch,
     prepare_topic_repo,
     reviewer_slugs_from_reviewers_rest,
     reviewer_slugs_on_change,
 )
 from tests.integration.repo_builder import build_linear_chain
+
+
+def _change_number(row: dict[str, object]) -> str:
+    """The change *row*'s number, as a REST path id.
+
+    A bare Change-Id is ambiguous on the shared test Gerrit: the same Change-Id can be
+    open on several topic branches, and Gerrit answers 404 "Multiple changes found".
+    """
+    number = row.get("_number")
+    assert isinstance(number, int), f"missing _number in row: {row!r}"
+    return str(number)
 
 
 def _reviewer_slugs_re_fetched_from_gerrit(
@@ -32,13 +42,13 @@ def _reviewer_slugs_re_fetched_from_gerrit(
     ``GET changes/<id>/reviewers/`` so we assert on live server state, not CLI output.
     """
 
-    cid = first_change_id_from_tip(session, project, topic)
-    assert cid, "expected an open change on topic branch"
-    enc = quote_change_id(cid)
-    detail = session.get_json(f"changes/{enc}/detail")
+    rows = open_changes_on_branch(session, project, topic)
+    assert rows, "expected an open change on topic branch"
+    number = _change_number(rows[0])
+    detail = session.get_json(f"changes/{number}/detail")
     assert isinstance(detail, dict)
     from_detail = set(reviewer_slugs_on_change(detail))
-    from_rest = set(reviewer_slugs_from_reviewers_rest(session, cid))
+    from_rest = set(reviewer_slugs_from_reviewers_rest(session, number))
     assert from_detail == from_rest, f"detail.reviewers and GET /reviewers/ disagree: {from_detail!r} vs {from_rest!r}"
     return from_rest
 
@@ -60,11 +70,9 @@ def _snapshot_revision_counts(
     for row in rows:
         cid = row.get("change_id") or row.get("id")
         assert cid, f"missing change id in row: {row!r}"
-        cid_str = str(cid)
-        enc = quote_change_id(cid_str)
-        detail = session.get_json(f"changes/{enc}/detail")
+        detail = session.get_json(f"changes/{_change_number(row)}/detail")
         assert isinstance(detail, dict)
-        out[cid_str] = _revision_count_from_detail(detail)
+        out[str(cid)] = _revision_count_from_detail(detail)
     return out
 
 
@@ -86,11 +94,11 @@ def _assert_all_open_changes_reviewers(
         cid = row.get("change_id") or row.get("id")
         assert cid, f"missing change id in row: {row!r}"
         cid_str = str(cid)
-        enc = quote_change_id(cid_str)
-        detail = session.get_json(f"changes/{enc}/detail")
+        number = _change_number(row)
+        detail = session.get_json(f"changes/{number}/detail")
         assert isinstance(detail, dict)
         from_detail = set(reviewer_slugs_on_change(detail))
-        from_rest = set(reviewer_slugs_from_reviewers_rest(session, cid_str))
+        from_rest = set(reviewer_slugs_from_reviewers_rest(session, number))
         assert from_detail == from_rest, (
             f"detail.reviewers and GET /reviewers/ disagree for {cid_str}: {from_detail!r} vs {from_rest!r}"
         )
@@ -294,8 +302,7 @@ def _reviewer_slugs_by_change_id(
     for row in rows:
         cid = row.get("change_id") or row.get("id")
         assert cid, f"missing change id in row: {row!r}"
-        cid_str = str(cid)
-        out[cid_str] = set(reviewer_slugs_from_reviewers_rest(session, cid_str))
+        out[str(cid)] = set(reviewer_slugs_from_reviewers_rest(session, _change_number(row)))
     return out
 
 
@@ -546,7 +553,9 @@ def test_overwrite_after_push_with_a_reviewer_keeps_or_replaces_them(
     typed_a = reviewer_a if name_a_by == "username" else f"{reviewer_a}@example.com"
     topic = f"ow_again_{name_a_by}_{secrets.token_hex(4)}"
     repo = prepare_topic_repo(ctx, tmp_path, topic)
-    build_linear_chain(repo, ["feat: overwrite after a push with a reviewer"])
+    # The subject names the parameter: Gerrit's commit-msg hook derives the Change-Id from
+    # message, parent and committer (not the tree), so both runs would otherwise share one.
+    build_linear_chain(repo, [f"feat: overwrite after a push with a reviewer named by {name_a_by}"])
 
     code0, _o0, e0 = run_cli(
         repo, ger_push_main, ["--yes", "--no-rebase-check", "--reviewers", reviewer_a], monkeypatch
