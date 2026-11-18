@@ -26,7 +26,12 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
-from gerrit_workflow_tools.core.rebase_state import history_rewrite_refusal, rebase_in_progress, rebase_refusal
+from gerrit_workflow_tools.core.rebase_state import (
+    history_rewrite_refusal,
+    rebase_in_progress,
+    rebase_refusal,
+    staged_submodule_refusal,
+)
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
 
@@ -89,6 +94,8 @@ def refuse_unless_on_the_branch(cwd: Path | str) -> None:
 def _refuse_unless_ready(cwd: Path | str, *, autostash: bool) -> None:
     if refusal := rebase_refusal(cwd):
         raise ReorderRefusal(refusal)
+    if refusal := staged_submodule_refusal(cwd):
+        raise ReorderRefusal(refusal)  # autostash would not get it out of the way
     if not autostash and (refusal := history_rewrite_refusal(cwd)):
         raise UncommittedChanges(refusal)
 

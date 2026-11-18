@@ -404,7 +404,8 @@ taken as written. It is `REFUSED` for an empty message, a commit outside the sta
 in progress or a detached HEAD.
 
 A rewrite is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted
-changes (and no `autostash`: `reason` is `uncommitted-changes`),
+changes (and no `autostash`: `reason` is `uncommitted-changes`), a submodule is staged at another
+commit (with or without `autostash`, which cannot stash it),
 a rebase is in progress, HEAD is detached, it would move, fold, drop or fold into the newest
 merge commit or a commit below it (git rebase cannot replay a merge, so the rewrite starts on
 top of it), or a commit does not apply in its new place. The last is found out before anything is touched, with the same

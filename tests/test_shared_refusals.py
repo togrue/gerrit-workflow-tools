@@ -22,7 +22,11 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_rebase import main as rebase_main
 from gerrit_workflow_tools.cli_show import main as show_main
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.rebase_state import history_rewrite_refusal
+from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, UncommittedChanges, rewrite_stack
+from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from tests.change_store import ChangeStore
 from tests.conftest import run_cli
 
@@ -80,26 +84,114 @@ def test_every_history_rewrite_refuses_a_dirty_tree_the_same_way(
     )
 
 
-def test_a_dirty_submodule_does_not_stop_a_history_rewrite(
-    stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Git rebases over it and ``git stash`` has nothing to save, so ger does not ask for either (#35)."""
-    _configure(stack_repo)
+def _add_submodule(repo: Path, tmp_path: Path) -> Path:
+    """A submodule ``lib`` with two commits, recorded (and checked out) at the second."""
     lib = tmp_path / "lib"
     lib.mkdir()
     git("init", "-b", "main", cwd=lib)
-    (lib / "a.txt").write_text("a\n", encoding="utf-8")
-    git("add", ".", cwd=lib)
-    git("commit", "-m", "lib", cwd=lib)
-    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), "lib", cwd=stack_repo)
-    git("commit", "-m", "add lib", cwd=stack_repo)
-    (stack_repo / "lib" / "a.txt").write_text("dirty\n", encoding="utf-8")
-    (stack_repo / "lib" / "untracked.txt").write_text("new\n", encoding="utf-8")
-    assert git("status", "--porcelain", "--untracked-files=no", cwd=stack_repo).stdout.strip() == "M lib"
+    for text in ("a\n", "b\n"):
+        (lib / "a.txt").write_text(text, encoding="utf-8")
+        git("add", ".", cwd=lib)
+        git("commit", "-m", f"lib {text.strip()}", cwd=lib)
+    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), "lib", cwd=repo)
+    git("commit", "-m", "add lib", cwd=repo)
+    return repo / "lib"
 
+
+def _modify_submodule_content(repo: Path, sub: Path) -> None:
+    (sub / "a.txt").write_text("dirty\n", encoding="utf-8")
+
+
+def _add_untracked_to_submodule(repo: Path, sub: Path) -> None:
+    (sub / "untracked.txt").write_text("new\n", encoding="utf-8")
+
+
+def _check_out_another_submodule_commit(repo: Path, sub: Path) -> None:
+    git("checkout", "-q", "HEAD~1", cwd=sub)
+
+
+def _stage_another_submodule_commit(repo: Path, sub: Path) -> None:
+    git("checkout", "-q", "HEAD~1", cwd=sub)
+    git("add", "lib", cwd=repo)
+
+
+def _modify_a_tracked_file(repo: Path, sub: Path) -> None:
+    tracked = next(f for f in git("ls-files", cwd=repo).stdout.split() if f not in ("lib", ".gitmodules"))
+    (repo / tracked).write_text("uncommitted\n", encoding="utf-8")
+
+
+_STASH_IT = "you have uncommitted changes"
+_STAGED_LIB = (
+    "the submodule commit staged for lib is not committed; commit it or `git restore --staged lib` "
+    "first (`git stash` does not save it)"
+)
+
+
+@pytest.mark.parametrize(
+    ("make_dirty", "refusal"),
+    [
+        (_modify_submodule_content, None),
+        (_add_untracked_to_submodule, None),
+        (_check_out_another_submodule_commit, None),
+        (_modify_a_tracked_file, _STASH_IT),
+    ],
+)
+def test_a_history_rewrite_counts_as_uncommitted_exactly_what_git_stash_would_save(
+    make_dirty: Callable[[Path, Path], None],
+    refusal: str | None,
+    stack_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ger edit asks for a stash exactly when ``git stash`` has something to save (#35).
+
+    Dirt inside a submodule, or a submodule checked out at another commit than the one recorded,
+    is neither saved by ``git stash`` nor in the way of ``git rebase``: no refusal. A tracked file of
+    the superproject is the control.
+    """
+    _configure(stack_repo)
+    sub = _add_submodule(stack_repo, tmp_path)
+    make_dirty(stack_repo, sub)
+    git_would_stash = bool(git("stash", "create", cwd=stack_repo).stdout.strip())
+    assert git_would_stash is (refusal is not None)
+
+    said = history_rewrite_refusal(stack_repo)
+    assert (said is not None) is git_would_stash
     code, _out, err = run_cli(stack_repo, edit_main, ["HEAD~1"], monkeypatch, gerrit=ChangeStore({}))
-    assert "uncommitted changes" not in err
-    assert code == ExitCode.OK, err
+    assert ("uncommitted changes" in err) is git_would_stash, err
+    assert code == (ExitCode.USAGE if git_would_stash else ExitCode.OK), err
+
+
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+def test_a_submodule_staged_at_another_commit_stops_a_history_rewrite_without_asking_for_a_stash(
+    main_fn: Callable[..., int], argv: list[str], stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``git stash`` saves nothing for it, yet the rebase's checkout refuses to overwrite it."""
+    _configure(stack_repo)
+    sub = _add_submodule(stack_repo, tmp_path)
+    _stage_another_submodule_commit(stack_repo, sub)
+    assert not git("stash", "create", cwd=stack_repo).stdout.strip()
+
+    assert history_rewrite_refusal(stack_repo) == _STAGED_LIB
+    code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=ChangeStore({}))
+    assert (code, err.strip()) == (ExitCode.USAGE, f"error: {_STAGED_LIB}")
+
+
+def test_reorder_refuses_a_staged_submodule_even_with_autostash(
+    stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Autostash would not get it out of the way, so the refusal is not ``uncommitted-changes``."""
+    _configure(stack_repo)
+    sub = _add_submodule(stack_repo, tmp_path)
+    _stage_another_submodule_commit(stack_repo, sub)
+    head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+    settings = Settings.from_cwd(stack_repo)
+    *below, top = get_stack_snapshot(stack_repo, settings=settings).commits
+    steps = [*(StackStep(c.sha) for c in below), StackStep(top.sha, "drop")]
+    with pytest.raises(ReorderRefusal, match="staged for lib") as refused:
+        rewrite_stack(stack_repo, steps, settings=settings, autostash=True)
+    assert not isinstance(refused.value, UncommittedChanges)
+    assert git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip() == head
 
 
 def test_unknown_command_suggests_the_close_one(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

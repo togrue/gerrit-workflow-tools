@@ -136,18 +136,41 @@ def edit_stop_next_step(walk_on: str) -> str:
     return f"amend it, then `git rebase --continue` to finish{_walks_on(walk_on)}"
 
 
+def staged_submodule_refusal(cwd: Path | str | None) -> str | None:
+    """Why rewriting cannot start over a submodule staged at another commit, or ``None``.
+
+    The one submodule change that counts: ``git stash`` saves nothing for it (not even with
+    ``--autostash``), yet the rebase's checkout refuses to overwrite it. Dirt inside a submodule,
+    or one checked out at another commit but not staged, is neither stashed nor in the rebase's way.
+    """
+    raw = git_out("diff", "--cached", "--raw", "--ignore-submodules=none", cwd=cwd)
+    paths = []
+    for line in raw.splitlines():
+        meta, _, path = line.partition("\t")
+        if "160000" in meta.lstrip(":").split()[:2]:  # a gitlink on either side: a submodule
+            paths.append(path)
+    if not paths:
+        return None
+    named = ", ".join(paths)
+    return (
+        f"the submodule commit staged for {named} is not committed; commit it or `git restore --staged {named}` "
+        "first (`git stash` does not save it)"
+    )
+
+
 def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
     """Why rewriting the local stack cannot start here, or ``None``: the one wording every rewrite shares.
 
     Git refuses an interactive rebase over a rebase underway or uncommitted changes to tracked
-    files; asking first replaces git's bare refusal with what to do about it. Like git's own check
-    (and ``git stash``), it leaves submodules out: a dirty submodule neither stops a rebase nor stashes.
+    files; asking first replaces git's bare refusal with what to do about it. What counts is what
+    ``git stash`` would save, so submodules are left out of that check, as git's own leaves them
+    out; a submodule staged at another commit is refused apart (:func:`staged_submodule_refusal`).
     """
     if refusal := rebase_refusal(cwd):
         return refusal
-    if git_out("status", "--porcelain", "--untracked-files=no", "--ignore-submodules", cwd=cwd):
+    if git_out("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all", cwd=cwd):
         return (
             "you have uncommitted changes; commit them (`ger fix REV` folds them into a stack commit) "
             "or `git stash` them first"
         )
-    return None
+    return staged_submodule_refusal(cwd)
