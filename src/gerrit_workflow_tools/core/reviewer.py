@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.http_rest import gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, parallel_map
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.reviewers_strategy import default_reviewers_via_registry
@@ -128,6 +130,25 @@ def removable_reviewer_ids(detail: Mapping[str, object]) -> set[int] | None:
     if not isinstance(rows, list):
         return None
     return {row["_account_id"] for row in rows if isinstance(row, dict) and isinstance(row.get("_account_id"), int)}
+
+
+def reviewer_account_ids(rest: GerritRest, names: Sequence[str]) -> dict[str, int | None]:
+    """The account id each reviewer name resolves to on Gerrit (username, email, full name or id).
+
+    ``None`` when Gerrit names no single account for it: a group, an unknown or an ambiguous
+    name. Who someone is on a change is their account id; the name a user typed need not be
+    the slug Gerrit reports for them.
+    """
+
+    def _lookup(name: str) -> int | None:
+        try:
+            raw = rest.get_account(name).get("_account_id")
+        except GerritApiError:
+            return None
+        return raw if isinstance(raw, int) else None
+
+    unique = list(dict.fromkeys(names))
+    return dict(zip(unique, parallel_map(partial(_lookup, name) for name in unique), strict=True))
 
 
 def parse_reviewer_names(raw: str) -> list[str]:

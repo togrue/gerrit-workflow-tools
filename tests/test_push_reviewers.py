@@ -9,7 +9,7 @@ import pytest
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, change_id_for_gerrit_rest_path
-from gerrit_workflow_tools.core.push_reviewers import apply_reviewer_strategy_after_push_service
+from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyResult, apply_reviewer_strategy_after_push_service
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, reviewer_accounts_from_change_info
 from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
@@ -188,7 +188,7 @@ def test_overwrite_does_not_remove_a_reviewer_it_was_asked_to_keep() -> None:
     res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, ["admin"], [triplet])
 
     assert res.ok is True
-    service.changes.set_reviewers.assert_called_once_with(triplet, add=["admin"], remove=[7])
+    service.changes.set_reviewers.assert_called_once_with(triplet, add=[], remove=[7])
 
 
 def test_overwrite_keeps_a_reviewer_gerrit_does_not_let_you_remove() -> None:
@@ -228,3 +228,65 @@ def test_lazy_says_so_when_it_skipped_every_change() -> None:
     assert res.ok is True
     assert [issue.level for issue in res.issues] == ["warning"]
     assert "nosuchuser not added or checked" in res.issues[0].message
+
+
+_ADMIN = {"_account_id": 1000000, "username": "admin", "email": "admin@example.com", "name": "Administrator"}
+_BOB = {"_account_id": 1000001, "username": "bob", "email": "robert@example.com", "name": "Bob Builder"}
+
+
+def _overwrite_on_gerrit_like_store(
+    tmp_path: Path, wanted: list[str], *, removable: list[int] | None = None
+) -> tuple[ChangeStore, ReviewerApplyResult]:
+    """Overwrite *wanted* on a change that already has admin as reviewer, through the real service."""
+    triplet = _triplet(_cid("a"))
+    detail: dict[str, object] = {
+        "id": triplet,
+        "project": _PROJECT,
+        "branch": _BRANCH,
+        "change_id": _cid("a"),
+        "_number": 1,
+        "status": "NEW",
+        "updated": "2026-11-18 10:00:00.000000000",
+        "reviewers": {"REVIEWER": [dict(_ADMIN)]},
+    }
+    if removable is not None:
+        detail["removable_reviewers"] = [{"_account_id": account_id} for account_id in removable]
+    store = ChangeStore({triplet: detail}, accounts={1000000: dict(_ADMIN), 1000001: dict(_BOB)})
+    service = RunContext.open(tmp_path, settings=Settings.from_map({}), gerrit=store).gerrit
+    res = apply_reviewer_strategy_after_push_service(service, ReviewerStrategy.OVERWRITE, wanted, [triplet])
+    return store, res
+
+
+def _reviewer_ids(store: ChangeStore) -> set[int | None]:
+    rows = store.list_change_reviewers(_triplet(_cid("a")))
+    return {row["account"]["_account_id"] for row in rows if row.get("state") == "REVIEWER"}
+
+
+@pytest.mark.parametrize("name", ["admin", "admin@example.com", "Administrator", "1000000"])
+def test_overwrite_keeps_a_wanted_reviewer_already_on_the_change_whatever_name_it_is_given(
+    tmp_path: Path, name: str
+) -> None:
+    """Issue #32: overwrite compares by account id, so a reviewer named by email, full name or id stays."""
+    store, res = _overwrite_on_gerrit_like_store(tmp_path, [name], removable=[])
+
+    assert (res.ok, res.issues) == (True, [])
+    assert _reviewer_ids(store) == {1000000}
+    assert store.calls_to("set_reviewers_batch") == []
+    assert store.calls_to("delete_reviewer") == []
+
+
+def test_overwrite_replaces_a_reviewer_with_one_named_by_email(tmp_path: Path) -> None:
+    store, res = _overwrite_on_gerrit_like_store(tmp_path, ["robert@example.com"])
+
+    assert (res.ok, res.issues) == (True, [])
+    assert _reviewer_ids(store) == {1000001}
+    assert [c.kwargs["reviewers"] for c in store.calls_to("set_reviewers_batch")] == [["robert@example.com"]]
+
+
+def test_overwrite_adds_only_the_missing_wanted_reviewers(tmp_path: Path) -> None:
+    store, res = _overwrite_on_gerrit_like_store(tmp_path, ["admin@example.com", "bob"], removable=[])
+
+    assert (res.ok, res.issues) == (True, [])
+    assert _reviewer_ids(store) == {1000000, 1000001}
+    assert [c.kwargs["reviewers"] for c in store.calls_to("set_reviewers_batch")] == [["bob"]]
+    assert store.calls_to("delete_reviewer") == []

@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
     removable_reviewer_ids,
+    reviewer_account_ids,
     reviewer_accounts_from_change_info,
 )
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -140,9 +141,12 @@ def apply_reviewer_strategy_after_push_service(
     except GerritApiError as error:
         return _apply_failed(f"could not load changes: {error}")
 
-    # Named reviewers stay: Gerrit reports nothing for one already on the change, so removing
-    # them after the add would take them off again.
-    wanted = {name.casefold() for name in reviewers}
+    # Overwrite compares people by account id: a reviewer named by email, full name or id is the
+    # same person as the slug Gerrit reports. A name Gerrit resolves to no single account (a
+    # group) falls back to matching the slug.
+    wanted_ids = reviewer_account_ids(service.rest, reviewers) if strategy == ReviewerStrategy.OVERWRITE else {}
+    keep_ids = {account_id for account_id in wanted_ids.values() if account_id is not None}
+    unresolved = {name.casefold() for name, account_id in wanted_ids.items() if account_id is None}
     for triplet in change_refs:
         detail = details_by_triplet.get(triplet)
         if detail is None:
@@ -158,24 +162,42 @@ def apply_reviewer_strategy_after_push_service(
             outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=()))
             continue
 
+        add = list(reviewers)
         remove: list[int] = []
         if strategy == ReviewerStrategy.OVERWRITE:
             reviewers_only = reviewer_accounts_from_change_info(detail, roles=("REVIEWER",))
+            present_ids = {account.account_id for account in reviewers_only if account.account_id is not None}
+            present_slugs = {account.slug.casefold() for account in reviewers_only}
+            # Only who is missing is added; asking Gerrit again for someone present is needless.
+            add = [
+                name
+                for name in reviewers
+                if (
+                    wanted_ids[name] not in present_ids
+                    if wanted_ids[name] is not None
+                    else name.casefold() not in present_slugs
+                )
+            ]
             # Gerrit refuses the delete for a reviewer the caller may not remove
             # (a negative vote, for a change owner): keep them and say so.
             removable = removable_reviewer_ids(detail)
             for account in reviewers_only:
-                if account.account_id is None or account.slug.casefold() in wanted:
+                if (
+                    account.account_id is None
+                    or account.account_id in keep_ids
+                    or account.slug.casefold() in unresolved
+                ):
                     continue
                 if removable is None or account.account_id in removable:
                     remove.append(account.account_id)
                 else:
                     kept.setdefault(account.slug, []).append(footer_change_id)
-        try:
-            service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
-        except GerritApiError as error:
-            issues.append(_not_applied(f"could not update reviewers on {triplet}: {error}"))
-            continue
+        if add or remove:
+            try:
+                service.changes.set_reviewers(triplet, add=add, remove=remove)
+            except GerritApiError as error:
+                issues.append(_not_applied(f"could not update reviewers on {triplet}: {error}"))
+                continue
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
     ok = not issues

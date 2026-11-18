@@ -105,6 +105,11 @@ def shape_change_info(row: dict[str, Any], options: list[str] | tuple[str, ...] 
     return out
 
 
+def _row_account_id(row: dict[str, Any]) -> object:
+    account = row.get("account")
+    return account.get("_account_id") if isinstance(account, dict) else None
+
+
 @dataclass(frozen=True)
 class RecordedCall:
     """One call made through the store."""
@@ -320,6 +325,24 @@ class ChangeStore:
                     out.extend({"account": account, "state": role} for account in bucket if isinstance(account, dict))
         return out
 
+    def _find_account(self, ref: int | str) -> dict[str, Any] | None:
+        """The seeded account *ref* names, as ``accounts/{ref}`` resolves it: id, username, email or full name."""
+        if isinstance(ref, int) or (isinstance(ref, str) and ref.isdigit()):
+            return self._accounts.get(int(ref))
+        needle = ref.strip().casefold()
+        for field_name in ("username", "email", "name"):
+            for row in self._accounts.values():
+                value = row.get(field_name)
+                if isinstance(value, str) and value.casefold() == needle:
+                    return row
+        return None
+
+    def _account_or_reject(self, name: str) -> dict[str, Any]:
+        account = self._find_account(name)
+        if account is None:
+            raise GerritApiError(f"Gerrit HTTP 400: {name} does not identify a registered user or group", status=400)
+        return account
+
     # -- GerritRest: reads -----------------------------------------------------
 
     def query_changes(self, query: str, *, n: int = 25, options: list[str] | None = None) -> list[dict[str, Any]]:
@@ -359,13 +382,7 @@ class ChangeStore:
             if payload is None:
                 raise GerritApiError("Gerrit HTTP 404: no matching account self", status=404)
             return payload
-        try:
-            payload = self._accounts.get(int(account_id))
-        except (TypeError, ValueError):
-            payload = next(
-                (row for row in self._accounts.values() if row.get("username") == account_id),
-                None,
-            )
+        payload = self._find_account(account_id)
         if payload is None:
             raise GerritApiError(f"Gerrit HTTP 404: no matching account {account_id}", status=404)
         return payload
@@ -508,6 +525,19 @@ class ChangeStore:
         self._record("set_reviewers_batch", change_id, reviewers=reviewers, ccs=ccs)
         payload = self._row_or_raise(change_id)
         rows = self._reviewer_rows(payload)
+        if self._accounts:
+            # Like Gerrit: every name must identify an account; one already on the change is
+            # re-asserted in the requested state, not added twice.
+            wanted = [
+                (self._account_or_reject(name), state)
+                for names, state in ((reviewers or [], "REVIEWER"), (ccs or [], "CC"))
+                for name in names
+            ]
+            for account, state in wanted:
+                rows = [row for row in rows if _row_account_id(row) != account["_account_id"]]
+                rows.append({"account": dict(account), "state": state})
+            payload["reviewers"] = rows
+            return {}
         existing = {str(row.get("account", {}).get("username")) for row in rows if isinstance(row.get("account"), dict)}
         for names, state in ((reviewers or [], "REVIEWER"), (ccs or [], "CC")):
             for name in names:
@@ -523,11 +553,15 @@ class ChangeStore:
         """Remove one reviewer or CC from a change."""
         self._record("delete_reviewer", change_id, account_id)
         payload = self._row_or_raise(change_id)
-        payload["reviewers"] = [
-            row
-            for row in self._reviewer_rows(payload)
-            if not (isinstance(row.get("account"), dict) and row["account"].get("_account_id") == account_id)
-        ]
+        rows = self._reviewer_rows(payload)
+        if all(_row_account_id(row) != account_id for row in rows):
+            raise GerritApiError(f"Gerrit HTTP 404: Not found: {account_id}", status=404)
+        removable = payload.get("removable_reviewers")
+        if isinstance(removable, list) and all(
+            not isinstance(row, dict) or row.get("_account_id") != account_id for row in removable
+        ):
+            raise GerritApiError("Gerrit HTTP 403: remove reviewer not permitted", status=403)
+        payload["reviewers"] = [row for row in rows if _row_account_id(row) != account_id]
         return None
 
     def set_topic(self, change_id: str, topic: str | None) -> None:

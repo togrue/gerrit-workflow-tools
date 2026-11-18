@@ -506,7 +506,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, and the warning when none could be read |
 | `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready prefix and boundary, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
-| `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
+| `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |

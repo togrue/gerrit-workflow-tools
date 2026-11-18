@@ -66,7 +66,7 @@ No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --se
 |----------|----------|
 | `push` (default) | Reviewers on refspec `%r=…` |
 | `lazy` | REST: add reviewers only where none assigned |
-| `overwrite` | REST: replace reviewers per change; CC accounts stay. A reviewer Gerrit does not let you remove (for a change owner: one with a negative vote) stays too, with a warning; the push still exits `0` |
+| `overwrite` | REST: replace reviewers per change; CC accounts stay. People are compared by Gerrit account id, so a wanted reviewer named by username, email, full name or id who is already on the change stays and is not asked for again; only missing ones are added and only unwanted ones removed (a change already matching gets no request). A name Gerrit resolves to no single account (a group) is matched by name. A reviewer Gerrit does not let you remove (for a change owner: one with a negative vote) stays too, with a warning; the push still exits `0` |
 
 `lazy` / `overwrite` may run REST assignment after push when git reports no new changes. Topic/WIP/ready/private/remove-private use magic ref options for all strategies.
 

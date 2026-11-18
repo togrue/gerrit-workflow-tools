@@ -527,3 +527,46 @@ def test_overwrite_when_existing_reviewer_voted_negatively(
     assert f"kept {ctx.admin_user} on 1 change" in e2
     after = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
     assert after[only.change_id] == {ctx.admin_user, ctx.rev_alt_user}
+
+
+@pytest.mark.parametrize("name_a_by", ["username", "email"])
+def test_overwrite_after_push_with_a_reviewer_keeps_or_replaces_them(
+    tmp_path,
+    gerrit_integration_context,
+    gerrit_admin_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+    name_a_by: str,
+) -> None:
+    """Issue #32: push with reviewer A, then overwrite [A], then overwrite [B]; each ends with exactly that set.
+
+    A is named by username or by email: overwrite compares account ids, not the typed name.
+    """
+    ctx = gerrit_integration_context
+    reviewer_a, reviewer_b = ctx.dev_user, ctx.rev_alt_user
+    typed_a = reviewer_a if name_a_by == "username" else f"{reviewer_a}@example.com"
+    topic = f"ow_again_{name_a_by}_{secrets.token_hex(4)}"
+    repo = prepare_topic_repo(ctx, tmp_path, topic)
+    build_linear_chain(repo, ["feat: overwrite after a push with a reviewer"])
+
+    code0, _o0, e0 = run_cli(
+        repo, ger_push_main, ["--yes", "--no-rebase-check", "--reviewers", reviewer_a], monkeypatch
+    )
+    assert code0 == 0, e0
+    (only,) = chain_commits_oldest_first(repo)
+    assert _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)[only.change_id] == {
+        reviewer_a
+    }
+
+    for typed, expected in ((typed_a, reviewer_a), (reviewer_b, reviewer_b)):
+        git("commit", "--amend", "--no-edit", cwd=repo)
+        code, _out, err = run_cli(
+            repo,
+            ger_push_main,
+            ["--yes", "--no-rebase-check", "--reviewer-strategy", "overwrite", "--reviewers", typed],
+            monkeypatch,
+        )
+        assert code == 0, err
+        assert "pushed, but" not in err
+        assert "kept " not in err
+        after = _reviewer_slugs_by_change_id(gerrit_admin_session, ctx.project_verified, topic)
+        assert after[only.change_id] == {expected}, (typed, after)
