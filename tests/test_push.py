@@ -25,7 +25,12 @@ from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from gerrit_workflow_tools.push_options_history import load_push_options_history
 from tests.change_store import ChangeStore
-from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, stack_rows_mb_to_head
+from tests.cli_gerrit_mocks import (
+    at_older_patchsets,
+    build_details_by_change_id,
+    stack_rows_mb_to_head,
+    web_edit,
+)
 from tests.conftest import run_cli
 from tests.fixtures import make_repo_with_merged_side_branch
 from tests.helpers import ref_exists, write_rebase_head
@@ -1476,11 +1481,9 @@ def test_ger_assume_yes_stands_in_for_y_without_a_terminal(stack_repo: Path, mon
 
 def _web_edited(rows: list[Commit], *, keep_local_patchset: bool) -> dict[str, dict[str, Any]]:
     """Every change with a patchset 2 made on Gerrit; the local commit its patchset 1, or no patchset at all."""
-    elsewhere = "e" * 40
     details = build_details_by_change_id(rows)
     for row, change in zip(rows, details.values(), strict=True):
-        change["current_revision"] = elsewhere
-        change["revisions"] = {elsewhere: {"_number": 2}} | ({row.sha: {"_number": 1}} if keep_local_patchset else {})
+        web_edit(change, row.sha, keep_local_patchset=keep_local_patchset)
     return details
 
 
@@ -1495,6 +1498,16 @@ def test_gpush_sends_nothing_where_glog_says_outdated(stack_repo: Path, monkeypa
     code, out, err = run_cli(stack_repo, gpush_main, [], monkeypatch, gerrit=ChangeStore(details))
     assert (code, err) == (0, "")
     assert "nothing to push: Gerrit already has these commits" in out
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    for number, row in enumerate(rows, start=100):
+        assert _outdated_line(row, number) in out
+    mock_run.assert_not_called()
+
+    code, dry, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0
+    assert "nothing to push: Gerrit already has these commits" in dry
+    assert all(_outdated_line(row, number) in dry for number, row in enumerate(rows, start=100))
+    assert "[dry-run] no git push: Gerrit already has these commits" in err
     mock_run.assert_not_called()
 
 
@@ -1509,3 +1522,59 @@ def test_gpush_guards_where_glog_says_diverged(stack_repo: Path, monkeypatch: py
     code, _out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 1
     assert f"{rows[0].short_sha} would replace patchset 2 of change 100" in err and "--force" in err
+
+
+def _outdated_line(row: Commit, number: int) -> str:
+    take_it = f"`ger checkout change:{number} --update`"
+    return f"{row.short_sha} outdated: Gerrit keeps patchset 2 of change {number} ({take_it})"
+
+
+def _bottom_web_edited(stack_repo: Path) -> tuple[list[Commit], dict[str, dict[str, Any]]]:
+    """The ready prefix on Gerrit at older patchsets, the bottom one then edited on the web (outdated)."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = at_older_patchsets(build_details_by_change_id(rows), stack_repo)
+    web_edit(next(iter(details.values())), rows[0].sha)
+    return rows, details
+
+
+def test_gpush_refuses_to_build_on_an_outdated_patchset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The top would go up on patchset 1 of the bottom change: not current, and without the web edit."""
+    rows, details = _bottom_web_edited(stack_repo)
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    assert [c["patchset_status"] for c in json.loads(out)["commits"]][:2] == ["outdated", "newer"]
+
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 1  # as the diverged refusal
+    assert (
+        f"error: {rows[1].short_sha} would be built on patchset 1 of change 100; Gerrit has patchset 2. "
+        "Take it first (`ger checkout change:100 --update`), or push anyway with --force"
+    ) in err
+    mock_run.assert_not_called()
+
+
+def test_gpush_force_builds_on_an_outdated_patchset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows, details = _bottom_web_edited(stack_repo)
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y", "--force"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0, err
+    assert mock_run.call_count == 1
+    assert mock_run.call_args[0][0][-1].startswith(f"{rows[1].sha}:refs/for/")
+    assert _outdated_line(rows[0], 100) in out
+
+
+def test_gpush_options_on_outdated_changes_name_the_newer_patchsets(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not a credentials problem: Gerrit has newer patchsets there, and no option reaches them over REST either."""
+    details = _web_edited(commits_in_range(stack_repo, "main..feature"), keep_local_patchset=True)
+    store = ChangeStore(details)
+    argv = ["-y", "--topic", "t", "--wip", "--reviewers", "alice", "--reviewer-strategy", "overwrite"]
+    code, _out, err = run_cli(stack_repo, gpush_main, argv, monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "push options not applied" in err and "Gerrit has newer patchsets of these changes" in err
+    assert "`ger checkout change:100 --update`" in err and "gerrit.token" not in err
+    writes = ("set_wip", "set_topic", "set_private", "set_reviewers_batch", "delete_reviewer")
+    assert not any(store.calls_to(method) for method in writes)

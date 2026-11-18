@@ -13,7 +13,7 @@ from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from tests.change_store import ChangeStore
-from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id
+from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, web_edit
 from tests.conftest import run_cli
 
 
@@ -134,3 +134,27 @@ def test_drafts_on_unchanged_commits_are_named(stack_repo: Path, monkeypatch: py
     assert code == ExitCode.OK
     assert f"drafts on {rows[0].short_sha} stay drafts" in out
     assert "Drafts" not in out.replace(f"drafts on {rows[0].short_sha}", "")
+
+
+def test_drafts_on_an_outdated_change_are_named(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An outdated change gets no patchset either, with --force pushing the commit above it: its drafts stay."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = at_older_patchsets(build_details_by_change_id(rows), stack_repo)
+    keys = list(details)
+    web_edit(details[keys[0]], rows[0].sha)
+    store = ChangeStore(details)
+    _with_draft(store, keys[0])
+    prompts: list[str] = []
+
+    def _input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return ""
+
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    monkeypatch.setattr("builtins.input", _input)
+    code, out, _err, refspec = _run_push(stack_repo, monkeypatch, ["--force"], store)
+    assert code == ExitCode.OK
+    assert f"drafts on {rows[0].short_sha} stay drafts" in out
+    assert "Drafts" not in out.replace(f"drafts on {rows[0].short_sha}", "")
+    assert not any("publish" in p for p in prompts)
+    assert "publish-comments" not in _options(refspec)

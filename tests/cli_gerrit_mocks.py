@@ -119,6 +119,17 @@ def at_older_patchsets(details: dict[str, dict[str, Any]], repo: Path) -> dict[s
     return details
 
 
+WEB_EDIT_SHA = "e" * 40
+"""Gerrit's patchset 2 made on the web: a commit no local repository has."""
+
+
+def web_edit(detail: dict[str, Any], local_sha: str, *, keep_local_patchset: bool = True) -> dict[str, Any]:
+    """*detail* with a patchset 2 made on Gerrit; the local commit its patchset 1 (outdated), or none (diverged)."""
+    detail["current_revision"] = WEB_EDIT_SHA
+    detail["revisions"] = {WEB_EDIT_SHA: {"_number": 2}} | ({local_sha: {"_number": 1}} if keep_local_patchset else {})
+    return detail
+
+
 def gerrit_client_class_stub(inst: object) -> MagicMock:
     """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
 

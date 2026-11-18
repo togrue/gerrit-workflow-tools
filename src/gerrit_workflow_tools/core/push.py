@@ -41,6 +41,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     push_marks,
 )
 from gerrit_workflow_tools.core.push_unchanged import (
+    OutdatedChange,
     StateUpdate,
     UnchangedChange,
     apply_updates,
@@ -69,7 +70,7 @@ class PushPlan:
     update_last_pushed: bool
     unchanged: tuple[UnchangedChange, ...] = ()
     """Commits Gerrit already has as current patchsets: push options reach them over REST."""
-    outdated: tuple[Commit, ...] = ()
+    outdated: tuple[OutdatedChange, ...] = ()
     """Commits Gerrit already has as older patchsets: not sent, so Gerrit keeps its newer one."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
@@ -150,18 +151,25 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
 
 def changes_nothing(plan: PushPlan) -> bool:
     """Nothing to send and nothing to set over REST: the push would leave Gerrit as it is."""
-    rest = state_updates(plan) or needs_rest_assignment(plan.options.strategy, plan.options.reviewers)
-    return not sent_commits(plan) and not rest
+    reviewers = needs_rest_assignment(plan.options.strategy, plan.options.reviewers) and _reviewed_commits(plan)
+    return not sent_commits(plan) and not state_updates(plan) and not reviewers
 
 
 def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
     """The commits *plan* gives Gerrit as new patch sets: all but those already one of their change's patch sets."""
-    known = {change.commit.sha for change in plan.unchanged} | {commit.sha for commit in plan.outdated}
+    known = {change.commit.sha for change in plan.unchanged} | {change.commit.sha for change in plan.outdated}
     return tuple(commit for commit in plan.commits if commit.sha not in known)
 
 
-def unchanged_short_shas(plan: PushPlan) -> set[str]:
-    return {change.commit.short_sha for change in plan.unchanged}
+def unsent_short_shas(plan: PushPlan) -> set[str]:
+    """The commits *plan* gives no new patch set: drafts on them cannot be published with it."""
+    return {c.short_sha for c in plan.commits} - {c.short_sha for c in sent_commits(plan)}
+
+
+def _reviewed_commits(plan: PushPlan) -> tuple[Commit, ...]:
+    """The commits reviewers reach over REST: all but the outdated ones, whose newer patchset Gerrit keeps."""
+    outdated = {change.commit.sha for change in plan.outdated}
+    return tuple(commit for commit in plan.commits if commit.sha not in outdated)
 
 
 def state_updates(plan: PushPlan) -> tuple[StateUpdate, ...]:
@@ -173,8 +181,8 @@ def publishable_drafts(plan: PushPlan) -> int:
     """Drafts this push would publish if asked: on changes it updates, while the guard allows it."""
     if publish_blocked():
         return 0
-    unchanged = unchanged_short_shas(plan)
-    return sum(count for sha, count in plan.drafts.items() if sha not in unchanged)
+    unsent = unsent_short_shas(plan)
+    return sum(count for sha, count in plan.drafts.items() if sha not in unsent)
 
 
 def publish_drafts_with(plan: PushPlan, publish: bool) -> PushPlan:
@@ -283,14 +291,8 @@ def prepare(
         if not all_commits:
             raise UsageError(f"--wip-from {wip_from[:8]} is not among the commits this push sends")
         wip_from = None
-    if existing.diverged and not force:
-        first = existing.diverged[0]
-        return PushRefusal(
-            f"error: {'; '.join(d.describe() for d in existing.diverged)}. Merge it into yours first "
-            f"(`ger checkout change:{first.number} --update`), or replace it anyway with --force",
-            boundary=boundary,
-            warnings=warnings,
-        )
+    if not force and (refusal := existing.refusal()):
+        return PushRefusal(refusal, boundary=boundary, warnings=warnings)
     plan = PushPlan(
         branch=branch,
         push_branch=refs_for_push_branch_name(destination, settings=settings),
@@ -331,7 +333,7 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
     updates = state_updates(plan)
     failures = apply_updates(run.gerrit, updates) if updates else []
     failed_updates = {failure.update for failure in failures}
-    unreached = unreached_options_warning(plan.options, plan.unchanged, rejected=rejected)
+    unreached = unreached_options_warning(plan.options, plan.unchanged, plan.outdated, rejected=rejected)
     note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), unreached)))
     failed = bool(error) or bool(failures) or (reviewers is not None and not reviewers.ok)
     return replace(
@@ -357,13 +359,14 @@ def _forget_pushed_changes(run: RunContext, plan: PushPlan) -> None:
 
 
 def _apply_reviewers(run: RunContext, plan: PushPlan) -> tuple[ReviewerApplyResult | None, str | None]:
-    if not needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
+    commits = _reviewed_commits(plan)
+    if not commits or not needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
         return None, None
     result = apply_reviewer_strategy_after_push_service(
         run.gerrit,
         plan.options.strategy,
         list(plan.options.reviewers),
-        change_refs_for_commits(run, plan.commits),
+        change_refs_for_commits(run, commits),
     )
     return result, None
 

@@ -30,7 +30,7 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 |--------|-------------|
 | `--dry-run` | Print preview only. Writes nothing, so a missing upstream is an error instead of a prompt |
 | `-y`, `--yes` | Skip confirmation (required when stdin is not a TTY) |
-| `--force` | Push even over a **diverged** change: one whose current patchset was uploaded from elsewhere (a web edit, another checkout) and is not in your history. Without it such a push is refused (check 5) |
+| `--force` | Push even over a **diverged** change (one whose current patchset was uploaded from elsewhere, a web edit or another checkout, and is not in your history), or on top of an **outdated** one. Without it such a push is refused (check 5) |
 | `--publish-comments` | Publish your drafts on the updated changes with the push. Needed with `-y`; on a TTY the prompt asks. Exits `2` while `GER_NO_PUBLISH` is set |
 | `-i` | TTY: prompt for reviewers (cannot combine with `-y`) |
 | `--all` | Push full stack (ignore stop pattern; Change-Id errors still tighten the tip). What the stop pattern or ready strategy held back goes up as **work-in-progress** (as `--wip-from <boundary>`), unless `--wip` or `--ready` says otherwise for all |
@@ -72,7 +72,7 @@ No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --se
 
 ### Changes Gerrit already has at that commit
 
-Gerrit applies magic-ref options only to the changes a push gives a new patch set. A commit that already is its change's current patch set gets them over REST instead (`core/push_unchanged.py`), after the push and also when Gerrit rejects it as `no new changes` (printed as `nothing to push: Gerrit already has these commits`). A commit Gerrit already has as an older patch set of its change (**outdated**: a web edit or a Gerrit rebase came after) is not sent either, and gets nothing over REST: Gerrit keeps its newer patch set. When Gerrit already has every commit, no `git push` runs at all, since Gerrit would refuse it; with nothing to set over REST either, `ger push` only prints that line and exits `0`: no preview, no question, and no `-y` needed off a terminal (`changes_nothing` in `core/push.py`).
+Gerrit applies magic-ref options only to the changes a push gives a new patch set. A commit that already is its change's current patch set gets them over REST instead (`core/push_unchanged.py`), after the push and also when Gerrit rejects it as `no new changes` (printed as `nothing to push: Gerrit already has these commits`). A commit Gerrit already has as an older patch set of its change (**outdated**: a web edit or a Gerrit rebase came after) is not sent either, and gets nothing over REST, reviewers included: Gerrit keeps its newer patch set. The preview and the `nothing to push` line name each one, dim: `` <sha> outdated: Gerrit keeps patchset 2 of change N (`ger checkout change:N --update`) ``, the next step `ger log` names. Options asked for there warn `push options not applied to <sha>…: Gerrit has newer patchsets of these changes`, not about credentials. Drafts on an outdated change stay drafts, as on an unchanged one. When Gerrit already has every commit, no `git push` runs at all, since Gerrit would refuse it; with nothing to set over REST either, `ger push` only prints that line and exits `0`: no preview, no question, and no `-y` needed off a terminal (`changes_nothing` in `core/push.py`).
 
 | Option | REST call, only where the change differs |
 |--------|------------------------------------------|
@@ -125,8 +125,8 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
 3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
-4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset or an older one (outdated), and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
-5. No **diverged** change: when a commit is new to its open change (`newer`) and that change's current patchset is a commit this repository never had, the push would replace somebody's upload with a commit not built on it. It refuses (exit `1`) and names the commit, the change and patchset, and the two ways on: merge it in with `ger checkout change:<n> --update`, or `--force`.
+4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset or an older one (outdated, not sent), and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
+5. No **diverged** change: when a commit is new to its open change (`newer`) and that change's current patchset is a commit this repository never had, the push would replace somebody's upload with a commit not built on it. It refuses (exit `1`) and names the commit, the change and patchset, and the two ways on: merge it in with `ger checkout change:<n> --update`, or `--force`. Nor a commit sent above an **outdated** one: Gerrit would chain its new patch set on the old patch set below, not on the current one (the relation chain shows it NOT CURRENT, and the stack lacks the web edit). It refuses the same way: `` error: <sha> would be built on patchset 1 of change N; Gerrit has patchset 2. Take it first (`ger checkout change:N --update`), or push anyway with --force ``. With `--force` the tip goes up as asked, and the outdated commit below still gets no patch set.
 
 ---
 
@@ -145,7 +145,7 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 | Code | Meaning |
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
-| `1` | Nothing to push (empty ready prefix), a **diverged** change without `--force`, or you declined the upstream prompt |
+| `1` | Nothing to push (empty ready prefix), a **diverged** change or a commit above an **outdated** one without `--force`, or you declined the upstream prompt |
 | `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
 | `4` | `REV` names a Change-Id that more than one stack commit carries |

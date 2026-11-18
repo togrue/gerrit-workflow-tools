@@ -6,6 +6,9 @@ patch set, a push changes nothing, so ``ger push`` sets the same state through t
 REST endpoints instead: ``POST …/wip`` / ``…/ready``, ``POST`` / ``DELETE …/private``, ``PUT …/topic`` and
 the reviewer batch. Only what differs from the change's current state is sent, so a push
 without these options makes no extra call.
+
+A commit Gerrit has as an older patch set of its change (**outdated**) gets nothing: neither
+a patch set nor options over REST, so Gerrit keeps its newer patch set as it is.
 """
 
 from __future__ import annotations
@@ -37,6 +40,33 @@ class UnchangedChange:
     def of(cls, commit: Commit, triplet: str, view: ChangeView) -> UnchangedChange:
         reviewers = None if view.reviewers is None else tuple(account.slug for account in view.reviewers)
         return cls(commit, triplet, view.work_in_progress, view.private, view.topic, reviewers)
+
+
+@dataclass(frozen=True)
+class OutdatedChange:
+    """A commit about to be pushed that Gerrit has as an older patch set of its change: it is not sent."""
+
+    commit: Commit
+    number: int | None
+    patch_set: int | None
+    """The local commit's patch-set number."""
+    current_patch_set: int | None
+
+    @classmethod
+    def of(cls, commit: Commit, view: ChangeView) -> OutdatedChange:
+        revision = view.revisions.get(commit.sha.lower())
+        return cls(commit, view.number, revision.number if revision else None, view.current_revision_number)
+
+    @property
+    def take_it(self) -> str:
+        return f"`ger checkout change:{self.number} --update`"
+
+    def describe(self) -> str:
+        """``<sha> outdated: Gerrit keeps patchset 2 of change N (…)``, as ``ger log`` names the next step."""
+        return (
+            f"{self.commit.short_sha} outdated: Gerrit keeps patchset {self.current_patch_set} "
+            f"of change {self.number} ({self.take_it})"
+        )
 
 
 @dataclass(frozen=True)
@@ -88,13 +118,23 @@ def _missing_reviewers(options: PushOptions, change: UnchangedChange) -> tuple[s
 
 
 def unreached_options_warning(
-    options: PushOptions, unchanged: Sequence[UnchangedChange], *, rejected: bool
+    options: PushOptions,
+    unchanged: Sequence[UnchangedChange],
+    outdated: Sequence[OutdatedChange] = (),
+    *,
+    rejected: bool,
 ) -> str | None:
-    """Gerrit took no new patch set and ger could not read the changes, so options set nothing."""
-    pushed_reviewers = bool(options.reviewers) and options.strategy == ReviewerStrategy.PUSH
+    """Options that set nothing: on outdated changes, or where Gerrit took no new patch set and ger could
+    not read the changes."""
     states = (options.wip, options.ready, options.private, options.remove_private)
-    asked = bool(options.topic) or any(states) or pushed_reviewers
-    if not rejected or unchanged or not asked:
+    asked = bool(options.topic) or any(states)
+    if outdated and (asked or options.reviewers):
+        return (
+            f"warning: push options not applied to {', '.join(c.commit.short_sha for c in outdated)}: "
+            f"Gerrit has newer patchsets of these changes ({outdated[0].take_it})"
+        )
+    pushed_reviewers = bool(options.reviewers) and options.strategy == ReviewerStrategy.PUSH
+    if not rejected or unchanged or not (asked or pushed_reviewers):
         return None
     return (
         "warning: push options not applied: Gerrit already has these commits, and without Gerrit's "

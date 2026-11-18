@@ -504,7 +504,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
 | `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
-| `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, and the warning when none could be read |
+| `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, `OutdatedChange` (Gerrit has a newer patch set: nothing is set), and the warning when options reached nothing |
 | `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready prefix and boundary, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |

@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
-from gerrit_workflow_tools.core.push_unchanged import UnchangedChange
+from gerrit_workflow_tools.core.push_unchanged import OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
@@ -115,6 +115,19 @@ class DivergedChange(NamedTuple):
         )
 
 
+class BuiltOnOutdated(NamedTuple):
+    """A commit a push sends above an outdated one: Gerrit would chain it on a patchset that is not current."""
+
+    short_sha: str
+    below: OutdatedChange
+
+    def describe(self) -> str:
+        return (
+            f"{self.short_sha} would be built on patchset {self.below.patch_set} of change {self.below.number}; "
+            f"Gerrit has patchset {self.below.current_patch_set}"
+        )
+
+
 class ExistingChanges(NamedTuple):
     """What Gerrit already holds for the commits about to be pushed."""
 
@@ -127,8 +140,25 @@ class ExistingChanges(NamedTuple):
     """Gerrit could not be asked at all; :attr:`warnings` says why. Nothing else here is known."""
     diverged: tuple[DivergedChange, ...] = ()
     """Commits whose push would replace a patchset not built on: somebody else's upload."""
-    outdated: tuple[Commit, ...] = ()
+    outdated: tuple[OutdatedChange, ...] = ()
     """Commits Gerrit already has as an older patchset of their change: a push sends them nowhere."""
+    built_on_outdated: tuple[BuiltOnOutdated, ...] = ()
+    """The lowest sent commit above each outdated one: its patch set would not sit on Gerrit's current one."""
+
+    def refusal(self) -> str | None:
+        """Why a push without ``--force`` must not run: it would replace a newer patchset, or build on an old one."""
+        lines: list[str] = []
+        if self.diverged:
+            lines.append(
+                f"error: {'; '.join(d.describe() for d in self.diverged)}. Merge it into yours first "
+                f"(`ger checkout change:{self.diverged[0].number} --update`), or replace it anyway with --force"
+            )
+        if self.built_on_outdated:
+            lines.append(
+                f"error: {'; '.join(b.describe() for b in self.built_on_outdated)}. Take it first "
+                f"({self.built_on_outdated[0].below.take_it}), or push anyway with --force"
+            )
+        return "\n".join(lines) or None
 
 
 def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> ExistingChanges:
@@ -152,32 +182,43 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
     warnings: list[str] = []
     unchanged: list[UnchangedChange] = []
     diverged: list[DivergedChange] = []
-    outdated: list[Commit] = []
+    outdated: list[OutdatedChange] = []
+    built_on_outdated: list[BuiltOnOutdated] = []
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
+    below: list[OutdatedChange] = []  # outdated, with no sent commit above yet
     for commit in commits:
         view = views.get(commit.sha)
-        if view is None:
-            continue
-        status = patchset_status(commit.sha, view)
-        if (view.status or "").upper() == "ABANDONED":
+        status = patchset_status(commit.sha, view) if view is not None else None
+        if view is not None and (view.status or "").upper() == "ABANDONED":
             warnings.append(
                 f"warning: {commit.short_sha} targets abandoned change {view.number}; "
                 "restore it on Gerrit or drop the commit"
             )
-        elif status == PatchsetStatus.ACTIVE:
+        elif view is not None and status == PatchsetStatus.ACTIVE:
             unchanged.append(UnchangedChange.of(commit, triplets[commit.sha], view))
-        elif status == PatchsetStatus.OUTDATED:  # Gerrit has it; its newer patchset stays
-            outdated.append(commit)
+            continue
+        elif view is not None and status == PatchsetStatus.OUTDATED:  # Gerrit has it; its newer patchset stays
+            outdated.append(OutdatedChange.of(commit, view))
+            below.append(outdated[-1])
+            continue
         elif (
-            status == PatchsetStatus.NEWER
+            view is not None
+            and status == PatchsetStatus.NEWER
             and view.is_open
             and view.current_revision
             and not commit_sha_or_none(run.cwd, view.current_revision)
         ):
             diverged.append(DivergedChange(commit.short_sha, view.number, view.current_revision_number))
+        built_on_outdated += (BuiltOnOutdated(commit.short_sha, change) for change in below)
+        below.clear()
     return ExistingChanges(
-        tuple(warnings), tuple(unchanged), drafts, diverged=tuple(diverged), outdated=tuple(outdated)
+        tuple(warnings),
+        tuple(unchanged),
+        drafts,
+        diverged=tuple(diverged),
+        outdated=tuple(outdated),
+        built_on_outdated=tuple(built_on_outdated),
     )
 
 

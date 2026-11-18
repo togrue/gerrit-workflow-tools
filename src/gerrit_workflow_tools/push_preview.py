@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.push import (
     revise,
     sent_commits,
     state_updates,
-    unchanged_short_shas,
+    unsent_short_shas,
     wip_commits,
 )
 from gerrit_workflow_tools.core.push_checks import PushBoundary
@@ -149,11 +149,18 @@ def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlight
         print(color_text(rest, ANSI_DIM) if sent else color_text("No new commits to push; set on Gerrit:", heading))
         for update in updates:
             print(f"    {update_line(update, summary_highlighter)}")
-    if sent and (idle := len(plan.commits) - len(sent) - len(updates)):
+    if sent and (idle := len(plan.commits) - len(sent) - len(updates) - len(plan.outdated)):
         print(color_text(f"{_commits(idle)} not sent again", ANSI_DIM))
     if not sent and not updates:
         print(NOTHING_TO_PUSH)
+    print_outdated(plan)
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
+
+
+def print_outdated(plan: PushPlan) -> None:
+    """One dim line per outdated commit: Gerrit keeps its newer patchset, and how to take it."""
+    for change in plan.outdated:
+        print(color_text(change.describe(), ANSI_DIM))
 
 
 def update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | None = None) -> str:
@@ -191,8 +198,8 @@ def print_plan_status(plan: PushPlan) -> None:
     ]
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
-    unchanged = unchanged_short_shas(plan)
-    stuck = [sha for sha in plan.drafts if sha in unchanged]
+    unsent = unsent_short_shas(plan)
+    stuck = [sha for sha in plan.drafts if sha in unsent]
     updated = sum(count for sha, count in plan.drafts.items() if sha not in stuck)
     if updated:
         decision = "publish" if options.publish_comments else "keep"
