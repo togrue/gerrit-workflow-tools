@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import partial
@@ -108,15 +108,21 @@ def reviewer_accounts_from_change_info(
     ``REVIEWER`` only so CC accounts are not removed.
     """
 
+    return _reviewer_accounts(_reviewer_account_infos(detail, roles))
+
+
+def _reviewer_account_infos(detail: Mapping[str, object], roles: Sequence[str]) -> Iterator[Mapping[str, object]]:
+    """The raw AccountInfo rows of ChangeInfo ``reviewers`` in *roles* (map or list shape)."""
     reviewers = detail.get("reviewers")
     if isinstance(reviewers, dict):
-        buckets = (reviewers.get(role) for role in roles)
-        return _reviewer_accounts(account for bucket in buckets if isinstance(bucket, list) for account in bucket)
-    if isinstance(reviewers, list):
-        return _reviewer_accounts(
-            entry.get("account") for entry in reviewers if isinstance(entry, dict) and entry.get("state") in roles
-        )
-    return []
+        for role in roles:
+            bucket = reviewers.get(role)
+            if isinstance(bucket, list):
+                yield from (account for account in bucket if isinstance(account, dict))
+    elif isinstance(reviewers, list):
+        for entry in reviewers:
+            if isinstance(entry, dict) and entry.get("state") in roles and isinstance(entry.get("account"), dict):
+                yield entry["account"]
 
 
 def removable_reviewer_ids(detail: Mapping[str, object]) -> set[int] | None:
@@ -132,23 +138,56 @@ def removable_reviewer_ids(detail: Mapping[str, object]) -> set[int] | None:
     return {row["_account_id"] for row in rows if isinstance(row, dict) and isinstance(row.get("_account_id"), int)}
 
 
-def reviewer_account_ids(rest: GerritRest, names: Sequence[str]) -> dict[str, int | None]:
+def reviewer_handles(details: Iterable[Mapping[str, object]]) -> dict[str, int]:
+    """Account id by unique handle (id, username, email; casefolded) for everyone on *details*.
+
+    Read from the reviewer and CC rows of ChangeInfo fetched with ``DETAILED_ACCOUNTS``. A full
+    name is not a handle: it names one account only when it is unique on the whole server.
+    """
+    out: dict[str, int] = {}
+    for detail in details:
+        for account in _reviewer_account_infos(detail, ("REVIEWER", "CC")):
+            account_id = account.get("_account_id")
+            if not isinstance(account_id, int):
+                continue
+            out[str(account_id)] = account_id
+            for key in ("username", "email"):
+                value = account.get(key)
+                if isinstance(value, str) and value.strip():
+                    out[value.strip().casefold()] = account_id
+    return out
+
+
+def reviewer_account_ids(
+    rest: GerritRest, names: Sequence[str], *, known: Mapping[str, int] | None = None
+) -> dict[str, int | None]:
     """The account id each reviewer name resolves to on Gerrit (username, email, full name or id).
 
-    ``None`` when Gerrit names no single account for it: a group, an unknown or an ambiguous
-    name. Who someone is on a change is their account id; the name a user typed need not be
-    the slug Gerrit reports for them.
+    A name in *known* (see :func:`reviewer_handles`) resolves without a request; the rest
+    ask ``GET accounts/{name}``. ``None`` when Gerrit names no single account for it (HTTP
+    404 or 400): a group, an unknown or an ambiguous name. Any other failure (401, 5xx,
+    Gerrit unreachable) raises :class:`GerritApiError`, since nothing is known then. Who
+    someone is on a change is their account id; the name a user typed need not be the slug
+    Gerrit reports for them.
     """
+    local = known or {}
 
     def _lookup(name: str) -> int | None:
         try:
             raw = rest.get_account(name).get("_account_id")
-        except GerritApiError:
-            return None
+        except GerritApiError as error:
+            if error.status in (400, 404):
+                return None
+            raise
         return raw if isinstance(raw, int) else None
 
     unique = list(dict.fromkeys(names))
-    return dict(zip(unique, parallel_map(partial(_lookup, name) for name in unique), strict=True))
+    out: dict[str, int | None] = {
+        name: local[name.strip().casefold()] for name in unique if name.strip().casefold() in local
+    }
+    asked = [name for name in unique if name not in out]
+    out.update(zip(asked, parallel_map(partial(_lookup, name) for name in asked), strict=True))
+    return {name: out[name] for name in unique}
 
 
 def parse_reviewer_names(raw: str) -> list[str]:

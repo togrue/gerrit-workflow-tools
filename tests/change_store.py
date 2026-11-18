@@ -133,11 +133,13 @@ class ChangeStore:
         messages: dict[str, list[dict[str, Any]]] | None = None,
         project_reviewers: dict[str, list[dict[str, Any]]] | None = None,
         self_account_id: int | None = None,
+        groups: dict[str, list[int]] | None = None,
     ) -> None:
         self.web_base = web_base.rstrip("/")
         self._changes: dict[str, dict[str, Any]] = dict(changes or {})
         self._accounts: dict[int, dict[str, Any]] = dict(accounts or {})
         self._self_account_id = self_account_id
+        self._groups = {name.casefold(): list(members) for name, members in (groups or {}).items()}
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
         self._drafts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._related: dict[str, list[dict[str, Any]]] = {}
@@ -337,6 +339,13 @@ class ChangeStore:
                     return row
         return None
 
+    def _accounts_named(self, name: str) -> list[dict[str, Any]]:
+        """The accounts a reviewer input *name* adds: one account, or a seeded group's members."""
+        members = self._groups.get(name.strip().casefold())
+        if members is not None:
+            return [self._accounts[account_id] for account_id in members]
+        return [self._account_or_reject(name)]
+
     def _account_or_reject(self, name: str) -> dict[str, Any]:
         account = self._find_account(name)
         if account is None:
@@ -521,24 +530,38 @@ class ChangeStore:
         reviewers: list[str] | None = None,
         ccs: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Add reviewers and CCs to one change; later reads observe them."""
+        """Add reviewers and CCs to one change; later reads observe them.
+
+        With seeded accounts every name must identify an account or a seeded group (else the
+        whole request is a 400 and nothing changes); a group adds its members.
+        """
         self._record("set_reviewers_batch", change_id, reviewers=reviewers, ccs=ccs)
         payload = self._row_or_raise(change_id)
         rows = self._reviewer_rows(payload)
+        # Like Gerrit: the change owner is never added as its reviewer or CC; the request
+        # still succeeds.
+        owner = payload.get("owner")
+        owner_id = owner.get("_account_id") if isinstance(owner, dict) else None
         if self._accounts:
             # Like Gerrit: every name must identify an account; one already on the change is
             # re-asserted in the requested state, not added twice.
+            # A group name adds its members; it is no account, so ``accounts/{name}`` 404s on it.
             wanted = [
-                (self._account_or_reject(name), state)
+                (account, state)
                 for names, state in ((reviewers or [], "REVIEWER"), (ccs or [], "CC"))
                 for name in names
+                for account in self._accounts_named(name)
             ]
             for account, state in wanted:
+                if account["_account_id"] == owner_id:
+                    continue
                 rows = [row for row in rows if _row_account_id(row) != account["_account_id"]]
                 rows.append({"account": dict(account), "state": state})
             payload["reviewers"] = rows
             return {}
         existing = {str(row.get("account", {}).get("username")) for row in rows if isinstance(row.get("account"), dict)}
+        if isinstance(owner, dict) and isinstance(owner.get("username"), str):
+            existing.add(owner["username"])
         for names, state in ((reviewers or [], "REVIEWER"), (ccs or [], "CC")):
             for name in names:
                 if name in existing:
