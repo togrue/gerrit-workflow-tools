@@ -89,8 +89,8 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
     (:mod:`gerrit_workflow_tools.rebase_enricher`) which annotates each pick line with
     the commit's Gerrit verified/CR/comments status before opening the real editor.
 
-    The real editor is resolved by the enricher from ``GIT_EDITOR``, ``core.editor``,
-    ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
+    The real editor is resolved by the enricher from ``GREBASE_EDITOR``, ``GIT_EDITOR``,
+    ``core.editor``, ``VISUAL``, or ``EDITOR`` — no extra configuration needed.
     """
     return run_cli_command(lambda: _run(argv, gerrit=gerrit))
 
@@ -131,7 +131,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
             return int(ExitCode.REFUSED)
         base, _, _ = merge_base_with_target(cwd, branch)
 
-    # The enricher reads GIT_EDITOR / core.editor / EDITOR to find the actual editor to open.
+    # The enricher reads GREBASE_EDITOR / GIT_EDITOR / core.editor / EDITOR to find the editor to open.
     env: dict[str, str] = {}
     if args.debug_log:
         env["GREBASE_DEBUG_LOG"] = "1"

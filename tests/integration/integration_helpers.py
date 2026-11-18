@@ -385,6 +385,86 @@ def current_patchset(session: GerritHttpSession, change: str) -> int:
     return int(detail["revisions"][detail["current_revision"]]["_number"])
 
 
+@dataclass(frozen=True)
+class OnGerrit:
+    """What Gerrit has for one change of a chain after a push."""
+
+    number: int
+    patchset: int
+    sha: str
+
+
+def related_changes(session: GerritHttpSession, change_number: int, revision: str = "current") -> list[dict[str, Any]]:
+    """Gerrit's relation chain of *revision* of a change, newest first (as the web UI lists it)."""
+    data = session.get_json(f"changes/{change_number}/revisions/{revision}/related")
+    return list(data.get("changes") or [])
+
+
+def not_current_members(related: list[dict[str, Any]]) -> list[str]:
+    """Change-Ids a relation chain lists at a patchset that is not their current one.
+
+    The web UI marks each of them *NOT CURRENT*.
+    """
+    return [r["change_id"] for r in related if r.get("_revision_number") != r.get("_current_revision_number")]
+
+
+def assert_gerrit_agrees(  # pylint: disable=too-many-arguments,too-many-locals
+    session: GerritHttpSession,
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    project: str,
+    branch: str,
+    before: dict[str, OnGerrit],
+    orphans: frozenset[str] = frozenset(),
+) -> dict[str, OnGerrit]:
+    """Check Gerrit and ``ger log`` against the local chain after a push; return what Gerrit has now.
+
+    *before* is what Gerrit had before the push: a change whose commit is unchanged keeps its
+    patchset, a changed one gets exactly one more, a Change-Id Gerrit did not know starts at 1.
+
+    Every member's relation chain lists exactly the local chain, newest first, each at its
+    current patchset (nothing *NOT CURRENT*). *orphans* are Change-Ids that are no longer in
+    the local chain but that Gerrit may still list (a squashed-away change): they may appear
+    in a member's chain, and nothing else may.
+    """
+    local = chain_commits_oldest_first(repo)
+    after: dict[str, OnGerrit] = {}
+    for commit in local:
+        detail = change_detail(session, f"{project}~{branch}~{commit.change_id}")
+        assert detail["status"] == "NEW", commit.subject
+        current = detail["current_revision"]
+        # The local commit's SHA fixes its parent too: being current means sitting on the
+        # local parent, which is the current patchset of the change below (checked one round
+        # earlier) or the branch.
+        assert current == commit.sha, f"{commit.subject}: Gerrit's current patchset is not the local commit"
+        patchset = int(detail["revisions"][current]["_number"])
+        old = before.get(commit.change_id)
+        expected = 1 if old is None else old.patchset + (0 if old.sha == commit.sha else 1)
+        assert patchset == expected, commit.subject
+        after[commit.change_id] = OnGerrit(number=int(detail["_number"]), patchset=patchset, sha=commit.sha)
+
+    newest_first = [c.change_id for c in reversed(local)]
+    for commit in local:
+        related = related_changes(session, after[commit.change_id].number)
+        ids = [r["change_id"] for r in related]
+        assert [i for i in ids if i not in orphans] == newest_first, (commit.subject, ids)
+        assert set(ids) <= set(newest_first) | orphans, (commit.subject, ids)
+        assert not_current_members(related) == [], (commit.subject, ids)
+        for r in related:
+            if r["change_id"] in after:
+                assert r["commit"]["commit"] == after[r["change_id"]].sha, (commit.subject, r["change_id"])
+
+    rows = log_commits_by_change_id(repo, monkeypatch)
+    assert list(rows) == [c.change_id for c in local]
+    for commit in local:
+        row = rows[commit.change_id]
+        assert row["sha"] == commit.sha
+        assert row["number"] == after[commit.change_id].number
+        assert row["patchset_status"] == "active", commit.subject
+    return after
+
+
 def submit_change(session: GerritHttpSession, change: str) -> None:
     """Approve and submit *change* as the session's user (Code-Review+2 is all the project needs)."""
     enc = quote_change_id(change)

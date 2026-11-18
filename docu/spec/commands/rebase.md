@@ -43,7 +43,7 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 | `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
-Editor: enricher delegates to `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`. Without a terminal (stdin not a TTY: scripts, agents) no editor opens: `GIT_EDITOR=true` takes the todo as annotated, so `--autosquash` and `--drop-merged-equivalent` run unattended.
+Editor: enricher delegates to `GREBASE_EDITOR` / `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`, first set wins. `GREBASE_EDITOR` edits only the todo (git's own editor, e.g. for a `squash` message, still comes from `GIT_EDITOR` onwards). Without a terminal (stdin not a TTY: scripts, agents) ger sets `GIT_EDITOR=true`, so unless `GREBASE_EDITOR` is set no editor opens: the todo runs as annotated, so `--autosquash` and `--drop-merged-equivalent` run unattended. A script that wants to edit the todo sets `GREBASE_EDITOR`.
 
 A rebase that stops on a conflict ends with the shared next step ([edit.md](edit.md#behavior)): resolve the paths, `git add` them, then `git rebase --continue`, or `git rebase --abort`.
 
