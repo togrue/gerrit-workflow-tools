@@ -312,6 +312,14 @@ test("a change wears the comment icon exactly when the Change view lists an open
     ["only resolved comments", { attention_reasons: ["awaiting-review"] }, [published(3, { resolved: true })]],
     ["open comment on an older patchset", { comments_unresolved: 1, attention_reasons: ["awaiting-review", "unresolved-comments"] }, [published(1)]],
     ["open comment and a negative vote", { code_review: -1, comments_unresolved: 1, attention_reasons: ["review-issues", "unresolved-comments"] }, [published(3)]],
+    // A patchset-level comment is listed as "whole change", and it is open all the same.
+    ["open patchset-level comment", { comments_unresolved: 1, attention_reasons: ["awaiting-review", "unresolved-comments"] }, [published(3, { path: "/PATCHSET_LEVEL", line: null })]],
+    // Your unpublished draft is yours to finish, not a comment waiting on you; Gerrit does not count it.
+    [
+      "only your draft",
+      { attention_reasons: ["awaiting-review"] },
+      [published(3, { comments: [{ path: "a.py", line: 4, message: "Maybe rename.", patch_set: 3, state: "draft", url: null }] })],
+    ],
   ];
   for (const [name, extra, chains] of cases) {
     const vm = changeVm(state({ shown: shown(extra), chains }));

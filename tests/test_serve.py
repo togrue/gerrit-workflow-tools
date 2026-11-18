@@ -186,6 +186,8 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
 def test_a_review_chain_member_has_unresolved_comments_exactly_when_show_lists_an_open_chain(stack_repo: Path) -> None:
     # Review chains draws its comment icon from the member's reasons; the Change view lists /show's chains.
     # 100: a negative vote and no comment (A4). 101: an open comment. 102: only a resolved one.
+    # The agreement rests on Gerrit deriving unresolved_comment_count from the published threads;
+    # the fake sets the count and the comments independently, so each case sets both to agree.
     store, keys, rows = _gerrit(stack_repo, [{"cr": -1}, {"unresolved_comment_count": 1}, {}, {}])
     store.set_comments(
         keys[1], {"b.txt": [{"id": "c1", "line": 1, "message": "rename", "unresolved": True, "patch_set": 1}]}

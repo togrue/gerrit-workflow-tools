@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, Comment, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
+import { Chain, Comment, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -48,6 +48,18 @@ export function attentionIcon(reasons: readonly string[]): { icon: string; sever
   const level = severity(reasons);
   const comments = level === "warning" && reasons.includes("unresolved-comments");
   return { icon: comments ? "comment-unresolved" : SEVERITY_ICONS[level], severity: level };
+}
+
+/**
+ * The status bar's codicon for the headline: an eye for a chain waiting on your review, else the
+ * icon `attentionIcon` gives its reason (a negative vote is a warning, not a comment bubble); a
+ * check when nothing needs you.
+ */
+export function headlineIcon(headline: Pick<Headline, "section" | "reason"> | null | undefined): string {
+  if (!headline) {
+    return "pass";
+  }
+  return headline.section === "to-review" ? "eye" : attentionIcon([headline.reason]).icon;
 }
 
 export function reasonWords(reasons: readonly string[]): string {

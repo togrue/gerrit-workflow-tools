@@ -16,6 +16,7 @@ import {
   commitVotes,
   eventsMayCome,
   fileState,
+  headlineIcon,
   movedTo,
   refreshMode,
   reviewOpened,
@@ -61,6 +62,20 @@ test("severity takes the most urgent reason", () => {
   assert.deepEqual(attentionIcon(["review-issues"]), { icon: "warning", severity: "warning" });
   assert.deepEqual(attentionIcon(["review-issues", "unresolved-comments"]), { icon: "comment-unresolved", severity: "warning" });
   assert.deepEqual(attentionIcon(["ci-failed", "unresolved-comments"]), { icon: "error", severity: "error" });
+});
+
+// A4: the status bar drew a comment bubble for "Negative vote on 123", which has no comment.
+test("the status bar's headline icon is the one its reason gets in Review chains", () => {
+  const outgoing = (reason: string) => headlineIcon({ section: "outgoing", reason });
+  assert.equal(outgoing("review-issues"), "warning");
+  assert.notEqual(outgoing("review-issues"), "comment-unresolved");
+  assert.equal(outgoing("unresolved-comments"), "comment-unresolved");
+  assert.equal(outgoing("ci-failed"), "error");
+  for (const reason of ["ci-failed", "unresolved-comments", "review-issues"]) {
+    assert.equal(outgoing(reason), attentionIcon([reason]).icon, reason);
+  }
+  assert.equal(headlineIcon({ section: "to-review", reason: "waiting-on-you" }), "eye");
+  assert.equal(headlineIcon(null), "pass");
 });
 
 test("votes and ages read like ger's own output", () => {

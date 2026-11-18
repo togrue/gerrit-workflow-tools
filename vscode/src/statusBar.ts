@@ -3,7 +3,7 @@
 import * as vscode from "vscode";
 
 import { EventFollower } from "./events";
-import { plural, refreshMode } from "./format";
+import { headlineIcon, plural, refreshMode } from "./format";
 import { Model } from "./model";
 import { pollSeconds } from "./poller";
 
@@ -29,7 +29,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
     } else {
       const headline = overview.headline;
       const text = headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
-      const glyph = !headline ? "$(pass)" : headline.reason === "ci-failed" ? "$(error)" : headline.section === "to-review" ? "$(eye)" : "$(comment-unresolved)";
+      const glyph = `$(${headlineIcon(headline)})`;
       // Out of date: the last refresh failed, and this is the answer before it.
       const old = model.stale ? " $(warning)" : "";
       item.text = `${glyph} ${text.length > 60 ? `${text.slice(0, 59)}…` : text}${news}${old}`;
