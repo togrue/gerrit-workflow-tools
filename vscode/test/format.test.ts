@@ -9,6 +9,7 @@ import {
   chainDescription,
   chainsWithActivity,
   commentLocation,
+  commentText,
   commitVotes,
   eventsMayCome,
   fileState,
@@ -163,4 +164,24 @@ test("a review checkout says where the change is: the review worktree, or this c
     reviewOpened({ ...review, staged: false }, true),
     "Change 900 (patchset 2) is checked out for review: this checkout was switched to change-900. Leave Review Checkout switches back.",
   );
+});
+
+test("a comment's text shows the Gerrit fix it suggests, and a suggestion block of its text only once", () => {
+  const range = { start_line: 2, start_character: 0, end_line: 4, end_character: 0 };
+  const fix = {
+    fix_id: "a6b3c2d1_0e9f8a7b",
+    description: "Use the LIMIT constant",
+    in_message: false,
+    replacements: [{ path: "epsilon.txt", range, replacement: "LIMIT = 10\nuse(LIMIT)\n", location: "epsilon.txt:2-3" }],
+  };
+  assert.equal(
+    commentText({ message: "Name the limit.", suggested_edits: [fix] }),
+    "Name the limit.\n\n**Suggested fix:** Use the LIMIT constant\n`epsilon.txt:2-3` becomes:\n```\nLIMIT = 10\nuse(LIMIT)\n```",
+  );
+  const deletion = { ...fix, description: "", replacements: [{ ...fix.replacements[0], replacement: "" }] };
+  assert.equal(commentText({ message: "", suggested_edits: [deletion] }), "**Suggested fix:**\n`epsilon.txt:2-3`: delete");
+  const block = "Typo:\n\n```suggestion\n    return total\n```\n";
+  const inMessage = { ...fix, fix_id: null, in_message: true };
+  assert.equal(commentText({ message: block, suggested_edits: [inMessage] }), block);
+  assert.equal(commentText({ message: "plain" }), "plain");
 });

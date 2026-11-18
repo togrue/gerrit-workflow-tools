@@ -181,10 +181,27 @@ export interface UpstreamChoice {
 /** What a new comment becomes: a draft on Gerrit, or kept here (a local draft or a private note). */
 export type NewCommentState = "draft" | "local-draft" | "note";
 
+/** One replacement of a suggested edit: Gerrit's FixReplacementInfo, and where it applies as `ger comment` writes a location. */
+export interface FixReplacement {
+  path: string;
+  range: { start_line: number; start_character: number; end_line: number; end_character: number };
+  replacement: string;
+  location: string;
+}
+
+/** An edit a comment suggests: a Gerrit fix suggestion, or a ```suggestion block of its text (`in_message`). */
+export interface SuggestedEdit {
+  fix_id: string | null;
+  description: string;
+  in_message: boolean;
+  replacements: FixReplacement[];
+}
+
 export interface Comment {
   path: string;
   line: number | null;
   message: string;
+  suggested_edits?: SuggestedEdit[];
   author?: string;
   comment_id?: string;
   patch_set: number | null;

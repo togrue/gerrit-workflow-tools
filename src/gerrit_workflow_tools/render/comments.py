@@ -8,6 +8,7 @@ from gerrit_workflow_tools.cli_style import (
     ANSI_CYAN,
     ANSI_DIM,
     ANSI_DIM_GRAY,
+    ANSI_GREEN,
     ANSI_YELLOW,
     color_text,
     format_link,
@@ -20,6 +21,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     InlineComment,
     gerrit_inline_comment_url,
 )
+from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
@@ -110,6 +112,25 @@ def format_pending_drafts(heading: str, chains: list[CommentChain]) -> list[str]
     return lines
 
 
+def fix_suggestion_lines(edits: tuple[SuggestedEdit, ...]) -> list[str]:
+    """Plain lines for the Gerrit fix suggestions in *edits*: what each replaces, and with what.
+
+    A ``suggestion`` block of the comment's text is left out: its message already shows it.
+    """
+    lines: list[str] = []
+    for edit in edits:
+        if edit.in_message:
+            continue
+        lines.append(f"suggested fix: {edit.description}" if edit.description else "suggested fix:")
+        for rep in edit.replacements:
+            if not rep.replacement:
+                lines.append(f"  {rep.describe()}: delete")
+                continue
+            lines.append(f"  {rep.describe()} becomes:")
+            lines.extend(f"  + {text}" for text in rep.replacement.rstrip("\n").split("\n"))
+    return lines
+
+
 def _box_border(text: str, *, resolved: bool) -> str:
     return color_text(text, ANSI_DIM_GRAY if resolved else ANSI_YELLOW)
 
@@ -169,12 +190,14 @@ def _box_content_rows(
             rows.append(color_text(draft_label(chain, row_item), ANSI_BOLD + ANSI_BLUE))
             for ln in row_item.message.splitlines() or [""]:
                 rows.extend(color_text(part, ANSI_BLUE) for part in _prefixed_wrap(ln, width, prefix="  "))
-            continue
-        if row_item.author:
-            for part in wrap_lines(row_item.author, width):
-                rows.append(color_text(part, ANSI_DIM))
-        for ln in row_item.message.splitlines() or [""]:
-            rows.extend(_prefixed_wrap(ln, width, prefix="  "))
+        else:
+            if row_item.author:
+                for part in wrap_lines(row_item.author, width):
+                    rows.append(color_text(part, ANSI_DIM))
+            for ln in row_item.message.splitlines() or [""]:
+                rows.extend(_prefixed_wrap(ln, width, prefix="  "))
+        for ln in fix_suggestion_lines(row_item.suggested_edits):
+            rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(ln, width, prefix="  "))
     chain_url = _chain_url(chain, gerrit_url)
     if chain_url:
         rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")
@@ -262,10 +285,30 @@ def format_comment_chain_markdown(
                 lines.append(f"> {ln}" if ln else ">")
         else:
             lines.append(">")
+        lines.extend(_fix_suggestions_markdown(row_item.suggested_edits))
         lines.append("")
     # Drop the trailing blank between chains; caller adds separation.
     if lines and lines[-1] == "":
         lines.pop()
+    return lines
+
+
+def _fix_suggestions_markdown(edits: tuple[SuggestedEdit, ...]) -> list[str]:
+    """The Gerrit fix suggestions in *edits*, quoted under the comment, each replacement fenced."""
+    lines: list[str] = []
+    for edit in edits:
+        if edit.in_message:
+            continue
+        lines.append(">")
+        lines.append(f"> **Suggested fix:** {edit.description}".rstrip())
+        for rep in edit.replacements:
+            if not rep.replacement:
+                lines.append(f"> `{rep.describe()}`: delete")
+                continue
+            lines.append(f"> `{rep.describe()}` becomes:")
+            lines.append("> ```")
+            lines.extend(f"> {text}".rstrip() for text in rep.replacement.rstrip("\n").split("\n"))
+            lines.append("> ```")
     return lines
 
 

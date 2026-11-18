@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from gerrit_workflow_tools.core.anchor_mapping import AnchorPlacement
     from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
     from gerrit_workflow_tools.core.stack import Commit
+    from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ class InlineComment:
     """A Gerrit draft: visible only to its author until published."""
     local: LocalCommentState | None = None
     """Set for a note or local draft: it is in the local comment store, not on Gerrit."""
+    suggested_edits: tuple[SuggestedEdit, ...] = ()
+    """Edits the comment suggests: Gerrit fix suggestions and ``suggestion`` blocks of its text."""
 
     @property
     def state(self) -> CommentState:

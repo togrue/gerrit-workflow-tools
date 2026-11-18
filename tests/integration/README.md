@@ -26,6 +26,7 @@ Unit tests (`pytest` with default config) **ignore** this directory; run integra
 | `test_16_rewrite_and_repush.py` | `ger push REV`, then the rest, then nothing to push; `ger fix` / `ger reword` / `ger edit` round trip renews only the touched change and those above, Change-Ids kept; a reordered stack |
 | `test_17_gerrit_failures.py` | Wrong token (HTTP 401) and an unreachable host for `ger log`, `ger show`, `ger edit -n`, `ger push --dry-run`: one line, exit 5 (push preview: one warning, exit 0), local state shown |
 | `test_18_serve.py` | `ger serve` `/stack` and `/overview` agree with `ger log --json`; the outgoing chain comes from Gerrit's relation data |
+| `test_20_suggested_edits.py` | A comment with `fix_suggestions` and one with a ```` ```suggestion ```` block, posted over REST, in `ger show --json` and human output |
 | `test_reviewer_strategies_rest.py` | `push` / `lazy` / `overwrite` reviewer strategies |
 
 ### Writing a test here

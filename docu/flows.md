@@ -33,6 +33,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff* | `tests/test_review.py` | ships |
 | What changed since the patchset you reviewed | — | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_serve.py` | **gap** in the CLI |
 | Read the comment chains | `ger show --comments all` | editor comment threads, *Next Unresolved Comment* | `tests/test_show.py`, `tests/test_show_comments_render.py` | ships |
+| Read a reviewer's suggested edit (Gerrit fix suggestion or ```` ```suggestion ```` block) | `ger show` (`suggested_edits` in `--json`) | in the comment, editor thread and *Change* view | `tests/test_suggested_edits.py`, `tests/test_serve.py` | partial: shown, not applied |
 | Comment on a line or range | `ger comment PATH:LINE -m MSG` | "+" in the editor gutter, *Save Draft* | `tests/test_comment.py` | ships |
 | Reply to a chain | `ger reply CHAIN -m MSG`, `--done` | *Reply as Draft…*, *Reply Done and Resolve as Draft* | `tests/test_reply.py` | ships |
 | Send comments and vote | `ger review --vote CR+1 -m MSG` | runs in the terminal | `tests/test_review.py` | ships |

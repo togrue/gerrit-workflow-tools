@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
+from gerrit_workflow_tools.core.suggested_edits import suggested_edits_from_raw
 
 
 if TYPE_CHECKING:
@@ -82,9 +83,10 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
     if isinstance(raw_author, dict):
         author_label = format_gerrit_account_label(raw_author)
     patch_set = comment.get("patch_set")
+    line = _comment_line(comment)
     return InlineComment(
         path=path,
-        line=_comment_line(comment),
+        line=line,
         message=raw_msg if isinstance(raw_msg, str) else "",
         comment_id=raw_id if isinstance(raw_id, str) else None,
         author=author_label,
@@ -92,6 +94,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
         patch_set=patch_set if isinstance(patch_set, int) else None,
         unresolved=comment.get("unresolved") is True,
         draft=draft,
+        suggested_edits=suggested_edits_from_raw(path, comment, start_line=_comment_start_line(comment), line=line),
     )
 
 

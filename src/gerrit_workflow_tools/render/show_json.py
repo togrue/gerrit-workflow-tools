@@ -39,6 +39,8 @@ def comment_json_payload(
                 entry["context_lines"] = [
                     {"line_number": line.line_number, "context_line": line.text} for line in row_item.context_lines
                 ]
+            if row_item.suggested_edits:
+                entry["suggested_edits"] = [edit.to_json() for edit in row_item.suggested_edits]
             chain_comments.append(entry)
             comment_payload.append(entry)
         chain_payload.append(

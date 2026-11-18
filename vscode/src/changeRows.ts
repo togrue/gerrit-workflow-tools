@@ -5,7 +5,7 @@
 import * as path from "node:path";
 
 import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
-import { Severity, commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
+import { Severity, commentText, commitVotes, fileState, plural, reasonWords, sentence, severity } from "./format";
 import { Badge, Tone, badges } from "./stackRows";
 import { Waiting } from "./state";
 
@@ -252,11 +252,11 @@ function thread(chain: CommentChain): ThreadRow {
     ...icon,
     id: chain.root_id,
     text: first?.message.split("\n")[0] ?? where,
-    body: first?.message ?? "",
+    body: first ? commentText(first) : "",
     author: first ? (first.author ?? "you") : "",
     file: !NOT_FILES.includes(chain.path),
     notes: notes.filter(Boolean),
-    tooltip: chain.comments.map((c) => `${c.author ?? "you"}${c.state === "published" ? "" : ` (${c.state})`}:\n${c.message}`).join("\n\n"),
+    tooltip: chain.comments.map((c) => `${c.author ?? "you"}${c.state === "published" ? "" : ` (${c.state})`}:\n${commentText(c)}`).join("\n\n"),
     // Your own unpublished chain: nobody to reply to, nothing for the agent to keep from.
     reply: !mine,
     open: !mine && !chain.resolved,
@@ -264,7 +264,7 @@ function thread(chain: CommentChain): ThreadRow {
     resolved: chain.resolved,
     edit: Boolean(mine && own),
     discard: own ? (mine ? DISCARD[own.state] : "Delete Your Draft Reply…") : "",
-    replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: c.message })),
+    replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: commentText(c) })),
   };
 }
 

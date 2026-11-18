@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 import { Comment, CommentChain, NewCommentState } from "./api";
 import { ownComment } from "./changeRows";
 import { ChangeView, FILE_SCHEME } from "./changeView";
-import { commentLocation } from "./format";
+import { commentLocation, commentText } from "./format";
 import { Model, describeError } from "./model";
 import { ui } from "./ui";
 
@@ -41,7 +41,7 @@ export class ThreadComment implements vscode.Comment {
   thread: vscode.CommentThread | undefined;
 
   constructor(readonly source: Comment) {
-    this.body = new vscode.MarkdownString(source.message);
+    this.body = new vscode.MarkdownString(commentText(source));
     this.author = { name: source.author ?? "you" };
     this.label = source.state === "published" ? undefined : source.state;
     this.contextValue = source.state !== "published" && source.comment_id ? "yours" : undefined;
@@ -397,6 +397,7 @@ export class CommentThreads implements vscode.Disposable {
     if (!comment.contextValue || !comment.thread) {
       return;
     }
+    comment.body = new vscode.MarkdownString(comment.source.message); // the text you wrote, not the fixes shown below it
     comment.mode = vscode.CommentMode.Editing;
     comment.thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     this.editing.add(comment);
@@ -405,7 +406,7 @@ export class CommentThreads implements vscode.Disposable {
 
   /** Leave the text box: the comment says again what is saved. */
   cancelEdit(comment: ThreadComment): void {
-    comment.body = new vscode.MarkdownString(comment.source.message);
+    comment.body = new vscode.MarkdownString(commentText(comment.source));
     comment.mode = vscode.CommentMode.Preview;
     this.editing.delete(comment);
     this.redraw(comment);

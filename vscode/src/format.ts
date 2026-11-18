@@ -1,6 +1,6 @@
 // How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
 
-import { Chain, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
+import { Chain, Comment, CommitStatus, EventsStatus, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
 
 export type Severity = "error" | "warning" | "pending" | "ok";
 
@@ -231,4 +231,20 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   }
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
+}
+
+/**
+ * A comment's text with the Gerrit fix suggestions it carries written out below it: what each
+ * replaces, and with what. A ```suggestion block of the text is already there, so it is not repeated.
+ */
+export function commentText(comment: Pick<Comment, "message" | "suggested_edits">): string {
+  const fixes = (comment.suggested_edits ?? []).filter((edit) => !edit.in_message);
+  const parts = fixes.map((edit) => {
+    const lines = [`**Suggested fix:**${edit.description ? ` ${edit.description}` : ""}`];
+    for (const rep of edit.replacements) {
+      lines.push(rep.replacement ? `\`${rep.location}\` becomes:\n\`\`\`\n${rep.replacement.replace(/\n$/, "")}\n\`\`\`` : `\`${rep.location}\`: delete`);
+    }
+    return lines.join("\n");
+  });
+  return [comment.message, ...parts].filter(Boolean).join("\n\n");
 }

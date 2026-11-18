@@ -196,6 +196,10 @@ _Avoid_: needs-human flag, skip list, ignore
 Where a comment is in its life: **note** (local, private, never uploaded), **local draft** (local, meant for Gerrit), **draft** (on Gerrit, visible only to you), **published**. "Private" is not a comment state: in Gerrit it names a kind of *change*.
 _Avoid_: private comment, pending comment, unsent comment
 
+**Suggested edit**:
+A reviewer's proposed change to the code a comment is on: a Gerrit **fix suggestion** (`fix_suggestions`, with a `fix_id`) or a ```` ```suggestion ```` block in the comment's text, which replaces the comment's lines. Shown with the comment; not applied by ger.
+_Avoid_: patch suggestion, code suggestion (unqualified), fix (alone; `ger fix` is something else)
+
 **Local comment store**:
 The `refs/ger/comments` ref holding every note and local draft of a repository, keyed by **triplet**. Shared by all worktrees. Not a cache: it is the only copy.
 _Avoid_: comment cache, comment db, notes (for the store)

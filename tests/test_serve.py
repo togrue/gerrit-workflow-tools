@@ -42,6 +42,7 @@ from tests.change_store import ChangeStore
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import json_stdout, run_cli
+from tests.test_suggested_edits import BLOCK_COMMENT, FIX_COMMENT
 
 
 WEB = "https://g.example"
@@ -232,6 +233,23 @@ def test_show_carries_comment_chains_and_a_draft_reply_lands_in_its_chain(stack_
     [chain] = _get(api, "/show", rev="HEAD", comments="all")["commits"][0]["comment_chains"]
     assert [c["state"] for c in chain["comments"]] == ["published", "draft"]
     assert chain["resolved_after_publish"] is True
+
+
+def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, keys, _rows = _gerrit(stack_repo, [{}, {}, {}, {"unresolved_comment_count": 2}])
+    store.set_comments(keys[3], {"epsilon.txt": [FIX_COMMENT], "zeta.py": [BLOCK_COMMENT]})
+    [commit] = _get(GerApi(stack_repo, gerrit=store), "/show", rev="HEAD", comments="all")["commits"]
+    _code, out, err = run_cli(stack_repo, show_main, ["--json", "--comments", "all", "HEAD"], monkeypatch, gerrit=store)
+
+    def edits(payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            c["comment_id"]: c.get("suggested_edits") for chain in payload["comment_chains"] for c in chain["comments"]
+        }
+
+    served = edits(commit)
+    assert served == edits(json_stdout(out)), err
+    assert served["4f0a1c2b_8d9e7f60"][0]["fix_id"] == "a6b3c2d1_0e9f8a7b"
+    assert served["7c6d5e4f_3a2b1c0d"][0]["in_message"] is True
 
 
 def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) -> None:
