@@ -93,6 +93,34 @@ _ALIASES: dict[str, str] = {
     "stack": "rebase",
 }
 
+# The sections of `ger --help`: daily work first, one-time setup and scripting after it.
+# Each entry is a group of commands sharing one line (and one handler); the first names the description.
+# Every command in _COMMANDS appears in exactly one group.
+_SECTIONS: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...] = (
+    (
+        "daily commands",
+        (
+            ("log",),
+            ("show",),
+            ("edit", "reword"),
+            ("fix",),
+            ("inbox",),
+            ("push",),
+            ("rebase",),
+            ("reply",),
+            ("review",),
+            ("checkout",),
+            ("comment",),
+            ("ci",),
+        ),
+    ),
+    ("setup", (("setup",), ("config",), ("vscode",), ("bash-completion",))),
+    (
+        "scripting and agents",
+        (("resolve",), ("sha",), ("change-id",), ("fetch-api",), ("serve",), ("cache",)),
+    ),
+)
+
 _HANDLER_CACHE: dict[str, _Handler] = {}
 
 
@@ -119,11 +147,12 @@ def _usage() -> str:
         "usage: ger <command> [options]",
         "",
         "Gerrit workflow tools for stacked reviews.",
-        "",
-        "commands:",
     ]
-    for name, (desc, _) in sorted(_COMMANDS.items()):
-        lines.append(f"  {name:12} {desc}")
+    width = max(len(", ".join(group)) for _title, groups in _SECTIONS for group in groups)
+    for title, groups in _SECTIONS:
+        lines.extend(["", f"{title}:"])
+        for group in groups:
+            lines.append(f"  {', '.join(group):{width}} {_COMMANDS[group[0]][0]}")
     lines.extend(["", "common tasks:", *(f"  {task:38} {how}" for task, how in _TASKS)])
     lines.extend(
         [

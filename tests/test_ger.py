@@ -109,3 +109,28 @@ def test_help_maps_common_tasks_to_commands(stack_repo: Path, monkeypatch: pytes
     assert code == 0 and "common tasks:" in out and "GER_ASSUME_YES" in out
     named = {m for _task, how in _TASKS for m in re.findall(r"\bger ([a-z-]+)", how)}
     assert named and named <= set(_COMMANDS), named - set(_COMMANDS)
+
+
+def test_every_command_is_in_exactly_one_help_section() -> None:
+    """A new command cannot be left out of `ger --help`, nor listed twice."""
+    from gerrit_workflow_tools.cli_ger import _COMMANDS, _SECTIONS
+
+    listed = [name for _title, groups in _SECTIONS for group in groups for name in group]
+    assert sorted(listed) == sorted(_COMMANDS)
+
+
+def test_help_lists_daily_commands_before_setup_and_scripting(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, out, _err = run_cli(stack_repo, ger_main, ["--help"], monkeypatch)
+    assert code == 0
+    lines = out.splitlines()
+    headers = [
+        line for line in lines if line in {"daily commands:", "setup:", "scripting and agents:", "common tasks:"}
+    ]
+    assert headers == ["daily commands:", "setup:", "scripting and agents:", "common tasks:"]
+    daily = lines[lines.index("daily commands:") + 1 : lines.index("setup:") - 1]
+    assert [line.split()[0].rstrip(",") for line in daily][:5] == ["log", "show", "edit", "fix", "inbox"]
+    assert any(line.startswith("  edit, reword ") for line in daily)
+    scripting = lines[lines.index("scripting and agents:") + 1 : lines.index("common tasks:") - 1]
+    assert "  sha " in "\n".join(scripting)
