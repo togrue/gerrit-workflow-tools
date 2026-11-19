@@ -185,6 +185,17 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
     assert overview["local"]["summary"]["commits"] == 4
 
 
+def test_failed_ci_is_the_headline_only_on_the_local_stacks_chain(stack_repo: Path) -> None:
+    store, _keys, _rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {"verified": -1}, {}])
+    git("reset", "-q", "--hard", "main", cwd=stack_repo)  # the chain is no longer the one you work on
+    overview = _get(GerApi(stack_repo, gerrit=store), "/overview")
+    [chain] = overview["sections"][1]["chains"]
+    assert chain["local"] is False
+    # Its failed CI waits until you look at it; the open comment is next in line.
+    headline = overview["headline"]
+    assert (headline["reason"], headline["number"]) == ("unresolved-comments", 101)
+
+
 def test_a_review_chain_member_has_unresolved_comments_exactly_when_show_lists_an_open_chain(stack_repo: Path) -> None:
     # Review chains draws its comment icon from the member's reasons; the Change view lists /show's chains.
     # 100: a negative vote and no comment (A4). 101: an open comment. 102: only a resolved one.

@@ -6,6 +6,7 @@ Spec: docu/spec/commands/serve.md.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from functools import partial
 from itertools import pairwise
 from typing import Any
 
@@ -178,15 +179,18 @@ def _soft(load: Any, ctx: Context, req: Request) -> dict[str, Any]:
         return {"error": error_json(error)}
 
 
-def _inbox(ctx: Context, req: Request) -> dict[str, Any]:
-    """Both inbox sections, narrowed to the repository's project; every project with ``all=1``."""
+def _inbox(ctx: Context, req: Request, *, current: set[str]) -> dict[str, Any]:
+    """Both inbox sections, narrowed to the repository's project; every project with ``all=1``.
+
+    *current* is the local stack's Change-Ids: failed CI is the headline only on that chain.
+    """
     now = datetime.now(timezone.utc)
     projects = project_scope(ctx.cwd, ctx.settings, all_projects=req.flag("all"))
     sections = load_inbox(ctx.service, now=now, projects=projects, all_projects=not projects)
     return {
         "generated": iso_utc(now),
         "projects": projects,
-        "headline": headline_json(pick_headline(sections)),
+        "headline": headline_json(pick_headline(sections, current=current)),
         "sections": [
             {
                 "name": section.name,
@@ -202,17 +206,18 @@ def _inbox(ctx: Context, req: Request) -> dict[str, Any]:
 def overview(ctx: Context, req: Request) -> dict[str, Any]:
     """Both inbox sections, the **headline**, and the local stack beside them.
 
-    Chain members that are commits of the local stack carry ``local_sha``. The inbox and the
+    Failed CI makes the headline only on the local stack's own chain. Chain members that are
+    commits of the local stack carry ``local_sha``. The inbox and the
     local stack fail separately: either may be ``{"error": …}`` while the other is shown.
     """
     local = _soft(stack, ctx, req)
     if "error" in local:
         branch = ctx.run.worktree.branch
         local["needs_upstream"] = branch is not None and not branch_has_upstream(ctx.cwd, branch)
-    inbox = _soft(_inbox, ctx, req)
     sha_by_change = {
         norm_change_id(c["change_id"]): c["sha"] for c in local.get("commits", []) if c.get("change_id") and c["sha"]
     }
+    inbox = _soft(partial(_inbox, current=set(sha_by_change)), ctx, req)
     for section in inbox.get("sections", []):
         for chain in section["chains"]:
             for member in chain["members"]:

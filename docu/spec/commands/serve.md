@@ -186,7 +186,9 @@ Everything the first screen needs, in one call.
   has `local_sha` — the commit of the **local stack** carrying that **Change-Id**, or `null` —
   and each chain has `local`.
 - `headline` — the **headline**: `section`, `reason`, `chain`, `number`, `subject`, `url` and a
-  sentence in `text`. `null` when nothing wants you.
+  sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
+  with a commit of the **local stack**; another chain's failure leaves the headline to the next
+  reason.
 - `local` — the answer of `GET /stack`.
 - `projects` — the Gerrit projects both sections are narrowed to: the repository's own
   (from `gerrit.project` or the remote URL), as `ger inbox` does inside a clone. `all=1` drops

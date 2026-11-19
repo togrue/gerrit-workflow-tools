@@ -6,7 +6,7 @@ inside a clone, the sections are narrowed to that clone's Gerrit project (:func:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.rest import parallel_map
+from gerrit_workflow_tools.core.gerrit.rest import norm_change_id, parallel_map
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain
@@ -120,6 +120,11 @@ def section_summary(chains: list[ReviewChain]) -> dict[str, int]:
     }
 
 
+def _touches(chain: ReviewChain, change_ids: Collection[str]) -> bool:
+    """Whether a member of *chain* carries one of *change_ids*."""
+    return any(norm_change_id(member.change_id) in change_ids for member in chain.members)
+
+
 def _urgency(chain: ReviewChain) -> int:
     """Position of the chain's most urgent reason in the headline order; past the end when it has none."""
     ranks = [i for i, reason in enumerate(_HEADLINE_ORDER) if reason in chain.attention_reasons]
@@ -164,13 +169,20 @@ def load_inbox(
     return [InboxSection(name, queries[name], chains) for name, chains in fetched.items()]
 
 
-def pick_headline(sections: Sequence[InboxSection]) -> Headline | None:
+def pick_headline(sections: Sequence[InboxSection], *, current: Collection[str] | None = None) -> Headline | None:
     """The headline: failed CI, then unresolved comments, then a negative vote on an outgoing
-    chain (its base-most such change); else the *to review* chain that has waited longest."""
+    chain (its base-most such change); else the *to review* chain that has waited longest.
+
+    *current* is the Change-Ids of the chain you work on (normalised, as
+    :func:`norm_change_id` gives them). Given, failed CI is a headline only on a chain with one
+    of them: another chain's failure waits until you look at it.
+    """
     by_name = {section.name: section for section in sections}
     outgoing = by_name[OUTGOING].chains if OUTGOING in by_name else []
     for reason in _HEADLINE_ORDER:
         for chain in outgoing:
+            if reason == Attention.CI_FAILED and current is not None and not _touches(chain, current):
+                continue
             for member in chain.members:
                 if reason in member.attention_reasons:
                     return Headline(OUTGOING, reason, chain, member)

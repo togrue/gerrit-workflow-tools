@@ -32,10 +32,15 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       const glyph = `$(${headlineIcon(headline)})`;
       // Out of date: the last refresh failed, and this is the answer before it.
       const old = model.stale ? " $(warning)" : "";
-      item.text = `${glyph} ${text.length > 60 ? `${text.slice(0, 59)}…` : text}${news}${old}`;
+      // Failed CI is the red item: kept short, the change's subject is in the tooltip.
+      const shown = headline?.reason === "ci-failed" ? `CI failed: ${headline.number}` : text.length > 60 ? `${text.slice(0, 59)}…` : text;
+      item.text = `${glyph} ${shown}${news}${old}`;
       label = `Gerrit: ${text}${model.active.size ? `. New activity on ${plural(model.active.size, "chain")}` : ""}${model.stale ? ". Out of date: the last refresh failed" : ""}`;
       if (model.stale) {
         tooltip.appendMarkdown("$(warning) ").appendText(`Out of date: the last refresh failed (${model.stale}). This is the last answer; the next refresh that works replaces it.`).appendMarkdown("\n\n");
+      }
+      if (headline) {
+        tooltip.appendText(headline.text).appendMarkdown("\n\n");
       }
       item.backgroundColor = headline?.reason === "ci-failed" ? new vscode.ThemeColor("statusBarItem.errorBackground") : undefined;
       for (const section of overview.sections ?? []) {

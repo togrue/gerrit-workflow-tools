@@ -3,7 +3,7 @@
 ## On start
 
 ```
-status bar | $(error) CI failed on 102: test! temporary experiment
+status bar | $(error) CI failed: 102
 state  | ready
 events | live
 chains | CI failed on 102: test! temporary experiment
@@ -273,7 +273,7 @@ notification (info): No review checkout is open here.
 + stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
 + change | title: Change 900 — Add retry to the uploader
 + change | A change shows here once ger runs. Review chains says what is missing and what to do next.
-- status bar | $(error) CI failed on 102: test! temporary experiment
+- status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
 - chains | CI failed on 102: test! temporary experiment
@@ -327,7 +327,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ status bar | $(error) CI failed on 102: test! temporary experiment
++ status bar | $(error) CI failed: 102
 + state  | ready
 + events | live
 + chains | CI failed on 102: test! temporary experiment
@@ -1093,8 +1093,8 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 **Expect:** Nothing is said and the views keep what they showed; the status bar item gets a warning mark, its tooltip says the answer is out of date, and Review chains is labelled so.
 
 ```
-+ status bar | $(error) CI failed on 102: test! temporary experiment $(warning)
-- status bar | $(error) CI failed on 102: test! temporary experiment
++ status bar | $(error) CI failed: 102 $(warning)
+- status bar | $(error) CI failed: 102
 + events | (not said)
 - events | live
 ```
@@ -1113,8 +1113,8 @@ notification (warning): Still out of date: fake ger: down for this test
 **Expect:** The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository, so the amended top commit is no longer ahead of it); its event stream is followed again.
 
 ```
-+ status bar | $(error) CI failed on 102: Refactor parser init
-- status bar | $(error) CI failed on 102: test! temporary experiment $(warning)
++ status bar | $(error) CI failed: 102
+- status bar | $(error) CI failed: 102 $(warning)
 + events | live
 + chains | CI failed on 102: Refactor parser init
 - events | (not said)
@@ -1142,8 +1142,8 @@ notification (warning): Still out of date: fake ger: down for this test
 **Expect:** With no click and no poll, Review chains shows the new unresolved comment on 900 within a few seconds; nothing is said.
 
 ```
-+ status bar | $(error) CI failed on 102: Refactor parser init  $(bell-dot) 1
-- status bar | $(error) CI failed on 102: Refactor parser init
++ status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(error) CI failed: 102
 + chains | To review — 1 chain · 1 with comments
 + chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
 - chains | To review — 1 chain
@@ -1163,7 +1163,7 @@ notification (warning): Still out of date: fake ger: down for this test
 ## At the end
 
 ```
-status bar | $(error) CI failed on 102: Refactor parser init  $(bell-dot) 1
+status bar | $(error) CI failed: 102  $(bell-dot) 1
 state  | ready
 events | live
 chains | CI failed on 102: Refactor parser init
