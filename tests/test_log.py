@@ -921,3 +921,38 @@ def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeyp
     details = build_details_by_change_id(rows, per_index_overrides=[{"cr": 1, "submittable": False}])
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
     assert "chain blocked: a change below is not submittable yet" in out
+
+
+def test_log_verbose_lists_reviewers_and_ccs(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``-v`` names who is on each change, CCs apart; JSON carries the same with the role."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {
+        "reviewers": {
+            "REVIEWER": [{"username": "alice", "_account_id": 1}, {"username": "bob", "_account_id": 2}],
+            "CC": [{"username": "carol", "_account_id": 3}],
+        }
+    }
+    overrides[1] = {"reviewers": {}}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+
+    code, plain, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "Reviewers:" not in plain
+
+    code, out, err = run_cli(stack_repo, log_main, ["-v", "--color=never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    reviewer_lines = [line.strip() for line in out.splitlines() if "Reviewers:" in line]
+    assert reviewer_lines[0] == "Reviewers: alice, bob (cc: carol)"
+    # The second change has nobody on it: no line (its `no reviewers` hint says so), the rest keep the default.
+    assert reviewer_lines[1:] == ["Reviewers: default-reviewer"] * (len(rows) - 2)
+
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    first = json_stdout(out)["commits"][0]
+    assert first["reviewers"] == [
+        {"name": "alice", "cc": False},
+        {"name": "bob", "cc": False},
+        {"name": "carol", "cc": True},
+    ]

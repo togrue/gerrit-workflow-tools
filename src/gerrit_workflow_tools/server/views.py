@@ -99,7 +99,6 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
             "merge": c.sha in merges,
             "rebase": progress.state_of(c.sha) if progress else None,
             "updated": iso_utc(parse_gerrit_time(c.updated)),
-            "reviewers": [reviewer.slug for reviewer in c.reviewers],
             "is_head": c.sha == head,
             "held_back": c.sha in blocked,
             "needs_edit": commit_needs_edit_attention(c),

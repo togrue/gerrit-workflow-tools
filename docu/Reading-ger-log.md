@@ -166,8 +166,8 @@ Only non-zero categories after `ready` are shown.
 
 The **primary line is identical** to default `ger log` (including inline `Open in gerrit` when hyperlinks are on). Verbosity only adds indented continuation lines:
 
-- `-v`: `CI:` row listing all CI pipelines (failed in red, successful in green)
-- `-vv`: `CI:` row plus full `Change-Id:` line
+- `-v`: `CI:` row listing all CI pipelines (failed in red, successful in green), and a `Reviewers:` row naming who is on the change (`alice, bob (cc: carol)`)
+- `-vv`: the `-v` rows plus full `Change-Id:` line
 
 Use verbose mode when the compact line is not enough context.
 

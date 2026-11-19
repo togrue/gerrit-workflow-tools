@@ -203,7 +203,7 @@ remembers what it showed last knows which chains moved.
 ### `GET /stack`
 
 The **annotated stack** of the working branch: `ger log --json`, plus per commit `short_sha`,
-`updated`, `reviewers`, `is_head`, `held_back` (at or above the **ready boundary**) and
+`updated`, `is_head`, `held_back` (at or above the **ready boundary**) and
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the

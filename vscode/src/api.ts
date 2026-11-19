@@ -90,6 +90,12 @@ export interface CiLink {
   source: string;
 }
 
+/** Someone Gerrit lists on a change: a reviewer, or (`cc`) only copied. */
+export interface Reviewer {
+  name: string;
+  cc: boolean;
+}
+
 /** The overlay state of one commit: the fields `ger log --json` and `ger show --json` share. */
 export interface CommitStatus {
   sha: string | null;
@@ -113,12 +119,14 @@ export interface CommitStatus {
   attention_reasons: string[];
   change_status: string | null;
   updated: string | null;
+  /** Who is on the change; absent where the source does not say (a Review chains member). */
+  reviewers?: Reviewer[];
 }
 
 export interface StackCommit extends CommitStatus {
   sha: string;
   abandoned: boolean;
-  reviewers: string[];
+  reviewers: Reviewer[];
   is_head: boolean;
   held_back: boolean;
   needs_edit: boolean;

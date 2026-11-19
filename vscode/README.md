@@ -49,7 +49,9 @@ The commits above your upstream, newest first. One row per commit:
   Gerrit does not have yet; a green check, one that is merged. Hover it for the words.
 - On the right, as icons: **unresolved comments** (with their number), the **review vote** and the
   **CI vote**. Dimmed, they are the last pushed patchset's: the commit's code changed since, and
-  Gerrit may not keep them. Hover any of them for the words.
+  Gerrit may not keep them. Hover any of them for the words; the review vote's tooltip names the
+  reviewers (and who is CC'd). A pushed change with nobody to review it shows a **person +** icon
+  where the review vote goes.
 - `HEAD`, the short commit id, and *held back* where `ger push` would stop at the ready boundary.
 - Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
   message, while the keyboard stays in the list. It shows what the row knows at once (what the

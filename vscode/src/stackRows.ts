@@ -2,7 +2,7 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { CommitStatus, MoveConflict, Overview, Stack, StackCommit, UpstreamChoice } from "./api";
+import { CommitStatus, MoveConflict, Overview, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
 import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
@@ -66,7 +66,20 @@ function signed(value: number): string {
   return `${value > 0 ? "+" : ""}${value}`;
 }
 
-/** Comments, review vote, CI vote, in that order; a slot with nothing to say is null. The Change view shows them too. */
+/** `Reviewers: alice, bob (cc: carol)`, or "" when nobody is on the change (or the source does not say). */
+export function reviewerWords(reviewers: readonly Reviewer[] | undefined): string {
+  const named = (cc: boolean) => (reviewers ?? []).filter((r) => r.cc === cc).map((r) => r.name).join(", ");
+  const [assigned, copied] = [named(false), named(true)];
+  if (!assigned && !copied) {
+    return "";
+  }
+  return `Reviewers: ${[assigned || "none", copied ? `(cc: ${copied})` : ""].filter(Boolean).join(" ")}`;
+}
+
+/**
+ * Comments, review vote, CI vote, in that order; a slot with nothing to say is null. The Change view shows them too.
+ * The review slot without a vote says when nobody is assigned to review (core's `no-reviewers`).
+ */
 export function badges(commit: CommitStatus): (Badge | null)[] {
   const last = commit.last_pushed_votes;
   const stale = Boolean(last && (last.verified !== null || last.code_review !== null));
@@ -75,6 +88,7 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
   const verified = stale ? (last?.verified ?? null) : commit.verified;
   const failed = commit.ci_failures.length > 0 || (verified !== null && verified < 0);
   const count = commit.comments_unresolved;
+  const who = reviewerWords(commit.reviewers);
   return [
     count > 0
       ? {
@@ -92,10 +106,19 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
           icon: review > 0 ? "thumbsup" : "thumbsdown",
           tone: review > 0 ? "good" : "bad",
           text: signed(review),
-          title: `Code-Review ${signed(review)}${note}`,
+          title: [`Code-Review ${signed(review)}${note}`, who].filter(Boolean).join("\n"),
           stale,
         }
-      : null,
+      : commit.attention_reasons.includes("no-reviewers")
+        ? {
+            kind: "review",
+            icon: "person-add",
+            tone: "warn",
+            text: "",
+            title: "No reviewers assigned: nobody is asked to review it",
+            stale: false,
+          }
+        : null,
     failed
       ? {
           kind: "ci",
@@ -200,7 +223,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
     commit.merge ? MERGE_WORDS : "",
     isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",
-    commit.reviewers.length ? `Reviewers: ${commit.reviewers.join(", ")}` : "",
+    reviewerWords(commit.reviewers),
     up ? blockedMove(commit.summary, above.summary, up) : "",
     down ? blockedMove(commit.summary, below.summary, down) : "",
   ];

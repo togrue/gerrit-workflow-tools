@@ -105,6 +105,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         ),
         "submittable": commit.submittable,
         "votes": [{"label": vote.label, "value": vote.value, "by": vote.by} for vote in commit.votes],
+        "reviewers": [{"name": r.slug, "cc": r.cc} for r in commit.reviewers],
         "work_in_progress": commit.wip,
         "private": commit.private,
         "attention_reasons": commit.attention_reasons,

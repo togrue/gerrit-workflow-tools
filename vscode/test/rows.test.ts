@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, stackLines, sync, stackVm } from "../src/stackRows";
+import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 
 function commit(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
@@ -81,6 +81,24 @@ test("a row carries comments, the review vote and the CI vote as badges, in that
   const stale = badges(commit("c", { last_pushed_votes: { verified: -1, code_review: 2 } }));
   assert.deepEqual([stale[1]?.text, stale[1]?.stale, stale[2]?.tone, stale[2]?.stale], ["+2", true, "bad", true]);
   assert.match(stale[1]?.title ?? "", /last pushed patchset/);
+});
+
+test("the review slot says when nobody is assigned, and the vote names who is on the change", () => {
+  const nobody = badges(commit("c", { attention_reasons: ["no-reviewers"] }))[1];
+  assert.deepEqual([nobody?.kind, nobody?.icon, nobody?.tone, nobody?.text], ["review", "person-add", "warn", ""]);
+  assert.match(nobody?.title ?? "", /No reviewers assigned/);
+  assert.equal(badges(commit("c", { reviewers: [{ name: "alice", cc: false }] }))[1], null, "assigned, no vote yet: nothing to say");
+  const reviewers = [
+    { name: "alice", cc: false },
+    { name: "bob", cc: false },
+    { name: "carol", cc: true },
+  ];
+  const voted = badges(commit("c", { code_review: 2, reviewers }))[1];
+  assert.equal(voted?.title, "Code-Review +2\nReviewers: alice, bob (cc: carol)");
+  assert.equal(reviewerWords([{ name: "carol", cc: true }]), "Reviewers: none (cc: carol)");
+  assert.equal(reviewerWords(undefined), "", "a source that does not say lists nobody");
+  const vm = stackVm(stack([commit("One", { reviewers })]), undefined, never);
+  assert.match(vm.rows[0].tooltip, /^Reviewers: alice, bob \(cc: carol\)$/m, "the row's tooltip names them too");
 });
 
 test("the stack shows newest first, with HEAD and what push would hold back", () => {

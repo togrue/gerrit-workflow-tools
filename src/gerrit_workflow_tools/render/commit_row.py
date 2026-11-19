@@ -203,6 +203,18 @@ def format_change_id_line(change_id: str | None) -> str | None:
     return f"{_detail_label('Change-Id:')} {change_id}"
 
 
+def format_reviewers_line(commit: LogCommit) -> str | None:
+    """``Reviewers: alice, bob (cc: carol)``, or ``None`` when Gerrit lists nobody on the change."""
+    reviewers = [r.slug for r in commit.reviewers if not r.cc]
+    ccs = [r.slug for r in commit.reviewers if r.cc]
+    if not reviewers and not ccs:
+        return None
+    parts = [", ".join(reviewers)] if reviewers else []
+    if ccs:
+        parts.append(color_text(f"(cc: {', '.join(ccs)})", ANSI_DIM))
+    return f"{_detail_label('Reviewers:')} {' '.join(parts)}"
+
+
 def continuation_lines(
     commit: LogCommit,
     *,
@@ -213,6 +225,9 @@ def continuation_lines(
     lines: list[str] = []
     if verbose_level >= 1:
         lines.extend(format_ci_lines(commit, verbose_level=verbose_level))
+        reviewers_line = format_reviewers_line(commit)
+        if reviewers_line:
+            lines.append(reviewers_line)
     if show_change_id:
         change_line = format_change_id_line(commit.change_id)
         if change_line:

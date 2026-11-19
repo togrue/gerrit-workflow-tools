@@ -23,6 +23,8 @@ class ReviewerAccount:
 
     slug: str
     account_id: int | None = None
+    cc: bool = False
+    """Gerrit lists the account as ``CC``, not as a ``REVIEWER``."""
 
 
 class ReviewerStrategy(str, Enum):
@@ -69,16 +71,20 @@ def format_gerrit_account_label(account: Mapping[str, object]) -> str | None:
     return None
 
 
-def _reviewer_accounts(accounts: Iterable[object]) -> list[ReviewerAccount]:
-    """AccountInfo rows that name someone, in order; anything else is skipped."""
+def _reviewer_accounts(accounts: Iterable[tuple[object, str | None]]) -> list[ReviewerAccount]:
+    """``(AccountInfo, role)`` rows that name someone, in order; anything else is skipped."""
     out: list[ReviewerAccount] = []
-    for account in accounts:
+    for account, role in accounts:
         if not isinstance(account, dict):
             continue
         slug = account_slug_from_gerrit(account)
         if slug:
             account_id = account.get("_account_id")
-            out.append(ReviewerAccount(slug=slug, account_id=account_id if isinstance(account_id, int) else None))
+            out.append(
+                ReviewerAccount(
+                    slug=slug, account_id=account_id if isinstance(account_id, int) else None, cc=role == "CC"
+                )
+            )
     return out
 
 
@@ -92,8 +98,14 @@ def reviewer_accounts_from_reviewer_list(rows: Sequence[Mapping[str, object]]) -
         return not isinstance(state, str) or state in ("REVIEWER", "CC")
 
     return _reviewer_accounts(
-        row["account"] if isinstance(row.get("account"), dict) else row for row in rows if _keeps(row)
+        (row["account"] if isinstance(row.get("account"), dict) else row, _str_or_none(row.get("state")))
+        for row in rows
+        if _keeps(row)
     )
+
+
+def _str_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def reviewer_accounts_from_change_info(
@@ -111,18 +123,20 @@ def reviewer_accounts_from_change_info(
     return _reviewer_accounts(_reviewer_account_infos(detail, roles))
 
 
-def _reviewer_account_infos(detail: Mapping[str, object], roles: Sequence[str]) -> Iterator[Mapping[str, object]]:
-    """The raw AccountInfo rows of ChangeInfo ``reviewers`` in *roles* (map or list shape)."""
+def _reviewer_account_infos(
+    detail: Mapping[str, object], roles: Sequence[str]
+) -> Iterator[tuple[Mapping[str, object], str]]:
+    """``(AccountInfo, role)`` for each ChangeInfo ``reviewers`` row in *roles* (map or list shape)."""
     reviewers = detail.get("reviewers")
     if isinstance(reviewers, dict):
         for role in roles:
             bucket = reviewers.get(role)
             if isinstance(bucket, list):
-                yield from (account for account in bucket if isinstance(account, dict))
+                yield from ((account, role) for account in bucket if isinstance(account, dict))
     elif isinstance(reviewers, list):
         for entry in reviewers:
             if isinstance(entry, dict) and entry.get("state") in roles and isinstance(entry.get("account"), dict):
-                yield entry["account"]
+                yield entry["account"], entry["state"]
 
 
 def removable_reviewer_ids(detail: Mapping[str, object]) -> set[int] | None:
@@ -146,7 +160,7 @@ def reviewer_handles(details: Iterable[Mapping[str, object]]) -> dict[str, int]:
     """
     out: dict[str, int] = {}
     for detail in details:
-        for account in _reviewer_account_infos(detail, ("REVIEWER", "CC")):
+        for account, _role in _reviewer_account_infos(detail, ("REVIEWER", "CC")):
             account_id = account.get("_account_id")
             if not isinstance(account_id, int):
                 continue
