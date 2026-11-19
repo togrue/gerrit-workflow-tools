@@ -505,3 +505,16 @@ select:focus {
 .reply-box {
   padding: 2px 0 6px 34px;
 }
+
+.reply-box .resolved {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.reply-box .resolved input {
+  margin: 0;
+  accent-color: var(--vscode-checkbox-selectBackground, var(--vscode-button-background));
+}

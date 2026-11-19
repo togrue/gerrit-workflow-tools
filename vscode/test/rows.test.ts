@@ -299,6 +299,24 @@ test("the commit message is read-only with the reason, and comment chains say wh
   assert.deepEqual([fixed?.body, fixed?.tooltip], [plain, `Alice:\n${plain}`]);
   const replied = changeVm(state({ chains: [chain("open", [comment("Please rename this."), comment("Renamed it.", { state: "draft", comment_id: "d1" })])] }));
   assert.deepEqual([replied.comments?.threads[0].edit, replied.comments?.threads[0].discard], [false, "Delete Your Draft Reply…"]);
+  // The Resolved checkbox of a reply box starts where the chain stands once your drafts are published.
+  const boxes = changeVm(
+    state({
+      chains: [
+        chain("open", [comment("Please rename this.")]),
+        chain("answered", [comment("Rename it."), comment("Done", { state: "draft", comment_id: "d2" })], { resolved_after_publish: true }),
+        chain("closed", [comment("Nit.")], { resolved: true, resolved_after_publish: true }),
+      ],
+    }),
+  ).comments?.threads;
+  assert.deepEqual(
+    boxes?.map((row) => [row.id, row.resolving, row.draft]),
+    [
+      ["open", false, false],
+      ["answered", true, true],
+      ["closed", true, false],
+    ],
+  );
   assert.equal(vm.comments?.summary, "1 unresolved of 2 · 1 of yours, not published");
   assert.deepEqual(changeLines(vm).slice(-5), [
     "Comments — 1 unresolved of 2 · 1 of yours, not published",

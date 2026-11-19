@@ -402,7 +402,7 @@ export class ChangeView extends WebView<ChangeVm> {
           return this.showThread(chain);
         }
         if (message.action === "replyText") {
-          return this.replyInView(chain, String(message.text ?? ""), message.resolved === true ? true : undefined);
+          return this.replyInView(chain, String(message.text ?? ""), typeof message.resolved === "boolean" ? message.resolved : undefined);
         }
         return vscode.commands.executeCommand(`ger.${String(message.action)}`, arg);
       }

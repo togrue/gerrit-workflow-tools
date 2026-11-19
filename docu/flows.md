@@ -106,8 +106,10 @@ A **gap** names the work that would close it.
 | `ger.prevComment` | UI only | |
 | `ger.reply` | `ger reply CHAIN -m MSG` | |
 | `ger.replyDone` | `ger reply CHAIN --done` | |
-| `ger.thread.reply` | `ger reply CHAIN -m MSG` | |
-| `ger.thread.resolve` | `ger reply CHAIN -m MSG --resolve` | |
+| `ger.thread.reply` | `ger reply CHAIN -m MSG --resolve` / `--unresolve` | Save in a thread's reply box, as its Resolved toggle says |
+| `ger.thread.cancel` | UI only | Cancel in a thread's reply box |
+| `ger.thread.markResolved` | `ger reply CHAIN --resolve` (with your draft there) | the Resolved toggle in a thread's header; with no draft yet it only sets what Save does |
+| `ger.thread.markUnresolved` | `ger reply CHAIN --unresolve` (with your draft there) | |
 | `ger.comment.saveDraft` | `ger comment PATH:LINE -m MSG` | |
 | `ger.comment.saveLocalDraft` | `ger comment --local PATH:LINE -m MSG` | |
 | `ger.comment.saveNote` | `ger comment --note PATH:LINE -m MSG` | |

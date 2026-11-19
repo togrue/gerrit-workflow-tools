@@ -270,8 +270,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const chain = threadOf(arg);
       return chain ? threads.discardChain(chain) : undefined;
     },
-    "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply, undefined),
-    "ger.thread.resolve": (reply: vscode.CommentReply) => threads.replyInThread(reply, true),
+    "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply),
+    "ger.thread.cancel": (reply: vscode.CommentReply) => threads.cancelReply(reply),
+    "ger.thread.markResolved": (thread: vscode.CommentThread) => threads.setResolved(thread, true),
+    "ger.thread.markUnresolved": (thread: vscode.CommentThread) => threads.setResolved(thread, false),
     "ger.agentBrief": (arg: unknown) => handToAgent(model, targetOf(arg)),
     "ger.agentWalk": () => runAgent(model, undefined),
     "ger.hold": (arg: unknown) => setHold(arg, true),

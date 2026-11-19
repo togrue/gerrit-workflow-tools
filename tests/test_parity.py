@@ -55,6 +55,7 @@ UI_ONLY = frozenset(
         "ger.comment.cancelNew",
         "ger.comment.escape",
         "ger.comment.close",
+        "ger.thread.cancel",
     }
 )
 

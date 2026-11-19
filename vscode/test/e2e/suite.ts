@@ -386,15 +386,25 @@ export async function run(): Promise<void> {
       exec("ger.replyDone", await threadRow(/^Please rename this/)),
     );
     await press(
-      "Expand \"Looks good overall.\" (about the whole change) in the Change view, type a reply › Save Draft Reply",
-      "The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved.",
-      () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "replyText", text: "Added a test for the parser." }),
+      "Expand \"Looks good overall.\" (about the whole change) in the Change view, type a reply, Resolved left ticked › Save",
+      "The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.",
+      () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "replyText", text: "Added a test for the parser.", resolved: true }),
     );
     const rename = api.threads.threadOf(chain(/^Please rename this/));
     await press(
-      "Type in the editor thread of \"Please rename this.\" › Save Draft Reply",
-      "What you type is added to your draft reply there, after what it already says; the status bar says the draft was updated.",
+      "Type in the editor thread of \"Please rename this.\", whose Resolved toggle is on (your draft resolves it) › Save",
+      "What you type is added to your draft reply there, after what it already says, and it still resolves the comment; the status bar says the draft was updated.",
       exec("ger.thread.reply", { thread: rename, text: "And updated the callers." }),
+    );
+    await press(
+      "Click the Resolved toggle in the header of the editor thread of \"Please rename this.\"",
+      "Your draft there is saved again at once, now leaving the comment unresolved; the status bar says so.",
+      exec("ger.thread.markUnresolved", api.threads.threadOf(chain(/^Please rename this/))),
+    );
+    await press(
+      "Click the Resolved toggle in the header of the editor thread of \"Please rename this.\" again",
+      "Your draft resolves the comment again, as before.",
+      exec("ger.thread.markResolved", api.threads.threadOf(chain(/^Please rename this/))),
     );
     const commit = api.changeView.diff?.commit ?? "";
     const newThread = { uri: fileUri(commit, "b.txt"), range: new vscode.Range(0, 0, 0, 0), dispose: () => undefined };

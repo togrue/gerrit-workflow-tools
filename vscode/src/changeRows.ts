@@ -100,6 +100,10 @@ export interface ThreadRow extends Icon {
   open: boolean;
   held: boolean;
   resolved: boolean;
+  /** Where it stands once your drafts are published: Gerrit's Resolved checkbox starts there. */
+  resolving: boolean;
+  /** Your draft reply is there: Save with no text still sets whether it resolves the chain. */
+  draft: boolean;
   /** A chain you started and have not published: its text can be edited. */
   edit: boolean;
   /** What deleting your unpublished comment in it is called; empty when you have none there. */
@@ -285,6 +289,8 @@ function thread(chain: CommentChain): ThreadRow {
     open: !mine && !chain.resolved,
     held: Boolean(chain.held),
     resolved: chain.resolved,
+    resolving: chain.resolved_after_publish,
+    draft: Boolean(!mine && own),
     edit: Boolean(mine && own),
     discard: own ? (mine ? DISCARD[own.state] : "Delete Your Draft Reply…") : "",
     replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: commentPlainText(c) })),

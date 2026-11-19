@@ -71,6 +71,19 @@ export async function closeComment(): Promise<void> {
   await vscode.commands.executeCommand("workbench.action.hideComment");
 }
 
+/**
+ * Set a thread's Resolved toggle (in its header) and its label to match: `resolved` or
+ * `unresolved`, whether the reply saved next resolves the chain.
+ */
+function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean): void {
+  thread.contextValue = resolved ? "resolved" : "unresolved";
+  thread.label = !resolved
+    ? "Gerrit — unresolved"
+    : chain.resolved_after_publish
+      ? "Gerrit — your draft resolves this"
+      : "Gerrit — your reply will resolve this";
+}
+
 /** Your unpublished reply in `chain`: a chain holds at most one. */
 function yourDraft(chain: CommentChain): Comment | undefined {
   return chain.comments.slice(1).find((comment) => comment.state === "draft");
@@ -272,15 +285,12 @@ export class CommentThreads implements vscode.Disposable {
       const thread = this.controller.createCommentThread(this.view.locationUri(chain.path), new vscode.Range(first, 0, line, 0), comments);
       comments.forEach((comment) => (comment.thread = thread));
       const root = chain.comments[0]?.state;
-      thread.label =
-        root === "note"
-          ? "Your private note"
-          : root !== "published"
-            ? "Your new comment (not published yet)"
-            : chain.resolved_after_publish
-              ? "Gerrit — your draft resolves this"
-              : "Gerrit — unresolved";
-      thread.contextValue = "open";
+      if (root === "published") {
+        mark(thread, chain, chain.resolved_after_publish);
+      } else {
+        thread.label = root === "note" ? "Your private note" : "Your new comment (not published yet)";
+        thread.contextValue = "yours";
+      }
       thread.canReply = root === "published"; // a reply answers someone on Gerrit
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
       this.anchors.set(thread, { rev: target.rev, chain });
@@ -324,23 +334,53 @@ export class CommentThreads implements vscode.Disposable {
   }
 
   /**
-   * Save a draft reply from the thread's reply box. A chain holds one draft of yours: what you
-   * type here is added to it, not put in its place.
+   * Save a draft reply from the thread's reply box, resolving the chain or not as the Resolved
+   * toggle in the thread's header says. A chain holds one draft of yours: what you type here is
+   * added to it, not put in its place.
    */
-  async replyInThread(reply: vscode.CommentReply, resolved: boolean | undefined): Promise<void> {
+  async replyInThread(reply: vscode.CommentReply): Promise<void> {
     const anchor = this.anchors.get(reply.thread);
     if (anchor) {
-      await this.replyWith(anchor.chain, reply.text, resolved);
+      await this.replyWith(anchor.chain, reply.text, reply.thread.contextValue === "resolved");
     }
   }
 
-  /** Save `text` as your draft reply in `chain`, added to the draft you have there: from a thread's reply box, or the Change view's for a chain with no line in a file. */
+  /** Cancel in a thread's reply box: VS Code has emptied the box; the thread closes and its toggle goes back. */
+  cancelReply(reply: vscode.CommentReply): void {
+    const anchor = this.anchors.get(reply.thread);
+    if (anchor) {
+      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish);
+    }
+    reply.thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
+  }
+
+  /**
+   * The Resolved toggle in a thread's header, Gerrit's checkbox. It sits in the header, not by
+   * Save, because VS Code empties the reply box on any button there. The reply saved next resolves
+   * the chain or leaves it open; your draft there, if you have one, changes at once.
+   */
+  async setResolved(thread: vscode.CommentThread, resolved: boolean): Promise<void> {
+    const anchor = this.anchors.get(thread);
+    if (!anchor) {
+      return;
+    }
+    mark(thread, anchor.chain, resolved);
+    if (yourDraft(anchor.chain)) {
+      await this.replyWith(anchor.chain, "", resolved);
+    }
+  }
+
+  /**
+   * Save `text` as your draft reply in `chain`, added to the draft you have there: from a thread's
+   * reply box, or the Change view's for a chain with no line in a file. With nothing typed, your
+   * draft is saved again only to change whether it resolves the chain.
+   */
   async replyWith(chain: CommentChain, text: string, resolved: boolean | undefined): Promise<boolean> {
-    if (!text.trim()) {
+    const [draft, typed] = [yourDraft(chain), text.trim()];
+    if (!typed && !(draft && resolved !== undefined)) {
       return false;
     }
-    const draft = yourDraft(chain);
-    return this.save(chain, draft ? `${draft.message}\n\n${text.trim()}` : text, resolved);
+    return this.save(chain, draft ? [draft.message, typed].filter(Boolean).join("\n\n") : typed, resolved);
   }
 
   /**
@@ -374,7 +414,8 @@ export class CommentThreads implements vscode.Disposable {
       const client = await this.model.client();
       const saved = await client.reply(target.rev, anchorId, message.trim(), resolved);
       const what = saved.reply.action === "updated" ? "Draft updated" : "Draft saved";
-      ui().status(`$(check) ${what}${resolved ? ", resolving the comment" : ""}. Publish it with ger push.`, 6000);
+      const how = resolved ? ", resolving the comment" : resolved === false && chain.resolved_after_publish ? ", leaving the comment unresolved" : "";
+      ui().status(`$(check) ${what}${how}. Publish it with ger push.`, 6000);
       await this.view.open();
       return true;
     } catch (error) {

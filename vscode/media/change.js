@@ -251,32 +251,49 @@
     ];
   }
 
-  /** A box to answer a chain that has no line in a file, saved as a draft reply as an editor thread's reply box saves it. */
+  /**
+   * A box to answer a chain that has no line in a file, saved as a draft reply as an editor thread's
+   * reply box saves it. As on Gerrit: a Resolved checkbox, Save and Cancel.
+   */
   function replyBox(thread) {
     let box = replyBoxes.get(thread.id);
     if (!box) {
       const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: "Reply… (Ctrl+Enter saves it as a draft)" });
-      const save = h("button", { class: "button", title: "Save as your draft reply on Gerrit (Ctrl+Enter)" }, "Save Draft Reply");
-      const resolve = h("button", { class: "button secondary", title: "Save as your draft reply, resolving the comment" }, "Save and Resolve");
+      const resolved = h("input", { type: "checkbox" });
+      const tick = h("label", { class: "resolved", title: "The reply resolves the comment; untick it to leave the comment open" }, resolved, "Resolved");
+      const save = h("button", { class: "button", title: "Save as your draft reply on Gerrit (Ctrl+Enter)" }, "Save");
+      const cancel = h("button", { class: "button secondary", title: "Drop what you typed and close the comment" }, "Cancel");
       const note = h("span", { class: "detail" });
-      const send = (resolved) => {
-        if (text.value.trim()) {
+      const send = () => {
+        // With your draft there, Save with nothing typed still sets whether it resolves the comment.
+        if (text.value.trim() || box.draft) {
           note.textContent = "saving…";
-          post("thread", { id: thread.id, action: "replyText", text: text.value, resolved });
+          post("thread", { id: thread.id, action: "replyText", text: text.value, resolved: resolved.checked });
         }
       };
       text.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
-          send(undefined);
+          send();
         }
       });
-      save.addEventListener("click", () => send(undefined));
-      resolve.addEventListener("click", () => send(true));
-      box = { block: h("div", { class: "reply-box" }, text, h("div", { class: "message-bar" }, save, resolve, note)), text, note, resolve };
+      save.addEventListener("click", send);
+      cancel.addEventListener("click", () => {
+        text.value = "";
+        note.textContent = "";
+        resolved.checked = box.resolving;
+        expanded.delete(thread.id);
+        draw(vm);
+      });
+      box = { block: h("div", { class: "reply-box" }, text, h("div", { class: "message-bar" }, tick, save, cancel, note)), text, note, resolved };
       replyBoxes.set(thread.id, box);
     }
-    box.resolve.hidden = !thread.open;
+    // The checkbox starts where the comment stands once your drafts are published; while you type, it is yours.
+    if (!box.text.value || box.resolving === undefined) {
+      box.resolved.checked = thread.resolving;
+    }
+    box.resolving = thread.resolving;
+    box.draft = thread.draft;
     return box.block;
   }
 

@@ -174,6 +174,23 @@ test("stepping through comments is a command and a key, not an icon in the Chang
   }
 });
 
+test("a reply in an editor thread is Save or Cancel, with Gerrit's Resolved checkbox as a toggle in the thread's header", () => {
+  const reply = menus["comments/commentThread/context"].filter((entry) => !(entry.when ?? "").includes("&& commentThreadIsEmpty"));
+  assert.deepEqual(reply.map((entry) => entry.command), ["ger.thread.reply", "ger.thread.cancel"]);
+  // VS Code empties the reply box when any button by it runs: a toggle there would lose what you typed.
+  const header = menus["comments/commentThread/title"];
+  assert.deepEqual(
+    header.map((entry) => [entry.command, entry.when]),
+    [
+      ["ger.thread.markResolved", "commentController == ger && commentThread == unresolved"],
+      ["ger.thread.markUnresolved", "commentController == ger && commentThread == resolved"],
+    ],
+  );
+  for (const value of ["resolved", "unresolved", "yours"]) {
+    assert.ok(source("comments.ts").includes(`"${value}"`), `comments.ts no longer sets the thread context ${value}`);
+  }
+});
+
 test("Esc in a ger comment box first leaves the box, then closes the thread; edit boxes and new comments keep VS Code's Esc", () => {
   const esc: Entry[] = manifest.contributes.keybindings.filter((entry: Entry) => entry.key === "escape");
   const box = esc.find((entry) => entry.command === "ger.comment.escape")?.when ?? "";
