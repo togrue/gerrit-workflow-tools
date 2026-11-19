@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushPlan,
     change_ref_of,
+    publish_drafts_with,
     push_argvs,
     revise,
     sent_commits,
@@ -40,7 +41,7 @@ from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assig
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
-from gerrit_workflow_tools.push_input_line import ParseResult, PushLineState
+from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -76,9 +77,7 @@ def _attribute_suffix(mark: PushMark, reviewers: tuple[str, ...]) -> str:
 
 def _stop_pattern_from_reason(boundary_reason: str) -> str | None:
     match = re.search(r"stop pattern (.+)$", boundary_reason)
-    if not match:
-        return None
-    return match.group(1).strip()
+    return match.group(1).strip() if match else None
 
 
 def _boundary_notice(boundary_line: str, because: str, detail: str) -> str:
@@ -275,6 +274,7 @@ def prompt_reviewers_line(
     session_strategy: ReviewerStrategy | None = None,
     message: str = "Push options: ",
     prefill: bool = True,
+    suffix: str = "",
 ) -> ParseResult:
     """Open the highlighted push-options input line, prefilled from flags/registry unless *prefill* is off."""
     from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
@@ -288,6 +288,7 @@ def prompt_reviewers_line(
         session_strategy=session_strategy,
         message=message,
         prefill=prefill,
+        suffix=suffix,
     )
 
 
@@ -349,12 +350,13 @@ _CONFIRM_LINE_MESSAGE = "Push options (Enter {}, Up: history, Ctrl-C cancels): "
 
 
 def confirm_with_options_line(
-    cwd: Path, plan: PushPlan, args: argparse.Namespace, *, settings: Settings
+    cwd: Path, plan: PushPlan, args: argparse.Namespace, *, settings: Settings, drafts: int = 0
 ) -> PushPlan | None:
     """The one-line push confirmation: Enter pushes, a typed line sets options first. ``None`` cancels.
 
     An empty line keeps the options *plan* already has, as the status line shows them. When the
-    push sends no commit, Enter sets them on Gerrit, and the line says that instead.
+    push sends no commit, Enter sets them on Gerrit, and the line says that instead. With *drafts*, the
+    line starts with ``publish-drafts`` when *plan* publishes them, and the keyword decides whether it does.
     """
     try:
         res = prompt_reviewers_line(
@@ -366,12 +368,13 @@ def confirm_with_options_line(
             session_strategy=_session_strategy(args),
             message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
             prefill=False,
+            suffix=KW_PUBLISH_DRAFTS if drafts and plan.options.publish_comments else "",
         )
     except (EOFError, KeyboardInterrupt):
         return None
-    if not _line_sets_options(res.state):
-        return plan
-    return revise(plan, _options_from_line(res.state), settings=settings)
+    if _line_sets_options(res.state):
+        plan = revise(plan, _options_from_line(res.state), settings=settings)
+    return publish_drafts_with(plan, res.state.publish_drafts) if drafts else plan
 
 
 def prompt_initial_options(

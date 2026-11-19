@@ -65,6 +65,7 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 | Key | Effect |
 |-----|--------|
 | `gerrit.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `gerrit.webUrl` and credentials). Default off when unset. |
+| `gerrit.pushPublishDrafts` | Default on: when you have drafts on the changes a push updates, the push options line starts with `publish-drafts`, so Enter pushes and publishes them. Set `false` to start it without, so Enter keeps them as drafts; typing `publish-drafts` still publishes. |
 | `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. |
 | `gerrit.push.remotePolicy` | Before push: fetch/check that `HEAD` is linear on the remote Gerrit target tip. Disable per-invocation with `ger push --no-rebase-check`. |
 

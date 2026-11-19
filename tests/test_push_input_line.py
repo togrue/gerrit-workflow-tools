@@ -129,6 +129,18 @@ def test_strategy_keywords_are_reserved_not_reviewers() -> None:
     assert s.strategy == "overwrite"
 
 
+def test_publish_drafts_is_a_flag_not_a_reviewer() -> None:
+    s = _state("alice publish-drafts")
+    assert s.reviewers == ["alice"]
+    assert s.publish_drafts is True
+    assert not parse("alice publish-drafts").diagnostics
+
+
+def test_minus_publish_drafts_keeps_the_drafts() -> None:
+    assert _state("publish-drafts -publish-drafts").publish_drafts is False
+    assert _state("alice").publish_drafts is False
+
+
 # ---------- diagnostics ----------
 
 
@@ -179,6 +191,7 @@ def test_topic_redefined_warns() -> None:
         ("alice private wip", "r=alice wip private"),
         ("alice lazy", "r=alice lazy"),
         ("alice overwrite", "r=alice overwrite"),
+        ("publish-drafts alice lazy", "r=alice lazy publish-drafts"),
     ],
 )
 def test_canonical_examples(buf: str, expected: str) -> None:

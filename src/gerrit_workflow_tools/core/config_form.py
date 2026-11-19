@@ -155,6 +155,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         default="false",
     ),
     _bool(
+        "gerrit.pushPublishDrafts",
+        "ger push",
+        "With drafts on the pushed changes, start the push options line with publish-drafts.",
+        default="true",
+    ),
+    _bool(
         "gerrit.lastPushedBranch",
         "ger push",
         "After a successful push, move local branch lastPush/<branch> to the pushed commit.",

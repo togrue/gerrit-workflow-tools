@@ -32,7 +32,7 @@ ger reply <id> --done              -> draft "Done", resolving the chain
 ger reply <id> -F -                -> draft a longer answer from stdin; the chain stays open
 ger edit -n                        -> continue the rebase, stop at the next commit;
                                       exit 7 when none is left
-ger push                           -> "Push and publish 3 drafts? [Y/n]"
+ger push                           -> push options line "publish-drafts": Enter pushes and publishes
 ```
 
 Planned ([Delivery](#delivery) steps 7 and 8): `ger edit` lists the open chains at each stop
@@ -129,7 +129,7 @@ With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "lab
 
 `ger push` looks for your drafts on the changes it is about to push: one `has:draft` query for those change numbers. When there are any:
 
-- **On a TTY**, the status line gains `Drafts keep N` and the prompt becomes `Push and publish N draft(s)? [Y/n/p/r]`. Yes adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Answering `p` pushes without publishing.
+- **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `gerrit.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N draft(s)? [Y/n/p/r]`, and `p` pushes without publishing.
 - **With `-y`**, drafts are published only when `--publish-comments` is also given. Scripts and agents never publish by accident.
 - Drafts on a change the push does **not** update (behind the ready boundary, or with nothing new) stay drafts. The preview lists them by change.
 

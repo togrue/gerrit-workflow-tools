@@ -275,6 +275,7 @@ class Settings:
         return {
             "show_attributes": self.flag("gerrit.pushShowAttributes"),
             "last_pushed_branch": self.flag("gerrit.lastPushedBranch", default=True),
+            "publish_drafts": self.flag("gerrit.pushPublishDrafts", default=True),
         }
 
     @property

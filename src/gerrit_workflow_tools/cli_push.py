@@ -225,6 +225,7 @@ def _confirm_gerrit_push(
 ) -> PushPlan | int:
     """Return the plan to execute, or an exit code when the command should stop."""
     stack_printed = False
+    drafts_defaulted = False
     while True:
         argv = push_argv(plan)
         logger.debug(
@@ -247,18 +248,24 @@ def _confirm_gerrit_push(
                 print(plan.credential_error, file=sys.stderr)
                 return 1
             return plan
+        line = options_line_available()
+        drafts = publishable_drafts(plan)
+        if line and drafts and not drafts_defaulted:  # the line starts with publish-drafts unless config says no
+            drafts_defaulted = True
+            if settings.push_defaults["publish_drafts"]:
+                plan = publish_drafts_with(plan, True)
         print()
         print_plan_status(plan)
         print()
-        drafts = publishable_drafts(plan) if plan.options.publish_comments is False else 0
-        if not drafts and options_line_available():
-            revised = confirm_with_options_line(cwd, plan, args, settings=settings)
+        if line:
+            revised = confirm_with_options_line(cwd, plan, args, settings=settings, drafts=drafts)
             act = "push" if revised else "cancel"
             plan = revised or plan
         else:
-            act = ask_push_action(drafts, sends=bool(sent_commits(plan)))
-        if act == "push" and drafts:
-            plan = publish_drafts_with(plan, True)
+            asked = drafts if plan.options.publish_comments is False else 0
+            act = ask_push_action(asked, sends=bool(sent_commits(plan)))
+            if act == "push" and asked:
+                plan = publish_drafts_with(plan, True)
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
             return 0

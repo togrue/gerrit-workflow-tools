@@ -11,7 +11,9 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_push import main as push_main
+from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
+from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, web_edit
 from tests.conftest import run_cli
@@ -158,3 +160,110 @@ def test_drafts_on_an_outdated_change_are_named(stack_repo: Path, monkeypatch: p
     assert "Drafts" not in out.replace(f"drafts on {rows[0].short_sha}", "")
     assert not any("publish" in p for p in prompts)
     assert "publish-comments" not in _options(refspec)
+
+
+def _line_answers(monkeypatch: pytest.MonkeyPatch, answer: str | None) -> list[dict[str, object]]:
+    """Make the confirmation the push options line; *answer* is what is typed, ``None`` takes the starting line."""
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("drafts use the push options line too"))
+    calls: list[dict[str, object]] = []
+
+    def _prompt(*_a: object, **kw: object) -> object:
+        calls.append(kw)
+        return parse_push_options_line(str(kw["suffix"]) if answer is None else answer)
+
+    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    return calls
+
+
+def test_options_line_starts_with_publish_drafts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drafts get the usual push options line, with publish-drafts at its end: Enter publishes."""
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    calls = _line_answers(monkeypatch, None)
+    code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert calls[0]["suffix"] == "publish-drafts"
+    assert calls[0]["message"] == "Push options (Enter pushes, Up: history, Ctrl-C cancels): "
+    assert "Drafts publish 1" in out
+    assert "publish-comments" in _options(refspec)
+    assert "no-publish-comments" not in _options(refspec)
+
+
+@pytest.mark.parametrize("answer", ["", "alice", "publish-drafts -publish-drafts"])
+def test_options_line_without_publish_drafts_keeps_them(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, answer: str
+) -> None:
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    _line_answers(monkeypatch, answer)
+    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert "no-publish-comments" in _options(refspec)
+    assert ("r=alice" in _options(refspec)) is (answer == "alice")
+
+
+def test_options_line_with_other_options_and_publish_drafts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    _line_answers(monkeypatch, "alice wip publish-drafts")
+    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert {"r=alice", "wip", "publish-comments"} <= set(_options(refspec))
+
+
+def test_config_off_starts_the_line_without_publish_drafts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    git("config", "gerrit.pushPublishDrafts", "false", cwd=stack_repo)
+    calls = _line_answers(monkeypatch, None)
+    code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert calls[0]["suffix"] == ""
+    assert "Drafts keep 1" in out
+    assert "no-publish-comments" in _options(refspec)
+
+
+def test_config_off_still_publishes_when_typed(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    git("config", "gerrit.pushPublishDrafts", "false", cwd=stack_repo)
+    _line_answers(monkeypatch, "publish-drafts")
+    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert "publish-comments" in _options(refspec)
+    assert "no-publish-comments" not in _options(refspec)
+
+
+def test_publish_comments_flag_starts_the_line_with_publish_drafts(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    git("config", "gerrit.pushPublishDrafts", "false", cwd=stack_repo)
+    calls = _line_answers(monkeypatch, None)
+    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, ["--publish-comments"], store)
+    assert code == ExitCode.OK
+    assert calls[0]["suffix"] == "publish-drafts"
+    assert "publish-comments" in _options(refspec)
+
+
+def test_no_drafts_no_publish_drafts_on_the_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _rows, _keys = _pushed(stack_repo)
+    calls = _line_answers(monkeypatch, None)
+    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert calls[0]["suffix"] == ""
+    assert not any("publish-comments" in option for option in _options(refspec))
+
+
+def test_guard_starts_the_line_without_publish_drafts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    monkeypatch.setenv("GER_NO_PUBLISH", "1")
+    calls = _line_answers(monkeypatch, "publish-drafts")
+    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert calls[0]["suffix"] == ""
+    assert "no-publish-comments" in _options(refspec)

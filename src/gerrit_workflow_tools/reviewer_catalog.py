@@ -32,7 +32,7 @@ from gerrit_workflow_tools.core.reviewer_completion import (
 from gerrit_workflow_tools.push_input_line import PushLineState
 
 
-_DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite"
+_DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts"
 _REQUEST_INTERVAL_SECONDS = 0.5
 
 _JobKind = Literal["warmup_plugin", "warmup_suggest", "complete", "validate"]
