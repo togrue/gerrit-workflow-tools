@@ -319,16 +319,14 @@ def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytes
     [
         ({}, True),
         ({"ger.showAfterEdit": "false"}, False),
-        ({"gerrit.editNextShow": "false"}, False),
-        ({"gerrit.editNextShow": "true"}, True),
-        ({"gerrit.editNextShow": "false", "ger.showAfterEdit": "true"}, True),
+        ({"ger.showAfterEdit": "true"}, True),
     ],
 )
 @pytest.mark.parametrize("walk", [["-n"], ["--first-attention-commit"]])
 def test_gedit_walk_runs_show_unless_show_after_edit_is_off(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch, config: dict[str, str], shows: bool, walk: list[str]
 ) -> None:
-    """Issue #33: on by default, for --next and --first-attention-commit; the old key still turns it off."""
+    """Issue #33: on by default, for --next and --first-attention-commit."""
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     assert len(rows) >= 2

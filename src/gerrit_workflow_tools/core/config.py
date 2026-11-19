@@ -56,8 +56,6 @@ _REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased
 _DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
 _DEFAULT_WRAP_WIDTH = 120
 SHOW_AFTER_EDIT_KEY = "ger.showAfterEdit"
-# The key before ger.showAfterEdit; read only when the new key is unset.
-_LEGACY_EDIT_NEXT_SHOW_KEY = "gerrit.editNextShow"
 
 _SCOPE_BY_NAME = {scope.value: scope for scope in ConfigScope}
 
@@ -290,11 +288,9 @@ class Settings:
     def show_after_edit(self) -> bool:
         """``ger.showAfterEdit``: run ``ger show`` after ``ger edit --next`` or ``--first-attention-commit`` stops.
 
-        Unset falls back to the old ``gerrit.editNextShow``, then to on.
+        On when unset.
         """
-        if self.get(SHOW_AFTER_EDIT_KEY) is not None:
-            return self.flag(SHOW_AFTER_EDIT_KEY)
-        return self.flag(_LEGACY_EDIT_NEXT_SHOW_KEY, default=True)
+        return self.flag(SHOW_AFTER_EDIT_KEY, default=True)
 
     @property
     def show_ci_content(self) -> bool:
