@@ -234,6 +234,7 @@ npm install
 npm run compile     # or: npm run watch
 npm test            # unit tests of the pure parts (formatting, activity, reorder math, the view models of the two webview views) and of package.json against the code (menus, row contexts, commands)
 npm run e2e         # the extension inside a real VS Code, against a fixture repo and a fake Gerrit
+npm run gallery     # the two webview views in a browser page: every layout state, dark and light, two widths
 ```
 
 `npm run e2e` starts your installed VS Code (or `VSCODE_EXE`) with a throwaway profile, opens
@@ -259,6 +260,27 @@ where one behaviour is clearly what users expect, the extension does that, and o
 design questions go to a decision. A run whose transcript differs fails and prints the diff: judge each
 changed step against its **Expect** line, then accept it with `npm run e2e -- --update`. Set
 `GER_E2E_SCREENS=<file>` to also get the full screen before and after every press.
+
+**The gallery** is for how the two webview views look, without starting VS Code. `npm run gallery`
+writes `out/gallery/index.html` and prints its path: open it in a browser. It runs the pages of
+`media/` as they ship, each in an iframe 300 and 450 pixels wide, in VS Code's Dark Modern and Light
+Modern colours. What stands in for VS Code is in `test/gallery/`: `theme.ts` has the `--vscode-*`
+variables and a webview's default styles (a variable the pages use and it does not list fails
+`npm test`), and `frame.js` is `acquireVsCodeApi()`: it answers the page's `ready` with the view
+model, and what the page posts (a click, a drop, the context a right-click would hand to the menu)
+is listed under the frame.
+
+- The scenarios (`test/gallery/scenarios.ts`) call `stackVm()` and `changeVm()` on what `ger serve`
+  would answer, built from the fixtures the unit tests use (`test/fixtures.ts`). A new state of a
+  view gets a scenario there.
+- `npm run gallery -- report.json` adds snapshot files as scenarios, in front of the built-in
+  ones. A snapshot is `{ "format": 1, "name": "…", "stack": <StackVm or null>, "change": <ChangeVm or null> }`,
+  other keys ignored (`src/snapshot.ts`).
+- `npm run gallery -- --png <dir>` also writes a picture of each frame,
+  `<scenario>.<view>.<theme>.<width>.png`, at twice the size. It runs an installed Edge, Chrome or
+  Chromium headless (`GER_GALLERY_BROWSER` names another one), once per picture: all of them take
+  a few minutes, so `--only <words>` keeps the scenarios with those words in their name. This is
+  how a coding agent looks at a layout change it made.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
 open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere; a release (`python scripts/build_release.py` in the repository root) builds it into ger, for `ger vscode install`.
@@ -289,6 +311,9 @@ printed.
 | `src/poller.ts` | Background refresh from Gerrit: on a timer while focused, and on regaining focus. |
 | `src/gitWatch.ts`, `src/repoWatcher.ts` | The views following local git: what to watch (pure, unit-tested), the debounce, the watcher. |
 | `src/extension.ts` | Wiring: views and commands. |
+| `src/snapshot.ts` | The snapshot file: the view models of the two webview views at one moment. Read by the gallery. No `vscode` import, unit-tested. |
+| `test/fixtures.ts` | API-shaped commits, diffs, comment chains and CI logs: shared by the unit tests and the gallery's scenarios. |
+| `test/gallery/` | The webview gallery (`npm run gallery`): scenarios, the stand-in for VS Code (theme, `acquireVsCodeApi()`), the page around the frames, pictures. Not in the `.vsix`. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's
 copy of the contract.

@@ -1,0 +1,113 @@
+/* The gallery page around the frames. Its own look, on purpose not VS Code's: what is inside a
+   frame is the extension's, what is outside is the harness. */
+
+:root {
+  color-scheme: light dark;
+  --page: #e9e9ec;
+  --ink: #1d1d1f;
+  --quiet: #6b6b70;
+  --rule: #c9c9ce;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #101012;
+    --ink: #e4e4e7;
+    --quiet: #9a9aa0;
+    --rule: #2e2e33;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 16px 24px 48px;
+  background: var(--page);
+  color: var(--ink);
+  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+h2 {
+  margin: 32px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+p,
+nav {
+  max-width: 100ch;
+  margin: 0 0 8px;
+  color: var(--quiet);
+}
+
+nav a {
+  display: inline-block;
+  margin-right: 12px;
+  color: inherit;
+}
+
+.panes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* One view of the side bar: its title bar as VS Code draws it, the frame, and what the page posted. */
+.pane {
+  margin: 0;
+  border: 1px solid var(--rule);
+}
+
+.pane figcaption {
+  display: flex;
+  gap: 8px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 22px;
+}
+
+.pane figcaption b {
+  flex: 1;
+  text-transform: uppercase;
+}
+
+.pane.dark figcaption {
+  background: #181818;
+  color: #cccccc;
+}
+
+.pane.light figcaption {
+  background: #f8f8f8;
+  color: #3b3b3b;
+}
+
+.pane iframe {
+  display: block;
+  height: 44px;
+  border: 0;
+}
+
+.log {
+  height: 4.5em;
+  margin: 0;
+  padding: 2px 8px;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+  background: var(--page);
+  color: var(--quiet);
+  font: 11px/1.5 Consolas, monospace;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.log b {
+  color: var(--ink);
+}
