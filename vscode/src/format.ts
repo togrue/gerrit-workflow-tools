@@ -39,6 +39,9 @@ export function severity(reasons: readonly string[]): Severity {
 
 const SEVERITY_ICONS: Record<Severity, string> = { error: "error", warning: "warning", pending: "clock", ok: "pass" };
 
+/** Every icon `attentionIcon` can give. */
+export const ATTENTION_ICONS: readonly string[] = [...Object.values(SEVERITY_ICONS), "comment-unresolved"];
+
 /**
  * The codicon for a change with these attention reasons, and how urgent it is. The comment icon
  * means unresolved comments, which the Change view lists; a negative vote or a newer patchset on
@@ -61,6 +64,9 @@ export function headlineIcon(headline: Pick<Headline, "section" | "reason"> | nu
   }
   return headline.section === "to-review" ? "eye" : attentionIcon([headline.reason]).icon;
 }
+
+/** Every attention reason this knows, in words: what `reasonWords` can say of ours. */
+export const REASON_WORDS: readonly string[] = Object.values(WORDS);
 
 export function reasonWords(reasons: readonly string[]): string {
   return reasons.map((r) => WORDS[r] ?? r).join(", ");
@@ -102,7 +108,7 @@ export function commitVotes(commit: CommitStatus): string {
   return `last pushed ${votes({ ...last, comments_unresolved: 0 })}${comments}`;
 }
 
-const FILE_STATES: Record<string, string> = { A: "added", M: "modified", D: "deleted", R: "renamed", C: "copied", T: "type changed" };
+export const FILE_STATES: Record<string, string> = { A: "added", M: "modified", D: "deleted", R: "renamed", C: "copied", T: "type changed" };
 
 /** Git's status letter in a word. */
 export function fileState(letter: string): string {

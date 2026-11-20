@@ -8,7 +8,7 @@ import { memberStatus } from "./changeLoad";
 import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, severity, sortedChains, votes } from "./format";
 import { attentionThemeIcon, icon } from "./icons";
 import { ChangeTarget, Model } from "./model";
-import { changeRowContext } from "./rows";
+import { SECTION_TITLES, TREE_WORDS, changeRowContext } from "./rows";
 import { feedback, ui } from "./ui";
 
 type Node =
@@ -18,7 +18,6 @@ type Node =
   | { kind: "member"; member: Member; chain: Chain }
   | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon };
 
-const SECTION_TITLES: Record<string, string> = { "to-review": "To review", outgoing: "Outgoing" };
 const SORT_KEY = "ger.chainSort";
 
 function memberRev(member: Member): string {
@@ -101,7 +100,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       const chains = sortedChains(node.section.chains, this.sort);
       return chains.length
         ? chains.map((chain) => ({ kind: "chain", chain, section: node.section }))
-        : [{ kind: "info", text: node.section.name === "to-review" ? "Nothing to review" : "No open changes" }];
+        : [{ kind: "info", text: node.section.name === "to-review" ? TREE_WORDS.nothingToReview : TREE_WORDS.noChanges }];
     }
     if (node.kind === "chain" && node.chain.members.length > 1) {
       // Base first is push order; the list reads top-down like `git log`, newest first.
@@ -122,7 +121,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     if (overview.headline) {
       nodes.push({ kind: "headline", headline: overview.headline });
     } else {
-      nodes.push({ kind: "info", text: "Nothing needs you right now", icon: icon("pass", "testing.iconPassed") });
+      nodes.push({ kind: "info", text: TREE_WORDS.nothingNeedsYou, icon: icon("pass", "testing.iconPassed") });
     }
     // Your own chains first: failed CI and comments there are yours to fix.
     const order = ["outgoing", "to-review"];

@@ -8,15 +8,13 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, sameChange } from "./changeLoad";
-import { ChangeVm, CiView, Mode, NOT_FILES, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
 
 export const FILE_SCHEME = "ger-file";
-
-const NOTHING_SHOWN = "Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.";
 
 /** What the comment commands take: the chain a row of the view stands for. */
 export interface ThreadArg {
@@ -327,12 +325,12 @@ export class ChangeView extends WebView<ChangeVm> {
 
   private readOnly(): string {
     if (!this.target?.local) {
-      return "Only a commit of your local stack can be reworded here.";
+      return READ_ONLY.remote;
     }
     if (this.version !== "local") {
-      return "This is a patchset on Gerrit: choose the local commit to edit its message.";
+      return READ_ONLY.patchset;
     }
-    return this.model.stack?.rebase_in_progress ? "A rebase is in progress: finish or abort it first." : "";
+    return this.model.stack?.rebase_in_progress ? READ_ONLY.rebase : "";
   }
 
   vm(): ChangeVm {
