@@ -16,6 +16,7 @@ from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, change_info_for_sha, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import _cid
+from tests.helpers import add_submodule
 
 
 WEB = "https://g.example"
@@ -235,6 +236,47 @@ def test_changes_to_tracked_files_stop_it_before_anything_moves(
     assert "changes to tracked files (README.md)" in err and "git stash" in err
     assert git_out("branch", "--list", "change-*", cwd=stack_repo) == ""
     assert (stack_repo / "README.md").read_text(encoding="utf-8") == "edited\n"
+
+
+def test_a_submodule_at_another_commit_or_with_edits_inside_does_not_stop_an_update(
+    stack_repo: Path, gerrit: Gerrit, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#41: switching and rebasing leave a submodule's own state alone, so it is not in the way."""
+    sub = add_submodule(stack_repo, tmp_path)  # a commit above the stack: rebased with it
+    gerrit.upload(stack_repo, 2, 2, "test! reworded experiment")
+    git("checkout", "-q", "HEAD~1", cwd=sub)
+    (sub / "a.txt").write_text("dirty\n", encoding="utf-8")
+    (sub / "untracked.txt").write_text("new\n", encoding="utf-8")
+    sub_head = git_out("rev-parse", "HEAD", cwd=sub)
+
+    code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "updated feature from patchset 1 to change 102 patchset 2" in out
+    assert "rebased the 2 commit(s) above it" in out
+    assert git_out("rev-parse", "HEAD", cwd=sub) == sub_head
+    assert (sub / "a.txt").read_text(encoding="utf-8") == "dirty\n"
+    assert (sub / "untracked.txt").read_text(encoding="utf-8") == "new\n"
+
+
+def test_a_submodule_staged_at_another_commit_stops_it_naming_the_submodule(
+    stack_repo: Path, gerrit: Gerrit, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``git stash`` does not save a staged submodule commit, and the rebase would stop on it."""
+    sub = add_submodule(stack_repo, tmp_path)
+    gerrit.upload(stack_repo, 2, 2, "test! reworded experiment")
+    git("checkout", "-q", "HEAD~1", cwd=sub)
+    git("add", "lib", cwd=stack_repo)
+    before = _on(stack_repo)
+
+    code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert err.strip() == (
+        "error: the submodule commit staged for lib is not committed: "
+        "commit it or `git restore --staged lib`, then run ger checkout again"
+    )
+    assert _on(stack_repo) == before
+    git("restore", "--staged", "lib", cwd=stack_repo)
+    assert _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)[0] == ExitCode.OK
 
 
 def test_patchset_picks_an_older_one(stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch) -> None:

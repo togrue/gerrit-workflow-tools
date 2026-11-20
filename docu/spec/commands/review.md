@@ -61,7 +61,7 @@ A `change-<number>` branch that already exists is moved to the fetched patchset,
 
 ### Leaving the checkout clean
 
-Before switching to another change, `ger review` checks that the worktree holds nothing of yours: no unstaged edits, and an index that is either clean or exactly the staged review. Otherwise it exits `2` (`USAGE`, as `ger checkout` and `ger edit` do for the same reason), lists the files, and says to commit or stash them. Untracked files are left alone and do not count. `--force` does not override this check; ger never throws your edits away.
+Before switching to another change, `ger review` checks that the worktree holds nothing of yours: no unstaged edits, and an index that is either clean or exactly the staged review. Otherwise it exits `2` (`USAGE`, as `ger checkout` and `ger edit` do for the same reason), lists the files, and says to commit or stash them. Untracked files are left alone and do not count, and so does a submodule's own state (edits inside it, another commit checked out); a submodule staged at another commit refuses with its own message, as in `ger checkout`. `--force` does not override this check; ger never throws your edits away.
 
 In place, the branch you were on before the first `ger review` is remembered, so `--done` can go back to it.
 
