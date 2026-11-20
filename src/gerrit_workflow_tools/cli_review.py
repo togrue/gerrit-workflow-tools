@@ -12,7 +12,7 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_change_option,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     ask_choice,
     assume_yes,
@@ -97,7 +97,7 @@ def _build_parser() -> argparse.ArgumentParser:
     vote.add_argument(
         "-y", "--yes", action="store_true", help="With --vote: skip the confirmation (GER_ASSUME_YES=1 too)."
     )
-    add_json_arg(p)
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
     return p

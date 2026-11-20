@@ -42,8 +42,8 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | `--context-padding N` | Extra source lines before/after the comment (implies `--context`) |
 | `--ci` / `--no-ci` | Attach **CI findings** from failed **CI links** (fetches CI logs). Default: `ger.showCiContent`, off. See [CI content](#ci-content) |
 | `--json` | JSON payload |
-| `--format {human,markdown}` | Output format (default: human) |
-| `--ai` | Alias for `--format markdown` |
+| `--format {human,markdown,ai}` | Output format (default: human); `ai` is the Markdown view |
+| `--ai` | Alias for `--format ai`: here the Markdown view ([Output formats](../../SPEC.md#output-formats)) |
 | `--color`, `--hyperlinks`, `--debug-log` | Standard helpers (`--hyperlinks`: `always` \| `auto` \| `never`) |
 | `-v` | Also fetch each change's CI pipelines (Checks) and list them under the commit |
 

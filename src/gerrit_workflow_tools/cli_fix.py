@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     ask_choice,
     changeish_help,
@@ -115,7 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Bypass pre-commit and commit-msg hooks (passed through to ``git commit``).",
     )
-    add_json_arg(p)
+    add_output_format_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log resolution steps to stderr.")
     return p
 

@@ -49,9 +49,9 @@ Publishing with the push matters. A "Done" that arrives before the patchset that
 
 ```
 ger reply                                      (TTY, planned) step through the open chains of HEAD's change
-ger reply [--change CHANGEISH] CHAIN (-m MSG ... | -F FILE | --done) [--resolve | --unresolve] [--json]
-ger reply [--change CHANGEISH] CHAIN --discard [--json]
-ger reply --publish [REV ...] [--only ID ... | --keep-drafts] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y] [--json]
+ger reply [--change CHANGEISH] CHAIN (-m MSG ... | -F FILE | --done) [--resolve | --unresolve] [--json | --ai]
+ger reply [--change CHANGEISH] CHAIN --discard [--json | --ai]
+ger reply --publish [REV ...] [--only ID ... | --keep-drafts] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y] [--json | --ai]
 ```
 
 ### Guided reply
@@ -220,6 +220,8 @@ draft reply on src/app.py:42 (change 123, patchset 3) -> resolves
   https://host/c/proj/+/123/comment/a1b2c3d4_5e6f7a8b/
 updated draft on src/app.py:42 (replaced: "Will do, after the refactor")
 ```
+
+**`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 
 **JSON** (`--json`): one object per action.
 

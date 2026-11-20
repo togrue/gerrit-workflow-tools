@@ -11,9 +11,10 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
     add_follow_merges_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    output_format,
     print_note,
     run_cli_command,
 )
@@ -35,6 +36,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
@@ -131,7 +133,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger log",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
-    add_json_arg(parser)
+    add_output_format_args(parser)
     add_color_args(parser)
     parser.add_argument(
         "--url",
@@ -283,8 +285,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     for commit in commits:
         print_note(notes_by_sha.get(commit.sha))
 
-    # JSON output
-    if args.json_:
+    out_fmt = output_format(args)
+    if out_fmt == "json":
         stack_payload = {
             "project": stack.project,
             "target_branch": stack.target_branch,
@@ -314,18 +316,25 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         settings=settings,
         web_base=settings.gerrit_web_url,
     )
-    _render_text_output(
-        visible=commits,
-        verbose_level=verbose_level,
-        show_url=show_url,
-        show_change_id=show_change_id,
-        summary_highlighter=summary_highlighter,
-        blocked=blocked,
-    )
-    print()
-    print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
-    for line in next_steps(commits):
-        print(color_text(line, ANSI_DIM))
+    if out_fmt == "ai":
+        ready = len(commits) - len(blocked)
+        lines = stack_ai_lines(
+            commits, project=stack.project, branch=stack.push_branch, ready=ready, next_lines=next_steps(commits)
+        )
+        print("\n".join(lines))
+    else:
+        _render_text_output(
+            visible=commits,
+            verbose_level=verbose_level,
+            show_url=show_url,
+            show_change_id=show_change_id,
+            summary_highlighter=summary_highlighter,
+            blocked=blocked,
+        )
+        print()
+        print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
+        for line in next_steps(commits):
+            print(color_text(line, ANSI_DIM))
     if stack_view.gerrit_unavailable is not None:
         raise stack_view.gerrit_unavailable
     return int(ExitCode.OK)

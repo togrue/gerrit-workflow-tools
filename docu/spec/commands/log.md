@@ -29,6 +29,7 @@ ger log [options] [REV_RANGE]
 | Option | Description |
 |--------|-------------|
 | `--json` | Machine-readable JSON (one object per commit) |
+| `--ai`, `--format {human,ai}` | `ai`: one plain line per commit for a model to read (see [Output (`--ai`)](#output---ai)) |
 | `--color WHEN` | `always` \| `auto` \| `never`; `auto` honours `NO_COLOR` ([Configuration.md](../../Configuration.md#colour)) |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
 | `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `gerrit.logShowUrl`. |
@@ -52,6 +53,25 @@ Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker
 Below the summary, dim **next lines** (`cli_log.next_steps`) name the ger command for a state the stack is in: a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`), a **diverged** or outdated change (`ger checkout change:<n> --update`), and what `chain blocked` means (a change below is not submittable yet). One line per state, none when there is nothing to do.
 
 Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when color is on.
+
+---
+
+## Output (`--ai`)
+
+[Output formats](../../SPEC.md#output-formats): the same commits, states and next steps as the text view, in words, with no colour, hyperlinks or padding.
+
+```text
+stack: testproj, branch main, 6 commits, ger push sends 1-2
+1. 63568e8 Refactor parser init — change 100, V+1, CR+2, submittable
+2. 10aa08b Extract command routing — change 101, V-1, build failed (unit-tests)
+3. 06da828 test! temporary experiment — change 102, V+1, CR+1, 2 unresolved comments, chain blocked
+4. f638488 Cleanup after experiment — change 103, ahead of gerrit, chain blocked
+5. 4808c06 Wip: cache — not-pushed
+6. 9692134 No footer here — missing Change-Id
+chain blocked: a change below is not submittable yet (votes, CI, comments); it clears when that one is
+```
+
+The first line names the project, the push branch, the commit count and which commits `ger push` sends (those below the **ready boundary**). Each commit line is numbered oldest first: short SHA, subject, then only the facts that have a value: `change N`, `merged`, the votes cast (`V+1`, `CR+2`: the text view's tokens), and the text view's trailing hints, with the failed Checks named after `build failed`. The `next:` lines (`cli_log.next_steps`) close it.
 
 ---
 

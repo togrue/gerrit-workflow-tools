@@ -10,7 +10,7 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_change_option,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     read_message,
@@ -49,8 +49,8 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger comment",
         usage=(
             "ger comment [options] LOCATION (-m MSG | -F FILE) [--note | --local]\n"
-            "       ger comment --edit ID (-m MSG | -F FILE) [--change CHANGEISH] [--resolved] [--json]\n"
-            "       ger comment --discard ID [--change CHANGEISH] [--json]"
+            "       ger comment --edit ID (-m MSG | -F FILE) [--change CHANGEISH] [--resolved] [--json | --ai]\n"
+            "       ger comment --discard ID [--change CHANGEISH] [--json | --ai]"
         ),
         description=(
             "Start a comment chain on a file, line or range. On a patchset Gerrit has, it is a draft "
@@ -76,7 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--edit", metavar="ID", default=None, help="Give your unpublished comment with this id a new message instead."
     )
     p.add_argument("--discard", metavar="ID", default=None, help="Delete your comment with this id instead.")
-    add_json_arg(p)
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
     return p

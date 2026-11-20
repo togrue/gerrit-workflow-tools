@@ -243,35 +243,39 @@ def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup,
     )
 
 
-def add_json_arg(parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGroup) -> None:
-    """Register ``--json``, read back as ``args.json_``."""
-    parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+def add_output_format_args(
+    parser: argparse.ArgumentParser,
+    *,
+    markdown: bool = False,
+    group: argparse._MutuallyExclusiveGroup | None = None,
+) -> None:
+    """Register mutually exclusive ``--json`` / ``--format`` / ``--ai``; read the choice with :func:`output_format`.
 
-
-def add_output_format_args(parser: argparse.ArgumentParser) -> None:
-    """Register mutually exclusive ``--json`` / ``--format {human,markdown}`` / ``--ai``.
-
-    Read the choice back with :func:`output_format`.
+    Every command with ``--json`` takes ``--ai`` (``--format ai``): text for a model to read. A command with a
+    Markdown view (*markdown*) also offers ``--format markdown``, and ``ai`` is that view there; elsewhere it is
+    the command's own compact view, or its human output with colour and hyperlinks off. *group* is a
+    mutually exclusive group of the command's own that the three join.
     """
-    fmt = parser.add_mutually_exclusive_group()
-    add_json_arg(fmt)
+    fmt = group or parser.add_mutually_exclusive_group()
+    fmt.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+    choices = ("human", "markdown", "ai") if markdown else ("human", "ai")
+    ai_view = "the Markdown view" if markdown else "compact plain text, no colour or hyperlinks"
     fmt.add_argument(
         "--format",
-        choices=("human", "markdown"),
-        default=None,
+        choices=choices,
         dest="format_",
-        help="Output format (default: human). 'markdown' is suited for AI review.",
+        help=f"Output format (default: human). 'ai': {ai_view}, for a model.",
     )
-    fmt.add_argument("--ai", action="store_true", help="Alias for --format markdown.")
+    fmt.add_argument("--ai", action="store_const", const="ai", dest="format_", help="Alias for --format ai.")
+    parser.set_defaults(ai_view_="markdown" if markdown else "ai")
 
 
 def output_format(args: argparse.Namespace) -> str:
-    """``json``, ``markdown`` or ``human``, from the flags :func:`add_output_format_args` registered."""
-    if args.json_:
+    """``json``, ``markdown``, ``ai`` or ``human``, from the flags :func:`add_output_format_args` registered."""
+    if getattr(args, "json_", False):
         return "json"
-    if args.ai or args.format_ == "markdown":
-        return "markdown"
-    return "human"
+    fmt = getattr(args, "format_", None) or "human"
+    return str(args.ai_view_) if fmt == "ai" else fmt
 
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
@@ -357,8 +361,9 @@ def init_cli_runtime(
     ensure_utf8_stdio()
     configure_logging(getattr(args, "debug_log", False))
     cwd = Path.cwd()
-    init_color_mode(color=getattr(args, "color", "auto"))
-    init_hyperlink_mode(hyperlinks=getattr(args, "hyperlinks", "auto"))
+    plain = output_format(args) == "ai"  # Text for a model: colour and hyperlinks forced off.
+    init_color_mode(color="never" if plain else getattr(args, "color", "auto"))
+    init_hyperlink_mode(hyperlinks="never" if plain else getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")

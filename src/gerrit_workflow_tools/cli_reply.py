@@ -14,7 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_change_option,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     assume_yes,
     confirm,
@@ -113,7 +113,7 @@ def _build_parser() -> argparse.ArgumentParser:
     publish.add_argument(
         "-y", "--yes", action="store_true", help="With --publish: skip the confirmation (GER_ASSUME_YES=1 too)."
     )
-    add_json_arg(p)
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
     return p

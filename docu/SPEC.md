@@ -28,6 +28,22 @@ Each command spec lists its **implementation module** (e.g. `cli_log.py`) so rev
 - **Aliases** (not shown in `ger --help`): `changeid` → `change-id`; `restack` / `stack` → `rebase`.
 - **Per-command help:** `ger <command> --help` — options there override narrative spec if they differ (then fix the spec).
 
+### Output formats
+
+Every command that prints something worth parsing takes one shared group, `cli_common.add_output_format_args`: `--json`, `--format`, `--ai`, mutually exclusive. `tests/test_output_formats.py` pins that a command with `--json` has the other two.
+
+| Format | Flag | Meaning |
+|--------|------|---------|
+| human | (default), `--format human` | Colour and hyperlinks per `--color` / `--hyperlinks` |
+| json | `--json` | The contract for scripts: every field, `null` where unknown |
+| ai | `--ai`, `--format ai` | Text for a model to read: easy to understand, few tokens |
+
+`--ai` means, per command:
+
+- **`ger show`, `ger ci`:** their Markdown view (also `--format markdown`).
+- **`ger log`, `ger inbox`:** a compact view of their own, built from the same model and the same words as the human view (`render/ai_text.py`, words from `render/status_fmt.py`): one line per commit or chain; plain words, not the `p`/`n`/`cr+2` columns that need a legend; a fact only when it has a value (no `0 comments`, no empty lists); change numbers instead of URLs; no colour, hyperlinks or alignment padding; the `next:` lines kept.
+- **every other command with `--json`** (`comment`, `fix`, `reply`, `resolve`, `review`, `sha`): its human output, with colour and hyperlinks forced off.
+
 ### Shared concepts
 
 Defined once in [CONTEXT.md](../CONTEXT.md): **local stack**, **ready boundary**, **target branch**, **Change-Id**, **attention**, **patchset status**. The patchset tokens (`p` / `n` / `o` / `-` …) are listed in [Reading-ger-log.md](Reading-ger-log.md#status-columns).

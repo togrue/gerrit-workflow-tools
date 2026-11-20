@@ -158,7 +158,7 @@ def _usage() -> str:
         [
             "",
             "Without a terminal, commands that ask (push, checkout, reply --publish, review --vote) take -y,",
-            "or set GER_ASSUME_YES=1 once; log, show, inbox and reply take --json.",
+            "or set GER_ASSUME_YES=1 once; every command with --json also takes --ai (compact text for agents).",
             "Run ger <command> --help for command-specific options.",
         ]
     )
