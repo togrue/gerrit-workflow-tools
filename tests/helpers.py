@@ -15,6 +15,20 @@ def ref_exists(repo: Path, ref: str) -> bool:
     return p.returncode == 0
 
 
+def add_submodule(repo: Path, tmp_path: Path, name: str = "lib") -> Path:
+    """A submodule *name* with two commits, recorded (and checked out) at the second."""
+    lib = tmp_path / name
+    lib.mkdir()
+    git("init", "-b", "main", cwd=lib)
+    for text in ("a\n", "b\n"):
+        (lib / "a.txt").write_text(text, encoding="utf-8")
+        git("add", ".", cwd=lib)
+        git("commit", "-m", f"lib {text.strip()}", cwd=lib)
+    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), name, cwd=repo)
+    git("commit", "-m", f"add {name}", cwd=repo)
+    return repo / name
+
+
 def write_rebase_head(repo: Path, branch: str, *, state_dir: str = "rebase-merge") -> None:
     """Simulate an in-progress rebase by writing ``head-name`` under ``state_dir``."""
     git_dir = Path(git_out("rev-parse", "--git-dir", cwd=repo))
