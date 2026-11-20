@@ -267,6 +267,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.comment.save": (comment: ThreadComment) => threads.saveEdit(comment),
     "ger.comment.cancel": (comment: ThreadComment) => threads.cancelEdit(comment),
     "ger.comment.delete": (comment: ThreadComment) => threads.discardInThread(comment),
+    // Discard in the box of a comment you are editing, as on Gerrit: the trash in its title, by another name.
+    "ger.comment.discard": (comment: ThreadComment) => threads.discardInThread(comment),
     "ger.comment.escape": () => leaveCommentBox(),
     "ger.comment.close": () => closeComment(),
     "ger.chain.edit": (arg: unknown) => {
