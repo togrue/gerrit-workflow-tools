@@ -83,6 +83,7 @@ A **gap** names the work that would close it.
 |-------------------|-----|------|
 | `ger.refresh` | `ger log`, `ger inbox` | every command reads Gerrit within the trust window |
 | `ger.showLog` | UI only | the service's output channel |
+| `ger.reportIssue` | UI only | an anonymized report of what the views show, shown first, then copied for a GitHub issue or saved |
 | `ger.openHeadline` | `ger inbox`, `ger show --first-attention` | |
 | `ger.markSeen` | **gap** | inbox watermark |
 | `ger.openChange` | `ger show CHANGEISH` | |

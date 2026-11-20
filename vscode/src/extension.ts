@@ -16,6 +16,7 @@ import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
 import { RepoWatcher } from "./repoWatcher";
+import { reportIssue } from "./reportIssue";
 import { checkout, editCommit, leaveReview, review } from "./review";
 import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
@@ -39,8 +40,13 @@ function activateWithoutRepo(context: vscode.ExtensionContext, log: vscode.Outpu
   void vscode.commands.executeCommand("setContext", "ger.state", "no-repo");
   const declared: { command: string }[] = context.extension.packageJSON.contributes.commands;
   const missing = () => ui().message("info", "Open a folder with a Gerrit checkout first: ger works on the git repository of a workspace folder.", {}, []);
+  // What works without a checkout: the log, and a report that says the extension did not start.
+  const works: Record<string, () => unknown> = {
+    "ger.showLog": () => log.show(),
+    "ger.reportIssue": () => reportIssue(context.extension.packageJSON, undefined, "no-repo"),
+  };
   for (const { command } of declared) {
-    waiting.push(vscode.commands.registerCommand(command, command === "ger.showLog" ? () => log.show() : missing));
+    waiting.push(vscode.commands.registerCommand(command, works[command] ?? missing));
   }
   const empty: vscode.TreeDataProvider<never> = { getChildren: () => [], getTreeItem: (node) => node };
   waiting.push(vscode.window.registerTreeDataProvider("ger.overview", empty));
@@ -200,6 +206,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       }
     },
     "ger.showLog": () => log.show(),
+    "ger.reportIssue": () => reportIssue(context.extension.packageJSON, { model, events, overviewView, stackView, changeView }, model.state),
     "ger.openHeadline": async () => {
       const target = headlineTarget(model);
       await (target ? openChange(target) : vscode.commands.executeCommand("ger.overview.focus"));

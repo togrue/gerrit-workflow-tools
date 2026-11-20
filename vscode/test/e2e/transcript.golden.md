@@ -1110,6 +1110,52 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 (no change)
 ```
 
+## 76. Review chains › … › Report Issue… › Copy and Open GitHub Issue
+
+**Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
+
+```
+untitled json document opens: 347 lines, starting
+    {
+      "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
+notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
+    → pressed "Copy and Open GitHub Issue"
+clipboard: 347 lines, starting "{"
+browser opens: https://github.com/togrue/gerrit-workflow-tools/issues/new?labels=vscode&body=<!-- What happened, and what did you expect%3F -->
+
+
+<details><summary>Report (names, paths, text and ids replaced)</summary>
+
+```json
+PASTE THE REPORT HERE: it is on your clipboard
+```
+
+</details>
+
+---
+ger extension <version> · VS Code <version> · <os>
+status bar message: $(check) Report copied: paste it into the issue that opens in the browser
+--- on screen:
+(no change)
+```
+
+## 77. Command palette › ger: Report Issue… › Save to File…
+
+**Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
+
+```
+untitled json document opens: 347 lines, starting
+    {
+      "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
+notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
+    → pressed "Save to File…"
+save dialog: suggests ger-report.json
+    → saved 347 lines as ~/ger-report.json
+status bar message: $(check) Report saved to ~/ger-report.json
+--- on screen:
+(no change)
+```
+
 ## Meanwhile: a background refresh finds ger serve gone and cannot start it again
 
 **Expect:** Nothing is said and the views keep what they showed; the status bar item gets a warning mark, its tooltip says the answer is out of date, and Review chains is labelled so.

@@ -13,6 +13,7 @@ import * as vscode from "vscode";
 
 import type { CommentChain } from "../../src/api";
 import { fileUri } from "../../src/changeView";
+import { readSnapshot } from "../../src/snapshot";
 import type { ExtensionApi } from "../../src/extension";
 import { gerCommandLine } from "../../src/launch";
 import { Answer, ScriptedUi, lineDiff } from "./scriptedUi";
@@ -75,6 +76,7 @@ function normalizer(repo: string): (line: string) => string {
     return out
       .replace(/ger-(runbook|brief)-[\w.-]+\.md/g, "ger-$1-<id>.md")
       .replace(/<tmp>[\\/]ger-e2e-\w+[\\/]repo/g, "<repo>")
+      .replace(/ger extension \S+ · VS Code \S+ · \S+ \S+/g, "ger extension <version> · VS Code <version> · <os>")
       .replace(/\b[0-9a-f]{7,40}\b/g, "<sha>")
       .replace(/\b\d+[mhd]\b/g, "<age>");
   };
@@ -637,6 +639,30 @@ export async function run(): Promise<void> {
       "A picker lists the branches it could track, the current one marked; Escape changes nothing.",
       exec("ger.setUpstream"),
       [{ dismiss: true }],
+    );
+
+    // --- Reporting an issue --------------------------------------------------------------
+    await press(
+      "Review chains › … › Report Issue… › Copy and Open GitHub Issue",
+      "The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.",
+      async () => {
+        await vscode.commands.executeCommand("ger.reportIssue");
+        const report = JSON.parse(ui.copied);
+        assert.equal(readSnapshot(ui.copied).stack?.rows.length, api.model.stack?.commits.length, "the report is a snapshot with Local stack's rows");
+        assert.ok(report.change.message.text && report.chains.length === 3 && report.state === "ready", "and with the Change view, Review chains and the state");
+        // Nothing of the fixture repository and the fake Gerrit: subjects, files, people, the project, CI's words, where it is.
+        assert.equal(/Extract|routing|parser|Cleanup|experiment|uploader|\.txt|alice|testproj|Widget|pytest|ZeroDivision/i.exec(ui.copied)?.[0], undefined);
+        assert.ok(!ui.copied.includes(repo) && !ui.copied.includes(path.basename(path.dirname(repo))) && !ui.copied.includes(os.userInfo().username));
+        const ids = api.model.stack?.commits.flatMap((c) => [c.short_sha, c.change_id ?? c.sha]) ?? [];
+        assert.deepEqual(ids.filter((id) => ui.copied.includes(id)), [], "no commit id or Change-Id");
+      },
+      [{ button: "Copy and Open GitHub Issue" }],
+    );
+    await press(
+      "Command palette › ger: Report Issue… › Save to File…",
+      "The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.",
+      exec("ger.reportIssue"),
+      [{ button: "Save to File…" }, { save: "~/ger-report.json" }],
     );
 
     // --- A failure nobody asked for ------------------------------------------------------

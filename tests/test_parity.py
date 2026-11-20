@@ -46,6 +46,7 @@ KNOWN_GAPS = frozenset(
 UI_ONLY = frozenset(
     {
         "ger.showLog",
+        "ger.reportIssue",
         "ger.openDiff",
         "ger.openLocation",
         "ger.nextComment",

@@ -48,3 +48,12 @@ test("the repository a report goes to is the one package.json names", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8"));
   assert.match(issueUrl(manifest.repository.url, versions), /^https:\/\/github\.com\/togrue\/gerrit-workflow-tools\/issues\/new\?/);
 });
+
+test("Report Issue… is in the palette whatever the state, and in the … menu of Review chains, not among its icons", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8"));
+  const menus = manifest.contributes.menus;
+  assert.deepEqual(manifest.contributes.commands.find((entry: { command: string }) => entry.command === "ger.reportIssue"), { command: "ger.reportIssue", title: "Report Issue…", category: "ger" });
+  assert.equal(menus.commandPalette.find((entry: { command: string }) => entry.command === "ger.reportIssue"), undefined, "no when clause: always offered");
+  const inViews = menus["view/title"].filter((entry: { command: string }) => entry.command === "ger.reportIssue");
+  assert.deepEqual(inViews, [{ command: "ger.reportIssue", when: "view == ger.overview", group: "9_help@1" }]);
+});
