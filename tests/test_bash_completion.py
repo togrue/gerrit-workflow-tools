@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools import cli_bash_completion as bc
-from gerrit_workflow_tools.bash_completion_generator import render_bash_completion_script
-from gerrit_workflow_tools.cli_ger import main as ger_main
+from gerrit_workflow_tools.bash_completion_generator import _parser_builders, render_bash_completion_script
+from gerrit_workflow_tools.cli_ger import _COMMANDS, main as ger_main
 from tests.conftest import run_cli
 
 
@@ -95,3 +95,31 @@ def test_ger_dispatches_bash_completion(tmp_path: Path, monkeypatch: pytest.Monk
 def test_regenerated_bash_completion_matches_checked_in_file() -> None:
     completion_path = Path(__file__).resolve().parents[1] / "contrib" / "completion" / "ger.bash"
     assert completion_path.read_text(encoding="utf-8") == render_bash_completion_script()
+
+
+def test_every_ger_command_has_a_completion_function() -> None:
+    """A command missing here dispatches to an undefined _ger_<cmd> and tab prints "command not found"."""
+    assert sorted(_parser_builders()) == sorted(_COMMANDS)
+
+
+def _complete(words: list[str]) -> subprocess.CompletedProcess[str]:
+    # Relative path and script on stdin: on Windows `bash` may be WSL's, which cannot read D:/
+    # paths and mangles a -c script.
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        "source contrib/completion/ger.bash; "
+        f'COMP_WORDS=({" ".join(words)}); COMP_CWORD={len(words) - 1}; _ger; echo "${{COMPREPLY[*]}}"'
+    )
+    return subprocess.run(["bash"], input=script, capture_output=True, text=True, check=False, cwd=repo_root)
+
+
+@pytest.mark.parametrize("command", sorted(_COMMANDS))
+def test_flag_completion_runs_for_every_command(command: str) -> None:
+    result = _complete(["ger", command, "--"])
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "--help" in result.stdout.split()
+
+
+def test_vscode_completes_its_action() -> None:
+    assert _complete(["ger", "vscode", "''"]).stdout.split() == ["install"]

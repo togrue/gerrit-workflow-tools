@@ -11,6 +11,8 @@ from gerrit_workflow_tools import (
     cli_cache,
     cli_changeid,
     cli_checkout,
+    cli_ci,
+    cli_comment,
     cli_config,
     cli_edit,
     cli_fetch_api,
@@ -19,14 +21,21 @@ from gerrit_workflow_tools import (
     cli_log,
     cli_push,
     cli_rebase,
+    cli_reply,
     cli_resolve,
+    cli_review,
+    cli_serve,
+    cli_setup,
     cli_sha,
     cli_show,
+    cli_vscode,
 )
 from gerrit_workflow_tools.cli_ger import _ALIASES, _COMMANDS
 
 
-_NO_REF_FALLBACK_COMMANDS = {"bash-completion", "fetch-api", "inbox"}
+# Commands whose positionals are not git revisions: "comment" takes a file path (bash's
+# default completion), "reply" takes comment ids or URLs.
+_NO_REF_FALLBACK_COMMANDS = {"bash-completion", "comment", "fetch-api", "inbox", "reply"}
 
 
 @dataclass
@@ -36,6 +45,7 @@ class CompletionSpec:
     flags: list[str] = field(default_factory=list)
     prev_choices: dict[str, list[str]] = field(default_factory=dict)
     has_ref_fallback: bool = False
+    positional_choices: list[str] = field(default_factory=list)
     subcommands: list[str] = field(default_factory=list)
     subcommand_specs: dict[str, CompletionSpec] = field(default_factory=dict)
 
@@ -52,6 +62,15 @@ def _takes_value(action: argparse.Action) -> bool:
 
 def _has_positional_args(parser: argparse.ArgumentParser) -> bool:
     return any(not action.option_strings and action.dest != argparse.SUPPRESS for action in parser._actions)
+
+
+def _positional_choices(parser: argparse.ArgumentParser) -> list[str]:
+    choices: list[str] = []
+    for action in parser._actions:
+        if action.option_strings or action.choices is None or isinstance(action, argparse._SubParsersAction):
+            continue
+        _append_unique(choices, [str(choice) for choice in action.choices])
+    return choices
 
 
 def _subparsers_action(parser: argparse.ArgumentParser) -> argparse._SubParsersAction | None:
@@ -78,10 +97,14 @@ def _collect_flags_and_choices(parser: argparse.ArgumentParser) -> tuple[list[st
 
 def _spec_from_parser(parser: argparse.ArgumentParser, *, command_name: str) -> CompletionSpec:
     flags, prev_choices = _collect_flags_and_choices(parser)
+    positional_choices = _positional_choices(parser)
     spec = CompletionSpec(
         flags=flags,
         prev_choices=prev_choices,
-        has_ref_fallback=_has_positional_args(parser) and command_name not in _NO_REF_FALLBACK_COMMANDS,
+        has_ref_fallback=(
+            _has_positional_args(parser) and not positional_choices and command_name not in _NO_REF_FALLBACK_COMMANDS
+        ),
+        positional_choices=positional_choices,
     )
     sub = _subparsers_action(parser)
     if sub is None:
@@ -100,6 +123,8 @@ def _parser_builders() -> dict[str, Callable[[], argparse.ArgumentParser]]:
         "cache": cli_cache._build_parser,
         "checkout": cli_checkout._build_parser,
         "change-id": cli_changeid._build_parser,
+        "ci": cli_ci._build_parser,
+        "comment": cli_comment._build_parser,
         "config": cli_config._build_parser,
         "edit": cli_edit._build_parser_edit,
         "fetch-api": cli_fetch_api._build_parser,
@@ -108,10 +133,15 @@ def _parser_builders() -> dict[str, Callable[[], argparse.ArgumentParser]]:
         "log": cli_log._build_parser,
         "push": cli_push._build_arg_parser,
         "rebase": cli_rebase._build_parser,
+        "reply": cli_reply._build_parser,
         "resolve": cli_resolve._build_parser,
+        "review": cli_review._build_parser,
         "reword": cli_edit._build_parser_reword,
+        "serve": cli_serve._build_parser,
+        "setup": cli_setup._build_parser,
         "sha": cli_sha._build_parser,
         "show": cli_show._build_parser,
+        "vscode": cli_vscode._build_parser,
     }
 
 
@@ -145,6 +175,8 @@ def _render_simple_command(command_name: str, spec: CompletionSpec) -> list[str]
     lines.append("        return")
     lines.append("    fi")
     lines.extend(_render_choice_case(spec.prev_choices, indent="    "))
+    if spec.positional_choices:
+        lines.append(f'    __gwt_flags "$cur" {" ".join(spec.positional_choices)}')
     if spec.has_ref_fallback:
         lines.extend(
             [
