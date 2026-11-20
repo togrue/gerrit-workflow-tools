@@ -66,7 +66,7 @@ A local version's branch keeps its upstream. One with no Gerrit destination gets
 
 ## Leaving your work alone
 
-Before anything moves, `ger checkout` checks that the working tree and index hold no changes to tracked files. Otherwise it exits `2` (`USAGE`: a state you fix, then rerun, as for `ger edit`), lists the files, and says to commit or stash them, in the wording `ger review` uses. Untracked files do not count; git itself refuses when the switch would overwrite one. When there is nothing to do (you are already on the local version and it is the patchset), the check is skipped.
+Before anything moves, `ger checkout` checks that the working tree and index hold no changes to tracked files. Otherwise it exits `2` (`USAGE`: a state you fix, then rerun, as for `ger edit`), lists the files, and says to commit or stash them, in the wording `ger review` uses. Untracked files do not count; git itself refuses when the switch would overwrite one. What counts is what `git stash` would save: a submodule with modified or untracked content inside it, or checked out at another commit than the one recorded, does not count, since switching and rebasing leave it as it is (#41). A submodule *staged* at another commit refuses with its own message, naming it: commit it or `git restore --staged` it (`git stash` would not save it, and the rebase would stop on it). When there is nothing to do (you are already on the local version and it is the patchset), the check is skipped.
 
 A rebase in progress stops `ger checkout` before it asks Gerrit anything (exit `2`, with the `git rebase --continue` / `--abort` hint every history-moving command gives).
 
