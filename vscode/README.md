@@ -312,6 +312,8 @@ printed.
 | `src/gitWatch.ts`, `src/repoWatcher.ts` | The views following local git: what to watch (pure, unit-tested), the debounce, the watcher. |
 | `src/extension.ts` | Wiring: views and commands. |
 | `src/snapshot.ts` | The snapshot file: the view models of the two webview views at one moment. Read by the gallery. No `vscode` import, unit-tested. |
+| `src/anonymize.ts`, `src/fakes.ts` | What becomes of every field of the view models in a report: kept, or replaced (default-deny); and the made-up words, names, paths and ids that replace. No `vscode` import, unit-tested. |
+| `src/report.ts` | The report of an issue: the anonymized views and the versions, as a snapshot file; the link to a new issue. No `vscode` import, unit-tested. |
 | `test/fixtures.ts` | API-shaped commits, diffs, comment chains and CI logs: shared by the unit tests and the gallery's scenarios. |
 | `test/gallery/` | The webview gallery (`npm run gallery`): scenarios, the stand-in for VS Code (theme, `acquireVsCodeApi()`), the page around the frames, pictures. Not in the `.vsix`. |
 
