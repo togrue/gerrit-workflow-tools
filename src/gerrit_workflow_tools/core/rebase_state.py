@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.git_state import git_dir
+from gerrit_workflow_tools.core.git_state import git_dir, staged_submodules
 
 
 def rebase_in_progress(cwd: Path | str | None) -> bool:
@@ -146,14 +146,7 @@ def staged_submodule_refusal(cwd: Path | str | None) -> str | None:
     gitlink into the commit being amended. Alone, it is also nothing ``git stash`` saves, so it
     cannot pass as uncommitted changes to stash.
     """
-    raw = git_out("diff", "--cached", "--raw", "-z", "--no-renames", "--ignore-submodules=none", cwd=cwd)
-    fields = raw.split("\0")
-    # -z: each record is ``:mode mode sha sha status`` NUL ``path`` NUL, the path as is (never C-quoted).
-    paths = [
-        path
-        for meta, path in zip(fields[::2], fields[1::2], strict=False)
-        if "160000" in meta.lstrip(":").split()[:2]  # a gitlink on either side: a submodule
-    ]
+    paths = staged_submodules(cwd)
     if not paths:
         return None
     unstage = "git restore --staged " + " ".join(shlex.quote(path) for path in paths)
