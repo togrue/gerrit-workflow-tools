@@ -80,6 +80,59 @@ def unresolved_comments_text(count: int) -> str:
     return f"{count} unresolved {noun}"
 
 
+# Not attention reasons, but hints all the same: keys of :func:`attention_hints` beside the reasons.
+PRIVATE = "private"
+SUBMITTABLE = "submittable"
+
+# Awaiting-review is left out: it is true of every commit under review, so `ger log` would
+# print it on nearly every line. `ger show` and JSON list it.
+_STATE_TEXT = (
+    (Attention.AHEAD_OF_GERRIT, "ahead of gerrit"),
+    (Attention.DIVERGED, "diverged: Gerrit has a patchset you never had"),
+    (Attention.OUTDATED_PATCHSET, "outdated patchset"),
+    (Attention.REVIEW_ISSUES, "review issues"),
+    (Attention.CHAIN_BLOCKED, "chain blocked"),
+)
+
+
+def attention_hints(commit: LogCommit) -> list[tuple[str, str]]:
+    """``ger log``'s trailing hints as (key, text): the key is the attention reason, or :data:`PRIVATE` /
+    :data:`SUBMITTABLE`. A reason that leaves nothing to review replaces every other hint.
+
+    Maps ``commit.attention_reasons`` to text; the verdict itself is ``core.attention``'s.
+    """
+    reasons = set(commit.attention_reasons)
+    for reason, text in _TERMINAL_TEXT:
+        if reason in reasons:
+            return [(reason, text)]
+    hints: list[tuple[str, str]] = [(Attention.WIP, "WIP")] if Attention.WIP in reasons else []
+    if commit.private:
+        hints.append((PRIVATE, "private"))
+    if Attention.CI_FAILED in reasons:
+        hints.append((Attention.CI_FAILED, "build failed"))
+    if Attention.UNRESOLVED_COMMENTS in reasons:
+        hints.append((Attention.UNRESOLVED_COMMENTS, unresolved_comments_text(commit.comments_unresolved)))
+    if Attention.NO_REVIEWERS in reasons:
+        hints.append((Attention.NO_REVIEWERS, "no reviewers"))
+    if commit.submittable and not hints:
+        hints.append((SUBMITTABLE, "submittable"))
+    hints.extend((reason, text) for reason, text in _STATE_TEXT if reason in reasons)
+    return hints
+
+
+def member_hints(reasons: tuple[str, ...], comments: int) -> list[tuple[str, str]]:
+    """``ger inbox``'s hints for one **review chain** member as (reason, text), most urgent first."""
+    hints: list[tuple[str, str]] = []
+    if Attention.CI_FAILED in reasons:
+        hints.append((Attention.CI_FAILED, "build failed"))
+    if Attention.UNRESOLVED_COMMENTS in reasons:
+        text = unresolved_comments_text(comments) if comments else "unresolved comments"
+        hints.append((Attention.UNRESOLVED_COMMENTS, text))
+    if Attention.REVIEW_ISSUES in reasons:
+        hints.append((Attention.REVIEW_ISSUES, "negative vote"))
+    return hints
+
+
 def attention_text(commit: LogCommit) -> str:
     """Short plain-text annotation for a trailing ``# …`` column, or empty string.
 

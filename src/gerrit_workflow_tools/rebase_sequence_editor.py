@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import configure_logging
+from gerrit_workflow_tools.cli_logging import configure_logging
 
 
 logger = logging.getLogger(__name__)
