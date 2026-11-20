@@ -4,56 +4,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CiContent, CiFinding, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
+import { CommentChain, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
 import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
-
-function commit(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
-  const sha = summary.toLowerCase().replace(/\W/g, "").padEnd(40, "0");
-  return {
-    sha,
-    short_sha: sha.slice(0, 7),
-    change_id: `I${sha}`,
-    summary,
-    pushed: true,
-    patchset_status: "active",
-    verified: null,
-    code_review: null,
-    comments_unresolved: 0,
-    ci_failures: [],
-    ci_links: [],
-    gerrit_url: "https://g/c/1",
-    number: 1,
-    last_pushed_votes: null,
-    submittable: false,
-    work_in_progress: false,
-    attention_reasons: [],
-    change_status: "NEW",
-    updated: null,
-    abandoned: false,
-    reviewers: [],
-    is_head: false,
-    held_back: false,
-    needs_edit: false,
-    ...extra,
-  };
-}
-
-function stack(commits: StackCommit[], extra: Partial<Stack> = {}): Stack {
-  return {
-    branch: "feature",
-    head: commits.at(-1)?.sha ?? null,
-    rebase_in_progress: false,
-    stack: { project: "p", target_branch: "origin/main", push_branch: "main" },
-    summary: { commits: commits.length, ready: 0, attention: 0, needs_edit: 0, not_on_gerrit: 0 },
-    commits,
-    ...extra,
-  };
-}
-
-const never = () => undefined;
+import { chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
 test("the icon says how a commit relates to Gerrit", () => {
   const states = (extra: Partial<StackCommit>) => sync(commit("c", extra));
@@ -154,29 +110,6 @@ test("without an upstream the stack offers one to track; while ger is not runnin
 
 // --- Change -------------------------------------------------------------------------
 
-const shown = (extra: Partial<ShownCommit> = {}): ShownCommit => ({ ...commit("Extract routing"), local_commit: true, comment_chains: [], ...extra });
-
-function diff(extra: Partial<Diff> = {}): Diff {
-  return {
-    commit: "c".repeat(40),
-    base: "b".repeat(40),
-    message: "Extract routing\n\nChange-Id: I1",
-    author: "Me <me@example.com>",
-    local_commit: true,
-    files: [
-      { path: "src/route.py", status: "M", old_path: null, insertions: 12, deletions: 3 },
-      { path: "logo.png", status: "A", old_path: null, insertions: null, deletions: null },
-    ],
-    ...extra,
-  };
-}
-
-function state(extra: Partial<ChangeState> = {}): ChangeState {
-  return { local: true, shown: shown(), chains: [], base: diff(), delta: undefined, patchsets: undefined, version: "local", mode: "base", readOnly: "", ci: { state: "closed" }, ...extra };
-}
-
-const patchsets: Patchsets = { number: 1, current: 3, reviewed: 2, patchsets: [1, 2, 3].map((number) => ({ number, commit: String(number).repeat(40), created: null })) };
-
 test("the change view shows the message, the files with their line counts, and what is compared", () => {
   const vm = changeVm(state());
   assert.deepEqual(vm.message, { key: shown().change_id, text: "Extract routing\n\nChange-Id: I1", author: "Me <me@example.com>", readOnly: "" });
@@ -256,20 +189,6 @@ test("a review delta names the two versions, and says when there is nothing to s
 
 test("the commit message is read-only with the reason, and comment chains say what can be done with them", () => {
   assert.equal(changeVm(state({ readOnly: "A rebase is in progress: finish or abort it first." })).message?.readOnly, "A rebase is in progress: finish or abort it first.");
-  const comment = (message: string, extra: object = {}) => ({ path: "a.py", line: 4, message, patch_set: 1, state: "published" as const, url: null, author: "Alice", ...extra });
-  const chain = (root_id: string, comments: ReturnType<typeof comment>[], extra: Partial<CommentChain> = {}): CommentChain => ({
-    root_id,
-    path: "a.py",
-    line: 4,
-    start_line: null,
-    url: null,
-    resolved: false,
-    resolved_after_publish: false,
-    outdated: false,
-    held: false,
-    comments,
-    ...extra,
-  });
   const vm = changeVm(
     state({
       chains: [
@@ -328,14 +247,6 @@ test("the commit message is read-only with the reason, and comment chains say wh
 });
 
 test("the CI group lists errors first and keeps the warnings behind a count", () => {
-  const finding = (message: string, severity: "error" | "warning", fingerprint: string): CiFinding => ({ tool: "cc", kind: severity, path: "src/main.c", line: 3, column: 1, message, detail: null, fingerprint, severity });
-  const content = (collapse_warnings: boolean, findings: CiFinding[]): CiContent => ({
-    label: "jenkins",
-    url: "https://ci.example.org/job/Widget/55/console",
-    provenance: { url: "https://ci.example.org/job/Widget/55/console", provider: "jenkins", build: "Widget #55", fetched_at: null, truncated: false, cached: false, error: null },
-    findings,
-    collapse_warnings,
-  });
   const failing = shown({ ci_failures: ["Verified"], attention_reasons: ["ci-failed"] });
   const both = [finding("unused variable", "warning", "w1"), finding("undeclared identifier", "error", "e1")];
   const vm = changeVm(state({ shown: failing, ci: { state: "loaded", contents: [content(true, both)], introduced: new Set(["w1", "e1"]) } }));

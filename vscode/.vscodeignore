@@ -1,6 +1,7 @@
 src/**
 test/**
 out/test/**
+out/gallery/**
 **/*.map
 tsconfig.json
 .gitignore
