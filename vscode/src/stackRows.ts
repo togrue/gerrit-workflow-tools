@@ -9,7 +9,7 @@ import { Waiting } from "./state";
 /** How a commit relates to what Gerrit has: its icon and its colour. */
 export type Sync = "same" | "changed" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
 
-const SYNC_WORDS: Record<Sync, string> = {
+export const SYNC_WORDS: Record<Sync, string> = {
   same: "the same as on Gerrit",
   changed: "changed here since the last push",
   outdated: "outdated: Gerrit has a newer patchset",
@@ -182,12 +182,12 @@ export interface StackVm {
   movable: number;
 }
 
-const MARKER_WORDS = {
+export const MARKER_WORDS = {
   rebase: "The rebase stopped here, with this commit applied.",
   conflict: "The rebase stopped here on a conflict: this commit is not applied yet.",
 };
 
-const MERGE_WORDS = "A merge commit: the commits it brings in are not part of the stack, and are not listed.";
+export const MERGE_WORDS = "A merge commit: the commits it brings in are not part of the stack, and are not listed.";
 
 /** How many commits, oldest first, stay where they are: the newest merge and all below it (git rebase cannot replay a merge). */
 export function pinned(stack: Stack): number {

@@ -158,7 +158,17 @@ export interface ChangeVm {
   ci?: { summary: string; state: CiView["state"]; error: string; links: CiLinkRow[] };
 }
 
-const LOADING = "loading…";
+/** What the view says while no change is chosen. */
+export const NOTHING_SHOWN = "Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.";
+
+/** Why a commit message cannot be edited: someone's change, a patchset on Gerrit, a rebase underway. */
+export const READ_ONLY = {
+  remote: "Only a commit of your local stack can be reworded here.",
+  patchset: "This is a patchset on Gerrit: choose the local commit to edit its message.",
+  rebase: "A rebase is in progress: finish or abort it first.",
+};
+
+export const LOADING = "loading…";
 
 const SEVERITY_TONE: Record<Severity, Tone | undefined> = { error: "bad", warning: "warn", pending: undefined, ok: "good" };
 
@@ -169,7 +179,7 @@ function headIcon(reasons: readonly string[]): Icon {
   return tone ? { icon, tone } : { icon };
 }
 
-const YOURS: Record<string, string> = { note: "your private note", "local-draft": "your local draft", draft: "your draft" };
+export const YOURS: Record<string, string> = { note: "your private note", "local-draft": "your local draft", draft: "your draft" };
 
 /** A chain you started and have not published: a draft, a local draft or a private note. */
 export function isYours(chain: CommentChain): boolean {
@@ -182,7 +192,7 @@ export function ownComment(chain: CommentChain): Comment | undefined {
   return own?.comment_id ? own : undefined;
 }
 
-const DISCARD: Record<string, string> = { note: "Delete Your Private Note…", "local-draft": "Delete Your Local Draft…", draft: "Delete Your Draft…" };
+export const DISCARD: Record<string, string> = { note: "Delete Your Private Note…", "local-draft": "Delete Your Local Draft…", draft: "Delete Your Draft…" };
 
 function versions(state: ChangeState): { options: Option[]; selected: string } {
   const { shown, patchsets } = state;

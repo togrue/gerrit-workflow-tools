@@ -32,3 +32,13 @@ export function allRowContexts(): string[] {
   }
   return all;
 }
+
+/** The titles of the two sections of Review chains, by the name the service gives them. */
+export const SECTION_TITLES: Record<string, string> = { "to-review": "To review", outgoing: "Outgoing" };
+
+/** What a row of Review chains says when it stands for no change. */
+export const TREE_WORDS = {
+  nothingNeedsYou: "Nothing needs you right now",
+  nothingToReview: "Nothing to review",
+  noChanges: "No open changes",
+};
