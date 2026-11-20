@@ -22,12 +22,12 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
-    GERRIT_UNKNOWN_TEXT,
-    UNSQUASHED_FIXUP_TEXT,
+    PRIVATE,
+    SUBMITTABLE,
+    attention_hints,
     code_review_token,
     comments_token,
     patchset_token,
-    unresolved_comments_text,
     verified_token,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
@@ -240,55 +240,27 @@ def extra_detail_lines(commit: LogCommit) -> list[str]:
     return format_ci_lines(commit, verbose_level=1)
 
 
-# Reasons that replace every other hint: the change cannot be reviewed as it stands.
-_TERMINAL_TOKENS = (
-    (Attention.MISSING_CHANGE_ID, "missing Change-Id", ANSI_YELLOW),
-    (Attention.INVALID_CHANGE_ID, "invalid Change-Id", ANSI_YELLOW),
-    (Attention.UNSQUASHED_FIXUP, UNSQUASHED_FIXUP_TEXT, ANSI_YELLOW),
-    (Attention.GERRIT_UNKNOWN, GERRIT_UNKNOWN_TEXT, ANSI_YELLOW),
-    (Attention.ABANDONED, "abandoned", ANSI_RED),
-    (Attention.NOT_PUSHED, Attention.NOT_PUSHED, ANSI_YELLOW),
-    (Attention.MERGED_DRIFT, "merged drift", ANSI_RED),
-    (Attention.MERGED_UNKNOWN, "merged (equiv. unknown)", ANSI_YELLOW),
-)
-
-
-# Awaiting-review is left out: it is true of every commit under review, so `ger log` would
-# print it on nearly every line. `ger show` and JSON list it.
-_STATE_TOKENS = (
-    (Attention.AHEAD_OF_GERRIT, "ahead of gerrit", ANSI_YELLOW),
-    (Attention.DIVERGED, "diverged: Gerrit has a patchset you never had", ANSI_RED),
-    (Attention.OUTDATED_PATCHSET, "outdated patchset", ANSI_RED),
-    (Attention.REVIEW_ISSUES, "review issues", ANSI_YELLOW),
-    (Attention.CHAIN_BLOCKED, "chain blocked", ANSI_DIM_GRAY),
-)
+_HINT_COLOR: dict[str, str] = {
+    Attention.ABANDONED: ANSI_RED,
+    Attention.MERGED_DRIFT: ANSI_RED,
+    Attention.WIP: ANSI_YELLOW,
+    PRIVATE: ANSI_DIM_GRAY,
+    Attention.CI_FAILED: ANSI_RED,
+    Attention.UNRESOLVED_COMMENTS: ANSI_YELLOW,
+    Attention.NO_REVIEWERS: ANSI_DIM_GRAY,
+    SUBMITTABLE: ANSI_GREEN,
+    Attention.AHEAD_OF_GERRIT: ANSI_YELLOW,
+    Attention.DIVERGED: ANSI_RED,
+    Attention.OUTDATED_PATCHSET: ANSI_RED,
+    Attention.REVIEW_ISSUES: ANSI_YELLOW,
+    Attention.CHAIN_BLOCKED: ANSI_DIM_GRAY,
+}
+"""Colour per hint key; a terminal hint not listed (missing Change-Id, not-pushed, …) is yellow."""
 
 
 def attention_tokens(commit: LogCommit) -> list[tuple[str, str]]:
-    """Attention (text, ANSI-color) pairs for the trailing annotation column.
-
-    Maps ``commit.attention_reasons`` to text; the verdict itself is ``core.attention``'s.
-    """
-    reasons = set(commit.attention_reasons)
-    for reason, text, code in _TERMINAL_TOKENS:
-        if reason in reasons:
-            return [(text, code)]
-
-    tokens: list[tuple[str, str]] = []
-    if Attention.WIP in reasons:
-        tokens.append(("WIP", ANSI_YELLOW))
-    if commit.private:
-        tokens.append(("private", ANSI_DIM_GRAY))
-    if Attention.CI_FAILED in reasons:
-        tokens.append(("build failed", ANSI_RED))
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        tokens.append((unresolved_comments_text(commit.comments_unresolved), ANSI_YELLOW))
-    if Attention.NO_REVIEWERS in reasons:
-        tokens.append(("no reviewers", ANSI_DIM_GRAY))
-    if commit.submittable and not tokens:
-        tokens.append(("submittable", ANSI_GREEN))
-    tokens.extend((text, code) for reason, text, code in _STATE_TOKENS if reason in reasons)
-    return tokens
+    """Attention (text, ANSI-color) pairs for the trailing annotation column: :func:`attention_hints`, coloured."""
+    return [(text, _HINT_COLOR.get(key, ANSI_YELLOW)) for key, text in attention_hints(commit)]
 
 
 def attention_suffix(commit: LogCommit) -> str:

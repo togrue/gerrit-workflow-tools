@@ -410,6 +410,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
 | `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
+| `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
 | `cli_show.py` | `ger show` |
@@ -543,7 +544,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `render/commit_row.py` | Full commit line layout for log/show |
-| `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts |
+| `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts, and the hint words for attention reasons (`attention_hints` for `ger log`, `member_hints` for `ger inbox`) |
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |

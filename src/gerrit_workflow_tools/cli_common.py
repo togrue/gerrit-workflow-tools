@@ -12,7 +12,6 @@ Help text style (``help=`` on parsers and arguments):
 from __future__ import annotations
 
 import argparse
-import logging
 import os
 import sys
 from collections.abc import Callable, Mapping
@@ -20,6 +19,7 @@ from enum import IntEnum
 from pathlib import Path
 from typing import TypeVar
 
+from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.cli_style import (
     ANSI_DIM,
     color_text,
@@ -28,7 +28,7 @@ from gerrit_workflow_tools.cli_style import (
     init_hyperlink_mode,
 )
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
-from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
+from gerrit_workflow_tools.core.call_trace import print_call_trace_summary
 from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
@@ -41,7 +41,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_local_sibling_note,
     format_resolution_note,
 )
-from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -320,33 +319,6 @@ def add_verbose_and_debug_log_args(
         action="store_true",
         help=debug_log_help or HELP_DEBUG_LOG,
     )
-
-
-_LOG = logging.getLogger("gerrit_workflow_tools")
-_CONFIGURED = False
-_DEBUG_LOG_ENABLED = False
-
-
-def configure_logging(verbosity: int | bool) -> None:
-    """Set package log level based on debug logging enablement.
-
-    False → WARNING (silent)
-    True  → DEBUG   (git subprocesses, outcomes, resolved refs/URLs, HTTP URLs/summaries,
-                          and full API JSON bodies)
-    """
-    global _CONFIGURED, _DEBUG_LOG_ENABLED  # pylint: disable=global-statement
-    v = int(verbosity)
-    _DEBUG_LOG_ENABLED = bool(v)
-    set_call_trace_enabled(_DEBUG_LOG_ENABLED)
-    set_log_gerrit_response_bodies(_DEBUG_LOG_ENABLED)
-    level = logging.DEBUG if v >= 1 else logging.WARNING
-    _LOG.setLevel(level)
-    if not _CONFIGURED:
-        h = logging.StreamHandler(sys.stderr)
-        h.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
-        _LOG.addHandler(h)
-        _LOG.propagate = False
-        _CONFIGURED = True
 
 
 # Set by `ger --refresh` (cli_ger) for this process and the git-run editors it starts,

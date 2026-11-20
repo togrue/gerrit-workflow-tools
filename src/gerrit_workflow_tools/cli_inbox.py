@@ -38,6 +38,7 @@ from gerrit_workflow_tools.core.inbox import (
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age, host_from_web_base
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
+from gerrit_workflow_tools.render.status_fmt import member_hints
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -148,17 +149,13 @@ def _hash_suffix(body: str) -> str:
     return f"{color_text('# ', ANSI_DIM)}{body}"
 
 
+_MEMBER_HINT_COLOR = {Attention.CI_FAILED: ANSI_RED}
+
+
 def _attention_note(reasons: tuple[str, ...], comments: int) -> str:
-    """Colored attention text, matching ``ger log`` trailing hints."""
-    if Attention.CI_FAILED in reasons:
-        return color_text("build failed", ANSI_RED)
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        noun = "comment" if comments == 1 else "comments"
-        text = f"{comments} unresolved {noun}" if comments else "unresolved comments"
-        return color_text(text, ANSI_YELLOW)
-    if Attention.REVIEW_ISSUES in reasons:
-        return color_text("negative vote", ANSI_YELLOW)
-    return ""
+    """The most urgent of :func:`member_hints`, coloured as ``ger log``'s trailing hints."""
+    hints = member_hints(reasons, comments)
+    return color_text(hints[0][1], _MEMBER_HINT_COLOR.get(hints[0][0], ANSI_YELLOW)) if hints else ""
 
 
 def _render_chain_line(
