@@ -147,6 +147,7 @@
     "commands": [
       { "command": "ger.refresh", "title": "Refresh from Gerrit", "category": "ger", "icon": "$(refresh)" },
       { "command": "ger.showLog", "title": "Show Log", "category": "ger" },
+      { "command": "ger.reportIssue", "title": "Report Issue…", "category": "ger" },
       { "command": "ger.openHeadline", "title": "Open the Most Important Change", "category": "ger" },
       { "command": "ger.markSeen", "title": "Mark All Activity as Seen", "category": "ger", "icon": "$(check-all)" },
       { "command": "ger.openChange", "title": "Show Change", "category": "ger" },
@@ -261,6 +262,7 @@
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
         { "command": "ger.markSeen", "when": "view == ger.overview && ger.ready", "group": "navigation@2" },
         { "command": "ger.sortChains", "when": "view == ger.overview && ger.ready", "group": "navigation@3" },
+        { "command": "ger.reportIssue", "when": "view == ger.overview", "group": "9_help@1" },
         { "command": "ger.agentWalk", "when": "view == ger.stack && ger.ready", "group": "navigation@0" },
         { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
         { "command": "ger.push", "when": "view == ger.stack && ger.ready", "group": "navigation@1" },

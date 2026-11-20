@@ -142,7 +142,7 @@ test("every command in a menu or keybinding is declared, and every declared comm
   assert.deepEqual([...registered].filter((command) => !declared.has(command)), [], "registered, not declared");
   // Every declared command has a palette decision: shown (when it can work) or hidden (when: false).
   const palette = new Set(menus.commandPalette.map((entry) => entry.command));
-  const undecided = [...declared].filter((command) => !palette.has(command) && !/^(ger\.(refresh|showLog))$/.test(command));
+  const undecided = [...declared].filter((command) => !palette.has(command) && !/^(ger\.(refresh|showLog|reportIssue))$/.test(command));
   assert.deepEqual(undecided, [], "no commandPalette entry: it would be offered when it cannot work");
 });
 

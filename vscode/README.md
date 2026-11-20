@@ -226,6 +226,54 @@ When something is missing, the *Review chains* view says what and offers the nex
 
 A branch without an upstream still shows your review chains; *Local stack* offers to track one.
 
+## Reporting an issue
+
+**ger: Report Issue…** (command palette, in every state, also when ger does not start; and the `…` menu of
+*Review chains*) takes a report of what the views show at that moment, for when something looks or behaves
+wrong. The extension runs in projects that are secret, so the report is **anonymized** before you see it,
+and nothing leaves your machine without you:
+
+1. The report opens as an untitled JSON document. Read it: it is all that would be shared. Edit it if you
+   want something else out.
+2. Then choose. **Copy and Open GitHub Issue** copies the document as it stands and opens a new issue on
+   the project's GitHub; the link carries only the label and the versions line, and the issue says where to
+   paste the report. **Save to File…** writes it where you say. Closing the notification does nothing.
+
+What a report contains:
+
+- The rows of *Review chains* and the view models of *Local stack* and *Change*: the same rows, icons,
+  states and badges, with
+  - **kept**: booleans; counts (unresolved comments, lines added and removed, files, chains, votes, the
+    number of a patchset, ages such as `waiting 3d`); icons, tones and states; and sentences that are the
+    extension's own words, such as *the same as on Gerrit* or *Since your review: patchset 2 → 5*;
+  - **replaced**: every other text. Subjects, commit messages, comments, CI findings and tool output,
+    errors of git and Gerrit, branch and remote names become filler words with the same length and line
+    breaks. Names and e-mail addresses become made-up names as long. Paths become made-up segments, as
+    many and roughly as long, without the file's name or extension. Commit ids, Change-Ids, change numbers
+    and line numbers become unrelated ones of the same shape; URLs become `https://example.invalid/<n>`.
+    A sentence of the extension with such a thing in it (*Track origin/…*, a tooltip naming the reviewers)
+    is replaced whole.
+  Within one report the same commit, person, file or change number is the same everywhere; the next report
+  uses other ones. Nothing is hashed or masked: the replacements are made up, not computed from the original.
+- The extension's version, VS Code's version, the operating system and its release, the state of the
+  extension (`ready`, `setup`, `no-executable`, …), where Gerrit's event stream is (`live`, `off`, …) and
+  whether the views are out of date.
+
+What it does not contain: the log (**Show Log**), any setting (`ger.executable` and `ger.agentCommand` may
+hold paths), the names of the workspace folders or of the repository, Gerrit's host, your name, the time.
+
+What remains to be read from a report is the shape of your work: how many commits, files, comments and
+patchsets there are, how long each text and name is, how many lines each file gained and lost, the votes,
+and how long chains have waited. If that is too much for your project, edit the document before you share
+it, or share nothing.
+
+Every field of the view models is classified in `src/anonymize.ts`. A field it does not name is replaced,
+key and all, and `npm test` fails until someone decides about it, so a field added later is safe before
+anyone remembers the report.
+
+A report is a snapshot file: `npm run gallery -- ger-report.json` draws it (see below), and it can become a
+test fixture.
+
 ## Build and run
 
 ```bash
@@ -252,7 +300,7 @@ The suite presses every button in turn. For the two webview views it calls what 
 send (a drop at a line, a button on a comment) and prints their view models as text; how the
 pages look and feel is not covered by it. Everything the extension says or does outside its
 views (notifications, dialogs, pickers, input boxes, the status bar, terminals, the clipboard,
-the browser) goes through one seam, `src/ui.ts`, which the suite replaces with a scripted user
+the browser, untitled documents, files it saves) goes through one seam, `src/ui.ts`, which the suite replaces with a scripted user
 (`test/e2e/scriptedUi.ts`) that answers each prompt and writes it down. For each press,
 `test/e2e/transcript.golden.md` holds what a user expects, what the extension said and did,
 and how the views changed. An **Expect** line says what a user would expect from that press;
@@ -275,7 +323,8 @@ is listed under the frame.
   view gets a scenario there.
 - `npm run gallery -- report.json` adds snapshot files as scenarios, in front of the built-in
   ones. A snapshot is `{ "format": 1, "name": "…", "stack": <StackVm or null>, "change": <ChangeVm or null> }`,
-  other keys ignored (`src/snapshot.ts`).
+  other keys ignored (`src/snapshot.ts`). The report of **ger: Report Issue…** is one: this is how a
+  reported layout is looked at.
 - `npm run gallery -- --png <dir>` also writes a picture of each frame,
   `<scenario>.<view>.<theme>.<width>.png`, at twice the size. It runs an installed Edge, Chrome or
   Chromium headless (`GER_GALLERY_BROWSER` names another one), once per picture: all of them take
@@ -314,6 +363,7 @@ printed.
 | `src/snapshot.ts` | The snapshot file: the view models of the two webview views at one moment. Read by the gallery. No `vscode` import, unit-tested. |
 | `src/anonymize.ts`, `src/fakes.ts` | What becomes of every field of the view models in a report: kept, or replaced (default-deny); and the made-up words, names, paths and ids that replace. No `vscode` import, unit-tested. |
 | `src/report.ts` | The report of an issue: the anonymized views and the versions, as a snapshot file; the link to a new issue. No `vscode` import, unit-tested. |
+| `src/reportIssue.ts` | ger: Report Issue…: shows the report, then copies it for a GitHub issue or saves it. |
 | `test/fixtures.ts` | API-shaped commits, diffs, comment chains and CI logs: shared by the unit tests and the gallery's scenarios. |
 | `test/gallery/` | The webview gallery (`npm run gallery`): scenarios, the stand-in for VS Code (theme, `acquireVsCodeApi()`), the page around the frames, pictures. Not in the `.vsix`. |
 
