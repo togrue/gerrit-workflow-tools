@@ -33,6 +33,7 @@ ger sha -n / --next-attention [CHANGEISH]
 | `--short` | Abbreviated SHA |
 | `--subject` | Short SHA + subject |
 | `--json` | `{"change_id", "sha", "subject"}` |
+| `--ai`, `--format {human,ai}` | The default output, colour off ([Output formats](../../SPEC.md#output-formats)). Exclusive with `--short`, `--subject`, `--json` |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Default range (Change-Id lookup): configured Gerrit stack window, else upstream..HEAD, else merge-base..HEAD.

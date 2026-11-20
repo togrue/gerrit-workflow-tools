@@ -117,7 +117,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Attach CI findings from failed CI links (fetches CI logs; default: ger.showCiContent, off).",
     )
-    add_output_format_args(p)
+    add_output_format_args(p, markdown=True)
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,

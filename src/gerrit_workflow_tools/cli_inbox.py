@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    output_format,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
@@ -36,6 +37,7 @@ from gerrit_workflow_tools.core.inbox import (
     section_summary,
 )
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age, host_from_web_base
+from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
 from gerrit_workflow_tools.render.status_fmt import member_hints
@@ -102,7 +104,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="At most N chains per section.",
     )
-    add_json_arg(parser)
+    add_output_format_args(parser)
     parser.add_argument(
         "--url",
         "--show-url",
@@ -274,7 +276,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     )
     if limit is not None:
         sections = [InboxSection(s.name, s.query, s.chains[: max(0, limit)]) for s in sections]
-    if args.json_:
+    out_fmt = output_format(args)
+    if out_fmt == "ai":
+        print("\n".join(inbox_ai_lines(sections, projects=projects)))
+    elif out_fmt == "json":
         payload = {
             "host": host_from_web_base(service.web_base),
             "generated": iso_utc(now),

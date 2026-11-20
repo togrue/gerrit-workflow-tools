@@ -109,6 +109,7 @@ Within *to review*, chains sort by **unreviewed age**, oldest first (longest wai
 | `--unready` | Include *to review* chains filtered out as not ready (WIP, private, CI red) |
 | `--limit N` | At most N chains per section. N must be positive |
 | `--json` | Machine-readable output (see [JSON](#json)) |
+| `--ai`, `--format {human,ai}` | `ai`: one plain line per chain for a model to read (see [Output (`--ai`)](#output---ai)) |
 | `--url`, `--show-url` | Chain-top URL per entry (default: **on**) |
 | `--no-url` | Omit URLs from text output |
 | `--color WHEN` | `always` \| `auto` \| `never` |
@@ -178,6 +179,22 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
 | Context | depth `Nc`, `unrevi`/`act` labels, activity age, owner, `#`, URL, empty-section hint | dim |
 
 `--hyperlinks` shortens the chain-top URL the same way as `ger log`.
+
+---
+
+## Output (`--ai`)
+
+[Output formats](../../SPEC.md#output-formats): the text view's chains and words, one line each, without URLs, colour or padding.
+
+```text
+project: myproject
+to review: 2 chains, 3 changes
+change 4321 feat: rate limiter — by alice, waiting on you 3d, last activity 4h, V+1, CR+1
+change 4380 refactor: split scheduler — 2 changes, by carol, waiting on you 6d, last activity 6d, V-1, 4376: build failed, 4380: 2 unresolved comments
+outgoing: none
+```
+
+A section line counts its chains and changes (`none` when empty). A chain line is the chain top's number and subject, then only facts with a value: its size when more than one change, the owner and unreviewed age (*to review* only), the wait age, the worst votes cast, and each member that needs something with the indented lines' hint words.
 
 ---
 

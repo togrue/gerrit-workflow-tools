@@ -28,12 +28,12 @@ ger review --done           -> back to how things were
 ## Usage
 
 ```
-ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force] [--json]
-ger review (--next | --prev) [--stage | --no-stage] [--force] [--json]
-ger review (--stage | --unstage) [--json]
-ger review --status [--json]
-ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json]
-ger review --done [--force] [--json]
+ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force] [--json | --ai]
+ger review (--next | --prev) [--stage | --no-stage] [--force] [--json | --ai]
+ger review (--stage | --unstage) [--json | --ai]
+ger review --status [--json | --ai]
+ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json | --ai]
+ger review --done [--force] [--json | --ai]
 ```
 
 `CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a Gerrit URL, a triplet, `change:N`. A bare number is a change number here, not a git revision. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
@@ -130,6 +130,8 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
 ```
 
 When you have reviewed an older patchset of the change (posted a vote, comment or reply on it), the last two lines say what changed since: the **review delta** (`core/review_delta.py`, the one the VS Code extension shows), narrowed to the files either patchset touched when it was rebased, and the `git diff` that shows it. Nothing is said for patchset 1 or a patchset you already reviewed, and a failure to compute it never fails the review.
+
+**`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 
 **JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta.
 

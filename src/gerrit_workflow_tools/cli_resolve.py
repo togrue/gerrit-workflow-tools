@@ -8,7 +8,7 @@ import json
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     changeish_help,
     init_cli_runtime,
@@ -38,7 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="CHANGEISH",
         help=changeish_help("What to resolve; also q:<search query>"),
     )
-    add_json_arg(p)
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,

@@ -49,6 +49,8 @@ Change-Id matching is case-insensitive, as the grammar accepts either case. Ambi
 |--------|-------------|
 | `-a`, `--all` | Stage all tracked modifications (`git commit -a`) |
 | `--no-verify` | Pass `-n` to `git commit` (skip hooks) |
+| `--json` | `{"fixup_sha", "resolution"?}` |
+| `--ai`, `--format {human,ai}` | The text output, colour off ([Output formats](../../SPEC.md#output-formats)) |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Default: only **staged** changes are committed. On a TTY with an empty index, prompts to stage tracked modifications (`y` / `n` / `d` for diff).

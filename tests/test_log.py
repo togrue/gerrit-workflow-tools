@@ -956,3 +956,52 @@ def test_log_verbose_lists_reviewers_and_ccs(stack_repo: Path, monkeypatch: pyte
         {"name": "bob", "cc": False},
         {"name": "carol", "cc": True},
     ]
+
+
+def _ai_stack(stack_repo: Path) -> ChangeStore:
+    """The four stack commits on Gerrit (ready, CI failed, comments, local code newer), then two never pushed."""
+    _configure_repo(stack_repo)
+    git("commit", "--allow-empty", "-m", "Wip: cache\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    git("commit", "--allow-empty", "-m", "No footer here", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict[str, Any]] = [
+        {},
+        {"verified": -1, "cr": 0, "submittable": False},
+        {"cr": 1, "unresolved_comment_count": 2, "submittable": False},
+        {"cr": 0, "submittable": False},
+    ]
+    details = build_details_by_change_id(rows[:4], per_index_overrides=overrides)
+    older = git_out("rev-parse", "main", cwd=stack_repo)
+    newer = details[f"testproj~main~{rows[3].change_id}"]
+    newer["current_revision"], newer["revisions"] = older, {older: {"_number": 1}}
+    checks = {f"testproj~main~{rows[1].change_id}": [{"state": "FAILED", "checker_name": "unit-tests"}]}
+    return ChangeStore(details, checks=checks)
+
+
+def test_log_ai_is_one_plain_line_per_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--ai``: the human view's words, one numbered line per commit, a fact only where it has a value."""
+    store = _ai_stack(stack_repo)
+    code, out, err = run_cli(stack_repo, log_main, ["--ai", "--color", "always"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert out == strip_ansi(out)  # --ai forces colour off, whatever --color says
+    lines = out.splitlines()
+    assert lines[0] == "stack: testproj, branch main, 6 commits, ger push sends 1-2"
+    sha = [row.short_sha for row in stack_rows_mb_to_head(stack_repo)]
+    assert lines[1:7] == [
+        f"1. {sha[0]} Refactor parser init — change 100, V+1, CR+2, submittable",
+        f"2. {sha[1]} Extract command routing — change 101, V-1, build failed (unit-tests)",
+        f"3. {sha[2]} test! temporary experiment — change 102, V+1, CR+1, 2 unresolved comments, chain blocked",
+        f"4. {sha[3]} Cleanup after experiment — change 103, ahead of gerrit, chain blocked",
+        f"5. {sha[4]} Wip: cache — not-pushed",
+        f"6. {sha[5]} No footer here — missing Change-Id",
+    ]
+    assert lines[7].startswith("chain blocked: ")  # cli_log.next_steps, as the human view ends
+    for empty in ("None", "null", "[]", "CR0", "V0", "0 unresolved", "http", "#"):
+        assert empty not in out
+
+
+def test_log_ai_is_far_smaller_than_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _ai_stack(stack_repo)
+    _code, ai, _err = run_cli(stack_repo, log_main, ["--ai"], monkeypatch, gerrit=store)
+    _code, as_json, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert len(ai) * 5 < len(as_json)

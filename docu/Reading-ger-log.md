@@ -183,6 +183,8 @@ ger log --json
 
 Each commit is one JSON object with fields such as `sha`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `attention_reasons`, and `gerrit_url`. See [spec/commands/log.md](spec/commands/log.md#json-fields).
 
+For an agent, `ger log --ai` prints the same stack in words, one line per commit and none of the columns above: see [spec/commands/log.md](spec/commands/log.md#output---ai).
+
 ---
 
 ## See also

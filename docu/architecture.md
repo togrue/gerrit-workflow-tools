@@ -408,7 +408,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`), `print_resolution_note`, `confirm` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `print_resolution_note`, `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
 | `cli_log.py` | `ger log` |
@@ -547,6 +547,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
+| `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
 | `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
 | `render/agent_runbook.py` | The agent runbook as Markdown (`runbook_markdown`) and JSON (`runbook_json`) |
 | `render/review_json.py` | JSON for **review chains** (`chain_json`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
