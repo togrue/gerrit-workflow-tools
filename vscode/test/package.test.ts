@@ -191,6 +191,24 @@ test("a reply in an editor thread is Save or Cancel, with Gerrit's Resolved chec
   }
 });
 
+test("the box of a comment you are editing is Save, Cancel and Discard, as on Gerrit; Discard deletes as the trash does", () => {
+  const box = menus["comments/comment/context"];
+  assert.deepEqual(box.map((entry) => entry.command), ["ger.comment.save", "ger.comment.cancel", "ger.comment.discard"]);
+  // Only your unpublished comments are edited; Discard goes where Delete goes, never on a new comment's box.
+  const trash = menus["comments/comment/title"].find((entry) => entry.command === "ger.comment.delete");
+  assert.equal(box[2].when, trash?.when);
+  assert.ok(!menus["comments/commentThread/context"].some((entry) => entry.command === "ger.comment.discard"));
+  // One way to delete: the same handler, so the same question before anything is deleted.
+  const handler = (command: string) => source("extension.ts").match(new RegExp(`"${command.replace(/\./g, "\\.")}": \\(([^)]*)\\) => ([^\\n]*)`))?.slice(1);
+  assert.ok(handler("ger.comment.delete"), "ger.comment.delete is not registered");
+  assert.deepEqual(handler("ger.comment.discard"), handler("ger.comment.delete"));
+  // The Change view's reply box: Discard while your draft reply is there, through the row's trash.
+  const page = fs.readFileSync(path.join(root, "media", "change.js"), "utf8");
+  assert.match(page, /act\("chain\.delete"\)/);
+  assert.match(page, /post\("thread", \{ id: thread\.id, action: "chain\.delete" \}\)/, "the reply box's Discard posts what the row's trash runs");
+  assert.match(page, /box\.discard\.hidden = !thread\.discard;/);
+});
+
 test("Esc in a ger comment box first leaves the box, then closes the thread; edit boxes and new comments keep VS Code's Esc", () => {
   const esc: Entry[] = manifest.contributes.keybindings.filter((entry: Entry) => entry.key === "escape");
   const box = esc.find((entry) => entry.command === "ger.comment.escape")?.when ?? "";
