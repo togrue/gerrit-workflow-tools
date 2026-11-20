@@ -7,9 +7,12 @@ import type * as vscode from "vscode";
 import type { Level, MessageOptions, TerminalOptions, Ui } from "../../src/ui";
 
 /** How the scripted user answers the next prompt. Nothing queued: they dismiss it. */
-export type Answer = { button: string } | { pick: string } | { type: string } | { dismiss: true };
+export type Answer = { button: string } | { pick: string } | { type: string } | { save: string } | { dismiss: true };
 
 function describe(answer: Answer): string {
+  if ("save" in answer) {
+    return `save as "${answer.save}"`;
+  }
   return "button" in answer ? `press "${answer.button}"` : "pick" in answer ? `pick "${answer.pick}"` : "type" in answer ? `type "${answer.type}"` : "dismiss";
 }
 
@@ -17,6 +20,8 @@ export class ScriptedUi implements Ui {
   private lines: string[] = [];
   private queue: Answer[] = [];
   private problems: string[] = [];
+  /** What was last put on the clipboard, whole. */
+  copied = "";
 
   constructor(private readonly normalize: (text: string) => string) {}
 
@@ -37,10 +42,10 @@ export class ScriptedUi implements Ui {
     this.lines.push(this.normalize(line));
   }
 
-  private next(kind: "button" | "pick" | "type"): Answer | undefined {
+  private next(kind: "button" | "pick" | "type" | "save"): Answer | undefined {
     const answer = this.queue.shift();
     if (answer && !("dismiss" in answer) && !(kind in answer)) {
-      this.problems.push(`the script said to ${describe(answer)}, but a ${kind === "button" ? "message" : kind === "pick" ? "picker" : "input box"} asked`);
+      this.problems.push(`the script said to ${describe(answer)}, but a ${{ button: "message", pick: "picker", type: "input box", save: "save dialog" }[kind]} asked`);
       return undefined;
     }
     return answer;
@@ -114,6 +119,7 @@ export class ScriptedUi implements Ui {
 
   copy(text: string): Thenable<void> {
     const lines = text.split("\n");
+    this.copied = text;
     this.say(`clipboard: ${lines.length} lines, starting "${lines[0]}"`);
     return Promise.resolve();
   }
@@ -126,6 +132,22 @@ export class ScriptedUi implements Ui {
   openFolder(uri: vscode.Uri): Thenable<unknown> {
     this.say(`new VS Code window on: ${uri.fsPath}`);
     return Promise.resolve();
+  }
+
+  document(content: string, language: string): Thenable<() => string> {
+    const lines = content.split("\n");
+    this.say(`untitled ${language} document opens: ${lines.length} lines, starting`);
+    lines.slice(0, 2).forEach((line) => this.say(`    ${line}`));
+    return Promise.resolve(() => content);
+  }
+
+  /** The file is not written: the transcript says what would have been. */
+  save(name: string, content: string): Thenable<string | undefined> {
+    this.say(`save dialog: suggests ${name}`);
+    const answer = this.next("save");
+    const file = answer && "save" in answer ? answer.save : undefined;
+    this.say(`    → ${file ? `saved ${content.split("\n").length} lines as ${file}` : "cancelled"}`);
+    return Promise.resolve(file);
   }
 }
 

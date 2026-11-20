@@ -1,8 +1,10 @@
 // Everything the extension says to the user or does outside its own views: notifications,
-// pickers, input boxes, the status bar, progress, terminals, the clipboard, the browser and
-// new windows. One seam, so the end-to-end suite can answer each prompt and record what a user
-// would have seen and what would have happened.
+// pickers, input boxes, the status bar, progress, terminals, the clipboard, the browser, new
+// windows, untitled documents and files saved where the user says. One seam, so the end-to-end
+// suite can answer each prompt and record what a user would have seen and what would have happened.
 
+import * as os from "node:os";
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 export type Level = "info" | "warning" | "error";
@@ -35,6 +37,10 @@ export interface Ui {
   copy(text: string): Thenable<void>;
   openExternal(uri: vscode.Uri): Thenable<boolean>;
   openFolder(uri: vscode.Uri): Thenable<unknown>;
+  /** Open `content` as an untitled document in `language`, to read and to edit. Resolves to what reads its text as it is by then. */
+  document(content: string, language: string): Thenable<() => string>;
+  /** Ask where to save `content`, suggesting the file name `name`, and write it there. Resolves to the file's path; undefined when the user cancelled. */
+  save(name: string, content: string): Thenable<string | undefined>;
 }
 
 /** What VS Code 1.93+ tells about commands run in a terminal (shell integration); absent before. */
@@ -102,6 +108,21 @@ export const vscodeUi: Ui = {
   copy: (text) => vscode.env.clipboard.writeText(text),
   openExternal: (uri) => vscode.env.openExternal(uri),
   openFolder: (uri) => vscode.commands.executeCommand("vscode.openFolder", uri, { forceNewWindow: true }),
+  async document(content, language) {
+    const document = await vscode.workspace.openTextDocument({ language, content });
+    await vscode.window.showTextDocument(document, { preview: false });
+    return () => (document.isClosed ? content : document.getText());
+  },
+  async save(name, content) {
+    const extension = path.extname(name).slice(1);
+    // Suggested in the home folder, not in the workspace: a report is not part of the repository.
+    const uri = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(path.join(os.homedir(), name)), filters: extension ? { [extension.toUpperCase()]: [extension] } : undefined });
+    if (!uri) {
+      return undefined;
+    }
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, "utf8"));
+    return uri.fsPath;
+  },
 };
 
 /** The one the extension uses; the end-to-end suite swaps in a scripted one. */
