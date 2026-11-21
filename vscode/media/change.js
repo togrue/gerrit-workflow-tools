@@ -478,11 +478,13 @@
         box.note.textContent = message.saved ? "" : "not saved";
       }
     } else if (message.type === "discarded") {
-      // Your draft reply is deleted: what you typed to add to it goes too. Dismissed, it stays.
+      // Your draft reply is deleted: what you typed to add to it goes too, and the checkbox is back
+      // where the comment now stands, as Cancel leaves it. Dismissed, both stay.
       const box = replyBoxes.get(message.id);
       if (box && message.deleted) {
         box.text.value = "";
         box.note.textContent = "";
+        box.resolved.checked = box.resolving;
       }
     } else if (message.type === "reveal") {
       revealed = message.id;
