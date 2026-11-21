@@ -14,7 +14,8 @@ from gerrit_workflow_tools.cli_style import strip_ansi
 from gerrit_workflow_tools.core.comment_anchor import CommentRange
 from gerrit_workflow_tools.core.comment_chains import build_comment_chains
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.suggested_edits import FixReplacement, message_suggestions
+from gerrit_workflow_tools.core.suggested_edits import FixReplacement, SuggestedEdit, message_suggestions
+from gerrit_workflow_tools.render.suggested_fixes import comment_text
 from tests.change_store import ChangeStore
 from tests.conftest import run_cli
 
@@ -197,3 +198,44 @@ def test_an_insertion_says_where_it_goes(stack_repo: Path, monkeypatch: pytest.M
 )
 def test_replacement_describes_the_range_it_replaces(rng: CommentRange, where: str) -> None:
     assert FixReplacement(path="f.py", range=rng, replacement="x").describe() == where
+
+
+# What ger serve sends as a comment's `text` and `markdown`: VS Code shows them as they are.
+_LINES = CommentRange(2, 0, 4, 0)
+
+
+def _fix(*replacements: tuple[CommentRange, str], description: str = "Use the LIMIT constant") -> SuggestedEdit:
+    return SuggestedEdit(
+        description, tuple(FixReplacement("epsilon.txt", rng, text) for rng, text in replacements), fix_id="f1"
+    )
+
+
+def test_a_comments_text_writes_its_fixes_out_below_it_in_markdown() -> None:
+    fix = _fix((_LINES, "LIMIT = 10\nuse(LIMIT)\n"))
+    assert comment_text("Name the limit.", (fix,), markdown=True) == (
+        "Name the limit.\n\n**Suggested fix:** Use the LIMIT constant\n`epsilon.txt:2-3` becomes:\n"
+        "```\nLIMIT = 10\nuse(LIMIT)\n```"
+    )
+    deletion = _fix((_LINES, ""), description="")
+    assert comment_text("", (deletion,), markdown=True) == "**Suggested fix:**\n`epsilon.txt:2-3`: delete"
+    block = "Typo:\n\n```suggestion\n    return total\n```\n"
+    in_message = SuggestedEdit("", (FixReplacement("epsilon.txt", _LINES, "    return total\n"),), in_message=True)
+    assert comment_text(block, (in_message,), markdown=True) == block
+    assert comment_text("plain", (), markdown=True) == "plain"
+
+
+def test_a_fix_is_fenced_longer_than_any_backtick_run_in_it() -> None:
+    fix = _fix((CommentRange(2, 0, 3, 0), "```\ncode\n```\n"), description="")
+    assert (
+        comment_text("", (fix,), markdown=True)
+        == "**Suggested fix:**\n`epsilon.txt:2` becomes:\n````\n```\ncode\n```\n````"
+    )
+
+
+def test_a_comments_plain_text_says_an_insertion_as_one() -> None:
+    fix = _fix((_LINES, "LIMIT = 10\r\n    use(LIMIT)\r\n"), (CommentRange(5, 2, 5, 2), "x"), (_LINES, ""))
+    assert comment_text("Name the limit.", (fix,)) == (
+        "Name the limit.\n\nsuggested fix: Use the LIMIT constant\n  epsilon.txt:2-3 becomes:\n"
+        "  + LIMIT = 10\n  +     use(LIMIT)\n  insert at epsilon.txt:5.3:\n  + x\n  epsilon.txt:2-3: delete"
+    )
+    assert comment_text("plain", ()) == "plain"

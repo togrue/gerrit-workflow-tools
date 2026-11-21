@@ -97,7 +97,7 @@ export const patchsets: Patchsets = { number: 1, current: 3, reviewed: 2, patchs
 
 /** A published comment by Alice on `a.py:4`. */
 export function comment(message: string, extra: Partial<Comment> = {}): Comment {
-  return { path: "a.py", line: 4, message, patch_set: 1, state: "published", url: null, author: "Alice", ...extra };
+  return { path: "a.py", line: 4, message, text: message, markdown: message, patch_set: 1, state: "published", url: null, author: "Alice", ...extra };
 }
 
 /** An open comment chain on `a.py:4`. */

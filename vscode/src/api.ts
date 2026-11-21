@@ -226,6 +226,10 @@ export interface Comment {
   line: number | null;
   message: string;
   suggested_edits?: SuggestedEdit[];
+  /** `message` with its fix suggestions written out below it, as `ger show` prints them: for the Change view and tooltips. */
+  text: string;
+  /** The same in Markdown, each replacement fenced: for the editor's comment threads. */
+  markdown: string;
   author?: string;
   comment_id?: string;
   patch_set: number | null;

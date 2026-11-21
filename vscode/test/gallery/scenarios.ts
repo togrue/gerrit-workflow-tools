@@ -200,6 +200,9 @@ function chains(): CommentChain[] {
     in_message: false,
     replacements: [{ path: init.path, range: { start_line: 7, start_character: 0, end_line: 8, end_character: 0 }, replacement: 'from .prefix_tree import PrefixTree\n\n__all__ = ["PrefixTree", "route"]\n', location: `${init.path}:7` }],
   };
+  // What ger serve writes out below the comment (render/suggested_fixes.py).
+  const exported = "Export it here, or callers have to reach into the module.";
+  const fixText = `suggested fix: ${fix.description}\n  ${init.path}:7 becomes:\n  + from .prefix_tree import PrefixTree\n  + \n  + __all__ = ["PrefixTree", "route"]`;
   return [
     chain("c1", [comment("Should this be a node per path segment rather than per character? With one per character the tree gets very deep for long URLs.", { ...on(42) }), comment("Per segment would also make the wildcard match simpler.", { ...on(42), author: "Bob Becker" })], on(42)),
     chain("c2", [comment("What happens when two handlers register the very same prefix?", { ...on(88), author: "Bob Becker" })], { ...on(88), held: true }),
@@ -215,7 +218,7 @@ function chains(): CommentChain[] {
       ],
       whole,
     ),
-    chain("c5", [comment("Export it here, or callers have to reach into the module.", { ...init, suggested_edits: [fix] })], init),
+    chain("c5", [comment(exported, { ...init, suggested_edits: [fix], text: `${exported}\n\n${fixText}`, markdown: exported })], init),
     chain("c6", [comment("Nit: blank line."), comment("Done", { author: "Dana Dietrich" })], { ...on(12), resolved: true, resolved_after_publish: true }),
     chain("c7", [comment("Measure this against the old router before pushing.", { ...on(140), state: "note", author: undefined, comment_id: "n1" })], on(140)),
     chain("c8", [comment("Explain here why registration order is the tie-break.", { ...on(63), state: "local-draft", author: undefined, comment_id: "l1" })], on(63)),

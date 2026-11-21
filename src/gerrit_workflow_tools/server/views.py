@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from functools import partial
 from itertools import pairwise
-from typing import Any
+from typing import Any, cast
 
 from gerrit_workflow_tools import __version__
 from gerrit_workflow_tools.cli_common import failure_exit
@@ -36,6 +36,7 @@ from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
+from gerrit_workflow_tools.render.suggested_fixes import comment_text
 from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
@@ -288,8 +289,12 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         )
         payload["short_sha"] = item.commit.short_sha
         payload["new_comment"] = new_comment_state(item.commit, is_local=item.target.is_local_commit)
-        for chain_payload in payload["comment_chains"]:  # type: ignore[attr-defined]
+        served_chains = cast(list[dict[str, Any]], payload["comment_chains"])
+        for chain_payload, chain in zip(served_chains, item.chains, strict=True):
             chain_payload["held"] = chain_payload["root_id"] in holds
+            for entry, comment in zip(chain_payload["comments"], chain.comments, strict=True):
+                entry["text"] = comment_text(comment.message, comment.suggested_edits)
+                entry["markdown"] = comment_text(comment.message, comment.suggested_edits, markdown=True)
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if req.flag("markdown"):
             lines = commit_markdown(

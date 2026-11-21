@@ -56,3 +56,24 @@ def fixes_markdown(edits: tuple[SuggestedEdit, ...]) -> list[list[str]]:
                 lines.extend([fence, *code, fence])
         fixes.append(lines)
     return fixes
+
+
+def comment_text(message: str, edits: tuple[SuggestedEdit, ...], *, markdown: bool = False) -> str:
+    """*message* with the fix suggestions of *edits* written out below it, a blank line apart.
+
+    Plain, as ``ger show`` writes them (without its box and colours); with *markdown*, each
+    replacement fenced, for a viewer that renders Markdown.
+    """
+    if markdown:
+        fixes = ["\n".join(fix) for fix in fixes_markdown(edits)]
+    else:
+        fixes = [
+            "\n".join(
+                [
+                    f"suggested fix: {description}" if description else "suggested fix:",
+                    *(line for what, code in parts for line in (f"  {what}", *(f"  + {ln}" for ln in code))),
+                ]
+            )
+            for description, parts in shown_fixes(edits)
+        ]
+    return "\n\n".join(part for part in (message, *fixes) if part)

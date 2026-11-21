@@ -267,6 +267,11 @@ The **review chain** an open change sits in, base to top, in the `ger inbox --js
 local commit with its Change-Id pushes to is that change, `local_commit: false`, with the commit in
 `resolution.local_sibling` ([show](show.md)).
 
+Each comment also carries its whole text with the Gerrit fix suggestions written out below it
+(`render/suggested_fixes.py`), so a viewer shows them without rendering them itself: `text`
+plain, as `ger show` prints them without its box and colours, and `markdown` with each
+replacement fenced. A ```` ```suggestion ```` block is in the message already and is not repeated.
+
 Each commit also says what a new comment on it becomes by default, in `new_comment`: `draft`
 when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else
 `local-draft` — never pushed, or rewritten here since. A `note` is always possible.

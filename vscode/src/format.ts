@@ -1,6 +1,6 @@
 // How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
-import { Attended, Chain, Comment, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, Severity, StackMoves } from "./api";
+import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, Severity, StackMoves } from "./api";
 
 /** Every reason core names (`Attention`, core/attention.py), in words: tests/test_attention_severity.py holds the two lists together. */
 const WORDS: Record<string, string> = {
@@ -251,71 +251,4 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   }
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
-}
-
-/** What a fix's replacement does and the lines it writes (none for a delete), its location passed through `where`. */
-interface FixPart {
-  what: string;
-  code: string[];
-}
-
-/**
- * The Gerrit fix suggestions of a comment, as they are written out below its text. A
- * ```suggestion block of the text is already there, so it is left out.
- */
-function shownFixes(comment: Pick<Comment, "suggested_edits">, where: (location: string) => string): { description: string; parts: FixPart[] }[] {
-  return (comment.suggested_edits ?? [])
-    .filter((edit) => !edit.in_message)
-    .map((edit) => ({
-      description: edit.description,
-      parts: edit.replacements.map((rep) => {
-        const location = where(rep.location);
-        if (!rep.replacement) {
-          return { what: `${location}: delete`, code: [] };
-        }
-        const r = rep.range;
-        const inserts = r.start_line === r.end_line && r.start_character === r.end_character;
-        return { what: inserts ? `insert at ${location}:` : `${location} becomes:`, code: rep.replacement.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") };
-      }),
-    }));
-}
-
-/** A Markdown fence longer than any run of backticks in `lines`, so none of them closes it. */
-export function codeFence(lines: string[]): string {
-  const longest = Math.max(0, ...lines.flatMap((line) => (line.match(/`+/g) ?? []).map((run) => run.length)));
-  return "`".repeat(Math.max(3, longest + 1));
-}
-
-/**
- * A comment's text with the Gerrit fix suggestions it carries written out below it in Markdown:
- * what each replaces, and with what (fenced). For the editor's comment threads.
- */
-export function commentText(comment: Pick<Comment, "message" | "suggested_edits">): string {
-  const fixes = shownFixes(comment, (location) => `\`${location}\``).map(({ description, parts }) => {
-    const lines = [`**Suggested fix:**${description ? ` ${description}` : ""}`];
-    for (const { what, code } of parts) {
-      lines.push(what);
-      if (code.length) {
-        const fence = codeFence(code);
-        lines.push(fence, ...code, fence);
-      }
-    }
-    return lines.join("\n");
-  });
-  return [comment.message, ...fixes].filter(Boolean).join("\n\n");
-}
-
-/**
- * The same as plain text, as `ger show` writes it: for the Change view and tooltips, which show
- * text as it is and would print Markdown's `**` and backticks.
- */
-export function commentPlainText(comment: Pick<Comment, "message" | "suggested_edits">): string {
-  const fixes = shownFixes(comment, (location) => location).map(({ description, parts }) => {
-    const lines = [description ? `suggested fix: ${description}` : "suggested fix:"];
-    for (const { what, code } of parts) {
-      lines.push(`  ${what}`, ...code.map((line) => `  + ${line}`));
-    }
-    return lines.join("\n");
-  });
-  return [comment.message, ...fixes].filter(Boolean).join("\n\n");
 }
