@@ -95,6 +95,21 @@ def first_conflict(cwd: Path | str, base: str, picks: Sequence[Commit], stack: S
     return None
 
 
+def replay_conflict(cwd: Path | str, onto: str, picks: Sequence[Commit]) -> PickConflict | None:
+    """The first of *picks* (oldest first) that conflicts when replayed in order onto *onto*; ``None`` when all apply.
+
+    What ``git rebase <onto>`` would meet, on trees alone: one ``merge-tree`` per pick, each
+    onto the tree the one before it left, so no scratch commit is written.
+    """
+    tip = onto
+    for commit in picks:
+        tree, files = _pick(cwd, tip, commit)
+        if tree is None:
+            return PickConflict(commit, files)
+        tip = tree
+    return None
+
+
 def _swapped(commits: Sequence[Commit], i: int) -> list[Commit]:
     return [*commits[:i], commits[i + 1], commits[i], *commits[i + 2 :]]
 

@@ -207,8 +207,12 @@ export function swapKey(lower: string, upper: string): string {
 
 /** Why `moving` cannot change places with `other`, as one sentence. */
 export function blockedMove(moving: string, other: string, conflict: MoveConflict): string {
-  const files = conflict.files.length ? ` in ${conflict.files.join(", ")}` : "";
-  return `"${moving}" cannot change places with "${other}": "${conflict.summary}" would conflict${files}.`;
+  return `"${moving}" cannot change places with "${other}": ${wouldConflict(conflict)}.`;
+}
+
+/** `"Refactor parser init" would conflict in a.txt`: the first commit a rewrite or a rebase would stop at. */
+export function wouldConflict(conflict: MoveConflict): string {
+  return `"${conflict.summary}" would conflict${conflict.files.length ? ` in ${conflict.files.join(", ")}` : ""}`;
 }
 
 /**
