@@ -30,7 +30,8 @@ def _commit(repo: Path, files: dict[str, list[str] | None]) -> str:
             git("rm", "-q", name, cwd=repo)
             continue
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+        # LF on Windows too: a CR LF file would differ on every line from the LF blobs the tests hash.
+        (repo / name).write_text("".join(f"{line}\n" for line in lines), encoding="utf-8", newline="\n")
         git("add", name, cwd=repo)
     git("commit", "-q", "-m", "c", "--allow-empty", cwd=repo)
     return git_out("rev-parse", "HEAD", cwd=repo)

@@ -45,7 +45,8 @@ jobs:
   unit:
     name: pytest (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # Linux takes about 1.5 minutes; Windows about 15, as every test spawns git processes.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 40 || 15 }}
     strategy:
       fail-fast: false
       matrix:
