@@ -18,6 +18,7 @@ from gerrit_workflow_tools.cli_fix import main as fix_main
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as show_main
+from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import _run_git, git, git_out
 from tests.change_store import ChangeStore, RecordedCall
 from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, stack_rows_mb_to_head
@@ -423,6 +424,7 @@ def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(
     clock["t"] = 1020
     (lookup,) = queries(show_main, ["HEAD", "--color=never"])
     assert lookup.args[0].startswith("change:I"), lookup.args[0]
+    assert lookup.kwargs["options"] == list(LIGHT_QUERY_OPTIONS)  # the cached change is what it is held against
 
     clock["t"] = 1025
     assert queries(show_main, ["HEAD", "--color=never"]) == []
@@ -430,3 +432,22 @@ def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(
 
     clock["t"] = 1040
     assert len(queries(resolve_main, ["HEAD"])) == 1
+
+
+def test_show_on_a_cold_cache_asks_for_the_change_once_in_full(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With nothing cached for the Change-Id, the lookup asks for the details too: no second query for the stack.
+
+    A light answer is only worth asking for when there is a cached row to hold it against.
+    """
+    _configure_web(stack_repo)
+    store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(stack_repo)))
+
+    code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    (lookup,) = store.calls_to("query_changes")
+    assert lookup.args[0].startswith("change:I"), lookup.args[0]
+    assert lookup.kwargs["options"] == list(LOG_QUERY_OPTIONS)
+    assert store.calls_to("get_change") == []

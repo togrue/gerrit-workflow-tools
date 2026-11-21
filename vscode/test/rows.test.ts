@@ -126,10 +126,10 @@ test("the change view shows the message, the files with their line counts, and w
   ]);
 });
 
-test("the change view's title bar names the change number and the subject; the view model says the subject once, in the message", () => {
+test("the change view says the subject once, in the commit message: its title bar names only the change number", () => {
   const vm = changeVm(state());
-  assert.deepEqual(changeHeading(7, "Extract routing"), { title: "Change 7", description: "Extract routing" });
-  assert.deepEqual(changeHeading(undefined, undefined), { title: "Change", description: undefined });
+  assert.equal(changeHeading(7), "Change 7");
+  assert.equal(changeHeading(undefined), "Change");
   assert.equal(JSON.stringify(vm).split("Extract routing").length - 1, 1, "no tooltip repeats it");
 });
 

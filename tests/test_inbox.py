@@ -23,6 +23,7 @@ from gerrit_workflow_tools.cli_style import (
     strip_ansi,
 )
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.inbox import (
@@ -211,6 +212,24 @@ def test_follow_up_commit_query_fills_chain_parent(tmp_path: Path, monkeypatch: 
     commit_queries = [query for query in store.queries() if "commit:" in query]
     assert commit_queries
     assert any("commit:aaa" in query for query in commit_queries)
+
+
+def test_follow_up_commit_query_is_light_only_once_the_parent_is_cached(tmp_path: Path) -> None:
+    """The first follow-up asks for the parent in full (nothing to hold a light answer against); the next, lightly."""
+    parent = _change(
+        number=1, sha="aaa", parent="origin", subject="base", owner="bob", updated="2026-08-10 12:00:00.000000000"
+    )
+    child = _change(number=2, sha="bbb", parent="aaa", subject="tip", updated="2026-08-18 08:00:00.000000000")
+    store = _store(parent, child, stub=[child])
+    service = RunContext.open(tmp_path, gerrit=store, settings=Settings.from_map({})).gerrit
+
+    def commit_query_options() -> list[list[str]]:
+        before = len(store.calls)
+        assert [member.number for member in service.fetch_review_chains(TO_REVIEW_QUERY)[0].members] == [1, 2]
+        return [call.kwargs["options"] for call in store.calls[before:] if "commit:" in str(call.args[0])]
+
+    assert commit_query_options() == [list(LOG_QUERY_OPTIONS)]
+    assert commit_query_options() == [list(LIGHT_QUERY_OPTIONS)]
 
 
 def test_does_not_resolve_stack_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -37,6 +37,18 @@ flowchart TB
   subgraph cli [CLI layer — src/gerrit_workflow_tools/cli_*.py]
     common[cli_common.py · cli_style.py]
     commands[cli_log · cli_show · cli_push · cli_edit · …]
+    serve_cmd[cli_serve.py]
+  end
+
+  subgraph clients [Clients of the service]
+    vscode[VS Code extension · vscode/]
+  end
+
+  subgraph local_service [Local service, the daemon — server/]
+    httpd[httpd.py · token, loopback, request lock]
+    api[api.py · routes, one run context per request]
+    endpoints[views.py · actions.py · diff_views.py]
+    activity[activity.py · activity sequence]
   end
 
   subgraph presentation [Presentation — render/ + package root]
@@ -53,6 +65,7 @@ flowchart TB
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
     push_core[push.py · push_reviewers.py · gerrit_show.py]
+    ci[ci_content_service.py · ci_jenkins.py · ci_http.py · ci_findings.py]
   end
 
   subgraph gerrit [Gerrit integration — core/gerrit/]
@@ -61,15 +74,28 @@ flowchart TB
     rest[rest.py]
     cache[cache.py · paths.py]
     view[change_view.py]
+    events[event_stream.py · event_source.py]
   end
 
   subgraph external [External systems]
     git_repo[(Local git repo)]
     gerrit_api[(Gerrit REST API)]
+    gerrit_ssh[(Gerrit event stream · ssh)]
     sqlite[(SQLite cache)]
+    ci_server[(CI server · Jenkins API and logs)]
   end
 
   ger --> commands
+  ger --> serve_cmd
+  serve_cmd -- starts --> httpd
+  vscode -- starts ger serve --> serve_cmd
+  vscode -- HTTP + token --> httpd
+  httpd --> api --> endpoints
+  endpoints --> core
+  endpoints --> render
+  events --> gerrit_ssh
+  events -- invalidates --> cache
+  events -- raises --> activity
   commands --> common
   commands --> core
   commands --> presentation
@@ -78,6 +104,7 @@ flowchart TB
   service --> cache
   rest --> gerrit_api
   cache --> sqlite
+  ci --> ci_server
   stack --> git
   config --> git
   git --> git_repo
@@ -91,7 +118,15 @@ flowchart TB
 | **Service** | `server/` | A peer of the CLI layer: HTTP in, core call, JSON out. Imports core, `render/` JSON builders and `cli_common.failure_exit`; nothing imports it but `cli_serve.py` |
 | **Core** | `core/` (except `core/gerrit/`) | Stack math, config, Change-Id rules, status model, git subprocess wrapper |
 | **Gerrit integration** | `core/gerrit/` | REST HTTP, caching, batch fetch, changeish resolution, `GerritService` |
-| **External** | git, Gerrit server, `~/.cache/ger/` SQLite | Persistent state and I/O |
+| **External** | git, Gerrit server, CI server (Jenkins), `~/.cache/ger/` SQLite | Persistent state and I/O |
+
+**Two ways into core, one model.** A command is a process that lives for one run and calls core
+directly. The **local service** (`ger serve`, the daemon) is a long-running process, one per
+checkout, started by its client; it calls the same core functions, once per request. Neither
+goes through the other: a command never needs a running service, and both read the same
+per-host Gerrit cache, so they give the same answers. Details:
+[the local service](#11-the-local-service-ger-serve); where this is going:
+[target architecture](#target-architecture).
 
 ### Rules
 
@@ -589,6 +624,85 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 2. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
 3. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
 4. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+
+---
+
+## Target architecture
+
+The long-term goal, agreed 2026-11-21. It describes where the code is going, not what it does
+today; the sections above describe today.
+
+**One engine with a typed application API. The commands, `ger serve`, the editor extension and
+agents are thin shells over the same operations.** The number of clients may grow, so the
+contract between engine and shell is worth keeping clean.
+
+### Principles
+
+1. **Operations live in core.** Every user-visible operation is one core function from a
+   request dataclass to a result dataclass. A command is *parse → call → render text*; an
+   endpoint is *parse → call → serialise*. Neither composes an answer from several core
+   modules, as `server/views.py`, `cli_log.py` and `cli_show.py` do today.
+2. **One contract, generated.** `--json` and HTTP serialise the same result types. The
+   TypeScript types of `vscode/` are generated from them, not mirrored by hand. The contract
+   is not presentation: the JSON builders (`render/show_json.py`, `render/review_json.py`,
+   the JSON half of `render/agent_runbook.py`) leave `render/`, which then only formats text
+   for a terminal. The service imports neither `render/` nor `cli_common.py`; today it needs
+   the first for those builders and for the Markdown of `ger show --ai`, and the second for
+   `failure_exit`.
+3. **Verdicts in core, words and icons in the shells.** What a state *is* (how a commit relates
+   to Gerrit, how urgent a chain is) is served as an enum. A shell only maps it to text or an icon.
+4. **A shell prompts; core never does.** An operation that needs answers from a person has
+   three steps:
+   1. Core serves the state: the plan, whether it is ready and why not, and the values on offer
+      (reviewer suggestions, history, validation).
+   2. The shell runs its own prompt loop. The loop may differ between a terminal and an editor;
+      the rules it shows come from core and are not repeated.
+   3. The shell sends one command with the final choices. Core prepares again from them and
+      executes, so no plan has to survive between two requests. The command names the head it
+      previewed, and core refuses when the stack moved since.
+
+   `ger push` is the first operation to take this shape
+   ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md) stands; the data behind its
+   prompts and the readiness verdict move into core).
+5. **Capability parity.** Every capability is reachable from the command line and from the
+   service. Parity is about what can be done, not about command names: reorder, squash and drop
+   are `ger rebase` on the command line and a drag in the editor. A capability offered by only
+   one shell is a written exception with a reason, agreed by the maintainer, in a guardrail of
+   `tests/test_architecture.py`. Known gaps today: push, vote and publish are not served; undo
+   and the conflict preview have no command.
+6. **State lives in git and the Gerrit cache, never in the process**
+   ([ADR-0014](adr/0014-memos-live-on-the-run.md)). The service gets faster through memos keyed
+   by object id, reads off the request lock and pushed events
+   ([commit-chain roadmap](plans/commit-chain-roadmap.md)), not through a model held in memory.
+7. **One stack-rewrite engine** with an operation log, as the
+   [commit-chain roadmap](plans/commit-chain-roadmap.md) describes.
+
+### Processes
+
+- **One service per checkout, started by its client.** No daemon shared between checkouts: it
+  would need discovery, a token on disk and a lifecycle of its own, it would run with the
+  environment (ssh agent, proxy, `PATH`) of whoever started it first, and WSL, dev containers
+  and ssh remotes each need their own anyway.
+- **Commands run in-process.** A command never depends on a running service. Both read the same
+  per-host Gerrit cache, so they give the same answers.
+
+### Later, when it is measured to matter
+
+**Services of one host coordinate through the cache database.** Today every editor window polls
+the listings and holds its own event-stream connection; only change details are shared, through
+the cache. Should that load become a problem, the services can share the rest without a new
+process:
+
+- A lease per host, a row in the cache database that its holder keeps renewing: only the holder
+  follows the event stream. When it exits the lease runs out and another service takes over; a
+  holder whose ssh fails gives the lease up.
+- Listings are cached with a short trust window, so the polls of several windows become about
+  one Gerrit request.
+- A shared activity counter in the database tells the other services to wake their clients.
+
+Events still only invalidate
+([ADR-0012](adr/0012-events-invalidate-never-populate.md)). Before building it, check how the
+cache behaves under several writers.
 
 ---
 

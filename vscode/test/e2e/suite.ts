@@ -17,6 +17,7 @@ import { readSnapshot } from "../../src/snapshot";
 import { vscodeUi } from "../../src/ui";
 import type { ExtensionApi } from "../../src/extension";
 import { gerCommandLine } from "../../src/launch";
+import { Camera, pictureName } from "./picture";
 import { Answer, ScriptedUi, lineDiff } from "./scriptedUi";
 
 type Provider<T> = vscode.TreeDataProvider<T>;
@@ -83,12 +84,16 @@ function normalizer(repo: string): (line: string) => string {
   };
 }
 
+/** The side bar's width in pictures, in CSS pixels: as wide as users who work in these views make it. */
+const SIDE_BAR_WIDTH = 420;
+
 export async function run(): Promise<void> {
   const out: string[] = [];
   const repo = vscode.workspace.workspaceFolders?.[0].uri.fsPath ?? "";
   const normalize = normalizer(repo);
   const ui = new ScriptedUi(normalize);
   const problems: string[] = [];
+  let camera: Camera | undefined;
   try {
     const extension = vscode.extensions.getExtension<ExtensionApi>("gerrit-workflow-tools.ger-vscode");
     assert.ok(extension, "the extension is installed in the development host");
@@ -122,9 +127,6 @@ export async function run(): Promise<void> {
     };
     // The status bar item as shown, its icons as `$(name)`; and the state the Gerrit views' welcome text follows.
     const status = (): string => api.statusItem.text;
-    /** The Change view's title bar as it was last set on the view: the title, then the description if there is one. */
-    const heading = (set: { title: string; description: string | undefined } | undefined): string =>
-      !set ? "(view not drawn)" : set.description ? `${set.title} — ${set.description}` : set.title;
     /** Everything a user could see, one line each, prefixed by where it is. */
     const screen = async (): Promise<string[]> => {
       const shown = api.changeView.target;
@@ -134,7 +136,7 @@ export async function run(): Promise<void> {
         `events | ${api.events.events?.state ?? "(not said)"}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
         ...api.stackView.lines().map((line) => `stack  | ${line}`),
-        `change | title: ${shown ? heading(api.changeView.heading) : "(nothing shown)"}`,
+        `change | title: ${shown ? (api.changeView.heading ?? "(view not drawn)") : "(nothing shown)"}`,
         ...(await api.changeView.lines()).map((line) => `change | ${line}`),
         `editor | ${editor()}`,
       ].map(normalize);
@@ -147,8 +149,27 @@ export async function run(): Promise<void> {
       await api.changeView.idle();
     };
 
+    // GER_E2E_PNG: a picture of the window on start and after every press, into that folder.
+    const pictures = process.env.GER_E2E_PNG;
+    if (pictures) {
+      fs.mkdirSync(pictures, { recursive: true });
+      camera = await Camera.open(process.env.GER_E2E_DEVTOOLS ?? "");
+      // The Gerrit side bar, wide as users make it, and no chat panel taking the right side.
+      await vscode.commands.executeCommand("workbench.view.extension.ger");
+      await vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar").then(undefined, () => undefined);
+      await camera.widenSideBar(SIDE_BAR_WIDTH);
+      await settle();
+    }
+    const snap = async (step: number, label: string) => {
+      if (camera && pictures) {
+        await wait(200); // the webview pages draw what they were sent
+        await camera.take(path.join(pictures, pictureName(step, label)));
+      }
+    };
+
     let step = 0;
     let before = await screen();
+    await snap(0, "on start");
     out.push("# What a user sees and gets, button by button", "", "## On start", "", "```", ...before, "```", "");
 
     /** Press one button: write the expectation, what was said and done, and what changed on screen. */
@@ -170,6 +191,7 @@ export async function run(): Promise<void> {
         fs.appendFileSync(process.env.GER_E2E_SCREENS, [`## ${step} before`, ...before, `## ${step} after`, ...after, ""].join("\n"));
       }
       before = after;
+      await snap(step, button);
       out.push(`## ${step}. ${button}`, "", `**Expect:** ${expect}`, "", "```");
       out.push(...(said.lines.length ? said.lines : ["(nothing said or done outside the views)"]));
       if (threw) {
@@ -392,6 +414,15 @@ export async function run(): Promise<void> {
       "Expand \"Looks good overall.\" (about the whole change) in the Change view, type a reply, Resolved left ticked › Save",
       "The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.",
       () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "replyText", text: "Added a test for the parser.", resolved: true }),
+    );
+    await press(
+      "Click \"Please rename this.\" in the Change view again",
+      "b.txt comes back in front of the runbook with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.",
+      async () => {
+        await page.receive({ type: "thread", id: chain(/^Please rename this/).root_id, action: "open" });
+        const thread = api.threads.threadOf(chain(/^Please rename this/));
+        assert.equal(thread?.collapsibleState, vscode.CommentThreadCollapsibleState.Expanded, "the thread is expanded");
+      },
     );
     const rename = api.threads.threadOf(chain(/^Please rename this/));
     await press(
@@ -789,6 +820,7 @@ export async function run(): Promise<void> {
     out.push("## FAILED", "", "```", error instanceof Error ? (error.stack ?? error.message) : String(error), "```", "");
     throw error;
   } finally {
+    camera?.close();
     const target = process.env.GER_E2E_OUT;
     if (target) {
       fs.writeFileSync(target, out.join("\n"), "utf8");

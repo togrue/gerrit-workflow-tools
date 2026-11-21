@@ -83,23 +83,31 @@ class ChangeApi:
         """The changes carrying Change-Id *change_id*, on any project and branch, as plain ChangeInfo rows.
 
         The lookup every changeish goes through. Its answer is kept for the trust window, like
-        a change, so naming the same commit twice in a row asks once. It is also a light
-        request like any other: a cached change whose freshness token it confirms needs no
-        probe of its own afterwards.
+        a change, so naming the same commit twice in a row asks once. It is a light request
+        when the cache has a change carrying *change_id*: one whose freshness token it confirms
+        needs no probe of its own afterwards. When the cache has none, a light answer would
+        only say what to fetch next, so the details are asked for in the same request.
         """
         service = self._service
         if not service.refresh and not self._exact:
             known = service.cache.carrying(change_id, trust_window_seconds=service.trust_window_seconds)
             if known is not None:
                 return known
-        rows = dict_rows(service.rest.query_changes(f"change:{change_id}", options=list(LIGHT_QUERY_OPTIONS)))
-        tokens: dict[str, str | None] = {}
-        for row in rows:
-            token = change_freshness_key(row)
-            # Under Gerrit's id, and under the triplet a stack asks for (not the same on every server).
-            keys = (payload_triplet(row), build_triplet(str(row.get("project")), str(row.get("branch")), change_id))
-            tokens.update({key: token for key in keys if key})
-        current, _moved = service.cache.reconcile(tokens)
+        cold = not service.refresh and not service.cache.find_payloads_by_footer_change_ids([change_id]).get(change_id)
+        options = LOG_QUERY_OPTIONS if cold else LIGHT_QUERY_OPTIONS
+        rows = dict_rows(service.rest.query_changes(f"change:{change_id}", options=list(options)))
+        # Under Gerrit's id, and under the triplet a stack asks for (not the same on every server).
+        keyed = {
+            key: row
+            for row in rows
+            for key in (payload_triplet(row), build_triplet(str(row.get("project")), str(row.get("branch")), change_id))
+            if key
+        }
+        if cold:
+            service.cache.upsert_changes(keyed)
+            current = keyed
+        else:
+            current, _moved = service.cache.reconcile({key: change_freshness_key(row) for key, row in keyed.items()})
         if self._exact:
             self._seen.update(current)
         service.cache.remember_carrying(change_id, rows)
@@ -148,14 +156,22 @@ class ChangeApi:
         listing of the chain that sits on it asks anew: for a week when it is a merged change
         (it stays one), for a quarter of an hour when Gerrit shows no change for it (history,
         or a change this user cannot see yet).
+
+        Gerrit is asked lightly only when a cached change has one of the commits as a
+        patchset: otherwise there is nothing to hold a light answer against, and the details
+        come in the same request.
         """
         service = self._service
         settled = set() if service.refresh else service.cache.settled_commits(shas)
         ask = [sha for sha in shas if sha not in settled]
         if not ask:
             return []
-        light = list(batch_load_changes_by_commit(service.rest, ask, options=list(LIGHT_QUERY_OPTIONS)).values())
-        found = self._with_details(light, lambda: list(batch_load_changes_by_commit(service.rest, ask).values()))
+        if service.refresh or not service.cache.knows_commits(ask):
+            found = list(batch_load_changes_by_commit(service.rest, ask).values())
+            service.cache.upsert_changes(found)
+        else:
+            light = list(batch_load_changes_by_commit(service.rest, ask, options=list(LIGHT_QUERY_OPTIONS)).values())
+            found = self._with_details(light, lambda: list(batch_load_changes_by_commit(service.rest, ask).values()))
         views = [ChangeView.from_payload(payload) for payload in found]
         pending = {sha for view in views if view.status != "MERGED" for sha in view.revisions}
         merged = {sha for view in views if view.status == "MERGED" for sha in view.revisions} - pending
