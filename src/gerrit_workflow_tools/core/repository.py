@@ -51,3 +51,11 @@ class Repository:
         or destination); that answer is not kept, so a caller that can do without may ask again.
         """
         return resolve_stack_context(self.cwd, self.working_branch, settings=self.settings)
+
+    @property
+    def shown_stack(self) -> StackContext:
+        """:attr:`stack` for a view that shows what it can: without a working branch (a detached
+        HEAD's rebase), ``gerrit.project`` and no target or push branch (empty)."""
+        if self.working_branch is None:
+            return StackContext(project=self.settings.gerrit_project or "", target_branch="", push_branch="")
+        return self.stack

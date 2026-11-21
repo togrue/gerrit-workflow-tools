@@ -66,10 +66,31 @@ on which branch, where and why it stopped, and how many commits are shown as the
 note: a rebase is in progress on feature, stopped on a conflict at 1a2b3c4 "Add e.txt" in e.txt; 1 commit still to replay, shown as before.
 ```
 
-The stop reads `to edit it`, `on a conflict … in <paths>`, `with its conflicts resolved, ready for
-`git rebase --continue`` (nothing unmerged any more) or `between commits`. A rebase git runs
-through `am` (`rebase-apply`) keeps no todo: the stack is then the branch as it was before, and
-the note says so.
+The stop reads `to edit it`, `to edit it, and HEAD has moved on from it: the commits above it were
+made at the stop` (a split), `on a conflict … in <paths>`, `with its conflicts resolved, ready for
+`git rebase --continue`` (nothing unmerged any more) or `between commits`; just `stopped` when
+that cannot be told. Where `HEAD` is, by git's own state files:
+
+- At an edit stop, `HEAD` is the commit it stopped at, or an amend of it (on the same commit,
+  with the same Change-Id, or the same subject without one): that commit is `current`. With
+  commits made on top of it, it stays `current` and they are `done`. Reset away (`git reset
+  HEAD~`, to split it), it is not shown at all; the commits made in its place are `done`, and no
+  commit is `current`.
+- A conflict resolved and committed by hand (`git commit` instead of `--continue`) is applied:
+  the new commit is `current`, shown once, and the stop reads `to edit it`. It is found by its
+  Change-Id, else its subject (git keeps its `# Conflicts:` lines below the footer).
+- On a detached HEAD there is no upstream: the stack is the commits above the rebase's `onto`,
+  with no Gerrit state (no push branch to find their changes on), and the note says `on a
+  detached HEAD`.
+
+The todo is shown one row per commit it replays: a `fixup` or `squash` line is its own row,
+counted in `N commits still to replay`. With `--rebase-merges`, the todo's merge lines are not
+shown and its commits are drawn on one line.
+
+A rebase git runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo: the stack
+is then the branch as it was before, and the note says so; it stops only on a conflict, which
+the note names as for any other. A `git am` underway is no rebase: `ger log` shows the branch as
+it is, with no note.
 
 ---
 
@@ -112,7 +133,7 @@ A commit with no Change-Id footer must include `missing-change-id` in `attention
 
 ## JSON fields
 
-Top level: `stack`, `rebase` (`null` without a rebase underway; else as `GET /stack` serves it: `branch`, `onto`, `orig_head`, `stop`, `applied`, `current`, `unmerged` — [serve.md](serve.md#get-stack)), `commits`.
+Top level: `stack`, `rebase` (`null` without a rebase underway; else as `GET /stack` serves it: `branch`, `onto`, `orig_head`, `stop`, `applied`, `current`, `unmerged`, `as_before` — [serve.md](serve.md#get-stack)), `commits`.
 
 Per commit: `sha`, `summary`, `rebase` (where the rebase underway stands on it: `done` \| `current` \| `todo`, `null` without one or for a commit it does not replay), `pushed`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `ci_failures`, `ci_links`, `ci_pipelines`, `gerrit_url`, `number` (the change number, `null` before the first push), `last_pushed_votes` (`{verified, code_review}` of the pushed patchset while the commit is `newer` with different code, else `null`; Gerrit may not carry them to the next push. A commit that is only rebased keeps its votes in `verified` and `code_review`), `code_change` (only while `newer`, else `null`: `rebased` when its code is the pushed patchset's by `git patch-id`, which leaves out whitespace and the commit message, so Gerrit usually keeps its votes (whether it does is the project's label rules); `changed` when it is not; `unknown` when that cannot be told here: either side is a merge, a root or an empty commit, or Gerrit's patchset is not in this repository, which shows as diverged), `submittable`, `votes` (`[{label, value, by}]`: every non-zero vote on the current patchset, `by` the voter's name, else username; empty while the commit is `newer` with other code), `reviewers` (`[{name, cc}]`: every account Gerrit lists as reviewer or CC, `cc` true for a CC), `work_in_progress`, `private`, `change_id`, `attention_reasons`, `severity` (the most urgent of the reasons: `error` \| `warning` \| `pending` \| `ok`, from `REASON_SEVERITY` in `core/attention.py`; a reason a project strategy made up is a `warning`), etc. (`patchset_status`: `active` \| `newer` \| `outdated` \| `absent` \| `unknown` \| a merged variant). `attention_reasons` includes `missing-change-id` when the local footer is absent and `invalid-change-id` when it is malformed. `ci_links` is a list of `{label, url, source}` (`source`: `checks` \| `message`) from the project CI registry when present, otherwise from the built-in Jenkins message parser when Verified is −1; otherwise `[]`. `ci_pipelines` lists Checks-plugin rows as `{label, state, url?}` when fetched (verbose log / show).
 

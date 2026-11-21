@@ -162,7 +162,7 @@ export interface StackCommit extends CommitStatus {
 }
 
 /** Why a rebase underway is stopped: core's verdict, the shell's words. */
-export type RebaseStop = "edit" | "conflict" | "resolved" | "paused";
+export type RebaseStop = "edit" | "split" | "conflict" | "resolved" | "paused";
 
 /** A rebase underway, as `GET /stack` serves it. */
 export interface Rebase {
@@ -170,13 +170,16 @@ export interface Rebase {
   branch: string | null;
   onto: string | null;
   orig_head: string | null;
-  stop: RebaseStop;
+  /** Null when core cannot tell what `git rebase --continue` would do from here. */
+  stop: RebaseStop | null;
   /** False while the commit it stopped at is only partly there (a conflict, resolved or not). */
   applied: boolean;
   /** The commit it stopped at, as the stack shows it. */
   current: string | null;
   /** Paths the index still holds as unresolved conflicts. */
   unmerged: string[];
+  /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
+  as_before: boolean;
 }
 
 export interface Stack {
@@ -186,7 +189,8 @@ export interface Stack {
   rebase_in_progress: boolean;
   /** The rebase underway; the stack is then as the rebase has it so far, the rest as it was. */
   rebase?: Rebase | null;
-  stack: { project: string; target_branch: string; push_branch: string };
+  /** The branches are null without a working branch (a detached HEAD's rebase). */
+  stack: { project: string; target_branch: string | null; push_branch: string | null };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
   commits: StackCommit[];
 }

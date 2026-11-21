@@ -109,6 +109,7 @@ def annotate(
     fetch_ci_pipelines: bool = False,
     on_target: frozenset[str] = frozenset(),
     triplets: Sequence[str | None] | None = None,
+    overlay: bool = True,
 ) -> AnnotatedStack:
     """Overlay Gerrit state onto *rows* and annotate attention, oldest first.
 
@@ -119,14 +120,16 @@ def annotate(
     :meth:`GerritService.fetch_gerrit_data`).
 
     When Gerrit cannot be asked at all, the rows come back with an unknown Gerrit state and
-    the reason in :attr:`AnnotatedStack.gerrit_unavailable`: shown, never guessed.
+    the reason in :attr:`AnnotatedStack.gerrit_unavailable`: shown, never guessed. With *overlay*
+    off (no push branch to find the changes on), they come back with an unknown Gerrit state too.
     """
     unavailable: GerritUnavailableError | None = None
+    commits = [local_log_commit(row, PatchsetStatus.UNKNOWN) for row in rows]
     try:
-        commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, triplets=triplets)
+        if overlay:
+            commits = service.fetch_gerrit_data(rows, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, triplets=triplets)
     except GerritUnavailableError as error:
         unavailable = error
-        commits = [local_log_commit(row, PatchsetStatus.UNKNOWN) for row in rows]
     for commit in commits:
         if commit.sha in on_target and commit.patchset_status in (PatchsetStatus.ABSENT, PatchsetStatus.UNKNOWN):
             commit.patchset_status = PatchsetStatus.MERGED_SAME
@@ -203,7 +206,8 @@ def _stack_rows(
     progress = rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir) if rev_range is None else None
     # A rebase that keeps no todo (rebase-apply) says nothing of its commits: the branch as it was.
     if progress is not None and progress.keeps_todo:
-        base = "@{upstream}" if branch == "HEAD" else f"{branch}@{{upstream}}"
+        # A detached HEAD has no upstream: the stack is then what the rebase replays, above its onto.
+        base = f"{branch}@{{upstream}}" if branch != "HEAD" else progress.onto or "@{upstream}"
         rebasing = load_rebasing_stack(run.cwd, base, progress, first_parent=first_parent)
         return list(rebasing.commits), rebasing
     rows = commits_in_range(run.cwd, rev_range or resolve_rev_range(None, branch=branch), first_parent=first_parent)
@@ -236,8 +240,12 @@ def load_annotated_stack(
     if not rows:
         return AnnotatedStack(rebase=rebasing)
     on_target = _commits_on_target(run, rows, rev_range) if rev_range else frozenset()
-    annotated = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target)
+    # A detached HEAD's rebase has no working branch, so no push branch to find its changes on.
+    overlay = rebasing is None or run.repo.working_branch is not None
+    annotated = annotate(
+        rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target, overlay=overlay
+    )
     annotated = replace(annotated, rebase=rebasing)
-    if annotated.gerrit_unavailable is not None:
+    if annotated.gerrit_unavailable is not None or not overlay:
         return annotated
     return replace(annotated, notes_by_sha=_multi_branch_notes(service, rows, cwd))

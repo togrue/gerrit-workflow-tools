@@ -176,7 +176,8 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
     """The rebase underway, as ``ger log --json`` and ``GET /stack`` serve it; ``None`` without one.
 
     ``current`` is the id of the commit it stopped at as the stack shows it: the amended commit
-    after an amend, the commit as it was while it is not applied.
+    after an amend, the commit as it was while it is not applied. ``as_before`` is true when the
+    stack is the branch as it was before the rebase (one git runs through ``am`` keeps no todo).
     """
     if progress is None:
         return None
@@ -185,10 +186,11 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "branch": progress.branch,
         "onto": progress.onto,
         "orig_head": progress.orig_head,
-        "stop": progress.stop.value,
+        "stop": progress.stop.value if progress.stop else None,
         "applied": progress.applied,
         "current": current.sha if current else None,
         "unmerged": list(progress.unmerged),
+        "as_before": stack.rebase is None,
     }
 
 

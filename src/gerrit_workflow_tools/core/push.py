@@ -48,7 +48,7 @@ from gerrit_workflow_tools.core.push_unchanged import (
     planned_updates,
     unreached_options_warning,
 )
-from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
@@ -242,6 +242,9 @@ def prepare(
             f"a rebase is in progress, and '{branch}' still points at the commits from before it; "
             "finish it (`git rebase --continue`) or `git rebase --abort`, then push"
         )
+    if am_underway(run.worktree.repository_dir):
+        # The branch moves with each patch `git am` applies: a push now sends it half applied.
+        raise UsageError(f"{AM_UNDERWAY}, then push")
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     if not destination:
         raise GitError("Internal error: Gerrit push mode without effective destination.")

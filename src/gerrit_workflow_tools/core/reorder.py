@@ -27,7 +27,6 @@ from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
 from gerrit_workflow_tools.core.rebase_state import (
-    rebase_in_progress,
     rebase_refusal,
     submodule_refusal,
     uncommitted_changes_refusal,
@@ -241,8 +240,8 @@ def undo_rewrite(cwd: Path | str, rewrite_head: str, previous_head: str) -> None
         raise ReorderRefusal("the branch has moved since the rewrite; undo it by hand from the reflog")
     if commit_sha_or_none(cwd, previous_head) is None:
         raise ReorderRefusal(f"{previous_head[:12]} is not a commit here")
-    if rebase_in_progress(cwd) or checked_out_branch_name(cwd) is None:
-        raise ReorderRefusal("a rebase is in progress or HEAD is detached; nothing was undone")
+    if rebase_refusal(cwd) or checked_out_branch_name(cwd) is None:
+        raise ReorderRefusal("a rebase or `git am` is in progress, or HEAD is detached; nothing was undone")
     back = git("reset", "--keep", "-q", previous_head, cwd=cwd, check=False)
     if back.returncode != 0:
         raise ReorderRefusal("your uncommitted changes are in the way of the undo; nothing was changed")
