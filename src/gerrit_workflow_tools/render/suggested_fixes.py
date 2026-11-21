@@ -38,6 +38,23 @@ def shown_fixes(edits: tuple[SuggestedEdit, ...], *, where: Callable[[str], str]
     return shown
 
 
+FixRow = tuple[str, str, bool]
+"""One line of a fix as plain text: its indent, its text, and whether it may be wrapped (code may not)."""
+
+
+def fix_rows(edits: tuple[SuggestedEdit, ...]) -> list[list[FixRow]]:
+    """The fix suggestions of *edits* as plain lines, one list per fix: ``ger show``'s box and
+    ``ger serve``'s ``text`` both write these, the box indented under the comment and wrapped."""
+    fixes: list[list[FixRow]] = []
+    for description, parts in shown_fixes(edits):
+        rows: list[FixRow] = [("", f"suggested fix: {description}" if description else "suggested fix:", True)]
+        for what, code in parts:
+            # Code is not wrapped: its line breaks and leading spaces are part of it.
+            rows.extend([("  ", what, True), *(("  ", f"+ {ln}", False) for ln in code)])
+        fixes.append(rows)
+    return fixes
+
+
 def code_fence(lines: list[str]) -> str:
     """A Markdown fence longer than any run of backticks in *lines*, so none of them closes it."""
     longest = max((len(run) for ln in lines for run in re.findall(r"`+", ln)), default=0)
@@ -67,13 +84,5 @@ def comment_text(message: str, edits: tuple[SuggestedEdit, ...], *, markdown: bo
     if markdown:
         fixes = ["\n".join(fix) for fix in fixes_markdown(edits)]
     else:
-        fixes = [
-            "\n".join(
-                [
-                    f"suggested fix: {description}" if description else "suggested fix:",
-                    *(line for what, code in parts for line in (f"  {what}", *(f"  + {ln}" for ln in code))),
-                ]
-            )
-            for description, parts in shown_fixes(edits)
-        ]
+        fixes = ["\n".join(f"{indent}{text}" for indent, text, _wraps in fix) for fix in fix_rows(edits)]
     return "\n\n".join(part for part in (message, *fixes) if part)

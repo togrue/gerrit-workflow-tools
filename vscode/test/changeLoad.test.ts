@@ -114,8 +114,9 @@ test("a Review chains member that is a commit of your stack is drawn from that c
   const detail = new ChangeDetail();
   detail.select(opened, false);
   assert.equal(drawn(detail).notes?.[0]?.text, "This commit is ahead of Gerrit");
-  // Without the stack (it could not be read) the row is all there is: Gerrit's current patchset.
-  assert.equal(memberTarget(member, chain, undefined).known?.sha, member.sha);
+  // Without the stack (it could not be read) nothing is guessed: the view waits for /show.
+  assert.equal(memberTarget(member, chain, undefined).known, undefined);
+  assert.equal(memberTarget({ ...member, local_sha: null }, chain, undefined).known?.sha, member.sha, "a change only on Gerrit is drawn from its row");
 });
 
 test("each answer fills in its part as it comes: the commit with its files first, the review delta later", () => {

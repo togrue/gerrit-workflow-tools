@@ -2,7 +2,7 @@
 
 import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, Severity, StackMoves } from "./api";
 
-/** Every reason core names (`Attention`, core/attention.py), in words: tests/test_attention_severity.py holds the two lists together. */
+/** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
 const WORDS: Record<string, string> = {
   "ci-failed": "CI failed",
   diverged: "Gerrit has a patchset you never had",

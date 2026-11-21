@@ -22,7 +22,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
-from gerrit_workflow_tools.render.suggested_fixes import fixes_markdown, shown_fixes
+from gerrit_workflow_tools.render.suggested_fixes import fix_rows, fixes_markdown
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
@@ -178,13 +178,11 @@ def _box_content_rows(
                     rows.append(color_text(part, ANSI_DIM))
             for ln in row_item.message.splitlines() or [""]:
                 rows.extend(_prefixed_wrap(ln, width, prefix="  "))
-        for description, parts in shown_fixes(row_item.suggested_edits):
-            heading = f"suggested fix: {description}" if description else "suggested fix:"
-            rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(heading, width, prefix="  "))
-            for what, code in parts:
-                rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(what, width, prefix="    "))
-                # Code is not wrapped: its line breaks and leading spaces are part of it.
-                rows.extend(color_text(f"    + {ln}", ANSI_GREEN) for ln in code)
+        for fix in fix_rows(row_item.suggested_edits):
+            for indent, text, wraps in fix:
+                prefix = f"  {indent}"
+                parts = _prefixed_wrap(text, width, prefix=prefix) if wraps else [f"{prefix}{text}"]
+                rows.extend(color_text(part, ANSI_GREEN) for part in parts)
     chain_url = _chain_url(chain, gerrit_url)
     if chain_url:
         rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")

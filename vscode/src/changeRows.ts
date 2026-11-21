@@ -370,7 +370,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
   const yours = chains.length - fromGerrit;
   const counts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
-  const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.verified === -1;
+  const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
   const words = sentence(reasonWords(commit.attention_reasons));
   // Nothing calls for attention, and whether it is ready to submit is not known yet: no green check meanwhile.

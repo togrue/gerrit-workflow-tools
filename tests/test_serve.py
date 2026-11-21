@@ -231,6 +231,7 @@ def test_headline_falls_back_to_the_longest_waiting_review(stack_repo: Path) -> 
     headline = _get(GerApi(stack_repo, gerrit=store), "/overview")["headline"]
     assert (headline["section"], headline["reason"], headline["number"]) == ("to-review", "waiting-on-you", 100)
     assert headline["text"].startswith("alice has waited ")
+    assert headline["severity"] == "pending", "waiting on your review is no problem of the change"
 
 
 def test_overview_shows_the_inbox_when_the_local_stack_cannot_be_read(stack_repo: Path) -> None:

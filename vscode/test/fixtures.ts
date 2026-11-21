@@ -12,8 +12,11 @@ import { ChangeState } from "../src/changeRows";
 const REASON_SEVERITY: Record<string, Severity> = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "test", "attention.json"), "utf8"));
 const ORDER: Severity[] = ["error", "warning", "pending", "ok"];
 
-/** `reasons` with the severity `ger serve` gives them (`attention_severity`): a reason core does not know is a warning. */
-export function attended(reasons: string[]): Attended {
+/** `reasons` with the severity `ger serve` gives them (`attention_severity`): a reason core does not know is a warning. `given` wins. */
+export function attended(reasons: string[], given?: Severity): Attended {
+  if (given) {
+    return { attention_reasons: reasons, severity: given };
+  }
   const found = reasons.map((reason) => ORDER.indexOf(REASON_SEVERITY[reason] ?? "warning"));
   return { attention_reasons: reasons, severity: ORDER[Math.min(ORDER.length - 1, ...found)] };
 }
@@ -45,7 +48,7 @@ export function commit(summary: string, extra: Partial<StackCommit> = {}): Stack
     held_back: false,
     needs_edit: false,
     ...extra,
-    ...attended(extra.attention_reasons ?? []),
+    ...attended(extra.attention_reasons ?? [], extra.severity),
   };
 }
 
@@ -70,7 +73,7 @@ export const shown = (extra: Partial<ShownCommit> = {}): ShownCommit => ({
   local_commit: true,
   comment_chains: [],
   ...extra,
-  ...attended(extra.attention_reasons ?? []),
+  ...attended(extra.attention_reasons ?? [], extra.severity),
 });
 
 export function diff(extra: Partial<Diff> = {}): Diff {

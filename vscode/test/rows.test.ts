@@ -211,7 +211,7 @@ test("the commit message is read-only with the reason, and comment chains say wh
   assert.deepEqual(rows.map((row) => row.file), [true, true, true]);
   // A Gerrit fix suggestion shows below the text as ger serve writes it in `text`: the Change view and tooltip print text as it is.
   const plain = "Name it.\n\nsuggested fix: Set x\n  a.py:4 becomes:\n  +     x = 1";
-  const fixed = changeVm(state({ chains: [chain("fix", [comment("Name it.", { text: plain, markdown: "Name it.\n\n**Suggested fix:** Set x" })])] })).comments?.threads[0];
+  const fixed = changeVm(state({ chains: [chain("fix", [comment("Name it.", { text: plain, markdown: "Name it.\n\n**Suggested fix:** Set x\n`a.py:4` becomes:\n```\n    x = 1\n```" })])] })).comments?.threads[0];
   assert.deepEqual([fixed?.body, fixed?.tooltip], [plain, `Alice:\n${plain}`]);
   const replied = changeVm(state({ chains: [chain("open", [comment("Please rename this."), comment("Renamed it.", { state: "draft", comment_id: "d1" })])] }));
   assert.deepEqual([replied.comments?.threads[0].edit, replied.comments?.threads[0].discard], [false, "Delete Your Draft Reply…"]);

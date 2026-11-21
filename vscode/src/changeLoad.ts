@@ -61,7 +61,8 @@ export function memberTarget(member: Member, chain: Chain, stack: Stack | undefi
     sha: member.local_sha ?? member.sha,
     chainRevs: chain.members.map(memberRev),
     chainKey: chain.key,
-    known: local ?? memberStatus(member),
+    // A commit of your stack the stack does not list (it could not be read): nothing to draw from until /show answers.
+    known: member.local_sha ? local : memberStatus(member),
   };
 }
 

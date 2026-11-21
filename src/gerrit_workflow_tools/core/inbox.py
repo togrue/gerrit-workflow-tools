@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 
-from gerrit_workflow_tools.core.attention import Attention
+from gerrit_workflow_tools.core.attention import Attention, Severity, attention_severity
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id, parallel_map
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -52,6 +52,11 @@ class Headline:
     chain: ReviewChain
     member: ChainMember
     """The change to open."""
+
+    @property
+    def severity(self) -> Severity:
+        """How urgent the reason is; waiting on your review is no problem of the change: ``pending``."""
+        return Severity.PENDING if self.reason == WAITING_ON_YOU else attention_severity([self.reason])
 
 
 def build_to_review_query(
