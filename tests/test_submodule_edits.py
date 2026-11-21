@@ -200,9 +200,11 @@ def test_checkout_review_and_edit_agree_on_what_a_submodule_holds_of_yours(
     if refusal is None:
         assert code == ExitCode.OK, err
         return
-    if command == "review" and lib.is_symlink():
-        # ger review fetches before it looks, and git's fetch (recursing into submodules) refuses first.
-        assert code == ExitCode.GIT and "expected submodule path 'lib' not to be a symbolic link" in err, err
+    if command == "review" and lib.is_symlink() and code == ExitCode.GIT:
+        # ger review fetches before it looks; newer git's fetch (recursing into submodules) refuses
+        # first. Older git (2.43) fetches, and the shared check below refuses instead. Either way the
+        # symlink and HEAD are kept, checked at the end.
+        assert "expected submodule path 'lib' not to be a symbolic link" in err, err
     elif refusal == "stash":  # staged, the file is a change git stash saves: the usual wording
         assert code == ExitCode.USAGE and stash_wording in err, err
     else:
@@ -226,3 +228,23 @@ def test_a_file_replacing_a_submodule_in_a_staged_review_is_not_to_be_committed(
         "or rebase would delete it: move it out of the way, then run ger review again",
     )
     assert (worktree / "lib").read_text(encoding="utf-8") == "precious\n"
+
+
+def test_review_refuses_a_symlink_over_a_submodule_itself_when_the_fetch_lets_it_through(
+    sub_stack: SubStack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Older git (2.43) fetches past a symlink at a submodule path; not recursing does the same on any
+    git. Then ger's own check is what refuses, and the symlink is kept."""
+    repo = sub_stack.repo
+    git("config", "fetch.recurseSubmodules", "false", cwd=repo)
+    git("switch", "-q", "main", cwd=repo)
+    git("branch", "-q", "-D", "feature", cwd=repo)
+    lib = repo / "lib"
+    _replaced_by_a_symlink(lib)
+    target = str(lib.readlink())
+    head = git_out("rev-parse", "HEAD", cwd=repo)
+    main_fn, argv, rerun, _ = _COMMANDS["review"]
+    code, _out, err = run_cli(repo, main_fn, argv, monkeypatch, gerrit=sub_stack.store, catch_sys_exit=True)
+    assert (code, err.strip()) == (ExitCode.USAGE, f"error: {_REPLACED}{rerun}")
+    assert git_out("rev-parse", "HEAD", cwd=repo) == head
+    assert str(lib.readlink()) == target
