@@ -112,6 +112,10 @@ uv run ruff format . && uv run ruff check --fix .
 uv run mypy
 ```
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs ruff, mypy, pytest on Linux and
+Windows, the extension's `npm test` and its e2e run on every pull request; the integration tests
+against Gerrit in Docker run nightly. It must be green before a merge into `dev`.
+
 Prefer a test that pins agreement *between* commands over another per-module test.
 Copies drift silently when each is only tested against itself.
 `tests/test_change_resolution_consistency.py` is the pattern.

@@ -4,7 +4,7 @@ These tests start the official image **`gerritcodereview/gerrit:3.14.0-rc5-ubunt
 
 Gerrit's event stream over real ssh is **`test_19_event_stream.py`**: it uploads a throwaway ssh key (generated in a temp directory; your `~/.ssh` is neither read nor written) for two test accounts, checks that the one without the *Stream Events* capability is refused once and quietly, grants the capability to a temporary group for the other (and removes the grant afterwards), and follows its events. It needs OpenSSH (`ssh`, `ssh-keygen`) on `PATH` and the container's SSH port (`GERRIT_IT_HOST_PORT_SSH`) reachable from your machine; without OpenSSH it is skipped.
 
-Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly.
+Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly. CI runs them nightly and on demand (the *Integration tests* job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
 
 ## What is covered where
 
