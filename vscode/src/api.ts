@@ -183,8 +183,10 @@ export interface Rebase {
   unmerged: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
   as_before: boolean;
-  /** The ways on core allows from this stop, in order: the only ones to offer. Skip only at a conflict, resolved or not. */
+  /** The ways on core allows from this stop, in order: the only ones to offer. */
   actions: RebaseAction[];
+  /** For each way on `actions` leaves out, the refusal `ger rebase --<action>` prints: what to say when it is asked for anyway. */
+  refused: Partial<Record<RebaseAction, string>>;
 }
 
 /** What is underway that no Gerrit push may run over: `GET /stack`'s `push_blocked`. */

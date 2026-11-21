@@ -94,7 +94,7 @@ function secretViews(word: string, hex: string, digit: number) {
   const rebasing = stackVm(
     stack(
       commits.map((c, index) => ({ ...c, rebase: (["done", "current", "todo"] as const)[index] })),
-      { branch: null, rebase_in_progress: true, rebase: { branch: `${word}-branch`, onto: sha(9), orig_head: sha(3), stop: "conflict", applied: false, current: sha(2), unmerged: [paths.tree, paths.top], as_before: false, actions: ["abort", "skip"] } },
+      { branch: null, rebase_in_progress: true, rebase: { branch: `${word}-branch`, onto: sha(9), orig_head: sha(3), stop: "conflict", applied: false, current: sha(2), unmerged: [paths.tree, paths.top], as_before: false, actions: ["abort", "skip"], refused: { continue: "the index has unresolved conflicts" } } },
     ),
     undefined,
     never,

@@ -93,7 +93,9 @@ test("ahead of Gerrit, a row tells new code from only rebased, by core's verdict
   assert.equal(detail({ code_change: "rebased" }), SYNC_WORDS.rebased);
 });
 
-const REBASE: Rebase = { branch: "feature", onto: "base000", orig_head: "three00", stop: "edit", applied: true, current: "two0000", unmerged: [], as_before: false, actions: ["continue", "abort"] };
+/** What core says of Skip at an edit stop (`RebaseProgress.refusal`). */
+const SKIP_REFUSED = "--skip leaves out a commit the rebase stopped on with a conflict, but it stopped with the commit applied (an `edit`)";
+const REBASE: Rebase = { branch: "feature", onto: "base000", orig_head: "three00", stop: "edit", applied: true, current: "two0000", unmerged: [], as_before: false, actions: ["continue", "abort"], refused: { skip: SKIP_REFUSED } };
 /** What core allows on a conflict, unresolved and resolved (`RebaseProgress.actions`). */
 const ON_CONFLICT: RebaseAction[] = ["abort", "skip"];
 const RESOLVED: RebaseAction[] = ["continue", "abort", "skip"];
@@ -141,12 +143,14 @@ test("the rebase banner offers the ways on core allows from where it stopped, an
 
 test("the palette's Continue and Skip run only where core allows them, and say why not", () => {
   const at = (rebase: Partial<Rebase>) => stack([commit("Two", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } });
-  // At an edit stop git's skip would reset away what is not committed and keep the commit.
-  assert.equal(rebaseNotNow(at({}), "skip"), REBASE_WORDS.notNow.skip);
-  assert.match(REBASE_WORDS.notNow.skip, /already applied: Skip would only throw away what is not committed/);
+  // Why not is core's refusal, as ger rebase prints it: one wording per stop, not the extension's.
+  assert.equal(rebaseNotNow(at({}), "skip"), `${SKIP_REFUSED[0].toUpperCase()}${SKIP_REFUSED.slice(1)}.`);
   assert.equal(rebaseNotNow(at({}), "continue"), undefined);
-  assert.equal(rebaseNotNow(at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT }), "continue"), REBASE_WORDS.notNow.continue);
-  assert.equal(rebaseNotNow(at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT }), "skip"), undefined);
+  const conflict = at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT, refused: { continue: "the index has unresolved conflicts; resolve the conflicts in e.txt" } });
+  assert.equal(rebaseNotNow(conflict, "continue"), "The index has unresolved conflicts; resolve the conflicts in e.txt.");
+  assert.equal(rebaseNotNow(conflict, "skip"), undefined);
+  assert.equal(rebaseNotNow(at({ actions: ["abort"], refused: {} }), "skip"), undefined, "core said nothing: ger rebase decides");
+  assert.equal(rebaseNotNow(stack([commit("Two")]), "abort"), REBASE_WORDS.noRebase);
   assert.equal(rebaseNotNow(undefined, "skip"), undefined, "before the stack is in, ger rebase decides");
 });
 

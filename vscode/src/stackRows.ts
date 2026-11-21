@@ -3,7 +3,7 @@
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
-import { blockedMove, reasonWords } from "./format";
+import { blockedMove, reasonWords, sentence } from "./format";
 import { Waiting } from "./state";
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
@@ -220,12 +220,8 @@ export const REBASE_WORDS = {
   tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Continue goes on, Abort goes back to the branch as it was before.",
   conflicted: "conflicted",
   resolve: "Open it in the merge editor to resolve it, then stage it (git add).",
-  /** Why the palette's Continue or Skip does not run here, by core's verdict. */
-  notNow: {
-    continue: "Resolve the conflicted files and stage them (git add) before you continue the rebase.",
-    abort: "There is no rebase to abort.",
-    skip: "Skip leaves out a commit the rebase stopped on with a conflict. Here the commit is already applied: Skip would only throw away what is not committed yet.",
-  } satisfies Record<RebaseAction, string>,
+  /** Why the palette's Continue, Abort or Skip does not run: there is no rebase. Where there is one, core says why (`rebase.refused`). */
+  noRebase: "There is no rebase in progress.",
   /** What Skip throws away, said before it does: the commit and the resolution so far; Abort brings back the branch, not the resolution. */
   skipLoses: "The rebase goes on without it: the commit and the conflict resolution done so far, staged or not, are thrown away, and once the rebase is finished the branch no longer has this commit. Abort instead brings back the branch as it was before the rebase, but not the resolution.",
   skipGerrit: "Its change stays open on Gerrit until you abandon it there.",
@@ -249,13 +245,19 @@ export function rebaseButtons(rebase: Rebase | null | undefined): StackAction[] 
   }));
 }
 
-/** Why `ger rebase --<action>` is not to run now, by core's verdict; undefined when it may, or core has said nothing yet (the CLI decides). */
+/** Why `ger rebase --<action>` is not to run now, in core's words (`rebase.refused`); undefined when it may, or core has said nothing yet (the CLI decides). */
 export function rebaseNotNow(stack: Stack | undefined, action: RebaseAction): string | undefined {
   if (!stack) {
     return undefined;
   }
-  const allowed = stack.rebase ? stack.rebase.actions : [];
-  return allowed.includes(action) ? undefined : REBASE_WORDS.notNow[action];
+  if (!stack.rebase) {
+    return REBASE_WORDS.noRebase;
+  }
+  if (stack.rebase.actions.includes(action)) {
+    return undefined;
+  }
+  const refused = stack.rebase.refused[action];
+  return refused ? `${sentence(refused)}.` : undefined;
 }
 
 /** Skip's question: what is left out, and what that throws away. */

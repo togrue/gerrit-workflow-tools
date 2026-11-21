@@ -1,6 +1,7 @@
 // Going on with a rebase underway: Continue, Abort and Skip on Local stack's banner (and in the
 // palette), the conflicted files under it, and Push while a rebase is stopped. What can be done
-// where is core's verdict (`GET /stack`'s `rebase.actions` and `push_blocked`); this runs it.
+// where, and why not, is core's verdict (`GET /stack`'s `rebase.actions`, `rebase.refused` and
+// `push_blocked`); this runs it.
 
 import * as path from "node:path";
 import * as vscode from "vscode";

@@ -121,7 +121,7 @@ function rebasing(stop: RebaseStop): StackVm {
     ],
     {
       rebase_in_progress: true,
-      rebase: { branch: "routing", onto: null, orig_head: null, stop, applied, current: null, unmerged: stop === "conflict" ? ["src/routes.ts"] : [], as_before: false, actions: WAYS_ON[stop] },
+      rebase: { branch: "routing", onto: null, orig_head: null, stop, applied, current: null, unmerged: stop === "conflict" ? ["src/routes.ts"] : [], as_before: false, actions: WAYS_ON[stop], refused: {} },
     },
   );
 }

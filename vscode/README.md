@@ -87,7 +87,9 @@ The commits above your upstream, newest first. One row per commit:
   away: the commit and the conflict resolution done so far, staged or not; Abort brings back the
   branch as it was before the rebase, not the resolution. At an edit stop, or once you split a
   commit there, there is nothing to skip: the commit is already in, and `git rebase --skip` would
-  only throw away what is not committed yet, so `ger rebase --skip` refuses there too.
+  only throw away what is not committed yet, so `ger rebase --skip` refuses there too. Run from
+  the palette where it is not offered, a way on says why not in `ger rebase`'s own words
+  (`rebase.refused`).
 - **Stopped on a conflict**, the commit it stopped at has a red conflict icon and is not dimmed:
   it is what wants you. The files still conflicted are listed under the banner; click one to
   resolve it in VS Code's merge editor (the file itself, with its conflict markers, where the
