@@ -295,10 +295,23 @@ class ShownCommit:
 
 
 def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> None:
-    """Of *commits* (none of the local stack: that is yours), each that waits on your review leads
-    with that (:func:`as_your_review`). Gerrit not answering leaves the author's reasons.
+    """Of *commits*, each that waits on your review leads with that (:func:`as_your_review`).
+
+    Commits of the local stack are asked too: a change checked out for review (``ger review``), or
+    a colleague's change your work sits on, is in the stack and still waits on you. The query's own
+    ``-owner:self`` leaves your changes out. Gerrit not answering leaves the author's reasons.
+
+    Only a change that lists you as a reviewer can match (the query asks ``reviewer:self``), so
+    the query is asked for those alone, and not at all when none does: showing your own stack
+    costs no request. Who you are is asked once per user and host.
     """
-    numbers = [commit.number for commit in commits if commit.pushed and commit.number is not None]
+    listed = [c for c in commits if c.pushed and c.number is not None and any(not r.cc for r in c.reviewers)]
+    me = service.self_account_id() if listed else None
+    if me is None:
+        return
+    numbers = [
+        c.number for c in listed if c.number is not None and any(r.account_id == me and not r.cc for r in c.reviewers)
+    ]
     try:
         asked = waiting_on_your_review(service, numbers)
     except GerritApiError:
@@ -319,8 +332,8 @@ def load_shown_commits(
 ) -> list[ShownCommit]:
     """Overlay, attention, comment chains and (with *ci*) **CI content** for *targets*, in order.
 
-    A target that is not a local commit and waits on your review (the *to review* query matches
-    it) leads with that.
+    A target that waits on your review (the *to review* query matches it, in any project and with
+    no limit) leads with that.
 
     *targets* must be in stack order for chain-blocking attention. A CI link that cannot be
     fetched stays on its result; nothing here raises for it.
@@ -336,7 +349,7 @@ def load_shown_commits(
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
     if annotated.gerrit_unavailable is None:
-        _mark_waiting_on_you(service, [c for t, c in zip(targets, commits, strict=True) if not t.is_local_commit])
+        _mark_waiting_on_you(service, commits)
     per_commit: list[list[CiContent] | None] = [None] * len(commits)
     if ci is not None:
         per_commit = list(ci.fetch_each([(commit.ci_links, commit.sha or None) for commit in commits]))

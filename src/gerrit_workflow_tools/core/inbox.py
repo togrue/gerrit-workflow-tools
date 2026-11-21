@@ -80,9 +80,12 @@ def build_to_review_query(
 
 def waiting_on_your_review(service: GerritService, numbers: Collection[int]) -> set[int]:
     """Which of the changes *numbers* wait on your review: the ones the *to review* section's own
-    query (:func:`build_to_review_query`) matches, in any project. One query; none for no *numbers*.
+    query (:func:`build_to_review_query`) matches, in any project, with no limit and without
+    ``--unready``. One query; none for no *numbers*.
 
-    The Change view asks it, so that a change listed under *to review* says so there too.
+    The Change view asks it, so that a change listed under *to review* says so there too. The list
+    is narrower (the clone's project, ``inbox.limit``): a change of another project, or beyond the
+    limit, waits on you without being listed.
     """
     if not numbers:
         return set()

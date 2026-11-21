@@ -214,20 +214,33 @@ def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     """``ger show HEAD`` resolves one change — a handful of git + REST calls, not a stack storm."""
     _configure_web(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
-    store = ChangeStore(build_details_by_change_id(rows))
+    store = ChangeStore(
+        build_details_by_change_id(rows),
+        accounts={1000: {"_account_id": 1000, "username": "me", "name": "me"}},
+        self_account_id=1000,
+    )
 
     with _count_git() as run:
         code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
 
     assert code == 0, err
-    # Resolution probe + detail query; no CI fetch without -v when Verified passes.
-    assert len(store.calls) <= 4, [c.method for c in store.calls]
+    # Resolution probe + detail query; no CI fetch without -v when Verified passes. Who you are is
+    # asked once per user and host (the change has a reviewer, so whether it waits on you could
+    # matter), then remembered: a second show does not ask it.
+    assert len(store.calls_to("get_account")) == 1
+    assert len(store.calls) <= 5, [c.method for c in store.calls]
     assert len(store.queries()) <= 2, store.queries()
     assert store.calls_to("list_change_reviewers") == []
     assert len(store.calls_to("get_change")) == 0
     assert run.call_count <= _SHOW_GIT_BUDGET, (
         f"git subprocesses={run.call_count} budget={_SHOW_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
     )
+    before = len(store.calls)
+    code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert [c.method for c in store.calls[before:] if c.method == "get_account"] == []
+    # Your own change does not list you as a reviewer: the to-review query is not asked.
+    assert not [q for q in store.queries() if "reviewer:self" in q]
 
 
 def test_resolve_call_budget_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

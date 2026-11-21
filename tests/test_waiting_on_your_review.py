@@ -11,8 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from gerrit_workflow_tools.core.attention import Attention, as_your_review
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.inbox import TO_REVIEW, build_to_review_query
 from gerrit_workflow_tools.server.api import GerApi
 from tests.change_store import ChangeStore
@@ -83,3 +86,42 @@ def test_the_to_review_list_and_each_changes_view_agree(stack_repo: Path) -> Non
 def test_your_review_replaces_what_the_author_waits_for_from_reviewers() -> None:
     reasons = [Attention.CI_FAILED, Attention.NO_REVIEWERS, Attention.AWAITING_REVIEW, Attention.UNRESOLVED_COMMENTS]
     assert as_your_review(reasons) == [Attention.WAITING_ON_YOU, Attention.CI_FAILED, Attention.UNRESOLVED_COMMENTS]
+
+
+def test_a_colleagues_change_in_your_local_stack_still_waits_on_you(stack_repo: Path) -> None:
+    """``ger review 900`` puts Alice's change in the local stack: it waits on you there too."""
+    store, keys, _rows = _gerrit(stack_repo)
+    top = store._changes[keys[-1]]  # pylint: disable=protected-access
+    top["owner"] = {"name": "Alice", "email": "alice@example.com", "_account_id": 2}
+    top["reviewers"] = {"REVIEWER": [{"_account_id": SELF, "name": "me", "username": "me"}]}
+    api = GerApi(stack_repo, gerrit=store)
+    [head] = _get(api, "/show", rev="HEAD")["commits"]
+    assert head["attention_reasons"][:1] == [Attention.WAITING_ON_YOU]
+    [below] = _get(api, "/show", rev="HEAD~1")["commits"]
+    assert Attention.WAITING_ON_YOU not in below["attention_reasons"], (
+        "your own change waits on nobody's review of yours"
+    )
+
+
+def test_gerrit_refusing_the_to_review_query_keeps_the_authors_reasons(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(stack_repo, _theirs(900, asks_you=True))
+    asked = store.query_changes
+
+    def refusing(query: str, *args: Any, **kwargs: Any) -> Any:
+        if "reviewer:self" in query and "change:900" in query:
+            raise GerritApiError("Gerrit HTTP 400: bad query", status=400)
+        return asked(query, *args, **kwargs)
+
+    monkeypatch.setattr(store, "query_changes", refusing)
+    assert _shown(GerApi(stack_repo, gerrit=store), 900)["attention_reasons"] == [Attention.AWAITING_REVIEW]
+
+
+def test_showing_changes_asks_the_to_review_query_once_and_only_for_those_that_list_you(stack_repo: Path) -> None:
+    store = _store(stack_repo, _theirs(900, asks_you=True), _theirs(901, asks_you=False))
+    api = GerApi(stack_repo, gerrit=store)
+    _get(api, "/show", rev=["change:900", "change:901"])
+    asked = [query for query in store.queries() if "reviewer:self" in query]
+    assert len(asked) == 1, asked
+    assert "change:900" in asked[0] and "change:901" not in asked[0]

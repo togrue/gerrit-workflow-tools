@@ -471,8 +471,10 @@ class ChangeStore:
         """Whether *row* passes the *to review* query's ``reviewer:self``, ``-owner:self`` and ``-is:wip``.
 
         The rest of such a query is not modelled; these decide whose review a change waits on.
+        Terms are matched whole, so ``-reviewer:self`` is not ``reviewer:self``.
         """
-        if "reviewer:self" in query:
+        terms = set(re.split(r"[\s()]+", query))
+        if "reviewer:self" in terms:
             reviewers = {
                 entry["account"].get("_account_id")
                 for entry in self._reviewer_rows(row)
@@ -480,9 +482,9 @@ class ChangeStore:
             }
             if self._self_account_id is None or self._self_account_id not in reviewers:
                 return False
-        if "-owner:self" in query and (row.get("owner") or {}).get("_account_id") == self._self_account_id:
+        if "-owner:self" in terms and (row.get("owner") or {}).get("_account_id") == self._self_account_id:
             return False
-        return not ("-is:wip" in query and row.get("work_in_progress"))
+        return not ("-is:wip" in terms and row.get("work_in_progress"))
 
     def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         """Return AccountInfo rows whose username, email or name contains *query*."""
