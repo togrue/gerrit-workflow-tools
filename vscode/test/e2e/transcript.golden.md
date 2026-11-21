@@ -112,7 +112,7 @@ status bar message: $(check) Refreshed from Gerrit
 (nothing said or done outside the views)
 --- on screen:
 + change | title: Change 900
-+ change | No reviewers, awaiting review — V+1
++ change | Waiting for your review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
 + change | Showing — Patchset 1 (current) · Against its base commit
 - change | title: Change 102
@@ -288,7 +288,7 @@ notification (info): No review checkout is open here.
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | A change shows here once ger runs. Review chains says what is missing and what to do next.
-- change | No reviewers, awaiting review — V+1
+- change | Waiting for your review — V+1
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Showing — Patchset 1 (current) · Against its base commit
 - change | Files — 1 · +1 −0
@@ -345,7 +345,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 - state  | no-executable
 - events | (not said)
 - stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
-+ change | No reviewers, awaiting review — V+1
++ change | Waiting for your review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
 + change | Showing — Patchset 1 (current) · Against its base commit
 + change | Files — 1 · +1 −0
@@ -367,7 +367,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + change | Commit message — Extract command routing  (editable)
 + change | Showing — Local commit <sha> · Against its base commit
 - change | title: Change 900
-- change | No reviewers, awaiting review — V+1
+- change | Waiting for your review — V+1
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Showing — Patchset 1 (current) · Against its base commit
 + change |   b.txt — added +1 −0

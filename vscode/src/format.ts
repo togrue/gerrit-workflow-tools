@@ -15,6 +15,7 @@ const WORDS: Record<string, string> = {
   "outdated-patchset": "Gerrit has a newer patchset",
   "awaiting-review": "awaiting review",
   "no-reviewers": "no reviewers",
+  "waiting-on-you": "waiting for your review",
   "chain-blocked": "blocked by an earlier change",
   "missing-change-id": "no Change-Id",
   "invalid-change-id": "invalid Change-Id",
@@ -27,28 +28,26 @@ const WORDS: Record<string, string> = {
 const SEVERITY_ICONS: Record<Severity, string> = { error: "error", warning: "warning", pending: "clock", ok: "pass" };
 
 /** Every icon `attentionIcon` can give. */
-export const ATTENTION_ICONS: readonly string[] = [...Object.values(SEVERITY_ICONS), "comment-unresolved"];
+export const ATTENTION_ICONS: readonly string[] = [...Object.values(SEVERITY_ICONS), "comment-unresolved", "eye"];
 
 /**
- * The codicon for a change with these attention reasons, and how urgent it is. The comment icon
- * means unresolved comments, which the Change view lists; a negative vote or a newer patchset on
- * Gerrit is a warning without one.
+ * The codicon for a change with these attention reasons, and how urgent it is. An eye means it
+ * waits on your review, as under To review. The comment icon means unresolved comments, which the
+ * Change view lists; a negative vote or a newer patchset on Gerrit is a warning without one.
  */
 export function attentionIcon({ attention_reasons: reasons, severity: level }: Readonly<Attended>): { icon: string; severity: Severity } {
   const comments = level === "warning" && reasons.includes("unresolved-comments");
-  return { icon: comments ? "comment-unresolved" : SEVERITY_ICONS[level], severity: level };
+  const yours = level === "pending" && reasons.includes("waiting-on-you");
+  return { icon: comments ? "comment-unresolved" : yours ? "eye" : SEVERITY_ICONS[level], severity: level };
 }
 
 /**
- * The status bar's codicon for the headline: an eye for a chain waiting on your review, else the
- * icon `attentionIcon` gives its reason (a negative vote is a warning, not a comment bubble); a
- * check when nothing needs you.
+ * The status bar's codicon for the headline: the icon `attentionIcon` gives its reason (an eye for
+ * a chain waiting on your review; a negative vote is a warning, not a comment bubble); a check
+ * when nothing needs you.
  */
-export function headlineIcon(headline: Pick<Headline, "section" | "reason" | "severity"> | null | undefined): string {
-  if (!headline) {
-    return "pass";
-  }
-  return headline.section === "to-review" ? "eye" : attentionIcon({ attention_reasons: [headline.reason], severity: headline.severity }).icon;
+export function headlineIcon(headline: Pick<Headline, "reason" | "severity"> | null | undefined): string {
+  return headline ? attentionIcon({ attention_reasons: [headline.reason], severity: headline.severity }).icon : "pass";
 }
 
 /** Every attention reason this knows, in words: what `reasonWords` can say of ours. */

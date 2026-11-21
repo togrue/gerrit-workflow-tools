@@ -360,8 +360,10 @@ def test_ci_of_one_change_asks_for_it_and_its_parent_and_agrees_with_the_whole_c
     asked, gerrit_calls, ci_calls = ask([rows[1].sha, rows[2].sha])
     assert asked["ci_introduced"], "the change introduced its findings"
     assert findings(asked) == findings(whole)
-    assert (gerrit_calls, ci_calls) == (9, 2)
-    assert (whole_gerrit, whole_ci) == (17, 4), "the whole chain: what the Change view asked before"
+    # Each count includes one ask for who you are: the changes list reviewers, so whether one
+    # waits on your review could matter.
+    assert (gerrit_calls, ci_calls) == (10, 2)
+    assert (whole_gerrit, whole_ci) == (18, 4), "the whole chain: what the Change view asked before"
 
 
 def test_show_serves_the_markdown_ger_show_ai_prints(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

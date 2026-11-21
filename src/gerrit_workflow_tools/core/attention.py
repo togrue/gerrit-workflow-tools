@@ -1,4 +1,5 @@
-"""Attention: the verdict that a commit needs the author's action.
+"""Attention: the verdict that a commit needs the author's action, or, on somebody's change that
+waits on your review, yours.
 
 The one owner of that verdict. ``ger log``'s exit code, ``ger edit --first-attention-commit``,
 the trailing ``# …`` hints, the rebase todo and the inbox all read the reasons computed here,
@@ -45,9 +46,24 @@ class Attention:  # pylint: disable=too-few-public-methods
     REVIEW_ISSUES = "review-issues"
     AWAITING_REVIEW = "awaiting-review"
     UNRESOLVED_COMMENTS = "unresolved-comments"
+    WAITING_ON_YOU = "waiting-on-you"
+    """Somebody else's change asks for your review: the *to review* section's query matches it."""
     WIP = "wip"
     GERRIT_UNKNOWN = "gerrit-unknown"
     """Gerrit could not be asked, so this commit's review state is unknown."""
+
+
+# What a change's author waits for from its reviewers: to a reviewer it is asked of, that is them.
+_WAITING_FOR_REVIEWERS = frozenset({Attention.NO_REVIEWERS, Attention.AWAITING_REVIEW})
+
+
+def as_your_review(reasons: Sequence[str]) -> list[str]:
+    """*reasons* of somebody's change that waits on your review, as you see it.
+
+    :data:`Attention.WAITING_ON_YOU` leads; no reviewers and awaiting review are gone, as what
+    the author waits for is you. Everything else about the change (CI, comments, votes) stays.
+    """
+    return [Attention.WAITING_ON_YOU, *(reason for reason in reasons if reason not in _WAITING_FOR_REVIEWERS)]
 
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``).
@@ -83,6 +99,7 @@ REASON_SEVERITY: dict[str, Severity] = {
     Attention.AHEAD_OF_GERRIT: Severity.PENDING,
     Attention.AWAITING_REVIEW: Severity.PENDING,
     Attention.NO_REVIEWERS: Severity.PENDING,
+    Attention.WAITING_ON_YOU: Severity.PENDING,
     Attention.CHAIN_BLOCKED: Severity.PENDING,
     Attention.WIP: Severity.PENDING,
     Attention.GERRIT_UNKNOWN: Severity.PENDING,

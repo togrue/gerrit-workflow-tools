@@ -14,6 +14,7 @@
   "ahead-of-gerrit": "pending",
   "awaiting-review": "pending",
   "no-reviewers": "pending",
+  "waiting-on-you": "pending",
   "chain-blocked": "pending",
   "wip": "pending",
   "gerrit-unknown": "pending"

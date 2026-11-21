@@ -464,7 +464,27 @@ class ChangeStore:
         self._record("query_changes", query, n=n, options=options)
         if query in self._stubbed_queries:
             return list(self._stubbed_queries[query])[:n]
-        return [shape_change_info(row, options) for row in self._query_rows(query)[:n]]
+        rows = [row for row in self._query_rows(query) if self._matches_self_terms(query, row)]
+        return [shape_change_info(row, options) for row in rows[:n]]
+
+    def _matches_self_terms(self, query: str, row: dict[str, Any]) -> bool:
+        """Whether *row* passes the *to review* query's ``reviewer:self``, ``-owner:self`` and ``-is:wip``.
+
+        The rest of such a query is not modelled; these decide whose review a change waits on.
+        Terms are matched whole, so ``-reviewer:self`` is not ``reviewer:self``.
+        """
+        terms = set(re.split(r"[\s()]+", query))
+        if "reviewer:self" in terms:
+            reviewers = {
+                entry["account"].get("_account_id")
+                for entry in self._reviewer_rows(row)
+                if entry["state"] == "REVIEWER"
+            }
+            if self._self_account_id is None or self._self_account_id not in reviewers:
+                return False
+        if "-owner:self" in terms and (row.get("owner") or {}).get("_account_id") == self._self_account_id:
+            return False
+        return not ("-is:wip" in terms and row.get("work_in_progress"))
 
     def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         """Return AccountInfo rows whose username, email or name contains *query*."""

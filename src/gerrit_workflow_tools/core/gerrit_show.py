@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.attention import as_your_review
 from gerrit_workflow_tools.core.changeish import unresolved_change_message, unresolved_rev_message
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
@@ -19,10 +20,11 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError, norm_change_id
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, GerritUnavailableError, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.inbox import to_review_needs_you_as_reviewer, waiting_on_your_review
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import (
     Commit,
@@ -292,6 +294,35 @@ class ShownCommit:
         return self.ci_contents
 
 
+def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> None:
+    """Of *commits*, each that waits on your review leads with that (:func:`as_your_review`).
+
+    Commits of the local stack are asked too: a change checked out for review (``ger review``), or
+    a colleague's change your work sits on, is in the stack and still waits on you. The query's own
+    ``-owner:self`` leaves your changes out. Gerrit not answering leaves the author's reasons.
+
+    With the built-in query only a change that lists you as a reviewer can match (it asks
+    ``reviewer:self``), so the query is asked for those alone, and not at all when none does:
+    showing your own stack costs no request. Who you are is asked once per user and host. A custom
+    ``inbox.toReviewQuery`` may select changes any other way: every shown change is asked.
+    """
+    pushed = [c for c in commits if c.pushed and c.number is not None]
+    if to_review_needs_you_as_reviewer(service.settings):
+        pushed = [c for c in pushed if any(not r.cc for r in c.reviewers)]
+        me = service.self_account_id() if pushed else None
+        if me is None:
+            return
+        pushed = [c for c in pushed if any(r.account_id == me and not r.cc for r in c.reviewers)]
+    numbers = [c.number for c in pushed if c.number is not None]
+    try:
+        asked = waiting_on_your_review(service, numbers)
+    except GerritApiError:
+        return
+    for commit in commits:
+        if commit.number in asked:
+            commit.attention_reasons = as_your_review(commit.attention_reasons)
+
+
 def load_shown_commits(
     targets: list[ShowCommitResolution],
     *,
@@ -302,6 +333,9 @@ def load_shown_commits(
     ci: CiContentService | None = None,
 ) -> list[ShownCommit]:
     """Overlay, attention, comment chains and (with *ci*) **CI content** for *targets*, in order.
+
+    A target that waits on your review (the *to review* query matches it, in any project and with
+    no limit) leads with that.
 
     *targets* must be in stack order for chain-blocking attention. A CI link that cannot be
     fetched stays on its result; nothing here raises for it.
@@ -316,6 +350,8 @@ def load_shown_commits(
     commits = annotated.commits
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
+    if annotated.gerrit_unavailable is None:
+        _mark_waiting_on_you(service, commits)
     per_commit: list[list[CiContent] | None] = [None] * len(commits)
     if ci is not None:
         per_commit = list(ci.fetch_each([(commit.ci_links, commit.sha or None) for commit in commits]))
