@@ -89,7 +89,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
     "Files — loading…",
     "Comments — loading…",
   ]);
-  assert.deepEqual(changeHeading(7, detail.commit()?.summary), { title: "Change 7", description: "Extract routing" });
+  assert.equal(changeHeading(detail.commit()?.number), "Change 7");
 });
 
 test("a Review chains row draws its votes and attention at once, and does not guess whether it is ready to submit", () => {
@@ -99,7 +99,6 @@ test("a Review chains row draws its votes and attention at once, and does not gu
   const vm = drawn(detail, { version: "current" });
   assert.equal(vm.head?.text, "Loading…", "the row does not say whether Gerrit would submit it");
   assert.deepEqual(vm.head?.badges.map((badge) => badge.kind), ["ci"]);
-  assert.equal(changeHeading(12, detail.commit()?.summary).description, "Add cache", "the subject, not the row's `12: Add cache`");
 });
 
 test("a Review chains member that is a commit of your stack is drawn from that commit, ahead of Gerrit as it is", () => {

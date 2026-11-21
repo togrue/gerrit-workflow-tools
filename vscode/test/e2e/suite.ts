@@ -127,9 +127,6 @@ export async function run(): Promise<void> {
     };
     // The status bar item as shown, its icons as `$(name)`; and the state the Gerrit views' welcome text follows.
     const status = (): string => api.statusItem.text;
-    /** The Change view's title bar as it was last set on the view: the title, then the description if there is one. */
-    const heading = (set: { title: string; description: string | undefined } | undefined): string =>
-      !set ? "(view not drawn)" : set.description ? `${set.title} — ${set.description}` : set.title;
     /** Everything a user could see, one line each, prefixed by where it is. */
     const screen = async (): Promise<string[]> => {
       const shown = api.changeView.target;
@@ -139,7 +136,7 @@ export async function run(): Promise<void> {
         `events | ${api.events.events?.state ?? "(not said)"}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
         ...api.stackView.lines().map((line) => `stack  | ${line}`),
-        `change | title: ${shown ? heading(api.changeView.heading) : "(nothing shown)"}`,
+        `change | title: ${shown ? (api.changeView.heading ?? "(view not drawn)") : "(nothing shown)"}`,
         ...(await api.changeView.lines()).map((line) => `change | ${line}`),
         `editor | ${editor()}`,
       ].map(normalize);

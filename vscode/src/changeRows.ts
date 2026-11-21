@@ -414,9 +414,9 @@ export function changeVm(state: ChangeState): ChangeVm {
   };
 }
 
-/** The view's title bar: `Change <number>`, and the subject. */
-export function changeHeading(number: number | null | undefined, subject: string | undefined): { title: string; description: string | undefined } {
-  return { title: number ? `Change ${number}` : "Change", description: subject };
+/** The view's title bar: `Change <number>`. The subject is not repeated there: the commit message says it. */
+export function changeHeading(number: number | null | undefined): string {
+  return number ? `Change ${number}` : "Change";
 }
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */

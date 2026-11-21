@@ -48,7 +48,7 @@ export class ChangeView extends WebView<ChangeVm> {
   private requests = new AbortController();
   private loading: Promise<void> = Promise.resolve();
   /** What decorate last set on the view's title bar: what the end-to-end suite prints. */
-  heading: { title: string; description: string | undefined } | undefined;
+  heading: string | undefined;
   /** Gives a stack commit a new message; `applied` runs once it has it. Set by the extension. */
   reword: (sha: string, message: string, applied: () => void) => Promise<boolean> = () => Promise.resolve(false);
   /** Opens a chain where it sits, its editor thread expanded. Set by the extension. */
@@ -353,8 +353,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   protected decorate(view: vscode.WebviewView): void {
     const commit = this.detail.commit();
-    this.heading = changeHeading(commit?.number ?? this.target?.number, commit?.summary ?? this.target?.title);
-    ({ title: view.title, description: view.description } = this.heading);
+    this.heading = changeHeading(commit?.number ?? this.target?.number);
+    view.title = this.heading;
   }
 
   /** Scroll to a comment chain and mark it, without taking the keyboard. */
