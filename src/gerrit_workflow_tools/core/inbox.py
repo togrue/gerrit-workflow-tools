@@ -27,9 +27,6 @@ DEFAULT_OUTGOING_QUERY = "is:open owner:self"
 TO_REVIEW = "to-review"
 OUTGOING = "outgoing"
 
-WAITING_ON_YOU = "waiting-on-you"
-"""Headline reason for a *to review* chain; the other reasons are :class:`Attention` names."""
-
 # What the author has to act on, most urgent first.
 _HEADLINE_ORDER = (Attention.CI_FAILED, Attention.UNRESOLVED_COMMENTS, Attention.REVIEW_ISSUES)
 
@@ -55,8 +52,8 @@ class Headline:
 
     @property
     def severity(self) -> Severity:
-        """How urgent the reason is; waiting on your review is no problem of the change: ``pending``."""
-        return Severity.PENDING if self.reason == WAITING_ON_YOU else attention_severity([self.reason])
+        """How urgent the reason is, as core rates every reason."""
+        return attention_severity([self.reason])
 
 
 def build_to_review_query(
@@ -193,5 +190,5 @@ def pick_headline(sections: Sequence[InboxSection], *, current: Collection[str] 
                     return Headline(OUTGOING, reason, chain, member)
     to_review = by_name[TO_REVIEW].chains if TO_REVIEW in by_name else []
     if to_review:
-        return Headline(TO_REVIEW, WAITING_ON_YOU, to_review[0], to_review[0].top)
+        return Headline(TO_REVIEW, Attention.WAITING_ON_YOU, to_review[0], to_review[0].top)
     return None

@@ -45,6 +45,8 @@ class Attention:  # pylint: disable=too-few-public-methods
     REVIEW_ISSUES = "review-issues"
     AWAITING_REVIEW = "awaiting-review"
     UNRESOLVED_COMMENTS = "unresolved-comments"
+    WAITING_ON_YOU = "waiting-on-you"
+    """Somebody else's change asks for your review: the *to review* section's query matches it."""
     WIP = "wip"
     GERRIT_UNKNOWN = "gerrit-unknown"
     """Gerrit could not be asked, so this commit's review state is unknown."""
@@ -83,6 +85,7 @@ REASON_SEVERITY: dict[str, Severity] = {
     Attention.AHEAD_OF_GERRIT: Severity.PENDING,
     Attention.AWAITING_REVIEW: Severity.PENDING,
     Attention.NO_REVIEWERS: Severity.PENDING,
+    Attention.WAITING_ON_YOU: Severity.PENDING,
     Attention.CHAIN_BLOCKED: Severity.PENDING,
     Attention.WIP: Severity.PENDING,
     Attention.GERRIT_UNKNOWN: Severity.PENDING,

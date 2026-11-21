@@ -15,6 +15,7 @@ const WORDS: Record<string, string> = {
   "outdated-patchset": "Gerrit has a newer patchset",
   "awaiting-review": "awaiting review",
   "no-reviewers": "no reviewers",
+  "waiting-on-you": "waiting for your review",
   "chain-blocked": "blocked by an earlier change",
   "missing-change-id": "no Change-Id",
   "invalid-change-id": "invalid Change-Id",
