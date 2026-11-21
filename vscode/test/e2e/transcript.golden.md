@@ -1261,7 +1261,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + change | CI failed — V-1 CR+2
 - change | title: Change 102
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+- change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | CI
 + change |   Widget #55 — 2 findings
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
@@ -1272,10 +1272,10 @@ notification (warning): Still out of date: fake ger: down for this test
 
 **Expect:** Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, "Add e.txt" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.
 
-**Today:** the banner has no buttons (#56); the header reads detached (#57); the status bar still shows the headline (#62).
+**Today:** the banner has no buttons (#56); the status bar still shows the headline (#62).
 
 ```
-+ stack  | A rebase is in progress — this is the branch as it was before
++ stack  | A rebase is in progress
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -1284,8 +1284,8 @@ notification (warning): Still out of date: fake ger: down for this test
 - change | Commit message — test! temporary experiment  (editable)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
-stack header | detached → origin/main
-stack  | A rebase is in progress — this is the branch as it was before
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
@@ -1312,56 +1312,14 @@ change | (the commit shown is HEAD)
 
 ## Meanwhile: you add a line to c.txt and amend the stopped commit
 
-**Expect:** The stopped commit shows what it is now: a new SHA, HEAD, its code changed since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.
-
-**Today:** Local stack shows the commit as before the amend: its old SHA, the same as on Gerrit, and no HEAD row at all; the Change view stays on the old commit (#57).
+**Expect:** The stopped commit shows what it is now: a new SHA, HEAD, changed here since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.
 
 ```
-+ stack  | ▶ test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
++ stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
---- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
-stack header | detached → origin/main
-stack  | A rebase is in progress — this is the branch as it was before
-stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
-stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
-stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
-stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-stack  | (Cleanup after experiment is below HEAD)
-stack  | (Extract command routing is below HEAD)
-stack  | (Refactor parser init is below HEAD)
-stack  | (test! temporary experiment is only on the branch as it was before)
-stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change 103
-change | CI failed — V-1 CR+2
-change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   c.txt — added +1 −0
-change | Comments — none
-change | CI
-change |   Widget #55 — 2 findings
-change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
-change |     FAILURE — generic · also fails on the parent
-change | (the commit shown is only on the branch as it was before)
-```
-
-## Meanwhile: you run git rebase --continue, and the rebase finishes
-
-**Expect:** The banner and the marks go: the branch is back, the amended commit with its code changed since the last push and "Add e.txt" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.
-
-```
-+ stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | A rebase is in progress — this is the branch as it was before
-- stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | ▶ test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-+ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-+ change | Commit message — test! temporary experiment  (editable)
++ change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | CI failed — V-1 CR+2
-- change | Commit message — test! temporary experiment  (read-only)
 + change | Files — 1 · +2 −0
 + change |   c.txt — added +2 −0
 - change | Files — 1 · +1 −0
@@ -1372,9 +1330,46 @@ change | (the commit shown is only on the branch as it was before)
 - change |     FAILURE — generic · also fails on the parent
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change 103
+change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | Commit message — test! temporary experiment  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +2 −0
+change |   c.txt — added +2 −0
+change | Comments — none
+change | (the commit shown is HEAD)
+```
+
+## Meanwhile: you run git rebase --continue, and the rebase finishes
+
+**Expect:** The banner and the marks go: the branch is back, the amended commit changed here since the last push and "Add e.txt" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.
+
+```
++ stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
++ stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | A rebase is in progress
+- stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+- stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
++ change | Commit message — test! temporary experiment  (editable)
+- change | Commit message — test! temporary experiment  (read-only)
+--- shown now:
+status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1385,7 +1380,7 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1396,37 +1391,37 @@ change | (the commit shown is below HEAD)
 
 ## Meanwhile: you stop at "Refactor parser init" the same way, and amend it to also add e.txt
 
-**Expect:** Local stack marks the rebase stopped at that commit, which shows its new code (its code changed since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.
+**Expect:** Local stack marks the rebase stopped at that commit, which shows its new code (changed here since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.
 
-**Today:** the row keeps its old SHA, the same as on Gerrit, and no row is HEAD (#57); the Change view shows the commit as it was before (#57); the header reads detached (#57); no Continue or Abort (#56); the status bar still shows the headline (#62).
+**Today:** no Continue or Abort (#56); the status bar still shows the headline (#62).
 
 ```
-+ stack  | A rebase is in progress — this is the branch as it was before
++ stack  | A rebase is in progress
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-+ stack  | ▶ Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
++ stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
++ stack  | ▶ Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
-stack header | detached → origin/main
-stack  | A rebase is in progress — this is the branch as it was before
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
+stack  | ▶ Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
 stack  | (Extract command routing is below HEAD)
-stack  | (Refactor parser init is only on the branch as it was before)
+stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1439,73 +1434,76 @@ change | (the commit shown is only on the branch as it was before)
 
 **Expect:** Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; "Add e.txt" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in "Add e.txt".
 
-**Today:** no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the commits below keep their SHAs from before the rebase, and the Change view shows the commit as it was before (#57); the header reads detached (#57); the status bar still shows the headline (#62).
+**Today:** no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the status bar still shows the headline (#62).
 
 ```
-+ stack  | A rebase stopped on a conflict — this is the branch as it was before
++ stack  | A rebase stopped on a conflict
 + stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
-- stack  | A rebase is in progress — this is the branch as it was before
++ stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | A rebase is in progress
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-- stack  | ▶ Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+- stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
+- stack  | ▶ Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
-stack header | detached → origin/main
-stack  | A rebase stopped on a conflict — this is the branch as it was before
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped on a conflict
 stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
 stack  | (Extract command routing is below HEAD)
-stack  | (Refactor parser init is only on the branch as it was before)
-stack  | (test! temporary experiment is only on the branch as it was before)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
-change | (the commit shown is only on the branch as it was before)
+change | (the commit shown is HEAD)
 ```
 
 ## Meanwhile: you resolve e.txt and git add it
 
 **Expect:** Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at "Add e.txt", ready to Continue.
 
-**Today:** nothing changes: it still says the rebase stopped on a conflict (no issue yet; the conflicted files of #56 would make it visible).
+**Today:** no list of conflicted files for e.txt to leave, and no Continue (#56).
 
 ```
-(no change)
++ stack  | A rebase stopped with its conflicts resolved — ready to continue
++ stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
+- stack  | A rebase stopped on a conflict
+- stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
-stack header | detached → origin/main
-stack  | A rebase stopped on a conflict — this is the branch as it was before
-stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped with its conflicts resolved — ready to continue
+stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
+stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
 stack  | (Extract command routing is below HEAD)
-stack  | (Refactor parser init is only on the branch as it was before)
-stack  | (test! temporary experiment is only on the branch as it was before)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
-change | (the commit shown is only on the branch as it was before)
+change | (the commit shown is HEAD)
 ```
 
 ## Meanwhile: you run git rebase --continue, and the rebase finishes
@@ -1514,18 +1512,18 @@ change | (the commit shown is only on the branch as it was before)
 
 ```
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | A rebase stopped on a conflict — this is the branch as it was before
-- stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
++ stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | A rebase stopped with its conflicts resolved — ready to continue
+- stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
+- stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
 + change | Commit message — test! temporary experiment  (editable)
 - change | Commit message — test! temporary experiment  (read-only)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -1535,7 +1533,7 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1556,8 +1554,8 @@ change | (the commit shown is below HEAD)
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -1567,7 +1565,7 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1580,33 +1578,39 @@ change | (the commit shown is below HEAD)
 
 **Expect:** Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
-**Today:** no conflicted file and no buttons (#56); the commits below keep their SHAs from before the rebase (#57); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the header reads detached (#57); the status bar still shows the headline (#62).
+**Today:** no conflicted file and no buttons (#56); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).
 
 ```
-+ stack  | A rebase stopped on a conflict — this is the branch as it was before
++ stack  | A rebase stopped on a conflict
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | ▶! test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
++ stack  | ▶! test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
++ stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
++ stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+- stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
-stack header | detached → origin/main
-stack  | A rebase stopped on a conflict — this is the branch as it was before
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped on a conflict
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶! test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
-stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-stack  | (Cleanup after experiment is only on the branch as it was before)
-stack  | (Extract command routing is only on the branch as it was before)
-stack  | (Refactor parser init is only on the branch as it was before)
+stack  | ▶! test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
+stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1623,18 +1627,24 @@ change | (the commit shown is only on the branch as it was before)
 
 ```
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | A rebase stopped on a conflict — this is the branch as it was before
++ stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
++ stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+- stack  | A rebase stopped on a conflict
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | ▶! test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
+- stack  | ▶! test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
+- stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
+- stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
 + change | Commit message — test! temporary experiment  (editable)
 - change | Commit message — test! temporary experiment  (read-only)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -1644,7 +1654,7 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1669,8 +1679,8 @@ chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger
 chains | To review — 1 chain · 1 with comments
 chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 change | title: Change 103

@@ -18,7 +18,7 @@ import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, READ_ONLY, YOURS } f
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
-import { MARKER_WORDS, MERGE_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
+import { MARKER_WORDS, MERGE_WORDS, REBASE_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -150,7 +150,7 @@ const TOOLTIP_LINE = ours([
   "Still to be replayed by the rebase.",
   "Held back by the ready boundary: ger push will not send it.",
   "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped.",
-  "The marker shows where the rebase stands; dimmed commits are not replayed yet. Finish with git rebase --continue, or go back with git rebase --abort.",
+  REBASE_WORDS.tooltip,
   "The log was cut: findings may be incomplete.",
   new RegExp(`${COUNT} unresolved comments?`),
   "No reviewers assigned: nobody is asked to review it",
@@ -177,8 +177,8 @@ const STACK: Shape = {
   info: [
     {
       // "<branch> has no upstream…", "Track <branch>" and an error of git's have their words in them: filler.
-      text: ours(["A rebase stopped on a conflict", "A rebase is in progress", "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]),
-      detail: ours(["this is the branch as it was before"]),
+      text: ours([REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]),
+      detail: ours([REBASE_WORDS.ready, REBASE_WORDS.asBefore]),
       icon: ICON,
       tone: TONE,
       tooltip: TOOLTIP,

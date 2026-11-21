@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 
-import { CommentChain, MoveConflict, ShownCommit, Stack, StackCommit } from "../../src/api";
+import { CommentChain, MoveConflict, RebaseStop, ShownCommit, Stack, StackCommit } from "../../src/api";
 import { ChangeState, ChangeVm, changeVm } from "../../src/changeRows";
 import { SNAPSHOT_FORMAT, Snapshot } from "../../src/snapshot";
 import { StackVm, stackVm } from "../../src/stackRows";
@@ -100,16 +100,20 @@ function rowKinds(): StackVm {
   ]);
 }
 
-function rebasing(applied: boolean): StackVm {
+function rebasing(stop: RebaseStop): StackVm {
+  const applied = stop === "edit";
   return stackOf(
     [
       pushed("Add the routing table", { rebase: "done", code_review: 2, verified: 1 }),
-      pushed("Extract routing into its own module", { rebase: "done", comments_unresolved: 2, attention_reasons: ["unresolved-comments"] }),
-      pushed("Route by longest matching prefix", { rebase: "current", is_head: true, patchset_status: "newer", attention_reasons: ["ahead-of-gerrit"] }),
+      pushed("Extract routing into its own module", { rebase: "done", is_head: !applied, comments_unresolved: 2, attention_reasons: ["unresolved-comments"] }),
+      pushed("Route by longest matching prefix", { rebase: "current", is_head: applied, ...(applied ? { patchset_status: "newer", attention_reasons: ["ahead-of-gerrit"] } : {}) }),
       pushed("Cache resolved routes", { rebase: "todo", code_review: -1, attention_reasons: ["review-issues"] }),
       unpushed("Evict stale routes", { rebase: "todo" }),
     ],
-    { rebase_in_progress: true, rebase: { applied } },
+    {
+      rebase_in_progress: true,
+      rebase: { branch: "routing", onto: null, orig_head: null, stop, applied, current: null, unmerged: stop === "conflict" ? ["src/routes.ts"] : [] },
+    },
   );
 }
 
@@ -144,8 +148,9 @@ function stackScenarios(): Scenario[] {
     scenario("Stack: every sync state", { stack: syncStates() }),
     scenario("Stack: every badge", { stack: badgeKinds() }),
     scenario("Stack: HEAD, held back, a merge, abandoned", { stack: rowKinds() }),
-    scenario("Stack: a rebase in progress", { stack: rebasing(true) }),
-    scenario("Stack: a rebase stopped on a conflict", { stack: rebasing(false) }),
+    scenario("Stack: a rebase in progress", { stack: rebasing("edit") }),
+    scenario("Stack: a rebase stopped on a conflict", { stack: rebasing("conflict") }),
+    scenario("Stack: a rebase with its conflicts resolved", { stack: rebasing("resolved") }),
     scenario("Stack: long subjects", { stack: longSubjects() }),
     scenario("Stack: neighbours that cannot swap (hover the rows)", { stack: swapConflict() }),
     scenario("Stack: no upstream, one to track", {
