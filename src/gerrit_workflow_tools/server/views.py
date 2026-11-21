@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, project_scope, section_summary
+from gerrit_workflow_tools.core.push_checks import push_blocked
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import rebase_progress, rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
@@ -114,6 +115,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "head": head,
         "rebase_in_progress": rebase_underway(ctx.run.worktree.repository_dir),
         "rebase": rebase_json(view, progress),
+        "push_blocked": _push_blocked_json(ctx),
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch or None,
@@ -129,6 +131,12 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "commits": commits,
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
+
+
+def _push_blocked_json(ctx: Context) -> dict[str, str] | None:
+    """Why ``ger push`` would refuse whatever the stack holds (a rebase, a ``git am`` underway), or ``None``."""
+    blocked = push_blocked(ctx.run.worktree.repository_dir, ctx.run.repo.working_branch)
+    return {"reason": blocked.by.value, "message": blocked.message} if blocked else None
 
 
 def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
@@ -25,8 +26,43 @@ from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, c
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
 from gerrit_workflow_tools.core.push_unchanged import OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
+from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
+
+
+class PushBlocker(Enum):
+    """What is underway in the worktree that no Gerrit push may run over, whatever the stack holds."""
+
+    REBASE = "rebase"
+    """The branch ref moves only when the rebase finishes: a push now sends the stack as it was before."""
+    AM = "am"
+    """The branch moves with each patch ``git am`` applies: a push now sends it half applied."""
+
+
+@dataclass(frozen=True)
+class PushBlocked:
+    """Why a Gerrit push cannot run now: ``ger push`` refuses with *message*, ``ger serve`` says it beforehand."""
+
+    by: PushBlocker
+    message: str
+
+
+def push_blocked(repo_dir: Path | None, branch: str | None) -> PushBlocked | None:
+    """Why no Gerrit push of *branch* can run now, or ``None``: the one verdict ``ger push`` and ``ger serve`` share.
+
+    *repo_dir* is the worktree's git dir (``run.worktree.repository_dir``).
+    """
+    if rebase_underway(repo_dir):
+        name = f"'{branch}'" if branch else "the branch"
+        return PushBlocked(
+            PushBlocker.REBASE,
+            f"a rebase is in progress, and {name} still points at the commits from before it; "
+            "finish it (`git rebase --continue`) or `git rebase --abort`, then push",
+        )
+    if am_underway(repo_dir):
+        return PushBlocked(PushBlocker.AM, f"{AM_UNDERWAY}, then push")
+    return None
 
 
 _REBASE_HINT = "Hint: run `ger rebase --onto-remote` to replay your commits on top of the latest target branch."

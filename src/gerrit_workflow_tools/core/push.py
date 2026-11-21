@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.git_state import (
 from gerrit_workflow_tools.core.push_checks import (
     PushBoundary,
     check_existing_changes,
+    push_blocked,
     push_boundary,
     push_ready,
     rebase_check,
@@ -48,7 +49,6 @@ from gerrit_workflow_tools.core.push_unchanged import (
     planned_updates,
     unreached_options_warning,
 )
-from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, resolve_push_reviewers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
@@ -236,15 +236,8 @@ def prepare(
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
         raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
-    if rebase_underway(run.worktree.repository_dir):
-        # The branch ref moves only when the rebase finishes: a push now sends the stack as it was before.
-        raise UsageError(
-            f"a rebase is in progress, and '{branch}' still points at the commits from before it; "
-            "finish it (`git rebase --continue`) or `git rebase --abort`, then push"
-        )
-    if am_underway(run.worktree.repository_dir):
-        # The branch moves with each patch `git am` applies: a push now sends it half applied.
-        raise UsageError(f"{AM_UNDERWAY}, then push")
+    if blocked := push_blocked(run.worktree.repository_dir, branch):
+        raise UsageError(blocked.message)
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     if not destination:
         raise GitError("Internal error: Gerrit push mode without effective destination.")

@@ -54,6 +54,7 @@ def _move_upstream_over_c_txt(repo: Path) -> str:
 def test_without_a_rebase_the_stack_has_no_rebase(stack_repo: Path) -> None:
     stack = _load(stack_repo, _store(stack_repo))
     assert stack.rebase is None and len(stack.commits) == 4
+    assert _get(GerApi(stack_repo, gerrit=_store(stack_repo)), "/stack")["push_blocked"] is None
 
 
 def test_an_amended_edit_stop_shows_the_commit_as_it_is_now(stack_repo: Path) -> None:
@@ -139,6 +140,11 @@ def test_ger_log_and_serve_show_the_same_stack_during_a_rebase(
     assert [c["rebase"] for c in served["commits"]] == ["done", "done", "current", "todo"]
     assert logged["rebase"] == served["rebase"]
     assert (served["rebase"]["stop"], served["rebase"]["unmerged"]) == ("conflict", ["c.txt"])
+    # The refusal `ger push` would print is served beforehand, word for word.
+    code, _out, push_err = run_cli(stack_repo, push_main, ["--dry-run"], monkeypatch, gerrit=store)
+    assert served["push_blocked"]["reason"] == "rebase" and code == ExitCode.USAGE
+    assert f"error: {served['push_blocked']['message']}" in push_err
+    assert "'feature' still points at the commits from before it" in served["push_blocked"]["message"]
     current = served["commits"][2]
     note = (
         f"note: a rebase is in progress on feature, stopped on a conflict at {current['short_sha']} "
@@ -376,6 +382,7 @@ def test_a_git_am_underway_is_not_a_rebase(stack_repo: Path, monkeypatch: pytest
     assert rebase_progress(stack_repo) is None and not rebase_in_progress(stack_repo)
     served = _get(GerApi(stack_repo, gerrit=store), "/stack")
     assert (served["rebase"], served["rebase_in_progress"], served["branch"]) == (None, False, "feature")
+    assert served["push_blocked"]["reason"] == "am"
     code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
     assert code == 0, err
     assert "rebase" not in err

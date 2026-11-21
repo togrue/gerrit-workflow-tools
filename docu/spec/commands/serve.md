@@ -257,6 +257,11 @@ then `branch` (here and at the top) is `null`, and so are `stack.target_branch` 
 `stack.push_branch`. A `git am` underway is no rebase: `rebase_in_progress` is `false` and
 `rebase` is `null`, but a rewrite or a push refuses, saying to finish or abort it.
 
+`push_blocked` is why `ger push` would refuse a Gerrit push now, whatever the stack holds, or
+`null`: `reason` is `rebase` (the branch still points at the commits from before it) or `am` (a
+`git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
+starts `ger push`, so it can offer to finish the rebase instead.
+
 ### `GET /stack/moves`
 
 The conflict preview for reordering: which neighbours of the local stack can swap places.
