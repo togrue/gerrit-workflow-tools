@@ -15,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.git_state import git_dir
+from gerrit_workflow_tools.core.git_state import am_underway, git_dir, rebase_underway
 from gerrit_workflow_tools.core.tracked_changes import TrackedChanges, tracked_changes
 
 
@@ -24,24 +24,9 @@ def rebase_in_progress(cwd: Path | str | None) -> bool:
     return rebase_underway(git_dir(cwd))
 
 
-def rebase_underway(repo_dir: Path | None) -> bool:
-    """:func:`rebase_in_progress` for a git dir already known (``run.worktree.repository_dir``).
-
-    ``git am`` keeps its state in ``rebase-apply`` too, marked ``applying``; see :func:`am_underway`.
-    """
-    if repo_dir is None:
-        return False
-    return (repo_dir / "rebase-merge").exists() or ((repo_dir / "rebase-apply").exists() and not am_underway(repo_dir))
-
-
 def am_in_progress(cwd: Path | str | None) -> bool:
     """True while a ``git am`` is underway (:func:`am_underway`)."""
     return am_underway(git_dir(cwd))
-
-
-def am_underway(repo_dir: Path | None) -> bool:
-    """True while a ``git am`` is underway: the checked-out branch moves with each patch it applies."""
-    return repo_dir is not None and (repo_dir / "rebase-apply" / "applying").exists()
 
 
 class RebaseStop(Enum):
