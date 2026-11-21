@@ -36,7 +36,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import RebaseStop, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
@@ -248,22 +248,29 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
 
 _STOPS = {
     RebaseStop.EDIT: "stopped{at} to edit it",
+    RebaseStop.SPLIT: (
+        "stopped{at} to edit it, and HEAD has moved on from it: the commits above it were made at the stop"
+    ),
     RebaseStop.CONFLICT: "stopped on a conflict{at} in {paths}",
     RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for `git rebase --continue`",
     RebaseStop.PAUSED: "stopped between commits",
 }
 
 
-def _rebase_note(rebasing: RebasingStack | None) -> str:
+def _rebase_note(progress: RebaseProgress, rebasing: RebasingStack | None) -> str:
     """The note above a stack a rebase is underway on: whose, where it stopped, what is shown as it was."""
-    if rebasing is None:
-        return "note: a rebase is in progress; this shows the branch as it was before the rebase."
-    progress, current = rebasing.rebase, rebasing.current
+    current = rebasing.current if rebasing else None
     at = f' at {current.short_sha} "{current.subject}"' if current else ""
-    stop = _STOPS[progress.stop].format(at=at, paths=", ".join(progress.unmerged))
+    if not current and progress.current and progress.stop is RebaseStop.SPLIT:
+        at = f" at {progress.current[:7]}"
+    stop = progress.stop
+    said = _STOPS[stop].format(at=at, paths=", ".join(progress.unmerged)) if stop else "stopped"
+    whose = f"note: a rebase is in progress on {progress.branch or 'a detached HEAD'}, {said}"
+    if rebasing is None:
+        return f"{whose}; this shows the branch as it was before the rebase."
     todo = rebasing.steps.count(RebaseStep.TODO)
     rest = f"; {todo} commit{'s' if todo != 1 else ''} still to replay, shown as before" if todo else ""
-    return f"note: a rebase is in progress on {progress.branch or 'a detached HEAD'}, {stop}{rest}."
+    return f"{whose}{rest}."
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -299,10 +306,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
     )
     if progress is not None:
-        print_note(_rebase_note(stack_view.rebase))
+        print_note(_rebase_note(progress, stack_view.rebase))
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
-    stack = run.stack
+    stack = run.repo.shown_stack
     summary_highlighter = build_summary_highlighter(
         settings,
         root=run.repo.root,
@@ -317,8 +324,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     if out_fmt == "json":
         stack_payload = {
             "project": stack.project,
-            "target_branch": stack.target_branch,
-            "push_branch": stack.push_branch,
+            "target_branch": stack.target_branch or None,
+            "push_branch": stack.push_branch or None,
         }
 
         commit_payload = [

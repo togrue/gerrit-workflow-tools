@@ -20,26 +20,49 @@ from gerrit_workflow_tools.core.tracked_changes import TrackedChanges, tracked_c
 
 
 def rebase_in_progress(cwd: Path | str | None) -> bool:
-    """True while git has a rebase underway, including one stopped at a commit."""
+    """True while git has a rebase underway, including one stopped at a commit; a ``git am`` is not one."""
     return rebase_underway(git_dir(cwd))
 
 
 def rebase_underway(repo_dir: Path | None) -> bool:
-    """:func:`rebase_in_progress` for a git dir already known (``run.worktree.repository_dir``)."""
-    return repo_dir is not None and any((repo_dir / d).exists() for d in ("rebase-merge", "rebase-apply"))
+    """:func:`rebase_in_progress` for a git dir already known (``run.worktree.repository_dir``).
+
+    ``git am`` keeps its state in ``rebase-apply`` too, marked ``applying``; see :func:`am_underway`.
+    """
+    if repo_dir is None:
+        return False
+    return (repo_dir / "rebase-merge").exists() or ((repo_dir / "rebase-apply").exists() and not am_underway(repo_dir))
+
+
+def am_in_progress(cwd: Path | str | None) -> bool:
+    """True while a ``git am`` is underway (:func:`am_underway`)."""
+    return am_underway(git_dir(cwd))
+
+
+def am_underway(repo_dir: Path | None) -> bool:
+    """True while a ``git am`` is underway: the checked-out branch moves with each patch it applies."""
+    return repo_dir is not None and (repo_dir / "rebase-apply" / "applying").exists()
 
 
 class RebaseStop(Enum):
     """Why a rebase underway is stopped: what the next step is, in core's words, not a shell's."""
 
     EDIT = "edit"
-    """Stopped with the commit it is at applied whole (an ``edit``): amend it, then continue."""
+    """Stopped with the commit it is at applied whole: amend it, then continue.
+
+    An ``edit``, or a conflict whose resolution was committed by hand (``git commit``, not
+    ``--continue``): either way ``HEAD`` is the commit, or an amend of it.
+    """
+    SPLIT = "split"
+    """Stopped at a commit applied whole, and ``HEAD`` has moved on from it: the commits above it,
+    or above its parent once it was reset away, were made at the stop (a split). Continue goes on
+    from ``HEAD``."""
     CONFLICT = "conflict"
     """Stopped on a conflict: :attr:`RebaseProgress.unmerged` names the paths still unresolved."""
     RESOLVED = "resolved"
     """Stopped on a conflict that is resolved and added: ready to continue."""
     PAUSED = "paused"
-    """Stopped between commits (``exec``, ``break``), or a rebase that keeps no todo (``rebase-apply``)."""
+    """Stopped between commits (``exec``, ``break``)."""
 
 
 @dataclass(frozen=True)
@@ -67,12 +90,26 @@ class RebaseProgress:
     """Paths the index still holds as unresolved conflicts, while :attr:`current` is not applied."""
     keeps_todo: bool = True
     """``False`` for a rebase git runs through ``am`` (``rebase-apply``): it says nothing of its commits."""
+    amend: str | None = None
+    """``HEAD`` where git stopped with :attr:`current` applied whole (``amend``), else ``None``."""
+    settled: frozenset[str] = frozenset()
+    """Ids ``HEAD`` may be at where git itself left it: ``onto``, the commits done as they were
+    (picked unchanged) and as it rewrote them, and :attr:`amend`. Telling a commit made by hand
+    at the stop from one git made needs no git call."""
+    moved: bool = False
+    """``HEAD`` has moved on from where git stopped: commits were made at the stop, or reset away."""
 
     @property
-    def stop(self) -> RebaseStop:
-        """Why the rebase is stopped (:class:`RebaseStop`)."""
+    def stop(self) -> RebaseStop | None:
+        """Why the rebase is stopped (:class:`RebaseStop`); ``None`` when that cannot be told.
+
+        A rebase that keeps no todo stops only on a conflict; once ``HEAD`` moved off where it
+        stopped, what ``--continue`` would do cannot be told from its state.
+        """
         if self.current is None:
-            return RebaseStop.PAUSED
+            return RebaseStop.PAUSED if self.keeps_todo else None
+        if self.moved:
+            return RebaseStop.SPLIT if self.applied else None
         if self.applied:
             return RebaseStop.EDIT
         return RebaseStop.CONFLICT if self.unmerged else RebaseStop.RESOLVED
@@ -105,43 +142,87 @@ def _state_word(path: Path) -> str | None:
         return None
 
 
+def _rebased_branch(state: Path) -> str | None:
+    """The branch a rebase's *state* dir says it rebases (``head-name``); ``None`` for a detached HEAD."""
+    head_name = _state_word(state / "head-name") or ""
+    return head_name.removeprefix("refs/heads/") if head_name.startswith("refs/heads/") else None
+
+
+def _rewritten(path: Path) -> list[str]:
+    """The new ids in ``rewritten-list`` (``<old> <new>`` per commit git replayed with a new id)."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [words[1].lower() for line in lines if len(words := line.split()) >= 2]
+
+
 def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> RebaseProgress | None:
-    """How far the rebase underway got, or ``None`` when there is none.
+    """How far the rebase underway got, or ``None`` when there is none (a ``git am`` is not one).
 
     Read from git's own state files; one ``git diff`` for the unmerged paths, only while the
     commit it stopped at is not applied. A rebase git runs through ``am`` (``rebase-apply``)
-    keeps no todo: it answers its branch and an empty progress. *repo_dir* is the git dir when
-    the caller already knows it (``run.worktree.repository_dir``).
+    keeps no todo: it answers its branch, the commit it stopped at and the unmerged paths.
+    *repo_dir* is the git dir when the caller already knows it (``run.worktree.repository_dir``).
     """
     repo_dir = repo_dir if repo_dir is not None else git_dir(cwd)
     if repo_dir is None or not rebase_underway(repo_dir):
         return None
     state = repo_dir / "rebase-merge"
-    keeps_todo = state.exists()
-    if not keeps_todo:
-        state = repo_dir / "rebase-apply"
+    if not state.exists():
+        return _apply_progress(cwd, repo_dir)
     done = _todo_ids(state / "done")
     current = done[-1] if done else None
+    amend = _state_word(state / "amend")
     # A stop with the commit in hand leaves REBASE_HEAD; `amend` is there only when it was applied whole.
-    applied = current is None or not (repo_dir / "REBASE_HEAD").exists() or (state / "amend").exists()
-    head_name = _state_word(state / "head-name") or ""
+    applied = current is None or not (repo_dir / "REBASE_HEAD").exists() or amend is not None
+    onto = _state_word(state / "onto")
+    settled = {sha for sha in done[:-1] if sha} | set(_rewritten(state / "rewritten-list"))
     return RebaseProgress(
         done=tuple(sha for sha in done[:-1] if sha),
         current=current,
         applied=applied,
         todo=tuple(sha for sha in _todo_ids(state / "git-rebase-todo") if sha),
-        branch=head_name.removeprefix("refs/heads/") if head_name.startswith("refs/heads/") else None,
-        onto=_state_word(state / "onto"),
+        branch=_rebased_branch(state),
+        onto=onto,
         orig_head=_state_word(state / "orig-head"),
         unmerged=() if applied else tuple(unmerged_paths(cwd)),
-        keeps_todo=keeps_todo,
+        amend=amend,
+        settled=frozenset(sha for sha in (*settled, onto, amend) if sha),
     )
 
 
+def _apply_progress(cwd: Path | str | None, repo_dir: Path) -> RebaseProgress:
+    """:func:`rebase_progress` of a rebase git runs through ``am``: it stops only on a conflict.
+
+    ``original-commit`` names the commit it stopped at, ``abort-safety`` where ``HEAD`` was then.
+    """
+    state = repo_dir / "rebase-apply"
+    current = _state_word(state / "original-commit")
+    stopped_at = _state_word(state / "abort-safety")
+    return RebaseProgress(
+        current=current,
+        applied=current is None,
+        branch=_rebased_branch(state),
+        onto=_state_word(state / "onto"),
+        orig_head=_state_word(state / "orig-head"),
+        unmerged=tuple(unmerged_paths(cwd)) if current else (),
+        keeps_todo=False,
+        moved=stopped_at is not None and stopped_at != _state_word(repo_dir / "HEAD"),
+    )
+
+
+AM_UNDERWAY = "a `git am` is in progress; finish it (`git am --continue`) or `git am --abort`"
+"""What is underway while ``git am`` applies patches: every refusal over it starts so."""
+
+
 def rebase_refusal(cwd: Path | str | None) -> str | None:
-    """Why a command that moves branches cannot start during a rebase, or ``None``."""
-    if rebase_in_progress(cwd):
+    """Why a command that moves branches cannot start during a rebase or a ``git am``, or ``None``."""
+    repo_dir = git_dir(cwd)
+    if rebase_underway(repo_dir):
         return "a rebase is already in progress; run `git rebase --continue` or `git rebase --abort` first"
+    if am_underway(repo_dir):
+        return f"{AM_UNDERWAY} first"
     return None
 
 

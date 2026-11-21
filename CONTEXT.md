@@ -15,7 +15,7 @@ The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open 
 _Avoid_: chain, series, branch commits
 
 **Rebasing stack**:
-The **local stack** while a rebase is underway: the commits on `HEAD` above the upstream as they are now, then the commit the rebase stopped at while it is not applied, then the todo, as they were. Each commit carries its **rebase step** — `done`, `current` or `todo`, none for one below the rebase's `onto` — and the stack carries why the rebase stopped (`edit`, `conflict`, `resolved`, `paused`) and the paths still unmerged. Not a second stack: the **Gerrit overlay** finds each commit by its Change-Id as for any other.
+The **local stack** while a rebase is underway: the commits on `HEAD` above the upstream as they are now, then the commit the rebase stopped at while it is not applied, then the todo, as they were. Each commit carries its **rebase step** — `done`, `current` or `todo`, none for one below the rebase's `onto` — and the stack carries why the rebase stopped (`edit`, `split`, `conflict`, `resolved`, `paused`) and the paths still unmerged. Not a second stack: the **Gerrit overlay** finds each commit by its Change-Id as for any other.
 _Avoid_: live stack, stack as it was, rebase view
 
 **Ready boundary**:

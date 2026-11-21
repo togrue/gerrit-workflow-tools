@@ -74,7 +74,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     """The **annotated stack** of the working branch, with the ready boundary: ``ger log`` as JSON."""
     cwd, settings = ctx.cwd, ctx.settings
     view = load_annotated_stack(ctx.run, None, fetch_ci_pipelines=req.flag("pipelines"))
-    context = ctx.run.stack
+    context = ctx.run.repo.shown_stack
     blocked = (
         blocked_shas_for_stack(
             ctx.run.repo.root,
@@ -116,8 +116,8 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "rebase": rebase_json(view, progress),
         "stack": {
             "project": context.project,
-            "target_branch": context.target_branch,
-            "push_branch": context.push_branch,
+            "target_branch": context.target_branch or None,
+            "push_branch": context.push_branch or None,
         },
         "summary": {
             "commits": len(commits),

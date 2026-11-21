@@ -79,7 +79,11 @@ class Worktree:
         return Path(abs_cwd(self.cwd)) / raw if p.returncode == 0 and raw else None
 
     def rebasing_branch(self) -> str | None:
-        """Branch git is rebasing, from its rebase state on disk (read now, not from the snapshot)."""
+        """Branch git is rebasing, from its rebase state on disk (read now, not from the snapshot).
+
+        ``None`` for a rebase of a detached HEAD (git writes ``detached HEAD`` as its ``head-name``)
+        and during a ``git am``, which keeps its branch checked out.
+        """
         repo_dir = self.repository_dir
         if repo_dir is None:
             return None
@@ -91,7 +95,7 @@ class Worktree:
                 branch = head_name.read_text(encoding="utf-8").strip()
             except OSError:
                 continue
-            return branch.removeprefix("refs/heads/") or None
+            return branch.removeprefix("refs/heads/") or None if branch.startswith("refs/heads/") else None
         return None
 
     def working_branch(self, *, settings: Settings) -> str | None:

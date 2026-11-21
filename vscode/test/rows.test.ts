@@ -67,7 +67,7 @@ test("the stack shows newest first, with HEAD and what push would hold back", ()
   assert.deepEqual(stackLines(vm), ["Three — HEAD · three00 · not on Gerrit", "Two — two0000 · held back · the same as on Gerrit", "One — one0000 · the same as on Gerrit"]);
 });
 
-const REBASE: Rebase = { branch: "feature", onto: "base000", orig_head: "three00", stop: "edit", applied: true, current: "two0000", unmerged: [] };
+const REBASE: Rebase = { branch: "feature", onto: "base000", orig_head: "three00", stop: "edit", applied: true, current: "two0000", unmerged: [], as_before: false };
 
 test("mid-rebase the stack marks where it stands and dims only what is still to be replayed", () => {
   const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current", is_head: true }), commit("Three", { rebase: "todo" })];
@@ -88,8 +88,11 @@ test("mid-rebase the stack marks where it stands and dims only what is still to 
 });
 
 test("a rebase that says nothing of its commits shows the branch as it was, and says so", () => {
-  const vm = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "paused", current: null } }), undefined, never);
-  assert.equal(vm.info[0].detail, "this is the branch as it was before");
+  const vm = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, current: null, unmerged: ["e.txt"], as_before: true } }), undefined, never);
+  assert.deepEqual([vm.info[0].text, vm.info[0].detail], ["A rebase stopped on a conflict", "this is the branch as it was before"]);
+  // Core says whether the stack is as before; no row having a step (all below onto) does not make it so.
+  const live = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "split", current: null } }), undefined, never);
+  assert.deepEqual([live.info[0].text, live.info[0].detail], ["A rebase is in progress", undefined]);
 });
 
 test("the header names the branch being rebased", () => {
@@ -97,6 +100,9 @@ test("the header names the branch being rebased", () => {
   assert.equal(stackWhere(stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: REBASE })), "feature (rebasing) → origin/main");
   assert.equal(stackWhere(stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: { ...REBASE, branch: null } })), "detached (rebasing) → origin/main");
   assert.equal(stackWhere(stack([commit("One")], { branch: null })), "detached → origin/main");
+  // A detached HEAD's rebase has no working branch, so no target branch: its stack starts at the rebase's onto.
+  const detached = stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: { ...REBASE, branch: null } });
+  assert.equal(stackWhere({ ...detached, stack: { ...detached.stack, target_branch: null, push_branch: null } }), "detached (rebasing)");
 });
 
 test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {

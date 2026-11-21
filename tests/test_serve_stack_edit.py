@@ -43,6 +43,7 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
         "applied": True,
         "current": rows[2].sha,
         "unmerged": [],
+        "as_before": False,
     }
 
     # Amended: the stack shows the commit as it is now, HEAD, changed here since the last push.
@@ -68,7 +69,12 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
     (state / "REBASE_HEAD").write_text("bbbb222\n", encoding="utf-8")
     progress = rebase_progress(stack_repo)
     assert progress == RebaseProgress(
-        done=("aaaa111",), current="bbbb222", applied=False, todo=("cccc333",), branch="feature"
+        done=("aaaa111",),
+        current="bbbb222",
+        applied=False,
+        todo=("cccc333",),
+        branch="feature",
+        settled=frozenset({"aaaa111"}),
     )
     # Not applied, and nothing unmerged in the index: resolved, ready to continue.
     assert progress.stop is RebaseStop.RESOLVED

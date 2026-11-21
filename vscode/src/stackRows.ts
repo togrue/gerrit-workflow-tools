@@ -202,7 +202,7 @@ export const REBASE_WORDS = {
 /** The view's header: the branch, or the one being rebased, and where its stack starts. */
 export function stackWhere(stack: Stack): string {
   const branch = stack.rebase ? `${stack.rebase.branch ?? "detached"} (rebasing)` : (stack.branch ?? "detached");
-  return `${branch} → ${stack.stack.target_branch}`;
+  return stack.stack.target_branch ? `${branch} → ${stack.stack.target_branch}` : branch;
 }
 
 export const MERGE_WORDS = "A merge commit: the commits it brings in are not part of the stack, and are not listed.";
@@ -308,11 +308,9 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   const info: StackInfo[] = [];
   if (local.rebase_in_progress) {
     const stop = local.rebase?.stop;
-    // A rebase that keeps no todo (git am's) says nothing of its commits: core serves the branch as it was.
-    const live = local.commits.some((commit) => commit.rebase);
     info.push({
       text: stop === "conflict" ? REBASE_WORDS.conflict : stop === "resolved" ? REBASE_WORDS.resolved : REBASE_WORDS.progress,
-      detail: stop === "resolved" ? REBASE_WORDS.ready : live ? undefined : REBASE_WORDS.asBefore,
+      detail: stop === "resolved" ? REBASE_WORDS.ready : local.rebase?.as_before ? REBASE_WORDS.asBefore : undefined,
       icon: "warning",
       tone: "warn",
       tooltip: REBASE_WORDS.tooltip,
