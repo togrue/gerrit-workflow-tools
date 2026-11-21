@@ -1,20 +1,25 @@
-# Spec: docu/spec/commands/checkout.md, docu/spec/commands/review.md
-"""What a submodule holds of yours, as ger checkout and ger review see it (#41).
+# Spec: docu/spec/commands/checkout.md, docu/spec/commands/review.md, docu/spec/commands/edit.md
+"""What a submodule holds of yours, as ger checkout, ger review and ger edit see it (#41).
 
-A submodule's own state (edits inside it, another commit checked out) is nothing switching or
-rebasing touches, so it never stops them. A submodule commit staged in the index is in the way,
-and is refused with a message naming the submodule and the command that clears it.
+A submodule's own state (edits inside it, another commit checked out, its directory gone) is
+nothing switching or rebasing touches, so it never stops them. A submodule commit staged in the
+index, or a file or symlink put where a submodule is, is in the way and nothing ``git stash``
+saves: it is refused with a message naming the submodule and what clears it.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from gerrit_workflow_tools.cli_checkout import main as checkout_main
 from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.cli_edit import main as edit_main
 from gerrit_workflow_tools.cli_review import main as review_main
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -106,3 +111,118 @@ def test_a_submodule_staged_on_a_staged_review_refuses_with_the_command_that_uns
     command = err.split("`")[1]
     subprocess.run(["sh", "-c", command], cwd=worktree, check=True)
     assert _review(worktree, sub_stack, ["--next"], monkeypatch)[0] == ExitCode.OK
+
+
+def _edit_inside(lib: Path) -> None:
+    (lib / "a.txt").write_text("dirty\n", encoding="utf-8")
+
+
+def _untracked_inside(lib: Path) -> None:
+    (lib / "untracked.txt").write_text("new\n", encoding="utf-8")
+
+
+def _at_another_commit(lib: Path) -> None:
+    git("checkout", "-q", "HEAD~1", cwd=lib)
+
+
+def _directory_gone(lib: Path) -> None:
+    shutil.rmtree(lib)
+
+
+def _staged_at_another_commit(lib: Path) -> None:
+    git("checkout", "-q", "HEAD~1", cwd=lib)
+    git("add", "lib", cwd=lib.parent)
+
+
+def _replaced_by_a_file(lib: Path) -> None:
+    shutil.rmtree(lib)
+    lib.write_text("precious\n", encoding="utf-8")
+
+
+def _replaced_by_a_symlink(lib: Path) -> None:
+    shutil.rmtree(lib)
+    lib.symlink_to("a.txt")
+
+
+def _replaced_by_a_file_and_staged(lib: Path) -> None:
+    _replaced_by_a_file(lib)
+    git("add", "lib", cwd=lib.parent)
+
+
+_REPLACED = (
+    "a file or symlink replaces the submodule at lib; `git stash` does not save it and a switch or rebase "
+    "would delete it: commit it (`git add lib`, then `git commit`) or move it out of the way"
+)
+_STAGED = "the submodule commit staged for lib is not committed; commit it or `git restore --staged lib`"
+_COMMANDS: dict[str, tuple[Callable[..., int], list[str], str, str]] = {
+    # name: (main, argv, its rerun clause, its wording for what git stash does save)
+    "checkout": (checkout_main, ["102"], ", then run ger checkout again", "changes to tracked files (lib)"),
+    "review": (review_main, ["102", "--in-place"], ", then run ger review again", "changes to tracked files (lib)"),
+    "edit": (edit_main, ["HEAD~1"], " first", "you have uncommitted changes"),
+}
+
+
+@pytest.mark.parametrize("command", list(_COMMANDS))
+@pytest.mark.parametrize(
+    ("make", "refusal"),
+    [
+        (_edit_inside, None),
+        (_untracked_inside, None),
+        (_at_another_commit, None),
+        (_directory_gone, None),
+        (_staged_at_another_commit, _STAGED),
+        (_replaced_by_a_file, _REPLACED),
+        (_replaced_by_a_symlink, _REPLACED),
+        (_replaced_by_a_file_and_staged, "stash"),
+    ],
+)
+def test_checkout_review_and_edit_agree_on_what_a_submodule_holds_of_yours(
+    command: str,
+    make: Callable[[Path], None],
+    refusal: str | None,
+    sub_stack: SubStack,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One check decides, whichever command asks. A file where a submodule was is what a switch or
+    rebase would delete unasked: ``git stash`` does not save it, so the advice is to commit it."""
+    main_fn, argv, rerun, stash_wording = _COMMANDS[command]
+    repo = sub_stack.repo
+    if command != "edit":  # as after a clone: the change comes from Gerrit
+        git("switch", "-q", "main", cwd=repo)
+        git("branch", "-q", "-D", "feature", cwd=repo)
+    lib = repo / "lib"
+    make(lib)
+    head = git_out("rev-parse", "HEAD", cwd=repo)
+    replaced = lib.is_symlink() or lib.is_file()
+    kept = (lib.is_symlink() and str(lib.readlink())) or (lib.is_file() and lib.read_text(encoding="utf-8"))
+
+    code, _out, err = run_cli(repo, main_fn, argv, monkeypatch, gerrit=sub_stack.store, catch_sys_exit=True)
+    if refusal is None:
+        assert code == ExitCode.OK, err
+        return
+    if command == "review" and lib.is_symlink():
+        # ger review fetches before it looks, and git's fetch (recursing into submodules) refuses first.
+        assert code == ExitCode.GIT and "expected submodule path 'lib' not to be a symbolic link" in err, err
+    elif refusal == "stash":  # staged, the file is a change git stash saves: the usual wording
+        assert code == ExitCode.USAGE and stash_wording in err, err
+    else:
+        why = " (a rebase would stop on it, or fold it into the commit it stops at)" if refusal == _STAGED else ""
+        assert (code, err.strip()) == (ExitCode.USAGE, f"error: {refusal}{rerun}{why if command == 'edit' else ''}")
+    assert git_out("rev-parse", "HEAD", cwd=repo) == head
+    if replaced:
+        assert ((lib.is_symlink() and str(lib.readlink())) or lib.read_text(encoding="utf-8")) == kept
+
+
+def test_a_file_replacing_a_submodule_in_a_staged_review_is_not_to_be_committed(
+    sub_stack: SubStack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Committing would commit the change under review with it: only moving it away is advised."""
+    worktree = _review_worktree_with_lib(sub_stack, monkeypatch)
+    _replaced_by_a_file(worktree / "lib")
+    code, _, err = _review(worktree, sub_stack, ["--next"], monkeypatch)
+    assert (code, err.strip()) == (
+        ExitCode.USAGE,
+        "error: a file or symlink replaces the submodule at lib; `git stash` does not save it and a switch "
+        "or rebase would delete it: move it out of the way, then run ger review again",
+    )
+    assert (worktree / "lib").read_text(encoding="utf-8") == "precious\n"
