@@ -486,16 +486,16 @@ export class CommentThreads implements vscode.Disposable {
     }
   }
 
-  /** Delete a draft, local draft or note of yours, after asking: it cannot be taken back. */
-  async discard(own: Comment, rev: string | undefined = this.view.target?.rev, reply = false): Promise<void> {
+  /** Delete a draft, local draft or note of yours, after asking: it cannot be taken back. True once it is deleted. */
+  async discard(own: Comment, rev: string | undefined = this.view.target?.rev, reply = false): Promise<boolean> {
     const what = reply ? "draft reply" : YOURS[own.state];
     if (!what || !own.comment_id || !rev) {
-      return;
+      return false;
     }
     const where = `${own.path}${own.line ? `:${own.line}` : ""}`;
     const sure = await ui().message("warning", `Delete your ${what} on ${where}?`, { modal: true, detail: own.message }, ["Delete"]);
     if (sure !== "Delete") {
-      return;
+      return false;
     }
     try {
       await (await this.model.client()).discardComment(rev, own.comment_id);
@@ -506,13 +506,15 @@ export class CommentThreads implements vscode.Disposable {
       }
       ui().status(`$(check) ${capital(what)} deleted.`, 6000);
       await this.view.open();
+      return true;
     } catch (error) {
       void ui().message("error", `Comment not deleted: ${describeError(error)}`, {}, []);
+      return false;
     }
   }
 
   /** Delete the comment a thread shows, from its title bar. */
-  discardInThread(comment: ThreadComment): Promise<void> {
+  discardInThread(comment: ThreadComment): Promise<boolean> {
     const thread = comment.thread;
     return this.discard(comment.source, thread && this.anchors.get(thread)?.rev, thread !== undefined && thread.comments[0] !== comment);
   }
@@ -548,11 +550,9 @@ export class CommentThreads implements vscode.Disposable {
   }
 
   /** Delete your unpublished comment in `chain`: the chain itself when you started it, else your draft reply. */
-  async discardChain(chain: CommentChain): Promise<void> {
+  async discardChain(chain: CommentChain): Promise<boolean> {
     const own = ownComment(chain);
-    if (own) {
-      await this.discard(own, undefined, own !== chain.comments[0]);
-    }
+    return own ? this.discard(own, undefined, own !== chain.comments[0]) : false;
   }
 
   dispose(): void {
