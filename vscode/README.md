@@ -15,6 +15,12 @@ then unresolved comments, then a negative vote, else the review that has waited 
 Failed CI counts only on the chain of your local stack, and the item then just says
 *CI failed:* and the change number; the tooltip has the change's subject. A bell
 with a count appears when chains had activity since you last looked. Click to open the change.
+While a rebase is underway (a `ger edit`, a conflict, also one you started in a terminal), the item
+shows that instead, as ger serve's headline does (and so does the first row of *Review chains*): *Rebase stopped at 101*, *Conflict in 103*,
+*Conflict resolved in 103*, *Rebase paused*, or *Rebase underway* when it cannot tell why it
+stopped — the change number when the commit is on Gerrit, else its subject. The tooltip says
+what to do next (amend, resolve and `git add`, `git rebase --continue` or `--abort`); a click
+opens *Local stack*. When the rebase ends, the item goes back to the headline.
 When a refresh fails, whether it ran in the background or you pressed *Refresh* (Gerrit unreachable, `ger serve` stopped
 and cannot be restarted), the views keep the last answer and the item carries a warning mark; its tooltip says why
 it is out of date, and *Review chains* is labelled so. The next refresh that works clears the mark. While `ger` cannot run at all (not found, not set up, folder not trusted) the
@@ -371,7 +377,7 @@ printed.
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
 | `src/rows.ts` | The `contextValue` of every tree row, which the menus in `package.json` match with `viewItem =~ /…/`. Pinned against them by `test/package.test.ts`. |
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
-| `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
+| `src/statusBar.ts` | The status bar item: the headline (a rebase underway, when core says so) and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |

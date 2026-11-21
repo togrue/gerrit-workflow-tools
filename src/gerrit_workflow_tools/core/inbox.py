@@ -2,6 +2,8 @@
 
 Host-scoped (ADR-0004): nothing here resolves a stack context or looks at local commits. Run
 inside a clone, the sections are narrowed to that clone's Gerrit project (:func:`project_scope`).
+A rebase underway in the clone leads the headline; the caller hands it in
+(:class:`RebaseHeadline`), so nothing here reads git.
 """
 
 from __future__ import annotations
@@ -16,7 +18,9 @@ from gerrit_workflow_tools.core.attention import Attention, Severity, attention_
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id, parallel_map
 from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
+from gerrit_workflow_tools.core.rebase_state import RebaseStop
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain
 
 
@@ -26,6 +30,10 @@ DEFAULT_OUTGOING_QUERY = "is:open owner:self"
 
 TO_REVIEW = "to-review"
 OUTGOING = "outgoing"
+LOCAL = "local"
+"""Not an inbox section: where a :class:`RebaseHeadline` comes from, the checkout."""
+REBASE = "rebase"
+"""The reason of a :class:`RebaseHeadline`."""
 
 # What the author has to act on, most urgent first.
 _HEADLINE_ORDER = (Attention.CI_FAILED, Attention.UNRESOLVED_COMMENTS, Attention.REVIEW_ISSUES)
@@ -54,6 +62,25 @@ class Headline:
     def severity(self) -> Severity:
         """How urgent the reason is, as core rates every reason."""
         return attention_severity([self.reason])
+
+
+@dataclass(frozen=True)
+class RebaseHeadline:
+    """The **headline** while a rebase is underway in the checkout: finishing it comes before any
+    review, so it leads whatever the inbox sections hold."""
+
+    stop: RebaseStop | None
+    """Why it is stopped; ``None`` when core cannot tell."""
+    commit: LogCommit | None
+    """The commit it stopped at, as the **rebasing stack** shows it; ``None`` between commits."""
+
+    section = LOCAL
+    reason = REBASE
+
+    @property
+    def severity(self) -> Severity:
+        """A conflict cannot go on as it is; any other stop only waits for you."""
+        return Severity.ERROR if self.stop is RebaseStop.CONFLICT else Severity.WARNING
 
 
 def build_to_review_query(
@@ -196,14 +223,22 @@ def load_inbox(
     return [InboxSection(name, queries[name], chains) for name, chains in fetched.items()]
 
 
-def pick_headline(sections: Sequence[InboxSection], *, current: Collection[str] | None = None) -> Headline | None:
-    """The headline: failed CI, then unresolved comments, then a negative vote on an outgoing
-    chain (its base-most such change); else the *to review* chain that has waited longest.
+def pick_headline(
+    sections: Sequence[InboxSection],
+    *,
+    current: Collection[str] | None = None,
+    rebase: RebaseHeadline | None = None,
+) -> Headline | RebaseHeadline | None:
+    """The headline: a *rebase* underway in the checkout; else failed CI, then unresolved
+    comments, then a negative vote on an outgoing chain (its base-most such change); else the
+    *to review* chain that has waited longest.
 
     *current* is the Change-Ids of the chain you work on (normalised, as
     :func:`norm_change_id` gives them). Given, failed CI is a headline only on a chain with one
     of them: another chain's failure waits until you look at it.
     """
+    if rebase is not None:
+        return rebase
     by_name = {section.name: section for section in sections}
     outgoing = by_name[OUTGOING].chains if OUTGOING in by_name else []
     for reason in _HEADLINE_ORDER:

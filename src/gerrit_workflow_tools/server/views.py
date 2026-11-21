@@ -5,10 +5,11 @@ Spec: docu/spec/commands/serve.md.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from functools import partial
 from itertools import pairwise
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from gerrit_workflow_tools import __version__
 from gerrit_workflow_tools.cli_common import failure_exit
@@ -23,7 +24,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.inbox import load_inbox, pick_headline, project_scope, section_summary
+from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope, section_summary
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import rebase_progress, rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
@@ -42,6 +43,7 @@ from gerrit_workflow_tools.server.request import BadRequest, Context, Request, s
 
 
 API_VERSION = 1
+_T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
 
 
@@ -72,6 +74,11 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
 
 def stack(ctx: Context, req: Request) -> dict[str, Any]:
     """The **annotated stack** of the working branch, with the ready boundary: ``ger log`` as JSON."""
+    return _stack(ctx, req)[0]
+
+
+def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:
+    """:func:`stack`, and the rebase underway as the headline it makes: ``None`` without one."""
     cwd, settings = ctx.cwd, ctx.settings
     view = load_annotated_stack(ctx.run, None, fetch_ci_pipelines=req.flag("pipelines"))
     context = ctx.run.repo.shown_stack
@@ -109,7 +116,9 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         }
         for index, c in enumerate(view.commits)
     ]
-    return {
+    stopped_at = next((c for c, step in zip(view.commits, steps, strict=True) if step == "current"), None)
+    rebase = RebaseHeadline(progress.stop, stopped_at) if progress else None
+    answer = {
         "branch": ctx.run.worktree.branch,
         "head": head,
         "rebase_in_progress": rebase_underway(ctx.run.worktree.repository_dir),
@@ -129,6 +138,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "commits": commits,
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
+    return answer, rebase
 
 
 def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
@@ -171,20 +181,21 @@ def stack_upstream(ctx: Context, _req: Request) -> dict[str, Any]:
     }
 
 
-def _soft(load: Any, ctx: Context, req: Request) -> dict[str, Any]:
-    """*load*'s answer, or ``{"error": …}`` for a known failure: one broken half must not hide the other."""
+def _soft(load: Callable[[], _T], failed: Callable[[dict[str, Any]], _T]) -> _T:
+    """*load*'s answer, or *failed* of ``{"error": …}`` for a known failure: one broken half must not hide the other."""
     try:
-        return load(ctx, req)  # type: ignore[no-any-return]
+        return load()
     except Exception as error:  # pylint: disable=broad-exception-caught
         if failure_exit(error) is None:
             raise
-        return {"error": error_json(error)}
+        return failed({"error": error_json(error)})
 
 
-def _inbox(ctx: Context, req: Request, *, current: set[str]) -> dict[str, Any]:
+def _inbox(ctx: Context, req: Request, *, current: set[str], rebase: RebaseHeadline | None) -> dict[str, Any]:
     """Both inbox sections, narrowed to the repository's project; every project with ``all=1``.
 
     *current* is the local stack's Change-Ids: failed CI is the headline only on that chain.
+    *rebase*, a rebase underway in the checkout, is the headline before anything of theirs.
     """
     now = datetime.now(timezone.utc)
     projects = project_scope(ctx.cwd, ctx.settings, all_projects=req.flag("all"))
@@ -192,7 +203,7 @@ def _inbox(ctx: Context, req: Request, *, current: set[str]) -> dict[str, Any]:
     return {
         "generated": iso_utc(now),
         "projects": projects,
-        "headline": headline_json(pick_headline(sections, current=current)),
+        "headline": headline_json(pick_headline(sections, current=current, rebase=rebase)),
         "sections": [
             {
                 "name": section.name,
@@ -212,14 +223,17 @@ def overview(ctx: Context, req: Request) -> dict[str, Any]:
     commits of the local stack carry ``local_sha``. The inbox and the
     local stack fail separately: either may be ``{"error": …}`` while the other is shown.
     """
-    local = _soft(stack, ctx, req)
+    local, rebase = _soft(partial(_stack, ctx, req), lambda failure: (failure, None))
     if "error" in local:
         branch = ctx.run.worktree.branch
         local["needs_upstream"] = branch is not None and not branch_has_upstream(ctx.cwd, branch)
     sha_by_change = {
         norm_change_id(c["change_id"]): c["sha"] for c in local.get("commits", []) if c.get("change_id") and c["sha"]
     }
-    inbox = _soft(partial(_inbox, current=set(sha_by_change)), ctx, req)
+    inbox = _soft(partial(_inbox, ctx, req, current=set(sha_by_change), rebase=rebase), lambda failure: failure)
+    if "error" in inbox and rebase is not None:
+        # The inbox could not be read; a rebase underway still leads.
+        inbox["headline"] = headline_json(pick_headline([], rebase=rebase))
     for section in inbox.get("sections", []):
         for chain in section["chains"]:
             for member in chain["members"]:

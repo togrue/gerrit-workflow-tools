@@ -85,7 +85,11 @@ export interface Section {
   chains: Chain[];
 }
 
-export interface Headline {
+/** The headline: the one thing that most wants you, as core picks it. */
+export type Headline = ChainHeadline | RebaseHeadline;
+
+/** A change of a review chain in an inbox section. */
+export interface ChainHeadline {
   section: SectionName;
   reason: string;
   /** The reason's severity; `pending` for one waiting on your review. */
@@ -93,6 +97,23 @@ export interface Headline {
   chain: string;
   number: number;
   subject: string;
+  url: string | null;
+  text: string;
+}
+
+/** A rebase underway in the checkout: while there is one, core makes it the headline. */
+export interface RebaseHeadline {
+  section: "local";
+  reason: "rebase";
+  /** `error` for a conflict, else `warning`. */
+  severity: Severity;
+  /** As `rebase.stop` of `GET /stack`. */
+  stop: RebaseStop | null;
+  chain: null;
+  /** The commit it stopped at: its change number, null when it is not on Gerrit or there is no such commit. */
+  number: number | null;
+  subject: string | null;
+  sha: string | null;
   url: string | null;
   text: string;
 }

@@ -891,7 +891,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you start ger edit's rebase on \"test! temporary experiment\", and it stops there",
         "Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, \"Add e.txt\" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.",
-        "the banner has no buttons (#56); the status bar still shows the headline (#62).",
+        "the banner has no buttons (#56).",
         () => editAt("test! temporary experiment"),
       );
       await inTerminal(
@@ -914,7 +914,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you stop at \"Refactor parser init\" the same way, and amend it to also add e.txt",
         "Local stack marks the rebase stopped at that commit, which shows its new code (changed here since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
-        "no Continue or Abort (#56); the status bar still shows the headline (#62).",
+        "no Continue or Abort (#56).",
         () => {
           editAt("Refactor parser init");
           write("e.txt", "from the amend\n");
@@ -925,7 +925,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
         "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
-        "no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the status bar still shows the headline (#62).",
+        "no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58).",
         () => gitStops(["rebase", "--continue"]),
       );
       await inTerminal(
@@ -963,7 +963,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
         "Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
-        "no conflicted file and no buttons (#56); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
+        "no conflicted file and no buttons (#56); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59).",
         () => gitStops(["rebase", "origin/main"]),
       );
       await inTerminal(

@@ -188,7 +188,12 @@ Everything the first screen needs, in one call.
 - `headline` — the **headline**: `section`, `reason`, its `severity` (`pending` for a chain
   waiting on your review), `chain`, `number`, `subject`, `url` and a sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
   with a commit of the **local stack**; another chain's failure leaves the headline to the next
-  reason.
+  reason. While a rebase is underway in the checkout, it is the headline, before anything in the
+  inbox and also when the inbox could not be read: `section` `local`, `reason` `rebase`, `stop`
+  as in [`GET /stack`](#get-stack)'s `rebase`, `severity` `error` for a conflict (else
+  `warning`), `chain` `null`, and the commit it stopped at, as the stack shows it: `number`
+  (`null` when it is not on Gerrit), `subject`, `sha` and `url`, all `null` when it is between
+  commits. `text` says it: `Rebase stopped at 102: Refactor parser init`, `Conflict in 103: …`.
 - `local` — the answer of `GET /stack`.
 - `projects` — the Gerrit projects both sections are narrowed to: the repository's own
   (from `gerrit.project` or the remote URL), as `ger inbox` does inside a clone. `all=1` drops

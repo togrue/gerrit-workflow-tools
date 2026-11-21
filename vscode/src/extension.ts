@@ -208,6 +208,11 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.showLog": () => log.show(),
     "ger.reportIssue": () => reportIssue(context.extension.packageJSON, { model, events, overviewView, stackView, changeView }, model.state),
     "ger.openHeadline": async () => {
+      // A rebase underway is finished in Local stack, where it shows where it stopped.
+      if (model.overview?.headline?.section === "local") {
+        await vscode.commands.executeCommand("ger.stack.focus");
+        return;
+      }
       const target = headlineTarget(model);
       await (target ? openChange(target) : vscode.commands.executeCommand("ger.overview.focus"));
     },
