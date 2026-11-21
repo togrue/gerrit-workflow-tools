@@ -66,12 +66,19 @@ export async function reportIssue(manifest: Manifest, running: Reported | undefi
   const shown = await ui().document(text, "json");
   const what = "This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.";
   const choice = await ui().message("info", what, {}, [COPY, SAVE]);
-  if (choice === COPY) {
-    await ui().copy(shown());
+  if (choice !== COPY && choice !== SAVE) {
+    return;
+  }
+  const report = shown();
+  if (report === undefined) {
+    // Never the original instead: the user may have taken things out of it.
+    await ui().message("info", "The report was closed without saving it, so nothing was shared. Run ger: Report Issue… again for a new one.", {}, []);
+  } else if (choice === COPY) {
+    await ui().copy(report);
     await ui().openExternal(vscode.Uri.parse(issueUrl(manifest.repository.url, versions), true));
     feedback("Report copied: paste it into the issue that opens in the browser", { milliseconds: 8000 });
-  } else if (choice === SAVE) {
-    const file = await ui().save("ger-report.json", shown());
+  } else {
+    const file = await ui().save("ger-report.json", report);
     if (file) {
       feedback(`Report saved to ${file}`);
     }

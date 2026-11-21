@@ -7,11 +7,14 @@ import type * as vscode from "vscode";
 import type { Level, MessageOptions, TerminalOptions, Ui } from "../../src/ui";
 
 /** How the scripted user answers the next prompt. Nothing queued: they dismiss it. */
-export type Answer = { button: string } | { pick: string } | { type: string } | { save: string } | { dismiss: true };
+export type Answer = { button: string } | { pick: string } | { type: string } | { save: string } | { closeUnsaved: true } | { dismiss: true };
 
 function describe(answer: Answer): string {
   if ("save" in answer) {
     return `save as "${answer.save}"`;
+  }
+  if ("closeUnsaved" in answer) {
+    return "close the document without saving";
   }
   return "button" in answer ? `press "${answer.button}"` : "pick" in answer ? `pick "${answer.pick}"` : "type" in answer ? `type "${answer.type}"` : "dismiss";
 }
@@ -134,10 +137,16 @@ export class ScriptedUi implements Ui {
     return Promise.resolve();
   }
 
-  document(content: string, language: string): Thenable<() => string> {
+  document(content: string, language: string): Thenable<() => string | undefined> {
     const lines = content.split("\n");
     this.say(`untitled ${language} document opens: ${lines.length} lines, starting`);
     lines.slice(0, 2).forEach((line) => this.say(`    ${line}`));
+    // Not a prompt: the user may close the document (queued first), or leave it open and answer what comes next.
+    if (this.queue[0] && "closeUnsaved" in this.queue[0]) {
+      this.queue.shift();
+      this.say("    → closed without saving");
+      return Promise.resolve(() => undefined);
+    }
     return Promise.resolve(() => content);
   }
 

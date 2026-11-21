@@ -234,7 +234,8 @@ wrong. The extension runs in projects that are secret, so the report is **anonym
 and nothing leaves your machine without you:
 
 1. The report opens as an untitled JSON document. Read it: it is all that would be shared. Edit it if you
-   want something else out.
+   want something else out. What you take out stays out: if you save the document somewhere before you
+   choose, what is shared is what you saved; if you close it without saving, nothing is shared.
 2. Then choose. **Copy and Open GitHub Issue** copies the document as it stands and opens a new issue on
    the project's GitHub; the link carries only the label and the versions line, and the issue says where to
    paste the report. **Save to File…** writes it where you say. Closing the notification does nothing.

@@ -14,6 +14,7 @@ import * as vscode from "vscode";
 import type { CommentChain } from "../../src/api";
 import { fileUri } from "../../src/changeView";
 import { readSnapshot } from "../../src/snapshot";
+import { vscodeUi } from "../../src/ui";
 import type { ExtensionApi } from "../../src/extension";
 import { gerCommandLine } from "../../src/launch";
 import { Answer, ScriptedUi, lineDiff } from "./scriptedUi";
@@ -664,6 +665,30 @@ export async function run(): Promise<void> {
       exec("ger.reportIssue"),
       [{ button: "Save to File…" }, { save: "~/ger-report.json" }],
     );
+    await press(
+      "Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue",
+      "The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.",
+      async () => {
+        ui.copied = "";
+        await vscode.commands.executeCommand("ger.reportIssue");
+        assert.equal(ui.copied, "", "nothing copied");
+      },
+      [{ closeUnsaved: true }, { button: "Copy and Open GitHub Issue" }],
+    );
+    {
+      // The real document(), which the scripted user stands in for above: what Copy and Save read once the user has
+      // edited the report and closed its tab without saving (Don't Save, here without the dialog) is nothing, not the
+      // original: VS Code empties the document before it closes it, so the edits are gone too.
+      const read = await vscodeUi.document('{\n  "secret": "keep me out"\n}\n', "json");
+      const shown = vscode.window.activeTextEditor;
+      assert.ok(shown, "the report is the active editor");
+      const document = shown.document;
+      await shown.edit((edit) => edit.replace(new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), "{}\n"));
+      assert.equal(read(), "{}\n", "while open: the text as it stands");
+      await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+      assert.ok(await until(() => document.isClosed), "the untitled document is closed");
+      assert.equal(read(), undefined, "once closed without saving: nothing to share");
+    }
 
     // --- A failure nobody asked for ------------------------------------------------------
     {

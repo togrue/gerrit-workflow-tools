@@ -1156,6 +1156,22 @@ status bar message: $(check) Report saved to ~/ger-report.json
 (no change)
 ```
 
+## 78. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
+
+**Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
+
+```
+untitled json document opens: 347 lines, starting
+    {
+      "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
+    → closed without saving
+notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
+    → pressed "Copy and Open GitHub Issue"
+notification (info): The report was closed without saving it, so nothing was shared. Run ger: Report Issue… again for a new one.
+--- on screen:
+(no change)
+```
+
 ## Meanwhile: a background refresh finds ger serve gone and cannot start it again
 
 **Expect:** Nothing is said and the views keep what they showed; the status bar item gets a warning mark, its tooltip says the answer is out of date, and Review chains is labelled so.

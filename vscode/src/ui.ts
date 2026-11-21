@@ -37,8 +37,12 @@ export interface Ui {
   copy(text: string): Thenable<void>;
   openExternal(uri: vscode.Uri): Thenable<boolean>;
   openFolder(uri: vscode.Uri): Thenable<unknown>;
-  /** Open `content` as an untitled document in `language`, to read and to edit. Resolves to what reads its text as it is by then. */
-  document(content: string, language: string): Thenable<() => string>;
+  /**
+   * Open `content` as an untitled document in `language`, to read and to edit. Resolves to what reads its text as it is
+   * by then; once the document is closed, as the user last left it (saved to a file, say), never the original again.
+   * Undefined when it was closed without saving: VS Code empties it first, so what the user made of it is gone.
+   */
+  document(content: string, language: string): Thenable<() => string | undefined>;
   /** Ask where to save `content`, suggesting the file name `name`, and write it there. Resolves to the file's path; undefined when the user cancelled. */
   save(name: string, content: string): Thenable<string | undefined>;
 }
@@ -111,7 +115,23 @@ export const vscodeUi: Ui = {
   async document(content, language) {
     const document = await vscode.workspace.openTextDocument({ language, content });
     await vscode.window.showTextDocument(document, { preview: false });
-    return () => (document.isClosed ? content : document.getText());
+    // A closed document's text is gone, and what the user took out of it must stay out: keep the text as it last was.
+    // Closing without saving empties the document before it closes (still dirty, as an edit would be), so a closed
+    // empty document gives nothing rather than the original or an earlier version.
+    let last = content;
+    const listeners = [
+      vscode.workspace.onDidChangeTextDocument((event) => {
+        if (event.document === document) {
+          last = document.getText();
+        }
+      }),
+      vscode.workspace.onDidCloseTextDocument((closed) => {
+        if (closed === document) {
+          listeners.forEach((listener) => listener.dispose());
+        }
+      }),
+    ];
+    return () => (!document.isClosed ? document.getText() : last || undefined);
   },
   async save(name, content) {
     const extension = path.extname(name).slice(1);
