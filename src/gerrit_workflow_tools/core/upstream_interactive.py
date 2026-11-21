@@ -100,17 +100,21 @@ def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str, *, s
     return True
 
 
-def require_branch_upstream(cwd: Path | str | None, branch: str, *, settings: Settings) -> bool:
+def require_branch_upstream(
+    cwd: Path | str | None, branch: str, *, settings: Settings, interactive: bool = True
+) -> bool:
     """Return True when *branch* has upstream (possibly set via TTY prompt).
 
-    ``False`` means the user declined the prompt. With no terminal to prompt on, raise
-    :class:`ConfigError` with the setup guidance every command shares. Non-existent local
-    branches are ignored so downstream git commands can report invalid refs.
+    ``False`` means the user declined the prompt. With no terminal to prompt on, or with
+    *interactive* off, raise :class:`ConfigError` with the setup guidance every command shares.
+    Non-existent local branches are ignored so downstream git commands can report invalid refs.
     """
     if not local_branch_exists(cwd, branch):
         return True
     if branch_has_upstream(cwd, branch):
         return True
+    if not interactive:
+        raise missing_upstream_error(branch)
     if ensure_branch_upstream_interactive(cwd, branch, settings=settings):
         return True
     if not prompt_toolkit_can_run():

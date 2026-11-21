@@ -14,6 +14,7 @@ from gerrit_workflow_tools.cli_common import (
     add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    may_prompt,
     output_format,
     print_note,
     run_cli_command,
@@ -261,7 +262,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
 
     rev_range = resolve_rev_range(args.rev_range, branch=run.repo.stack_branch)
-    if not require_stack_upstream(run, rev_range):
+    if not require_stack_upstream(run, rev_range, interactive=may_prompt(args)):
         return int(ExitCode.REFUSED)
 
     stack_view = load_annotated_stack(
