@@ -173,11 +173,24 @@ def test_first_use_asks_where_and_remembers(
     stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store, _keys, _shas = gerrit
-    monkeypatch.setattr("gerrit_workflow_tools.cli_review.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt: "b")
     assert _review(stack_repo, store, ["102"], monkeypatch)[0] == ExitCode.OK
     assert git_out("config", "--local", "ger.reviewCheckout", cwd=stack_repo) == "branch"
     assert not _worktree(stack_repo).exists()
+
+
+@pytest.mark.parametrize("output", ["--json", "--ai"])
+def test_machine_output_never_asks_even_on_a_terminal(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch, output: str
+) -> None:
+    """An agent in a pty passing --ai must not hang on the first-use question (cli_common.may_prompt)."""
+    store, _keys, _shas = gerrit
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("prompted"))
+    assert _review(stack_repo, store, ["102", output], monkeypatch)[0] == ExitCode.OK
+    assert _worktree(stack_repo).is_dir()
+    assert git("config", "--local", "ger.reviewCheckout", cwd=stack_repo, check=False).returncode != 0
 
 
 def test_without_a_terminal_the_review_worktree_is_used_and_nothing_is_saved(

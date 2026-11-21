@@ -2,7 +2,7 @@
 ``ger sha`` — resolve a commit SHA from a Gerrit Change-Id in the current commit chain
 
 USAGE
-    ger sha [--range REV_RANGE] [--all] [--short | --subject | --json | --ai] CHANGE_ID
+    ger sha [--range REV_RANGE] [--all] [--short | --subject] [--json | --ai] CHANGE_ID
 
 DESCRIPTION
     Searches commits in the selected revision range for a commit message footer
@@ -32,7 +32,7 @@ OPTIONS
         Print a JSON object with keys: change_id, sha, subject.
 
     --ai, --format ai
-        The default output (the full SHA), colour off: text for a model to read.
+        The same line as without it (with --short / --subject too), colour off: text for a model to read.
 
 DEFAULT RANGE
     If --range is omitted, ger sha searches the current Gerrit stack using:
@@ -115,8 +115,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print abbreviated SHA and commit subject.",
     )
-    add_output_format_args(ap, group=out_group)
 
+    add_output_format_args(ap)
     add_color_args(ap)
     add_verbose_and_debug_log_args(ap)
     return ap
@@ -133,6 +133,8 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
     run, _summary_highlighter = init_cli_runtime(args)
     cwd, settings = run.cwd, run.settings
 
+    if args.json_ and (args.short or args.subject):
+        ap.error("--short and --subject pick a text line; they do not combine with --json")
     if (args.first_attention or args.next_attention) and (args.rev_range or args.all_commits):
         ap.error("cannot combine attention targeting with --range / --all")
     if args.first_attention and args.change_id:

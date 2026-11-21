@@ -110,9 +110,9 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 |--------|--------|
 | `-m MSG` | Top-level change message posted with the drafts. It is posted only on changes that have drafts |
 | `--dry-run` | List what would be published and exit `0`. Allowed under the publish guard |
-| `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json`, which never prompts |
+| `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json` or `--ai`, which never prompt |
 
-Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, or `--json`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
+Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
 
 Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
 

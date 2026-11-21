@@ -1005,3 +1005,35 @@ def test_log_ai_is_far_smaller_than_json(stack_repo: Path, monkeypatch: pytest.M
     _code, ai, _err = run_cli(stack_repo, log_main, ["--ai"], monkeypatch, gerrit=store)
     _code, as_json, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert len(ai) * 5 < len(as_json)
+
+
+def test_log_ai_names_merged_commits_every_failed_check_and_the_wip_next_step(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both views end with the same next: lines (cli_log.next_steps), the WIP advice among them."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict[str, Any]] = [
+        {"status": "MERGED", "submittable": False},
+        {"verified": -1, "submittable": False},
+        {"work_in_progress": True, "submittable": False},
+        {},
+    ]
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    failed = [{"state": "FAILED", "checker_name": name} for name in ("unit-tests", "lint")]
+    store = ChangeStore(details, checks={f"testproj~main~{rows[1].change_id}": failed})
+    write_rebase_head(stack_repo, "feature")  # a note on stderr, which --ai must leave uncoloured too
+    code, out, err = run_cli(stack_repo, log_main, ["--ai", "--color", "always"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "rebase is in progress" in err
+    assert err == strip_ansi(err)
+    lines = out.splitlines()
+    assert lines[1] == f"1. {rows[0].short_sha} Refactor parser init — change 100, merged, V+1, CR+2"
+    assert lines[2].endswith("— change 101, V-1, CR+2, build failed (unit-tests, lint)")
+    assert lines[3].startswith(f"3. {rows[2].short_sha} test! temporary experiment — change 102, V+1, CR+2, WIP")
+    wip_step = "next: 1 WIP change on Gerrit; ready them with `ger push --ready`"
+    assert wip_step in lines
+    _code, human, _err = run_cli(stack_repo, log_main, ["--color", "never"], monkeypatch, gerrit=store)
+    next_lines = [line for line in human.splitlines() if line.startswith(("next: ", "chain blocked: "))]
+    assert next_lines == lines[5:]
+    assert wip_step in next_lines

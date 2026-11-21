@@ -156,7 +156,7 @@ summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4
 | `CI` | Count of commits with failed Verified / CI |
 | `comments` | Count of commits with unresolved comments |
 | `on-gerrit` | Count of commits that exist on Gerrit |
-| `WIP` | Count of work-in-progress changes, followed by ``ready them with `ger push --ready` `` |
+| `WIP` | Count of work-in-progress changes; a `next:` line below says ``ready them with `ger push --ready` `` |
 
 Only non-zero categories after `ready` are shown.
 

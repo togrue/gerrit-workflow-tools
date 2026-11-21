@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW
 
 
 def patchset_token(commit: LogCommit) -> str:
@@ -79,6 +80,9 @@ def unresolved_comments_text(count: int) -> str:
     noun = "comment" if count == 1 else "comments"
     return f"{count} unresolved {noun}"
 
+
+SECTION_HEADINGS = {TO_REVIEW: "to review", OUTGOING: "outgoing"}
+"""What ``ger inbox`` calls each **inbox section**, in every view."""
 
 # Not attention reasons, but hints all the same: keys of :func:`attention_hints` beside the reasons.
 PRIVATE = "private"

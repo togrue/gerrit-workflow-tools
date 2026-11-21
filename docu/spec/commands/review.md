@@ -49,7 +49,7 @@ Two **review checkout** modes, set by `ger.reviewCheckout`:
 | **Review worktree** (default) | `worktree` | One reusable worktree, at `ger.reviewWorktree` (default: `<repository>-review` beside the main worktree). Created on first use with `git worktree add`, reused after. Your own branch, stack and working tree are never touched |
 | **In place** | `branch` | The change is checked out in the current worktree, like a manual `git fetch` + `git switch` |
 
-**First use asks.** When `ger.reviewCheckout` is unset and stdin is a terminal, `ger review` asks once: `Check out reviews in a separate worktree (w, default) or in this checkout (b)?` and writes the answer to the repository's local git config. Without a terminal it uses the review worktree and writes nothing. `--in-worktree` and `--in-place` override the setting for one run.
+**First use asks.** When `ger.reviewCheckout` is unset and stdin is a terminal, `ger review` asks once: `Check out reviews in a separate worktree (w, default) or in this checkout (b)?` and writes the answer to the repository's local git config. Without a terminal, or with `--json` or `--ai`, it uses the review worktree and writes nothing. `--in-worktree` and `--in-place` override the setting for one run.
 
 `ger review` acts on the review worktree whichever worktree you run it from. Its output names the worktree's path, so you can open it in your editor.
 

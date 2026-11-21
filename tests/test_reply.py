@@ -230,11 +230,21 @@ def test_publish_prompt_defaults_to_no(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch, answer: str, published: bool
 ) -> None:
     store, _key = _store_with_draft(stack_repo)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_reply.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("sys.stdin", io.StringIO(answer))
     code, _out, _err = run_cli(stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
     assert code == (ExitCode.OK if published else ExitCode.REFUSED)
     assert bool(store.calls_to("publish_drafts")) is published
+
+
+def test_publish_with_ai_needs_yes_even_on_a_terminal(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _key = _store_with_draft(stack_repo)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("sys.stdin", io.StringIO("y\n"))
+    code, _out, err = run_cli(stack_repo, reply_main, ["--publish", "--ai"], monkeypatch, gerrit=store)
+    assert code == ExitCode.USAGE
+    assert "pass -y" in err
+    assert not store.calls_to("publish_drafts")
 
 
 def test_publish_guard_blocks_before_contacting_gerrit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

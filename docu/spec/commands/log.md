@@ -50,7 +50,7 @@ Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker
 
 **Summary example:** `summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4`
 
-Below the summary, dim **next lines** (`cli_log.next_steps`) name the ger command for a state the stack is in: a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`), a **diverged** or outdated change (`ger checkout change:<n> --update`), and what `chain blocked` means (a change below is not submittable yet). One line per state, none when there is nothing to do.
+Below the summary, dim **next lines** (`cli_log.next_steps`) name the ger command for a state the stack is in: WIP changes on Gerrit (`ger push --ready`), a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`), a **diverged** or outdated change (`ger checkout change:<n> --update`), and what `chain blocked` means (a change below is not submittable yet). One line per state, none when there is nothing to do.
 
 Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when color is on.
 

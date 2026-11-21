@@ -94,8 +94,6 @@ def _format_summary_dashboard_line(
     ):
         if count:
             stats.append(color_stat(label, count, color))
-    if summary.get(Attention.WIP):
-        stats.append(color_text("ready them with `ger push --ready`", ANSI_DIM))
     return f"{color_text('summary:', f'{ANSI_BOLD}{ANSI_CYAN}')} {color_text(' · ', ANSI_DIM).join(stats)}"
 
 
@@ -108,6 +106,9 @@ def next_steps(commits: list[LogCommit]) -> list[str]:
             f"next: {merged[0].short_sha} is merged on Gerrit; drop it and rebase onto the target with "
             "`ger rebase --onto-remote --drop-merged-equivalent`"
         )
+    wip = sum(1 for c in commits if c.pushed and Attention.WIP in c.attention_reasons)
+    if wip:
+        lines.append(f"next: {wip} WIP change{'' if wip == 1 else 's'} on Gerrit; ready them with `ger push --ready`")
     for reason, how in (
         (Attention.DIVERGED, "merge Gerrit's patchset into yours with `ger checkout change:{n} --update`"),
         (Attention.OUTDATED_PATCHSET, "take Gerrit's newer patchset with `ger checkout change:{n} --update`"),
@@ -133,7 +134,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger log",
         description="Compact, actionable overview of the local commit chain vs Gerrit.",
     )
-    add_output_format_args(parser)
+    add_output_format_args(parser, ai_view="one plain line per commit")
     add_color_args(parser)
     parser.add_argument(
         "--url",
