@@ -161,12 +161,18 @@ test("Discard shows in the Change view's reply box only while your draft reply i
   assert.ok(!posted.some((message) => message.action === "chain.delete"), "the extension runs the trash's command, not the page");
 });
 
-test("a confirmed Discard empties the reply box; a dismissed one keeps what you typed", () => {
+test("a confirmed Discard empties the reply box and resets Resolved; a dismissed one keeps both", () => {
   const { box, send } = wholeChange(true);
   const text = box.all((element) => element.tagName === "TEXTAREA")[0];
+  const resolved = box.all((element) => element.tagName === "INPUT")[0];
+  const standing = resolved.checked;
   text.value = "And the docs.";
+  // The deleted draft's choice, kept while text is typed: a fresh Save must not resolve with it.
+  resolved.checked = !standing;
   send({ type: "discarded", id: "whole", deleted: false });
   assert.equal(text.value, "And the docs.");
+  assert.equal(resolved.checked, !standing);
   send({ type: "discarded", id: "whole", deleted: true });
   assert.equal(text.value, "");
+  assert.equal(resolved.checked, standing, "back where the comment stands, as Cancel leaves it");
 });
