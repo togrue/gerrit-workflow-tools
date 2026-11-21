@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -604,3 +605,52 @@ def test_to_review_alone_does_not_ask_for_outgoing(tmp_path: Path, monkeypatch: 
 def test_all_and_project_do_not_combine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, _err = run_cli(tmp_path, inbox_main, ["--all", "--project", "x"], monkeypatch, catch_sys_exit=True)
     assert code == int(ExitCode.USAGE)
+
+
+def _ai_inbox() -> ChangeStore:
+    """To review: a healthy chain of one, and carol's chain of two with failed CI and comments.
+
+    Outgoing: one change of mine, with failed CI.
+    """
+
+    def change(number: int, sha: str, parent: str, subject: str, **fields: Any) -> dict[str, Any]:
+        when = "2026-08-12 12:00:00.000000000"
+        return _change(
+            number=number, sha=sha, parent=parent, subject=subject, updated=when, attention_since=when, **fields
+        )
+
+    healthy = change(4321, "hhh", "origin", "feat: rate limiter", cr=1)
+    base = change(4376, "aaa", "origin", "split part one", verified=-1)
+    top = change(4380, "bbb", "aaa", "refactor: split scheduler", owner="carol", comments=2)
+    mine = change(4410, "mmm", "origin", "feat: quota headers", owner="me", verified=-1)
+    store = _store(healthy, base, top, mine, stub=[healthy, base, top])
+    store.stub_query(DEFAULT_OUTGOING_QUERY, [mine])
+    return store
+
+
+def test_inbox_ai_is_one_plain_line_per_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--ai``: change numbers, not URLs; the human view's hint words; a fact only where it has a value."""
+    code, out, err = run_cli(tmp_path, inbox_main, ["--ai", "--color", "always"], monkeypatch, gerrit=_ai_inbox())
+    assert code == int(ExitCode.OK), err
+    assert out == strip_ansi(out)  # --ai forces colour off, whatever --color says
+    assert err == strip_ansi(err)
+    lines = [re.sub(r"\b\d+[mhd]\b", "<age>", line) for line in out.splitlines()]
+    assert lines[0] == "project: all projects"
+    assert lines[1] == "to review: 2 chains, 3 changes"
+    assert sorted(lines[2:4]) == [
+        "change 4321 feat: rate limiter — by alice, waiting on you <age>, last activity <age>, V+1, CR+1",
+        "change 4380 refactor: split scheduler — 2 changes, by carol, waiting on you <age>, "
+        "last activity <age>, V-1, 4376: build failed, 4380: 2 unresolved comments",
+    ]
+    assert lines[4:] == [
+        "outgoing: 1 chain, 1 change",
+        "change 4410 feat: quota headers — last activity <age>, V-1, 4410: build failed",  # no owner, no wait on you
+    ]
+    for absent in ("http", "c4321", "CR0", "0 unresolved", "None", "#"):
+        assert absent not in out
+
+
+def test_inbox_ai_is_far_smaller_than_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _code, ai, _err = run_cli(tmp_path, inbox_main, ["--ai"], monkeypatch, gerrit=_ai_inbox())
+    _code, as_json, _err = run_cli(tmp_path, inbox_main, ["--json"], monkeypatch, gerrit=_ai_inbox())
+    assert len(ai) * 5 < len(as_json)

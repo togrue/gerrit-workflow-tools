@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List the warnings below the errors, not just their count (JSON always has them).",
     )
-    add_output_format_args(p)
+    add_output_format_args(p, ai_view="markdown")
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,

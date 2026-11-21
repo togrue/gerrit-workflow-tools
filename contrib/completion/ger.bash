@@ -114,7 +114,7 @@ _ger_ci() {
             return
             ;;
         --format)
-            __gwt_flags "$cur" human markdown
+            __gwt_flags "$cur" human markdown ai
             return
             ;;
         --hyperlinks)
@@ -131,12 +131,16 @@ _ger_comment() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --change --branch -m --message -F --file --resolved --note --local --edit --discard --json --color --hyperlinks --debug-log
+        __gwt_flags "$cur" -h --help --change --branch -m --message -F --file --resolved --note --local --edit --discard --json --format --ai --color --hyperlinks --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -190,9 +194,15 @@ _ger_fix() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -a --all --no-verify --json --debug-log
+        __gwt_flags "$cur" -h --help -a --all --no-verify --json --format --ai --debug-log
         return
     fi
+    case "$prev" in
+        --format)
+            __gwt_flags "$cur" human ai
+            return
+            ;;
+    esac
     if declare -F __git_complete_refs >/dev/null 2>&1; then
         __git_complete_refs
     fi
@@ -202,12 +212,16 @@ _ger_inbox() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --to-review --outgoing --project --all --unready --limit --json --url --show-url --no-url --color --hyperlinks -v --verbose --debug-log
+        __gwt_flags "$cur" -h --help --to-review --outgoing --project --all --unready --limit --json --format --ai --url --show-url --no-url --color --hyperlinks -v --verbose --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -221,12 +235,16 @@ _ger_log() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --json --color --hyperlinks --url --show-url --show-change-id -v --verbose --debug-log --follow-merges
+        __gwt_flags "$cur" -h --help --json --format --ai --color --hyperlinks --url --show-url --show-change-id -v --verbose --debug-log --follow-merges
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -281,12 +299,16 @@ _ger_reply() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --change --branch -m --message -F --file --done --resolve --unresolve --discard --publish --only --keep-drafts --vote --dry-run -y --yes --json --color --hyperlinks --debug-log
+        __gwt_flags "$cur" -h --help --change --branch -m --message -F --file --done --resolve --unresolve --discard --publish --only --keep-drafts --vote --dry-run -y --yes --json --format --ai --color --hyperlinks --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -300,12 +322,16 @@ _ger_resolve() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --json --color --hyperlinks --debug-log
+        __gwt_flags "$cur" -h --help --json --format --ai --color --hyperlinks --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -322,12 +348,16 @@ _ger_review() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --patchset --next --prev --status --done --stage --no-stage --unstage --in-worktree --in-place --force --vote --change -m --message --dry-run -y --yes --json --color --hyperlinks --debug-log
+        __gwt_flags "$cur" -h --help --patchset --next --prev --status --done --stage --no-stage --unstage --in-worktree --in-place --force --vote --change -m --message --dry-run -y --yes --json --format --ai --color --hyperlinks --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -374,12 +404,16 @@ _ger_sha() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --first-attention -n --next-attention --range --all --short --subject --json --color --hyperlinks --debug-log
+        __gwt_flags "$cur" -h --help --first-attention -n --next-attention --range --all --short --subject --json --format --ai --color --hyperlinks --debug-log
         return
     fi
     case "$prev" in
         --color)
             __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --format)
+            __gwt_flags "$cur" human ai
             return
             ;;
         --hyperlinks)
@@ -409,7 +443,7 @@ _ger_show() {
             return
             ;;
         --format)
-            __gwt_flags "$cur" human markdown
+            __gwt_flags "$cur" human markdown ai
             return
             ;;
         --hyperlinks)

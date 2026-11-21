@@ -8,7 +8,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import configure_logging, refresh_requested
+from gerrit_workflow_tools.cli_common import refresh_requested
+from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest

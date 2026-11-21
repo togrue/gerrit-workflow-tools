@@ -12,13 +12,14 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_change_option,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     ask_choice,
     assume_yes,
     changeish_help,
     confirm,
     init_cli_runtime,
+    may_prompt,
     run_cli_command,
 )
 from gerrit_workflow_tools.core.config import Settings
@@ -45,7 +46,6 @@ from gerrit_workflow_tools.core.review_checkout import (
 from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
 from gerrit_workflow_tools.render.review_json import review_state_json
@@ -97,7 +97,7 @@ def _build_parser() -> argparse.ArgumentParser:
     vote.add_argument(
         "-y", "--yes", action="store_true", help="With --vote: skip the confirmation (GER_ASSUME_YES=1 too)."
     )
-    add_json_arg(p)
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
     return p
@@ -123,7 +123,7 @@ def _mode(args: argparse.Namespace, cwd: Path, settings: Settings) -> ReviewMode
         return args.mode  # type: ignore[no-any-return]
     if settings.review_checkout is not None:
         return settings.review_checkout  # type: ignore[return-value]
-    if args.json_ or not stdin_is_terminal():
+    if not may_prompt(args):
         return "worktree"
     answer: ReviewMode = ask_choice(
         "Check out reviews in a separate worktree (w, default) or in this checkout (b)? ",
@@ -242,7 +242,7 @@ def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritS
     if args.dry_run:
         return int(ExitCode.OK)
     if not (args.yes or assume_yes()):
-        if args.json_ or not stdin_is_terminal():
+        if not may_prompt(args):
             print("not publishing: pass -y to publish without a prompt", file=sys.stderr)
             return int(ExitCode.REFUSED)
         if not confirm(f"Publish {count} draft(s) and {voted} on {number}?", default=False):

@@ -313,6 +313,28 @@ def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkey
     assert "git log failed" not in err
 
 
+@pytest.mark.parametrize("flag", ["--ai", "--json"])
+def test_log_missing_upstream_never_prompts_for_machine_output(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    """On a terminal, ``--ai`` and ``--json`` report the setup hint rather than open the upstream prompt."""
+    _configure_repo(stack_repo)
+    git("branch", "--unset-upstream", cwd=stack_repo, check=False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_toolkit_can_run", lambda: True)
+
+    def _no_prompt(*_args: object, **_kwargs: object) -> str | None:
+        raise AssertionError("prompted for an upstream")
+
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _no_prompt
+    )
+    code, out, err = run_cli(stack_repo, log_main, [flag], monkeypatch)
+    assert code == ExitCode.CONFIG
+    assert out == ""
+    assert "No upstream configured for branch" in err
+
+
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.gerrit.http_rest.resolve_gerrit_web_base",
@@ -956,3 +978,84 @@ def test_log_verbose_lists_reviewers_and_ccs(stack_repo: Path, monkeypatch: pyte
         {"name": "bob", "cc": False},
         {"name": "carol", "cc": True},
     ]
+
+
+def _ai_stack(stack_repo: Path) -> ChangeStore:
+    """The four stack commits on Gerrit (ready, CI failed, comments, local code newer), then two never pushed."""
+    _configure_repo(stack_repo)
+    git("commit", "--allow-empty", "-m", "Wip: cache\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    git("commit", "--allow-empty", "-m", "No footer here", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict[str, Any]] = [
+        {},
+        {"verified": -1, "cr": 0, "submittable": False},
+        {"cr": 1, "unresolved_comment_count": 2, "submittable": False},
+        {"cr": 0, "submittable": False},
+    ]
+    details = build_details_by_change_id(rows[:4], per_index_overrides=overrides)
+    older = git_out("rev-parse", "main", cwd=stack_repo)
+    newer = details[f"testproj~main~{rows[3].change_id}"]
+    newer["current_revision"], newer["revisions"] = older, {older: {"_number": 1}}
+    checks = {f"testproj~main~{rows[1].change_id}": [{"state": "FAILED", "checker_name": "unit-tests"}]}
+    return ChangeStore(details, checks=checks)
+
+
+def test_log_ai_is_one_plain_line_per_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--ai``: the human view's words, one numbered line per commit, a fact only where it has a value."""
+    store = _ai_stack(stack_repo)
+    code, out, err = run_cli(stack_repo, log_main, ["--ai", "--color", "always"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert out == strip_ansi(out)  # --ai forces colour off, whatever --color says
+    lines = out.splitlines()
+    assert lines[0] == "stack: testproj, branch main, 6 commits, ger push sends 1-2"
+    sha = [row.short_sha for row in stack_rows_mb_to_head(stack_repo)]
+    assert lines[1:7] == [
+        f"1. {sha[0]} Refactor parser init — change 100, V+1, CR+2, submittable",
+        f"2. {sha[1]} Extract command routing — change 101, V-1, build failed (unit-tests)",
+        f"3. {sha[2]} test! temporary experiment — change 102, V+1, CR+1, 2 unresolved comments, chain blocked",
+        f"4. {sha[3]} Cleanup after experiment — change 103, ahead of gerrit, chain blocked",
+        f"5. {sha[4]} Wip: cache — not-pushed",
+        f"6. {sha[5]} No footer here — missing Change-Id",
+    ]
+    assert lines[7].startswith("chain blocked: ")  # cli_log.next_steps, as the human view ends
+    for empty in ("None", "null", "[]", "CR0", "V0", "0 unresolved", "http", "#"):
+        assert empty not in out
+
+
+def test_log_ai_is_far_smaller_than_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _ai_stack(stack_repo)
+    _code, ai, _err = run_cli(stack_repo, log_main, ["--ai"], monkeypatch, gerrit=store)
+    _code, as_json, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert len(ai) * 5 < len(as_json)
+
+
+def test_log_ai_names_merged_commits_every_failed_check_and_the_wip_next_step(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both views end with the same next: lines (cli_log.next_steps), the WIP advice among them."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict[str, Any]] = [
+        {"status": "MERGED", "submittable": False},
+        {"verified": -1, "submittable": False},
+        {"work_in_progress": True, "submittable": False},
+        {},
+    ]
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    failed = [{"state": "FAILED", "checker_name": name} for name in ("unit-tests", "lint")]
+    store = ChangeStore(details, checks={f"testproj~main~{rows[1].change_id}": failed})
+    write_rebase_head(stack_repo, "feature")  # a note on stderr, which --ai must leave uncoloured too
+    code, out, err = run_cli(stack_repo, log_main, ["--ai", "--color", "always"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "rebase is in progress" in err
+    assert err == strip_ansi(err)
+    lines = out.splitlines()
+    assert lines[1] == f"1. {rows[0].short_sha} Refactor parser init — change 100, merged, V+1, CR+2"
+    assert lines[2].endswith("— change 101, V-1, CR+2, build failed (unit-tests, lint)")
+    assert lines[3].startswith(f"3. {rows[2].short_sha} test! temporary experiment — change 102, V+1, CR+2, WIP")
+    wip_step = "next: 1 WIP change on Gerrit; ready them with `ger push --ready`"
+    assert wip_step in lines
+    _code, human, _err = run_cli(stack_repo, log_main, ["--color", "never"], monkeypatch, gerrit=store)
+    next_lines = [line for line in human.splitlines() if line.startswith(("next: ", "chain blocked: "))]
+    assert next_lines == lines[5:]
+    assert wip_step in next_lines

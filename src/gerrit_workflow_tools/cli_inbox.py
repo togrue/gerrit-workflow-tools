@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    output_format,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
@@ -36,12 +37,13 @@ from gerrit_workflow_tools.core.inbox import (
     section_summary,
 )
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age, host_from_web_base
+from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
+from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
-_HEADINGS = {TO_REVIEW: "to review", OUTGOING: "outgoing"}
 _EMPTY = {TO_REVIEW: "(nothing to review)", OUTGOING: "(no open chains of yours)"}
 
 
@@ -101,7 +103,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="At most N chains per section.",
     )
-    add_json_arg(parser)
+    add_output_format_args(parser, ai_view="one plain line per chain")
     parser.add_argument(
         "--url",
         "--show-url",
@@ -148,17 +150,13 @@ def _hash_suffix(body: str) -> str:
     return f"{color_text('# ', ANSI_DIM)}{body}"
 
 
+_MEMBER_HINT_COLOR = {Attention.CI_FAILED: ANSI_RED}
+
+
 def _attention_note(reasons: tuple[str, ...], comments: int) -> str:
-    """Colored attention text, matching ``ger log`` trailing hints."""
-    if Attention.CI_FAILED in reasons:
-        return color_text("build failed", ANSI_RED)
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        noun = "comment" if comments == 1 else "comments"
-        text = f"{comments} unresolved {noun}" if comments else "unresolved comments"
-        return color_text(text, ANSI_YELLOW)
-    if Attention.REVIEW_ISSUES in reasons:
-        return color_text("negative vote", ANSI_YELLOW)
-    return ""
+    """The most urgent of :func:`member_hints`, coloured as ``ger log``'s trailing hints."""
+    hints = member_hints(reasons, comments)
+    return color_text(hints[0][1], _MEMBER_HINT_COLOR.get(hints[0][0], ANSI_YELLOW)) if hints else ""
 
 
 def _render_chain_line(
@@ -205,7 +203,7 @@ def _render_section(
 ) -> None:
     chains = section.chains
     outgoing = section.name == OUTGOING
-    print(color_text(f"{_HEADINGS[section.name]} ({len(chains)})", f"{ANSI_BOLD}{ANSI_CYAN}"))
+    print(color_text(f"{SECTION_HEADINGS[section.name]} ({len(chains)})", f"{ANSI_BOLD}{ANSI_CYAN}"))
     if not chains:
         print(color_text(_EMPTY[section.name], ANSI_DIM))
         return
@@ -277,7 +275,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     )
     if limit is not None:
         sections = [InboxSection(s.name, s.query, s.chains[: max(0, limit)]) for s in sections]
-    if args.json_:
+    out_fmt = output_format(args)
+    if out_fmt == "ai":
+        print("\n".join(inbox_ai_lines(sections, projects=projects)))
+    elif out_fmt == "json":
         payload = {
             "host": host_from_web_base(service.web_base),
             "generated": iso_utc(now),

@@ -24,9 +24,9 @@ A comment has one of four **comment states**:
 ## Usage
 
 ```
-ger comment LOCATION (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--note | --local] [--json]
-ger comment --edit ID (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--json]
-ger comment --discard ID [--change CHANGEISH] [--json]
+ger comment LOCATION (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--note | --local] [--json | --ai]
+ger comment --edit ID (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--json | --ai]
+ger comment --discard ID [--change CHANGEISH] [--json | --ai]
 ```
 
 ### Which change
@@ -134,6 +134,8 @@ draft on src/app.py:42 (patchset 3)
 local draft on src/app.py:40-42 (commit 1a2b3c4, not on Gerrit) id 5d1f0c2e9b7a4e61
 note on src/app.py (commit 1a2b3c4) id 0b6e2d7f8c9a4b13
 ```
+
+**`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 
 **JSON** (`--json`):
 

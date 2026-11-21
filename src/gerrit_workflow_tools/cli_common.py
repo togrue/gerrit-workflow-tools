@@ -12,7 +12,6 @@ Help text style (``help=`` on parsers and arguments):
 from __future__ import annotations
 
 import argparse
-import logging
 import os
 import sys
 from collections.abc import Callable, Mapping
@@ -20,6 +19,7 @@ from enum import IntEnum
 from pathlib import Path
 from typing import TypeVar
 
+from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.cli_style import (
     ANSI_DIM,
     color_text,
@@ -28,7 +28,7 @@ from gerrit_workflow_tools.cli_style import (
     init_hyperlink_mode,
 )
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
-from gerrit_workflow_tools.core.call_trace import print_call_trace_summary, set_call_trace_enabled
+from gerrit_workflow_tools.core.call_trace import print_call_trace_summary
 from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
@@ -41,10 +41,10 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     format_local_sibling_note,
     format_resolution_note,
 )
-from gerrit_workflow_tools.core.gerrit.http_rest import set_log_gerrit_response_bodies
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -244,35 +244,40 @@ def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup,
     )
 
 
-def add_json_arg(parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGroup) -> None:
-    """Register ``--json``, read back as ``args.json_``."""
-    parser.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+def add_output_format_args(parser: argparse.ArgumentParser, *, ai_view: str | None = None) -> None:
+    """Register mutually exclusive ``--json`` / ``--format`` / ``--ai``; read the choice with :func:`output_format`.
 
-
-def add_output_format_args(parser: argparse.ArgumentParser) -> None:
-    """Register mutually exclusive ``--json`` / ``--format {human,markdown}`` / ``--ai``.
-
-    Read the choice back with :func:`output_format`.
+    Every command with ``--json`` takes ``--ai`` (``--format ai``): text for a model to read, never a prompt.
+    *ai_view* says what that is when the command has a view of its own for it; ``"markdown"`` makes it
+    the command's Markdown view and offers ``--format markdown`` too. Without one, ``ai`` is the human
+    output with colour and hyperlinks off.
     """
     fmt = parser.add_mutually_exclusive_group()
-    add_json_arg(fmt)
+    fmt.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+    markdown = ai_view == "markdown"
+    choices = ("human", "markdown", "ai") if markdown else ("human", "ai")
+    view = "the Markdown view" if markdown else ai_view or "the human output without colour or hyperlinks"
     fmt.add_argument(
         "--format",
-        choices=("human", "markdown"),
-        default=None,
+        choices=choices,
         dest="format_",
-        help="Output format (default: human). 'markdown' is suited for AI review.",
+        help=f"Output format (default: human). 'ai': {view}, for a model; it never prompts.",
     )
-    fmt.add_argument("--ai", action="store_true", help="Alias for --format markdown.")
+    fmt.add_argument("--ai", action="store_const", const="ai", dest="format_", help="Alias for --format ai.")
+    parser.set_defaults(ai_view_="markdown" if markdown else "ai")
 
 
 def output_format(args: argparse.Namespace) -> str:
-    """``json``, ``markdown`` or ``human``, from the flags :func:`add_output_format_args` registered."""
-    if args.json_:
+    """``json``, ``markdown``, ``ai`` or ``human``, from the flags :func:`add_output_format_args` registered."""
+    if getattr(args, "json_", False):
         return "json"
-    if args.ai or args.format_ == "markdown":
-        return "markdown"
-    return "human"
+    fmt = getattr(args, "format_", None) or "human"
+    return str(args.ai_view_) if fmt == "ai" else fmt
+
+
+def may_prompt(args: argparse.Namespace) -> bool:
+    """Whether a command may ask: human output on a terminal. ``--json`` and ``--ai`` output never prompts."""
+    return output_format(args) == "human" and stdin_is_terminal()
 
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
@@ -322,33 +327,6 @@ def add_verbose_and_debug_log_args(
     )
 
 
-_LOG = logging.getLogger("gerrit_workflow_tools")
-_CONFIGURED = False
-_DEBUG_LOG_ENABLED = False
-
-
-def configure_logging(verbosity: int | bool) -> None:
-    """Set package log level based on debug logging enablement.
-
-    False → WARNING (silent)
-    True  → DEBUG   (git subprocesses, outcomes, resolved refs/URLs, HTTP URLs/summaries,
-                          and full API JSON bodies)
-    """
-    global _CONFIGURED, _DEBUG_LOG_ENABLED  # pylint: disable=global-statement
-    v = int(verbosity)
-    _DEBUG_LOG_ENABLED = bool(v)
-    set_call_trace_enabled(_DEBUG_LOG_ENABLED)
-    set_log_gerrit_response_bodies(_DEBUG_LOG_ENABLED)
-    level = logging.DEBUG if v >= 1 else logging.WARNING
-    _LOG.setLevel(level)
-    if not _CONFIGURED:
-        h = logging.StreamHandler(sys.stderr)
-        h.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
-        _LOG.addHandler(h)
-        _LOG.propagate = False
-        _CONFIGURED = True
-
-
 # Set by `ger --refresh` (cli_ger) for this process and the git-run editors it starts,
 # such as the rebase enricher. Read here, once per run, and nowhere below.
 REFRESH_ENV = "GER_CACHE_REFRESH"
@@ -385,8 +363,9 @@ def init_cli_runtime(
     ensure_utf8_stdio()
     configure_logging(getattr(args, "debug_log", False))
     cwd = Path.cwd()
-    init_color_mode(color=getattr(args, "color", "auto"))
-    init_hyperlink_mode(hyperlinks=getattr(args, "hyperlinks", "auto"))
+    plain = getattr(args, "format_", None) == "ai"  # Text for a model, Markdown or not: no colour, no links.
+    init_color_mode(color="never" if plain else getattr(args, "color", "auto"))
+    init_hyperlink_mode(hyperlinks="never" if plain else getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")

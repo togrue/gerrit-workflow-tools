@@ -31,7 +31,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 | `--full` | After each link's findings, print the whole log (for searching the raw text) |
 | `--warnings` | List the warnings below the errors, not just their count. JSON always has them |
 | `--json` | JSON payload — the stable contract for agents |
-| `--format {human,markdown}` / `--ai` | Output format; `--ai` is Markdown |
+| `--format {human,markdown,ai}` / `--ai` | Output format; `ai` (`--ai`) is the Markdown view ([Output formats](../../SPEC.md#output-formats)) |
 | `--color`, `--hyperlinks`, `--debug-log` | Standard helpers |
 
 ---

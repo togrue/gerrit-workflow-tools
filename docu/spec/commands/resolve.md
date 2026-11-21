@@ -13,7 +13,7 @@ Side-effect-free resolver: report what a **changeish** maps to in the current re
 ## Usage
 
 ```
-ger resolve <CHANGEISH> [--json]
+ger resolve <CHANGEISH> [--json | --ai]
 ```
 
 `CHANGEISH` — same shared grammar as every other resolving command (git ref, Change-Id, triplet, `change:<n>`, `refs/changes/…`, URL, `q:…`). Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
@@ -35,6 +35,10 @@ Stderr:
 
 - A dimmed **transparency note** when a bare Change-Id was narrowed (same text as other commands via `format_resolution_note`)
 - A dimmed note when the selected change is a **sibling** of the local stack commit carrying its Change-Id, which targets another branch (`format_local_sibling_note`; `local_sibling` in JSON)
+
+### `--ai`
+
+The text output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)); `--format ai` is the same.
 
 ### `--json`
 
