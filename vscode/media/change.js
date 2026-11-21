@@ -253,8 +253,9 @@
 
   /**
    * A box to answer a chain that has no line in a file, saved as a draft reply as an editor thread's
-   * reply box saves it. As on Gerrit: a Resolved checkbox, Save and Cancel, and Discard while your
-   * draft reply is there, which deletes it as the trash on the row does, asking first.
+   * reply box saves it. As on Gerrit: a Resolved checkbox, and bottom right Discard (while your
+   * draft reply is there), Cancel and Save. Discard deletes it as the trash on the row does, asking
+   * first; once it is deleted, the box is emptied.
    */
   function replyBox(thread) {
     let box = replyBoxes.get(thread.id);
@@ -287,8 +288,8 @@
         expanded.delete(thread.id);
         draw(vm);
       });
-      discard.addEventListener("click", () => post("thread", { id: thread.id, action: "chain.delete" }));
-      box = { block: h("div", { class: "reply-box" }, text, h("div", { class: "message-bar" }, tick, save, cancel, discard, note)), text, note, resolved, discard };
+      discard.addEventListener("click", () => post("thread", { id: thread.id, action: "discard" }));
+      box = { block: h("div", { class: "reply-box" }, text, h("div", { class: "message-bar" }, tick, note, discard, cancel, save)), text, note, resolved, discard };
       replyBoxes.set(thread.id, box);
     }
     // The checkbox starts where the comment stands once your drafts are published; while you type, it is yours.
@@ -475,6 +476,13 @@
       if (box) {
         box.text.value = message.saved ? "" : box.text.value;
         box.note.textContent = message.saved ? "" : "not saved";
+      }
+    } else if (message.type === "discarded") {
+      // Your draft reply is deleted: what you typed to add to it goes too. Dismissed, it stays.
+      const box = replyBoxes.get(message.id);
+      if (box && message.deleted) {
+        box.text.value = "";
+        box.note.textContent = "";
       }
     } else if (message.type === "reveal") {
       revealed = message.id;

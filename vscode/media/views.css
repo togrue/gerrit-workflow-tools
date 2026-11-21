@@ -514,6 +514,11 @@ select:focus {
   cursor: pointer;
 }
 
+/* As on Gerrit: the Resolved checkbox on the left, Discard, Cancel and Save bottom right. */
+.reply-box .message-bar .detail {
+  margin-right: auto;
+}
+
 .reply-box .resolved input {
   margin: 0;
   accent-color: var(--vscode-checkbox-selectBackground, var(--vscode-button-background));
