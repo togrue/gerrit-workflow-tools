@@ -315,6 +315,16 @@ design questions go to a decision. A run whose transcript differs fails and prin
 changed step against its **Expect** line, then accept it with `npm run e2e -- --update`. Set
 `GER_E2E_SCREENS=<file>` to also get the full screen before and after every press.
 
+**Pictures of the real thing.** `GER_E2E_PNG=<dir> npm run e2e` also writes a picture of the VS Code
+window on start and after every press, `<step>-<button>.png` (1400 × 900, the Gerrit side bar 420
+pixels wide, no chat panel). This is how a coding agent looks at the native tree view, the webview
+views in place, the status bar and the editor together; the gallery is quicker for the webview
+views alone. It is off by default: it makes the run about 20 seconds slower. The pictures are taken
+through the window's DevTools protocol (`test/e2e/picture.ts`), with no dependency. On Linux with
+no X or Wayland display (a coding agent's shell, a server), VS Code runs headless, pictures or not.
+Without an installed VS Code, `npm run e2e -- --get-vscode` downloads the latest stable one for
+Linux into `~/.cache/ger-vscode-test`, where the run finds it.
+
 **The gallery** is for how the two webview views look, without starting VS Code. `npm run gallery`
 writes `out/gallery/index.html` and prints its path: open it in a browser. It runs the pages of
 `media/` as they ship, each in an iframe 300 and 450 pixels wide, in VS Code's Dark Modern and Light
