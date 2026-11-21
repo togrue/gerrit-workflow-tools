@@ -50,6 +50,17 @@ class RebaseStop(Enum):
     """Stopped between commits (``exec``, ``break``)."""
 
 
+class RebaseAction(Enum):
+    """A way on from where a rebase underway stopped: ``git rebase --<action>``.
+
+    Not :class:`~gerrit_workflow_tools.core.rebasing_stack.RebaseStep`, where it stands on a commit.
+    """
+
+    CONTINUE = "continue"
+    ABORT = "abort"
+    SKIP = "skip"
+
+
 @dataclass(frozen=True)
 class RebaseProgress:
     """Where a rebase underway stands, in the ids of the commits it replays: the branch as it was.
@@ -98,6 +109,18 @@ class RebaseProgress:
         if self.applied:
             return RebaseStop.EDIT
         return RebaseStop.CONFLICT if self.unmerged else RebaseStop.RESOLVED
+
+    @property
+    def actions(self) -> tuple[RebaseAction, ...]:
+        """The ways on from this stop, by one verdict for ``ger rebase``, ``ger edit -n`` and ``ger serve``.
+
+        Abort always. Continue unless paths are still unmerged. Skip only at a stop on a conflict
+        (resolved or not), where it leaves out the commit not applied yet: at any other stop the
+        commit is already in, and ``git rebase --skip`` would only throw away what is not committed.
+        """
+        go_on = () if self.unmerged else (RebaseAction.CONTINUE,)
+        skip = (RebaseAction.SKIP,) if self.stop in (RebaseStop.CONFLICT, RebaseStop.RESOLVED) else ()
+        return (*go_on, RebaseAction.ABORT, *skip)
 
 
 _FOLDING = frozenset({"squash", "s", "fixup", "f"})
@@ -246,6 +269,46 @@ def conflict_next_step(cwd: Path | str | None, *, walk_on: str | None = None) ->
     return (
         f"resolve the conflicts in {', '.join(paths)}, `git add` them, then `git rebase --continue` to finish"
         f"{_walks_on(walk_on)}; `git rebase --abort` goes back to where the rebase started"
+    )
+
+
+def _unstaged_paths(cwd: Path | str | None) -> list[str]:
+    """Tracked paths whose work tree differs from the index, a submodule's own state left out, as git's check."""
+    out = git("diff", "--name-only", "--ignore-submodules", cwd=cwd, check=False).stdout or ""
+    return [line for line in out.splitlines() if line.strip()]
+
+
+_SKIP_REFUSALS = {
+    RebaseStop.EDIT: "it stopped with the commit applied (an `edit`)",
+    RebaseStop.SPLIT: "it stopped with the commit applied (a split)",
+    RebaseStop.PAUSED: "it stopped between commits (`exec`, `break`), with no commit to leave out",
+}
+
+
+def go_on_refusal(cwd: Path | str | None, action: RebaseAction, *, walk_on: str | None = None) -> str | None:
+    """Why ``git rebase --<action>`` must not run now, or ``None``: the one check before every ger "go on".
+
+    Beyond :attr:`RebaseProgress.actions`: git refuses to continue over unstaged changes to tracked
+    files with "You must edit all merge conflicts", whatever the stop; this says what to do instead.
+    *walk_on* names the command that also walks on, where a walk is underway.
+    """
+    progress = rebase_progress(cwd)
+    if progress is None:
+        return f"no rebase is in progress: {AM_UNDERWAY}" if am_in_progress(cwd) else "no rebase is in progress"
+    if action is RebaseAction.CONTINUE:
+        if conflict := conflict_next_step(cwd, walk_on=walk_on):
+            return f"the index has unresolved conflicts; {conflict}"
+        if paths := _unstaged_paths(cwd):
+            take = "`git add` them" if not progress.applied else "amend them in (`git commit --amend -a`)"
+            return f"you have unstaged changes to {', '.join(paths)}; {take} or `git stash` them, then continue"
+    if action in progress.actions:
+        return None
+    why = _SKIP_REFUSALS.get(progress.stop) if progress.stop else None
+    why = why or "ger cannot tell where it stopped"
+    return (
+        f"--skip leaves out a commit the rebase stopped on with a conflict, but {why}: "
+        "`git rebase --skip` would only throw away your uncommitted changes; "
+        "go on with `git rebase --continue`, or `git rebase --abort`"
     )
 
 

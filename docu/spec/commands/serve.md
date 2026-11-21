@@ -250,6 +250,12 @@ The top-level `rebase` is `null` without a rebase, else:
   a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say
   which. It is about the backend: `ger log` with an explicit range shows that range as it is
   now either way.
+- `actions` — the ways on from this stop, in order, by the verdict `ger rebase` refuses by
+  (`RebaseProgress.actions`): `continue` unless paths are still unmerged, `abort` always, `skip`
+  only at a `conflict` or `resolved` stop, where it leaves out the commit not applied yet (at any
+  other stop the commit is in, and `git rebase --skip` would only throw away what is not
+  committed). A client offers these and no others. `continue` can still be refused over
+  unstaged changes, which this does not look at.
 
 `ger log`'s [During a rebase](log.md#during-a-rebase) says where `HEAD` is at each stop, how
 `fixup`/`squash` and merge lines of the todo are shown, and what a detached HEAD's rebase shows:

@@ -178,7 +178,8 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
     ``current`` is the id of the commit it stopped at as the stack shows it: the amended commit
     after an amend, the commit as it was while it is not applied. ``as_before`` is true when the
     rebase keeps no todo to show it live (the ``apply`` backend): ``ger log`` shows the branch as it
-    was before it, unless an explicit range was asked for.
+    was before it, unless an explicit range was asked for. ``actions`` are the ways on from this stop
+    (:attr:`RebaseProgress.actions`).
     """
     if progress is None:
         return None
@@ -192,6 +193,7 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "current": current.sha if current else None,
         "unmerged": list(progress.unmerged),
         "as_before": not progress.keeps_todo,
+        "actions": [action.value for action in progress.actions],
     }
 
 

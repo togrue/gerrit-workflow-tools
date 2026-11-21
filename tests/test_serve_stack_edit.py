@@ -44,6 +44,7 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
         "current": rows[2].sha,
         "unmerged": [],
         "as_before": False,
+        "actions": ["continue", "abort"],
     }
 
     # Amended: the stack shows the commit as it is now, HEAD, changed here since the last push.

@@ -313,11 +313,16 @@ def _stop_on_a_conflict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
 def test_a_conflict_in_an_attention_walk_names_finishing_and_walking_on_apart(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``git rebase --continue`` only finishes; ``ger edit -n`` is named as the way on to the next stop."""
+    """``git rebase --continue`` only finishes; ``ger edit -n`` is named as the way on to the next stop.
+
+    ``ger edit -n`` refuses as ``ger rebase --continue`` does, before git says it cannot go on.
+    """
     _stop_on_a_conflict(stack_repo, monkeypatch)
-    _code, _out, err = run_cli(stack_repo, edit_main, ["-n"], monkeypatch, gerrit=ChangeStore({}))
+    code, _out, err = run_cli(stack_repo, edit_main, ["-n"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == ExitCode.USAGE
     assert err.rstrip().endswith(
-        "next: resolve the conflicts in grow.txt, `git add` them, then `git rebase --continue` to finish; "
+        "error: the index has unresolved conflicts; resolve the conflicts in grow.txt, `git add` them, "
+        "then `git rebase --continue` to finish; "
         "`ger edit -n` finishes and goes on to the next commit needing attention; "
         "`git rebase --abort` goes back to where the rebase started"
     )

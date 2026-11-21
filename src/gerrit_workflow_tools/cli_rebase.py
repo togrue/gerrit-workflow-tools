@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -16,13 +15,11 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
-from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_in_progress, conflict_next_step, rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import RebaseAction
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
-from gerrit_workflow_tools.core.usage import UsageError
-from gerrit_workflow_tools.rebase_run import continue_rebase, require_history_rewrite, run_interactive_rebase
+from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 
 
 logger = logging.getLogger(__name__)
@@ -100,7 +97,10 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="go_on",
         action="store_const",
         const="skip",
-        help="Leave out the commit the rebase underway stopped on with a conflict, and go on without it.",
+        help=(
+            "Leave out the commit the rebase underway stopped on with a conflict, and go on without it. "
+            "Refused at any other stop, where git would only throw away uncommitted changes."
+        ),
     )
     add_verbose_and_debug_log_args(
         p,
@@ -131,7 +131,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.go_on:
         if args.rev or args.onto_remote or args.no_onto_remote or args.drop_merged_equivalent or args.autosquash:
             p.error(f"--{args.go_on} goes on with the rebase underway: it takes no REV and no other option")
-        return _go_on(cwd, args.go_on)
+        return go_on_with_rebase(cwd, RebaseAction(args.go_on))
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 
@@ -174,21 +174,6 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
     autosquash = True if args.autosquash else None
     return run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
-
-
-def _go_on(cwd: Path, how: str) -> int:
-    """``git rebase --continue`` / ``--abort`` / ``--skip`` of the rebase underway; return git's exit code."""
-    if not rebase_in_progress(cwd):
-        raise UsageError(
-            f"no rebase is in progress: {AM_UNDERWAY}" if am_in_progress(cwd) else "no rebase is in progress"
-        )
-    if how == "abort":
-        return git("rebase", "--abort", cwd=cwd, check=False, capture=False).returncode
-    if how == "continue" and (step := conflict_next_step(cwd)):
-        raise UsageError(f"the index has unresolved conflicts; {step}")
-    # Nobody to edit a message (a resolved conflict's commit) without a terminal: take it as it is.
-    env = None if stdin_is_terminal() else {"GIT_EDITOR": "true"}
-    return continue_rebase(cwd, skip=how == "skip", env=env)
 
 
 if __name__ == "__main__":
