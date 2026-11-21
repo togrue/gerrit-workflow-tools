@@ -26,6 +26,9 @@ from tests.fixtures import (
 _FIXTURE_PROFILE_SECONDS: dict[str, float] = defaultdict(float)
 _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)
 
+# The stub global git config of this pytest process (see pytest_configure); None without isolation.
+_STUB_GLOBAL: Path | None = None
+
 
 @pytest.fixture(autouse=True)
 def _reset_hyperlink_mode() -> Generator[None]:
@@ -42,15 +45,19 @@ def pytest_configure(config: pytest.Config) -> None:
     The stub global file supplies only ``user.*`` so ``git commit`` works without per-call
     ``GIT_AUTHOR_*`` env. Production uses full ``git config --list`` (standard precedence);
     without this, tests would pick up the developer's ``gerrit.*`` keys and become flaky.
+
+    The stub lives in a directory of this process: two runs at once (two worktrees, two agents)
+    must not read each other's writes. Each test then gets its own copy of it
+    (``_isolate_git_global_config``), so what ``ger setup`` writes does not reach the next test.
     """
+    global _STUB_GLOBAL
     if os.environ.get("GERRIT_WORKFLOW_TOOLS_NO_GIT_CONFIG_ISOLATION", "").lower() in (
         "1",
         "true",
         "yes",
     ):
         return
-    base = Path(tempfile.gettempdir()) / "gerrit-workflow-tools-test-gitconfig"
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix="gerrit-workflow-tools-test-gitconfig-"))
     stub_global = base / "stub-global"
     stub_system = base / "stub-system"
     stub_global.write_text(
@@ -60,6 +67,13 @@ def pytest_configure(config: pytest.Config) -> None:
     stub_system.write_text("", encoding="utf-8")
     os.environ.setdefault("GIT_CONFIG_GLOBAL", str(stub_global))
     os.environ.setdefault("GIT_CONFIG_SYSTEM", str(stub_system))
+    _STUB_GLOBAL = stub_global
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove this process's stub git config directory."""
+    if _STUB_GLOBAL is not None:
+        shutil.rmtree(_STUB_GLOBAL.parent, ignore_errors=True)
 
 
 def _test_profile_enabled() -> bool:
@@ -164,6 +178,18 @@ def _isolate_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     """Keep Gerrit API cache rows from leaking between tests that share mock hosts."""
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+
+
+@pytest.fixture(autouse=True)
+def _isolate_git_global_config(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give each test its own copy of the stub global git config, so a test that writes to it
+    (``ger setup``, the recent upstreams) leaves the next test the stub as it was."""
+    if _STUB_GLOBAL is None or os.environ.get("GIT_CONFIG_GLOBAL") != str(_STUB_GLOBAL):
+        return
+    # Not in tmp_path, where a test's repository may be and would see an untracked file.
+    own = tmp_path_factory.mktemp("gitconfig") / "global"
+    shutil.copyfile(_STUB_GLOBAL, own)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(own))
 
 
 @pytest.fixture
