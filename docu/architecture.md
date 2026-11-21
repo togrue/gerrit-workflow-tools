@@ -228,7 +228,7 @@ sequenceDiagram
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
-**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking) and how urgent each reason is (`REASON_SEVERITY`, `attention_severity()`, served as `severity` beside every `attention_reasons`); the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render (and the VS Code extension) only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
+**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking) and how urgent each reason is (`REASON_SEVERITY`, `attention_severity()`, served as `severity` beside every `attention_reasons`); somebody's change that waits on your review is seen as yours to review (`as_your_review()`), not as its author's; the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render (and the VS Code extension) only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
 
 **Rendering:** `render/commit_row.py` (full rows for log/show) and `render/status_fmt.py` (compact tokens for rebase todo lines) both consume `LogCommit`.
 
@@ -466,7 +466,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries and the attention cursor (`--cursor`, `--cursor-history`, `--set-cursor`) |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
-| `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, and the **headline** (`pick_headline`) |
+| `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
 | `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), and doing it (`apply_checkout`, rebasing the commits above an updated version) |
@@ -495,7 +495,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
-| `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target) |
+| `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |

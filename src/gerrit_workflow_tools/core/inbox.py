@@ -78,6 +78,20 @@ def build_to_review_query(
     return with_project_filter(base, list(projects))
 
 
+def waiting_on_your_review(service: GerritService, numbers: Collection[int]) -> set[int]:
+    """Which of the changes *numbers* wait on your review: the ones the *to review* section's own
+    query (:func:`build_to_review_query`) matches, in any project. One query; none for no *numbers*.
+
+    The Change view asks it, so that a change listed under *to review* says so there too.
+    """
+    if not numbers:
+        return set()
+    query = build_to_review_query(service.settings, projects=[], include_unready=False)
+    changes = " OR ".join(f"change:{number}" for number in sorted(set(numbers)))
+    found = {row.get("_number") for row in service.changes.query(f"({query}) ({changes})")}
+    return {number for number in numbers if number in found}
+
+
 def project_scope(
     cwd: Path | str | None,
     settings: Settings,

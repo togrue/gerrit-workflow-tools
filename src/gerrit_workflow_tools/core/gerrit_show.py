@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.attention import as_your_review
 from gerrit_workflow_tools.core.changeish import unresolved_change_message, unresolved_rev_message
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
@@ -19,10 +20,11 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 )
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
-from gerrit_workflow_tools.core.gerrit.rest import GerritRest, GerritUnavailableError, norm_change_id
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, GerritUnavailableError, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.inbox import waiting_on_your_review
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import (
     Commit,
@@ -292,6 +294,20 @@ class ShownCommit:
         return self.ci_contents
 
 
+def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> None:
+    """Of *commits* (none of the local stack: that is yours), each that waits on your review leads
+    with that (:func:`as_your_review`). Gerrit not answering leaves the author's reasons.
+    """
+    numbers = [commit.number for commit in commits if commit.pushed and commit.number is not None]
+    try:
+        asked = waiting_on_your_review(service, numbers)
+    except GerritApiError:
+        return
+    for commit in commits:
+        if commit.number in asked:
+            commit.attention_reasons = as_your_review(commit.attention_reasons)
+
+
 def load_shown_commits(
     targets: list[ShowCommitResolution],
     *,
@@ -302,6 +318,9 @@ def load_shown_commits(
     ci: CiContentService | None = None,
 ) -> list[ShownCommit]:
     """Overlay, attention, comment chains and (with *ci*) **CI content** for *targets*, in order.
+
+    A target that is not a local commit and waits on your review (the *to review* query matches
+    it) leads with that.
 
     *targets* must be in stack order for chain-blocking attention. A CI link that cannot be
     fetched stays on its result; nothing here raises for it.
@@ -316,6 +335,8 @@ def load_shown_commits(
     commits = annotated.commits
     if len(commits) != len(targets):
         raise ChangeResolutionError("commit annotation mismatch")
+    if annotated.gerrit_unavailable is None:
+        _mark_waiting_on_you(service, [c for t, c in zip(targets, commits, strict=True) if not t.is_local_commit])
     per_commit: list[list[CiContent] | None] = [None] * len(commits)
     if ci is not None:
         per_commit = list(ci.fetch_each([(commit.ci_links, commit.sha or None) for commit in commits]))

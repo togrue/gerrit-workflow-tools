@@ -30,7 +30,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "src")]
 from tests.change_store import ChangeStore  # noqa: E402
 from tests.ci_fakes import FakeCiHttp, jenkins_build  # noqa: E402
 from tests.fixtures import configure_gerrit_target, make_stack_repo  # noqa: E402
-from tests.test_inbox import _change  # noqa: E402
+from tests.test_inbox import SELF, _change  # noqa: E402
 from tests.test_serve import WEB, _gerrit  # noqa: E402
 
 from gerrit_workflow_tools.cli_serve import main as serve_main  # noqa: E402
@@ -160,7 +160,12 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
         updated="2026-11-08 09:00:00.000000000",
         attention_since="2026-11-07 09:00:00.000000000",
     )
-    theirs.update(project="testproj", id=f"testproj~main~{THEIRS_CHANGE_ID}")
+    # The to-review query asks for reviewer:self: you are a reviewer of what it lists.
+    theirs.update(
+        project="testproj",
+        id=f"testproj~main~{THEIRS_CHANGE_ID}",
+        reviewers={"REVIEWER": [{"_account_id": SELF, "name": "me", "username": "me"}]},
+    )
     store.add_change(theirs)
     store.stub_query(
         build_to_review_query(Settings.from_cwd(repo), projects=["testproj"], include_unready=False), [theirs]
