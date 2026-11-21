@@ -186,7 +186,7 @@ const FIVE = { ...patchsets, number: 48211, current: 5, reviewed: 2, patchsets: 
 const change = (extra: Partial<ChangeState> = {}): ChangeVm => changeVm(state({ shown: theChange(), base: itsDiff(), patchsets: FIVE, ...extra }));
 
 const REMOTE = "Only a commit of your local stack can be reworded here.";
-const since = { patch_set: 2, current_patch_set: 5, to_patch_set: null, up_to_date: false, rebased: false };
+const since = { patch_set: 2, current_patch_set: 5, to_patch_set: null, up_to_date: false, identical: false, rebased: false };
 
 const TREE = "src/widget/routing/prefix_tree.py";
 const on = (line: number | null, path = TREE) => ({ path, line });

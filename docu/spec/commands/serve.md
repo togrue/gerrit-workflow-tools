@@ -303,7 +303,7 @@ that is not in the repository is fetched from `gerrit.remote` first.
 With `since=reviewed` the answer is the **review delta** instead: the current patchset against
 the newest one you posted a vote or comment on. `since=<n>` compares with patchset `n`. The
 shape is the same — `base` is the reviewed patchset's commit, so `/file` serves both sides —
-plus `since`: `patch_set`, `current_patch_set`, `up_to_date` and `rebased`. `patch_set` is
+plus `since`: `patch_set`, `current_patch_set`, `up_to_date`, `identical` and `rebased`. `patch_set` is
 `null` (and `files` empty) when you have not reviewed the change. When the patchsets sit on
 different parents, `rebased` is true and `files` holds only files the change touches; inside
 those, edits that came in from underneath still show.
@@ -318,7 +318,8 @@ What is compared can be chosen:
 | `since=current&local=<commit>` | Gerrit against local: the current patchset against that commit |
 
 `since.to_patch_set` is the patchset on the right-hand side, `null` when that is a local commit
-(`local_commit` is then true). A patchset is compared with an older one only; a local commit
+(`local_commit` is then true). `since.identical` is true when both sides are the same commit: a local
+commit that is the patchset it is compared with. A patchset is compared with an older one only; a local commit
 with any patchset Gerrit has. Without `since`, the answer also carries the commit's `message`
 (the whole commit message) and `author`.
 

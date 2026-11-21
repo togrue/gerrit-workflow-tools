@@ -215,7 +215,7 @@ test("answers out of order: the review delta before the commit fills in its hint
   const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
-  const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, up_to_date: false, rebased: false } };
+  const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, up_to_date: false, identical: false, rebased: false } };
   assert.ok(detail.arrive(token, "delta", delta));
   let vm = drawn(detail, { version: "current" });
   assert.equal(vm.hint?.text, "Since your review: patchset 1 → 2 · 1 file");

@@ -272,9 +272,13 @@ def test_diff_shows_any_patchset_and_compares_gerrit_with_the_local_commit(stack
         "current_patch_set": 2,
         "to_patch_set": None,
         "up_to_date": False,
+        "identical": False,
         "rebased": False,
     }
     assert [(f["path"], f["insertions"], f["deletions"]) for f in gerrit["files"]] == [("d.txt", 1, 0)]
+    # A local commit that is the current patchset (named by a short id): identical, nothing to compare.
+    same = _get(api, "/diff", rev="change:103", since="current", local=second[:12])
+    assert (same["commit"], same["since"]["identical"], same["files"]) == (second, True, [])
 
     # Since your review, up to the local commit, and up to a chosen patchset.
     reviewed = _get(api, "/diff", rev="change:103", since="reviewed", local=local)

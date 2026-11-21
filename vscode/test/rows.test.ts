@@ -167,9 +167,12 @@ test("each comparison is offered only where it means something", () => {
 });
 
 test("a review delta names the two versions, and says when there is nothing to show", () => {
-  const since = { patch_set: 2, current_patch_set: 3, to_patch_set: null, up_to_date: false, rebased: false };
+  const since = { patch_set: 2, current_patch_set: 3, to_patch_set: null, up_to_date: false, identical: false, rebased: false };
   const gerrit = changeVm(state({ mode: "gerrit", delta: diff({ since: { ...since, patch_set: 3 }, files: [] }) })).files;
   assert.deepEqual([gerrit?.title, gerrit?.summary], ["Gerrit vs. local: patchset 3 → local", "0 files"]);
+  // Your commit is the patchset itself: core says so, and the view says there is nothing to push.
+  const same = changeVm(state({ mode: "gerrit", delta: diff({ since: { ...since, patch_set: 3, identical: true }, files: [] }) })).files;
+  assert.deepEqual([same?.title, same?.summary], ["Gerrit vs. local", "identical to patchset 3 — nothing to push"]);
   const reviewed = changeVm(state({ mode: "reviewed", version: 3, delta: diff({ since: { ...since, to_patch_set: 3, rebased: true } }) })).files;
   assert.equal(reviewed?.title, "Since your review: patchset 2 → patchset 3 (rebased)");
   const never = changeVm(state({ mode: "reviewed", delta: diff({ since: { ...since, patch_set: null }, files: [] }) })).files;

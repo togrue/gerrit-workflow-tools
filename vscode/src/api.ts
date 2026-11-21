@@ -314,7 +314,7 @@ export interface Diff {
   local_commit: boolean;
   files: FileChange[];
   /** Present in a review delta: patchset `patch_set` against `to_patch_set` (null: a local commit). */
-  since?: { patch_set: number | null; current_patch_set: number; to_patch_set?: number | null; up_to_date: boolean; rebased: boolean };
+  since?: { patch_set: number | null; current_patch_set: number; to_patch_set?: number | null; up_to_date: boolean; identical: boolean; rebased: boolean };
 }
 
 /** What `/diff` compares instead of a commit with its parent. */

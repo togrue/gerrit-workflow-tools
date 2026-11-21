@@ -388,7 +388,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 (nothing said or done outside the views)
 --- on screen:
 + change | Showing — Local commit <sha> · Gerrit vs. local
-+ change | Gerrit vs. local: patchset 1 → local — 0 · +0 −0
++ change | Gerrit vs. local — identical to patchset 1 — nothing to push
 - change | Showing — Local commit <sha> · Against its base commit
 - change | Files — 1 · +1 −0
 - change |   b.txt — added +1 −0
@@ -407,7 +407,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + change |   b.txt — added +1 −0
 - change | Commit message — Extract command routing  (editable)
 - change | Showing — Local commit <sha> · Gerrit vs. local
-- change | Gerrit vs. local: patchset 1 → local — 0 · +0 −0
+- change | Gerrit vs. local — identical to patchset 1 — nothing to push
 ```
 
 ## 25. Change › Show › Local commit

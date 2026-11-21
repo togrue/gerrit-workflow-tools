@@ -102,7 +102,8 @@ The commits above your upstream, newest first. One row per commit:
   and the one you reviewed marked.
 - **Compare**: *Against its base commit* (what the change does), *Since my last review* (from
   the newest patchset you voted or commented on), or *Gerrit vs. local* (Gerrit's current
-  patchset against your commit: what a push would add). On someone else's change you reviewed
+  patchset against your commit: what a push would add; when your commit is that patchset, it
+  says there is nothing to push). On someone else's change you reviewed
   before, a line says what is new since, with **Show** to switch to it.
 - **Files**: added and removed lines per file, in the colours git gives them. Click for the
   diff of what is compared; an added or deleted file opens on its own. The commit you are
