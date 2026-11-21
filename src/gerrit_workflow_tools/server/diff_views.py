@@ -24,7 +24,7 @@ _OBJECT_ID = re.compile(r"[0-9a-f]{7,40}")
 def _review_delta(ctx: Context, req: Request, rev: str) -> dict[str, Any]:
     raw = req.one("since")
     local = req.one("local")
-    if local is not None and (not _OBJECT_ID.fullmatch(local) or commit_sha_or_none(ctx.cwd, local) is None):
+    if local is not None and (not _OBJECT_ID.fullmatch(local) or (local := commit_sha_or_none(ctx.cwd, local)) is None):
         raise BadRequest("local must be the id of a commit here")
     delta = load_review_delta(
         ctx.service,
@@ -44,6 +44,7 @@ def _review_delta(ctx: Context, req: Request, rev: str) -> dict[str, Any]:
             "current_patch_set": delta.current_patch_set,
             "to_patch_set": delta.target_patch_set,
             "up_to_date": delta.up_to_date,
+            "identical": delta.identical,
             "rebased": delta.rebased,
         },
     }

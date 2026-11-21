@@ -523,6 +523,7 @@ def test_diff_since_reviewed_is_the_current_patchset_against_the_one_you_voted_o
         "current_patch_set": 2,
         "to_patch_set": 2,
         "up_to_date": False,
+        "identical": False,
         "rebased": False,
     }
     assert (delta["base"], delta["commit"]) == (rows[3].sha, amended)

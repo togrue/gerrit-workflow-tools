@@ -369,7 +369,7 @@ export async function run(): Promise<void> {
     );
     await press(
       "Click b.txt under Files",
-      "A diff opens: the parent on the left, the commit on the right.",
+      "b.txt opens on its own: the commit adds it, so there is nothing to compare it with.",
       exec("ger.openDiff", api.changeView.diff?.files[0], api.changeView.diff),
     );
     await press(

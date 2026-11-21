@@ -242,7 +242,9 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
       note = state.loading?.delta ? LOADING : "could not be compared";
     } else if (since?.patch_set === null || since?.patch_set === undefined) {
       note = "you have not reviewed this change yet";
-    } else if (since.up_to_date) {
+    } else if (since.identical && state.mode === "gerrit") {
+      note = `identical to patchset ${since.patch_set} — nothing to push`;
+    } else if (since.up_to_date || since.identical) {
       note = `nothing new: you reviewed patchset ${since.patch_set}`;
     } else {
       title = `${title}: patchset ${since.patch_set} → ${to}${since.rebased ? " (rebased)" : ""}`;

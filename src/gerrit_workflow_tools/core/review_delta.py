@@ -42,6 +42,11 @@ class ReviewDelta:
         """You reviewed the patchset compared: nothing is new."""
         return self.target_patch_set is not None and self.reviewed_patch_set == self.target_patch_set
 
+    @property
+    def identical(self) -> bool:
+        """Both sides are the same commit: a local commit that is the patchset it is compared with."""
+        return self.base is not None and self.base == self.commit
+
 
 def last_reviewed_patch_set(messages: Sequence[Mapping[str, Any]], account_id: int | None) -> int | None:
     """The newest patchset *account_id* posted a change message on, or ``None``."""

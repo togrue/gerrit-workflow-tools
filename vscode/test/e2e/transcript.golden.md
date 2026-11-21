@@ -388,7 +388,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 (nothing said or done outside the views)
 --- on screen:
 + change | Showing — Local commit <sha> · Gerrit vs. local
-+ change | Gerrit vs. local: patchset 1 → local — 0 · +0 −0
++ change | Gerrit vs. local — identical to patchset 1 — nothing to push
 - change | Showing — Local commit <sha> · Against its base commit
 - change | Files — 1 · +1 −0
 - change |   b.txt — added +1 −0
@@ -407,7 +407,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + change |   b.txt — added +1 −0
 - change | Commit message — Extract command routing  (editable)
 - change | Showing — Local commit <sha> · Gerrit vs. local
-- change | Gerrit vs. local: patchset 1 → local — 0 · +0 −0
+- change | Gerrit vs. local — identical to patchset 1 — nothing to push
 ```
 
 ## 25. Change › Show › Local commit
@@ -476,12 +476,12 @@ status bar message: Comment 2 of 2
 
 ## 31. Click b.txt under Files
 
-**Expect:** A diff opens: the parent on the left, the commit on the right.
+**Expect:** b.txt opens on its own: the commit adds it, so there is nothing to compare it with.
 
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ editor | b.txt (<sha>) (diff, ger-file ↔ ger-file)
++ editor | b.txt (ger-file, line 1)
 - editor | b.txt (file, line 1)
 ```
 
@@ -509,7 +509,7 @@ clipboard: 73 lines, starting "# Address the review feedback on this stack"
 notification (info): Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.
 --- on screen:
 + editor | Preview ger-runbook-<id>.md (webview)
-- editor | b.txt (<sha>) (diff, ger-file ↔ ger-file)
+- editor | b.txt (ger-file, line 1)
 ```
 
 ## 34. Inline Let the Agent Handle It on "Is this the right design?"
