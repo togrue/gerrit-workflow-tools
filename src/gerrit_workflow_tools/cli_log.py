@@ -36,7 +36,8 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import RebaseStep, RebaseStop, RebasingStack, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import RebaseStop, rebase_progress
+from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
