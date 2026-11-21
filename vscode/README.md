@@ -45,10 +45,10 @@ The commits above your upstream, newest first. One row per commit:
 
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
-  (push it: the votes stay); a **yellow diff** square when its code changed since (push it, and
+  (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and
   reviewers have to look again: Gerrit may not keep the votes), noted *code changed* beside the
-  short id; a plain **yellow arrow up** when it changed and ger cannot tell which (Gerrit's
-  patchset is a merge, or has no diff); a **red arrow down** when Gerrit has a newer patchset than this commit
+  short id; a plain **yellow arrow up** when it changed and ger cannot tell which (either side
+  is a merge, a root or an empty commit); a **red arrow down** when Gerrit has a newer patchset than this commit
   (outdated); **blue arrows both ways** when both happened (diverged: you changed it, and
   Gerrit's current patchset came from somewhere else). A dimmed **empty circle** is a commit
   Gerrit does not have yet; a green check, one that is merged. Hover it for the words.

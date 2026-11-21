@@ -886,7 +886,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Local changes not pushed, CI failed — V-1 CR+2
-+ change | This commit is ahead of Gerrit — only rebased since the last push: the votes stay when you push
++ change | This commit is ahead of Gerrit — only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push
 - change | CI failed — V-1 CR+2
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
 + change |     FAILURE — generic
@@ -1096,7 +1096,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 + change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Local changes not pushed, CI failed — V-1 CR+2
-- change | This commit is ahead of Gerrit — only rebased since the last push: the votes stay when you push
+- change | This commit is ahead of Gerrit — only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push
 - change | CI
 - change |   Widget #55 — 2 findings
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6

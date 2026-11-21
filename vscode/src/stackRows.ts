@@ -7,13 +7,13 @@ import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
-export type Sync = "same" | "rebased" | "code-changed" | "changed" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
+export type Sync = "same" | "rebased" | "code-changed" | "ahead" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
 
 export const SYNC_WORDS: Record<Sync, string> = {
   same: "the same as on Gerrit",
-  rebased: "only rebased since the last push: the votes stay when you push",
+  rebased: "only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push",
   "code-changed": "its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push",
-  changed: "changed here since the last push: whether its code changed cannot be told here, and Gerrit may not keep the votes when you push",
+  ahead: "changed here since the last push: whether its code changed cannot be told here, and Gerrit may not keep the votes when you push",
   outdated: "outdated: Gerrit has a newer patchset",
   diverged: "diverged: changed here, and Gerrit has a patchset from elsewhere",
   "not-pushed": "not on Gerrit",
@@ -30,7 +30,7 @@ export const SYNC_ICONS: Record<Sync, string> = {
   same: "circle-filled",
   rebased: "arrow-circle-up",
   "code-changed": "diff-modified",
-  changed: "arrow-up",
+  ahead: "arrow-up",
   outdated: "arrow-circle-down",
   diverged: "arrow-swap",
   "not-pushed": "circle-outline",
@@ -39,7 +39,7 @@ export const SYNC_ICONS: Record<Sync, string> = {
 };
 
 /** A commit ahead of Gerrit, by core's verdict on its code. */
-const NEWER_SYNC: Record<CodeChange, Sync> = { rebased: "rebased", changed: "code-changed", unknown: "changed" };
+const NEWER_SYNC: Record<CodeChange, Sync> = { rebased: "rebased", changed: "code-changed", unknown: "ahead" };
 
 export function sync(commit: CommitStatus & { diverged?: boolean }): Sync {
   switch (commit.patchset_status) {

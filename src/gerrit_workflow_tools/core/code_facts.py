@@ -67,11 +67,13 @@ class CodeChange(str, Enum):
     """How a commit ahead of Gerrit's current patch set differs from it: what decides whether its votes stay."""
 
     REBASED = "rebased"
-    """Only rebased: the same patch-id, so Gerrit carries the votes over when it is pushed."""
+    """Only rebased: the same patch-id (``git patch-id`` leaves out whitespace and the message), so
+    Gerrit usually carries the votes over when it is pushed; the project's label rules decide."""
     CHANGED = "changed"
     """Its code changed: the votes are about the pushed patchset, and Gerrit may not keep them."""
     UNKNOWN = "unknown"
-    """Cannot be told here (Gerrit's patchset is not in this repository, a merge, no diff)."""
+    """Cannot be told here: either side is a merge, a root or an empty commit, or Gerrit's patchset
+    is not in this repository."""
 
 
 def code_change(local_sha: str, change: ChangeView, facts: CodeFacts) -> CodeChange:

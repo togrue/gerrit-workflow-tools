@@ -619,6 +619,17 @@ def test_a_commit_ahead_of_a_patchset_it_never_had_cannot_tell_whether_its_code_
     assert commits[1]["last_pushed_votes"] is not None, "not proved only rebased: the votes are the pushed patchset's"
 
 
+def test_an_empty_commit_ahead_of_its_patchset_cannot_tell_whether_its_code_changed(stack_repo: Path) -> None:
+    """No diff, no patch-id: neither only rebased nor changed, and the votes are the pushed patchset's."""
+    store, _keys, _rows = _gerrit(stack_repo)
+    git_out("read-tree", "HEAD~1", cwd=stack_repo)
+    git_out("commit", "--amend", "--allow-empty", "--no-edit", cwd=stack_repo)
+    git_out("checkout", "--", ".", cwd=stack_repo)
+    top = _get(GerApi(stack_repo, gerrit=store), "/stack")["commits"][-1]
+    assert (top["patchset_status"], top["code_change"]) == ("newer", "unknown")
+    assert top["last_pushed_votes"] is not None
+
+
 def test_rewrite_folds_and_drops_without_ever_merging_two_change_ids(stack_repo: Path) -> None:
     store, _keys, rows = _gerrit(stack_repo)
     api = GerApi(stack_repo, gerrit=store)
