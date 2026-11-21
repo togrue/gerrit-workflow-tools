@@ -127,7 +127,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     if (arg && typeof arg === "object" && "rev" in arg) {
       return arg as ChangeTarget;
     }
-    return OverviewView.target(arg as Parameters<typeof OverviewView.target>[0]) ?? stackView.target(arg as CommitArg) ?? changeView.target;
+    return OverviewView.target(arg as Parameters<typeof OverviewView.target>[0], model.stack) ?? stackView.target(arg as CommitArg) ?? changeView.target;
   };
   const threadOf = (arg: unknown): CommentChain | undefined => {
     const row = arg as ThreadArg | undefined;
