@@ -145,7 +145,8 @@ export class Model implements vscode.Disposable {
       const headline = this.overview.headline ?? undefined;
       const key = headline ? `${headline.reason}:${headline.number}` : undefined;
       // Remembered either way: what you caused yourself does not come back as news later.
-      if (background && !first && headline && key !== this.lastHeadline) {
+      // A rebase is yours, never news.
+      if (background && !first && headline && headline.section !== "local" && key !== this.lastHeadline) {
         this.news.fire(headline);
       }
       this.lastHeadline = key;

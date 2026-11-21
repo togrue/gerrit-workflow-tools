@@ -119,7 +119,7 @@ One Gerrit query plus the **review chains** assembled from it. Two exist: **to r
 _Avoid_: inbox tab, queue (unqualified), incoming (for *to review*)
 
 **Headline**:
-The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain, then unresolved comments, then a negative vote; with none of those, the *to review* chain with the largest **unreviewed age**. What an editor's status bar shows.
+The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain, then unresolved comments, then a negative vote; with none of those, the *to review* chain with the largest **unreviewed age**. While a rebase is underway in the checkout, the rebase leads instead: where it stopped, on the **rebasing stack**. What an editor's status bar shows.
 _Avoid_: top issue, main alert, status (unqualified)
 
 **Reviewer strategy**:

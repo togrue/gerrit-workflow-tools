@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 
-import { Chain, CommitStatus, EventsStatus, Overview } from "../src/api";
+import { Chain, CommitStatus, EventsStatus, Overview, Rebase, RebaseHeadline, RebaseStop } from "../src/api";
 import {
   age,
   attentionIcon,
@@ -17,6 +17,7 @@ import {
   fileState,
   headlineIcon,
   movedTo,
+  rebaseItem,
   refreshMode,
   reviewOpened,
   rememberSeen,
@@ -82,6 +83,44 @@ test("the status bar's headline icon is the one its reason gets in Review chains
   }
   assert.equal(headlineIcon({ reason: "waiting-on-you", severity: "pending" }), "eye");
   assert.equal(headlineIcon(null), "pass");
+});
+
+// #62: during a rebase the status bar kept the headline; core now makes the rebase the headline.
+test("the status bar says where a rebase stopped, by the change number or else the subject, and what is next", () => {
+  const at = (stop: RebaseStop | null, number: number | null, subject: string | null = "Cleanup after experiment"): RebaseHeadline => ({
+    section: "local",
+    reason: "rebase",
+    severity: stop === "conflict" ? "error" : "warning",
+    stop,
+    chain: null,
+    number,
+    subject,
+    sha: subject ? "a".repeat(40) : null,
+    url: null,
+    text: "core's sentence",
+  });
+  const text = (headline: RebaseHeadline) => rebaseItem(headline).text;
+  assert.equal(text(at("edit", 101)), "Rebase stopped at 101");
+  assert.equal(text(at("split", 101)), "Rebase stopped at 101");
+  assert.equal(text(at("conflict", 103)), "Conflict in 103");
+  assert.equal(text(at("resolved", 103)), "Conflict resolved in 103");
+  assert.equal(text(at("paused", null, null)), "Rebase paused");
+  assert.equal(text(at(null, null, null)), "Rebase underway");
+  // Not on Gerrit: its subject, cut short.
+  assert.equal(text(at("edit", null)), "Rebase stopped at Cleanup after experiment");
+  assert.equal(text(at("conflict", null, "A subject far too long for the status bar")), "Conflict in A subject far too long for th…");
+  // No commit to name: a split whose commit was reset away.
+  assert.equal(text(at("split", null, null)), "Rebase stopped");
+
+  // What to do next, with the conflicted files.
+  const rebase = (unmerged: string[]): Rebase => ({ branch: "feature", onto: null, orig_head: null, stop: "conflict", applied: false, current: null, unmerged, as_before: false });
+  assert.match(rebaseItem(at("edit", 101)).next, /amend .*git rebase --continue/);
+  assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt"])).next, /^Resolve the conflicts in d\.txt and git add/);
+  assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt", "e.txt"])).next, /conflicts in 2 files .*git rebase --abort/);
+  assert.match(rebaseItem(at("resolved", 103)).next, /resolved: git rebase --continue/);
+  for (const stop of ["edit", "split", "conflict", "resolved", "paused", null] as const) {
+    assert.match(rebaseItem(at(stop, 101)).next, /git rebase --continue/, String(stop));
+  }
 });
 
 test("votes and ages read like ger's own output", () => {

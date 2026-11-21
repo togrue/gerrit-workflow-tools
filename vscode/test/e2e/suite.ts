@@ -931,7 +931,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you start ger edit's rebase on \"test! temporary experiment\", and it stops there",
         "Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, \"Add e.txt\" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.",
-        "the status bar still shows the headline (#62).",
+        undefined,
         () => editAt("test! temporary experiment"),
       );
       await inTerminal(
@@ -955,7 +955,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you stop at \"Refactor parser init\" the same way, and amend it to also add e.txt",
         "Local stack marks the rebase stopped at that commit, which shows its new code (its code changed since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
-        "the status bar still shows the headline (#62).",
+        undefined,
         () => {
           editAt("Refactor parser init");
           write("e.txt", "from the amend\n");
@@ -966,7 +966,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
         "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Abort and Skip (no Continue while e.txt is conflicted); \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
-        "the status bar still shows the headline (#62).",
+        undefined,
         () => gitStops(["rebase", "--continue"]),
       );
       await inTerminal(
@@ -1015,7 +1015,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "Local stack › Rebase onto origin/main (\"test! temporary experiment\" conflicts in c.txt, as the row said)",
         "ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
-        "the status bar still shows the headline (#62).",
+        undefined,
         async () => {
           await exec("ger.rebase.upstream")();
           // What the ger terminal runs: ger rebase's todo, saved as it is, is git rebase onto the upstream.
@@ -1048,7 +1048,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you stop at \"Refactor parser init\" with ger edit's rebase",
         "Local stack marks the rebase stopped at \"Refactor parser init\", HEAD on it; the two above are dimmed, still to be replayed.",
-        "the status bar still shows the headline (#62).",
+        undefined,
         () => editAt("Refactor parser init"),
       );
       await inTerminal("Local stack › click \"Add e.txt\" (still to be replayed)", "The Change view shows \"Add e.txt\" as it was: it changes e.txt.", undefined, openRow("Add e.txt"), [], true);
@@ -1135,7 +1135,7 @@ export async function run(): Promise<void> {
         await inTerminal(
           "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
           "Local stack says the rebase stopped on a conflict in c.txt. \"Add e.txt\" is still to be replayed, but its diff tab has your file on the right, which is now the worktree of the stopped rebase, not that commit: its title says it is stale. It is not closed, though ger.closeDiffsOnRebase is on: it holds unsaved edits, which are kept.",
-          "the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
+          "the Change view still explains votes and shows the commit as it was (#59).",
           () => gitStops(["rebase", "origin/main"]),
         );
         await inTerminal(
