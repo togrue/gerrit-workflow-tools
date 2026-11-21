@@ -476,12 +476,12 @@ status bar message: Comment 2 of 2
 
 ## 31. Click b.txt under Files
 
-**Expect:** A diff opens: the parent on the left, the commit on the right.
+**Expect:** b.txt opens on its own: the commit adds it, so there is nothing to compare it with.
 
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ editor | b.txt (<sha>) (diff, ger-file ↔ ger-file)
++ editor | b.txt (ger-file, line 1)
 - editor | b.txt (file, line 1)
 ```
 
@@ -509,7 +509,7 @@ clipboard: 67 lines, starting "# Address the review feedback on this stack"
 notification (info): Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.
 --- on screen:
 + editor | Preview ger-runbook-<id>.md (webview)
-- editor | b.txt (<sha>) (diff, ger-file ↔ ger-file)
+- editor | b.txt (ger-file, line 1)
 ```
 
 ## 34. Inline Let the Agent Handle It on "Is this the right design?"

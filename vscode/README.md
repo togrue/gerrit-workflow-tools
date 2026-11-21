@@ -105,8 +105,8 @@ The commits above your upstream, newest first. One row per commit:
   patchset against your commit: what a push would add). On someone else's change you reviewed
   before, a line says what is new since, with **Show** to switch to it.
 - **Files**: added and removed lines per file, in the colours git gives them. Click for the
-  diff of what is compared. The commit you are standing on diffs against the real file, so you
-  can fix things in the diff editor.
+  diff of what is compared; an added or deleted file opens on its own. The commit you are
+  standing on diffs against the real file, so you can fix things in the diff editor.
 - **Comments**: unresolved first. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only

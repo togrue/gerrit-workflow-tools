@@ -496,15 +496,27 @@ export class ChangeView extends WebView<ChangeVm> {
     return this.mode === "base" ? this.diff : this.delta;
   }
 
-  /** The diff of one file: what it is compared with on the left, the version looked at on the right. */
+  /**
+   * The diff of one file: what it is compared with on the left, the version looked at on the right.
+   * An added file opens alone, and so does a deleted one, as VS Code's own Git does: its diff editor
+   * shows an empty side as one removed (or added) empty line.
+   */
   async openDiff(file: FileChange, diff: Diff | undefined = this.shownDiff()): Promise<void> {
     if (!diff || diff.base === null) {
       return;
     }
     const left = fileUri(diff.base, file.old_path ?? file.path);
+    if (file.status === "D") {
+      await vscode.commands.executeCommand("vscode.open", left);
+      return;
+    }
     // The commit you are standing on diffs against the real file, so you can edit in place.
-    const editable = this.showsLocal() && this.model.stack?.head === diff.commit && file.status !== "D";
+    const editable = this.showsLocal() && this.model.stack?.head === diff.commit;
     const right = editable ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
+    if (file.status === "A") {
+      await vscode.commands.executeCommand("vscode.open", right);
+      return;
+    }
     const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
     const range = diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
     const title = `${path.posix.basename(file.path)} (${range})`;
