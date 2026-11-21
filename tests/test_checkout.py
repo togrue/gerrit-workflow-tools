@@ -271,7 +271,7 @@ def test_a_submodule_staged_at_another_commit_stops_it_naming_the_submodule(
     code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
     assert code == ExitCode.USAGE
     assert err.strip() == (
-        "error: the submodule commit staged for lib is not committed: "
+        "error: the submodule commit staged for lib is not committed; "
         "commit it or `git restore --staged lib`, then run ger checkout again"
     )
     assert _on(stack_repo) == before
