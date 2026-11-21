@@ -31,6 +31,15 @@ export interface Activity {
   events: EventsStatus;
 }
 
+/** How urgent a change's attention reasons are, as core says (`core/attention.py`, `REASON_SEVERITY`). */
+export type Severity = "error" | "warning" | "pending" | "ok";
+
+/** Anything that carries attention reasons, and the severity core gave them. */
+export interface Attended {
+  attention_reasons: string[];
+  severity: Severity;
+}
+
 export interface Member {
   number: number;
   change_id: string;
@@ -39,6 +48,7 @@ export interface Member {
   code_review: number | null;
   comments_unresolved: number;
   attention_reasons: string[];
+  severity: Severity;
   url: string | null;
   /** The local stack commit carrying this Change-Id, if there is one. */
   local_sha: string | null;
@@ -60,6 +70,7 @@ export interface Chain {
   code_review: number | null;
   comments_unresolved: number;
   attention_reasons: string[];
+  severity: Severity;
   partial_chain: boolean;
   members: Member[];
   local?: boolean;
@@ -77,6 +88,8 @@ export interface Section {
 export interface Headline {
   section: SectionName;
   reason: string;
+  /** The reason's severity; `pending` for one waiting on your review. */
+  severity: Severity;
   chain: string;
   number: number;
   subject: string;
@@ -117,6 +130,7 @@ export interface CommitStatus {
   submittable: boolean;
   work_in_progress: boolean;
   attention_reasons: string[];
+  severity: Severity;
   change_status: string | null;
   updated: string | null;
   /** Who is on the change; absent where the source does not say (a Review chains member). */
@@ -132,8 +146,10 @@ export interface StackCommit extends CommitStatus {
   needs_edit: boolean;
   /** `newer`, and Gerrit's current patchset is a commit this repository never had: it came from elsewhere. */
   diverged?: boolean;
-  /** A merge commit: one stack commit, whatever it brings in; it and the commits below it cannot be moved. */
+  /** A merge commit: one stack commit, whatever it brings in. */
   merge?: boolean;
+  /** The newest merge or below it: git rebase cannot replay a merge, so core leaves it where it is. */
+  pinned?: boolean;
   /** Where a rebase underway stands on this commit; null without one, or when it does not replay it. */
   rebase?: "done" | "current" | "todo" | null;
 }
@@ -210,6 +226,10 @@ export interface Comment {
   line: number | null;
   message: string;
   suggested_edits?: SuggestedEdit[];
+  /** `message` with its fix suggestions written out below it, as `ger show` prints them: for the Change view and tooltips. */
+  text: string;
+  /** The same in Markdown, each replacement fenced: for the editor's comment threads. */
+  markdown: string;
   author?: string;
   comment_id?: string;
   patch_set: number | null;

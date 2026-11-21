@@ -1,0 +1,20 @@
+{
+  "ci-failed": "error",
+  "merged-drift": "error",
+  "abandoned": "error",
+  "missing-change-id": "error",
+  "invalid-change-id": "error",
+  "unsquashed-fixup": "error",
+  "diverged": "error",
+  "unresolved-comments": "warning",
+  "review-issues": "warning",
+  "outdated-patchset": "warning",
+  "merged-unknown": "warning",
+  "not-pushed": "pending",
+  "ahead-of-gerrit": "pending",
+  "awaiting-review": "pending",
+  "no-reviewers": "pending",
+  "chain-blocked": "pending",
+  "wip": "pending",
+  "gerrit-unknown": "pending"
+}

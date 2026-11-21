@@ -2,8 +2,24 @@
 // a CI log. The unit tests of the view models and the gallery's scenarios (test/gallery) build on
 // the same ones, so neither can drift from the API types.
 
-import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit, Stack, StackCommit } from "../src/api";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Severity, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState } from "../src/changeRows";
+
+/** What core says each attention reason weighs (`REASON_SEVERITY`); tests/test_attention_severity.py holds attention.json to it. */
+const REASON_SEVERITY: Record<string, Severity> = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "test", "attention.json"), "utf8"));
+const ORDER: Severity[] = ["error", "warning", "pending", "ok"];
+
+/** `reasons` with the severity `ger serve` gives them (`attention_severity`): a reason core does not know is a warning. `given` wins. */
+export function attended(reasons: string[], given?: Severity): Attended {
+  if (given) {
+    return { attention_reasons: reasons, severity: given };
+  }
+  const found = reasons.map((reason) => ORDER.indexOf(REASON_SEVERITY[reason] ?? "warning"));
+  return { attention_reasons: reasons, severity: ORDER[Math.min(ORDER.length - 1, ...found)] };
+}
 
 export function commit(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
   const sha = summary.toLowerCase().replace(/\W/g, "").padEnd(40, "0");
@@ -24,7 +40,6 @@ export function commit(summary: string, extra: Partial<StackCommit> = {}): Stack
     last_pushed_votes: null,
     submittable: false,
     work_in_progress: false,
-    attention_reasons: [],
     change_status: "NEW",
     updated: null,
     abandoned: false,
@@ -33,6 +48,7 @@ export function commit(summary: string, extra: Partial<StackCommit> = {}): Stack
     held_back: false,
     needs_edit: false,
     ...extra,
+    ...attended(extra.attention_reasons ?? [], extra.severity),
   };
 }
 
@@ -52,7 +68,13 @@ export function stack(commits: StackCommit[], extra: Partial<Stack> = {}): Stack
 /** The conflict preview when no two neighbours conflict. */
 export const never = () => undefined;
 
-export const shown = (extra: Partial<ShownCommit> = {}): ShownCommit => ({ ...commit("Extract routing"), local_commit: true, comment_chains: [], ...extra });
+export const shown = (extra: Partial<ShownCommit> = {}): ShownCommit => ({
+  ...commit("Extract routing"),
+  local_commit: true,
+  comment_chains: [],
+  ...extra,
+  ...attended(extra.attention_reasons ?? [], extra.severity),
+});
 
 export function diff(extra: Partial<Diff> = {}): Diff {
   return {
@@ -78,7 +100,7 @@ export const patchsets: Patchsets = { number: 1, current: 3, reviewed: 2, patchs
 
 /** A published comment by Alice on `a.py:4`. */
 export function comment(message: string, extra: Partial<Comment> = {}): Comment {
-  return { path: "a.py", line: 4, message, patch_set: 1, state: "published", url: null, author: "Alice", ...extra };
+  return { path: "a.py", line: 4, message, text: message, markdown: message, patch_set: 1, state: "published", url: null, author: "Alice", ...extra };
 }
 
 /** An open comment chain on `a.py:4`. */

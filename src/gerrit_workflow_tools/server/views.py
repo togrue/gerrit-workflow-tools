@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from functools import partial
 from itertools import pairwise
-from typing import Any
+from typing import Any, cast
 
 from gerrit_workflow_tools import __version__
 from gerrit_workflow_tools.cli_common import failure_exit
@@ -30,12 +30,13 @@ from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, pinned_count
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, pinned_below, pinned_count
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
+from gerrit_workflow_tools.render.suggested_fixes import comment_text
 from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
@@ -91,6 +92,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     head = commit_sha_or_none(cwd, "HEAD")
     progress = rebase_progress(cwd)
     merges = merge_commits(cwd, [c.sha for c in view.commits])
+    pinned = pinned_below([c.sha for c in view.commits], merges)
     commits = [
         {
             **log_commit_json(c),
@@ -98,6 +100,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
             "abandoned": c.abandoned,
             "diverged": c.diverged,
             "merge": c.sha in merges,
+            "pinned": index < pinned,
             "rebase": progress.state_of(c.sha) if progress else None,
             "updated": iso_utc(parse_gerrit_time(c.updated)),
             "is_head": c.sha == head,
@@ -105,7 +108,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
             "needs_edit": commit_needs_edit_attention(c),
             **({"resolution_note": view.notes_by_sha[c.sha]} if c.sha in view.notes_by_sha else {}),
         }
-        for c in view.commits
+        for index, c in enumerate(view.commits)
     ]
     return {
         "branch": ctx.run.worktree.branch,
@@ -286,8 +289,12 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         )
         payload["short_sha"] = item.commit.short_sha
         payload["new_comment"] = new_comment_state(item.commit, is_local=item.target.is_local_commit)
-        for chain_payload in payload["comment_chains"]:  # type: ignore[attr-defined]
+        served_chains = cast(list[dict[str, Any]], payload["comment_chains"])
+        for chain_payload, chain in zip(served_chains, item.chains, strict=True):
             chain_payload["held"] = chain_payload["root_id"] in holds
+            for entry, comment in zip(chain_payload["comments"], chain.comments, strict=True):
+                entry["text"] = comment_text(comment.message, comment.suggested_edits)
+                entry["markdown"] = comment_text(comment.message, comment.suggested_edits, markdown=True)
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if req.flag("markdown"):
             lines = commit_markdown(

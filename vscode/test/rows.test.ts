@@ -9,7 +9,7 @@ import { ChangeState, changeHeading, changeLines, changeVm } from "../src/change
 import { attentionIcon } from "../src/format";
 import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
-import { chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
+import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
 test("the icon says how a commit relates to Gerrit", () => {
   const states = (extra: Partial<StackCommit>) => sync(commit("c", extra));
@@ -80,8 +80,8 @@ test("mid-rebase the stack marks where it stands and dims what is not replayed y
   assert.equal(stackLines(conflict)[2], "▶! Two — two0000 · the same as on Gerrit  (dim)");
 });
 
-test("a merge is one row; it and what is below it stay, what is above it still moves", () => {
-  const withMerge = stack([commit("One"), commit("Merge side", { merge: true }), commit("Two"), commit("Three")]);
+test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {
+  const withMerge = stack([commit("One", { pinned: true }), commit("Merge side", { merge: true, pinned: true }), commit("Two"), commit("Three")]);
   assert.equal(frozen(withMerge), null, "a merge no longer freezes the whole stack");
   assert.equal(pinned(withMerge), 2);
   const vm = stackVm(withMerge, undefined, never);
@@ -209,12 +209,9 @@ test("the commit message is read-only with the reason, and comment chains say wh
   ).comments?.threads[0];
   assert.deepEqual([long?.text, long?.body, long?.author, long?.file, long?.reply], ["Looks good overall.", "Looks good overall.\n\nBut the second half needs a test.", "Alice", false, true]);
   assert.deepEqual(rows.map((row) => row.file), [true, true, true]);
-  // A Gerrit fix suggestion shows below the text as plain text: the Change view and tooltip print text as it is.
-  const replacement = { path: "a.py", range: { start_line: 4, start_character: 0, end_line: 5, end_character: 0 }, replacement: "    x = 1\n", location: "a.py:4" };
-  const fixed = changeVm(
-    state({ chains: [chain("fix", [comment("Name it.", { suggested_edits: [{ fix_id: "f1", description: "Set x", in_message: false, replacements: [replacement] }] })])] }),
-  ).comments?.threads[0];
+  // A Gerrit fix suggestion shows below the text as ger serve writes it in `text`: the Change view and tooltip print text as it is.
   const plain = "Name it.\n\nsuggested fix: Set x\n  a.py:4 becomes:\n  +     x = 1";
+  const fixed = changeVm(state({ chains: [chain("fix", [comment("Name it.", { text: plain, markdown: "Name it.\n\n**Suggested fix:** Set x\n`a.py:4` becomes:\n```\n    x = 1\n```" })])] })).comments?.threads[0];
   assert.deepEqual([fixed?.body, fixed?.tooltip], [plain, `Alice:\n${plain}`]);
   const replied = changeVm(state({ chains: [chain("open", [comment("Please rename this."), comment("Renamed it.", { state: "draft", comment_id: "d1" })])] }));
   assert.deepEqual([replied.comments?.threads[0].edit, replied.comments?.threads[0].discard], [false, "Delete Your Draft Reply…"]);
@@ -270,7 +267,7 @@ test("a change wears the comment icon exactly when the Change view lists an open
     resolved_after_publish: false,
     outdated: patch_set < 3,
     held: false,
-    comments: [{ path: "a.py", line: 4, message: "Rename this.", patch_set, state: "published", url: null, author: "Alice" }],
+    comments: [comment("Rename this.", { patch_set })],
     ...extra,
   });
   const cases: [string, Partial<StackCommit>, CommentChain[]][] = [
@@ -286,7 +283,7 @@ test("a change wears the comment icon exactly when the Change view lists an open
     [
       "only your draft",
       { attention_reasons: ["awaiting-review"] },
-      [published(3, { comments: [{ path: "a.py", line: 4, message: "Maybe rename.", patch_set: 3, state: "draft", url: null }] })],
+      [published(3, { comments: [comment("Maybe rename.", { patch_set: 3, state: "draft", author: undefined })] })],
     ],
   ];
   for (const [name, extra, chains] of cases) {
@@ -294,7 +291,7 @@ test("a change wears the comment icon exactly when the Change view lists an open
     const listsOpen = (vm.comments?.threads ?? []).some((row) => row.open);
     assert.equal(vm.head?.icon === "comment-unresolved", listsOpen, `${name}: Change view head`);
     // Review chains draws a change and its chain from the same attention reasons.
-    assert.equal(attentionIcon(extra.attention_reasons ?? []).icon === "comment-unresolved", listsOpen, `${name}: Review chains row`);
-    assert.equal(attentionIcon(extra.attention_reasons ?? []).icon, vm.head?.icon, `${name}: both views draw the same icon`);
+    assert.equal(attentionIcon(attended(extra.attention_reasons ?? [])).icon === "comment-unresolved", listsOpen, `${name}: Review chains row`);
+    assert.equal(attentionIcon(attended(extra.attention_reasons ?? [])).icon, vm.head?.icon, `${name}: both views draw the same icon`);
   }
 });

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { test } from "node:test";
 
 import { Chain, CommitStatus, EventsStatus, Overview } from "../src/api";
@@ -10,9 +12,6 @@ import {
   chainDescription,
   chainsWithActivity,
   commentLocation,
-  codeFence,
-  commentPlainText,
-  commentText,
   commitVotes,
   eventsMayCome,
   fileState,
@@ -22,12 +21,13 @@ import {
   reviewOpened,
   rememberSeen,
   sentence,
-  severity,
   sortedChains,
   swapKey,
   vote,
   votes,
+  WORDED_REASONS,
 } from "../src/format";
+import { attended } from "./fixtures";
 
 function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): Chain {
   return {
@@ -43,10 +43,10 @@ function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): C
     verified: 1,
     code_review: null,
     comments_unresolved: 2,
-    attention_reasons: [],
     partial_chain: false,
     members: [],
     ...extra,
+    ...attended(extra.attention_reasons ?? []),
   };
 }
 
@@ -54,27 +54,30 @@ function overview(...chains: Chain[]): Overview {
   return { host: "g", sections: [{ name: "to-review", query: "", summary: {}, chains }], local: { error: { code: "GIT", message: "" } } };
 }
 
-test("severity takes the most urgent reason", () => {
-  assert.equal(severity(["awaiting-review", "ci-failed", "unresolved-comments"]), "error");
-  assert.equal(severity(["awaiting-review", "unresolved-comments"]), "warning");
-  assert.equal(severity(["not-pushed"]), "pending");
-  assert.equal(severity([]), "ok");
-  assert.deepEqual(attentionIcon(["review-issues"]), { icon: "warning", severity: "warning" });
-  assert.deepEqual(attentionIcon(["review-issues", "unresolved-comments"]), { icon: "comment-unresolved", severity: "warning" });
-  assert.deepEqual(attentionIcon(["ci-failed", "unresolved-comments"]), { icon: "error", severity: "error" });
+test("the icon follows the severity core gave; unresolved comments draw the comment bubble only as a warning", () => {
+  assert.deepEqual(attentionIcon(attended(["review-issues"])), { icon: "warning", severity: "warning" });
+  assert.deepEqual(attentionIcon(attended(["review-issues", "unresolved-comments"])), { icon: "comment-unresolved", severity: "warning" });
+  assert.deepEqual(attentionIcon(attended(["ci-failed", "unresolved-comments"])), { icon: "error", severity: "error" });
+  assert.deepEqual(attentionIcon(attended(["not-pushed"])), { icon: "clock", severity: "pending" });
+  assert.deepEqual(attentionIcon(attended([])), { icon: "pass", severity: "ok" });
+});
+
+test("every attention reason core names has words", () => {
+  const core = Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "test", "attention.json"), "utf8")));
+  assert.deepEqual([...WORDED_REASONS].sort(), core.sort());
 });
 
 // A4: the status bar drew a comment bubble for "Negative vote on 123", which has no comment.
 test("the status bar's headline icon is the one its reason gets in Review chains", () => {
-  const outgoing = (reason: string) => headlineIcon({ section: "outgoing", reason });
+  const outgoing = (reason: string) => headlineIcon({ section: "outgoing", reason, severity: attended([reason]).severity });
   assert.equal(outgoing("review-issues"), "warning");
   assert.notEqual(outgoing("review-issues"), "comment-unresolved");
   assert.equal(outgoing("unresolved-comments"), "comment-unresolved");
   assert.equal(outgoing("ci-failed"), "error");
   for (const reason of ["ci-failed", "unresolved-comments", "review-issues"]) {
-    assert.equal(outgoing(reason), attentionIcon([reason]).icon, reason);
+    assert.equal(outgoing(reason), attentionIcon(attended([reason])).icon, reason);
   }
-  assert.equal(headlineIcon({ section: "to-review", reason: "waiting-on-you" }), "eye");
+  assert.equal(headlineIcon({ section: "to-review", reason: "waiting-on-you", severity: "pending" }), "eye");
   assert.equal(headlineIcon(null), "pass");
 });
 
@@ -185,52 +188,4 @@ test("a review checkout says where the change is: the review worktree, or this c
     reviewOpened({ ...review, staged: false }, true),
     "Change 900 (patchset 2) is checked out for review: this checkout was switched to change-900. Leave Review Checkout switches back.",
   );
-});
-
-test("a comment's text shows the Gerrit fix it suggests, and a suggestion block of its text only once", () => {
-  const range = { start_line: 2, start_character: 0, end_line: 4, end_character: 0 };
-  const fix = {
-    fix_id: "a6b3c2d1_0e9f8a7b",
-    description: "Use the LIMIT constant",
-    in_message: false,
-    replacements: [{ path: "epsilon.txt", range, replacement: "LIMIT = 10\nuse(LIMIT)\n", location: "epsilon.txt:2-3" }],
-  };
-  assert.equal(
-    commentText({ message: "Name the limit.", suggested_edits: [fix] }),
-    "Name the limit.\n\n**Suggested fix:** Use the LIMIT constant\n`epsilon.txt:2-3` becomes:\n```\nLIMIT = 10\nuse(LIMIT)\n```",
-  );
-  const deletion = { ...fix, description: "", replacements: [{ ...fix.replacements[0], replacement: "" }] };
-  assert.equal(commentText({ message: "", suggested_edits: [deletion] }), "**Suggested fix:**\n`epsilon.txt:2-3`: delete");
-  const block = "Typo:\n\n```suggestion\n    return total\n```\n";
-  const inMessage = { ...fix, fix_id: null, in_message: true };
-  assert.equal(commentText({ message: block, suggested_edits: [inMessage] }), block);
-  assert.equal(commentText({ message: "plain" }), "plain");
-});
-
-test("a fix is fenced longer than any backtick run in it, so a ``` line of the code cannot close the fence", () => {
-  assert.equal(codeFence(["x = 1"]), "```");
-  assert.equal(codeFence(["```", "x = `y`", "```"]), "````");
-  const range = { start_line: 2, start_character: 0, end_line: 3, end_character: 0 };
-  const fix = { fix_id: "f1", description: "", in_message: false, replacements: [{ path: "a.md", range, replacement: "```\ncode\n```\n", location: "a.md:2" }] };
-  assert.equal(commentText({ message: "", suggested_edits: [fix] }), "**Suggested fix:**\n`a.md:2` becomes:\n````\n```\ncode\n```\n````");
-});
-
-test("the Change view and tooltips get a comment's fixes as plain text, an insertion said as one", () => {
-  const range = { start_line: 2, start_character: 0, end_line: 4, end_character: 0 };
-  const at = { start_line: 5, start_character: 2, end_line: 5, end_character: 2 };
-  const fix = {
-    fix_id: "a6b3c2d1_0e9f8a7b",
-    description: "Use the LIMIT constant",
-    in_message: false,
-    replacements: [
-      { path: "epsilon.txt", range, replacement: "LIMIT = 10\r\n    use(LIMIT)\r\n", location: "epsilon.txt:2-3" },
-      { path: "epsilon.txt", range: at, replacement: "x", location: "epsilon.txt:5.3" },
-      { path: "epsilon.txt", range, replacement: "", location: "epsilon.txt:2-3" },
-    ],
-  };
-  assert.equal(
-    commentPlainText({ message: "Name the limit.", suggested_edits: [fix] }),
-    "Name the limit.\n\nsuggested fix: Use the LIMIT constant\n  epsilon.txt:2-3 becomes:\n  + LIMIT = 10\n  +     use(LIMIT)\n  insert at epsilon.txt:5.3:\n  + x\n  epsilon.txt:2-3: delete",
-  );
-  assert.equal(commentPlainText({ message: "plain" }), "plain");
 });

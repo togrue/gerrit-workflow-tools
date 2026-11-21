@@ -185,8 +185,8 @@ Everything the first screen needs, in one call.
   `query`, `summary`, and `chains` in the shape of `ger inbox --json`. Each chain member also
   has `local_sha` — the commit of the **local stack** carrying that **Change-Id**, or `null` —
   and each chain has `local`.
-- `headline` — the **headline**: `section`, `reason`, `chain`, `number`, `subject`, `url` and a
-  sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
+- `headline` — the **headline**: `section`, `reason`, its `severity` (`pending` for a chain
+  waiting on your review), `chain`, `number`, `subject`, `url` and a sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
   with a commit of the **local stack**; another chain's failure leaves the headline to the next
   reason.
 - `local` — the answer of `GET /stack`.
@@ -217,8 +217,10 @@ For a view that draws the stack, each commit also says:
   repository never had: somebody else, or another checkout, uploaded it. Told from the object
   database alone, so a patch set you fetched without building on it does not count.
 - `merge` — it is a merge commit. The stack is first-parent, as Gerrit relates changes: the
-  merge is a stack commit, what it merged is not, and is never walked. The newest merge and
-  the commits below it cannot be moved, folded or dropped here; the ones above it can.
+  merge is a stack commit, what it merged is not, and is never walked.
+- `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
+  or dropped here, as `POST /stack/rewrite` refuses and `GET /stack/moves` leaves out; the
+  commits above the newest merge can.
 - `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the branch as it
   was before, and this is where the rebase stands on each commit: `done` (replayed), `current`
   (it stopped here), `todo` (still to come), or `null` for a commit the rebase does not replay.
@@ -264,6 +266,11 @@ The **review chain** an open change sits in, base to top, in the `ger inbox --js
 `ci_content` of each failed **CI link**. A `rev` naming a **sibling** on another branch than the
 local commit with its Change-Id pushes to is that change, `local_commit: false`, with the commit in
 `resolution.local_sibling` ([show](show.md)).
+
+Each comment also carries its whole text with the Gerrit fix suggestions written out below it
+(`render/suggested_fixes.py`), so a viewer shows them without rendering them itself: `text`
+plain, as `ger show` prints them without its box and colours, and `markdown` with each
+replacement fenced. A ```` ```suggestion ```` block is in the message already and is not repeated.
 
 Each commit also says what a new comment on it becomes by default, in `new_comment`: `draft`
 when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else

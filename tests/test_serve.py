@@ -231,6 +231,7 @@ def test_headline_falls_back_to_the_longest_waiting_review(stack_repo: Path) -> 
     headline = _get(GerApi(stack_repo, gerrit=store), "/overview")["headline"]
     assert (headline["section"], headline["reason"], headline["number"]) == ("to-review", "waiting-on-you", 100)
     assert headline["text"].startswith("alice has waited ")
+    assert headline["severity"] == "pending", "waiting on your review is no problem of the change"
 
 
 def test_overview_shows_the_inbox_when_the_local_stack_cannot_be_read(stack_repo: Path) -> None:
@@ -312,6 +313,18 @@ def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, mo
     assert served == edits(json_stdout(out)), err
     assert served["4f0a1c2b_8d9e7f60"][0]["fix_id"] == "a6b3c2d1_0e9f8a7b"
     assert served["7c6d5e4f_3a2b1c0d"][0]["in_message"] is True
+    # And the text with the fix written out, both ways, so a viewer does not render it itself.
+    texts = {
+        c["comment_id"]: (c["text"], c["markdown"]) for chain in commit["comment_chains"] for c in chain["comments"]
+    }
+    assert texts["4f0a1c2b_8d9e7f60"] == (
+        "Name the limit.\n\nsuggested fix: Use the LIMIT constant\n  epsilon.txt:2-3 becomes:\n"
+        "  + LIMIT = 10\n  + use(LIMIT)",
+        "Name the limit.\n\n**Suggested fix:** Use the LIMIT constant\n`epsilon.txt:2-3` becomes:\n"
+        "```\nLIMIT = 10\nuse(LIMIT)\n```",
+    )
+    block = BLOCK_COMMENT["message"]
+    assert texts["7c6d5e4f_3a2b1c0d"] == (block, block), "a suggestion block is in the text already"
 
 
 def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) -> None:

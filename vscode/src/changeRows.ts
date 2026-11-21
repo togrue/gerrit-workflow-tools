@@ -4,8 +4,8 @@
 
 import * as path from "node:path";
 
-import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
-import { Severity, attentionIcon, commentPlainText, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Severity, ShownCommit } from "./api";
+import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
 import { Badge, Tone, badges } from "./stackRows";
 import { Waiting } from "./state";
 
@@ -173,8 +173,8 @@ export const LOADING = "loading…";
 const SEVERITY_TONE: Record<Severity, Tone | undefined> = { error: "bad", warning: "warn", pending: undefined, ok: "good" };
 
 /** The head's icon: the one the change wears in Review chains (`attentionIcon`). */
-function headIcon(reasons: readonly string[]): Icon {
-  const { icon, severity } = attentionIcon(reasons);
+function headIcon(commit: Readonly<Attended>): Icon {
+  const { icon, severity } = attentionIcon(commit);
   const tone = SEVERITY_TONE[severity];
   return tone ? { icon, tone } : { icon };
 }
@@ -289,11 +289,11 @@ function thread(chain: CommentChain): ThreadRow {
     ...icon,
     id: chain.root_id,
     text: first?.message.split("\n")[0] ?? where,
-    body: first ? commentPlainText(first) : "",
+    body: first?.text ?? "",
     author: first ? (first.author ?? "you") : "",
     file: !NOT_FILES.includes(chain.path),
     notes: notes.filter(Boolean),
-    tooltip: chain.comments.map((c) => `${c.author ?? "you"}${c.state === "published" ? "" : ` (${c.state})`}:\n${commentPlainText(c)}`).join("\n\n"),
+    tooltip: chain.comments.map((c) => `${c.author ?? "you"}${c.state === "published" ? "" : ` (${c.state})`}:\n${c.text}`).join("\n\n"),
     // Your own unpublished chain: nobody to reply to, nothing for the agent to keep from.
     reply: !mine,
     open: !mine && !chain.resolved,
@@ -303,7 +303,7 @@ function thread(chain: CommentChain): ThreadRow {
     draft: Boolean(!mine && own),
     edit: Boolean(mine && own),
     discard: own ? (mine ? DISCARD[own.state] : "Delete Your Draft Reply…") : "",
-    replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: commentPlainText(c) })),
+    replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: c.text })),
   };
 }
 
@@ -370,7 +370,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
   const yours = chains.length - fromGerrit;
   const counts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
-  const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.verified === -1;
+  const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
   const words = sentence(reasonWords(commit.attention_reasons));
   // Nothing calls for attention, and whether it is ready to submit is not known yet: no green check meanwhile.
@@ -379,7 +379,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     key: commit.change_id ?? commit.sha ?? "",
     loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly } : undefined,
     head: {
-      ...(unsure ? { icon: "loading" } : headIcon(commit.attention_reasons)),
+      ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],

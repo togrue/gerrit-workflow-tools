@@ -5,10 +5,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Diff, Member, ShownCommit, StackCommit } from "../src/api";
-import { ChangeDetail, memberStatus, sameChange } from "../src/changeLoad";
+import { ChangeDetail, memberStatus, memberTarget, sameChange } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
+import { attended, stack } from "./fixtures";
 
 function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
   const sha = summary.toLowerCase().replace(/\W/g, "").padEnd(40, "0");
@@ -29,7 +30,6 @@ function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
     last_pushed_votes: null,
     submittable: false,
     work_in_progress: false,
-    attention_reasons: ["unresolved-comments"],
     change_status: "NEW",
     updated: null,
     abandoned: false,
@@ -38,6 +38,7 @@ function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
     held_back: false,
     needs_edit: false,
     ...extra,
+    ...attended(extra.attention_reasons ?? ["unresolved-comments"]),
   };
 }
 
@@ -95,13 +96,27 @@ test("a click draws the Change view at once from the Local stack row: what it ne
 });
 
 test("a Review chains row draws its votes and attention at once, and does not guess whether it is ready to submit", () => {
-  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   const vm = drawn(detail, { version: "current" });
   assert.equal(vm.head?.text, "Loading…", "the row does not say whether Gerrit would submit it");
   assert.deepEqual(vm.head?.badges.map((badge) => badge.kind), ["ci"]);
   assert.equal(changeHeading(12, detail.commit()?.summary, vm, onScreen).description, "Add cache", "the subject, not the row's `12: Add cache`");
+});
+
+test("a Review chains member that is a commit of your stack is drawn from that commit, ahead of Gerrit as it is", () => {
+  const mine = row("Add cache", { patchset_status: "newer", number: 12, attention_reasons: ["ahead-of-gerrit"] });
+  const member: Member = { number: 12, change_id: mine.change_id ?? "", subject: "Add cache", verified: 1, code_review: 2, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: mine.sha, sha: "f".repeat(40) };
+  const chain = { key: "k", members: [member] } as unknown as Parameters<typeof memberTarget>[1];
+  const opened = memberTarget(member, chain, stack([mine]));
+  assert.equal(opened.known, mine, "what ger serve says of the commit, not a guess from the row");
+  const detail = new ChangeDetail();
+  detail.select(opened, false);
+  assert.equal(drawn(detail).notes?.[0]?.text, "This commit is ahead of Gerrit");
+  // Without the stack (it could not be read) nothing is guessed: the view waits for /show.
+  assert.equal(memberTarget(member, chain, undefined).known, undefined);
+  assert.equal(memberTarget({ ...member, local_sha: null }, chain, undefined).known?.sha, member.sha, "a change only on Gerrit is drawn from its row");
 });
 
 test("each answer fills in its part as it comes: the commit with its files first, the review delta later", () => {
@@ -203,7 +218,7 @@ test("a /show failure stays shown when a late answer of another part comes", () 
 });
 
 test("answers out of order: the review delta before the commit fills in its hint, the rest still loading", () => {
-  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, up_to_date: false, rebased: false } };
@@ -220,7 +235,7 @@ test("answers out of order: the review delta before the commit fills in its hint
 });
 
 test("while it is not known whether the change is ready to submit, the head wears a loading icon, not the green check", () => {
-  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   let head = drawn(detail, { version: "current" }).head;

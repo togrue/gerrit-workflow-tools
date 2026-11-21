@@ -1,15 +1,13 @@
-// How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
+// How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
-import { Chain, Comment, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
+import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, Severity, StackMoves } from "./api";
 
-export type Severity = "error" | "warning" | "pending" | "ok";
-
-const ERRORS = ["ci-failed", "merged-drift", "abandoned", "missing-change-id", "invalid-change-id"];
-const WARNINGS = ["unresolved-comments", "review-issues", "outdated-patchset", "merged-unknown"];
-const PENDING = ["not-pushed", "ahead-of-gerrit", "awaiting-review", "no-reviewers", "chain-blocked", "wip"];
-
+/** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
 const WORDS: Record<string, string> = {
   "ci-failed": "CI failed",
+  diverged: "Gerrit has a patchset you never had",
+  "unsquashed-fixup": "unsquashed fixup commit",
+  "gerrit-unknown": "Gerrit state unknown",
   "unresolved-comments": "unresolved comments",
   "review-issues": "negative vote",
   "not-pushed": "not pushed",
@@ -26,17 +24,6 @@ const WORDS: Record<string, string> = {
   wip: "work in progress",
 };
 
-/** The most urgent thing the attention reasons say. */
-export function severity(reasons: readonly string[]): Severity {
-  if (reasons.some((r) => ERRORS.includes(r))) {
-    return "error";
-  }
-  if (reasons.some((r) => WARNINGS.includes(r))) {
-    return "warning";
-  }
-  return reasons.some((r) => PENDING.includes(r)) ? "pending" : "ok";
-}
-
 const SEVERITY_ICONS: Record<Severity, string> = { error: "error", warning: "warning", pending: "clock", ok: "pass" };
 
 /** Every icon `attentionIcon` can give. */
@@ -47,8 +34,7 @@ export const ATTENTION_ICONS: readonly string[] = [...Object.values(SEVERITY_ICO
  * means unresolved comments, which the Change view lists; a negative vote or a newer patchset on
  * Gerrit is a warning without one.
  */
-export function attentionIcon(reasons: readonly string[]): { icon: string; severity: Severity } {
-  const level = severity(reasons);
+export function attentionIcon({ attention_reasons: reasons, severity: level }: Readonly<Attended>): { icon: string; severity: Severity } {
   const comments = level === "warning" && reasons.includes("unresolved-comments");
   return { icon: comments ? "comment-unresolved" : SEVERITY_ICONS[level], severity: level };
 }
@@ -58,15 +44,18 @@ export function attentionIcon(reasons: readonly string[]): { icon: string; sever
  * icon `attentionIcon` gives its reason (a negative vote is a warning, not a comment bubble); a
  * check when nothing needs you.
  */
-export function headlineIcon(headline: Pick<Headline, "section" | "reason"> | null | undefined): string {
+export function headlineIcon(headline: Pick<Headline, "section" | "reason" | "severity"> | null | undefined): string {
   if (!headline) {
     return "pass";
   }
-  return headline.section === "to-review" ? "eye" : attentionIcon([headline.reason]).icon;
+  return headline.section === "to-review" ? "eye" : attentionIcon({ attention_reasons: [headline.reason], severity: headline.severity }).icon;
 }
 
 /** Every attention reason this knows, in words: what `reasonWords` can say of ours. */
 export const REASON_WORDS: readonly string[] = Object.values(WORDS);
+
+/** Every attention reason this has words for: all that core names. */
+export const WORDED_REASONS: readonly string[] = Object.keys(WORDS);
 
 export function reasonWords(reasons: readonly string[]): string {
   return reasons.map((r) => WORDS[r] ?? r).join(", ");
@@ -262,71 +251,4 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   }
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
-}
-
-/** What a fix's replacement does and the lines it writes (none for a delete), its location passed through `where`. */
-interface FixPart {
-  what: string;
-  code: string[];
-}
-
-/**
- * The Gerrit fix suggestions of a comment, as they are written out below its text. A
- * ```suggestion block of the text is already there, so it is left out.
- */
-function shownFixes(comment: Pick<Comment, "suggested_edits">, where: (location: string) => string): { description: string; parts: FixPart[] }[] {
-  return (comment.suggested_edits ?? [])
-    .filter((edit) => !edit.in_message)
-    .map((edit) => ({
-      description: edit.description,
-      parts: edit.replacements.map((rep) => {
-        const location = where(rep.location);
-        if (!rep.replacement) {
-          return { what: `${location}: delete`, code: [] };
-        }
-        const r = rep.range;
-        const inserts = r.start_line === r.end_line && r.start_character === r.end_character;
-        return { what: inserts ? `insert at ${location}:` : `${location} becomes:`, code: rep.replacement.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") };
-      }),
-    }));
-}
-
-/** A Markdown fence longer than any run of backticks in `lines`, so none of them closes it. */
-export function codeFence(lines: string[]): string {
-  const longest = Math.max(0, ...lines.flatMap((line) => (line.match(/`+/g) ?? []).map((run) => run.length)));
-  return "`".repeat(Math.max(3, longest + 1));
-}
-
-/**
- * A comment's text with the Gerrit fix suggestions it carries written out below it in Markdown:
- * what each replaces, and with what (fenced). For the editor's comment threads.
- */
-export function commentText(comment: Pick<Comment, "message" | "suggested_edits">): string {
-  const fixes = shownFixes(comment, (location) => `\`${location}\``).map(({ description, parts }) => {
-    const lines = [`**Suggested fix:**${description ? ` ${description}` : ""}`];
-    for (const { what, code } of parts) {
-      lines.push(what);
-      if (code.length) {
-        const fence = codeFence(code);
-        lines.push(fence, ...code, fence);
-      }
-    }
-    return lines.join("\n");
-  });
-  return [comment.message, ...fixes].filter(Boolean).join("\n\n");
-}
-
-/**
- * The same as plain text, as `ger show` writes it: for the Change view and tooltips, which show
- * text as it is and would print Markdown's `**` and backticks.
- */
-export function commentPlainText(comment: Pick<Comment, "message" | "suggested_edits">): string {
-  const fixes = shownFixes(comment, (location) => location).map(({ description, parts }) => {
-    const lines = [description ? `suggested fix: ${description}` : "suggested fix:"];
-    for (const { what, code } of parts) {
-      lines.push(`  ${what}`, ...code.map((line) => `  + ${line}`));
-    }
-    return lines.join("\n");
-  });
-  return [comment.message, ...fixes].filter(Boolean).join("\n\n");
 }

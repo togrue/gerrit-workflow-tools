@@ -307,8 +307,12 @@ def pinned_count(cwd: Path | str | None, commits: Sequence[Commit]) -> int:
     ``git rebase`` cannot recreate a merge, so the commits from the bottom up to the newest
     merge stay where they are; the ones above it can still be reordered, folded or dropped.
     """
-    merges = merge_commits(cwd, [c.sha for c in commits])
-    return next((len(commits) - i for i, c in enumerate(reversed(commits)) if c.sha in merges), 0)
+    return pinned_below([c.sha for c in commits], merge_commits(cwd, [c.sha for c in commits]))
+
+
+def pinned_below(shas: Sequence[str], merges: frozenset[str]) -> int:
+    """:func:`pinned_count` for *shas* (oldest first) whose *merges* are already known: no git call."""
+    return next((len(shas) - i for i, sha in enumerate(reversed(shas)) if sha in merges), 0)
 
 
 UNSQUASHED_FIXUP_ADVICE = "squash it with `ger rebase --autosquash`"

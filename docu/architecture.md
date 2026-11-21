@@ -228,7 +228,7 @@ sequenceDiagram
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
-**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking); the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
+**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking) and how urgent each reason is (`REASON_SEVERITY`, `attention_severity()`, served as `severity` beside every `attention_reasons`); the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render (and the VS Code extension) only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
 
 **Rendering:** `render/commit_row.py` (full rows for log/show) and `render/status_fmt.py` (compact tokens for rebase todo lines) both consume `LogCommit`.
 
@@ -546,6 +546,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/commit_row.py` | Full commit line layout for log/show |
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts, and the hint words for attention reasons (`attention_hints` for `ger log`, `member_hints` for `ger inbox`) |
 | `render/comments.py` | Inline comment chains, human and Markdown |
+| `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
 | `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |

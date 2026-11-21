@@ -2,16 +2,22 @@
 // from what the clicked row knows; each answer of ger serve fills in its part as it comes, and an
 // answer for a change selected before is dropped. Pure: no `vscode`, no I/O.
 
-import type { CommitStatus, Diff, Member, ShownCommit } from "./api";
+import type { Chain, CommitStatus, Diff, Member, ShownCommit, Stack } from "./api";
 import type { ChangeState, Loading } from "./changeRows";
 import type { ChangeTarget } from "./model";
 
 /** What a row of Local stack or Review chains already says about its change. Review chains do not say whether it is ready to submit. */
 export type RowStatus = Omit<CommitStatus, "submittable"> & { submittable?: boolean };
 
-/** What a Review chains row says about a change: its votes, unresolved comments and attention; the commit is your local one when there is one. */
+/**
+ * What a Review chains row says about a change only on Gerrit: its votes, unresolved comments
+ * and attention. The rest is what being in a review chain means: an open change, on Gerrit,
+ * looked at as its current patchset. What the row does not say (CI links, reviewers, whether
+ * it is ready to submit) is empty until `/show` answers, and the view says it is loading. A
+ * member that is a commit of your local stack is drawn from that commit instead (`memberTarget`).
+ */
 export function memberStatus(member: Member): RowStatus {
-  const sha = member.local_sha ?? member.sha;
+  const sha = member.sha;
   return {
     sha,
     short_sha: sha?.slice(0, 7) ?? "",
@@ -29,8 +35,34 @@ export function memberStatus(member: Member): RowStatus {
     last_pushed_votes: null,
     work_in_progress: member.attention_reasons.includes("wip"),
     attention_reasons: member.attention_reasons,
+    severity: member.severity,
     change_status: "NEW",
     updated: null,
+  };
+}
+
+function memberRev(member: Member): string {
+  return member.local_sha ?? `change:${member.number}`;
+}
+
+/**
+ * What a click on `member` opens. A member that is a commit of your local stack is drawn from
+ * that commit as `stack` (ger serve's) says it, ahead of Gerrit or not; any other from its row.
+ */
+export function memberTarget(member: Member, chain: Chain, stack: Stack | undefined): ChangeTarget {
+  const local = member.local_sha ? stack?.commits.find((commit) => commit.sha === member.local_sha) : undefined;
+  return {
+    rev: memberRev(member),
+    title: `${member.number}: ${member.subject}`,
+    number: member.number,
+    url: member.url,
+    local: member.local_sha !== null,
+    changeId: member.change_id,
+    sha: member.local_sha ?? member.sha,
+    chainRevs: chain.members.map(memberRev),
+    chainKey: chain.key,
+    // A commit of your stack the stack does not list (it could not be read): nothing to draw from until /show answers.
+    known: member.local_sha ? local : memberStatus(member),
   };
 }
 

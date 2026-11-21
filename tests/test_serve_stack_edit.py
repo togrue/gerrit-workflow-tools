@@ -92,6 +92,8 @@ def test_a_merge_commit_in_the_stack_is_marked_and_what_is_below_it_stays_put(st
     stack = _get(api, "/stack")
     # First-parent, as Gerrit relates changes: the merge is a stack commit, what it merged is not.
     assert [c["merge"] for c in stack["commits"]] == [False, False, False, False, True]
+    # The newest merge is on top: every commit is pinned, and a client is told so.
+    assert all(c["pinned"] for c in stack["commits"])
     order = [c["sha"] for c in stack["commits"]]
     with pytest.raises(ReorderRefusal, match="at or below the merge commit"):
         _post(api, "/stack/rewrite", {"steps": [order[1], order[0], *order[2:]]})
@@ -135,6 +137,10 @@ def test_commits_above_the_newest_merge_still_move_and_the_merged_side_is_never_
     # Only the pair above the merge can swap; the merge and what is below it are not offered.
     moves = _get(api, "/stack/moves")
     assert [(s["lower"], s["upper"]) for s in moves["swaps"]] == [(order[5], order[6])]
+    # /stack says the same per commit: what /stack/moves leaves out, and the rewrite refuses, is pinned.
+    assert [c["pinned"] for c in stack["commits"]] == [True] * 5 + [False] * 2
+    offered = {sha for swap in moves["swaps"] for sha in (swap["lower"], swap["upper"])}
+    assert offered == {c["sha"] for c in stack["commits"] if not c["pinned"]}
 
     rewritten = _post(api, "/stack/rewrite", {"steps": [*order[:5], order[6], order[5]]})
     after = [c["summary"] for c in rewritten["commits"]]
