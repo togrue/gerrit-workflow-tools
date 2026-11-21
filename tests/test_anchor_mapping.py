@@ -144,7 +144,7 @@ def test_renames_are_found_from_a_subdirectory(repo: Path) -> None:
     assert (placed.shown.path, placed.shown.line) == ("lib/a.txt", 6)
     gone = Anchor(commit="0" * 40, location=anchor.location, blob=anchor.blob, text=anchor.text)
     git("mv", "lib/a.txt", "lib/b.txt", cwd=repo)
-    (repo / "lib" / "b.txt").write_text("".join(f"{line}\n" for line in LINES), encoding="utf-8")
+    (repo / "lib" / "b.txt").write_text("".join(f"{line}\n" for line in LINES), encoding="utf-8", newline="\n")
     git("add", "lib/b.txt", cwd=repo)
     by_blob = place_anchor(repo / "src", gone, _commit(repo, {}))
     assert (by_blob.shown.path, by_blob.shown.line) == ("lib/b.txt", 5)
