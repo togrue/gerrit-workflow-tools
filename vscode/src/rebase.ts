@@ -6,11 +6,13 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { unsavedInRepo } from "./diffTabs";
 import { runInTerminal } from "./launch";
 import { sentence } from "./format";
 import { Model } from "./model";
 import { RebaseAction } from "./api";
 import { REBASE_ACTIONS, pushWaysOn, rebaseNotNowFresh, skipQuestion } from "./stackRows";
+import { saveBeforeContinue } from "./staleDiffs";
 import { feedback, ui } from "./ui";
 
 const SAID: Record<RebaseAction, string> = {
@@ -23,7 +25,8 @@ const SAID: Record<RebaseAction, string> = {
  * `ger rebase --<step>` in the ger terminal, where git can open an editor or say why not. Only a
  * way on core allows from this stop: the palette has Skip only where it does (`ger.rebaseSkippable`),
  * and says why not when it is run anyway, after a fresh look at the stack (a `git add` in the terminal
- * may have resolved it since). Skip asks first: it leaves a commit out.
+ * may have resolved it since). Skip asks first: it leaves a commit out. Continue asks to save the
+ * repository's files with unsaved edits first: git goes on with the files on disk.
  */
 export async function rebaseStep(model: Model, step: RebaseAction): Promise<void> {
   const notNow = await rebaseNotNowFresh(model, step);
@@ -32,6 +35,9 @@ export async function rebaseStep(model: Model, step: RebaseAction): Promise<void
     return;
   }
   if (step === "skip" && !(await confirmSkip(model))) {
+    return;
+  }
+  if (step === "continue" && !(await saveBeforeContinue(ui(), unsavedInRepo(model.repo)))) {
     return;
   }
   runInTerminal(model.repo, ["rebase", `--${step}`]);

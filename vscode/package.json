@@ -77,6 +77,13 @@
           "scope": "window",
           "order": 4,
           "markdownDescription": "Show a notification when a background refresh finds that something new has become the most important change (the status bar headline). A change you caused yourself is not announced: the status bar shows it."
+        },
+        "ger.closeDiffsOnRebase": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "order": 5,
+          "markdownDescription": "Close a diff tab opened from the Change view once its commit has been rewritten: a rebase goes on or ends (in the views or in a terminal), an amend, a reorder. Off: the tab stays open, its title marked *stale*, as it still shows the commit as it was. A tab with unsaved edits is never closed."
         }
       }
     },
