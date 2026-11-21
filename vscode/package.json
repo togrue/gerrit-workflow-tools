@@ -185,6 +185,7 @@
       { "command": "ger.comment.save", "title": "Save", "category": "ger" },
       { "command": "ger.comment.cancel", "title": "Cancel", "category": "ger" },
       { "command": "ger.comment.delete", "title": "Delete Comment…", "category": "ger", "icon": "$(trash)" },
+      { "command": "ger.comment.discard", "title": "Discard", "category": "ger" },
       { "command": "ger.comment.escape", "title": "Leave the Comment Box", "category": "ger" },
       { "command": "ger.comment.close", "title": "Close the Comment", "category": "ger" },
       { "command": "ger.chain.edit", "title": "Edit Your Comment…", "category": "ger", "icon": "$(edit)" },
@@ -239,6 +240,7 @@
         { "command": "ger.comment.save", "when": "false" },
         { "command": "ger.comment.cancel", "when": "false" },
         { "command": "ger.comment.delete", "when": "false" },
+        { "command": "ger.comment.discard", "when": "false" },
         { "command": "ger.comment.escape", "when": "false" },
         { "command": "ger.comment.close", "when": "false" },
         { "command": "ger.chain.edit", "when": "false" },
@@ -256,7 +258,8 @@
       ],
       "comments/comment/context": [
         { "command": "ger.comment.save", "when": "commentController == ger", "group": "inline@1" },
-        { "command": "ger.comment.cancel", "when": "commentController == ger", "group": "inline@2" }
+        { "command": "ger.comment.cancel", "when": "commentController == ger", "group": "inline@2" },
+        { "command": "ger.comment.discard", "when": "commentController == ger && comment == yours", "group": "inline@3" }
       ],
       "view/title": [
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },

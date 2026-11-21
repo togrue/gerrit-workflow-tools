@@ -54,7 +54,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Add a private comment | `ger comment --note`, `ger comment --local` | *Save Private Note*, *Save Local Draft* | `tests/test_comment.py`, `tests/test_local_comments.py` | ships |
 | Add a comment from the keyboard or on a whole file | `ger comment PATH[:LINE]` | *Add Comment* (Ctrl+Alt+C, the editor's menus), *Comment on This File…* | `tests/test_comment.py` | ships |
 | Edit a comment you have not published | `ger comment --edit ID -m MSG` | *Edit Comment* in its editor thread, *Edit…* in the *Change* view | `tests/test_comment.py`, `tests/test_serve.py` | ships |
-| Remove a comment you have not published | `ger comment --discard`, `ger reply CHAIN --discard` | *Delete Comment…* in its editor thread, the trash in the *Change* view | `tests/test_comment.py`, `tests/test_serve.py` | ships |
+| Remove a comment you have not published | `ger comment --discard`, `ger reply CHAIN --discard` | *Delete Comment…* in its editor thread, the trash in the *Change* view, *Discard* in the comment box | `tests/test_comment.py`, `tests/test_serve.py` | ships |
 | Fold a fix into a stack commit | `ger fix CHANGEISH` | — | `tests/test_fix.py` | ships |
 | Reorder, squash, drop | `ger rebase` (interactive), `ger edit --drop REV` | move, drag and drop, *Squash*, *Drop*, with a conflict preview and *Undo* | `tests/test_serve.py` | partial: no non-interactive CLI, no CLI preview or undo ([roadmap](plans/commit-chain-roadmap.md)) |
 | Push | `ger push` | *Push to Gerrit…* (runs in the terminal) | `tests/test_push.py` | ships |
@@ -121,6 +121,7 @@ A **gap** names the work that would close it.
 | `ger.comment.save` | `ger comment --edit ID -m MSG` | |
 | `ger.comment.cancel` | UI only | |
 | `ger.comment.delete` | `ger comment --discard ID` | |
+| `ger.comment.discard` | `ger comment --discard ID` | Discard in the box of a comment you are editing; asks as `ger.comment.delete` does |
 | `ger.comment.escape` | UI only | Esc in a reply box: the focus steps back to the thread's comments |
 | `ger.comment.close` | UI only | Esc on a comment or in the editor: closes the open threads in view |
 | `ger.chain.edit` | `ger comment --edit ID -m MSG` | |

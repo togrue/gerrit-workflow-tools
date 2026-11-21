@@ -402,6 +402,9 @@ export class ChangeView extends WebView<ChangeVm> {
         if (message.action === "replyText") {
           return this.replyInView(chain, String(message.text ?? ""), typeof message.resolved === "boolean" ? message.resolved : undefined);
         }
+        if (message.action === "discard") {
+          return this.discardInView(arg);
+        }
         return vscode.commands.executeCommand(`ger.${String(message.action)}`, arg);
       }
       case "finding":
@@ -436,6 +439,15 @@ export class ChangeView extends WebView<ChangeVm> {
   private async replyInView(chain: CommentChain, text: string, resolved: boolean | undefined): Promise<void> {
     const saved = await this.replyWith(chain, text, resolved);
     this.post({ type: "replied", id: chain.root_id, saved });
+  }
+
+  /**
+   * Discard in the view's reply box: the row's trash (ger.chain.delete), asking the same. The page
+   * empties the box only once your draft reply is deleted; dismissed, what you typed stays.
+   */
+  private async discardInView(arg: ThreadArg): Promise<void> {
+    const deleted = await vscode.commands.executeCommand<boolean | undefined>("ger.chain.delete", arg);
+    this.post({ type: "discarded", id: arg.chain.root_id, deleted: deleted === true });
   }
 
   private async applyMessage(text: string): Promise<void> {
