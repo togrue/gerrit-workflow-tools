@@ -90,8 +90,7 @@ The commits above your upstream, newest first. One row per commit:
 
 **Change** — select any change or commit
 
-- The title bar names the change number, and the subject while the commit message's first line is
-  not on screen (the view collapsed or scrolled down, or no message shown).
+- The title bar names the change number and the subject.
 - What it needs, in words, with its votes.
 - **Commit message**: the whole message. For a commit of your local stack it is a text box:
   edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's message. Only

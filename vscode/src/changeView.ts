@@ -47,12 +47,6 @@ export class ChangeView extends WebView<ChangeVm> {
   /** Aborted with each open and close: the requests of a load nobody waits for any more are called off, so ger serve skips what it has not started. */
   private requests = new AbortController();
   private loading: Promise<void> = Promise.resolve();
-  /**
-   * Whether the page has the commit message's first line on screen, as it last said. Until it
-   * says, it is taken to: a page starts scrolled to the top, where that line sits under the
-   * head row, so the title bar does not show the subject only to drop it a moment later.
-   */
-  private firstLineVisible = true;
   /** What decorate last set on the view's title bar: what the end-to-end suite prints. */
   heading: { title: string; description: string | undefined } | undefined;
   /** Gives a stack commit a new message; `applied` runs once it has it. Set by the extension. */
@@ -88,12 +82,6 @@ export class ChangeView extends WebView<ChangeVm> {
     super(extensionUri, "change");
     // The view says why nothing is shown while ger is not running, and whether a rebase keeps the message read-only.
     model.onDidChange(() => this.render());
-  }
-
-  /** A new page: it starts at the top, the message's first line on screen, until it says otherwise. */
-  override resolveWebviewView(view: vscode.WebviewView): void {
-    this.firstLineVisible = true;
-    super.resolveWebviewView(view);
   }
 
   /** Resolves once no load is under way: for the end-to-end suite, which reads the view after each press. */
@@ -363,10 +351,9 @@ export class ChangeView extends WebView<ChangeVm> {
     return changeLines(this.vm());
   }
 
-  protected decorate(view: vscode.WebviewView, vm: ChangeVm): void {
-    const seen = { viewVisible: view.visible, firstLineVisible: this.firstLineVisible };
+  protected decorate(view: vscode.WebviewView): void {
     const commit = this.detail.commit();
-    this.heading = changeHeading(commit?.number ?? this.target?.number, commit?.summary ?? this.target?.title, vm, seen);
+    this.heading = changeHeading(commit?.number ?? this.target?.number, commit?.summary ?? this.target?.title);
     ({ title: view.title, description: view.description } = this.heading);
   }
 
@@ -379,9 +366,6 @@ export class ChangeView extends WebView<ChangeVm> {
   protected receive(message: Message): unknown {
     const diff = this.shownDiff();
     switch (message.type) {
-      case "subjectVisible":
-        this.firstLineVisible = message.visible === true;
-        return this.view && this.decorate(this.view, this.vm());
       case "file": {
         const file = diff?.files[message.index as number];
         return file ? this.openDiff(file, diff) : undefined;

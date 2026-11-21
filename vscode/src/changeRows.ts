@@ -414,19 +414,9 @@ export function changeVm(state: ChangeState): ChangeVm {
   };
 }
 
-/** Where the view is seen: whether it is open (not collapsed, nor in a hidden container), and whether the commit message's first line is scrolled into it. */
-export interface HeadingSeen {
-  viewVisible: boolean;
-  firstLineVisible: boolean;
-}
-
-/**
- * The view's title bar: `Change <number>`, and the subject while nothing on screen says it. The
- * subject is the commit message's first line, so it is left out exactly while that line is in view.
- */
-export function changeHeading(number: number | null | undefined, subject: string | undefined, vm: ChangeVm, seen: HeadingSeen): { title: string; description: string | undefined } {
-  const said = Boolean(vm.message) && seen.viewVisible && seen.firstLineVisible;
-  return { title: number ? `Change ${number}` : "Change", description: said ? undefined : subject };
+/** The view's title bar: `Change <number>`, and the subject. */
+export function changeHeading(number: number | null | undefined, subject: string | undefined): { title: string; description: string | undefined } {
+  return { title: number ? `Change ${number}` : "Change", description: subject };
 }
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */

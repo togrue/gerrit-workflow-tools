@@ -126,18 +126,11 @@ test("the change view shows the message, the files with their line counts, and w
   ]);
 });
 
-test("the change view shows the subject once: in the commit message while its first line is on screen, in the title bar otherwise", () => {
+test("the change view's title bar names the change number and the subject; the view model says the subject once, in the message", () => {
   const vm = changeVm(state());
-  const onScreen = { viewVisible: true, firstLineVisible: true };
-  const heading = (seen: { viewVisible: boolean; firstLineVisible: boolean }, model = vm) => changeHeading(7, "Extract routing", model, seen);
-  assert.deepEqual(heading(onScreen), { title: "Change 7", description: undefined }, "the message's first line already says it");
-  assert.deepEqual(heading({ viewVisible: true, firstLineVisible: false }).description, "Extract routing", "scrolled past the message's first line");
-  assert.deepEqual(heading({ viewVisible: false, firstLineVisible: true }).description, "Extract routing", "the view is collapsed: only its title bar is on screen");
-  assert.deepEqual(heading(onScreen, changeVm(state({ base: undefined }))).description, "Extract routing", "no message is drawn");
-  const says = (subject: string, text: string) => text.split(subject).length - 1;
-  const lines = [heading(onScreen).description ?? "", ...changeLines(vm)].join("\n");
-  assert.equal(says("Extract routing", lines), 1);
-  assert.equal(says("Extract routing", JSON.stringify(vm)), 1, "nor a tooltip that repeats it");
+  assert.deepEqual(changeHeading(7, "Extract routing"), { title: "Change 7", description: "Extract routing" });
+  assert.deepEqual(changeHeading(undefined, undefined), { title: "Change", description: undefined });
+  assert.equal(JSON.stringify(vm).split("Extract routing").length - 1, 1, "no tooltip repeats it");
 });
 
 test("the CI section does not repeat the head's \"CI failed\": it names the failing builds, or nothing", () => {

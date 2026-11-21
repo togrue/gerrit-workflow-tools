@@ -50,8 +50,6 @@ export abstract class WebView<Vm> implements vscode.WebviewViewProvider {
         void this.receive(message);
       }
     });
-    // Collapsed or shown again: the title bar may say more while the page is out of sight.
-    view.onDidChangeVisibility(() => this.decorate(view, this.vm()));
     view.onDidDispose(() => {
       this.view = undefined;
     });
@@ -62,13 +60,13 @@ export abstract class WebView<Vm> implements vscode.WebviewViewProvider {
   abstract vm(): Vm;
   /** Something the user did in the page. */
   protected abstract receive(message: Message): unknown;
-  /** The view's title and description, which VS Code draws outside the page, for the view model `vm` the page draws. */
-  protected decorate(_view: vscode.WebviewView, _vm: Vm): void {}
+  /** The view's title and description, which VS Code draws outside the page. */
+  protected decorate(_view: vscode.WebviewView): void {}
 
   render(): void {
     if (this.view) {
       const vm = this.vm();
-      this.decorate(this.view, vm);
+      this.decorate(this.view);
       this.post({ type: "render", vm });
     }
   }
