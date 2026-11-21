@@ -108,13 +108,13 @@ if [ -f ./scripts/pytest-on-remote.sh ]; then
 else
   uv run pytest -q
 fi
-uv run ruff format . && uv run ruff check --fix .
-uv run mypy
+bash check.sh       # ruff format, ruff check --fix, mypy src, mypy tests
+cd vscode && npm ci && npm test && npm run e2e   # headless Linux: npm run e2e -- --get-vscode first
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs ruff, mypy, pytest on Linux and
-Windows, the extension's `npm test` and its e2e run on every pull request; the integration tests
-against Gerrit in Docker run nightly. It must be green before a merge into `dev`.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same on every pull request,
+pytest on Linux and Windows. The integration tests against Gerrit in Docker run nightly and on
+demand. A pull request is merged into `dev` only when CI is green.
 
 Prefer a test that pins agreement *between* commands over another per-module test.
 Copies drift silently when each is only tested against itself.

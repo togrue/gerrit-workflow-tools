@@ -7,7 +7,11 @@
 // ~/.cache/ger-vscode-test. On Linux without a display, VS Code runs headless.
 //
 // GER_E2E_PNG=<dir> also writes a picture of the window on start and after every press; that
-// is off by default, as it makes the run slower.
+// is off by default, as it makes the run slower. The transcript is written next to them.
+//
+// GER_E2E_VSCODE_VERSION=<x.y.z> makes `--get-vscode` download that version instead of the
+// latest, so a run does not change with VS Code's releases. GER_E2E_TIMEOUT_SECONDS gives VS Code
+// longer than the default 300 seconds to finish the suite.
 //
 // The suite writes a transcript: for every button it presses, what a user expects, what the
 // extension said and did, and how the views changed. It must match transcript.golden.md; on a
@@ -44,7 +48,8 @@ function codeExecutable(): string {
   return found;
 }
 
-/** Download the latest stable VS Code for Linux (x64 or arm64) into `portable`, replacing an older one. */
+/** Download a stable VS Code for Linux (x64 or arm64) into `portable`, replacing an older one:
+ * GER_E2E_VSCODE_VERSION, or the latest. */
 function getVscode(): number {
   const arch = { x64: "x64", arm64: "arm64" }[process.arch as string];
   if (process.platform !== "linux" || !arch) {
@@ -55,7 +60,8 @@ function getVscode(): number {
   // download leaves a working VS Code where it was.
   fs.mkdirSync(portable, { recursive: true });
   const fresh = fs.mkdtempSync(path.join(portable, "download-"));
-  const url = `https://update.code.visualstudio.com/latest/linux-${arch}/stable`;
+  const version = process.env.GER_E2E_VSCODE_VERSION || "latest";
+  const url = `https://update.code.visualstudio.com/${version}/linux-${arch}/stable`;
   const got = spawnSync(`curl -fsSL "${url}" | tar xz -C "${fresh}"`, { shell: true, stdio: "inherit" });
   const unpacked = fs.existsSync(fresh) ? fs.readdirSync(fresh).find((name) => name.startsWith("VSCode-linux-")) : undefined;
   if (got.status !== 0 || !unpacked || !fs.existsSync(path.join(fresh, unpacked, "code"))) {
@@ -130,8 +136,12 @@ function main(): number {
       ...(noDisplay ? ["--ozone-platform=headless"] : []),
       ...(pictures ? ["--remote-debugging-port=0"] : []),
     ],
-    { env, stdio: "inherit", timeout: 300_000 },
+    { env, stdio: "inherit", timeout: Number(process.env.GER_E2E_TIMEOUT_SECONDS || 300) * 1000 },
   );
+  if (pictures && fs.existsSync(report)) {
+    fs.mkdirSync(pictures, { recursive: true });
+    fs.copyFileSync(report, path.join(pictures, "transcript.md"));
+  }
   if (ran.status !== 0) {
     if (fs.existsSync(report)) {
       console.log(`\n${fs.readFileSync(report, "utf8")}`);
