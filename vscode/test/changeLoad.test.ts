@@ -71,8 +71,6 @@ function drawn(detail: ChangeDetail, extra: Partial<ChangeState> = {}) {
   return changeVm(state);
 }
 
-const onScreen = { viewVisible: true, firstLineVisible: true };
-
 test("a click draws the Change view at once from the Local stack row: what it needs, its votes, the rest loading", () => {
   const commit = row("Extract routing");
   const detail = new ChangeDetail();
@@ -91,8 +89,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
     "Files — loading…",
     "Comments — loading…",
   ]);
-  // No message is drawn yet: the subject is in the title bar, once.
-  assert.deepEqual(changeHeading(7, detail.commit()?.summary, vm, onScreen), { title: "Change 7", description: "Extract routing" });
+  assert.equal(changeHeading(detail.commit()?.number), "Change 7");
 });
 
 test("a Review chains row draws its votes and attention at once, and does not guess whether it is ready to submit", () => {
@@ -102,7 +99,6 @@ test("a Review chains row draws its votes and attention at once, and does not gu
   const vm = drawn(detail, { version: "current" });
   assert.equal(vm.head?.text, "Loading…", "the row does not say whether Gerrit would submit it");
   assert.deepEqual(vm.head?.badges.map((badge) => badge.kind), ["ci"]);
-  assert.equal(changeHeading(12, detail.commit()?.summary, vm, onScreen).description, "Add cache", "the subject, not the row's `12: Add cache`");
 });
 
 test("a Review chains member that is a commit of your stack is drawn from that commit, ahead of Gerrit as it is", () => {
@@ -131,8 +127,6 @@ test("each answer fills in its part as it comes: the commit with its files first
   assert.deepEqual([vm.files?.summary, vm.comments?.summary, vm.comments?.threads.map((t) => t.id)], ["1 file", "1 unresolved of 1", ["c1"]]);
   assert.deepEqual(detail.loading(), { commit: false, base: false, delta: true, ready: true }, "the delta has not come yet");
   assert.equal(vm.key, commit.change_id, "the same change as before the message came: nothing the page kept is reset");
-  // The title keeps its number; the subject leaves it once the message's first line is on screen, as before.
-  assert.deepEqual(changeHeading(7, detail.commit()?.summary, vm, onScreen), { title: "Change 7", description: undefined });
   assert.ok(detail.arrive(token, "delta", undefined));
   assert.equal(detail.loading(), undefined);
 });
@@ -185,7 +179,6 @@ test("clicking the change already shown keeps what is drawn: a new target naming
   const vm = drawn(detail);
   assert.equal(vm.message?.text, "Extract routing\n\nChange-Id: I1", "the message stays drawn");
   assert.equal(vm.loading, undefined);
-  assert.equal(changeHeading(7, detail.commit()?.summary, vm, onScreen).description, undefined, "the subject does not come back into the title bar");
 
   // Another change, or the same change seen from the other side (Gerrit's, not your commit), starts over.
   assert.equal(sameChange(target(commit), { ...target(commit), local: false }), false);

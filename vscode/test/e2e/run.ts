@@ -2,8 +2,12 @@
 // development and a fake Gerrit behind `ger serve`, and run suite.ts inside it.
 //
 // Uses its own profile and extensions directory, so your VS Code is not touched. Needs `uv`
-// (to run fake_ger.py with the project's Python) and a VS Code executable: VSCODE_EXE, or the
-// usual install locations.
+// (to run fake_ger.py with the project's Python) and a VS Code executable: VSCODE_EXE, the
+// usual install locations, or the portable one `npm run e2e -- --get-vscode` puts in
+// ~/.cache/ger-vscode-test. On Linux without a display, VS Code runs headless.
+//
+// GER_E2E_PNG=<dir> also writes a picture of the window on start and after every press; that
+// is off by default, as it makes the run slower.
 //
 // The suite writes a transcript: for every button it presses, what a user expects, what the
 // extension said and did, and how the views changed. It must match transcript.golden.md; on a
@@ -19,9 +23,14 @@ const projectDir = path.resolve(extensionDir, "..");
 const fakeGer = path.join(extensionDir, "test", "e2e", "fake_ger.py");
 const golden = path.join(extensionDir, "test", "e2e", "transcript.golden.md");
 
+/** Where `--get-vscode` unpacks a portable VS Code for Linux. */
+const portable = path.join(os.homedir(), ".cache", "ger-vscode-test");
+const portableCode = path.join(portable, `VSCode-linux-${process.arch === "arm64" ? "arm64" : "x64"}`, "code");
+
 function codeExecutable(): string {
   const candidates = [
     process.env.VSCODE_EXE,
+    portableCode,
     path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Microsoft VS Code", "Code.exe"),
     "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
     "/usr/share/code/code",
@@ -29,12 +38,46 @@ function codeExecutable(): string {
   ];
   const found = candidates.find((candidate) => candidate && fs.existsSync(candidate));
   if (!found) {
-    throw new Error("VS Code not found: set VSCODE_EXE to its executable");
+    const get = process.platform === "linux" ? ", or get a portable one: npm run e2e -- --get-vscode" : "";
+    throw new Error(`VS Code not found: set VSCODE_EXE to its executable${get}`);
   }
   return found;
 }
 
+/** Download the latest stable VS Code for Linux (x64 or arm64) into `portable`, replacing an older one. */
+function getVscode(): number {
+  const arch = { x64: "x64", arm64: "arm64" }[process.arch as string];
+  if (process.platform !== "linux" || !arch) {
+    console.log(`e2e: --get-vscode is for Linux on x64 or arm64, not ${process.platform} ${process.arch}`);
+    return 1;
+  }
+  // Unpacked next to the one in use, and swapped in only once it is complete: a failed
+  // download leaves a working VS Code where it was.
+  fs.mkdirSync(portable, { recursive: true });
+  const fresh = fs.mkdtempSync(path.join(portable, "download-"));
+  const url = `https://update.code.visualstudio.com/latest/linux-${arch}/stable`;
+  const got = spawnSync(`curl -fsSL "${url}" | tar xz -C "${fresh}"`, { shell: true, stdio: "inherit" });
+  const unpacked = fs.existsSync(fresh) ? fs.readdirSync(fresh).find((name) => name.startsWith("VSCode-linux-")) : undefined;
+  if (got.status !== 0 || !unpacked || !fs.existsSync(path.join(fresh, unpacked, "code"))) {
+    fs.rmSync(fresh, { recursive: true, force: true });
+    console.log(`e2e: could not download VS Code from ${url}`);
+    return 1;
+  }
+  const installed = path.dirname(portableCode);
+  fs.rmSync(installed, { recursive: true, force: true });
+  fs.renameSync(path.join(fresh, unpacked), installed);
+  fs.rmSync(fresh, { recursive: true, force: true });
+  console.log(`e2e: VS Code is in ${path.dirname(portableCode)}`);
+  return 0;
+}
+
+/** Linux with neither X nor Wayland: Electron draws without a screen. */
+const noDisplay = process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
+
 function main(): number {
+  if (process.argv.includes("--get-vscode")) {
+    return getVscode();
+  }
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ger-e2e-"));
   const repo = path.join(work, "repo");
   const profile = path.join(work, "profile");
@@ -65,6 +108,12 @@ function main(): number {
   const events = path.join(work, "events.jsonl");
   fs.writeFileSync(events, "");
   const env: NodeJS.ProcessEnv = { ...hermetic, GER_E2E_OUT: report, GER_E2E_EVENTS: events, GER_E2E_DOWN: path.join(work, "down") };
+  const pictures = process.env.GER_E2E_PNG ? path.resolve(process.env.GER_E2E_PNG) : undefined;
+  if (pictures) {
+    // Port 0: Electron picks a free one and writes it to this file in the profile.
+    env.GER_E2E_PNG = pictures;
+    env.GER_E2E_DEVTOOLS = path.join(profile, "DevToolsActivePort");
+  }
   delete env.ELECTRON_RUN_AS_NODE; // set when started from VS Code's own terminal; it would run Code as plain Node
   const ran = spawnSync(
     codeExecutable(),
@@ -78,6 +127,8 @@ function main(): number {
       "--skip-welcome",
       "--skip-release-notes",
       "--disable-updates",
+      ...(noDisplay ? ["--ozone-platform=headless"] : []),
+      ...(pictures ? ["--remote-debugging-port=0"] : []),
     ],
     { env, stdio: "inherit", timeout: 300_000 },
   );
@@ -87,6 +138,9 @@ function main(): number {
     }
     console.log(`e2e: FAILED (exit ${ran.status ?? ran.signal})`);
     return ran.status ?? 1;
+  }
+  if (pictures) {
+    console.log(`e2e: pictures of every step in ${pictures}`);
   }
   return compare(report);
 }

@@ -32,11 +32,8 @@
     const note = h("span", { class: "detail" });
     const author = h("span", { class: "detail" });
     const bar = h("div", { class: "message-bar" }, apply, revert, note);
-    // Marks the box's first line, the subject: the title bar names it only while this is out of view.
-    const firstLine = h("div", { class: "first-line", "aria-hidden": "true" });
-    const frame = h("div", { class: "message-frame" }, box, firstLine);
-    const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), frame, bar);
-    const state = { key, base: "", block, box, author, firstLine };
+    const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), box, bar);
+    const state = { key, base: "", block, box, author };
     const fit = () => {
       box.rows = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
     };
@@ -73,41 +70,9 @@
     return state;
   }
 
-  /**
-   * Tell the extension whether the message's first line is on screen: at least half of it inside
-   * the page's viewport, and the box itself not scrolled past it. Said only when it changes.
-   */
-  let subjectSaid;
-  function watchFirstLine(state) {
-    let inViewport = false;
-    const report = () => {
-      const visible = inViewport && state.box.scrollTop < state.firstLine.offsetHeight / 2;
-      if (visible !== subjectSaid) {
-        subjectSaid = visible;
-        post("subjectVisible", { visible });
-      }
-    };
-    state.observer = new IntersectionObserver(
-      (entries) => {
-        if (!state.firstLine.isConnected) {
-          return; // the message is not drawn (waiting, a problem): not scrolled away, and the title bar names the change anyway
-        }
-        inViewport = entries[entries.length - 1].intersectionRatio >= 0.5;
-        report();
-      },
-      { threshold: [0, 0.5, 1] },
-    );
-    state.observer.observe(state.firstLine);
-    state.box.addEventListener("scroll", report);
-  }
-
   function messageBlock(message) {
     if (!editor || editor.key !== message.key) {
-      if (editor) {
-        editor.observer.disconnect();
-      }
       editor = buildEditor(message.key);
-      watchFirstLine(editor);
       editor.box.value = drafts[message.key] ?? message.text;
     } else if (editor.box.value === editor.base || drafts[message.key] === undefined) {
       // Nothing typed: follow the commit. Something typed stays, whatever happened underneath.
@@ -124,13 +89,13 @@
   /**
    * The message's place until it comes: the block drawn empty, as tall as a change's shortest
    * message (subject, blank line, Change-Id), its bar saying what the real one will. A longer
-   * message grows the box when it comes. No first-line mark, so the title bar names the subject meanwhile.
+   * message grows the box when it comes.
    */
   function messagePlace(readOnly) {
     const box = h("textarea", { class: "message", rows: "4", readonly: "", disabled: "", tabindex: "-1", "aria-hidden": "true" });
     const bar = h("div", { class: "message-bar" }, h("span", { class: "detail" }, readOnly || ""));
     const heading = h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, "loading…"));
-    return h("div", { class: "message-block loading" }, heading, h("div", { class: "message-frame" }, box), bar);
+    return h("div", { class: "message-block loading" }, heading, box, bar);
   }
 
   // --- Rows -------------------------------------------------------------------------
