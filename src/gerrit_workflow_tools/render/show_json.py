@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from gerrit_workflow_tools.core.annotated_stack import AnnotatedStack
 from gerrit_workflow_tools.core.attention import attention_severity
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.comment_write import ChangedComment, WrittenComment
@@ -10,6 +11,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     gerrit_inline_comment_url,
 )
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress
 from gerrit_workflow_tools.render.ci_content import ci_content_json
 
 
@@ -168,3 +170,30 @@ def written_comment_json(written: WrittenComment) -> dict[str, object]:
         "unresolved": written.unresolved,
         "url": written.url,
     }
+
+
+def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[str, object] | None:
+    """The rebase underway, as ``ger log --json`` and ``GET /stack`` serve it; ``None`` without one.
+
+    ``current`` is the id of the commit it stopped at as the stack shows it: the amended commit
+    after an amend, the commit as it was while it is not applied.
+    """
+    if progress is None:
+        return None
+    current = stack.rebase.current if stack.rebase else None
+    return {
+        "branch": progress.branch,
+        "onto": progress.onto,
+        "orig_head": progress.orig_head,
+        "stop": progress.stop.value,
+        "applied": progress.applied,
+        "current": current.sha if current else None,
+        "unmerged": list(progress.unmerged),
+    }
+
+
+def rebase_steps(stack: AnnotatedStack) -> list[str | None]:
+    """Per commit of *stack*: where the rebase underway stands on it (``done``, ``current``, ``todo``), or ``None``."""
+    if stack.rebase is None:
+        return [None] * len(stack.commits)
+    return [step.value if step else None for step in stack.rebase.steps]

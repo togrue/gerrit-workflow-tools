@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.rebase_state import RebasingStack, load_rebasing_stack, rebase_progress
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
 
@@ -46,6 +47,9 @@ class AnnotatedStack:
     notes_by_sha: dict[str, str] = field(default_factory=dict)
     """Multi-branch resolution notes, keyed by commit SHA. Only commits whose Change-Id
     matched on more than one branch appear here."""
+    rebase: RebasingStack | None = None
+    """While a rebase is underway, the run's local stack as it stands (:class:`RebasingStack`):
+    :attr:`commits` are its commits, and its steps say where the rebase stands on each."""
     gerrit_unavailable: GerritUnavailableError | None = None
     """Why Gerrit could not be asked, when it could not. Every commit then carries
     :attr:`PatchsetStatus.UNKNOWN` rather than a guess; the caller shows the local state and
@@ -190,14 +194,33 @@ def _project(service: GerritService) -> str:
         return service.settings.gerrit_project or ""
 
 
+def _stack_rows(
+    run: RunContext, rev_range: str | None, *, first_parent: bool
+) -> tuple[list[Commit], RebasingStack | None]:
+    """The commit rows of *rev_range*; with none, the run's local stack, the rebasing one while a rebase is underway."""
+    branch = run.repo.stack_branch
+    progress = rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir) if rev_range is None else None
+    # A rebase that keeps no todo (rebase-apply) says nothing of its commits: the branch as it was.
+    if progress is not None and progress.keeps_todo:
+        base = "@{upstream}" if branch == "HEAD" else f"{branch}@{{upstream}}"
+        rebasing = load_rebasing_stack(run.cwd, base, progress, first_parent=first_parent)
+        return list(rebasing.commits), rebasing
+    rows = commits_in_range(run.cwd, rev_range or resolve_rev_range(None, branch=branch), first_parent=first_parent)
+    return rows, None
+
+
 def load_annotated_stack(
     run: RunContext,
-    rev_range: str,
+    rev_range: str | None,
     *,
     first_parent: bool = True,
     fetch_ci_pipelines: bool = False,
 ) -> AnnotatedStack:
     """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
+
+    With no *rev_range*, the run's **local stack**: while a rebase is underway, the commits it
+    replayed so far as they are now, then those still to replay as they were
+    (:attr:`AnnotatedStack.rebase`). The Gerrit overlay finds each by its Change-Id either way.
 
     Defaults to first-parent traversal, matching Gerrit's relation-chain semantics. Pass
     ``first_parent=False`` for ``--follow-merges``.
@@ -208,11 +231,12 @@ def load_annotated_stack(
     does not raise: see :attr:`AnnotatedStack.gerrit_unavailable`.
     """
     cwd, service = run.cwd, run.gerrit
-    rows = commits_in_range(cwd, rev_range, first_parent=first_parent)
+    rows, rebasing = _stack_rows(run, rev_range, first_parent=first_parent)
     if not rows:
-        return AnnotatedStack()
-    on_target = _commits_on_target(run, rows, rev_range)
+        return AnnotatedStack(rebase=rebasing)
+    on_target = _commits_on_target(run, rows, rev_range) if rev_range else frozenset()
     annotated = annotate(rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target)
+    annotated = replace(annotated, rebase=rebasing)
     if annotated.gerrit_unavailable is not None:
         return annotated
     return replace(annotated, notes_by_sha=_multi_branch_notes(service, rows, cwd))

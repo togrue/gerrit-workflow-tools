@@ -13,7 +13,7 @@ from typing import Any, cast
 from gerrit_workflow_tools import __version__
 from gerrit_workflow_tools.cli_common import failure_exit
 from gerrit_workflow_tools.core.agent_runbook import load_holds, plan_runbook
-from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
+from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack
 from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_attention
 from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
@@ -34,7 +34,7 @@ from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, 
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
-from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json
+from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json, rebase_json, rebase_steps
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.suggested_fixes import comment_text
 from gerrit_workflow_tools.server.diff_views import commit_files
@@ -73,9 +73,7 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
 def stack(ctx: Context, req: Request) -> dict[str, Any]:
     """The **annotated stack** of the working branch, with the ready boundary: ``ger log`` as JSON."""
     cwd, settings = ctx.cwd, ctx.settings
-    view = load_annotated_stack(
-        ctx.run, resolve_rev_range(None, branch=ctx.run.repo.stack_branch), fetch_ci_pipelines=req.flag("pipelines")
-    )
+    view = load_annotated_stack(ctx.run, None, fetch_ci_pipelines=req.flag("pipelines"))
     context = ctx.run.stack
     blocked = (
         blocked_shas_for_stack(
@@ -90,7 +88,8 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         else frozenset()
     )
     head = commit_sha_or_none(cwd, "HEAD")
-    progress = rebase_progress(cwd)
+    progress = view.rebase.rebase if view.rebase else rebase_progress(cwd, repo_dir=ctx.run.worktree.repository_dir)
+    steps = rebase_steps(view)
     merges = merge_commits(cwd, [c.sha for c in view.commits])
     pinned = pinned_below([c.sha for c in view.commits], merges)
     commits = [
@@ -101,7 +100,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
             "diverged": c.diverged,
             "merge": c.sha in merges,
             "pinned": index < pinned,
-            "rebase": progress.state_of(c.sha) if progress else None,
+            "rebase": steps[index],
             "updated": iso_utc(parse_gerrit_time(c.updated)),
             "is_head": c.sha == head,
             "held_back": c.sha in blocked,
@@ -114,7 +113,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         "branch": ctx.run.worktree.branch,
         "head": head,
         "rebase_in_progress": rebase_underway(ctx.run.worktree.repository_dir),
-        "rebase": {"applied": progress.applied} if progress else None,
+        "rebase": rebase_json(view, progress),
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch,
