@@ -118,7 +118,11 @@ The commits above your upstream, newest first. One row per commit:
   (VS Code empties the reply box on any button beside it), its label saying what Save will do. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
   With your draft reply there, the Change view's box also has **Discard**, and so has the box of a
-  draft or note of yours you edit in an editor thread: it deletes it, asking first, as the trash does. In a thread, Esc in the reply box steps back to its comments; Esc again (or Esc in the editor) closes it. A reviewer's suggested edit shows in the comment: a ```` ```suggestion ```` block of its text as a code block, a Gerrit fix suggestion as **Suggested fix**, where it applies and the new text. It is shown, not applied.
+  draft, local draft or note of yours you edit in an editor thread: it deletes it, asking first, as
+  the trash does; Save is bottom right, as on Gerrit. In a thread, Esc in the reply box steps back
+  to its comments; Esc again (or Esc in the editor) closes it. A reviewer's suggested edit shows in
+  the comment: a ```` ```suggestion ```` block of its text as a code block, a Gerrit fix suggestion
+  as **Suggested fix**, where it applies and the new text. It is shown, not applied.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
   the shown commit is HEAD — and click **+**. Save it as:
   - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published;
