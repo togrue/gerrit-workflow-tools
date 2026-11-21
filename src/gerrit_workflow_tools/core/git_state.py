@@ -358,19 +358,3 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         f"`git fetch {remote_name}` so `refs/remotes/{remote_name}/<branch>` exists."
     )
     raise GitError(f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {ref}). {hint}")
-
-
-def staged_submodules(cwd: Path | str | None, base: str = "HEAD") -> list[str]:
-    """Submodules whose commit in the index is not the one *base* records: staged, not committed.
-
-    A submodule's own state (another commit checked out, edits inside it) is not here: git
-    leaves it out of what switching, rebasing and ``git stash`` touch.
-    """
-    raw = git_out("diff", "--cached", "--raw", "-z", "--no-renames", "--ignore-submodules=none", base, cwd=cwd)
-    fields = raw.split("\0")
-    # -z: each record is ``:mode mode sha sha status`` NUL ``path`` NUL, the path as is (never C-quoted).
-    return [
-        path
-        for meta, path in zip(fields[::2], fields[1::2], strict=False)
-        if "160000" in meta.lstrip(":").split()[:2]  # a gitlink on either side: a submodule
-    ]
