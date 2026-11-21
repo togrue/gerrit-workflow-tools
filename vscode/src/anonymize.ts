@@ -14,7 +14,7 @@
 
 import { randomInt } from "node:crypto";
 
-import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, READ_ONLY, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, STOPPED_WORDS, YOURS } from "./changeRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
@@ -353,6 +353,7 @@ const CHANGE: Shape = {
     summary: TEXT,
     state: ours(["closed", "loading", "error", "loaded"]),
     error: TEXT,
+    noLinks: ours(["", NO_CI_LINK]),
     links: [
       {
         icon: ICON,

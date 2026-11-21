@@ -296,16 +296,21 @@ export function pushWaysOn(stack: Stack | undefined): RebaseAction[] {
 }
 
 /**
- * Where the rebase underway stopped at `commit`, by core's verdict (its `rebase` step, the stack's
- * `stop`): on a conflict still open or resolved, with the commit applied, or not at this commit.
- * Local stack marks the row with it; the Change view of that commit says it.
+ * Where the rebase underway stopped at `commit`, by core's verdict: the commit's `rebase` step says
+ * it stopped there, the stack's `applied` whether the commit is in whole, and its `stop` whether a
+ * conflict is still open or resolved; null when it did not stop at this commit. Local stack marks
+ * the row with it; the Change view of that commit says it.
  */
 export function stoppedAt(commit: Pick<StackCommit, "rebase">, stack: Pick<Stack, "rebase">): "conflict" | "resolved" | "applied" | null {
-  if (commit.rebase !== "current") {
+  const rebase = stack.rebase;
+  if (commit.rebase !== "current" || !rebase) {
     return null;
   }
-  const stop = stack.rebase?.stop;
-  return stop === "conflict" || stop === "resolved" ? stop : "applied";
+  if (rebase.applied) {
+    return "applied";
+  }
+  // Only partly there: a conflict, resolved once nothing is unmerged.
+  return rebase.stop === "resolved" ? "resolved" : "conflict";
 }
 
 /** A file still conflicted, under the banner and in the Change view's Conflicts: a click opens it to resolve. */

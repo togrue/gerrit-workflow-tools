@@ -276,7 +276,7 @@
       return h("div", { class: "reply" }, icon("error", "bad"), h("span", { class: "label" }, ci.error));
     }
     if (!ci.links.length) {
-      return h("div", { class: "reply" }, h("span", { class: "label" }, "No CI link was found for the failed build"), h("span", { class: "detail" }, ci.summary));
+      return h("div", { class: "reply" }, ci.noLinks ? h("span", { class: "label" }, ci.noLinks) : null, h("span", { class: "detail" }, ci.summary));
     }
     return h(
       "div",

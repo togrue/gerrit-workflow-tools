@@ -170,8 +170,12 @@ export interface ChangeVm {
   conflicts?: { summary: string; rows: StackInfo[] };
   files?: { title: string; summary: string; added: number; deleted: number; note: string; tooltip: string; rows: FileRow[] };
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
-  ci?: { summary: string; state: CiView["state"]; error: string; links: CiLinkRow[] };
+  /** `noLinks`: what to say when no build log was found; empty when that is not to be said. */
+  ci?: { summary: string; state: CiView["state"]; error: string; noLinks: string; links: CiLinkRow[] };
 }
+
+/** A failed CI vote without a log to read. */
+export const NO_CI_LINK = "No CI link was found for the failed build";
 
 /** What the view says while no change is chosen. */
 export const NOTHING_SHOWN = "Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.";
@@ -389,10 +393,11 @@ function ciLinks(ci: CiView): CiLinkRow[] {
 export function changeVm(state: ChangeState): ChangeVm {
   const { shown: commit, chains } = state;
   const notes: NonNullable<ChangeVm["notes"]> = [];
-  // Stopped before this commit is applied, what the notes and CI would say of it is not true yet.
+  // Stopped before this commit is applied, what a push of it would do is not known yet: "ahead of
+  // Gerrit" and what its votes would do are not said. That Gerrit has a newer patchset still holds.
   const stopped = state.stopped;
-  const status = stopped ? undefined : commit.patchset_status;
-  if (status === "newer") {
+  const status = commit.patchset_status;
+  if (status === "newer" && !stopped) {
     notes.push({
       icon: "history",
       tone: "warn",
@@ -443,12 +448,15 @@ export function changeVm(state: ChangeState): ChangeVm {
     comments: loading?.commit
       ? { summary: LOADING, open: false, threads: [] }
       : { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map(thread) },
-    ci: hasCi && !stopped
+    ci: hasCi
       ? {
           // The head already says "CI failed": the section names the failing builds, or nothing.
           summary: commit.ci_failures.join(", "),
           state: state.ci.state,
           error: state.ci.state === "error" ? state.ci.error : "",
+          // The builds and logs are the last pushed patchset's, true while stopped too; why there is
+          // no log to read is about this commit's build, which there is not yet.
+          noLinks: stopped ? "" : NO_CI_LINK,
           links: ciLinks(state.ci),
         }
       : undefined,
@@ -504,8 +512,8 @@ export function changeLines(vm: ChangeVm): string[] {
   }
   if (vm.ci) {
     add(0, "CI", vm.ci.state === "error" ? vm.ci.error : vm.ci.summary);
-    if (vm.ci.state === "loaded" && !vm.ci.links.length) {
-      add(1, "No CI link was found for the failed build");
+    if (vm.ci.state === "loaded" && !vm.ci.links.length && vm.ci.noLinks) {
+      add(1, vm.ci.noLinks);
     }
     for (const link of vm.ci.links) {
       add(1, link.text, link.detail);
