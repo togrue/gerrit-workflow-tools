@@ -608,7 +608,10 @@ def test_all_and_project_do_not_combine(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def _ai_inbox() -> ChangeStore:
-    """To review: a healthy chain of one, and carol's chain of two with failed CI and comments. Outgoing: none."""
+    """To review: a healthy chain of one, and carol's chain of two with failed CI and comments.
+
+    Outgoing: one change of mine, with failed CI.
+    """
 
     def change(number: int, sha: str, parent: str, subject: str, **fields: Any) -> dict[str, Any]:
         when = "2026-08-12 12:00:00.000000000"
@@ -619,7 +622,10 @@ def _ai_inbox() -> ChangeStore:
     healthy = change(4321, "hhh", "origin", "feat: rate limiter", cr=1)
     base = change(4376, "aaa", "origin", "split part one", verified=-1)
     top = change(4380, "bbb", "aaa", "refactor: split scheduler", owner="carol", comments=2)
-    return _store(healthy, base, top)
+    mine = change(4410, "mmm", "origin", "feat: quota headers", owner="me", verified=-1)
+    store = _store(healthy, base, top, mine, stub=[healthy, base, top])
+    store.stub_query(DEFAULT_OUTGOING_QUERY, [mine])
+    return store
 
 
 def test_inbox_ai_is_one_plain_line_per_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -627,6 +633,7 @@ def test_inbox_ai_is_one_plain_line_per_chain(tmp_path: Path, monkeypatch: pytes
     code, out, err = run_cli(tmp_path, inbox_main, ["--ai", "--color", "always"], monkeypatch, gerrit=_ai_inbox())
     assert code == int(ExitCode.OK), err
     assert out == strip_ansi(out)  # --ai forces colour off, whatever --color says
+    assert err == strip_ansi(err)
     lines = [re.sub(r"\b\d+[mhd]\b", "<age>", line) for line in out.splitlines()]
     assert lines[0] == "project: all projects"
     assert lines[1] == "to review: 2 chains, 3 changes"
@@ -635,7 +642,10 @@ def test_inbox_ai_is_one_plain_line_per_chain(tmp_path: Path, monkeypatch: pytes
         "change 4380 refactor: split scheduler — 2 changes, by carol, waiting on you <age>, "
         "last activity <age>, V-1, 4376: build failed, 4380: 2 unresolved comments",
     ]
-    assert lines[4:] == ["outgoing: none"]
+    assert lines[4:] == [
+        "outgoing: 1 chain, 1 change",
+        "change 4410 feat: quota headers — last activity <age>, V-1, 4410: build failed",  # no owner, no wait on you
+    ]
     for absent in ("http", "c4321", "CR0", "0 unresolved", "None", "#"):
         assert absent not in out
 

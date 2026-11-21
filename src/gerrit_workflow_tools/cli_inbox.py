@@ -40,11 +40,10 @@ from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age, hos
 from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
-from gerrit_workflow_tools.render.status_fmt import member_hints
+from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
-_HEADINGS = {TO_REVIEW: "to review", OUTGOING: "outgoing"}
 _EMPTY = {TO_REVIEW: "(nothing to review)", OUTGOING: "(no open chains of yours)"}
 
 
@@ -104,7 +103,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="At most N chains per section.",
     )
-    add_output_format_args(parser)
+    add_output_format_args(parser, ai_view="one plain line per chain")
     parser.add_argument(
         "--url",
         "--show-url",
@@ -204,7 +203,7 @@ def _render_section(
 ) -> None:
     chains = section.chains
     outgoing = section.name == OUTGOING
-    print(color_text(f"{_HEADINGS[section.name]} ({len(chains)})", f"{ANSI_BOLD}{ANSI_CYAN}"))
+    print(color_text(f"{SECTION_HEADINGS[section.name]} ({len(chains)})", f"{ANSI_BOLD}{ANSI_CYAN}"))
     if not chains:
         print(color_text(_EMPTY[section.name], ANSI_DIM))
         return

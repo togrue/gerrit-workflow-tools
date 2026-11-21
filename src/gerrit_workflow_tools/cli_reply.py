@@ -19,6 +19,7 @@ from gerrit_workflow_tools.cli_common import (
     assume_yes,
     confirm,
     init_cli_runtime,
+    may_prompt,
     read_message,
     run_cli_command,
 )
@@ -31,7 +32,7 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
+from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import (
@@ -262,8 +263,8 @@ def _confirmed(args: argparse.Namespace, what: str) -> bool:
     """Whether to go ahead: ``-y``, or a yes at a prompt. JSON output and no terminal never prompt."""
     if args.yes or assume_yes():
         return True
-    if args.json_ or not stdin_is_terminal():
-        raise UsageError("no prompt to answer (non-interactive or --json): pass -y to publish")
+    if not may_prompt(args):
+        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
     return confirm(f"Publish {what}?", default=False)
 
 

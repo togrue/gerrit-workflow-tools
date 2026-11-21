@@ -44,6 +44,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -243,28 +244,24 @@ def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup,
     )
 
 
-def add_output_format_args(
-    parser: argparse.ArgumentParser,
-    *,
-    markdown: bool = False,
-    group: argparse._MutuallyExclusiveGroup | None = None,
-) -> None:
+def add_output_format_args(parser: argparse.ArgumentParser, *, ai_view: str | None = None) -> None:
     """Register mutually exclusive ``--json`` / ``--format`` / ``--ai``; read the choice with :func:`output_format`.
 
-    Every command with ``--json`` takes ``--ai`` (``--format ai``): text for a model to read. A command with a
-    Markdown view (*markdown*) also offers ``--format markdown``, and ``ai`` is that view there; elsewhere it is
-    the command's own compact view, or its human output with colour and hyperlinks off. *group* is a
-    mutually exclusive group of the command's own that the three join.
+    Every command with ``--json`` takes ``--ai`` (``--format ai``): text for a model to read, never a prompt.
+    *ai_view* says what that is when the command has a view of its own for it; ``"markdown"`` makes it
+    the command's Markdown view and offers ``--format markdown`` too. Without one, ``ai`` is the human
+    output with colour and hyperlinks off.
     """
-    fmt = group or parser.add_mutually_exclusive_group()
+    fmt = parser.add_mutually_exclusive_group()
     fmt.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
+    markdown = ai_view == "markdown"
     choices = ("human", "markdown", "ai") if markdown else ("human", "ai")
-    ai_view = "the Markdown view" if markdown else "compact plain text, no colour or hyperlinks"
+    view = "the Markdown view" if markdown else ai_view or "the human output without colour or hyperlinks"
     fmt.add_argument(
         "--format",
         choices=choices,
         dest="format_",
-        help=f"Output format (default: human). 'ai': {ai_view}, for a model.",
+        help=f"Output format (default: human). 'ai': {view}, for a model; it never prompts.",
     )
     fmt.add_argument("--ai", action="store_const", const="ai", dest="format_", help="Alias for --format ai.")
     parser.set_defaults(ai_view_="markdown" if markdown else "ai")
@@ -276,6 +273,11 @@ def output_format(args: argparse.Namespace) -> str:
         return "json"
     fmt = getattr(args, "format_", None) or "human"
     return str(args.ai_view_) if fmt == "ai" else fmt
+
+
+def may_prompt(args: argparse.Namespace) -> bool:
+    """Whether a command may ask: human output on a terminal. ``--json`` and ``--ai`` output never prompts."""
+    return output_format(args) == "human" and stdin_is_terminal()
 
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
@@ -361,7 +363,7 @@ def init_cli_runtime(
     ensure_utf8_stdio()
     configure_logging(getattr(args, "debug_log", False))
     cwd = Path.cwd()
-    plain = output_format(args) == "ai"  # Text for a model: colour and hyperlinks forced off.
+    plain = getattr(args, "format_", None) == "ai"  # Text for a model, Markdown or not: no colour, no links.
     init_color_mode(color="never" if plain else getattr(args, "color", "auto"))
     init_hyperlink_mode(hyperlinks="never" if plain else getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)

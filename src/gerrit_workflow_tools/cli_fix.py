@@ -15,6 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     ask_choice,
     changeish_help,
     init_cli_runtime,
+    may_prompt,
     print_stack_commit_notes,
     run_cli_command,
 )
@@ -23,7 +24,6 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_underway
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
-from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -56,13 +56,13 @@ def _print_unstaged_diff(cwd: Path) -> None:
         print("(no unstaged diff)", file=sys.stderr)
 
 
-def _prompt_stage_modified_changes(cwd: Path) -> bool:
+def _prompt_stage_modified_changes(cwd: Path, *, may_ask: bool) -> bool:
     """Interactively offer to stage unstaged tracked modifications.
 
     Returns True if the user accepted and files were staged. Only runs when
-    stdin is a TTY and there are unstaged tracked changes.
+    it may ask (human output on a TTY) and there are unstaged tracked changes.
     """
-    if not stdin_is_terminal():
+    if not may_ask:
         return False
     if not _worktree_has_unstaged_tracked_changes(cwd):
         return False
@@ -145,7 +145,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if (
         not args.commit_all
         and not _index_has_staged_changes(cwd)
-        and (not _prompt_stage_modified_changes(cwd) or not _index_has_staged_changes(cwd))
+        and (not _prompt_stage_modified_changes(cwd, may_ask=may_prompt(args)) or not _index_has_staged_changes(cwd))
     ):
         raise UsageError(
             "no staged changes (index empty). Stage edits with `git add`, "

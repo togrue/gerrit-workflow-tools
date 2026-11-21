@@ -13,7 +13,13 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.inbox import OUTGOING, InboxSection
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age
-from gerrit_workflow_tools.render.status_fmt import attention_hints, code_review_token, member_hints, verified_token
+from gerrit_workflow_tools.render.status_fmt import (
+    SECTION_HEADINGS,
+    attention_hints,
+    code_review_token,
+    member_hints,
+    verified_token,
+)
 
 
 def vote_words(verified: int | None, code_review: int | None) -> list[str]:
@@ -74,7 +80,7 @@ def inbox_ai_lines(sections: Sequence[InboxSection], *, projects: Sequence[str])
     """``ger inbox --ai``: the project scope, then per section a count line and a line per chain."""
     lines = [f"project: {', '.join(projects) if projects else 'all projects'}"]
     for section in sections:
-        name = section.name.replace("-", " ")
+        name = SECTION_HEADINGS[section.name]
         chains = section.chains
         changes = sum(chain.depth for chain in chains)
         count = f"{_plural(len(chains), 'chain')}, {_plural(changes, 'change')}" if chains else "none"
