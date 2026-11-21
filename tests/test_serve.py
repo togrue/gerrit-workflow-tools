@@ -339,6 +339,31 @@ def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) ->
     assert "ci_introduced" not in _get(api, "/show", rev="HEAD", ci="1")["commits"][0]
 
 
+def test_ci_of_one_change_asks_for_it_and_its_parent_and_agrees_with_the_whole_chain(stack_repo: Path) -> None:
+    # What the Change view asks when its CI section opens (issue #40): every other member of the
+    # chain would add its build logs and a round of comments to the wait.
+    rows = stack_rows_mb_to_head(stack_repo)
+    verified = [{}, {}, {"verified": -1}, {"verified": -1}]
+
+    def ask(revs: list[str]) -> tuple[dict[str, Any], int, int]:
+        store, _keys, _rows = _gerrit(stack_repo, verified)
+        http = FakeCiHttp(jenkins_build())
+        api = GerApi(stack_repo, gerrit=store, ci_http=http)
+        commits = _get(api, "/show", rev=revs, ci="1", chain="1", refresh="1")["commits"]
+        found = next(c for c in commits if c["sha"] == rows[2].sha)
+        return found, len(store.calls), len(http.calls)
+
+    def findings(commit: dict[str, Any]) -> tuple[list[Any], list[str]]:
+        return [content["findings"] for content in commit["ci_content"]], commit["ci_introduced"]
+
+    whole, whole_gerrit, whole_ci = ask([row.sha for row in rows])
+    asked, gerrit_calls, ci_calls = ask([rows[1].sha, rows[2].sha])
+    assert asked["ci_introduced"], "the change introduced its findings"
+    assert findings(asked) == findings(whole)
+    assert (gerrit_calls, ci_calls) == (9, 2)
+    assert (whole_gerrit, whole_ci) == (17, 4), "the whole chain: what the Change view asked before"
+
+
 def test_show_serves_the_markdown_ger_show_ai_prints(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, keys, _rows = _gerrit(stack_repo, [{}, {}, {}, {"verified": -1, "unresolved_comment_count": 1}])
     comment = {"id": "c1", "line": 1, "message": "rename this", "unresolved": True, "patch_set": 1}

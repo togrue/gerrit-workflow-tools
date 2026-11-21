@@ -89,6 +89,18 @@ export function sameChange(a: ChangeTarget, b: ChangeTarget): boolean {
   return a.number !== undefined && b.number !== undefined ? a.number === b.number : a.rev === b.rev;
 }
 
+/**
+ * The commits `/show` is asked for a change's CI findings, base first: the change and the commit
+ * below it, as a chain. Whether a finding was introduced turns on the parent's CI alone, and every
+ * other member would cost its build logs and its comments (issue #40). The change is last; with no
+ * chain or stack to place it in, it is asked alone and nothing is said about what it introduced.
+ */
+export function ciRevs(target: ChangeTarget, stack: Stack | undefined): { revs: string[]; chain: boolean } {
+  const below = target.chainRevs?.includes(target.rev) ? target.chainRevs : target.local ? stack?.commits.map((c) => c.sha) : undefined;
+  const index = below ? below.indexOf(target.rev) : -1;
+  return below && index >= 0 ? { revs: below.slice(Math.max(0, index - 1), index + 1), chain: true } : { revs: [target.rev], chain: false };
+}
+
 export class ChangeDetail {
   target: ChangeTarget | undefined;
   /** `/show`'s answer; undefined until it has come. */

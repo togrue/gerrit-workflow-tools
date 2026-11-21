@@ -291,8 +291,11 @@ when Gerrit has that very commit as a patchset (or the change is only on Gerrit)
 With `ci=1` and `stack=1` or `chain=1`, each commit also carries `ci_introduced`: the
 fingerprints of its **introduced findings**. It is `null` where that cannot be told — the
 commit is not on Gerrit or is ahead of the patchset CI ran on, or its parent's CI log could
-not be fetched. A single `rev` never gets `ci_introduced`: without its parent there is nothing
-to compare with.
+not be fetched. A single `rev` without `chain=1` never gets `ci_introduced`: without its parent
+there is nothing to compare with. A commit's entry turns on its parent alone, so a client after
+one commit's asks for `rev=<parent>&rev=<commit>&chain=1` (the chain's base alone, with
+`chain=1`, is compared with the target branch), not the whole chain: every other commit adds its
+build logs and its comments to the answer.
 
 ### `GET /diff?rev=<changeish>`
 
