@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -60,6 +61,23 @@ def merged_equivalent(local_sha: str, change: ChangeView, facts: CodeFacts) -> b
     if pl is None or pg is None:
         return None
     return pl == pg
+
+
+class CodeChange(str, Enum):
+    """How a commit ahead of Gerrit's current patch set differs from it: what decides whether its votes stay."""
+
+    REBASED = "rebased"
+    """Only rebased: the same patch-id, so Gerrit carries the votes over when it is pushed."""
+    CHANGED = "changed"
+    """Its code changed: the votes are about the pushed patchset, and Gerrit may not keep them."""
+    UNKNOWN = "unknown"
+    """Cannot be told here (Gerrit's patchset is not in this repository, a merge, no diff)."""
+
+
+def code_change(local_sha: str, change: ChangeView, facts: CodeFacts) -> CodeChange:
+    """Whether *local_sha*, ahead of *change*'s current patch set, changed its code or is only rebased."""
+    same = merged_equivalent(local_sha, change, facts)
+    return CodeChange.UNKNOWN if same is None else CodeChange.REBASED if same else CodeChange.CHANGED
 
 
 def norm_sha(sha: str) -> str:

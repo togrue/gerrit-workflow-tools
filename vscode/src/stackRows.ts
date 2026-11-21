@@ -2,16 +2,18 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { CommitStatus, MoveConflict, Overview, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
+import { CodeChange, CommitStatus, MoveConflict, Overview, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
 import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
-export type Sync = "same" | "changed" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
+export type Sync = "same" | "rebased" | "code-changed" | "changed" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
 
 export const SYNC_WORDS: Record<Sync, string> = {
   same: "the same as on Gerrit",
-  changed: "changed here since the last push",
+  rebased: "only rebased since the last push: the votes stay when you push",
+  "code-changed": "its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push",
+  changed: "changed here since the last push: whether its code changed cannot be told here, and Gerrit may not keep the votes when you push",
   outdated: "outdated: Gerrit has a newer patchset",
   diverged: "diverged: changed here, and Gerrit has a patchset from elsewhere",
   "not-pushed": "not on Gerrit",
@@ -22,10 +24,13 @@ export const SYNC_WORDS: Record<Sync, string> = {
 /**
  * The codicon for each: a commit is no cloud. A full circle is in step with Gerrit, an empty one
  * is not there yet; an arrow points to the side that is newer (up: here, to push; down: Gerrit).
+ * New code since the push is a diff: the votes are about other code.
  */
 export const SYNC_ICONS: Record<Sync, string> = {
   same: "circle-filled",
-  changed: "arrow-circle-up",
+  rebased: "arrow-circle-up",
+  "code-changed": "diff-modified",
+  changed: "arrow-up",
   outdated: "arrow-circle-down",
   diverged: "arrow-swap",
   "not-pushed": "circle-outline",
@@ -33,12 +38,15 @@ export const SYNC_ICONS: Record<Sync, string> = {
   unknown: "question",
 };
 
-export function sync(commit: StackCommit): Sync {
+/** A commit ahead of Gerrit, by core's verdict on its code. */
+const NEWER_SYNC: Record<CodeChange, Sync> = { rebased: "rebased", changed: "code-changed", unknown: "changed" };
+
+export function sync(commit: CommitStatus & { diverged?: boolean }): Sync {
   switch (commit.patchset_status) {
     case "active":
       return "same";
     case "newer":
-      return commit.diverged ? "diverged" : "changed";
+      return commit.diverged ? "diverged" : NEWER_SYNC[commit.code_change ?? "unknown"];
     case "outdated":
       return "outdated";
     case "absent":
@@ -154,7 +162,7 @@ export interface StackRow {
   merge: boolean;
   /** The newest merge or below it: git rebase cannot replay a merge, so it stays where it is. */
   pinned: boolean;
-  /** Words after the summary: `HEAD`, the short id, `held back`. */
+  /** Words after the summary: `HEAD`, the short id, `code changed`, `held back`. */
   notes: string[];
   badges: (Badge | null)[];
   tooltip: string;
@@ -209,7 +217,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   const marker = stopped ? (conflict ? "conflict" : "rebase") : null;
   const up = above && conflicts(commit.sha, above.sha);
   const down = below && conflicts(below.sha, commit.sha);
-  const notes = [commit.is_head ? "HEAD" : "", commit.short_sha, commit.merge ? "merge" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
+  const notes = [commit.is_head ? "HEAD" : "", commit.short_sha, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
   const tooltip = [
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,

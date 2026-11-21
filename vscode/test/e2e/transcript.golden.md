@@ -877,16 +877,16 @@ progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → dismissed
 --- on screen:
-+ stack  | Cleanup after experiment — HEAD · <sha> · held back · changed here since the last push  [review +2, ci bad]
-+ stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [review +2, ci bad]
-+ stack  | Refactor parser init — <sha> · changed here since the last push  [review +2, ci good]
-+ stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
++ stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
++ stack  | test! temporary experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
++ stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
++ stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Local changes not pushed, CI failed — V-1 CR+2
-+ change | This commit is ahead of Gerrit — only rebased: the votes stay when you push
++ change | This commit is ahead of Gerrit — only rebased since the last push: the votes stay when you push
 - change | CI failed — V-1 CR+2
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
 + change |     FAILURE — generic
@@ -977,8 +977,8 @@ status bar message: $(check) Undone: the stack is as it was
 
 ```
 + stack  | Rework d.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | Cleanup after experiment — <sha> · held back · changed here since the last push  [review +2, ci bad]
-- stack  | Cleanup after experiment — HEAD · <sha> · held back · changed here since the last push  [review +2, ci bad]
++ stack  | Cleanup after experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
+- stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 ```
 
 ## 68. Drag "Rework d.txt" to the line under "Cleanup after experiment"
@@ -1011,8 +1011,8 @@ progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → dismissed
 --- on screen:
-- stack  | Cleanup after experiment — <sha> · held back · changed here since the last push  [review +2, ci bad]
-+ stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci bad]
+- stack  | Cleanup after experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
++ stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
 ## 71. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
@@ -1081,9 +1081,9 @@ progress (in view ger.stack): Rewriting the stack
 notification (info): Dropped "Rework d.txt".  [Undo]
     → dismissed
 --- on screen:
-+ stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [review +2, ci bad]
++ stack  | test! temporary experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 - stack  | Rework d.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [review +2, ci bad]
+- stack  | test! temporary experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
 ```
 
 ## Meanwhile: you change the code of the top commit and amend it
@@ -1091,12 +1091,12 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 **Expect:** Its votes now show as the last pushed patchset's (Gerrit may not keep them for this code); the Change view follows the commit and says so.
 
 ```
-+ stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [review +2, ci bad]
++ stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-+ change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
++ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Local changes not pushed, CI failed — V-1 CR+2
-- change | This commit is ahead of Gerrit — only rebased: the votes stay when you push
+- change | This commit is ahead of Gerrit — only rebased since the last push: the votes stay when you push
 - change | CI
 - change |   Widget #55 — 2 findings
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
@@ -1121,12 +1121,12 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 **Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
 
 ```
-untitled json document opens: 347 lines, starting
+untitled json document opens: 348 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Copy and Open GitHub Issue"
-clipboard: 347 lines, starting "{"
+clipboard: 348 lines, starting "{"
 browser opens: https://github.com/togrue/gerrit-workflow-tools/issues/new?labels=vscode&body=<!-- What happened, and what did you expect%3F -->
 
 
@@ -1150,13 +1150,13 @@ status bar message: $(check) Report copied: paste it into the issue that opens i
 **Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
 
 ```
-untitled json document opens: 347 lines, starting
+untitled json document opens: 348 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Save to File…"
 save dialog: suggests ger-report.json
-    → saved 347 lines as ~/ger-report.json
+    → saved 348 lines as ~/ger-report.json
 status bar message: $(check) Report saved to ~/ger-report.json
 --- on screen:
 (no change)
@@ -1167,7 +1167,7 @@ status bar message: $(check) Report saved to ~/ger-report.json
 **Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
 
 ```
-untitled json document opens: 347 lines, starting
+untitled json document opens: 348 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
     → closed without saving
@@ -1221,10 +1221,10 @@ notification (warning): Still out of date: fake ger: down for this test
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-- stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — <sha> · changed here since the last push  [review +2, ci good]
-- stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
-- stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci bad]
+- stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
+- stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
+- stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -1272,7 +1272,7 @@ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +1 −0

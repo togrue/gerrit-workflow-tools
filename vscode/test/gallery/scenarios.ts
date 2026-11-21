@@ -64,7 +64,9 @@ function syncStates(): StackVm {
   return stackOf([
     pushed("Add the routing table", { patchset_status: "merged-same", change_status: "MERGED", code_review: 2, verified: 1, attention_reasons: [] }),
     pushed("Extract routing into its own module", { code_review: 2, verified: 1, submittable: true, attention_reasons: [] }),
-    pushed("Route by longest matching prefix", { patchset_status: "newer", attention_reasons: ["ahead-of-gerrit"] }),
+    pushed("Route by longest matching prefix", { patchset_status: "newer", code_change: "rebased", code_review: 2, attention_reasons: ["ahead-of-gerrit"] }),
+    pushed("Match routes case-insensitively", { patchset_status: "newer", code_change: "changed", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }),
+    pushed("Normalise trailing slashes", { patchset_status: "newer", code_change: "unknown", attention_reasons: ["ahead-of-gerrit"] }),
     pushed("Cache resolved routes", { patchset_status: "outdated", attention_reasons: ["outdated-patchset"] }),
     pushed("Evict stale routes", { patchset_status: "newer", diverged: true, attention_reasons: ["ahead-of-gerrit"] }),
     pushed("Log route misses", { patchset_status: "unknown", attention_reasons: [] }),
@@ -81,7 +83,7 @@ function badgeKinds(): StackVm {
     pushed("A negative vote", { code_review: -1, attention_reasons: ["review-issues"] }),
     pushed("Vetoed, CI failed, many comments", { code_review: -2, verified: -1, ci_failures: ["Verified"], comments_unresolved: 12, attention_reasons: ["ci-failed", "unresolved-comments", "review-issues"] }),
     pushed("CI failed, nobody voted", { ci_failures: ["widget-verify", "widget-lint"], attention_reasons: ["ci-failed"] }),
-    pushed("Votes of the last pushed patchset", { patchset_status: "newer", last_pushed_votes: { verified: -1, code_review: 2 }, comments_unresolved: 1, attention_reasons: ["ahead-of-gerrit"] }),
+    pushed("Votes of the last pushed patchset", { patchset_status: "newer", code_change: "changed", last_pushed_votes: { verified: -1, code_review: 2 }, comments_unresolved: 1, attention_reasons: ["ahead-of-gerrit"] }),
     pushed("Nobody to review it", { reviewers: [], attention_reasons: ["no-reviewers"], is_head: true }),
   ]);
 }
@@ -261,7 +263,7 @@ function changeScenarios(): Scenario[] {
     scenario("Change: a commit of your stack, its message editable", { change: change({ shown: theChange(voted) }) }),
     scenario("Change: not on Gerrit yet", { change: change({ shown: shown(unpushed(SUBJECT)), patchsets: undefined }) }),
     scenario("Change: ahead of Gerrit, compared with it", {
-      change: change({ shown: theChange({ patchset_status: "newer", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }), mode: "gerrit", delta: itsDiff({ files: FILES.slice(3, 6), since: { ...since, patch_set: 5 } }) }),
+      change: change({ shown: theChange({ patchset_status: "newer", code_change: "changed", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }), mode: "gerrit", delta: itsDiff({ files: FILES.slice(3, 6), since: { ...since, patch_set: 5 } }) }),
     }),
     scenario("Change: Gerrit has a newer patchset", { change: change({ shown: theChange({ patchset_status: "outdated", attention_reasons: ["outdated-patchset"] }) }) }),
     scenario("Change: someone's change, new since your review", {

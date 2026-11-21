@@ -201,7 +201,7 @@ const STACK: Shape = {
       merge: KEEP,
       pinned: KEEP,
       /** Our words, and the short commit id. */
-      notes: [ours(["HEAD", "merge", "held back", "abandoned"], SHA)],
+      notes: [ours(["HEAD", "merge", "code changed", "held back", "abandoned"], SHA)],
       badges: [BADGE],
       tooltip: TOOLTIP,
       squash: KEEP,
@@ -256,11 +256,7 @@ const CHANGE: Shape = {
       icon: ICON,
       tone: TONE,
       text: ours(["This commit is ahead of Gerrit", "Gerrit has a newer patchset than this commit"]),
-      detail: ours([
-        "its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push",
-        "only rebased: the votes stay when you push",
-        "comments and CI below are about Gerrit's version",
-      ]),
+      detail: ours([...Object.values(SYNC_WORDS), "comments and CI below are about Gerrit's version"]),
     },
   ],
   message: { key: KEY, text: TEXT, author: PERSON, readOnly: READ_ONLY_WORDS },

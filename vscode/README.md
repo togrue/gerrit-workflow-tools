@@ -44,8 +44,11 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 The commits above your upstream, newest first. One row per commit:
 
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
-  same as on Gerrit; a **yellow arrow up** when you changed it since the last push (yours is
-  newer: push it); a **red arrow down** when Gerrit has a newer patchset than this commit
+  same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
+  (push it: the votes stay); a **yellow diff** square when its code changed since (push it, and
+  reviewers have to look again: Gerrit may not keep the votes), noted *code changed* beside the
+  short id; a plain **yellow arrow up** when it changed and ger cannot tell which (Gerrit's
+  patchset is a merge, or has no diff); a **red arrow down** when Gerrit has a newer patchset than this commit
   (outdated); **blue arrows both ways** when both happened (diverged: you changed it, and
   Gerrit's current patchset came from somewhere else). A dimmed **empty circle** is a commit
   Gerrit does not have yet; a green check, one that is merged. Hover it for the words.
@@ -54,7 +57,8 @@ The commits above your upstream, newest first. One row per commit:
   Gerrit may not keep them. Hover any of them for the words; the review vote's tooltip names the
   reviewers (and who is CC'd). A pushed change with nobody to review it shows a **person +** icon
   where the review vote goes.
-- `HEAD`, the short commit id, and *held back* where `ger push` would stop at the ready boundary.
+- `HEAD`, the short commit id, *code changed* (see above), and *held back* where `ger push` would
+  stop at the ready boundary.
 - Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
   message, while the keyboard stays in the list. It shows what the row knows at once (what the
   change needs, its votes) and fills in the message, files and comments as they arrive. `Enter` (or a double click) moves to the Change view.

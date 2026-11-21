@@ -11,7 +11,14 @@ from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
-from gerrit_workflow_tools.core.code_facts import CodeFacts, merged_equivalent, norm_sha, read_code_facts
+from gerrit_workflow_tools.core.code_facts import (
+    CodeChange,
+    CodeFacts,
+    code_change,
+    merged_equivalent,
+    norm_sha,
+    read_code_facts,
+)
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 
@@ -182,6 +189,8 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     diverged: bool = False
     """``newer``, and Gerrit's current patch set is a commit this repository never had: somebody
     else (or another checkout) uploaded it, so a push would put this commit over work it was not built on."""
+    code_change: CodeChange | None = None
+    """``newer`` only: whether its code changed or it is only rebased (then its votes stay)."""
     invalid_footer: str | None = None
     """The **footer value** when the commit has one that is not a valid **Change-Id** (``change_id``
     is then ``None``): what lets attention call the footer invalid rather than missing."""
@@ -296,10 +305,9 @@ def build_log_commit(
 
     # Votes and submittability belong to the patch set on Gerrit, not to a commit it has not seen.
     newer = ps == PatchsetStatus.NEWER
-    # Unless the commit's own code is the same (only rebased): Gerrit carries the votes over
-    # on such a push, so they stay.
-    same_code = newer and merged_equivalent(sha, change, facts) is True
-    votes_moved_on = newer and not same_code
+    # Unless the commit is only rebased: Gerrit carries the votes over on such a push, so they stay.
+    code = code_change(sha, change, facts) if newer else None
+    votes_moved_on = newer and code is not CodeChange.REBASED
     current = change.current_revision
     diverged = newer and current is not None and norm_sha(current) not in facts.present
     if votes_moved_on:
@@ -338,6 +346,7 @@ def build_log_commit(
             wip=change.work_in_progress,
             private=change.private,
             diverged=diverged,
+            code_change=code,
         ),
         frozenset(needed),
     )

@@ -42,7 +42,7 @@ from gerrit_workflow_tools.server.httpd import GerHttpServer, _Handler, failure_
 from gerrit_workflow_tools.server.request import BadRequest, NoRoute
 from tests.change_store import ChangeStore
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
-from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
+from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head, web_edit
 from tests.conftest import json_stdout, run_cli
 from tests.test_suggested_edits import BLOCK_COMMENT, FIX_COMMENT
 
@@ -126,6 +126,7 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert second["gerrit_url"] == f"{WEB}/c/testproj/+/101"
     assert [c["number"] for c in stack["commits"]] == [100, 101, 102, 103]
     assert [c["last_pushed_votes"] for c in stack["commits"]] == [None] * 4, "in step with Gerrit: votes are current"
+    assert [c["code_change"] for c in stack["commits"]] == [None] * 4, "only a commit ahead of Gerrit has one"
 
 
 def test_refresh_rereads_the_local_stack_inside_the_trust_window(
@@ -596,7 +597,9 @@ def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) 
     assert not rebase_in_progress(stack_repo)
     # Only reordered: each commit's own code is the same, so its votes stay (Gerrit carries them over).
     moved = _get(api, "/stack")["commits"]
-    assert {(c["patchset_status"], c["code_review"], c["last_pushed_votes"]) for c in moved} == {("newer", 2, None)}
+    assert {(c["patchset_status"], c["code_change"], c["code_review"], c["last_pushed_votes"]) for c in moved} == {
+        ("newer", "rebased", 2, None)
+    }
     # New code in the top commit: its votes are about the pushed patchset, served as that.
     (stack_repo / "more.txt").write_text("more code\n", encoding="utf-8")
     git("add", "-A", cwd=stack_repo)
@@ -604,6 +607,16 @@ def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) 
     top = _get(api, "/stack")["commits"][-1]
     assert (top["patchset_status"], top["verified"], top["code_review"]) == ("newer", None, None)
     assert top["last_pushed_votes"] == {"verified": 1, "code_review": 2}
+    assert top["code_change"] == "changed", "the verdict the Local Stack row shows as code changed"
+
+
+def test_a_commit_ahead_of_a_patchset_it_never_had_cannot_tell_whether_its_code_changed(stack_repo: Path) -> None:
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    web_edit(list(details.values())[1], rows[1].sha, keep_local_patchset=False)
+    commits = _get(GerApi(stack_repo, gerrit=ChangeStore(details, web_base=WEB)), "/stack")["commits"]
+    assert (commits[1]["patchset_status"], commits[1]["code_change"]) == ("newer", "unknown")
+    assert commits[1]["last_pushed_votes"] is not None, "not proved only rebased: the votes are the pushed patchset's"
 
 
 def test_rewrite_folds_and_drops_without_ever_merging_two_change_ids(stack_repo: Path) -> None:
