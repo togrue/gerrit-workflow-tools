@@ -44,9 +44,15 @@ def run_interactive_rebase(
     return code
 
 
-def continue_rebase(cwd: Path, *, walk_on: str | None = None) -> int:
-    """``git rebase --continue``; return git's exit code. Output goes to the terminal."""
-    code = git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode
+def continue_rebase(
+    cwd: Path, *, walk_on: str | None = None, skip: bool = False, env: dict[str, str] | None = None
+) -> int:
+    """``git rebase --continue`` (``--skip`` with *skip*); return git's exit code. Output goes to the terminal.
+
+    A stop on the next conflict ends with the shared next step, as a rebase ger started does.
+    """
+    step = "--skip" if skip else "--continue"
+    code = git("rebase", step, cwd=cwd, env=env, check=False, capture=False).returncode
     _print_conflict_next_step(cwd, walk_on)
     return code
 

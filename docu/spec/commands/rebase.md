@@ -16,6 +16,7 @@ Start **`git rebase -i`** with Gerrit status annotations on each `pick` line (pa
 
 ```
 ger rebase [options] [REV]
+ger rebase --continue | --abort | --skip
 ```
 
 `REV` — base commit, Change-Id, or ref (default: merge-base with target). Not used with `--onto-remote`.
@@ -41,9 +42,22 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 | `--no-onto-remote` | Force merge-base behavior (overrides `gerrit.rebaseOntoRemote`) |
 | `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
 | `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
+| `--continue` | Go on with the rebase underway: `git rebase --continue`. Refused while paths are still unmerged, with the shared next step |
+| `--abort` | Stop the rebase underway: `git rebase --abort`, the branch back where it was |
+| `--skip` | Leave out the commit the rebase stopped on with a conflict: `git rebase --skip` |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Editor: enricher delegates to `GREBASE_EDITOR` / `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`, first set wins. `GREBASE_EDITOR` edits only the todo (git's own editor, e.g. for a `squash` message, still comes from `GIT_EDITOR` onwards). Without a terminal (stdin not a TTY: scripts, agents) ger sets `GIT_EDITOR=true`, so unless `GREBASE_EDITOR` is set no editor opens: the todo runs as annotated, so `--autosquash` and `--drop-merged-equivalent` run unattended. A script that wants to edit the todo sets `GREBASE_EDITOR`.
+
+### Going on with a rebase underway
+
+`--continue`, `--abort` and `--skip` act on the rebase underway, whoever started it, and take no
+`REV` or other option. They are what the VS Code extension's *Continue*, *Abort* and *Skip* run.
+Without a rebase they refuse (`no rebase is in progress`, naming a `git am` when one is underway
+instead). `--continue` refuses while the index holds unresolved conflicts, with the shared next
+step, and changes nothing. Without a terminal `--continue` and `--skip` set `GIT_EDITOR=true`, so
+a resolved conflict is committed with its message as it is. A stop on the next conflict ends with
+the shared next step, as below.
 
 A rebase that stops on a conflict ends with the shared next step ([edit.md](edit.md#behavior)): resolve the paths, `git add` them, then `git rebase --continue`, or `git rebase --abort`.
 
