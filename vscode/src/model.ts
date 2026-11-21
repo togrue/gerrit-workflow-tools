@@ -3,7 +3,7 @@
 import * as vscode from "vscode";
 
 import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
-import { Seen, blockedSwaps, chainsWithActivity, rememberSeen, swapKey } from "./format";
+import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
 import { GerProcess } from "./server";
 import { GerState, failureState, staleReason } from "./state";
@@ -139,13 +139,12 @@ export class Model implements vscode.Disposable {
       const review = await client.review().catch(() => null);
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       const headline = this.overview.headline ?? undefined;
-      const key = headline ? `${headline.reason}:${headline.number}` : undefined;
       // Remembered either way: what you caused yourself does not come back as news later.
-      // A rebase is yours, never news.
-      if (background && !first && headline && headline.section !== "local" && key !== this.lastHeadline) {
+      const { news, last } = headlineNews(this.lastHeadline, headline, background && !first);
+      if (news && headline) {
         this.news.fire(headline);
       }
-      this.lastHeadline = key;
+      this.lastHeadline = last;
       const seen = rememberSeen(this.overview, this.memento.get<Seen>(SEEN_KEY, {}));
       this.active = chainsWithActivity(this.overview, seen);
       await this.memento.update(SEEN_KEY, seen);

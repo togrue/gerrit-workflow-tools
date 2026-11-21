@@ -29,6 +29,15 @@ export function watches({ gitDir, commonDir }: GitDirs): Watch[] {
       ];
 }
 
+/**
+ * The index, watched only while a rebase is stopped: `git add` of a resolved conflict changes
+ * nothing else, and the conflict must not stay shown. At other times it changes with every git
+ * command (and VS Code's own git rewrites it), so it is not watched.
+ */
+export function indexWatch({ gitDir }: GitDirs): Watch {
+  return { base: gitDir, pattern: "index" };
+}
+
 /** The injectable clock of {@link Quiet}. */
 export interface Timers {
   set(run: () => void, ms: number): unknown;

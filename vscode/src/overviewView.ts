@@ -114,7 +114,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     switch (node.kind) {
       case "headline": {
         const item = new vscode.TreeItem(node.headline.text);
-        item.iconPath = icon("target", node.headline.reason === "ci-failed" ? "list.errorForeground" : "list.warningForeground");
+        item.iconPath = icon("target", node.headline.severity === "error" ? "list.errorForeground" : "list.warningForeground");
         item.tooltip = "The most important thing right now. Click to open it.";
         item.command = { command: "ger.openHeadline", title: "Open" };
         return item;

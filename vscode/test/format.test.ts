@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 
-import { Chain, CommitStatus, EventsStatus, Overview, Rebase, RebaseHeadline, RebaseStop } from "../src/api";
+import { Chain, CommitStatus, EventsStatus, Headline, Overview, Rebase, RebaseHeadline, RebaseStop } from "../src/api";
 import {
   age,
   attentionIcon,
@@ -27,6 +27,7 @@ import {
   vote,
   votes,
   WORDED_REASONS,
+  headlineNews,
 } from "../src/format";
 import { attended } from "./fixtures";
 
@@ -101,14 +102,15 @@ test("the status bar says where a rebase stopped, by the change number or else t
   });
   const text = (headline: RebaseHeadline) => rebaseItem(headline).text;
   assert.equal(text(at("edit", 101)), "Rebase stopped at 101");
-  assert.equal(text(at("split", 101)), "Rebase stopped at 101");
+  assert.equal(text(at("split", 101)), "Rebase stopped to split 101");
   assert.equal(text(at("conflict", 103)), "Conflict in 103");
   assert.equal(text(at("resolved", 103)), "Conflict resolved in 103");
   assert.equal(text(at("paused", null, null)), "Rebase paused");
   assert.equal(text(at(null, null, null)), "Rebase underway");
   // Not on Gerrit: its subject, cut short.
-  assert.equal(text(at("edit", null)), "Rebase stopped at Cleanup after experiment");
-  assert.equal(text(at("conflict", null, "A subject far too long for the status bar")), "Conflict in A subject far too long for th…");
+  // Not on Gerrit: its subject, cut short and quoted, so it does not read as a file.
+  assert.equal(text(at("edit", null)), 'Rebase stopped at "Cleanup after experiment"');
+  assert.equal(text(at("conflict", null, "A subject far too long for the status bar")), 'Conflict in "A subject far too long for th…"');
   // No commit to name: a split whose commit was reset away.
   assert.equal(text(at("split", null, null)), "Rebase stopped");
 
@@ -132,6 +134,19 @@ test("votes and ages read like ger's own output", () => {
   assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 💬2 · active 4h ago");
   assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 0 }), "no votes");
   assert.deepEqual([fileState("A"), fileState("R"), sentence("unresolved comments")], ["added", "renamed", "Unresolved comments"]);
+});
+
+test("a rebase is never news, and the headline from before it is not news when it ends", () => {
+  const ci: Headline = { section: "outgoing", reason: "ci-failed", severity: "error", chain: "k", number: 102, subject: "s", url: null, text: "CI failed" };
+  const rebase = { section: "local", reason: "rebase", severity: "warning", stop: "edit", chain: null, number: 103, subject: "t", sha: null, url: null, text: "r" } as Headline;
+  let state = headlineNews(undefined, ci, false);
+  assert.deepEqual(state, { news: false, last: "ci-failed:102" }, "first sight is not news");
+  state = headlineNews(state.last, rebase, true);
+  assert.deepEqual(state, { news: false, last: "ci-failed:102" }, "a rebase is yours, and not remembered");
+  state = headlineNews(state.last, ci, true);
+  assert.equal(state.news, false, "the CI failure from before the rebase is not news again");
+  const other: Headline = { ...ci, number: 104 };
+  assert.equal(headlineNews(state.last, other, true).news, true, "a new headline in a background load is news");
 });
 
 test("activity is what moved since the chain was last seen", () => {

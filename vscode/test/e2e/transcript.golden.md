@@ -1449,9 +1449,9 @@ change | (the commit shown is only on the branch as it was before)
 **Today:** no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58).
 
 ```
-+ status bar | $(error) Conflict in Add e.txt  $(bell-dot) 1
++ status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 - status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
-+ chains | Conflict in Add e.txt
++ chains | Conflict in "Add e.txt"
 - chains | Rebase stopped at 102: Refactor parser init
 + stack  | A rebase stopped on a conflict
 + stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1462,7 +1462,7 @@ change | (the commit shown is only on the branch as it was before)
 - stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]  (dim)
 - stack  | ▶ Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 --- shown now:
-status bar | $(error) Conflict in Add e.txt  $(bell-dot) 1
+status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped on a conflict
 stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1493,16 +1493,16 @@ change | (the commit shown is HEAD)
 **Today:** no list of conflicted files for e.txt to leave, and no Continue (#56).
 
 ```
-+ status bar | $(warning) Conflict resolved in Add e.txt  $(bell-dot) 1
-- status bar | $(error) Conflict in Add e.txt  $(bell-dot) 1
-+ chains | Conflict resolved in Add e.txt
-- chains | Conflict in Add e.txt
++ status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
+- status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
++ chains | Conflict resolved in "Add e.txt"
+- chains | Conflict in "Add e.txt"
 + stack  | A rebase stopped with its conflicts resolved — ready to continue
 + stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
 - stack  | A rebase stopped on a conflict
 - stack  | ▶! Add e.txt — <sha> · held back · not on Gerrit  (dim)
 --- shown now:
-status bar | $(warning) Conflict resolved in Add e.txt  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue
 stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
@@ -1532,9 +1532,9 @@ change | (the commit shown is HEAD)
 
 ```
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
-- status bar | $(warning) Conflict resolved in Add e.txt  $(bell-dot) 1
+- status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
-- chains | Conflict resolved in Add e.txt
+- chains | Conflict resolved in "Add e.txt"
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | A rebase stopped with its conflicts resolved — ready to continue

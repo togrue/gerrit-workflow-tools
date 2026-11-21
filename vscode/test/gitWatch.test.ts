@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 
-import { Quiet, Timers, watches } from "../src/gitWatch";
+import { Quiet, Timers, indexWatch, watches } from "../src/gitWatch";
 import { gitDirs } from "../src/workspace";
 
 test("a plain checkout is watched in one place: HEAD, branches, the rebase state", () => {
@@ -90,4 +90,8 @@ test("a change after the quiet makes another run, and disposing cancels a pendin
   quiet.dispose();
   advance(5000);
   assert.equal(runs.length, 2);
+});
+
+test("the index is its own watch, in the worktree's own git directory, for a rebase to follow git add", () => {
+  assert.deepEqual(indexWatch({ gitDir: "/r/.git/worktrees/w", commonDir: "/r/.git" }), { base: "/r/.git/worktrees/w", pattern: "index" });
 });
