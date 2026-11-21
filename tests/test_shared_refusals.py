@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, Uncomm
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from tests.change_store import ChangeStore
 from tests.conftest import run_cli
+from tests.helpers import add_submodule
 
 
 def _configure(repo: Path) -> None:
@@ -84,20 +85,6 @@ def test_every_history_rewrite_refuses_a_dirty_tree_the_same_way(
     )
 
 
-def _add_submodule(repo: Path, tmp_path: Path, name: str = "lib") -> Path:
-    """A submodule *name* with two commits, recorded (and checked out) at the second."""
-    lib = tmp_path / name
-    lib.mkdir()
-    git("init", "-b", "main", cwd=lib)
-    for text in ("a\n", "b\n"):
-        (lib / "a.txt").write_text(text, encoding="utf-8")
-        git("add", ".", cwd=lib)
-        git("commit", "-m", f"lib {text.strip()}", cwd=lib)
-    git("-c", "protocol.file.allow=always", "submodule", "add", str(lib), name, cwd=repo)
-    git("commit", "-m", f"add {name}", cwd=repo)
-    return repo / name
-
-
 def _modify_submodule_content(repo: Path, sub: Path) -> None:
     (sub / "a.txt").write_text("dirty\n", encoding="utf-8")
 
@@ -150,7 +137,7 @@ def test_a_history_rewrite_counts_as_uncommitted_exactly_what_git_stash_would_sa
     the superproject is the control.
     """
     _configure(stack_repo)
-    sub = _add_submodule(stack_repo, tmp_path)
+    sub = add_submodule(stack_repo, tmp_path)
     make_dirty(stack_repo, sub)
     git_would_stash = bool(git("stash", "create", cwd=stack_repo).stdout.strip())
     assert git_would_stash is (refusal is not None)
@@ -168,7 +155,7 @@ def test_a_submodule_staged_at_another_commit_stops_a_history_rewrite_without_as
 ) -> None:
     """``git stash`` saves nothing for it, yet the rebase's checkout refuses to overwrite it."""
     _configure(stack_repo)
-    sub = _add_submodule(stack_repo, tmp_path)
+    sub = add_submodule(stack_repo, tmp_path)
     _stage_another_submodule_commit(stack_repo, sub)
     assert not git("stash", "create", cwd=stack_repo).stdout.strip()
 
@@ -183,7 +170,7 @@ def test_the_unstage_command_for_two_staged_submodules_runs_as_given(
     """One copy-pasteable command for every staged path, even one git would C-quote."""
     _configure(stack_repo)
     names = ["lib", "lib ü"]
-    for sub in [_add_submodule(stack_repo, tmp_path, name) for name in names]:
+    for sub in [add_submodule(stack_repo, tmp_path, name) for name in names]:
         _stage_another_submodule_commit(stack_repo, sub)
     staged = git("diff", "--cached", "--name-only", "-z", cwd=stack_repo).stdout.split("\0")
     assert sorted(p for p in staged if p) == names
@@ -205,7 +192,7 @@ def test_a_submodule_staged_below_the_stack_stops_a_history_rewrite_up_front(
     """The submodule is in the base and no stack commit touches it: git's checkout has nothing to
     refuse, yet the rebase would stop at its first commit. ger refuses before it starts."""
     _configure(stack_repo)
-    sub = _add_submodule(stack_repo, tmp_path)
+    sub = add_submodule(stack_repo, tmp_path)
     git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=stack_repo)
     for n in (1, 2):
         (stack_repo / f"on-top-{n}.txt").write_text(f"{n}\n", encoding="utf-8")
@@ -227,7 +214,7 @@ def test_reorder_refuses_a_staged_submodule_even_with_autostash(
 ) -> None:
     """Autostash would not get it out of the way, so the refusal is not ``uncommitted-changes``."""
     _configure(stack_repo)
-    sub = _add_submodule(stack_repo, tmp_path)
+    sub = add_submodule(stack_repo, tmp_path)
     _stage_another_submodule_commit(stack_repo, sub)
     head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
     settings = Settings.from_cwd(stack_repo)
