@@ -91,6 +91,19 @@ body {
   outline-offset: -1px;
 }
 
+/* The buttons under a banner (a rebase: Continue, Abort, Skip), lined up with its text. */
+.info-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 8px 6px 34px;
+}
+
+/* A conflicted file under the banner: indented below it, as its details. */
+.info.conflict {
+  padding-left: 34px;
+}
+
 /* Icon buttons that show on the row under the pointer, as a tree's inline actions do. */
 .actions {
   display: none;

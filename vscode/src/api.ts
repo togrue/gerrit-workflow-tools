@@ -182,6 +182,13 @@ export interface Rebase {
   as_before: boolean;
 }
 
+/** What is underway that no Gerrit push may run over: `GET /stack`'s `push_blocked`. */
+export interface PushBlocked {
+  reason: "rebase" | "am";
+  /** The refusal `ger push` prints. */
+  message: string;
+}
+
 export interface Stack {
   /** The branch checked out: null while a rebase runs (see `rebase.branch`). */
   branch: string | null;
@@ -189,6 +196,8 @@ export interface Stack {
   rebase_in_progress: boolean;
   /** The rebase underway; the stack is then as the rebase has it so far, the rest as it was. */
   rebase?: Rebase | null;
+  /** Why `ger push` would refuse now, whatever the stack holds (core's verdict, and its words); null when it would not. */
+  push_blocked?: PushBlocked | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
   stack: { project: string; target_branch: string | null; push_branch: string | null };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };

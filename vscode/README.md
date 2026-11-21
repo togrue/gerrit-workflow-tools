@@ -79,16 +79,27 @@ The commits above your upstream, newest first. One row per commit:
   so far, as `ger log` does: the commits it replayed, and the one it stopped at once applied,
   as they are now (an amend shows at once, with its new id and HEAD); a **marker** on the
   commit it stopped at; the commits still to be replayed **dimmed**, as they were. The header
-  names the branch being rebased (`feature (rebasing) → origin/main`). Stopped on a conflict,
-  the marked commit is dimmed too: it is not applied yet; once the conflicts are resolved and
-  added, the banner says it is ready to continue. Nothing can be moved until the rebase is
+  names the branch being rebased (`feature (rebasing) → origin/main`). The banner above the
+  stack says why it stopped and has the way on: **Continue** and **Abort**, and **Skip** where it
+  stopped on a conflict (`ger rebase --continue`, `--abort`, `--skip`, in the *ger* terminal, also
+  in the palette while a rebase is underway). Skip asks first: it leaves that commit out. At an
+  edit stop, or once you split a commit there, there is nothing to skip: the commit is already in,
+  and `git rebase --skip` would only throw away what is not committed yet.
+- **Stopped on a conflict**, the commit it stopped at has a red conflict icon and is not dimmed:
+  it is what wants you. The files still conflicted are listed under the banner; click one to
+  resolve it in VS Code's merge editor (the file itself, with its conflict markers, where the
+  built-in Git extension cannot open one). Once they are resolved and added, the banner says it is
+  ready to continue, and Continue is the one to press. Nothing can be moved until the rebase is
   finished or aborted.
 - **A merge commit** in the stack is one row, with a merge icon and marked *merge*, however
   many commits it brings in: those are not part of the stack (as on Gerrit) and are never read.
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where
   they are — the view says so when you try to move, squash or drop one; `ger rebase` does it by
   hand. The commits above it reorder, squash and drop as usual. Rewording works everywhere.
-- Push (`ger push` in the *ger* terminal, where it can ask you). Every ger command the extension
+- Push (`ger push` in the *ger* terminal, where it can ask you). During a rebase, when `ger push`
+  would refuse (the branch still points at the commits from before it), Push says *Finish the
+  rebase first*, in `ger push`'s own words, and offers Continue and Abort instead; during a
+  `git am` it says to finish that. Every ger command the extension
   starts runs in that one terminal, shown when it starts; closed or exited, the next command opens it
   again. When a command still runs there (VS Code 1.93+ can tell), a new *ger* terminal takes over.
 - **No upstream** (typical after checking a change out with Gerrit's download commands; `ger

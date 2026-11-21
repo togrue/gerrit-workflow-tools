@@ -36,7 +36,8 @@
   function rowElement(row, slots) {
     const { classes, ...attributes } = selection.attributes(row);
     const all = ["row", ...classes, row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
-    const marker = row.marker ? icon("debug-stackframe", row.marker === "conflict" ? "bad" : "warn") : null;
+    // Stopped on a conflict: a red warning, the row not dimmed; stopped with the commit applied: a marker.
+    const marker = row.marker === "conflict" ? icon("warning", "bad", "The rebase stopped here on a conflict") : row.marker ? icon("debug-stackframe", "warn") : null;
     return h(
       "div",
       {
@@ -61,14 +62,31 @@
   }
 
   function infoElement(info) {
-    const run = info.command ? () => post("command", { command: info.command.id, args: info.command.args }) : undefined;
-    return h(
+    const run = info.conflict
+      ? () => post("conflict", { path: info.conflict })
+      : info.command
+        ? () => post("command", { command: info.command.id, args: info.command.args })
+        : undefined;
+    const keys = run ? (event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), run()) : undefined;
+    const row = h(
       "div",
-      { class: `info${run ? " clickable" : ""}`, title: info.tooltip, role: run ? "button" : undefined, tabindex: run ? "0" : undefined, onclick: run },
+      { class: `info${run ? " clickable" : ""}${info.conflict ? " conflict" : ""}`, title: info.tooltip, role: run ? "button" : undefined, tabindex: run ? "0" : undefined, onclick: run, onkeydown: keys },
       info.icon ? icon(info.icon, info.tone) : h("span", { class: "codicon" }),
       h("span", { class: "label" }, info.text),
       h("span", { class: "detail" }, info.detail || ""),
     );
+    if (!info.actions || !info.actions.length) {
+      return row;
+    }
+    // The way on from here, under the sentence it belongs to: the one to press now drawn as the primary button.
+    const buttons = info.actions.map((action) =>
+      h(
+        "button",
+        { class: `button${action.primary ? "" : " secondary"}`, title: action.title, onclick: () => post("command", { command: action.command.id, args: action.command.args }) },
+        action.label,
+      ),
+    );
+    return [row, h("div", { class: "info-buttons" }, buttons)];
   }
 
   function draw(next) {

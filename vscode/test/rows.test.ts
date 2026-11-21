@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { CommentChain, Rebase, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { SYNC_ICONS, SYNC_WORDS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
+import { SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -102,22 +102,47 @@ test("mid-rebase the stack marks where it stands and dims only what is still to 
   assert.match(stopped.frozen ?? "", /rebase is in progress/);
   assert.deepEqual([stopped.info[0].text, stopped.info[0].detail], ["A rebase is in progress", undefined], "the stack is the live one: nothing is as it was");
   assert.equal(stackLines(stopped)[2], "▶ Two — HEAD · two0000 · the same as on Gerrit");
-  // On a conflict the commit it stopped at is only partly there: marked, and dim.
+  // On a conflict the commit it stopped at is what wants you: a conflict marker, not dimmed; what is still to come stays dim.
   const conflict = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["e.txt"] } }), undefined, never);
-  assert.deepEqual([conflict.rows[1].marker, conflict.rows[1].dim], ["conflict", true]);
+  assert.deepEqual(conflict.rows.map((row) => [row.marker, row.dim]), [[null, true], ["conflict", false], [null, false]]);
   assert.equal(conflict.info[0].text, "A rebase stopped on a conflict");
+  assert.equal(stackLines(conflict)[3], "⚠ Two — HEAD · two0000 · the same as on Gerrit");
   // Resolved and added: no conflict any more, ready to continue.
   const resolved = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "resolved", applied: false } }), undefined, never);
   assert.deepEqual([resolved.rows[1].marker, resolved.rows[1].dim], ["rebase", false]);
   assert.deepEqual([resolved.info[0].text, resolved.info[0].detail], ["A rebase stopped with its conflicts resolved", "ready to continue"]);
-  assert.match(resolved.rows[1].tooltip, /now resolved: git rebase --continue commits it/);
+  assert.match(resolved.rows[1].tooltip, /now resolved: Continue commits it/);
+});
+
+test("the rebase banner offers the way on from where it stopped, and lists the files still conflicted", () => {
+  const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current", is_head: true }), commit("Three", { rebase: "todo" })];
+  const at = (rebase: Partial<Rebase>) => stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } }), undefined, never);
+  const buttons = (vm: StackVm) => (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""} ${action.command.id}`);
+  // Applied whole (an edit, a split): nothing to skip, only to go on or go back.
+  assert.deepEqual(buttons(at({ stop: "edit" })), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual(buttons(at({ stop: "paused", current: null })), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  const split = at({ stop: "split", current: null });
+  assert.deepEqual(buttons(split), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual([split.info[0].text, split.info[0].detail], ["A rebase stopped while you split a commit", "Continue replays the rest on top of HEAD"]);
+  // Not applied: the commit can be left out. Resolved, Continue is the one to press.
+  const conflict = at({ stop: "conflict", applied: false, unmerged: ["src/e.txt", "f.txt"] });
+  assert.deepEqual(buttons(conflict), ["Continue ger.rebase.continue", "Abort ger.rebase.abort", "Skip ger.rebase.skip"]);
+  assert.deepEqual(buttons(at({ stop: "resolved", applied: false })), ["Continue! ger.rebase.continue", "Abort ger.rebase.abort", "Skip ger.rebase.skip"]);
+  // Each file still unmerged is a row under the banner; a click opens it to resolve.
+  assert.deepEqual(conflict.info.slice(1).map((info) => [info.text, info.conflict, info.tone]), [["src/e.txt", "src/e.txt", "bad"], ["f.txt", "f.txt", "bad"]]);
+  assert.deepEqual(stackLines(conflict).slice(0, 3), ["A rebase stopped on a conflict  [Continue] [Abort] [Skip]", "  ⚠ src/e.txt — conflicted", "  ⚠ f.txt — conflicted"]);
+  assert.equal(stackLines(at({ stop: "resolved", applied: false }))[0], "A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]");
+  // Core cannot tell what --continue would do: go on or go back, nothing more.
+  assert.deepEqual(buttons(at({ stop: null })), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.equal(stackVm(stack(commits), undefined, never).info.length, 0, "no rebase, no banner");
 });
 
 test("a rebase that says nothing of its commits shows the branch as it was, and says so", () => {
   const vm = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, current: null, unmerged: ["e.txt"], as_before: true } }), undefined, never);
   assert.deepEqual([vm.info[0].text, vm.info[0].detail], ["A rebase stopped on a conflict", "this is the branch as it was before"]);
+  assert.deepEqual(vm.info.slice(1).map((info) => info.conflict), ["e.txt"], "it still names what is conflicted");
   // Core says whether the stack is as before; no row having a step (all below onto) does not make it so.
-  const live = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "split", current: null } }), undefined, never);
+  const live = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "paused", current: null } }), undefined, never);
   assert.deepEqual([live.info[0].text, live.info[0].detail], ["A rebase is in progress", undefined]);
 });
 

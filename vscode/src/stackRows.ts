@@ -2,7 +2,7 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { CodeChange, CommitStatus, MoveConflict, Overview, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
+import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
 import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
@@ -154,9 +154,9 @@ export interface StackRow {
   /** The codicon that shows `sync`. */
   syncIcon: string;
   syncTitle: string;
-  /** The rebase underway stands here: stopped with the commit applied (`rebase`), or on a conflict. */
+  /** The rebase underway stands here: stopped with the commit applied (`rebase`), or on a conflict (drawn red). */
   marker: "rebase" | "conflict" | null;
-  /** Not (wholly) there yet: still to be replayed by the rebase, or stopped part-way. */
+  /** Not there yet: still to be replayed by the rebase. The commit it stopped at on a conflict is not: it is what wants you. */
   dim: boolean;
   /** A merge commit: one row, whatever it brings in. */
   merge: boolean;
@@ -170,6 +170,14 @@ export interface StackRow {
   squash: boolean;
 }
 
+/** A button on an info row: it runs `command`. `primary`: the one to press now, drawn prominently. */
+export interface StackAction {
+  label: string;
+  title: string;
+  command: { id: string; args: unknown[] };
+  primary?: boolean;
+}
+
 export interface StackInfo {
   text: string;
   detail?: string;
@@ -178,6 +186,9 @@ export interface StackInfo {
   tooltip?: string;
   /** Clicking the row runs this. */
   command?: { id: string; args: unknown[] };
+  /** A path still unmerged (relative to the repository): clicking the row opens it to resolve. */
+  conflict?: string;
+  actions?: StackAction[];
 }
 
 export interface StackVm {
@@ -194,7 +205,7 @@ export interface StackVm {
 export const MARKER_WORDS = {
   rebase: "The rebase stopped here, with this commit applied.",
   conflict: "The rebase stopped here on a conflict: this commit is not applied yet.",
-  resolved: "The rebase stopped here on a conflict, now resolved: git rebase --continue commits it.",
+  resolved: "The rebase stopped here on a conflict, now resolved: Continue commits it.",
 };
 
 /** The banner above a stack a rebase is underway on. */
@@ -202,10 +213,51 @@ export const REBASE_WORDS = {
   progress: "A rebase is in progress",
   conflict: "A rebase stopped on a conflict",
   resolved: "A rebase stopped with its conflicts resolved",
+  split: "A rebase stopped while you split a commit",
   ready: "ready to continue",
+  onTop: "Continue replays the rest on top of HEAD",
   asBefore: "this is the branch as it was before",
-  tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Finish with git rebase --continue, or go back with git rebase --abort.",
+  tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Continue goes on, Abort goes back to the branch as it was before.",
+  conflicted: "conflicted",
+  resolve: "Open it in the merge editor to resolve it, then stage it (git add).",
 };
+
+/** How to go on with a rebase underway: `ger rebase --<step>`, in the ger terminal. */
+export type RebaseStep = "continue" | "abort" | "skip";
+
+/** The banner's buttons: the commands they run, and what they do. */
+export const REBASE_ACTIONS: Record<RebaseStep, { label: string; title: string; command: string }> = {
+  continue: { label: "Continue", title: "Go on with the rebase (ger rebase --continue, in the ger terminal)", command: "ger.rebase.continue" },
+  abort: { label: "Abort", title: "Stop the rebase: the branch goes back to where it was before it (ger rebase --abort)", command: "ger.rebase.abort" },
+  skip: { label: "Skip", title: "Leave out the commit it stopped at, and go on without it (ger rebase --skip)", command: "ger.rebase.skip" },
+};
+
+/**
+ * What can be done from where the rebase stopped, by core's verdict. Skip only where a commit is
+ * not applied (a conflict, resolved or not): at an edit or a split stop the commit is already in,
+ * and `git rebase --skip` would only throw away what is not committed yet. Continue is the one to
+ * press once the conflicts are resolved.
+ */
+export function rebaseSteps(stop: Rebase["stop"]): StackAction[] {
+  const unapplied = stop === "conflict" || stop === "resolved";
+  const steps: RebaseStep[] = unapplied ? ["continue", "abort", "skip"] : ["continue", "abort"];
+  return steps.map((step) => ({
+    label: REBASE_ACTIONS[step].label,
+    title: REBASE_ACTIONS[step].title,
+    command: { id: REBASE_ACTIONS[step].command, args: [] },
+    ...(step === "continue" && stop === "resolved" ? { primary: true } : {}),
+  }));
+}
+
+function rebaseBanner(rebase: Rebase | null | undefined): StackInfo[] {
+  const stop = rebase?.stop ?? null;
+  const said: Partial<Record<string, string>> = { conflict: REBASE_WORDS.conflict, resolved: REBASE_WORDS.resolved, split: REBASE_WORDS.split };
+  const text = said[stop ?? ""] ?? REBASE_WORDS.progress;
+  const detail = stop === "resolved" ? REBASE_WORDS.ready : stop === "split" ? REBASE_WORDS.onTop : rebase?.as_before ? REBASE_WORDS.asBefore : undefined;
+  const banner: StackInfo = { text, detail, icon: "warning", tone: "warn", tooltip: REBASE_WORDS.tooltip, actions: rebaseSteps(stop) };
+  const files = (rebase?.unmerged ?? []).map((file): StackInfo => ({ text: file, detail: REBASE_WORDS.conflicted, icon: "warning", tone: "bad", tooltip: REBASE_WORDS.resolve, conflict: file }));
+  return [banner, ...files];
+}
 
 /** The view's header: the branch, or the one being rebased, and where its stack starts. */
 export function stackWhere(stack: Stack): string {
@@ -260,7 +312,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     syncIcon: SYNC_ICONS[state],
     syncTitle: SYNC_WORDS[state],
     marker,
-    dim: commit.rebase === "todo" || conflict,
+    dim: commit.rebase === "todo",
     merge: Boolean(commit.merge),
     pinned: isPinned,
     notes: notes.filter(Boolean),
@@ -315,14 +367,7 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   }
   const info: StackInfo[] = [];
   if (local.rebase_in_progress) {
-    const stop = local.rebase?.stop;
-    info.push({
-      text: stop === "conflict" ? REBASE_WORDS.conflict : stop === "resolved" ? REBASE_WORDS.resolved : REBASE_WORDS.progress,
-      detail: stop === "resolved" ? REBASE_WORDS.ready : local.rebase?.as_before ? REBASE_WORDS.asBefore : undefined,
-      icon: "warning",
-      tone: "warn",
-      tooltip: REBASE_WORDS.tooltip,
-    });
+    info.push(...rebaseBanner(local.rebase));
   }
   if (!local.commits.length) {
     info.push({ text: "No local commits", detail: `${local.branch ?? "HEAD"} is at ${local.stack.target_branch}` });
@@ -340,9 +385,13 @@ export function stackLines(vm: StackVm): string[] {
   }
   const said = (badge: Badge | null) => (badge ? `${badge.stale ? "last pushed " : ""}${badge.kind}${badge.text ? ` ${badge.text}` : ` ${badge.tone}`}` : "");
   return [
-    ...vm.info.map((info) => `${info.text}${info.detail ? ` — ${info.detail}` : ""}`),
+    ...vm.info.map((info) => {
+      const buttons = (info.actions ?? []).map((a) => (a.primary ? `[**${a.label}**]` : `[${a.label}]`)).join(" ");
+      return `${info.conflict ? "  ⚠ " : ""}${info.text}${info.detail ? ` — ${info.detail}` : ""}${buttons ? `  ${buttons}` : ""}`;
+    }),
     ...vm.rows.map((r) => {
-      const marker = r.marker ? `▶${r.marker === "conflict" ? "!" : ""} ` : "";
+      // The conflict is drawn as a red warning; the commit it stopped at otherwise as a marker.
+      const marker = r.marker ? (r.marker === "conflict" ? "⚠ " : "▶ ") : "";
       const right = r.badges.map(said).filter(Boolean).join(", ");
       return `${marker}${r.summary} — ${[...r.notes, r.syncTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
     }),

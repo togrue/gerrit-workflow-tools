@@ -94,6 +94,9 @@ A **gap** names the work that would close it.
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
 | `ger.push` | `ger push` | |
+| `ger.rebase.continue` | `ger rebase --continue` | the button on the *Local stack* banner, also offered when you push during a rebase |
+| `ger.rebase.abort` | `ger rebase --abort` | |
+| `ger.rebase.skip` | `ger rebase --skip` | offered only where the rebase stopped on a conflict; asks first |
 | `ger.setup` | `ger setup` | runs in a terminal; offered when the checkout lacks Gerrit settings |
 | `ger.installCli` | `ger vscode install` is the same step from the other side | installs the ger release with the extension's version, in a terminal (uv or pipx); offered when ger is not found |
 | `ger.stack.squash` | **gap** | `ger rebase` squashes interactively only |

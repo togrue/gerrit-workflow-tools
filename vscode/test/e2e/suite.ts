@@ -115,8 +115,12 @@ export async function run(): Promise<void> {
         return "(none)";
       }
       const input = tab.input;
+      // The merge editor's input (TabInputTextMerge) is not in the 1.85 API: it has the file it writes as `result`.
+      const merged = (input as { result?: unknown }).result;
       const kind =
-        input instanceof vscode.TabInputTextDiff
+        merged instanceof vscode.Uri
+          ? `merge editor, ${merged.scheme}`
+          : input instanceof vscode.TabInputTextDiff
           ? `diff, ${input.original.scheme} ↔ ${input.modified.scheme}`
           : input instanceof vscode.TabInputText
             ? input.uri.scheme
@@ -813,7 +817,9 @@ export async function run(): Promise<void> {
 
     // --- Rebasing in the terminal ------------------------------------------------------------
     {
-      // Everything after the first click is git in the terminal, as a user runs it; the extension is only watched.
+      // Most of it is git in the terminal, as a user runs it, with the extension only watched; where the extension offers
+      // the way on (the banner's Continue, Abort and Skip, the conflicted files, Push), it is pressed, and what it starts
+      // in the ger terminal is then run as the terminal would.
       // Fixed identities and dates for what this block commits (the commits it builds on are not; their ids are
       // normalised). Where the views are wrong today, **Today** says how and names the issue that fixes it: that
       // fix is then a diff of this transcript. Afterwards main and origin/main have moved on and feature is behind
@@ -865,21 +871,40 @@ export async function run(): Promise<void> {
           `change | (the commit shown is ${shownCommit()})`,
         ].map(normalize);
       let n = 0;
-      const inTerminal = async (what: string, expect: string, today: string | undefined, action: () => void) => {
-        ui.script([]);
-        action();
+      /** One step of this block: something done in the terminal, or (`pressed`) a button of the extension, numbered as the presses are. */
+      const inTerminal = async (what: string, expect: string, today: string | undefined, action: () => unknown, answers: Answer[] = [], pressed = false) => {
+        step += pressed ? 1 : 0;
+        ui.script(answers);
+        await action();
         await wait(1_000); // past the watcher's quiet time, so the refresh it starts is not still to come
         await settle();
         const after = await screen();
         const said = ui.drain();
         const changed = lineDiff(before, after);
-        out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", ...(today ? [`**Today:** ${today}`, ""] : []), "```");
+        out.push(pressed ? `## ${step}. ${what}` : `## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", ...(today ? [`**Today:** ${today}`, ""] : []), "```");
         out.push(...said.lines, ...(changed.length ? changed : ["(no change)"]), "--- shown now:", ...(await shown()), "```", "");
         problems.push(...said.problems.map((problem) => `${what}: ${problem}`));
         before = after;
         n += 1;
         await snap(step, `rebase ${n}`);
       };
+      /** Press a button, then let the ger terminal run what it started: ScriptedUi only writes the command down, so this runs the rebase step it stands for. */
+      const pressAndRun = (button: string, expect: string, today: string | undefined, command: string, terminal: string[] | undefined, answers: Answer[] = []) =>
+        inTerminal(
+          button,
+          expect,
+          today,
+          async () => {
+            await exec(command)();
+            if (terminal) {
+              gitRun(terminal);
+            }
+          },
+          answers,
+          true,
+        );
+      /** What Local stack's page posts when a conflicted file under the banner is clicked. */
+      const stackPage = api.stackView as unknown as { receive(message: { type: string; [field: string]: unknown }): Promise<unknown> };
 
       await press(
         "Click \"test! temporary experiment\" in Local stack",
@@ -891,7 +916,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you start ger edit's rebase on \"test! temporary experiment\", and it stops there",
         "Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, \"Add e.txt\" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.",
-        "the banner has no buttons (#56); the status bar still shows the headline (#62).",
+        "the status bar still shows the headline (#62).",
         () => editAt("test! temporary experiment"),
       );
       await inTerminal(
@@ -903,18 +928,19 @@ export async function run(): Promise<void> {
           gitRun(["commit", "-q", "--amend", "--no-edit", "-a"]);
         },
       );
-      await inTerminal(
-        "you run git rebase --continue, and the rebase finishes",
-        "The banner and the marks go: the branch is back, the amended commit with its code changed since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
+      await pressAndRun(
+        "Local stack › Continue (the rebase stopped at the amended commit)",
+        "ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the banner and the marks go: the branch is back, the amended commit with its code changed since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
         undefined,
-        () => gitRun(["rebase", "--continue"]),
+        "ger.rebase.continue",
+        ["rebase", "--continue"],
       );
 
       // A conflict while continuing, resolved.
       await inTerminal(
         "you stop at \"Refactor parser init\" the same way, and amend it to also add e.txt",
         "Local stack marks the rebase stopped at that commit, which shows its new code (its code changed since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
-        "no Continue or Abort (#56); the status bar still shows the headline (#62).",
+        "the status bar still shows the headline (#62).",
         () => {
           editAt("Refactor parser init");
           write("e.txt", "from the amend\n");
@@ -925,23 +951,34 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
         "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
-        "no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the status bar still shows the headline (#62).",
+        "the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "--continue"]),
       );
       await inTerminal(
+        "Local stack › click e.txt under the banner",
+        "e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.",
+        undefined,
+        () => stackPage.receive({ type: "conflict", path: "e.txt" }),
+        [],
+        true,
+      );
+      await inTerminal(
         "you resolve e.txt and git add it",
-        "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue.",
-        "no list of conflicted files for e.txt to leave, and no Continue (#56).",
-        () => {
+        "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue, which is now the prominent button.",
+        undefined,
+        async () => {
+          // Resolved by hand here, not in the merge editor: close it without keeping what it put in e.txt.
+          await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
           write("e.txt", "from the amend\nfrom the terminal\n");
           gitRun(["add", "e.txt"]);
         },
       );
-      await inTerminal(
-        "you run git rebase --continue, and the rebase finishes",
-        "The banner and the marks go; Local stack shows the branch with \"Refactor parser init\" changed here since the last push and \"Add e.txt\" on top.",
+      await pressAndRun(
+        "Local stack › Continue (the conflict resolved)",
+        "ger rebase --continue runs in the ger terminal; once it has run, the banner and the marks go; Local stack shows the branch with \"Refactor parser init\" changed here since the last push and \"Add e.txt\" on top.",
         undefined,
-        () => gitRun(["rebase", "--continue"]),
+        "ger.rebase.continue",
+        ["rebase", "--continue"],
       );
 
       // The upstream moves on.
@@ -963,14 +1000,24 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
         "Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
-        "no conflicted file and no buttons (#56); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
+        "the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "origin/main"]),
       );
-      await inTerminal(
-        "you run git rebase --abort",
-        "Everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.",
+      await pressAndRun(
+        "Local stack › Skip › Cancel",
+        "A dialog asks before \"test! temporary experiment\" is left out: the branch would no longer have it, Abort brings it back until the rebase is finished, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.",
+        undefined,
+        "ger.rebase.skip",
+        undefined,
+        [{ dismiss: true }],
+      );
+      await pressAndRun(
+        "Local stack › Push to Gerrit… (during the rebase) › Abort",
+        "No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers Continue and Abort. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.",
         "back as before, but nothing says origin/main moved on (#60).",
-        () => gitRun(["rebase", "--abort"]),
+        "ger.push",
+        ["rebase", "--abort"],
+        [{ button: "Abort" }],
       );
       fs.rmSync(scratch, { recursive: true, force: true });
     }
