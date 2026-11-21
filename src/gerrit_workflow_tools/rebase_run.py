@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.rebase_state import (
     conflict_next_step,
     go_on_refusal,
 )
+from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
@@ -60,7 +61,7 @@ def go_on_with_rebase(cwd: Path, action: RebaseAction, *, walk_on: str | None = 
     it is, unless the caller set ``GIT_EDITOR``. A stop on the next conflict ends with the shared next
     step, naming *walk_on* as the way on to the next attention stop.
     """
-    if refusal := go_on_refusal(cwd, action, walk_on=walk_on):
+    if refusal := go_on_refusal(cwd, action, stopped_rebase(cwd), walk_on=walk_on):
         raise UsageError(refusal)
     env = None if stdin_is_terminal() or "GIT_EDITOR" in os.environ else {"GIT_EDITOR": "true"}
     code = git("rebase", f"--{action.value}", cwd=cwd, env=env, check=False, capture=False).returncode

@@ -267,6 +267,24 @@ def test_an_amend_at_an_edit_stop_that_keeps_the_change_id_is_still_the_stopped_
     assert stack.rebase.rebase.stop is RebaseStop.EDIT
 
 
+def test_paths_left_unmerged_at_an_edit_stop_are_served_and_continue_is_not_offered(stack_repo: Path) -> None:
+    """``git stash pop`` over the amended commit conflicts: the index is unmerged though the commit is applied."""
+    store = _store(stack_repo)
+    _stop_to_edit(stack_repo)
+    (stack_repo / "c.txt").write_text("stashed\n", encoding="utf-8")
+    git("stash", "-q", cwd=stack_repo)
+    (stack_repo / "c.txt").write_text("amended\n", encoding="utf-8")
+    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
+    git("stash", "pop", "-q", cwd=stack_repo, check=False)
+
+    served = _get(GerApi(stack_repo, gerrit=store), "/stack")["rebase"]
+
+    assert (served["stop"], served["unmerged"], served["actions"]) == ("edit", ["c.txt"], ["abort"])
+    assert served["refused"]["continue"].startswith(
+        "the index has unresolved conflicts; resolve the conflicts in c.txt"
+    )
+
+
 def test_a_conflict_under_the_apply_backend_reads_as_a_conflict(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

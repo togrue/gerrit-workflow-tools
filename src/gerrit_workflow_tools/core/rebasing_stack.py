@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
-from gerrit_workflow_tools.core.rebase_state import RebaseProgress
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
 
 
@@ -101,7 +101,7 @@ def load_rebasing_stack(
     rows: list[Commit] = []
     if (at := _stopped_on_head(replayed, start, made_at, rebase, was)) is not None:
         steps[at] = RebaseStep.CURRENT
-        rebase = replace(rebase, applied=True, unmerged=(), moved=at < len(replayed) - 1)
+        rebase = replace(rebase, applied=True, moved=at < len(replayed) - 1)
     elif rebase.applied and rebase.amend is not None:
         rebase = replace(rebase, moved=True)  # applied, then reset away: maybe split into new commits
     elif was is not None and not rebase.applied:
@@ -110,3 +110,17 @@ def load_rebasing_stack(
     todo = [row for row in found if row is not None]
     steps += [RebaseStep.TODO] * len(todo)
     return RebasingStack(rebase=rebase, commits=(*replayed, *rows, *todo), steps=tuple(steps))
+
+
+def stopped_rebase(cwd: Path | str | None, *, repo_dir: Path | None = None) -> RebaseProgress | None:
+    """Where the rebase underway stopped, as ``GET /stack`` serves it; ``None`` without one.
+
+    :func:`rebase_progress` as the rebasing stack refines it (a conflict whose resolution was
+    committed by hand is an ``edit``, an edit stop ``HEAD`` moved on from a ``split``), read above
+    ``onto``: what ``ger rebase --continue|--skip`` and ``ger edit -n`` go by, so they refuse what
+    ``rebase.actions`` leaves out. One ``git log`` and one ``git show`` more, on a rebase that keeps a todo.
+    """
+    progress = rebase_progress(cwd, repo_dir=repo_dir)
+    if progress is None or not progress.keeps_todo or progress.onto is None:
+        return progress
+    return load_rebasing_stack(cwd, progress.onto, progress).rebase

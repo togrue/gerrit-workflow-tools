@@ -45,6 +45,11 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
         "unmerged": [],
         "as_before": False,
         "actions": ["continue", "abort"],
+        "refused": {
+            "skip": "--skip leaves out a commit the rebase stopped on with a conflict, but it stopped with the "
+            "commit applied (an `edit`, or a conflict's resolution committed by hand): `git rebase --skip` would "
+            "only throw away your uncommitted changes; go on with `git rebase --continue`, or `git rebase --abort`"
+        },
     }
 
     # Amended: the stack shows the commit as it is now, HEAD, changed here since the last push.
@@ -68,6 +73,10 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
         "# comment\npick cccc333 three\nbreak\ndrop dddd444 four\n", encoding="utf-8"
     )
     (state / "REBASE_HEAD").write_text("bbbb222\n", encoding="utf-8")
+    # HEAD where git left it on the conflict: here, on its onto.
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    (merge / "onto").write_text(f"{head}\n", encoding="utf-8")
+    git("update-ref", "--no-deref", "HEAD", head, cwd=stack_repo)
     progress = rebase_progress(stack_repo)
     assert progress == RebaseProgress(
         done=("aaaa111",),
@@ -75,7 +84,8 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
         applied=False,
         todo=("cccc333",),
         branch="feature",
-        settled=frozenset({"aaaa111"}),
+        onto=head,
+        settled=frozenset({"aaaa111", head}),
     )
     # Not applied, and nothing unmerged in the index: resolved, ready to continue.
     assert progress.stop is RebaseStop.RESOLVED

@@ -42,9 +42,9 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 | `--no-onto-remote` | Force merge-base behavior (overrides `gerrit.rebaseOntoRemote`) |
 | `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
 | `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
-| `--continue` | Go on with the rebase underway: `git rebase --continue`. Refused while paths are still unmerged, with the shared next step, and over unstaged changes to tracked files |
+| `--continue` | Go on with the rebase underway: `git rebase --continue`. Refused while paths are still unmerged, with the shared next step, over unstaged changes to tracked files, and where nothing is left to apply |
 | `--abort` | Stop the rebase underway: `git rebase --abort`, the branch back where it was |
-| `--skip` | Leave out the commit the rebase stopped on with a conflict: `git rebase --skip`. Refused at any other stop |
+| `--skip` | Leave out the commit the rebase stopped on with a conflict: `git rebase --skip`. Refused at any other stop, and where it would keep a commit made by hand and throw away work |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 Editor: enricher delegates to `GREBASE_EDITOR` / `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`, first set wins. `GREBASE_EDITOR` edits only the todo (git's own editor, e.g. for a `squash` message, still comes from `GIT_EDITOR` onwards). Without a terminal (stdin not a TTY: scripts, agents) ger sets `GIT_EDITOR=true`, so unless `GREBASE_EDITOR` is set no editor opens: the todo runs as annotated, so `--autosquash` and `--drop-merged-equivalent` run unattended. A script that wants to edit the todo sets `GREBASE_EDITOR`.
@@ -65,13 +65,21 @@ instead). Each refusal exits `2` and changes nothing:
 
 - `--continue` refuses while the index holds unresolved conflicts, with the shared next step, and
   over unstaged changes to tracked files, which git would refuse with a misleading "You must edit
-  all merge conflicts": `git add` them into a conflict's resolution, or at any other stop amend
-  them in (`git commit --amend -a`), or `git stash` them, then continue. Staged changes go on as
-  in git: an `edit` stop's are amended in.
-- `--skip` refuses unless the rebase stopped on a conflict (resolved or not): at an `edit` or a
-  split stop the commit is already applied, so `git rebase --skip` would keep it and only reset
-  away what is not committed. The ways on a stop allows are core's one verdict, served on
-  `GET /stack` as `rebase.actions` ([serve.md](serve.md#get-stack)).
+  all merge conflicts": `git add` them into a conflict's resolution not committed yet, or at any
+  other stop amend them in (`git commit --amend -a`), or `git stash` them, then continue. What is
+  unstaged is git's own answer: the index refreshed first, then `git diff-files`, submodules left
+  out, so a file only touched is not, and a line-ending change `core.autocrlf` sees is. Staged
+  changes go on as in git: an `edit` stop's are amended in. Under a rebase through `am`, once the
+  conflict was committed by hand and nothing is left uncommitted, it refuses too: git would stop
+  again with "No changes"; `--skip` goes on from `HEAD`.
+- `--skip` refuses unless the rebase stopped on a conflict (resolved or not) and the commit is not
+  in yet: at an `edit` or a split stop, and once a conflict's resolution was committed by hand,
+  the commit is already applied, so `git rebase --skip` would keep it and only reset away what is
+  not committed. A resolution committed by hand that core cannot tell is the stopped commit
+  (another subject, no Change-Id) can be skipped once nothing is left uncommitted: commit or
+  `git stash` it first. The ways on a stop allows are core's one verdict, served on `GET /stack`
+  as `rebase.actions`, with each refusal as `rebase.refused` ([serve.md](serve.md#get-stack)):
+  `ger rebase` judges the stop as `/stack` does, so the two never disagree.
 
 Without a terminal, `--continue` and `--skip` set `GIT_EDITOR=true` unless `GIT_EDITOR` is set
 (unlike the todo run above, which sets it always): a resolved conflict is committed with its
