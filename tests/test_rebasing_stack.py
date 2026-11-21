@@ -393,3 +393,50 @@ def test_an_amend_at_an_edit_stop_onto_a_moved_upstream_is_the_stopped_commit(st
     assert stack.rebase.rebase.stop is RebaseStop.EDIT
     assert stack.rebase.current is not None
     assert stack.rebase.current.sha == git_out("rev-parse", "HEAD", cwd=stack_repo)
+
+
+def test_a_detached_rebase_does_not_borrow_a_branch_that_points_where_it_stopped(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HEAD moves with the rebase: a branch sitting at the stop is not the one being worked on."""
+    store = _store(stack_repo)
+    before = stack_rows_mb_to_head(stack_repo)
+    git("branch", "part1", before[2].sha, cwd=stack_repo)
+    git("branch", "--set-upstream-to", "origin/main", "part1", cwd=stack_repo)
+    git("checkout", "-q", "--detach", cwd=stack_repo)
+    _stop_to_edit(stack_repo)  # stops at before[2], where part1 points
+
+    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    logged = json.loads(out)
+    assert [(c["sha"], c["rebase"]) for c in logged["commits"]] == [(before[2].sha, "current"), (before[3].sha, "todo")]
+    assert (logged["rebase"]["branch"], logged["stack"]["push_branch"]) == (None, None)
+
+
+def test_an_amend_with_commits_made_on_top_stays_the_current_commit(stack_repo: Path) -> None:
+    store = _store(stack_repo)
+    _stop_to_edit(stack_repo)
+    (stack_repo / "c.txt").write_text("amended\n", encoding="utf-8")
+    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
+    amended = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    on_top = _commit_file(stack_repo, "f.txt", "Made at the stop")
+
+    stack = _load(stack_repo, store)
+
+    assert stack.rebase is not None and stack.rebase.current is not None
+    assert stack.rebase.current.sha == amended, "the amend is still the stopped change"
+    shas = [c.sha for c in stack.commits]
+    assert stack.rebase.steps[shas.index(amended)] is CURRENT and stack.rebase.steps[shas.index(on_top)] is DONE
+    assert stack.rebase.rebase.moved
+
+
+def test_an_explicit_range_during_a_live_rebase_is_not_served_as_before(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(stack_repo)
+    _stop_to_edit(stack_repo)
+    code, out, err = run_cli(stack_repo, log_main, ["--json", "origin/main..HEAD"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert json.loads(out)["rebase"]["as_before"] is False
+    assert "as it was before the rebase" not in err and "the range asked for, as it is now" in err

@@ -248,7 +248,8 @@ The top-level `rebase` is `null` without a rebase, else:
 - `as_before` — `true` when the stack is the branch as it was before the rebase: a rebase git
   runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo, so no commit carries
   a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say
-  which.
+  which. It is about the backend: `ger log` with an explicit range shows that range as it is
+  now either way.
 
 `ger log`'s [During a rebase](log.md#during-a-rebase) says where `HEAD` is at each stop, how
 `fixup`/`squash` and merge lines of the todo are shown, and what a detached HEAD's rebase shows:

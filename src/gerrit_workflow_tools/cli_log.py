@@ -267,7 +267,11 @@ def _rebase_note(progress: RebaseProgress, rebasing: RebasingStack | None) -> st
     said = _STOPS[stop].format(at=at, paths=", ".join(progress.unmerged)) if stop else "stopped"
     whose = f"note: a rebase is in progress on {progress.branch or 'a detached HEAD'}, {said}"
     if rebasing is None:
-        return f"{whose}; this shows the branch as it was before the rebase."
+        # No rebasing stack: the backend keeps no todo (the branch as it was), or a range was asked for (as it is).
+        shown = (
+            "the branch as it was before the rebase" if not progress.keeps_todo else "the range asked for, as it is now"
+        )
+        return f"{whose}; this shows {shown}."
     todo = rebasing.steps.count(RebaseStep.TODO)
     rest = f"; {todo} commit{'s' if todo != 1 else ''} still to replay, shown as before" if todo else ""
     return f"{whose}{rest}."

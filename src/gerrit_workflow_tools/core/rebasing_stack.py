@@ -93,8 +93,19 @@ def load_rebasing_stack(
             rebase = replace(rebase, moved=at < len(replayed) - 1)
         elif rebase.amend is None and len(replayed) > start:
             steps[-1] = RebaseStep.CURRENT  # applied, with nothing to tell where git left HEAD
-        elif made == 1 and was is not None and _same_change(replayed[-1], was):
-            steps[-1] = RebaseStep.CURRENT  # amended: on where the stopped commit sat, the same change
+        elif (
+            mine := next(
+                (
+                    i
+                    for i in range(len(replayed) - made, len(replayed))
+                    if was is not None and _same_change(replayed[i], was)
+                ),
+                None,
+            )
+        ) is not None:
+            # Amended (or re-made with its Change-Id), maybe with commits made on top: still the same change.
+            steps[mine] = RebaseStep.CURRENT
+            rebase = replace(rebase, moved=mine < len(replayed) - 1)
         elif rebase.amend is not None:
             rebase = replace(rebase, moved=True)  # reset away, maybe split into new commits
     if stopped and rebase.applied:
