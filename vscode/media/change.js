@@ -3,7 +3,7 @@
 // files, comment chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, post, panel, listen, getState, setState } = window.ger;
+  const { h, icon, badge, actions, info, post, panel, listen, getState, setState } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -363,6 +363,10 @@
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
       const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
       parts.push(h("div", { class: "head", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
+      // A rebase stopped here: the way on, as Local stack's banner offers it.
+      if (head.actions && head.actions.length) {
+        parts.push(actions(head.actions));
+      }
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
@@ -385,6 +389,11 @@
           vm.hint.show ? h("button", { class: "link", onclick: () => post("mode", { value: "reviewed" }) }, "Show") : null,
         ),
       );
+    }
+    if (vm.conflicts) {
+      // The files still conflicted, as under Local stack's banner: a click opens one to resolve.
+      const conflicts = vm.conflicts;
+      parts.push(section("conflicts", "Conflicts", h("span", { class: "detail" }, conflicts.summary), true, () => h("div", {}, conflicts.rows.map(info))));
     }
     if (vm.files) {
       const files = vm.files;

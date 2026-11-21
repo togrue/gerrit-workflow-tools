@@ -59,6 +59,39 @@
     );
   }
 
+  /** Buttons that run commands (a `StackAction` of src/stackRows.ts): the one to press now drawn as the primary button. */
+  function actions(list) {
+    const buttons = list.map((action) =>
+      h(
+        "button",
+        { class: `button${action.primary ? "" : " secondary"}`, title: action.title, onclick: () => post("command", { command: action.command.id, args: action.command.args }) },
+        action.label,
+      ),
+    );
+    return h("div", { class: "info-buttons" }, buttons);
+  }
+
+  /**
+   * An info row (a `StackInfo` of src/stackRows.ts): Local stack's banner and its lines, a
+   * conflicted file in either view. A conflicted file opens to resolve it; its buttons go under it.
+   */
+  function info(row) {
+    const run = row.conflict
+      ? () => post("conflict", { path: row.conflict })
+      : row.command
+        ? () => post("command", { command: row.command.id, args: row.command.args })
+        : undefined;
+    const keys = run ? (event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), run()) : undefined;
+    const element = h(
+      "div",
+      { class: `info${run ? " clickable" : ""}${row.conflict ? " conflict" : ""}`, title: row.tooltip, role: run ? "button" : undefined, tabindex: run ? "0" : undefined, onclick: run, onkeydown: keys },
+      row.icon ? icon(row.icon, row.tone) : h("span", { class: "codicon" }),
+      h("span", { class: "label" }, row.text),
+      h("span", { class: "detail" }, row.detail || ""),
+    );
+    return row.actions && row.actions.length ? [element, actions(row.actions)] : element;
+  }
+
   /** Call `draw(vm)` for every view model the extension sends, and tell it the page is listening. */
   function listen(draw, other) {
     window.addEventListener("message", (event) => {
@@ -228,6 +261,8 @@
     h,
     icon,
     badge,
+    actions,
+    info,
     post,
     panel,
     listen,

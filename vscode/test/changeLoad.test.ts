@@ -4,8 +4,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Diff, Member, ShownCommit, StackCommit } from "../src/api";
-import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange } from "../src/changeLoad";
+import { Diff, Member, RebaseAction, ShownCommit, StackCommit } from "../src/api";
+import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange, stoppedHere } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
@@ -252,4 +252,19 @@ test("CI findings ask for the change and the commit below it, never the rest of 
   assert.deepEqual(ciRevs(mine(commits[2]), undefined), { revs: [], chain: false, stack: true }, "no stack held here: the live stack is asked");
   assert.deepEqual(ciRevs(mine(row("Amended")), stack(commits)), { revs: [], chain: false, stack: true }, "not in the stack held here: the live stack is asked");
   assert.deepEqual(ciRevs({ rev: "change:900", title: "theirs", local: false }, undefined), { revs: ["change:900"], chain: false, stack: false });
+});
+
+test("the commit a rebase stopped at before applying it is told from the stack held here, by core's step and stop (issue #59)", () => {
+  const commits = [row("Base", { rebase: "done" }), row("Stopped", { rebase: "current" }), row("Todo", { rebase: "todo" })];
+  const ways: Record<"conflict" | "resolved" | "edit", RebaseAction[]> = { conflict: ["abort", "skip"], resolved: ["continue", "abort", "skip"], edit: ["continue", "abort"] };
+  const at = (stop: "conflict" | "resolved" | "edit", unmerged: string[]) =>
+    stack(commits, { rebase_in_progress: true, rebase: { branch: "feature", onto: null, orig_head: null, stop, applied: stop === "edit", current: commits[1].sha, unmerged, as_before: false, actions: ways[stop], refused: {} } });
+  const mine = (commit: StackCommit): ChangeTarget => ({ rev: commit.sha, title: commit.summary, local: true });
+  assert.deepEqual(stoppedHere(mine(commits[1]), at("conflict", ["d.txt"])), { stop: "conflict", unmerged: ["d.txt"], actions: ["abort", "skip"] }, "with the ways on core serves");
+  assert.deepEqual(stoppedHere(mine(commits[1]), at("resolved", [])), { stop: "resolved", unmerged: [], actions: ["continue", "abort", "skip"] });
+  assert.equal(stoppedHere(mine(commits[1]), at("edit", [])), undefined, "applied whole: the commit is in, and its notes hold");
+  assert.equal(stoppedHere(mine(commits[0]), at("conflict", ["d.txt"])), undefined, "a commit replayed already");
+  assert.equal(stoppedHere(mine(commits[2]), at("conflict", ["d.txt"])), undefined, "a commit still to come");
+  assert.equal(stoppedHere({ rev: "change:7", title: "theirs", local: false }, at("conflict", ["d.txt"])), undefined, "a change only on Gerrit");
+  assert.equal(stoppedHere(mine(commits[1]), undefined), undefined, "no stack held yet");
 });

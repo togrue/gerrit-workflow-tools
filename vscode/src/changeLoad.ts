@@ -3,8 +3,9 @@
 // answer for a change selected before is dropped. Pure: no `vscode`, no I/O.
 
 import type { Chain, CommitStatus, Diff, Member, ShownCommit, Stack } from "./api";
-import type { ChangeState, Loading } from "./changeRows";
+import type { ChangeState, Loading, Stopped } from "./changeRows";
 import type { ChangeTarget } from "./model";
+import { stoppedAt } from "./stackRows";
 
 /** What a row of Local stack or Review chains already says about its change. Review chains do not say whether it is ready to submit. */
 export type RowStatus = Omit<CommitStatus, "submittable"> & { submittable?: boolean };
@@ -105,6 +106,18 @@ export function ciRevs(target: ChangeTarget, stack: Stack | undefined): { revs: 
     return { revs: below.slice(Math.max(0, index - 1), index + 1), chain: true, stack: false };
   }
   return target.local ? { revs: [], chain: false, stack: true } : { revs: [target.rev], chain: false, stack: false };
+}
+
+/**
+ * The rebase underway stopped at the commit `target` names before applying it: on a conflict, or
+ * with the conflicts resolved. Core's verdict, read from the stack the extension already holds
+ * (the commit's `rebase` step, the stack's `stop` and `unmerged`), as Local stack reads it for the
+ * row; undefined for anything else.
+ */
+export function stoppedHere(target: ChangeTarget, stack: Stack | undefined): Stopped | undefined {
+  const commit = target.local ? stack?.commits.find((c) => c.sha === target.rev) : undefined;
+  const stop = commit && stack ? stoppedAt(commit, stack) : null;
+  return stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack?.rebase?.unmerged ?? [], actions: stack?.rebase?.actions ?? [] } : undefined;
 }
 
 export class ChangeDetail {

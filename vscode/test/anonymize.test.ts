@@ -159,6 +159,21 @@ test("a stopped rebase keeps its banner and buttons; each conflicted file's row 
   assert.deepEqual(out.rows.map((row) => [row.marker, row.dim]), [[null, true], ["conflict", false], [null, false]]);
 });
 
+test("the Change view of a commit stopped on a conflict keeps its words and buttons; the file in its headline becomes what the file's row becomes", () => {
+  const secret = "zqxvsrc/zqxvd.zqxvtxt";
+  const one = changeVm(state({ stopped: { stop: "conflict", unmerged: [secret], actions: ["abort", "skip"] } }));
+  const out = anonymize({ stack: null, change: one, chains: null }, seeded(3));
+  assert.deepEqual(out.unclassified, []);
+  const change = out.change as ChangeVm;
+  assert.doesNotMatch(JSON.stringify(change), /zqxv/);
+  assert.equal(change.head?.text, `Conflict in ${change.conflicts?.rows[0].text} — resolve it, then Continue`);
+  assert.equal(change.conflicts?.rows[0].text, change.conflicts?.rows[0].conflict);
+  assert.deepEqual(change.head?.actions?.map((action) => action.label), ["Abort", "Skip"], "the ways on served");
+  assert.equal(change.files?.title, "Files, as before the rebase");
+  const many = anonymize({ stack: null, change: changeVm(state({ stopped: { stop: "conflict", unmerged: [secret, "b"], actions: ["abort", "skip"] } })), chains: null }, seeded(3)).change as ChangeVm;
+  assert.equal(many.head?.text, "Conflicts in 2 files — resolve them, then Continue");
+});
+
 test("a field nobody classified is replaced, key and all, whatever its type", () => {
   const vm = { info: [], rows: [{ summary: "Subject", branch: "release-2.4", pushed: true, parents: 12, owner: { name: "Alice", "src/secret.py": ["x.py"] } }], frozen: null, movable: 1, remote: "origin" };
   const out = anonymize({ stack: vm, change: { empty: "x", byPath: { "src/a.py": 3 } }, chains: null }, seeded(1));

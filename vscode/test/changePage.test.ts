@@ -61,3 +61,15 @@ test("a confirmed Discard empties the reply box and resets Resolved; a dismissed
   assert.equal(text.value, "");
   assert.equal(resolved.checked, standing, "back where the comment stands, as Cancel leaves it");
 });
+
+test("stopped by a rebase on a conflict, the Change view's buttons run the rebase's commands and a conflicted file opens to resolve", () => {
+  const { root, posted } = changePage(changeVm(state({ stopped: { stop: "conflict", unmerged: ["src/d.txt"], actions: ["abort", "skip"] } })));
+  button(root, "Abort").click();
+  assert.deepEqual(posted.at(-1), { type: "command", command: "ger.rebase.abort", args: [] });
+  button(root, "Skip").click();
+  assert.deepEqual(posted.at(-1), { type: "command", command: "ger.rebase.skip", args: [] });
+  const file = root.all(byClass("conflict"))[0];
+  assert.equal(file.textContent, "src/d.txtconflicted");
+  file.click();
+  assert.deepEqual(posted.at(-1), { type: "conflict", path: "src/d.txt" }, "as the banner's row posts it: the extension opens the merge editor");
+});

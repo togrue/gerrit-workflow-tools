@@ -4,9 +4,9 @@
 
 import * as path from "node:path";
 
-import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Severity, ShownCommit } from "./api";
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, RebaseAction, Severity, ShownCommit } from "./api";
 import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
-import { Badge, SYNC_WORDS, Tone, badges, sync } from "./stackRows";
+import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
 
 /** Which version of the change is looked at: your commit, Gerrit's current patchset, or patchset `n`. */
@@ -39,6 +39,14 @@ export interface Loading {
   ready: boolean;
 }
 
+/** A rebase stopped at the commit shown, before applying it (`stoppedAt`). */
+export interface Stopped {
+  stop: "conflict" | "resolved";
+  unmerged: string[];
+  /** The ways on core allows from there (`rebase.actions`), as on Local stack's banner. */
+  actions: RebaseAction[];
+}
+
 /** Everything the view is built from. */
 export interface ChangeState {
   /** A commit of your local stack. */
@@ -57,6 +65,11 @@ export interface ChangeState {
   /** Why the commit message cannot be edited; empty when it can. */
   readOnly: string;
   ci: CiView;
+  /**
+   * The rebase underway stopped at this commit and has not applied it: on a conflict (`unmerged`,
+   * the files still conflicted), or with the conflicts resolved. Core's verdict, from the stack.
+   */
+  stopped?: Stopped;
   /** What has not come yet; absent once everything has. */
   loading?: Loading;
 }
@@ -145,14 +158,16 @@ export interface ChangeVm {
   key?: string;
   /** What is on its way: the page holds the commit message's place, its read-only note (as `message.readOnly` will say) included. */
   loading?: { message: boolean; readOnly: string };
-  /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). */
-  head?: Icon & { text: string; detail: string; badges: Badge[] };
+  /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). `actions`: the way on from a rebase stopped here, as Local stack's banner offers it. */
+  head?: Icon & { text: string; detail: string; badges: Badge[]; actions?: StackAction[] };
   notes?: (Icon & { text: string; detail: string })[];
   message?: { key: string; text: string; author: string; readOnly: string };
   versions?: { options: Option[]; selected: string };
   modes?: { options: Option[]; selected: Mode };
   /** Someone's change you reviewed before: what is new, one click away. */
   hint?: { text: string; show: boolean };
+  /** A rebase stopped here on a conflict: the files still conflicted, as Local stack lists them under its banner. */
+  conflicts?: { summary: string; rows: StackInfo[] };
   files?: { title: string; summary: string; added: number; deleted: number; note: string; tooltip: string; rows: FileRow[] };
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
   ci?: { summary: string; state: CiView["state"]; error: string; links: CiLinkRow[] };
@@ -169,6 +184,24 @@ export const READ_ONLY = {
 };
 
 export const LOADING = "loading…";
+
+/** The Change view of the commit a rebase stopped at before applying it. */
+export const STOPPED_WORDS = {
+  conflict: (file: string) => `Conflict in ${file} — resolve it, then Continue`,
+  conflicts: (count: number) => `Conflicts in ${count} files — resolve them, then Continue`,
+  resolved: "Conflicts resolved — Continue",
+  files: "Files, as before the rebase",
+  filesTooltip: "The rebase has not applied this commit yet: these are its files as they were before the rebase, against its old parent. What is left to resolve is under Conflicts.",
+};
+
+/** The head of a commit a rebase stopped at before applying it: what is left to do, and the buttons to go on. */
+function stoppedHead(stopped: Stopped): Icon & { text: string; actions: StackAction[] } {
+  const [one, ...more] = stopped.unmerged;
+  const text =
+    stopped.stop === "resolved" || one === undefined ? STOPPED_WORDS.resolved : more.length ? STOPPED_WORDS.conflicts(stopped.unmerged.length) : STOPPED_WORDS.conflict(one);
+  const icon: Icon = stopped.stop === "resolved" ? { icon: "debug-continue", tone: "warn" } : { icon: "warning", tone: "bad" };
+  return { ...icon, text, actions: rebaseButtons(stopped) };
+}
 
 const SEVERITY_TONE: Record<Severity, Tone | undefined> = { error: "bad", warning: "warn", pending: undefined, ok: "good" };
 
@@ -251,6 +284,9 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
     }
   } else if (!diff) {
     note = state.loading?.base ? LOADING : "the commit is not available here";
+  }
+  if (state.stopped && state.mode === "base" && state.version === "local") {
+    [title, tooltip] = [STOPPED_WORDS.files, STOPPED_WORDS.filesTooltip];
   }
   const rows = (diff?.files ?? []).map((file): FileRow => {
     const dir = path.posix.dirname(file.path);
@@ -353,7 +389,10 @@ function ciLinks(ci: CiView): CiLinkRow[] {
 export function changeVm(state: ChangeState): ChangeVm {
   const { shown: commit, chains } = state;
   const notes: NonNullable<ChangeVm["notes"]> = [];
-  if (commit.patchset_status === "newer") {
+  // Stopped before this commit is applied, what the notes and CI would say of it is not true yet.
+  const stopped = state.stopped;
+  const status = stopped ? undefined : commit.patchset_status;
+  if (status === "newer") {
     notes.push({
       icon: "history",
       tone: "warn",
@@ -361,7 +400,7 @@ export function changeVm(state: ChangeState): ChangeVm {
       // Only rebased, Gerrit keeps the votes on the push; with new code it may not. The row says the same.
       detail: SYNC_WORDS[sync({ ...commit, diverged: false })],
     });
-  } else if (commit.patchset_status === "outdated") {
+  } else if (status === "outdated") {
     notes.push({ icon: "history", tone: "warn", text: "Gerrit has a newer patchset than this commit", detail: "comments and CI below are about Gerrit's version" });
   }
   const since = state.delta?.since;
@@ -383,7 +422,9 @@ export function changeVm(state: ChangeState): ChangeVm {
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
+      ...(stopped ? stoppedHead(stopped) : {}),
     },
+    conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
     notes,
     message: state.base?.message
       ? { key: commit.change_id ?? commit.sha ?? "", text: state.base.message, author: state.base.author ?? "", readOnly: state.readOnly }
@@ -402,7 +443,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     comments: loading?.commit
       ? { summary: LOADING, open: false, threads: [] }
       : { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map(thread) },
-    ci: hasCi
+    ci: hasCi && !stopped
       ? {
           // The head already says "CI failed": the section names the failing builds, or nothing.
           summary: commit.ci_failures.join(", "),
@@ -427,7 +468,8 @@ export function changeLines(vm: ChangeVm): string[] {
   const lines: string[] = [];
   const add = (depth: number, text: string, detail = "") => lines.push(`${"  ".repeat(depth)}${text}${detail ? ` — ${detail}` : ""}`);
   if (vm.head) {
-    add(0, vm.head.text, vm.head.detail);
+    const buttons = actionsText(vm.head.actions);
+    add(0, vm.head.text, `${vm.head.detail}${buttons ? `  ${buttons}` : ""}`);
   }
   vm.notes?.forEach((note) => add(0, note.text, note.detail));
   if (vm.message) {
@@ -441,6 +483,10 @@ export function changeLines(vm: ChangeVm): string[] {
   }
   if (vm.hint) {
     add(0, vm.hint.text);
+  }
+  if (vm.conflicts) {
+    add(0, "Conflicts", vm.conflicts.summary);
+    vm.conflicts.rows.forEach((row) => add(1, `⚠ ${row.text}`, row.detail));
   }
   if (vm.files) {
     add(0, vm.files.title, vm.files.note || `${vm.files.rows.length} · +${vm.files.added} −${vm.files.deleted}`);

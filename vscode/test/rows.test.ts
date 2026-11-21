@@ -254,6 +254,37 @@ test("the change view shows the message, the files with their line counts, and w
   ]);
 });
 
+test("stopped by a rebase on a conflict, the change view says what is left and how to go on, not what its votes will do", () => {
+  const ahead = shown({ patchset_status: "newer", attention_reasons: ["ahead-of-gerrit", "ci-failed"], ci_failures: ["Verified"], verified: -1 });
+  const conflict = changeVm(state({ shown: ahead, stopped: { stop: "conflict", unmerged: ["src/d.txt"], actions: ON_CONFLICT } }));
+  assert.equal(conflict.head?.text, "Conflict in src/d.txt — resolve it, then Continue");
+  assert.deepEqual([conflict.head?.icon, conflict.head?.tone], ["warning", "bad"]);
+  assert.deepEqual(conflict.head?.actions?.map((action) => action.command.id), ["ger.rebase.abort", "ger.rebase.skip"], "the ways on core serves: no Continue over open conflicts");
+  assert.deepEqual(conflict.notes, [], "\"only rebased: the votes stay\" is not true yet");
+  assert.equal(conflict.ci, undefined, "nor is anything about its CI");
+  // The conflicted files and the buttons are the banner's: one function draws each, from the same served stop.
+  const banner = stackVm(stack([commit("One", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["src/d.txt"], actions: ON_CONFLICT } }), undefined, never).info;
+  assert.deepEqual(conflict.conflicts?.rows, banner.slice(1));
+  assert.deepEqual(conflict.head?.actions, banner[0].actions);
+  assert.deepEqual([conflict.files?.title, conflict.files?.rows.length], ["Files, as before the rebase", 2], "the commit as it was, and it says so");
+  assert.deepEqual(changeLines(conflict).slice(0, 6), [
+    "Conflict in src/d.txt — resolve it, then Continue — V-1  [Abort] [Skip]",
+    "Commit message — Extract routing  (editable)",
+    "Showing — Local commit extract · Against its base commit",
+    "Conflicts — 1 file",
+    "  ⚠ src/d.txt — conflicted",
+    "Files, as before the rebase — 2 · +12 −3",
+  ]);
+  assert.equal(changeVm(state({ stopped: { stop: "conflict", unmerged: ["a", "b", "c"], actions: ON_CONFLICT } })).head?.text, "Conflicts in 3 files — resolve them, then Continue");
+  // Resolved and added: Continue is the one to press; the rows stay hidden until it is applied.
+  const resolved = changeVm(state({ shown: ahead, stopped: { stop: "resolved", unmerged: [], actions: RESOLVED } }));
+  assert.equal(resolved.head?.text, "Conflicts resolved — Continue");
+  assert.deepEqual(resolved.head?.actions?.map((action) => `${action.label}${action.primary ? "!" : ""}`), ["Continue!", "Abort", "Skip"]);
+  assert.deepEqual([resolved.conflicts, resolved.notes, resolved.ci], [undefined, [], undefined]);
+  // A patchset of the change is no commit the rebase holds: its files are not labelled as it.
+  assert.equal(changeVm(state({ stopped: { stop: "conflict", unmerged: ["a"], actions: ON_CONFLICT }, version: 3 })).files?.title, "Files");
+});
+
 test("the change view says the subject once, in the commit message: its title bar names only the change number", () => {
   const vm = changeVm(state());
   assert.equal(changeHeading(7), "Change 7");

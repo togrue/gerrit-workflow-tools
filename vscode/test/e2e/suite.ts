@@ -1000,7 +1000,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
         "Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
-        "the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
+        "the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "origin/main"]),
       );
       await pressAndRun(

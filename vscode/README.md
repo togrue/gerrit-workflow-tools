@@ -119,6 +119,13 @@ The commits above your upstream, newest first. One row per commit:
 - The title bar names the change number. The subject is not repeated there: the commit message
   says it.
 - What it needs, in words, with its votes.
+- **The commit a rebase stopped at on a conflict** says so instead: *Conflict in d.txt — resolve it,
+  then Continue* (several files: how many), with **Continue**, **Abort** and **Skip** as on Local
+  stack's banner. **Conflicts**, above Files, lists the files still conflicted; a click opens one in
+  the merge editor, as under the banner. Files is the commit as it was before the rebase, and says
+  so: the rebase has not applied it yet. What its votes and CI would do on a push is not said until
+  it has: that is not known yet. Once the conflicts are resolved and added, it says *Conflicts
+  resolved — Continue*, and Continue is the one to press.
 - **Commit message**: the whole message. For a commit of your local stack it is a text box:
   edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's message. Only
   the message is rewritten — uncommitted changes stay where they are, nothing can conflict —

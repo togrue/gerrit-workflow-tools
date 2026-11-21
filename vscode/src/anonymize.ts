@@ -14,7 +14,7 @@
 
 import { randomInt } from "node:crypto";
 
-import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, READ_ONLY, YOURS } from "./changeRows";
+import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, READ_ONLY, STOPPED_WORDS, YOURS } from "./changeRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
@@ -115,7 +115,7 @@ function around(pattern: RegExp, rebuild: (names: Names, ...theirs: string[]) =>
 export const ICONS = [
   ...Object.values(SYNC_ICONS),
   ...ATTENTION_ICONS,
-  ...["beaker", "edit", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
+  ...["beaker", "debug-continue", "edit", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
 ];
 const ICON = ours(ICONS);
 const TONE = ours(["good", "bad", "warn", "plain", "dim"]);
@@ -176,26 +176,34 @@ const ROW_KEY = string((text, names, row) => (text === row.changeId ? names.chan
 /** A banner's words, or a line about the upstream ("<branch> has no upstream…", "Track <branch>", an error of git's: filler). */
 const INFO_TEXT = ours([REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
 
+/** A rebase's buttons: Continue, Abort, Skip. */
+const ACTIONS: Shape = [
+  {
+    label: ours(Object.values(REBASE_ACTIONS).map((action) => action.label)),
+    title: ours(Object.values(REBASE_ACTIONS).map((action) => action.title)),
+    command: { id: ours(Object.values(REBASE_ACTIONS).map((action) => action.command)), args: [TEXT] },
+    primary: KEEP,
+  },
+];
+
+/** A conflicted file's row (`conflictRow`), under Local stack's banner and in the Change view's Conflicts. */
+const CONFLICT_ROW = {
+  // It says its path: it becomes what its `conflict` becomes.
+  text: string((text, names, info) => String((text === info.conflict ? PATH : INFO_TEXT)(text, names, info))),
+  detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted]),
+  icon: ICON,
+  tone: TONE,
+  tooltip: TOOLTIP,
+  conflict: PATH,
+};
+
 const STACK: Shape = {
   waiting: WAITING,
   info: [
     {
-      // A conflicted file's row says its path: it becomes what its `conflict` becomes.
-      text: string((text, names, info) => String((text === info.conflict ? PATH : INFO_TEXT)(text, names, info))),
-      detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted]),
-      icon: ICON,
-      tone: TONE,
-      tooltip: TOOLTIP,
+      ...CONFLICT_ROW,
       command: { id: ours(["ger.setUpstream"]), args: [TEXT] },
-      conflict: PATH,
-      actions: [
-        {
-          label: ours(Object.values(REBASE_ACTIONS).map((action) => action.label)),
-          title: ours(Object.values(REBASE_ACTIONS).map((action) => action.title)),
-          command: { id: ours(Object.values(REBASE_ACTIONS).map((action) => action.command)), args: [TEXT] },
-          primary: KEEP,
-        },
-      ],
+      actions: ACTIONS,
     },
   ],
   rows: [
@@ -260,10 +268,15 @@ const CHANGE: Shape = {
   head: {
     icon: ICON,
     tone: TONE,
-    text: ours([reasons, "Ready to submit", "Loading…", "Nothing to do"]),
+    text: ours(
+      [reasons, "Ready to submit", "Loading…", "Nothing to do", STOPPED_WORDS.resolved, new RegExp(STOPPED_WORDS.conflicts(0).replace("0", COUNT))],
+      around(/Conflict in (.+) — resolve it, then Continue/, (names, file) => STOPPED_WORDS.conflict(names.path(file))),
+    ),
     detail: ours([VOTES, "not on Gerrit"]),
     badges: [BADGE],
+    actions: ACTIONS,
   },
+  conflicts: { summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
   notes: [
     {
       icon: ICON,
@@ -280,7 +293,7 @@ const CHANGE: Shape = {
     show: KEEP,
   },
   files: {
-    title: ours(["Files", "Gerrit vs. local", "Since your review", new RegExp(`(Gerrit vs\\. local|Since your review): patchset ${PATCHSET} → (patchset ${PATCHSET}|local)( \\(rebased\\))?`)]),
+    title: ours(["Files", STOPPED_WORDS.files, "Gerrit vs. local", "Since your review", new RegExp(`(Gerrit vs\\. local|Since your review): patchset ${PATCHSET} → (patchset ${PATCHSET}|local)( \\(rebased\\))?`)]),
     summary: ours([new RegExp(`${COUNT} files?`), LOADING, "could not be compared", "you have not reviewed this change yet", "the commit is not available here", new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`)]),
     /** Lines added and removed, in all. */
     added: KEEP,
@@ -288,6 +301,7 @@ const CHANGE: Shape = {
     note: ours(["", LOADING, "could not be compared", "you have not reviewed this change yet", "the commit is not available here", new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`)]),
     tooltip: ours([
       "What the change does: its files against the parent commit.",
+      STOPPED_WORDS.filesTooltip,
       "The two versions sit on different parents. Only files the change touches are listed; inside them, edits that came in from underneath show too.",
       "What your commit changes compared with the patchset Gerrit has: what a push would upload on top.",
       "What changed after the patchset you last voted or commented on.",
