@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 
-import { CommentChain, MoveConflict, RebaseStop, ShownCommit, Stack, StackCommit } from "../../src/api";
+import { CommentChain, MoveConflict, RebaseAction, RebaseStop, ShownCommit, Stack, StackCommit } from "../../src/api";
 import { ChangeState, ChangeVm, changeVm } from "../../src/changeRows";
 import { SNAPSHOT_FORMAT, Snapshot } from "../../src/snapshot";
 import { StackVm, stackVm } from "../../src/stackRows";
@@ -100,6 +100,15 @@ function rowKinds(): StackVm {
   ]);
 }
 
+/** What core allows at each stop (`RebaseProgress.actions`). */
+const WAYS_ON: Record<RebaseStop, RebaseAction[]> = {
+  edit: ["continue", "abort"],
+  split: ["continue", "abort"],
+  paused: ["continue", "abort"],
+  conflict: ["abort", "skip"],
+  resolved: ["continue", "abort", "skip"],
+};
+
 function rebasing(stop: RebaseStop): StackVm {
   const applied = stop === "edit";
   return stackOf(
@@ -112,7 +121,7 @@ function rebasing(stop: RebaseStop): StackVm {
     ],
     {
       rebase_in_progress: true,
-      rebase: { branch: "routing", onto: null, orig_head: null, stop, applied, current: null, unmerged: stop === "conflict" ? ["src/routes.ts"] : [], as_before: false },
+      rebase: { branch: "routing", onto: null, orig_head: null, stop, applied, current: null, unmerged: stop === "conflict" ? ["src/routes.ts"] : [], as_before: false, actions: WAYS_ON[stop] },
     },
   );
 }

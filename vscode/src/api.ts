@@ -164,6 +164,9 @@ export interface StackCommit extends CommitStatus {
 /** Why a rebase underway is stopped: core's verdict, the shell's words. */
 export type RebaseStop = "edit" | "split" | "conflict" | "resolved" | "paused";
 
+/** A way on from where a rebase stopped: `ger rebase --<action>`. */
+export type RebaseAction = "continue" | "abort" | "skip";
+
 /** A rebase underway, as `GET /stack` serves it. */
 export interface Rebase {
   /** The branch being rebased; null for a detached HEAD's. */
@@ -180,6 +183,8 @@ export interface Rebase {
   unmerged: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
   as_before: boolean;
+  /** The ways on core allows from this stop, in order: the only ones to offer. Skip only at a conflict, resolved or not. */
+  actions: RebaseAction[];
 }
 
 /** What is underway that no Gerrit push may run over: `GET /stack`'s `push_blocked`. */

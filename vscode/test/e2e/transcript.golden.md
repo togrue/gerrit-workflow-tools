@@ -1434,12 +1434,12 @@ change | (the commit shown is only on the branch as it was before)
 
 ## Meanwhile: you run git rebase --continue, and "Add e.txt" conflicts in e.txt
 
-**Expect:** Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; "Add e.txt" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in "Add e.txt".
+**Expect:** Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Abort and Skip (no Continue while e.txt is conflicted); "Add e.txt" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in "Add e.txt".
 
 **Today:** the status bar still shows the headline (#62).
 
 ```
-+ stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
++ stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ e.txt — conflicted
 + stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
@@ -1451,7 +1451,7 @@ change | (the commit shown is only on the branch as it was before)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
-stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
+stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ e.txt — conflicted
 stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
@@ -1484,7 +1484,7 @@ change | (the commit shown is HEAD)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
-stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
+stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ e.txt — conflicted
 stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — HEAD · <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
@@ -1509,12 +1509,12 @@ change | (the commit shown is HEAD)
 
 ## Meanwhile: you resolve e.txt and git add it
 
-**Expect:** Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at "Add e.txt", ready to Continue, which is now the prominent button.
+**Expect:** Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at "Add e.txt", ready to Continue, which now appears as the prominent button.
 
 ```
 + stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 + stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
-- stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
+- stack  | A rebase stopped on a conflict  [Abort] [Skip]
 - stack  |   ⚠ e.txt — conflicted
 - stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
 + editor | Preview ger-runbook-<id>.md (webview)
@@ -1616,12 +1616,12 @@ change | (the commit shown is below HEAD)
 
 ## Meanwhile: you rebase onto origin/main, and "test! temporary experiment" conflicts in c.txt
 
-**Expect:** Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
+**Expect:** Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
 **Today:** the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).
 
 ```
-+ stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
++ stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ c.txt — conflicted
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | ⚠ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
@@ -1638,7 +1638,7 @@ change | (the commit shown is below HEAD)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
-stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
+stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ c.txt — conflicted
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 stack  | ⚠ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
@@ -1663,17 +1663,17 @@ change | (the commit shown is only on the branch as it was before)
 
 ## 84. Local stack › Skip › Cancel
 
-**Expect:** A dialog asks before "test! temporary experiment" is left out: the branch would no longer have it, Abort brings it back until the rebase is finished, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
+**Expect:** A dialog asks before "test! temporary experiment" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
 
 ```
 dialog (warning): Skip "test! temporary experiment"?  [Skip] [Cancel]
-    detail: The rebase goes on without it: once it is finished, the branch no longer has this commit. Until then, Abort brings it back. Its change stays open on Gerrit until you abandon it there.
+    detail: The rebase goes on without it: the commit and the conflict resolution done so far, staged or not, are thrown away, and once the rebase is finished the branch no longer has this commit. Abort instead brings back the branch as it was before the rebase, but not the resolution. Its change stays open on Gerrit until you abandon it there.
     → cancelled
 (no change)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
-stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
+stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ c.txt — conflicted
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 stack  | ⚠ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
@@ -1698,12 +1698,12 @@ change | (the commit shown is only on the branch as it was before)
 
 ## 85. Local stack › Push to Gerrit… (during the rebase) › Abort
 
-**Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers Continue and Abort. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
+**Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
 
 **Today:** back as before, but nothing says origin/main moved on (#60).
 
 ```
-dialog (warning): Finish the rebase first  [Continue] [Abort] [Cancel]
+dialog (warning): Finish the rebase first  [Abort] [Cancel]
     detail: A rebase is in progress, and 'feature' still points at the commits from before it; finish it (`git rebase --continue`) or `git rebase --abort`, then push.
     → pressed "Abort"
 terminal "ger": runs `ger rebase --abort`
@@ -1713,7 +1713,7 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 + stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-- stack  | A rebase stopped on a conflict  [Continue] [Abort] [Skip]
+- stack  | A rebase stopped on a conflict  [Abort] [Skip]
 - stack  |   ⚠ c.txt — conflicted
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 - stack  | ⚠ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]

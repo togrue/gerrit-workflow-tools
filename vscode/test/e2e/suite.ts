@@ -950,7 +950,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
-        "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
+        "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Abort and Skip (no Continue while e.txt is conflicted); \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
         "the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "--continue"]),
       );
@@ -964,7 +964,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "you resolve e.txt and git add it",
-        "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue, which is now the prominent button.",
+        "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue, which now appears as the prominent button.",
         undefined,
         async () => {
           // Resolved by hand here, not in the merge editor: close it without keeping what it put in e.txt.
@@ -999,13 +999,13 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
-        "Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
+        "Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
         "the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "origin/main"]),
       );
       await pressAndRun(
         "Local stack › Skip › Cancel",
-        "A dialog asks before \"test! temporary experiment\" is left out: the branch would no longer have it, Abort brings it back until the rebase is finished, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.",
+        "A dialog asks before \"test! temporary experiment\" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.",
         undefined,
         "ger.rebase.skip",
         undefined,
@@ -1013,7 +1013,7 @@ export async function run(): Promise<void> {
       );
       await pressAndRun(
         "Local stack › Push to Gerrit… (during the rebase) › Abort",
-        "No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers Continue and Abort. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.",
+        "No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.",
         "back as before, but nothing says origin/main moved on (#60).",
         "ger.push",
         ["rebase", "--abort"],

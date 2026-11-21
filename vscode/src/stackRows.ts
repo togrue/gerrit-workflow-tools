@@ -2,7 +2,7 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
+import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
 import { blockedMove, reasonWords } from "./format";
 import { Waiting } from "./state";
 
@@ -220,33 +220,54 @@ export const REBASE_WORDS = {
   tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Continue goes on, Abort goes back to the branch as it was before.",
   conflicted: "conflicted",
   resolve: "Open it in the merge editor to resolve it, then stage it (git add).",
+  /** Why the palette's Continue or Skip does not run here, by core's verdict. */
+  notNow: {
+    continue: "Resolve the conflicted files and stage them (git add) before you continue the rebase.",
+    abort: "There is no rebase to abort.",
+    skip: "Skip leaves out a commit the rebase stopped on with a conflict. Here the commit is already applied: Skip would only throw away what is not committed yet.",
+  } satisfies Record<RebaseAction, string>,
+  /** What Skip throws away, said before it does: the commit and the resolution so far; Abort brings back the branch, not the resolution. */
+  skipLoses: "The rebase goes on without it: the commit and the conflict resolution done so far, staged or not, are thrown away, and once the rebase is finished the branch no longer has this commit. Abort instead brings back the branch as it was before the rebase, but not the resolution.",
+  skipGerrit: "Its change stays open on Gerrit until you abandon it there.",
 };
 
-/** How to go on with a rebase underway: `ger rebase --<step>`, in the ger terminal. */
-export type RebaseStep = "continue" | "abort" | "skip";
 
 /** The banner's buttons: the commands they run, and what they do. */
-export const REBASE_ACTIONS: Record<RebaseStep, { label: string; title: string; command: string }> = {
+export const REBASE_ACTIONS: Record<RebaseAction, { label: string; title: string; command: string }> = {
   continue: { label: "Continue", title: "Go on with the rebase (ger rebase --continue, in the ger terminal)", command: "ger.rebase.continue" },
   abort: { label: "Abort", title: "Stop the rebase: the branch goes back to where it was before it (ger rebase --abort)", command: "ger.rebase.abort" },
   skip: { label: "Skip", title: "Leave out the commit it stopped at, and go on without it (ger rebase --skip)", command: "ger.rebase.skip" },
 };
 
-/**
- * What can be done from where the rebase stopped, by core's verdict. Skip only where a commit is
- * not applied (a conflict, resolved or not): at an edit or a split stop the commit is already in,
- * and `git rebase --skip` would only throw away what is not committed yet. Continue is the one to
- * press once the conflicts are resolved.
- */
-export function rebaseSteps(stop: Rebase["stop"]): StackAction[] {
-  const unapplied = stop === "conflict" || stop === "resolved";
-  const steps: RebaseStep[] = unapplied ? ["continue", "abort", "skip"] : ["continue", "abort"];
-  return steps.map((step) => ({
-    label: REBASE_ACTIONS[step].label,
-    title: REBASE_ACTIONS[step].title,
-    command: { id: REBASE_ACTIONS[step].command, args: [] },
-    ...(step === "continue" && stop === "resolved" ? { primary: true } : {}),
+/** The banner's buttons: the ways on core allows from where the rebase stopped (`rebase.actions`); Continue is the one to press once resolved. */
+export function rebaseButtons(rebase: Rebase | null | undefined): StackAction[] {
+  return (rebase?.actions ?? []).map((action) => ({
+    label: REBASE_ACTIONS[action].label,
+    title: REBASE_ACTIONS[action].title,
+    command: { id: REBASE_ACTIONS[action].command, args: [] },
+    ...(action === "continue" && rebase?.stop === "resolved" ? { primary: true } : {}),
   }));
+}
+
+/** Why `ger rebase --<action>` is not to run now, by core's verdict; undefined when it may, or core has said nothing yet (the CLI decides). */
+export function rebaseNotNow(stack: Stack | undefined, action: RebaseAction): string | undefined {
+  if (!stack) {
+    return undefined;
+  }
+  const allowed = stack.rebase ? stack.rebase.actions : [];
+  return allowed.includes(action) ? undefined : REBASE_WORDS.notNow[action];
+}
+
+/** Skip's question: what is left out, and what that throws away. */
+export function skipQuestion(stack: Stack | undefined): { message: string; detail: string } {
+  const stopped = stack?.commits.find((commit) => commit.rebase === "current");
+  const what = stopped ? `"${stopped.summary}"` : "the commit the rebase stopped at";
+  return { message: `Skip ${what}?`, detail: stopped?.pushed ? `${REBASE_WORDS.skipLoses} ${REBASE_WORDS.skipGerrit}` : REBASE_WORDS.skipLoses };
+}
+
+/** What Push offers instead while a rebase blocks it: the ways on core allows, but Skip (finishing is the point). */
+export function pushWaysOn(stack: Stack | undefined): RebaseAction[] {
+  return (stack?.rebase?.actions ?? ["continue", "abort"]).filter((action) => action !== "skip");
 }
 
 function rebaseBanner(rebase: Rebase | null | undefined): StackInfo[] {
@@ -254,7 +275,7 @@ function rebaseBanner(rebase: Rebase | null | undefined): StackInfo[] {
   const said: Partial<Record<string, string>> = { conflict: REBASE_WORDS.conflict, resolved: REBASE_WORDS.resolved, split: REBASE_WORDS.split };
   const text = said[stop ?? ""] ?? REBASE_WORDS.progress;
   const detail = stop === "resolved" ? REBASE_WORDS.ready : stop === "split" ? REBASE_WORDS.onTop : rebase?.as_before ? REBASE_WORDS.asBefore : undefined;
-  const banner: StackInfo = { text, detail, icon: "warning", tone: "warn", tooltip: REBASE_WORDS.tooltip, actions: rebaseSteps(stop) };
+  const banner: StackInfo = { text, detail, icon: "warning", tone: "warn", tooltip: REBASE_WORDS.tooltip, actions: rebaseButtons(rebase) };
   const files = (rebase?.unmerged ?? []).map((file): StackInfo => ({ text: file, detail: REBASE_WORDS.conflicted, icon: "warning", tone: "bad", tooltip: REBASE_WORDS.resolve, conflict: file }));
   return [banner, ...files];
 }

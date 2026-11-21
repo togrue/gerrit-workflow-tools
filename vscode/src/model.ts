@@ -140,6 +140,8 @@ export class Model implements vscode.Disposable {
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       // Continue, Abort and Skip are in the palette only while there is a rebase to go on with.
       void vscode.commands.executeCommand("setContext", "ger.rebasing", Boolean(this.stack?.rebase_in_progress));
+      // Skip only where core allows it: at any other stop git would only throw away what is not committed.
+      void vscode.commands.executeCommand("setContext", "ger.rebaseSkippable", Boolean(this.stack?.rebase?.actions.includes("skip")));
       const headline = this.overview.headline ?? undefined;
       const key = headline ? `${headline.reason}:${headline.number}` : undefined;
       // Remembered either way: what you caused yourself does not come back as news later.

@@ -94,7 +94,7 @@ function secretViews(word: string, hex: string, digit: number) {
   const rebasing = stackVm(
     stack(
       commits.map((c, index) => ({ ...c, rebase: (["done", "current", "todo"] as const)[index] })),
-      { branch: null, rebase_in_progress: true, rebase: { branch: `${word}-branch`, onto: sha(9), orig_head: sha(3), stop: "conflict", applied: false, current: sha(2), unmerged: [paths.tree, paths.top], as_before: false } },
+      { branch: null, rebase_in_progress: true, rebase: { branch: `${word}-branch`, onto: sha(9), orig_head: sha(3), stop: "conflict", applied: false, current: sha(2), unmerged: [paths.tree, paths.top], as_before: false, actions: ["abort", "skip"] } },
     ),
     undefined,
     never,
@@ -151,7 +151,7 @@ test("a stopped rebase keeps its banner and buttons; each conflicted file's row 
   const out = anonymize({ stack: FIRST().rebasing, change: null, chains: null }, seeded(5)).stack as StackVm;
   assert.doesNotMatch(JSON.stringify(out), /zqxv|a3f9c1/);
   assert.equal(out.info[0].text, "A rebase stopped on a conflict");
-  assert.deepEqual(out.info[0].actions?.map((action) => [action.label, action.command.id]), [["Continue", "ger.rebase.continue"], ["Abort", "ger.rebase.abort"], ["Skip", "ger.rebase.skip"]]);
+  assert.deepEqual(out.info[0].actions?.map((action) => [action.label, action.command.id]), [["Abort", "ger.rebase.abort"], ["Skip", "ger.rebase.skip"]]);
   assert.deepEqual(out.info.slice(1).map((info) => [info.text === info.conflict, info.detail, info.tooltip]), [
     [true, "conflicted", "Open it in the merge editor to resolve it, then stage it (git add)."],
     [true, "conflicted", "Open it in the merge editor to resolve it, then stage it (git add)."],

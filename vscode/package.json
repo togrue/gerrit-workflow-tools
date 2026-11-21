@@ -211,7 +211,7 @@
         { "command": "ger.push", "when": "ger.ready" },
         { "command": "ger.rebase.continue", "when": "ger.ready && ger.rebasing" },
         { "command": "ger.rebase.abort", "when": "ger.ready && ger.rebasing" },
-        { "command": "ger.rebase.skip", "when": "ger.ready && ger.rebasing" },
+        { "command": "ger.rebase.skip", "when": "ger.ready && ger.rebasing && ger.rebaseSkippable" },
         { "command": "ger.setup", "when": "ger.state != no-repo" },
         { "command": "ger.installCli", "when": "ger.state == no-executable" },
         { "command": "ger.nextComment", "when": "ger.ready && ger.changeShown" },
