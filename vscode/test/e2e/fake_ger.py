@@ -130,6 +130,20 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
                     "unresolved": True,
                     "patch_set": 1,
                     "author": {"name": "Alice Reviewer"},
+                    # A suggested fix, so the editor thread shows one (and the e2e pictures with it).
+                    "fix_suggestions": [
+                        {
+                            "fix_id": "fix1",
+                            "description": "Rename the file",
+                            "replacements": [
+                                {
+                                    "path": "b.txt",
+                                    "range": {"start_line": 1, "start_character": 0, "end_line": 2, "end_character": 0},
+                                    "replacement": "file renamed.txt\n",
+                                }
+                            ],
+                        }
+                    ],
                 },
                 {
                     "id": "c2",

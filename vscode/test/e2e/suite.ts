@@ -418,6 +418,15 @@ export async function run(): Promise<void> {
       "The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.",
       () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "replyText", text: "Added a test for the parser.", resolved: true }),
     );
+    await press(
+      "Click \"Please rename this.\" in the Change view again",
+      "b.txt comes back in front of the runbook with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.",
+      async () => {
+        await page.receive({ type: "thread", id: chain(/^Please rename this/).root_id, action: "open" });
+        const thread = api.threads.threadOf(chain(/^Please rename this/));
+        assert.equal(thread?.collapsibleState, vscode.CommentThreadCollapsibleState.Expanded, "the thread is expanded");
+      },
+    );
     const rename = api.threads.threadOf(chain(/^Please rename this/));
     await press(
       "Type in the editor thread of \"Please rename this.\", whose Resolved toggle is on (your draft resolves it) › Save",
