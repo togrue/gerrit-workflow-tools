@@ -146,8 +146,10 @@ export interface StackCommit extends CommitStatus {
   needs_edit: boolean;
   /** `newer`, and Gerrit's current patchset is a commit this repository never had: it came from elsewhere. */
   diverged?: boolean;
-  /** A merge commit: one stack commit, whatever it brings in; it and the commits below it cannot be moved. */
+  /** A merge commit: one stack commit, whatever it brings in. */
   merge?: boolean;
+  /** The newest merge or below it: git rebase cannot replay a merge, so core leaves it where it is. */
+  pinned?: boolean;
   /** Where a rebase underway stands on this commit; null without one, or when it does not replay it. */
   rebase?: "done" | "current" | "todo" | null;
 }

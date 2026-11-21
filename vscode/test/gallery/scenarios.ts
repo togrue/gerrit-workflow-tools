@@ -88,8 +88,8 @@ function badgeKinds(): StackVm {
 
 function rowKinds(): StackVm {
   return stackOf([
-    pushed("Add the routing table", { code_review: 2, verified: 1 }),
-    pushed("Merge branch 'release-2.4' into routing", { merge: true, patchset_status: "absent", pushed: false, number: null, gerrit_url: null, attention_reasons: ["not-pushed"] }),
+    pushed("Add the routing table", { code_review: 2, verified: 1, pinned: true }),
+    pushed("Merge branch 'release-2.4' into routing", { merge: true, pinned: true, patchset_status: "absent", pushed: false, number: null, gerrit_url: null, attention_reasons: ["not-pushed"] }),
     pushed("Extract routing into its own module", { code_review: 1 }),
     pushed("Drop the first-match router", { abandoned: true, change_status: "ABANDONED", attention_reasons: ["abandoned"] }),
     pushed("Cache resolved routes", { held_back: true, work_in_progress: true, attention_reasons: ["wip"] }),
@@ -119,9 +119,10 @@ function longSubjects(): StackVm {
       ci_failures: ["Verified"],
       comments_unresolved: 4,
       attention_reasons: ["ci-failed", "unresolved-comments", "review-issues"],
+      pinned: true,
     }),
-    pushed("WIP", { held_back: true, work_in_progress: true, attention_reasons: ["wip"] }),
-    pushed("Merge remote-tracking branch 'origin/release-2.4-long-lived-stabilisation' into routing", { merge: true, held_back: true }),
+    pushed("WIP", { held_back: true, work_in_progress: true, attention_reasons: ["wip"], pinned: true }),
+    pushed("Merge remote-tracking branch 'origin/release-2.4-long-lived-stabilisation' into routing", { merge: true, held_back: true, pinned: true }),
     pushed("AVeryLongSubjectWithoutASingleBlankInItThatCannotWrapAnywhereAtAllSoItHasToBeCutOff", { held_back: true, code_review: 2, verified: 1 }),
     unpushed("Cache resolved routes per worker process and evict them when the routing table is reloaded from disk", { held_back: true, is_head: true }),
   ]);

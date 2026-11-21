@@ -189,14 +189,9 @@ export const MARKER_WORDS = {
 
 export const MERGE_WORDS = "A merge commit: the commits it brings in are not part of the stack, and are not listed.";
 
-/** How many commits, oldest first, stay where they are: the newest merge and all below it (git rebase cannot replay a merge). */
+/** How many commits, oldest first, stay where they are: the ones `ger serve` says are pinned. */
 export function pinned(stack: Stack): number {
-  for (let index = stack.commits.length - 1; index >= 0; index--) {
-    if (stack.commits[index].merge) {
-      return index + 1;
-    }
-  }
-  return 0;
+  return stack.commits.filter((commit) => commit.pinned).length;
 }
 
 /** Why commits at or below the newest merge cannot move, fold or go: for the message when one is asked to. */

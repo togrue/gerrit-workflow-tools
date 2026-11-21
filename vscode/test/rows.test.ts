@@ -80,8 +80,8 @@ test("mid-rebase the stack marks where it stands and dims what is not replayed y
   assert.equal(stackLines(conflict)[2], "▶! Two — two0000 · the same as on Gerrit  (dim)");
 });
 
-test("a merge is one row; it and what is below it stay, what is above it still moves", () => {
-  const withMerge = stack([commit("One"), commit("Merge side", { merge: true }), commit("Two"), commit("Three")]);
+test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {
+  const withMerge = stack([commit("One", { pinned: true }), commit("Merge side", { merge: true, pinned: true }), commit("Two"), commit("Three")]);
   assert.equal(frozen(withMerge), null, "a merge no longer freezes the whole stack");
   assert.equal(pinned(withMerge), 2);
   const vm = stackVm(withMerge, undefined, never);

@@ -217,8 +217,10 @@ For a view that draws the stack, each commit also says:
   repository never had: somebody else, or another checkout, uploaded it. Told from the object
   database alone, so a patch set you fetched without building on it does not count.
 - `merge` — it is a merge commit. The stack is first-parent, as Gerrit relates changes: the
-  merge is a stack commit, what it merged is not, and is never walked. The newest merge and
-  the commits below it cannot be moved, folded or dropped here; the ones above it can.
+  merge is a stack commit, what it merged is not, and is never walked.
+- `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
+  or dropped here, as `POST /stack/rewrite` refuses and `GET /stack/moves` leaves out; the
+  commits above the newest merge can.
 - `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the branch as it
   was before, and this is where the rebase stands on each commit: `done` (replayed), `current`
   (it stopped here), `todo` (still to come), or `null` for a commit the rebase does not replay.
