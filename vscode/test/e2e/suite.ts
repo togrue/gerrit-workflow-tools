@@ -17,6 +17,7 @@ import { readSnapshot } from "../../src/snapshot";
 import { vscodeUi } from "../../src/ui";
 import type { ExtensionApi } from "../../src/extension";
 import { gerCommandLine } from "../../src/launch";
+import { Camera, pictureName } from "./picture";
 import { Answer, ScriptedUi, lineDiff } from "./scriptedUi";
 
 type Provider<T> = vscode.TreeDataProvider<T>;
@@ -83,12 +84,16 @@ function normalizer(repo: string): (line: string) => string {
   };
 }
 
+/** The side bar's width in pictures, in CSS pixels: as wide as users who work in these views make it. */
+const SIDE_BAR_WIDTH = 420;
+
 export async function run(): Promise<void> {
   const out: string[] = [];
   const repo = vscode.workspace.workspaceFolders?.[0].uri.fsPath ?? "";
   const normalize = normalizer(repo);
   const ui = new ScriptedUi(normalize);
   const problems: string[] = [];
+  let camera: Camera | undefined;
   try {
     const extension = vscode.extensions.getExtension<ExtensionApi>("gerrit-workflow-tools.ger-vscode");
     assert.ok(extension, "the extension is installed in the development host");
@@ -147,8 +152,27 @@ export async function run(): Promise<void> {
       await api.changeView.idle();
     };
 
+    // GER_E2E_PNG: a picture of the window on start and after every press, into that folder.
+    const pictures = process.env.GER_E2E_PNG;
+    if (pictures) {
+      fs.mkdirSync(pictures, { recursive: true });
+      camera = await Camera.open(process.env.GER_E2E_DEVTOOLS ?? "");
+      // The Gerrit side bar, wide as users make it, and no chat panel taking the right side.
+      await vscode.commands.executeCommand("workbench.view.extension.ger");
+      await vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar").then(undefined, () => undefined);
+      await camera.widenSideBar(SIDE_BAR_WIDTH);
+      await settle();
+    }
+    const snap = async (step: number, label: string) => {
+      if (camera && pictures) {
+        await wait(200); // the webview pages draw what they were sent
+        await camera.take(path.join(pictures, pictureName(step, label)));
+      }
+    };
+
     let step = 0;
     let before = await screen();
+    await snap(0, "on start");
     out.push("# What a user sees and gets, button by button", "", "## On start", "", "```", ...before, "```", "");
 
     /** Press one button: write the expectation, what was said and done, and what changed on screen. */
@@ -170,6 +194,7 @@ export async function run(): Promise<void> {
         fs.appendFileSync(process.env.GER_E2E_SCREENS, [`## ${step} before`, ...before, `## ${step} after`, ...after, ""].join("\n"));
       }
       before = after;
+      await snap(step, button);
       out.push(`## ${step}. ${button}`, "", `**Expect:** ${expect}`, "", "```");
       out.push(...(said.lines.length ? said.lines : ["(nothing said or done outside the views)"]));
       if (threw) {
@@ -789,6 +814,7 @@ export async function run(): Promise<void> {
     out.push("## FAILED", "", "```", error instanceof Error ? (error.stack ?? error.message) : String(error), "```", "");
     throw error;
   } finally {
+    camera?.close();
     const target = process.env.GER_E2E_OUT;
     if (target) {
       fs.writeFileSync(target, out.join("\n"), "utf8");
