@@ -134,7 +134,7 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
                     "fix_suggestions": [
                         {
                             "fix_id": "fix1",
-                            "description": "Rename the file",
+                            "description": "Say the new name",
                             "replacements": [
                                 {
                                     "path": "b.txt",

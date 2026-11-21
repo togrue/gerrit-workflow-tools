@@ -25,7 +25,7 @@ const golden = path.join(extensionDir, "test", "e2e", "transcript.golden.md");
 
 /** Where `--get-vscode` unpacks a portable VS Code for Linux. */
 const portable = path.join(os.homedir(), ".cache", "ger-vscode-test");
-const portableCode = path.join(portable, "VSCode-linux-x64", "code");
+const portableCode = path.join(portable, `VSCode-linux-${process.arch === "arm64" ? "arm64" : "x64"}`, "code");
 
 function codeExecutable(): string {
   const candidates = [
@@ -44,16 +44,29 @@ function codeExecutable(): string {
   return found;
 }
 
-/** Download the latest stable VS Code for Linux x64 into `portable`, replacing an older one. */
+/** Download the latest stable VS Code for Linux (x64 or arm64) into `portable`, replacing an older one. */
 function getVscode(): number {
-  fs.rmSync(path.join(portable, "VSCode-linux-x64"), { recursive: true, force: true });
+  const arch = { x64: "x64", arm64: "arm64" }[process.arch as string];
+  if (process.platform !== "linux" || !arch) {
+    console.log(`e2e: --get-vscode is for Linux on x64 or arm64, not ${process.platform} ${process.arch}`);
+    return 1;
+  }
+  // Unpacked next to the one in use, and swapped in only once it is complete: a failed
+  // download leaves a working VS Code where it was.
   fs.mkdirSync(portable, { recursive: true });
-  const url = "https://update.code.visualstudio.com/latest/linux-x64/stable";
-  const got = spawnSync(`curl -fsSL "${url}" | tar xz -C "${portable}"`, { shell: true, stdio: "inherit" });
-  if (got.status !== 0 || !fs.existsSync(portableCode)) {
+  const fresh = fs.mkdtempSync(path.join(portable, "download-"));
+  const url = `https://update.code.visualstudio.com/latest/linux-${arch}/stable`;
+  const got = spawnSync(`curl -fsSL "${url}" | tar xz -C "${fresh}"`, { shell: true, stdio: "inherit" });
+  const unpacked = fs.existsSync(fresh) ? fs.readdirSync(fresh).find((name) => name.startsWith("VSCode-linux-")) : undefined;
+  if (got.status !== 0 || !unpacked || !fs.existsSync(path.join(fresh, unpacked, "code"))) {
+    fs.rmSync(fresh, { recursive: true, force: true });
     console.log(`e2e: could not download VS Code from ${url}`);
     return 1;
   }
+  const installed = path.dirname(portableCode);
+  fs.rmSync(installed, { recursive: true, force: true });
+  fs.renameSync(path.join(fresh, unpacked), installed);
+  fs.rmSync(fresh, { recursive: true, force: true });
   console.log(`e2e: VS Code is in ${path.dirname(portableCode)}`);
   return 0;
 }
