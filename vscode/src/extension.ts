@@ -5,7 +5,8 @@ import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange } from "./api";
-import { ChangeView, FILE_SCHEME, Location, ThreadArg } from "./changeView";
+import { ChangeView, Location, ThreadArg } from "./changeView";
+import { FILE_SCHEME } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";

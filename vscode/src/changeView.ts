@@ -9,12 +9,11 @@ import * as vscode from "vscode";
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { fileUri } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
-
-export const FILE_SCHEME = "ger-file";
 
 /** What the comment commands take: the chain a row of the view stands for. */
 export interface ThreadArg {
@@ -25,11 +24,6 @@ export interface ThreadArg {
 export interface Location {
   path: string;
   line: number | null;
-}
-
-/** A file as it is in a commit: `ger-file:/<path>?<commit>`. */
-export function fileUri(rev: string, file: string): vscode.Uri {
-  return vscode.Uri.from({ scheme: FILE_SCHEME, path: `/${file}`, query: rev });
 }
 
 export class ChangeView extends WebView<ChangeVm> {

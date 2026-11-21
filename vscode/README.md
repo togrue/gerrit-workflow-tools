@@ -410,6 +410,7 @@ printed.
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
 | `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
+| `src/diffTabs.ts` | `ger-file:` documents: a file as it is in a commit, which the diffs show. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |

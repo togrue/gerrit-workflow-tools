@@ -8,7 +8,8 @@ import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState } from "./api";
 import { ownComment } from "./changeRows";
-import { ChangeView, FILE_SCHEME } from "./changeView";
+import { ChangeView } from "./changeView";
+import { FILE_SCHEME } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
 import { ui } from "./ui";

@@ -12,7 +12,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import type { CommentChain } from "../../src/api";
-import { fileUri } from "../../src/changeView";
+import { fileUri } from "../../src/diffTabs";
 import { readSnapshot } from "../../src/snapshot";
 import { vscodeUi } from "../../src/ui";
 import type { ExtensionApi } from "../../src/extension";
