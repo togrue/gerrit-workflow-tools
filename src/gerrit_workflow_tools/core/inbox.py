@@ -78,6 +78,14 @@ def build_to_review_query(
     return with_project_filter(base, list(projects))
 
 
+def to_review_needs_you_as_reviewer(settings: Settings) -> bool:
+    """Whether a change must list you as a reviewer to match the *to review* query: true of the
+    built-in queries (``reviewer:self``), not of a custom ``inbox.toReviewQuery``, which may
+    select changes any other way.
+    """
+    return not settings.inbox_to_review_query
+
+
 def waiting_on_your_review(service: GerritService, numbers: Collection[int]) -> set[int]:
     """Which of the changes *numbers* wait on your review: the ones the *to review* section's own
     query (:func:`build_to_review_query`) matches, in any project, with no limit and without

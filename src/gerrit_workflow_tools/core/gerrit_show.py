@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, G
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.inbox import waiting_on_your_review
+from gerrit_workflow_tools.core.inbox import to_review_needs_you_as_reviewer, waiting_on_your_review
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import (
     Commit,
@@ -301,17 +301,19 @@ def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> No
     a colleague's change your work sits on, is in the stack and still waits on you. The query's own
     ``-owner:self`` leaves your changes out. Gerrit not answering leaves the author's reasons.
 
-    Only a change that lists you as a reviewer can match (the query asks ``reviewer:self``), so
-    the query is asked for those alone, and not at all when none does: showing your own stack
-    costs no request. Who you are is asked once per user and host.
+    With the built-in query only a change that lists you as a reviewer can match (it asks
+    ``reviewer:self``), so the query is asked for those alone, and not at all when none does:
+    showing your own stack costs no request. Who you are is asked once per user and host. A custom
+    ``inbox.toReviewQuery`` may select changes any other way: every shown change is asked.
     """
-    listed = [c for c in commits if c.pushed and c.number is not None and any(not r.cc for r in c.reviewers)]
-    me = service.self_account_id() if listed else None
-    if me is None:
-        return
-    numbers = [
-        c.number for c in listed if c.number is not None and any(r.account_id == me and not r.cc for r in c.reviewers)
-    ]
+    pushed = [c for c in commits if c.pushed and c.number is not None]
+    if to_review_needs_you_as_reviewer(service.settings):
+        pushed = [c for c in pushed if any(not r.cc for r in c.reviewers)]
+        me = service.self_account_id() if pushed else None
+        if me is None:
+            return
+        pushed = [c for c in pushed if any(r.account_id == me and not r.cc for r in c.reviewers)]
+    numbers = [c.number for c in pushed if c.number is not None]
     try:
         asked = waiting_on_your_review(service, numbers)
     except GerritApiError:

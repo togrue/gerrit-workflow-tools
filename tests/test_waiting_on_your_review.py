@@ -8,6 +8,7 @@ awaiting review" when opened (issue #71).
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -125,3 +126,12 @@ def test_showing_changes_asks_the_to_review_query_once_and_only_for_those_that_l
     asked = [query for query in store.queries() if "reviewer:self" in query]
     assert len(asked) == 1, asked
     assert "change:900" in asked[0] and "change:901" not in asked[0]
+
+
+def test_a_custom_to_review_query_is_asked_for_changes_that_do_not_list_you(stack_repo: Path) -> None:
+    """``inbox.toReviewQuery`` may select changes without ``reviewer:self``: none is skipped for it."""
+    subprocess.run(["git", "config", "inbox.toReviewQuery", "is:open topic:team-review"], cwd=stack_repo, check=True)
+    store = _store(stack_repo, _theirs(900, asks_you=False))
+    shown = _shown(GerApi(stack_repo, gerrit=store), 900)
+    assert any("topic:team-review" in query and "change:900" in query for query in store.queries())
+    assert shown["attention_reasons"][:1] == [Attention.WAITING_ON_YOU]
