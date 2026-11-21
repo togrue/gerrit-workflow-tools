@@ -119,7 +119,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   });
   let pausedLogged = false;
   const follower = new ShownCommitFollower(model, changeView);
-  const diffTabs = new DiffTabs(model);
+  const diffTabs = new DiffTabs(model, (line) => log.appendLine(line));
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
       await vscode.commands.executeCommand("ger.openHeadline");

@@ -3,13 +3,12 @@
 // documents — the right-hand side of its diffs. What you wrote and have not published (a draft,
 // a local draft, a private note) can be edited and deleted where it stands.
 
-import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState } from "./api";
 import { ownComment } from "./changeRows";
 import { ChangeView } from "./changeView";
-import { FILE_SCHEME } from "./diffTabs";
+import { FILE_SCHEME, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
 import { ui } from "./ui";
@@ -146,22 +145,13 @@ export class CommentThreads implements vscode.Disposable {
     if (uri.scheme === FILE_SCHEME) {
       return uri.query === commit ? uri.path.slice(1) : undefined;
     }
-    return target.local && this.model.stack?.head === commit ? this.ownFile(uri) : undefined;
-  }
-
-  /** The repository path of your own file `uri`; undefined for anything else. */
-  private ownFile(uri: vscode.Uri): string | undefined {
-    if (uri.scheme !== "file") {
-      return undefined;
-    }
-    const relative = path.relative(this.model.repo, uri.fsPath);
-    return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative.split(path.sep).join("/") : undefined;
+    return target.local && this.model.stack?.head === commit ? repoPath(this.model.repo, uri) : undefined;
   }
 
   /** With no change shown, your own file is commented on as the commit you stand on has it: whether `uri` is such a file. */
   private ofHead(uri: vscode.Uri): boolean {
     const onStack = this.model.stack?.commits.some((commit) => commit.is_head) ?? false;
-    return !this.view.target && onStack && this.ownFile(uri) !== undefined;
+    return !this.view.target && onStack && repoPath(this.model.repo, uri) !== undefined;
   }
 
   /** Whether "Add Comment" has something to comment on in `uri`. */

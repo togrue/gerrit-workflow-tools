@@ -2,6 +2,7 @@
 
     fake_ger.py --make-repo DIR     create the fixture repository (a four-commit local stack)
     fake_ger.py serve [options]     what the extension starts: cli_serve over a ChangeStore
+    fake_ger.py rebase [options]    what the ger terminal runs for the rebase banner: cli_rebase
 
 With GER_E2E_EVENTS naming a file, that file is Gerrit's event stream: each line the suite
 appends is one event, and its ``_fake`` part says how the fake Gerrit changed first. While the file
@@ -33,6 +34,7 @@ from tests.fixtures import configure_gerrit_target, make_stack_repo  # noqa: E40
 from tests.test_inbox import SELF, _change  # noqa: E402
 from tests.test_serve import WEB, _gerrit  # noqa: E402
 
+from gerrit_workflow_tools.cli_rebase import main as rebase_main  # noqa: E402
 from gerrit_workflow_tools.cli_serve import main as serve_main  # noqa: E402
 from gerrit_workflow_tools.core.config import Settings  # noqa: E402
 from gerrit_workflow_tools.core.git_run import git, git_out  # noqa: E402
@@ -215,4 +217,7 @@ if __name__ == "__main__":
         events_file = os.environ.get("GER_E2E_EVENTS")
         events = FileEvents(Path(events_file), store, changes) if events_file else None
         raise SystemExit(serve_main(sys.argv[2:], gerrit=store, ci_http=FakeCiHttp(jenkins_build()), events=events))
-    raise SystemExit("usage: fake_ger.py (--make-repo DIR | serve [options])")
+    if sys.argv[1:2] == ["rebase"]:
+        # --continue, --abort and --skip never ask Gerrit; the fake one reads the stack, which a stopped rebase has not.
+        raise SystemExit(rebase_main(sys.argv[2:], gerrit=ChangeStore()))
+    raise SystemExit("usage: fake_ger.py (--make-repo DIR | serve [options] | rebase [options])")

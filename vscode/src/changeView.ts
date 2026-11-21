@@ -12,6 +12,7 @@ import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, c
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
+import { markOf } from "./staleDiffs";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
 
@@ -504,8 +505,7 @@ export class ChangeView extends WebView<ChangeVm> {
     const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
     const range = diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
     const title = `${path.posix.basename(file.path)} (${range})`;
-    const inStack = this.model.stack?.commits.some((commit) => commit.sha === diff.commit) ?? false;
-    await openDiff(left, right, title, inStack ? diff.commit : undefined);
+    await openDiff(left, right, title, markOf(diff, this.model.stack, editable));
   }
 
   /** The document a path of the shown change lives in: your file for your local commit, the commit's otherwise. */

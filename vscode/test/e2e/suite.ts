@@ -5,7 +5,7 @@
 // golden file, so any change in behaviour is a visible diff to judge against the expectation.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -838,6 +838,15 @@ export async function run(): Promise<void> {
       };
       const gitRun = (args: string[], env: NodeJS.ProcessEnv = {}, input?: string): string =>
         execFileSync("git", args, { cwd: repo, env: { ...gitEnv, ...env }, input, stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
+      /** What `ger` printed in the ger terminal during the step (gerInTerminal), for the transcript. */
+      const terminalSaid: string[] = [];
+      /** Run `ger <args>` as the ger terminal would (the fake: the real command over the fake Gerrit); what it prints goes into the step. */
+      const gerInTerminal = (args: string[]): number => {
+        const ran = spawnSync(gerCommandLine(args), { cwd: repo, env: gitEnv, shell: true, encoding: "utf8" });
+        const printed = `${ran.stdout}${ran.stderr}`.split("\n").filter((line) => line.trim());
+        terminalSaid.push(...printed.map((line) => `ger terminal | ${line}`), `ger terminal | (exit ${ran.status})`);
+        return ran.status ?? -1;
+      };
       /** A git command that stops the rebase on a conflict: it exits non-zero, which is what is meant. */
       const gitStops = (args: string[]) => assert.throws(() => gitRun(args), Error, `git ${args.join(" ")} stops on a conflict`);
       /** `ger edit`'s rebase: interactive onto the fork point, no autosquash, stopping at the commit with this subject. */
@@ -888,7 +897,7 @@ export async function run(): Promise<void> {
         const said = ui.drain();
         const changed = lineDiff(before, after);
         out.push(pressed ? `## ${step}. ${what}` : `## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", ...(today ? [`**Today:** ${today}`, ""] : []), "```");
-        out.push(...said.lines, ...(changed.length ? changed : ["(no change)"]), "--- shown now:", ...(await shown()), "```", "");
+        out.push(...said.lines, ...terminalSaid.splice(0).map(normalize), ...(changed.length ? changed : ["(no change)"]), "--- shown now:", ...(await shown()), "```", "");
         problems.push(...said.problems.map((problem) => `${what}: ${problem}`));
         before = after;
         n += 1;
@@ -1068,15 +1077,15 @@ export async function run(): Promise<void> {
         },
       );
       await inTerminal(
-        "Local stack › Continue (e.txt not saved) › Save All and Continue",
-        "Before anything runs, a dialog names e.txt, says git goes on with the files on disk and would leave the edit out, and offers Save All and Continue. Pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where git refuses: e.txt is changed but not committed. The rebase stays where it stopped.",
+        "Local stack › Continue (e.txt not saved) › Save All",
+        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and will say what saved edits still need, and offers Save All. Pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.",
         undefined,
         async () => {
           await exec("ger.rebase.continue")();
           assert.equal(fs.readFileSync(path.join(repo, "e.txt"), "utf8"), "added in the editor\nfrom the amend\n", "e.txt is saved");
-          assert.throws(() => gitRun(["rebase", "--continue"]), Error, "git refuses to go on with e.txt changed and not committed");
+          assert.equal(gerInTerminal(["rebase", "--continue"]), 2, "ger rebase --continue refuses over e.txt changed and not committed");
         },
-        [{ button: "Save All and Continue" }],
+        [{ button: "Save All" }],
         true,
       );
       await inTerminal(
@@ -1088,46 +1097,78 @@ export async function run(): Promise<void> {
           gitRun(["rebase", "--continue"]);
         },
       );
-      await inTerminal(
-        "Settings › ger.closeDiffsOnRebase: on",
-        "The stale diff tab of \"Add e.txt\" closes.",
-        undefined,
-        () => vscode.workspace.getConfiguration("ger").update("closeDiffsOnRebase", true, vscode.ConfigurationTarget.Global),
-        [],
-        true,
-      );
-      await inTerminal("Local stack › click \"Add e.txt\"", "The Change view shows \"Add e.txt\", now HEAD.", undefined, openRow("Add e.txt"), [], true);
-      await inTerminal(
-        "Change › click e.txt under Files",
-        "The diff of e.txt in \"Add e.txt\" opens with your file on its right: you stand on this commit.",
-        undefined,
-        openFile("e.txt"),
-        [],
-        true,
-      );
-      await inTerminal(
-        "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
-        "Local stack says the rebase stopped on a conflict in c.txt. \"Add e.txt\" is still to be replayed, as it was: its diff tab stays open, not stale.",
-        "the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
-        () => gitStops(["rebase", "origin/main"]),
-      );
-      await inTerminal(
-        "you resolve c.txt and git add it",
-        "Nothing is conflicted any more; the rebase is ready to Continue.",
-        undefined,
-        () => {
-          write("c.txt", "file c.txt, from main\namended at the stop\n");
-          gitRun(["add", "c.txt"]);
-        },
-      );
-      await pressAndRun(
-        "Local stack › Continue (ger.closeDiffsOnRebase on)",
-        "Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, \"Add e.txt\" is replayed onto origin/main with a new SHA, and its diff tab closes. The Change view follows \"Add e.txt\" to its new commit.",
-        "the Change view loses \"Add e.txt\" and shows nothing: it follows a rewritten commit by its Change-Id, and this one has none (no issue yet).",
-        "ger.rebase.continue",
-        ["rebase", "--continue"],
-      );
-      await vscode.workspace.getConfiguration("ger").update("closeDiffsOnRebase", undefined, vscode.ConfigurationTarget.Global);
+      try {
+        await inTerminal(
+          "Settings › ger.closeDiffsOnRebase: on",
+          "The stale diff tab of \"Add e.txt\" closes.",
+          undefined,
+          () => vscode.workspace.getConfiguration("ger").update("closeDiffsOnRebase", true, vscode.ConfigurationTarget.Global),
+          [],
+          true,
+        );
+        await inTerminal("Local stack › click \"Add e.txt\"", "The Change view shows \"Add e.txt\", now HEAD.", undefined, openRow("Add e.txt"), [], true);
+        await inTerminal(
+          "Change › click e.txt under Files",
+          "The diff of e.txt in \"Add e.txt\" opens with your file on its right: you stand on this commit.",
+          undefined,
+          openFile("e.txt"),
+          [],
+          true,
+        );
+        const eTxt = vscode.Uri.file(path.join(repo, "e.txt"));
+        await inTerminal(
+          "you type a line at the top of e.txt in that diff, and do not save it",
+          "The diff tab of \"Add e.txt\" has unsaved edits; nothing else changes.",
+          undefined,
+          async () => {
+            const edit = new vscode.WorkspaceEdit();
+            edit.insert(eTxt, new vscode.Position(0, 0), "typed in the diff\n");
+            assert.ok(await vscode.workspace.applyEdit(edit));
+          },
+        );
+        await inTerminal(
+          "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
+          "Local stack says the rebase stopped on a conflict in c.txt. \"Add e.txt\" is still to be replayed, but its diff tab has your file on the right, which is now the worktree of the stopped rebase, not that commit: its title says it is stale. It is not closed, though ger.closeDiffsOnRebase is on: it holds unsaved edits, which are kept.",
+          "the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
+          () => gitStops(["rebase", "origin/main"]),
+        );
+        await inTerminal(
+          "you resolve c.txt and git add it",
+          "Nothing is conflicted any more; the rebase is ready to Continue.",
+          undefined,
+          () => {
+            write("c.txt", "file c.txt, from main\namended at the stop\n");
+            gitRun(["add", "c.txt"]);
+          },
+        );
+        await pressAndRun(
+          "Local stack › Continue (e.txt not saved) › Cancel",
+          "A dialog names e.txt, whose edits are only in the stale diff tab, and offers Save All. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.",
+          undefined,
+          "ger.rebase.continue",
+          undefined,
+          [{ dismiss: true }],
+        );
+        await inTerminal(
+          "you revert e.txt in the stale diff tab (File › Revert File)",
+          "The stale diff tab of \"Add e.txt\" has no unsaved edits any more, so with ger.closeDiffsOnRebase on it closes once the views refresh; the editor of e.txt opened earlier is in front again.",
+          undefined,
+          async () => {
+            await vscode.commands.executeCommand("workbench.action.files.revert");
+            const document = vscode.workspace.textDocuments.find((open) => open.uri.toString() === eTxt.toString());
+            assert.ok(document && !document.isDirty, "e.txt is reverted");
+          },
+        );
+        await pressAndRun(
+          "Local stack › Continue (ger.closeDiffsOnRebase on)",
+          "Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, \"Add e.txt\" is replayed onto origin/main with a new SHA. The Change view follows \"Add e.txt\" to its new commit.",
+          "the Change view loses \"Add e.txt\" and shows nothing: it follows a rewritten commit by its Change-Id, and this one has none (no issue yet).",
+          "ger.rebase.continue",
+          ["rebase", "--continue"],
+        );
+      } finally {
+        await vscode.workspace.getConfiguration("ger").update("closeDiffsOnRebase", undefined, vscode.ConfigurationTarget.Global);
+      }
       fs.rmSync(scratch, { recursive: true, force: true });
     }
 

@@ -83,7 +83,7 @@
           "default": false,
           "scope": "window",
           "order": 5,
-          "markdownDescription": "Close a diff tab opened from the Change view once its commit has been rewritten: a rebase goes on or ends (in the views or in a terminal), an amend, a reorder. Off: the tab stays open, its title marked *stale*, as it still shows the commit as it was. A tab with unsaved edits is never closed."
+          "markdownDescription": "Close a diff tab opened from the Change view once it no longer shows the commit its title names: the commit was rewritten (a rebase goes on or ends, in the views or in a terminal, an amend, a reorder), or, with your file on its right, HEAD moved off it. Off: the tab stays open, its title marked *stale*. A tab with unsaved edits is never closed."
         }
       }
     },

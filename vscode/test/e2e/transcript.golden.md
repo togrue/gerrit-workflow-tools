@@ -1971,16 +1971,18 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right)
 ```
 
-## 90. Local stack › Continue (e.txt not saved) › Save All and Continue
+## 90. Local stack › Continue (e.txt not saved) › Save All
 
-**Expect:** Before anything runs, a dialog names e.txt, says git goes on with the files on disk and would leave the edit out, and offers Save All and Continue. Pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where git refuses: e.txt is changed but not committed. The rebase stays where it stopped.
+**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and will say what saved edits still need, and offers Save All. Pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
 
 ```
-dialog (warning): Save e.txt before the rebase goes on?  [Save All and Continue] [Cancel]
-    detail: e.txt has edits that are not saved. git rebase --continue goes on with the files as they are on disk: it would leave these edits out, and may then change the files under them.
-    → pressed "Save All and Continue"
+dialog (warning): Save e.txt before the rebase goes on?  [Save All] [Cancel]
+    detail: e.txt has edits that are not saved. ger rebase --continue sees only the files on disk: saved, it says what the edits still need before the rebase can go on.
+    → pressed "Save All"
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then continue
+ger terminal | (exit 2)
 (no change)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
@@ -2155,9 +2157,39 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (file on the right, active)
 ```
 
+## Meanwhile: you type a line at the top of e.txt in that diff, and do not save it
+
+**Expect:** The diff tab of "Add e.txt" has unsaved edits; nothing else changes.
+
+```
+(no change)
+--- shown now:
+status bar | $(error) CI failed: 102  $(bell-dot) 1
+stack header | feature → origin/main
+stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
+stack  | test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is below HEAD)
+stack  | (Add e.txt is HEAD)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (editable)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
+change | Comments — none
+change | (the commit shown is HEAD)
+diff tab | e.txt (<sha>) (file on the right, unsaved, active)
+```
+
 ## Meanwhile: you rebase onto origin/main, and "test! temporary experiment" conflicts in c.txt
 
-**Expect:** Local stack says the rebase stopped on a conflict in c.txt. "Add e.txt" is still to be replayed, as it was: its diff tab stays open, not stale.
+**Expect:** Local stack says the rebase stopped on a conflict in c.txt. "Add e.txt" is still to be replayed, but its diff tab has your file on the right, which is now the worktree of the stopped rebase, not that commit: its title says it is stale. It is not closed, though ger.closeDiffsOnRebase is on: it holds unsaved edits, which are kept.
 
 **Today:** the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).
 
@@ -2176,6 +2208,8 @@ diff tab | e.txt (<sha>) (file on the right, active)
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Commit message — Add e.txt  (read-only)
 - change | Commit message — Add e.txt  (editable)
++ editor | e.txt (<sha>) — stale (diff, ger-file ↔ file)
+- editor | e.txt (<sha>) (diff, ger-file ↔ file)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -2199,7 +2233,7 @@ change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
-diff tab | e.txt (<sha>) (file on the right, active)
+diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
 ## Meanwhile: you resolve c.txt and git add it
@@ -2234,12 +2268,77 @@ change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
-diff tab | e.txt (<sha>) (file on the right, active)
+diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 94. Local stack › Continue (ger.closeDiffsOnRebase on)
+## 94. Local stack › Continue (e.txt not saved) › Cancel
 
-**Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA, and its diff tab closes. The Change view follows "Add e.txt" to its new commit.
+**Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and offers Save All. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
+
+```
+dialog (warning): Save e.txt before the rebase goes on?  [Save All] [Cancel]
+    detail: e.txt has edits that are not saved. ger rebase --continue sees only the files on disk: saved, it says what the edits still need before the rebase can go on.
+    → cancelled
+(no change)
+--- shown now:
+status bar | $(error) CI failed: 102  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is HEAD)
+stack  | (test! temporary experiment is only on the branch as it was before)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
+change | Comments — none
+change | (the commit shown is only on the branch as it was before)
+diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
+```
+
+## Meanwhile: you revert e.txt in the stale diff tab (File › Revert File)
+
+**Expect:** The stale diff tab of "Add e.txt" has no unsaved edits any more, so with ger.closeDiffsOnRebase on it closes once the views refresh; the editor of e.txt opened earlier is in front again.
+
+```
++ editor | e.txt (file, line 2)
+- editor | e.txt (<sha>) — stale (diff, ger-file ↔ file)
+--- shown now:
+status bar | $(error) CI failed: 102  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is HEAD)
+stack  | (test! temporary experiment is only on the branch as it was before)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
+change | Comments — none
+change | (the commit shown is only on the branch as it was before)
+```
+
+## 95. Local stack › Continue (ger.closeDiffsOnRebase on)
+
+**Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA. The Change view follows "Add e.txt" to its new commit.
 
 **Today:** the Change view loses "Add e.txt" and shows nothing: it follows a rewritten commit by its Change-Id, and this one has none (no issue yet).
 
@@ -2255,7 +2354,6 @@ status bar message: $(terminal) ger rebase --continue runs in the ger terminal: 
 - stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
 + change | title: (nothing shown)
 + change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
-+ editor | e.txt (file, line 2)
 - change | title: Change
 - change | No Change-Id — not on Gerrit
 - change | Commit message — Add e.txt  (read-only)
@@ -2263,7 +2361,6 @@ status bar message: $(terminal) ger rebase --continue runs in the ger terminal: 
 - change | Files — 1 · +1 −0
 - change |   e.txt — modified +1 −0
 - change | Comments — none
-- editor | e.txt (<sha>) (diff, ger-file ↔ file)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
