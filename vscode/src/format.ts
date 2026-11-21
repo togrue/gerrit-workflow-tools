@@ -53,7 +53,7 @@ export function headlineIcon(headline: Pick<Headline, "reason" | "severity"> | n
 /** What the status bar says of a rebase underway, by why it stopped, around the commit it is at. */
 const REBASE_ITEM: Record<RebaseStop, (what: string) => string> = {
   edit: (what) => `Rebase stopped at ${what}`,
-  split: (what) => `Rebase stopped at ${what}`,
+  split: (what) => `Rebase stopped to split ${what}`,
   conflict: (what) => `Conflict in ${what}`,
   resolved: (what) => `Conflict resolved in ${what}`,
   paused: (what) => `Rebase paused at ${what}`,
@@ -80,7 +80,8 @@ function shortSubject(subject: string): string {
  */
 export function rebaseItem(headline: RebaseHeadline, rebase?: Rebase | null): { text: string; next: string } {
   const { stop, number, subject } = headline;
-  const what = number ? String(number) : subject ? shortSubject(subject) : undefined;
+  // A subject is quoted, so "Conflict in" does not read as naming a file.
+  const what = number ? String(number) : subject ? `"${shortSubject(subject)}"` : undefined;
   const text = !stop ? "Rebase underway" : what ? REBASE_ITEM[stop](what) : stop === "paused" ? "Rebase paused" : "Rebase stopped";
   const unmerged = rebase?.unmerged ?? [];
   const where = unmerged.length === 1 ? ` in ${unmerged[0]}` : unmerged.length ? ` in ${plural(unmerged.length, "file")}` : "";
@@ -216,6 +217,19 @@ export function chainsWithActivity(overview: Overview | undefined, seen: Seen): 
 }
 
 /** `seen`, with first sightings recorded and chains that are gone dropped; `mark` keys count as seen now. */
+/**
+ * Whether a loaded headline is news, and the headline to remember: one seen for the first time,
+ * or after a load you caused, is not news. A rebase is yours, never news, and not remembered, so
+ * the inbox's headline from before it is not news again when it ends.
+ */
+export function headlineNews(last: string | undefined, headline: Headline | undefined, quietly: boolean): { news: boolean; last: string | undefined } {
+  if (headline?.section === "local") {
+    return { news: false, last };
+  }
+  const key = headline ? `${headline.reason}:${headline.number}` : undefined;
+  return { news: quietly && headline !== undefined && key !== last, last: key };
+}
+
 export function rememberSeen(overview: Overview | undefined, seen: Seen, mark: Iterable<string> = []): Seen {
   const marked = new Set(mark);
   const next: Seen = {};

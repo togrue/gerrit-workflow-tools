@@ -47,8 +47,9 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       if (rebase) {
         tooltip.appendText(rebase.next).appendMarkdown("\n\n");
       }
+      // How urgent, core says: failed CI and a conflict are errors, another rebase stop a warning.
       item.backgroundColor =
-        headline?.reason === "ci-failed"
+        headline?.severity === "error"
           ? new vscode.ThemeColor("statusBarItem.errorBackground")
           : rebase
             ? new vscode.ThemeColor("statusBarItem.warningBackground")

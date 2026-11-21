@@ -93,7 +93,8 @@ def _rebase_headline_text(headline: RebaseHeadline) -> str:
     commit, stop = headline.commit, headline.stop
     if commit is None:
         return "Rebase paused" if stop is RebaseStop.PAUSED else "Rebase stopped" if stop else "Rebase underway"
-    what = f"{commit.number}: {commit.summary}" if commit.number else commit.summary
+    # A subject alone is quoted, so "Conflict in" does not read as naming a file.
+    what = f"{commit.number}: {commit.summary}" if commit.number else f'"{commit.summary}"'
     return (_REBASE_STOPS[stop] if stop else "Rebase underway at {}").format(what)
 
 

@@ -254,7 +254,7 @@ def overview(ctx: Context, req: Request) -> dict[str, Any]:
     inbox = _soft(partial(_inbox, ctx, req, current=set(sha_by_change), rebase=rebase), lambda failure: failure)
     if "error" in inbox and rebase is not None:
         # The inbox could not be read; a rebase underway still leads.
-        inbox["headline"] = headline_json(pick_headline([], rebase=rebase))
+        inbox["headline"] = headline_json(rebase)
     for section in inbox.get("sections", []):
         for chain in section["chains"]:
             for member in chain["members"]:

@@ -16,9 +16,11 @@ Failed CI counts only on the chain of your local stack, and the item then just s
 *CI failed:* and the change number; the tooltip has the change's subject. A bell
 with a count appears when chains had activity since you last looked. Click to open the change.
 While a rebase is underway (a `ger edit`, a conflict, also one you started in a terminal), the item
-shows that instead, as ger serve's headline does (and so does the first row of *Review chains*): *Rebase stopped at 101*, *Conflict in 103*,
-*Conflict resolved in 103*, *Rebase paused*, or *Rebase underway* when it cannot tell why it
-stopped — the change number when the commit is on Gerrit, else its subject. The tooltip says
+shows that instead, as ger serve's headline does (and so does the first row of *Review chains*): *Rebase stopped at 101*,
+*Rebase stopped to split 101*, *Conflict in 103*, *Conflict resolved in 103*, *Rebase paused*, *Rebase stopped* when the
+commit it stopped at was reset away, or *Rebase underway* when it cannot tell why it stopped — the change number when the
+commit is on Gerrit, else its subject in quotes. A conflict is shown in the error colour, another stop as a warning. The
+index is watched while a rebase is stopped, so a `git add` that resolves the last conflict shows at once. The tooltip says
 what to do next (amend, resolve and `git add`, `git rebase --continue` or `--abort`); a click
 opens *Local stack*. When the rebase ends, the item goes back to the headline.
 When a refresh fails, whether it ran in the background or you pressed *Refresh* (Gerrit unreachable, `ger serve` stopped
