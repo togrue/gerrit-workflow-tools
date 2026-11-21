@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Callable
-
 from gerrit_workflow_tools.cli_style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -25,6 +22,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
+from gerrit_workflow_tools.render.suggested_fixes import fixes_markdown, shown_fixes
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
@@ -115,36 +113,6 @@ def format_pending_drafts(heading: str, chains: list[CommentChain]) -> list[str]
     return lines
 
 
-def _shown_fixes(
-    edits: tuple[SuggestedEdit, ...], *, where: Callable[[str], str] = str
-) -> list[tuple[str, list[tuple[str, list[str]]]]]:
-    """The Gerrit fix suggestions of *edits*, as each renderer writes them out below a comment.
-
-    One ``(description, replacements)`` per fix; each replacement is what it does, its
-    location passed through *where*, and the lines it writes (none for a delete). A
-    ``suggestion`` block of the comment's text is left out: its message already shows it.
-    """
-    shown: list[tuple[str, list[tuple[str, list[str]]]]] = []
-    for edit in edits:
-        if edit.in_message:
-            continue
-        parts: list[tuple[str, list[str]]] = []
-        for rep in edit.replacements:
-            location = where(rep.describe())
-            if not rep.replacement:
-                parts.append((f"{location}: delete", []))
-            else:
-                parts.append((f"insert at {location}:" if rep.inserts else f"{location} becomes:", rep.lines()))
-        shown.append((edit.description, parts))
-    return shown
-
-
-def _code_fence(lines: list[str]) -> str:
-    """A Markdown fence longer than any run of backticks in *lines*, so none of them closes it."""
-    longest = max((len(run) for ln in lines for run in re.findall(r"`+", ln)), default=0)
-    return "`" * max(3, longest + 1)
-
-
 def _box_border(text: str, *, resolved: bool) -> str:
     return color_text(text, ANSI_DIM_GRAY if resolved else ANSI_YELLOW)
 
@@ -210,7 +178,7 @@ def _box_content_rows(
                     rows.append(color_text(part, ANSI_DIM))
             for ln in row_item.message.splitlines() or [""]:
                 rows.extend(_prefixed_wrap(ln, width, prefix="  "))
-        for description, parts in _shown_fixes(row_item.suggested_edits):
+        for description, parts in shown_fixes(row_item.suggested_edits):
             heading = f"suggested fix: {description}" if description else "suggested fix:"
             rows.extend(color_text(part, ANSI_GREEN) for part in _prefixed_wrap(heading, width, prefix="  "))
             for what, code in parts:
@@ -314,16 +282,7 @@ def format_comment_chain_markdown(
 
 def _fix_suggestions_markdown(edits: tuple[SuggestedEdit, ...]) -> list[str]:
     """The Gerrit fix suggestions in *edits*, quoted under the comment, each replacement fenced."""
-    lines: list[str] = []
-    for description, parts in _shown_fixes(edits, where=lambda location: f"`{location}`"):
-        lines.append(">")
-        lines.append(f"> **Suggested fix:** {description}".rstrip())
-        for what, code in parts:
-            lines.append(f"> {what}")
-            if code:
-                fence = _code_fence(code)
-                lines.extend([f"> {fence}", *(f"> {text}".rstrip() for text in code), f"> {fence}"])
-    return lines
+    return [line for fix in fixes_markdown(edits) for line in (">", *(f"> {text}".rstrip() for text in fix))]
 
 
 def format_unresolved_section_human(
