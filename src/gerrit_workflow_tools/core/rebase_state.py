@@ -137,23 +137,33 @@ def edit_stop_next_step(walk_on: str) -> str:
     return f"amend it, then `git rebase --continue` to finish{_walks_on(walk_on)}"
 
 
-def staged_submodule_refusal(cwd: Path | str | None) -> str | None:
-    """Why rewriting cannot start over a submodule staged at another commit, or ``None``.
+def _then(rerun: str | None) -> str:
+    return f", then run {rerun} again" if rerun else " first"
 
-    The interactive rebase does not check for it before it starts (its own check leaves
-    submodules out), so it would start and then stop at its first commit with the rebase underway
-    ("your local changes would be overwritten"); an ``edit`` stop it did reach would take the staged
-    gitlink into the commit being amended. Alone, it is also nothing ``git stash`` saves, so it
-    cannot pass as uncommitted changes to stash.
+
+def staged_submodule_refusal(cwd: Path | str | None, base: str = "HEAD", *, rerun: str | None = None) -> str | None:
+    """Why ger cannot go on over a submodule staged at another commit than *base* records, or ``None``.
+
+    The one wording for it. *rerun* names the command to run again; without it, the refusal is a
+    history rewrite's. The interactive rebase does not check for it before it starts (its own check
+    leaves submodules out), so it would start and then stop at its first commit with the rebase
+    underway ("your local changes would be overwritten"); an ``edit`` stop it did reach would take
+    the staged gitlink into the commit being amended. Alone, it is also nothing ``git stash``
+    saves, so it cannot pass as uncommitted changes to stash.
+
+    When *base* is not ``HEAD`` (a staged ``ger review``: the index holds *base*, ``HEAD`` its
+    parent), committing would commit the review too, so only the unstage step is given.
     """
-    paths = staged_submodules(cwd)
+    paths = staged_submodules(cwd, base)
     if not paths:
         return None
-    unstage = "git restore --staged " + " ".join(shlex.quote(path) for path in paths)
-    return (
-        f"the submodule commit staged for {', '.join(paths)} is not committed; commit it or `{unstage}` "
-        "first (a rebase would stop on it, or fold it into the commit it stops at)"
-    )
+    source = "" if base == "HEAD" else f" --source={base[:12]}"
+    unstage = f"git restore --staged{source} " + " ".join(shlex.quote(path) for path in paths)
+    staged = f"the submodule commit staged for {', '.join(paths)}"
+    if base != "HEAD":
+        return f"{staged} is not the one {base[:12]} records; `{unstage}`{_then(rerun)}"
+    why = "" if rerun else " (a rebase would stop on it, or fold it into the commit it stops at)"
+    return f"{staged} is not committed; commit it or `{unstage}`{_then(rerun)}{why}"
 
 
 def uncommitted_changes_refusal(cwd: Path | str | None) -> str | None:

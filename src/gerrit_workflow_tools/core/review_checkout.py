@@ -7,7 +7,6 @@ runs git and keeps ``<git dir>/ger/review.json``, so it never needs a network.
 from __future__ import annotations
 
 import json
-import shlex
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -15,7 +14,8 @@ from typing import Any, Literal
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_patchset
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
-from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel, staged_submodules
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel
+from gerrit_workflow_tools.core.rebase_state import staged_submodule_refusal
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 from gerrit_workflow_tools.core.usage import UsageError
 
@@ -168,7 +168,7 @@ def own_edits(worktree: Path | str, state: ReviewState | None) -> list[str]:
 
     Anything in the index or working tree that the base does not have is yours. Submodules are
     left out, as ``git stash`` leaves them out: switching and rebasing leave a submodule's own
-    state alone (a submodule staged at another commit is :func:`staged_submodules`).
+    state alone (a submodule staged at another commit is :func:`staged_submodule_refusal`).
     """
     base = _edits_base(state)
     if commit_sha_or_none(worktree, base) is None:
@@ -191,13 +191,10 @@ def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: 
             f"commit or stash them (git stash), then run {rerun} again"
         )
     base = _edits_base(state)
-    if commit_sha_or_none(worktree, base) is not None and (paths := staged_submodules(worktree, base)):
-        source = "" if base == "HEAD" else f" --source={base[:12]}"
-        unstage = f"git restore --staged{source} " + " ".join(shlex.quote(path) for path in paths)
-        raise UsageError(
-            f"the submodule commit staged for {', '.join(paths)} is not committed: "
-            f"commit it or `{unstage}`, then run {rerun} again"
-        )
+    if commit_sha_or_none(worktree, base) is not None and (
+        refusal := staged_submodule_refusal(worktree, base, rerun=rerun)
+    ):
+        raise UsageError(refusal)
 
 
 def _commits_not_in(worktree: Path | str, tip: str, *bases: str) -> list[str]:
