@@ -71,10 +71,14 @@ The commits above your upstream, newest first. One row per commit:
   commit below** (keeping either message — never both, so there is always exactly one
   Change-Id), **Drop**, **Copy Change-Id** and **Copy SHA** (of every selected row, one
   per line). Every rewrite offers **Undo** right after.
-- **During a rebase** (a `ger edit`, a conflict) the view shows the branch as it was before it,
-  with a **marker** on the commit the rebase stopped at; commits still to be replayed are
-  **dimmed**. Stopped on a conflict, the marked commit is dimmed too: it is not applied yet.
-  Nothing can be moved until the rebase is finished or aborted.
+- **During a rebase** (a `ger edit`, a conflict) the view shows the stack as the rebase has it
+  so far, as `ger log` does: the commits it replayed, and the one it stopped at once applied,
+  as they are now (an amend shows at once, with its new id and HEAD); a **marker** on the
+  commit it stopped at; the commits still to be replayed **dimmed**, as they were. The header
+  names the branch being rebased (`feature (rebasing) → origin/main`). Stopped on a conflict,
+  the marked commit is dimmed too: it is not applied yet; once the conflicts are resolved and
+  added, the banner says it is ready to continue. Nothing can be moved until the rebase is
+  finished or aborted.
 - **A merge commit** in the stack is one row, with a merge icon and marked *merge*, however
   many commits it brings in: those are not part of the stack (as on Gerrit) and are never read.
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where

@@ -4,10 +4,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CommentChain, StackCommit } from "../src/api";
+import { CommentChain, Rebase, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
+import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -67,17 +67,36 @@ test("the stack shows newest first, with HEAD and what push would hold back", ()
   assert.deepEqual(stackLines(vm), ["Three — HEAD · three00 · not on Gerrit", "Two — two0000 · held back · the same as on Gerrit", "One — one0000 · the same as on Gerrit"]);
 });
 
-test("mid-rebase the stack marks where it stands and dims what is not replayed yet", () => {
-  const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current" }), commit("Three", { rebase: "todo" })];
-  const stopped = stackVm(stack(commits, { rebase_in_progress: true, rebase: { applied: true } }), undefined, never);
+const REBASE: Rebase = { branch: "feature", onto: "base000", orig_head: "three00", stop: "edit", applied: true, current: "two0000", unmerged: [] };
+
+test("mid-rebase the stack marks where it stands and dims only what is still to be replayed", () => {
+  const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current", is_head: true }), commit("Three", { rebase: "todo" })];
+  const stopped = stackVm(stack(commits, { branch: null, rebase_in_progress: true, rebase: REBASE }), undefined, never);
   assert.deepEqual(stopped.rows.map((row) => [row.summary, row.marker, row.dim]), [["Three", null, true], ["Two", "rebase", false], ["One", null, false]]);
   assert.match(stopped.frozen ?? "", /rebase is in progress/);
-  assert.equal(stopped.info[0].text, "A rebase is in progress");
+  assert.deepEqual([stopped.info[0].text, stopped.info[0].detail], ["A rebase is in progress", undefined], "the stack is the live one: nothing is as it was");
+  assert.equal(stackLines(stopped)[2], "▶ Two — HEAD · two0000 · the same as on Gerrit");
   // On a conflict the commit it stopped at is only partly there: marked, and dim.
-  const conflict = stackVm(stack(commits, { rebase_in_progress: true, rebase: { applied: false } }), undefined, never);
+  const conflict = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["e.txt"] } }), undefined, never);
   assert.deepEqual([conflict.rows[1].marker, conflict.rows[1].dim], ["conflict", true]);
   assert.equal(conflict.info[0].text, "A rebase stopped on a conflict");
-  assert.equal(stackLines(conflict)[2], "▶! Two — two0000 · the same as on Gerrit  (dim)");
+  // Resolved and added: no conflict any more, ready to continue.
+  const resolved = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "resolved", applied: false } }), undefined, never);
+  assert.deepEqual([resolved.rows[1].marker, resolved.rows[1].dim], ["rebase", false]);
+  assert.deepEqual([resolved.info[0].text, resolved.info[0].detail], ["A rebase stopped with its conflicts resolved", "ready to continue"]);
+  assert.match(resolved.rows[1].tooltip, /now resolved: git rebase --continue commits it/);
+});
+
+test("a rebase that says nothing of its commits shows the branch as it was, and says so", () => {
+  const vm = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "paused", current: null } }), undefined, never);
+  assert.equal(vm.info[0].detail, "this is the branch as it was before");
+});
+
+test("the header names the branch being rebased", () => {
+  assert.equal(stackWhere(stack([commit("One")], { branch: "feature" })), "feature → origin/main");
+  assert.equal(stackWhere(stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: REBASE })), "feature (rebasing) → origin/main");
+  assert.equal(stackWhere(stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: { ...REBASE, branch: null } })), "detached (rebasing) → origin/main");
+  assert.equal(stackWhere(stack([commit("One")], { branch: null })), "detached → origin/main");
 });
 
 test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {

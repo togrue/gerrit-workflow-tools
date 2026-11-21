@@ -182,10 +182,28 @@ export interface StackVm {
   movable: number;
 }
 
+/** Where a rebase stopped, in the row's tooltip: why, by core's verdict. */
 export const MARKER_WORDS = {
   rebase: "The rebase stopped here, with this commit applied.",
   conflict: "The rebase stopped here on a conflict: this commit is not applied yet.",
+  resolved: "The rebase stopped here on a conflict, now resolved: git rebase --continue commits it.",
 };
+
+/** The banner above a stack a rebase is underway on. */
+export const REBASE_WORDS = {
+  progress: "A rebase is in progress",
+  conflict: "A rebase stopped on a conflict",
+  resolved: "A rebase stopped with its conflicts resolved",
+  ready: "ready to continue",
+  asBefore: "this is the branch as it was before",
+  tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Finish with git rebase --continue, or go back with git rebase --abort.",
+};
+
+/** The view's header: the branch, or the one being rebased, and where its stack starts. */
+export function stackWhere(stack: Stack): string {
+  const branch = stack.rebase ? `${stack.rebase.branch ?? "detached"} (rebasing)` : (stack.branch ?? "detached");
+  return `${branch} → ${stack.stack.target_branch}`;
+}
 
 export const MERGE_WORDS = "A merge commit: the commits it brings in are not part of the stack, and are not listed.";
 
@@ -205,7 +223,8 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   const isPinned = index < pinnedBelow;
   const state = sync(commit);
   const stopped = commit.rebase === "current";
-  const conflict = stopped && stack.rebase?.applied === false;
+  const conflict = stopped && stack.rebase?.stop === "conflict";
+  const resolved = stopped && stack.rebase?.stop === "resolved";
   const marker = stopped ? (conflict ? "conflict" : "rebase") : null;
   const up = above && conflicts(commit.sha, above.sha);
   const down = below && conflicts(below.sha, commit.sha);
@@ -214,7 +233,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
     reasonWords(commit.attention_reasons) || "no open issues",
-    marker ? MARKER_WORDS[marker] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
+    marker ? MARKER_WORDS[resolved ? "resolved" : marker] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
     commit.merge ? MERGE_WORDS : "",
     isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",
@@ -288,13 +307,15 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   }
   const info: StackInfo[] = [];
   if (local.rebase_in_progress) {
-    const conflict = local.rebase?.applied === false;
+    const stop = local.rebase?.stop;
+    // A rebase that keeps no todo (git am's) says nothing of its commits: core serves the branch as it was.
+    const live = local.commits.some((commit) => commit.rebase);
     info.push({
-      text: conflict ? "A rebase stopped on a conflict" : "A rebase is in progress",
-      detail: "this is the branch as it was before",
+      text: stop === "conflict" ? REBASE_WORDS.conflict : stop === "resolved" ? REBASE_WORDS.resolved : REBASE_WORDS.progress,
+      detail: stop === "resolved" ? REBASE_WORDS.ready : live ? undefined : REBASE_WORDS.asBefore,
       icon: "warning",
       tone: "warn",
-      tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet. Finish with git rebase --continue, or go back with git rebase --abort.",
+      tooltip: REBASE_WORDS.tooltip,
     });
   }
   if (!local.commits.length) {

@@ -891,13 +891,13 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you start ger edit's rebase on \"test! temporary experiment\", and it stops there",
         "Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, \"Add e.txt\" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.",
-        "the banner has no buttons (#56); the header reads detached (#57); the status bar still shows the headline (#62).",
+        "the banner has no buttons (#56); the status bar still shows the headline (#62).",
         () => editAt("test! temporary experiment"),
       );
       await inTerminal(
         "you add a line to c.txt and amend the stopped commit",
         "The stopped commit shows what it is now: a new SHA, HEAD, changed here since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.",
-        "Local stack shows the commit as before the amend: its old SHA, the same as on Gerrit, and no HEAD row at all; the Change view stays on the old commit (#57).",
+        undefined,
         () => {
           write("c.txt", "file c.txt\namended at the stop\n");
           gitRun(["commit", "-q", "--amend", "--no-edit", "-a"]);
@@ -914,7 +914,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you stop at \"Refactor parser init\" the same way, and amend it to also add e.txt",
         "Local stack marks the rebase stopped at that commit, which shows its new code (changed here since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
-        "the row keeps its old SHA, the same as on Gerrit, and no row is HEAD (#57); the Change view shows the commit as it was before (#57); the header reads detached (#57); no Continue or Abort (#56); the status bar still shows the headline (#62).",
+        "no Continue or Abort (#56); the status bar still shows the headline (#62).",
         () => {
           editAt("Refactor parser init");
           write("e.txt", "from the amend\n");
@@ -925,13 +925,13 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
         "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
-        "no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the commits below keep their SHAs from before the rebase, and the Change view shows the commit as it was before (#57); the header reads detached (#57); the status bar still shows the headline (#62).",
+        "no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "--continue"]),
       );
       await inTerminal(
         "you resolve e.txt and git add it",
         "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue.",
-        "nothing changes: it still says the rebase stopped on a conflict (no issue yet; the conflicted files of #56 would make it visible).",
+        "no list of conflicted files for e.txt to leave, and no Continue (#56).",
         () => {
           write("e.txt", "from the amend\nfrom the terminal\n");
           gitRun(["add", "e.txt"]);
@@ -963,7 +963,7 @@ export async function run(): Promise<void> {
       await inTerminal(
         "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
         "Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
-        "no conflicted file and no buttons (#56); the commits below keep their SHAs from before the rebase (#57); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the header reads detached (#57); the status bar still shows the headline (#62).",
+        "no conflicted file and no buttons (#56); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).",
         () => gitStops(["rebase", "origin/main"]),
       );
       await inTerminal(

@@ -154,12 +154,31 @@ export interface StackCommit extends CommitStatus {
   rebase?: "done" | "current" | "todo" | null;
 }
 
+/** Why a rebase underway is stopped: core's verdict, the shell's words. */
+export type RebaseStop = "edit" | "conflict" | "resolved" | "paused";
+
+/** A rebase underway, as `GET /stack` serves it. */
+export interface Rebase {
+  /** The branch being rebased; null for a detached HEAD's. */
+  branch: string | null;
+  onto: string | null;
+  orig_head: string | null;
+  stop: RebaseStop;
+  /** False while the commit it stopped at is only partly there (a conflict, resolved or not). */
+  applied: boolean;
+  /** The commit it stopped at, as the stack shows it. */
+  current: string | null;
+  /** Paths the index still holds as unresolved conflicts. */
+  unmerged: string[];
+}
+
 export interface Stack {
+  /** The branch checked out: null while a rebase runs (see `rebase.branch`). */
   branch: string | null;
   head: string | null;
   rebase_in_progress: boolean;
-  /** With a rebase underway: `applied` is false while the commit it stopped at is only partly there (a conflict). */
-  rebase?: { applied: boolean } | null;
+  /** The rebase underway; the stack is then as the rebase has it so far, the rest as it was. */
+  rebase?: Rebase | null;
   stack: { project: string; target_branch: string; push_branch: string };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
   commits: StackCommit[];
