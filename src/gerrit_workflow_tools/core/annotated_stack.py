@@ -29,7 +29,8 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.rebase_state import RebasingStack, load_rebasing_stack, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import rebase_progress
+from gerrit_workflow_tools.core.rebasing_stack import RebasingStack, load_rebasing_stack
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
 

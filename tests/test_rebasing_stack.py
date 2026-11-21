@@ -13,7 +13,8 @@ from gerrit_workflow_tools.core.annotated_stack import AnnotatedStack, load_anno
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.rebase_state import RebaseStep, RebaseStop
+from gerrit_workflow_tools.core.rebase_state import RebaseStop
+from gerrit_workflow_tools.core.rebasing_stack import RebaseStep
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server.api import GerApi
 from tests.change_store import ChangeStore
