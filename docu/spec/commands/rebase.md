@@ -49,6 +49,13 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 
 Editor: enricher delegates to `GREBASE_EDITOR` / `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`, first set wins. `GREBASE_EDITOR` edits only the todo (git's own editor, e.g. for a `squash` message, still comes from `GIT_EDITOR` onwards). Without a terminal (stdin not a TTY: scripts, agents) ger sets `GIT_EDITOR=true`, so unless `GREBASE_EDITOR` is set no editor opens: the todo runs as annotated, so `--autosquash` and `--drop-merged-equivalent` run unattended. A script that wants to edit the todo sets `GREBASE_EDITOR`.
 
+Without a terminal, the two ways ger runs a rebase set `GIT_EDITOR` differently:
+
+| | `GIT_EDITOR` without a terminal |
+|--|--|
+| `ger rebase [REV]` (runs the todo) | always `true`: a `GIT_EDITOR` the caller set is overridden; `GREBASE_EDITOR` still edits the todo |
+| `ger rebase --continue` / `--skip`, `ger edit -n` | `true` only when the caller set none: a caller's `GIT_EDITOR` writes the messages |
+
 ### Going on with a rebase underway
 
 `--continue`, `--abort` and `--skip` act on the rebase underway, whoever started it, and take no
@@ -66,10 +73,11 @@ instead). Each refusal exits `2` and changes nothing:
   away what is not committed. The ways on a stop allows are core's one verdict, served on
   `GET /stack` as `rebase.actions` ([serve.md](serve.md#get-stack)).
 
-Without a terminal, `--continue` and `--skip` set `GIT_EDITOR=true` unless `GIT_EDITOR` is set: a
-resolved conflict is committed with its message as it is, and so is any later `reword` or
-`squash` message in the todo. A script that wants to write those sets `GIT_EDITOR`. `ger edit -n`
-goes on the same way. A stop on the next conflict ends with the shared next step, as below.
+Without a terminal, `--continue` and `--skip` set `GIT_EDITOR=true` unless `GIT_EDITOR` is set
+(unlike the todo run above, which sets it always): a resolved conflict is committed with its
+message as it is, and so is any later `reword` or `squash` message in the todo. A script that
+wants to write those sets `GIT_EDITOR`. `ger edit -n` goes on the same way. A stop on the next
+conflict ends with the shared next step, as below.
 
 A rebase that stops on a conflict ends with the shared next step ([edit.md](edit.md#behavior)): resolve the paths, `git add` them, then `git rebase --continue`, or `git rebase --abort`.
 
