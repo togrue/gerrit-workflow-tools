@@ -293,8 +293,8 @@ fingerprints of its **introduced findings**. It is `null` where that cannot be t
 commit is not on Gerrit or is ahead of the patchset CI ran on, or its parent's CI log could
 not be fetched. A single `rev` without `chain=1` never gets `ci_introduced`: without its parent
 there is nothing to compare with. A commit's entry turns on its parent alone, so a client after
-one commit's asks for `rev=<parent>&rev=<commit>&chain=1` (the chain's base alone, with
-`chain=1`, is compared with the target branch), not the whole chain: every other commit adds its
+one commit's asks for `rev=<parent>&rev=<commit>&chain=1` (for the chain's base alone, with
+`chain=1`, its parent, the target branch, is taken as clean), not the whole chain: every other commit adds its
 build logs and its comments to the answer.
 
 ### `GET /diff?rev=<changeish>`

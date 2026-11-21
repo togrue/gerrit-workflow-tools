@@ -472,9 +472,9 @@ export class ChangeView extends WebView<ChangeVm> {
     }
     const client = await this.model.client();
     // Introduced findings need the parent: ask for it and this change, not the whole chain.
-    const { revs, chain } = ciRevs(target, this.model.stack);
-    const commits = await client.show(revs, { ci: true, chain });
-    const commit = commits[commits.length - 1];
+    const { revs, chain, stack } = ciRevs(target, this.model.stack);
+    const commits = await client.show(revs, { ci: true, chain, stack });
+    const commit = stack ? commits.find((c) => c.sha === target.rev) : commits[commits.length - 1];
     const introduced = commit?.ci_introduced;
     return { state: "loaded", contents: commit?.ci_content ?? [], introduced: introduced ? new Set(introduced) : null };
   }
