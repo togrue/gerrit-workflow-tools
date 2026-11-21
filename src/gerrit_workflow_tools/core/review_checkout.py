@@ -15,7 +15,8 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_patchset
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel
-from gerrit_workflow_tools.core.rebase_state import staged_submodule_refusal
+from gerrit_workflow_tools.core.rebase_state import submodule_refusal
+from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 from gerrit_workflow_tools.core.usage import UsageError
 
@@ -158,42 +159,22 @@ def ensure_review_worktree(cwd: Path | str, path: Path, commit: str) -> None:
     git("worktree", "add", "--detach", str(path), commit, cwd=cwd)
 
 
-def _edits_base(state: ReviewState | None) -> str:
-    """What the index and working tree are compared with. Staged, the index may hold exactly the change."""
-    return state.commit if state is not None and state.staged else "HEAD"
-
-
-def own_edits(worktree: Path | str, state: ReviewState | None) -> list[str]:
-    """Tracked files whose content is not the review's: your edits. Untracked files never count.
-
-    Anything in the index or working tree that the base does not have is yours. Submodules are
-    left out, as ``git stash`` leaves them out: switching and rebasing leave a submodule's own
-    state alone (a submodule staged at another commit is :func:`staged_submodule_refusal`).
-    """
-    base = _edits_base(state)
-    if commit_sha_or_none(worktree, base) is None:
-        return []
-    ignore = "--ignore-submodules=all"
-    names = set(git_out("diff", "--name-only", ignore, base, cwd=worktree).splitlines())
-    names |= set(git_out("diff", "--cached", "--name-only", ignore, base, cwd=worktree).splitlines())
-    return sorted(name for name in names if name)
-
-
 def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: str) -> None:
     """Stop while the worktree holds edits of yours: a state you fix, then rerun (``USAGE``).
 
-    A submodule staged at another commit stops it too, with its own message: ``git stash``
-    does not save it, and switching would carry it along or a rebase stop on it.
+    Yours is what the index and work tree hold that the base does not: ``HEAD``, or the change
+    while it is staged (the index may hold exactly the change). Untracked files never count, nor
+    does a submodule's own state, which switching and rebasing leave alone. A submodule change
+    ``git stash`` does not save stops it with its own message (:func:`submodule_refusal`).
     """
-    if edits := own_edits(worktree, state):
+    base = state.commit if state is not None and state.staged else "HEAD"
+    changes = tracked_changes(worktree, base)
+    if changes.files:
         raise UsageError(
-            f"your working tree has changes to tracked files ({', '.join(edits)}): "
+            f"your working tree has changes to tracked files ({', '.join(changes.files)}): "
             f"commit or stash them (git stash), then run {rerun} again"
         )
-    base = _edits_base(state)
-    if commit_sha_or_none(worktree, base) is not None and (
-        refusal := staged_submodule_refusal(worktree, base, rerun=rerun)
-    ):
+    if refusal := submodule_refusal(worktree, base, rerun=rerun, changes=changes):
         raise UsageError(refusal)
 
 

@@ -29,11 +29,12 @@ from gerrit_workflow_tools.core.git_state import checked_out_branch_name
 from gerrit_workflow_tools.core.rebase_state import (
     rebase_in_progress,
     rebase_refusal,
-    staged_submodule_refusal,
+    submodule_refusal,
     uncommitted_changes_refusal,
 )
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
+from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 
 
 TODO_ENV = "GER_REORDER_TODO"
@@ -94,12 +95,14 @@ def refuse_unless_on_the_branch(cwd: Path | str) -> None:
 def _refuse_unless_ready(cwd: Path | str, *, autostash: bool) -> None:
     if refusal := rebase_refusal(cwd):
         raise ReorderRefusal(refusal)
-    # Asked before uncommitted changes, and whatever autostash says: alone, it is nothing the
-    # autostash saves. With other tracked changes the autostash would save it with the index, but
-    # what the replay and the unstash make of it is not pinned down, so it is refused all the same.
-    if refusal := staged_submodule_refusal(cwd):
+    # Asked before uncommitted changes, and whatever autostash says: alone, a submodule change is
+    # nothing the autostash saves. With other tracked changes the autostash would save a staged one
+    # with the index, but what the replay and the unstash make of it is not pinned down, so it is
+    # refused all the same.
+    changes = tracked_changes(cwd)
+    if refusal := submodule_refusal(cwd, changes=changes):
         raise ReorderRefusal(refusal)
-    if not autostash and (refusal := uncommitted_changes_refusal(cwd)):
+    if not autostash and (refusal := uncommitted_changes_refusal(cwd, changes)):
         raise UncommittedChanges(refusal)
 
 
