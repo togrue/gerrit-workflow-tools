@@ -24,8 +24,8 @@ from gerrit_workflow_tools.cli_rebase import main as rebase_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.rebase_state import history_rewrite_refusal
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, UncommittedChanges, rewrite_stack
+from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from tests.change_store import ChangeStore
 from tests.conftest import run_cli

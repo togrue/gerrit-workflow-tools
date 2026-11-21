@@ -17,8 +17,8 @@ from gerrit_workflow_tools.core.rebase_state import (
     RebaseAction,
     conflict_next_step,
     go_on_refusal,
-    history_rewrite_refusal,
 )
+from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 

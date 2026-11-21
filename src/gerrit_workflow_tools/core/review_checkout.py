@@ -15,7 +15,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_patchset
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel
-from gerrit_workflow_tools.core.rebase_state import submodule_refusal
+from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 from gerrit_workflow_tools.core.usage import UsageError

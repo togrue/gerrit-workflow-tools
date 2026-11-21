@@ -26,12 +26,9 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
-from gerrit_workflow_tools.core.rebase_state import (
-    rebase_refusal,
-    submodule_refusal,
-    uncommitted_changes_refusal,
-)
+from gerrit_workflow_tools.core.rebase_state import rebase_refusal
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
+from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal, uncommitted_changes_refusal
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 
