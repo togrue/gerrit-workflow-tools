@@ -29,6 +29,7 @@ export function memberStatus(member: Member): RowStatus {
     last_pushed_votes: null,
     work_in_progress: member.attention_reasons.includes("wip"),
     attention_reasons: member.attention_reasons,
+    severity: member.severity,
     change_status: "NEW",
     updated: null,
   };

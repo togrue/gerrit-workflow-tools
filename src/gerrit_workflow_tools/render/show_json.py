@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from gerrit_workflow_tools.core.attention import attention_severity
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.comment_write import ChangedComment, WrittenComment
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -109,6 +110,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "work_in_progress": commit.wip,
         "private": commit.private,
         "attention_reasons": commit.attention_reasons,
+        "severity": attention_severity(commit.attention_reasons).value,
         "change_status": commit.change_status,
         "merged_equivalent": commit.merged_equivalent,
     }

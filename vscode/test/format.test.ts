@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { test } from "node:test";
 
 import { Chain, CommitStatus, EventsStatus, Overview } from "../src/api";
@@ -22,12 +24,13 @@ import {
   reviewOpened,
   rememberSeen,
   sentence,
-  severity,
   sortedChains,
   swapKey,
   vote,
   votes,
+  WORDED_REASONS,
 } from "../src/format";
+import { attended } from "./fixtures";
 
 function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): Chain {
   return {
@@ -43,10 +46,10 @@ function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): C
     verified: 1,
     code_review: null,
     comments_unresolved: 2,
-    attention_reasons: [],
     partial_chain: false,
     members: [],
     ...extra,
+    ...attended(extra.attention_reasons ?? []),
   };
 }
 
@@ -54,27 +57,30 @@ function overview(...chains: Chain[]): Overview {
   return { host: "g", sections: [{ name: "to-review", query: "", summary: {}, chains }], local: { error: { code: "GIT", message: "" } } };
 }
 
-test("severity takes the most urgent reason", () => {
-  assert.equal(severity(["awaiting-review", "ci-failed", "unresolved-comments"]), "error");
-  assert.equal(severity(["awaiting-review", "unresolved-comments"]), "warning");
-  assert.equal(severity(["not-pushed"]), "pending");
-  assert.equal(severity([]), "ok");
-  assert.deepEqual(attentionIcon(["review-issues"]), { icon: "warning", severity: "warning" });
-  assert.deepEqual(attentionIcon(["review-issues", "unresolved-comments"]), { icon: "comment-unresolved", severity: "warning" });
-  assert.deepEqual(attentionIcon(["ci-failed", "unresolved-comments"]), { icon: "error", severity: "error" });
+test("the icon follows the severity core gave; unresolved comments draw the comment bubble only as a warning", () => {
+  assert.deepEqual(attentionIcon(attended(["review-issues"])), { icon: "warning", severity: "warning" });
+  assert.deepEqual(attentionIcon(attended(["review-issues", "unresolved-comments"])), { icon: "comment-unresolved", severity: "warning" });
+  assert.deepEqual(attentionIcon(attended(["ci-failed", "unresolved-comments"])), { icon: "error", severity: "error" });
+  assert.deepEqual(attentionIcon(attended(["not-pushed"])), { icon: "clock", severity: "pending" });
+  assert.deepEqual(attentionIcon(attended([])), { icon: "pass", severity: "ok" });
+});
+
+test("every attention reason core names has words", () => {
+  const core = Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "test", "attention.json"), "utf8")));
+  assert.deepEqual([...WORDED_REASONS].sort(), core.sort());
 });
 
 // A4: the status bar drew a comment bubble for "Negative vote on 123", which has no comment.
 test("the status bar's headline icon is the one its reason gets in Review chains", () => {
-  const outgoing = (reason: string) => headlineIcon({ section: "outgoing", reason });
+  const outgoing = (reason: string) => headlineIcon({ section: "outgoing", reason, severity: attended([reason]).severity });
   assert.equal(outgoing("review-issues"), "warning");
   assert.notEqual(outgoing("review-issues"), "comment-unresolved");
   assert.equal(outgoing("unresolved-comments"), "comment-unresolved");
   assert.equal(outgoing("ci-failed"), "error");
   for (const reason of ["ci-failed", "unresolved-comments", "review-issues"]) {
-    assert.equal(outgoing(reason), attentionIcon([reason]).icon, reason);
+    assert.equal(outgoing(reason), attentionIcon(attended([reason])).icon, reason);
   }
-  assert.equal(headlineIcon({ section: "to-review", reason: "waiting-on-you" }), "eye");
+  assert.equal(headlineIcon({ section: "to-review", reason: "waiting-on-you", severity: "pending" }), "eye");
   assert.equal(headlineIcon(null), "pass");
 });
 

@@ -228,7 +228,7 @@ sequenceDiagram
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
-**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking); the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
+**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking) and how urgent each reason is (`REASON_SEVERITY`, `attention_severity()`, served as `severity` beside every `attention_reasons`); the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render (and the VS Code extension) only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
 
 **Rendering:** `render/commit_row.py` (full rows for log/show) and `render/status_fmt.py` (compact tokens for rebase todo lines) both consume `LogCommit`.
 

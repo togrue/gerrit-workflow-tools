@@ -31,6 +31,15 @@ export interface Activity {
   events: EventsStatus;
 }
 
+/** How urgent a change's attention reasons are, as core says (`core/attention.py`, `REASON_SEVERITY`). */
+export type Severity = "error" | "warning" | "pending" | "ok";
+
+/** Anything that carries attention reasons, and the severity core gave them. */
+export interface Attended {
+  attention_reasons: string[];
+  severity: Severity;
+}
+
 export interface Member {
   number: number;
   change_id: string;
@@ -39,6 +48,7 @@ export interface Member {
   code_review: number | null;
   comments_unresolved: number;
   attention_reasons: string[];
+  severity: Severity;
   url: string | null;
   /** The local stack commit carrying this Change-Id, if there is one. */
   local_sha: string | null;
@@ -60,6 +70,7 @@ export interface Chain {
   code_review: number | null;
   comments_unresolved: number;
   attention_reasons: string[];
+  severity: Severity;
   partial_chain: boolean;
   members: Member[];
   local?: boolean;
@@ -77,6 +88,8 @@ export interface Section {
 export interface Headline {
   section: SectionName;
   reason: string;
+  /** The reason's severity; `pending` for one waiting on your review. */
+  severity: Severity;
   chain: string;
   number: number;
   subject: string;
@@ -117,6 +130,7 @@ export interface CommitStatus {
   submittable: boolean;
   work_in_progress: boolean;
   attention_reasons: string[];
+  severity: Severity;
   change_status: string | null;
   updated: string | null;
   /** Who is on the change; absent where the source does not say (a Review chains member). */

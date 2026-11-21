@@ -1,15 +1,13 @@
-// How review state is put into words and ordered by urgency. Pure: no `vscode`, no I/O.
+// How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
-import { Chain, Comment, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, StackMoves } from "./api";
+import { Attended, Chain, Comment, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, Severity, StackMoves } from "./api";
 
-export type Severity = "error" | "warning" | "pending" | "ok";
-
-const ERRORS = ["ci-failed", "merged-drift", "abandoned", "missing-change-id", "invalid-change-id"];
-const WARNINGS = ["unresolved-comments", "review-issues", "outdated-patchset", "merged-unknown"];
-const PENDING = ["not-pushed", "ahead-of-gerrit", "awaiting-review", "no-reviewers", "chain-blocked", "wip"];
-
+/** Every reason core names (`Attention`, core/attention.py), in words: tests/test_attention_severity.py holds the two lists together. */
 const WORDS: Record<string, string> = {
   "ci-failed": "CI failed",
+  diverged: "Gerrit has a patchset you never had",
+  "unsquashed-fixup": "unsquashed fixup commit",
+  "gerrit-unknown": "Gerrit state unknown",
   "unresolved-comments": "unresolved comments",
   "review-issues": "negative vote",
   "not-pushed": "not pushed",
@@ -26,17 +24,6 @@ const WORDS: Record<string, string> = {
   wip: "work in progress",
 };
 
-/** The most urgent thing the attention reasons say. */
-export function severity(reasons: readonly string[]): Severity {
-  if (reasons.some((r) => ERRORS.includes(r))) {
-    return "error";
-  }
-  if (reasons.some((r) => WARNINGS.includes(r))) {
-    return "warning";
-  }
-  return reasons.some((r) => PENDING.includes(r)) ? "pending" : "ok";
-}
-
 const SEVERITY_ICONS: Record<Severity, string> = { error: "error", warning: "warning", pending: "clock", ok: "pass" };
 
 /** Every icon `attentionIcon` can give. */
@@ -47,8 +34,7 @@ export const ATTENTION_ICONS: readonly string[] = [...Object.values(SEVERITY_ICO
  * means unresolved comments, which the Change view lists; a negative vote or a newer patchset on
  * Gerrit is a warning without one.
  */
-export function attentionIcon(reasons: readonly string[]): { icon: string; severity: Severity } {
-  const level = severity(reasons);
+export function attentionIcon({ attention_reasons: reasons, severity: level }: Readonly<Attended>): { icon: string; severity: Severity } {
   const comments = level === "warning" && reasons.includes("unresolved-comments");
   return { icon: comments ? "comment-unresolved" : SEVERITY_ICONS[level], severity: level };
 }
@@ -58,15 +44,18 @@ export function attentionIcon(reasons: readonly string[]): { icon: string; sever
  * icon `attentionIcon` gives its reason (a negative vote is a warning, not a comment bubble); a
  * check when nothing needs you.
  */
-export function headlineIcon(headline: Pick<Headline, "section" | "reason"> | null | undefined): string {
+export function headlineIcon(headline: Pick<Headline, "section" | "reason" | "severity"> | null | undefined): string {
   if (!headline) {
     return "pass";
   }
-  return headline.section === "to-review" ? "eye" : attentionIcon([headline.reason]).icon;
+  return headline.section === "to-review" ? "eye" : attentionIcon({ attention_reasons: [headline.reason], severity: headline.severity }).icon;
 }
 
 /** Every attention reason this knows, in words: what `reasonWords` can say of ours. */
 export const REASON_WORDS: readonly string[] = Object.values(WORDS);
+
+/** Every attention reason this has words for: all that core names. */
+export const WORDED_REASONS: readonly string[] = Object.keys(WORDS);
 
 export function reasonWords(reasons: readonly string[]): string {
   return reasons.map((r) => WORDS[r] ?? r).join(", ");

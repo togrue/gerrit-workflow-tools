@@ -9,6 +9,7 @@ import { ChangeDetail, memberStatus, sameChange } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
+import { attended } from "./fixtures";
 
 function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
   const sha = summary.toLowerCase().replace(/\W/g, "").padEnd(40, "0");
@@ -29,7 +30,6 @@ function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
     last_pushed_votes: null,
     submittable: false,
     work_in_progress: false,
-    attention_reasons: ["unresolved-comments"],
     change_status: "NEW",
     updated: null,
     abandoned: false,
@@ -38,6 +38,7 @@ function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
     held_back: false,
     needs_edit: false,
     ...extra,
+    ...attended(extra.attention_reasons ?? ["unresolved-comments"]),
   };
 }
 
@@ -95,7 +96,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
 });
 
 test("a Review chains row draws its votes and attention at once, and does not guess whether it is ready to submit", () => {
-  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   const vm = drawn(detail, { version: "current" });
@@ -203,7 +204,7 @@ test("a /show failure stays shown when a late answer of another part comes", () 
 });
 
 test("answers out of order: the review delta before the commit fills in its hint, the rest still loading", () => {
-  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, up_to_date: false, rebased: false } };
@@ -220,7 +221,7 @@ test("answers out of order: the review delta before the commit fills in its hint
 });
 
 test("while it is not known whether the change is ready to submit, the head wears a loading icon, not the green check", () => {
-  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
+  const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   let head = drawn(detail, { version: "current" }).head;

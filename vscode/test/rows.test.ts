@@ -9,7 +9,7 @@ import { ChangeState, changeHeading, changeLines, changeVm } from "../src/change
 import { attentionIcon } from "../src/format";
 import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
-import { chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
+import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
 test("the icon says how a commit relates to Gerrit", () => {
   const states = (extra: Partial<StackCommit>) => sync(commit("c", extra));
@@ -294,7 +294,7 @@ test("a change wears the comment icon exactly when the Change view lists an open
     const listsOpen = (vm.comments?.threads ?? []).some((row) => row.open);
     assert.equal(vm.head?.icon === "comment-unresolved", listsOpen, `${name}: Change view head`);
     // Review chains draws a change and its chain from the same attention reasons.
-    assert.equal(attentionIcon(extra.attention_reasons ?? []).icon === "comment-unresolved", listsOpen, `${name}: Review chains row`);
-    assert.equal(attentionIcon(extra.attention_reasons ?? []).icon, vm.head?.icon, `${name}: both views draw the same icon`);
+    assert.equal(attentionIcon(attended(extra.attention_reasons ?? [])).icon === "comment-unresolved", listsOpen, `${name}: Review chains row`);
+    assert.equal(attentionIcon(attended(extra.attention_reasons ?? [])).icon, vm.head?.icon, `${name}: both views draw the same icon`);
   }
 });

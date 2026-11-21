@@ -228,10 +228,11 @@ A section line counts its chains and changes (`none` when empty). A chain line i
           "verified": -1, "code_review": 0,
           "comments_unresolved": 2,
           "attention_reasons": ["ci-failed", "unresolved-comments"],
+          "severity": "error",
           "partial_chain": false,
           "members": [
             { "number": 4317, "subject": "feat: config plumbing", "sha": "3f2a…", "verified": 1,
-              "code_review": 2, "comments_unresolved": 0, "attention_reasons": [] }
+              "code_review": 2, "comments_unresolved": 0, "attention_reasons": [], "severity": "ok" }
           ]
         }
       ]
@@ -243,7 +244,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
 
 A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it).
 
-`attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments`, and `review-issues` — there is no local patchset to align.
+`attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments`, and `review-issues` — there is no local patchset to align. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
 
 ---
 

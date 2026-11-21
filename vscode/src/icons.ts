@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
-import { Severity, attentionIcon } from "./format";
+import { Attended, Severity } from "./api";
+import { attentionIcon } from "./format";
 
 const COLORS: Record<Severity, string | undefined> = {
   error: "list.errorForeground",
@@ -9,9 +10,9 @@ const COLORS: Record<Severity, string | undefined> = {
   ok: "testing.iconPassed",
 };
 
-/** The icon of a change or chain with these attention reasons (`attentionIcon`), coloured by urgency. */
-export function attentionThemeIcon(reasons: readonly string[]): vscode.ThemeIcon {
-  const { icon: id, severity } = attentionIcon(reasons);
+/** The icon of a change or chain with its attention reasons (`attentionIcon`), coloured by their severity. */
+export function attentionThemeIcon(item: Readonly<Attended>): vscode.ThemeIcon {
+  const { icon: id, severity } = attentionIcon(item);
   return icon(id, COLORS[severity]);
 }
 

@@ -185,8 +185,8 @@ Everything the first screen needs, in one call.
   `query`, `summary`, and `chains` in the shape of `ger inbox --json`. Each chain member also
   has `local_sha` — the commit of the **local stack** carrying that **Change-Id**, or `null` —
   and each chain has `local`.
-- `headline` — the **headline**: `section`, `reason`, `chain`, `number`, `subject`, `url` and a
-  sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
+- `headline` — the **headline**: `section`, `reason`, its `severity` (`pending` for a chain
+  waiting on your review), `chain`, `number`, `subject`, `url` and a sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
   with a commit of the **local stack**; another chain's failure leaves the headline to the next
   reason.
 - `local` — the answer of `GET /stack`.

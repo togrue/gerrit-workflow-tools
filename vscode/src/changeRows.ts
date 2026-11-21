@@ -4,8 +4,8 @@
 
 import * as path from "node:path";
 
-import { CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, ShownCommit } from "./api";
-import { Severity, attentionIcon, commentPlainText, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Severity, ShownCommit } from "./api";
+import { attentionIcon, commentPlainText, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
 import { Badge, Tone, badges } from "./stackRows";
 import { Waiting } from "./state";
 
@@ -173,8 +173,8 @@ export const LOADING = "loading…";
 const SEVERITY_TONE: Record<Severity, Tone | undefined> = { error: "bad", warning: "warn", pending: undefined, ok: "good" };
 
 /** The head's icon: the one the change wears in Review chains (`attentionIcon`). */
-function headIcon(reasons: readonly string[]): Icon {
-  const { icon, severity } = attentionIcon(reasons);
+function headIcon(commit: Readonly<Attended>): Icon {
+  const { icon, severity } = attentionIcon(commit);
   const tone = SEVERITY_TONE[severity];
   return tone ? { icon, tone } : { icon };
 }
@@ -379,7 +379,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     key: commit.change_id ?? commit.sha ?? "",
     loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly } : undefined,
     head: {
-      ...(unsure ? { icon: "loading" } : headIcon(commit.attention_reasons)),
+      ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],

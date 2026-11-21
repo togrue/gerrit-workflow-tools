@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime
 
-from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.inbox import Headline
+from gerrit_workflow_tools.core.attention import Attention, Severity, attention_severity
+from gerrit_workflow_tools.core.inbox import WAITING_ON_YOU, Headline
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
 
@@ -26,6 +26,7 @@ def member_json(member: ChainMember) -> dict[str, object]:
         "code_review": member.code_review,
         "comments_unresolved": member.comments_unresolved,
         "attention_reasons": list(member.attention_reasons),
+        "severity": attention_severity(member.attention_reasons).value,
         "url": member.url,
         "sha": member.sha,
     }
@@ -52,6 +53,7 @@ def chain_json(chain: ReviewChain) -> dict[str, object]:
         "code_review": chain.code_review,
         "comments_unresolved": chain.comments_unresolved,
         "attention_reasons": list(chain.attention_reasons),
+        "severity": attention_severity(chain.attention_reasons).value,
         "partial_chain": chain.partial_chain,
         "members": [member_json(member) for member in chain.members],
     }
@@ -83,6 +85,10 @@ def headline_json(headline: Headline | None) -> dict[str, object] | None:
     return {
         "section": headline.section,
         "reason": headline.reason,
+        # Waiting on your review is not a problem of the change: nothing to colour.
+        "severity": (
+            Severity.PENDING if headline.reason == WAITING_ON_YOU else attention_severity([headline.reason])
+        ).value,
         "chain": headline.chain.key,
         "number": headline.member.number,
         "subject": headline.member.subject,

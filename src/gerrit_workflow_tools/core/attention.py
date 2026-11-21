@@ -9,6 +9,7 @@ Render maps reasons to text; it never re-derives them from votes or patchset sta
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
@@ -51,6 +52,53 @@ class Attention:  # pylint: disable=too-few-public-methods
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``).
 EDIT_ATTENTION_REASONS = frozenset({Attention.UNRESOLVED_COMMENTS, Attention.CI_FAILED})
+
+
+class Severity(str, Enum):
+    """How urgent attention is, most urgent first: what a viewer colours and orders by."""
+
+    ERROR = "error"
+    """Broken: it cannot go in as it is, or what went in is not what you have."""
+    WARNING = "warning"
+    """Someone or something asks for a change."""
+    PENDING = "pending"
+    """Waiting: on a push, on reviewers, on Gerrit, or on an earlier change."""
+    OK = "ok"
+
+
+# Every reason in :class:`Attention` has one; tests/test_attention_severity.py keeps it total.
+REASON_SEVERITY: dict[str, Severity] = {
+    Attention.CI_FAILED: Severity.ERROR,
+    Attention.MERGED_DRIFT: Severity.ERROR,
+    Attention.ABANDONED: Severity.ERROR,
+    Attention.MISSING_CHANGE_ID: Severity.ERROR,
+    Attention.INVALID_CHANGE_ID: Severity.ERROR,
+    Attention.UNSQUASHED_FIXUP: Severity.ERROR,
+    Attention.DIVERGED: Severity.ERROR,
+    Attention.UNRESOLVED_COMMENTS: Severity.WARNING,
+    Attention.REVIEW_ISSUES: Severity.WARNING,
+    Attention.OUTDATED_PATCHSET: Severity.WARNING,
+    Attention.MERGED_UNKNOWN: Severity.WARNING,
+    Attention.NOT_PUSHED: Severity.PENDING,
+    Attention.AHEAD_OF_GERRIT: Severity.PENDING,
+    Attention.AWAITING_REVIEW: Severity.PENDING,
+    Attention.NO_REVIEWERS: Severity.PENDING,
+    Attention.CHAIN_BLOCKED: Severity.PENDING,
+    Attention.WIP: Severity.PENDING,
+    Attention.GERRIT_UNKNOWN: Severity.PENDING,
+}
+
+_SEVERITY_ORDER = tuple(Severity)
+
+
+def attention_severity(reasons: Sequence[str]) -> Severity:
+    """The most urgent severity among *reasons*; ``ok`` for none.
+
+    A reason a project's attention strategy made up is a warning: it asks for something, and
+    nothing here knows what.
+    """
+    found = [REASON_SEVERITY.get(reason, Severity.WARNING) for reason in reasons]
+    return min(found, key=_SEVERITY_ORDER.index, default=Severity.OK)
 
 
 def ci_failed(verified: int | None, ci_failures: Sequence[str] = ()) -> bool:
