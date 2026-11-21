@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.git_state import git_dir, staged_submodules
+from gerrit_workflow_tools.core.git_state import git_dir
+from gerrit_workflow_tools.core.tracked_changes import staged_submodules
 
 
 def rebase_in_progress(cwd: Path | str | None) -> bool:
