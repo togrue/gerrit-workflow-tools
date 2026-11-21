@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Diff, Member, ShownCommit, StackCommit } from "../src/api";
-import { ChangeDetail, memberStatus, memberTarget, sameChange } from "../src/changeLoad";
+import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
@@ -237,4 +237,18 @@ test("while it is not known whether the change is ready to submit, the head wear
   head = drawn(detail, { version: "current" }).head;
   assert.equal(head?.text, "Nothing to do");
   assert.notEqual(head?.icon, "loading");
+});
+
+test("CI findings ask for the change and the commit below it, never the rest of its chain or stack (issue #40)", () => {
+  const chainRevs = ["change:1", "change:2", "change:3", "change:4", "change:5"];
+  const member = (rev: string): ChangeTarget => ({ rev, title: rev, local: false, chainRevs });
+  assert.deepEqual(ciRevs(member("change:4"), undefined), { revs: ["change:3", "change:4"], chain: true, stack: false });
+  assert.deepEqual(ciRevs(member("change:1"), undefined), { revs: ["change:1"], chain: true, stack: false }, "the base's parent is the target branch");
+
+  const commits = ["Base", "Middle", "Top"].map((summary) => row(summary));
+  const mine = (commit: StackCommit): ChangeTarget => ({ rev: commit.sha, title: commit.summary, local: true });
+  assert.deepEqual(ciRevs(mine(commits[2]), stack(commits)), { revs: [commits[1].sha, commits[2].sha], chain: true, stack: false });
+  assert.deepEqual(ciRevs(mine(commits[2]), undefined), { revs: [], chain: false, stack: true }, "no stack held here: the live stack is asked");
+  assert.deepEqual(ciRevs(mine(row("Amended")), stack(commits)), { revs: [], chain: false, stack: true }, "not in the stack held here: the live stack is asked");
+  assert.deepEqual(ciRevs({ rev: "change:900", title: "theirs", local: false }, undefined), { revs: ["change:900"], chain: false, stack: false });
 });

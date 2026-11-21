@@ -7,7 +7,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail, sameChange } from "./changeLoad";
+import { ChangeDetail, ciRevs, sameChange } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { ChangeTarget, Model, describeError } from "./model";
 import { waitingFor } from "./state";
@@ -471,20 +471,10 @@ export class ChangeView extends WebView<ChangeVm> {
       return { state: "loaded", contents: [], introduced: null };
     }
     const client = await this.model.client();
-    // Introduced findings need the parent: ask for the whole chain, then pick this change out of it.
-    let commits: ShownCommit[];
-    let index: number;
-    if (target.chainRevs && target.chainRevs.includes(target.rev)) {
-      commits = await client.show(target.chainRevs, { ci: true, chain: true });
-      index = target.chainRevs.indexOf(target.rev);
-    } else if (target.local) {
-      commits = await client.show([], { ci: true, stack: true });
-      index = commits.findIndex((c) => c.sha === target.rev);
-    } else {
-      commits = await client.show([target.rev], { ci: true });
-      index = 0;
-    }
-    const commit = commits[index];
+    // Introduced findings need the parent: ask for it and this change, not the whole chain.
+    const { revs, chain, stack } = ciRevs(target, this.model.stack);
+    const commits = await client.show(revs, { ci: true, chain, stack });
+    const commit = stack ? commits.find((c) => c.sha === target.rev) : commits[commits.length - 1];
     const introduced = commit?.ci_introduced;
     return { state: "loaded", contents: commit?.ci_content ?? [], introduced: introduced ? new Set(introduced) : null };
   }
