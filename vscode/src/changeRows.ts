@@ -4,7 +4,7 @@
 
 import * as path from "node:path";
 
-import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, RebaseAction, Severity, ShownCommit } from "./api";
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, RebaseAction, Severity, ViewedCommit } from "./api";
 import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
@@ -52,7 +52,7 @@ export interface ChangeState {
   /** A commit of your local stack. */
   local: boolean;
   /** As `/show` answered, or (while `loading.commit`) as the clicked row said. */
-  shown: ShownCommit;
+  shown: ViewedCommit;
   /** Comment chains, in the order shown. */
   chains: CommentChain[];
   /** The version looked at against its parent; it carries the commit message. */

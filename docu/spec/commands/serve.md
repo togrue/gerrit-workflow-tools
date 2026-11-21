@@ -130,6 +130,28 @@ the stream.
 
 ---
 
+## The contract
+
+Every query, body and answer below is a type in `src/gerrit_workflow_tools/server/contract.py`
+(and the `contract_*.py` modules beside it): one `TypedDict` per JSON object, `NotRequired` for
+a key that may be absent, `| None` for one that is there and may be `null`, an enum or
+`Literal` for a closed set of words. `ENDPOINTS` names each call's query, body and answer.
+
+A client does not copy these by hand. `uv run python scripts/generate_serve_contract.py` writes
+them out as:
+
+- `vscode/src/contract.ts`: TypeScript types, with an `Endpoints` map from `METHOD /path` to
+  query, body and answer, which the extension's client is typed by;
+- [`serve-contract.schema.json`](../serve-contract.schema.json): JSON Schema (2020-12), for a
+  client in any other language; `endpoints` there is the same map.
+
+`tests/test_serve_contract.py` fails when either file is stale or a route is missing from
+`ENDPOINTS`. Every answer an endpoint gives in any test is held against its type, strictly: a
+key the contract does not name fails as much as a missing or mistyped one. A field added to an
+answer is added to the contract in the same change, and the generated files with it.
+
+---
+
 ## Errors
 
 A failure answers with a status and one shape:

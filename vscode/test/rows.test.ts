@@ -451,19 +451,8 @@ test("the CI group lists errors first and keeps the warnings behind a count", ()
 
 // A4: Review chains showed a comment icon for a negative vote, where the Change view listed no comment.
 test("a change wears the comment icon exactly when the Change view lists an open comment", () => {
-  const published = (patch_set: number, extra: Partial<CommentChain> = {}): CommentChain => ({
-    root_id: `c${patch_set}`,
-    path: "a.py",
-    line: 4,
-    start_line: null,
-    url: null,
-    resolved: false,
-    resolved_after_publish: false,
-    outdated: patch_set < 3,
-    held: false,
-    comments: [comment("Rename this.", { patch_set })],
-    ...extra,
-  });
+  const published = (patch_set: number, extra: Partial<CommentChain> = {}): CommentChain =>
+    chain(`c${patch_set}`, [comment("Rename this.", { patch_set })], { outdated: patch_set < 3, ...extra });
   const cases: [string, Partial<StackCommit>, CommentChain[]][] = [
     // The ger-playground change of A4: a negative vote and no comment at all.
     ["negative vote, no comment", { code_review: -1, attention_reasons: ["review-issues", "awaiting-review"] }, []],

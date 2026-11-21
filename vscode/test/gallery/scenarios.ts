@@ -166,7 +166,7 @@ function stackScenarios(): Scenario[] {
       stack: stackVm(NO_UPSTREAM, { branch: "change-48211", upstream: null, suggested: "origin/release-2.4", why: "the remote branch nearest to it", candidates: ["origin/release-2.4", "origin/main"] }, never),
     }),
     scenario("Stack: no upstream, none to suggest", { stack: stackVm(NO_UPSTREAM, { branch: "change-48211", upstream: null, suggested: null, why: null, candidates: [] }, never) }),
-    scenario("Stack: it could not be read", { stack: stackVm({ error: { code: "GIT", message: "fatal: bad revision 'origin/main..HEAD'\nthe upstream branch is gone" } }, undefined, never) }),
+    scenario("Stack: it could not be read", { stack: stackVm({ error: { code: "GIT", message: "fatal: bad revision 'origin/main..HEAD'\nthe upstream branch is gone" }, needs_upstream: false }, undefined, never) }),
     scenario("Stack: no local commits", { stack: stackOf([]) }),
   ];
 }
@@ -244,7 +244,7 @@ function chains(): CommentChain[] {
 
 const commented = () => change({ shown: theChange({ comments_unresolved: 5, code_review: -1, attention_reasons: ["unresolved-comments", "review-issues"] }), chains: chains() });
 
-const FAILING = { ci_failures: ["Verified"], verified: -1, attention_reasons: ["ci-failed"], ci_links: [{ label: "widget-verify #5512", url: "https://ci.example.org/job/widget-verify/5512/", source: "message" }] };
+const FAILING = { ci_failures: ["Verified"], verified: -1, attention_reasons: ["ci-failed"], ci_links: [{ label: "widget-verify #5512", url: "https://ci.example.org/job/widget-verify/5512/", build_url: "https://ci.example.org/job/widget-verify/5512/", source: "message" as const }] };
 
 /** The findings of one failed build: two this change introduced, one it inherited, and warnings behind them. */
 function findings() {

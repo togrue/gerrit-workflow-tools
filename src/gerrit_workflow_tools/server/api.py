@@ -20,16 +20,18 @@ from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
 
 PREFIX = f"/api/v{views.API_VERSION}"
+_SEGMENT = re.compile(r"\{\w+\}")
 
 Endpoint = Callable[[Context, Request], dict[str, Any]]
 
+# The paths of server/contract.py's ENDPOINTS: ``{name}`` is one path segment, passed in ``path_args``.
 ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/health", views.health),
     ("GET", "/overview", views.overview),
     ("GET", "/stack", views.stack),
     ("GET", "/stack/moves", views.stack_moves),
     ("GET", "/stack/upstream", views.stack_upstream),
-    ("GET", "/chains/([^/]+)", views.chain),
+    ("GET", "/chains/{number}", views.chain),
     ("GET", "/show", views.show),
     ("GET", "/diff", diff_views.diff),
     ("GET", "/patchsets", diff_views.patchsets),
@@ -107,8 +109,8 @@ class GerApi:
         if not path.startswith(PREFIX + "/"):
             raise NoRoute(f"no such endpoint: {path} (the API lives under {PREFIX}/)")
         tail = path[len(PREFIX) :].rstrip("/")
-        for route_method, pattern, endpoint in ROUTES:
-            match = re.fullmatch(pattern, tail)
+        for route_method, route, endpoint in ROUTES:
+            match = re.fullmatch(_SEGMENT.sub("([^/]+)", route), tail)
             if match is None or route_method != method:
                 continue
             request = Request(query=query or {}, body=body or {}, path_args=match.groups())
