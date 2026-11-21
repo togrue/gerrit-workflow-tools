@@ -259,7 +259,7 @@ sequenceDiagram
 
 **Shared pipeline:** `GerritService.fetch_gerrit_data` is the local-stack enrichment entry point used by `ger log`, `ger show`, and the rebase enricher. `GerritService.fetch_review_chains` is the query-driven sibling used by `ger inbox` — it must not resolve stack context.
 
-**Annotated stack:** `core/annotated_stack.py` composes the local stack, the overlay and attention. `annotate(rows, service=…, cwd=…)` serves callers that already have rows (`ger log`, `ger show`, the rebase enricher); `load_annotated_stack(cwd, rev_range, …)` serves callers that start from a revision range (`ger log`, `ger edit --first-attention-commit`). It neither prints nor prompts.
+**Annotated stack:** `core/annotated_stack.py` composes the local stack, the overlay and attention. `annotate(rows, service=…, cwd=…)` serves callers that already have rows (`ger log`, `ger show`, the rebase enricher); `load_annotated_stack(run, rev_range, …)` serves callers that start from a revision range (`ger log`, `ger edit --first-attention-commit`); with none it loads the run's local stack, the **rebasing stack** while a rebase is underway (`AnnotatedStack.rebase`), which `ger log` and `GET /stack` both show. It neither prints nor prompts.
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
@@ -486,7 +486,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
-| `core/rebase_state.py` | A rebase underway: whether one is, how far it got (`rebase_progress`, `RebaseProgress`), the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`, `uncommitted_changes_refusal`, `submodule_refusal`) and the one next step after a conflict (`conflict_next_step`) |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the **rebasing stack** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), the refusals it causes (`rebase_refusal`, `history_rewrite_refusal`, `uncommitted_changes_refusal`, `submodule_refusal`) and the one next step after a conflict (`conflict_next_step`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |

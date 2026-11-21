@@ -36,7 +36,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.core.rebase_state import RebaseStep, RebaseStop, RebasingStack, rebase_progress
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -45,7 +45,7 @@ from gerrit_workflow_tools.render.commit_row import (
     oneline_body,
     oneline_line,
 )
-from gerrit_workflow_tools.render.show_json import log_commit_json
+from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -245,6 +245,26 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
                 print(f"{ind}{line}")
 
 
+_STOPS = {
+    RebaseStop.EDIT: "stopped{at} to edit it",
+    RebaseStop.CONFLICT: "stopped on a conflict{at} in {paths}",
+    RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for `git rebase --continue`",
+    RebaseStop.PAUSED: "stopped between commits",
+}
+
+
+def _rebase_note(rebasing: RebasingStack | None) -> str:
+    """The note above a stack a rebase is underway on: whose, where it stopped, what is shown as it was."""
+    if rebasing is None:
+        return "note: a rebase is in progress; this shows the branch as it was before the rebase."
+    progress, current = rebasing.rebase, rebasing.current
+    at = f' at {current.short_sha} "{current.subject}"' if current else ""
+    stop = _STOPS[progress.stop].format(at=at, paths=", ".join(progress.unmerged))
+    todo = rebasing.steps.count(RebaseStep.TODO)
+    rest = f"; {todo} commit{'s' if todo != 1 else ''} still to replay, shown as before" if todo else ""
+    return f"note: a rebase is in progress on {progress.branch or 'a detached HEAD'}, {stop}{rest}."
+
+
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit))
@@ -266,14 +286,19 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         return int(ExitCode.REFUSED)
 
     stack_view = load_annotated_stack(
-        run, rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
+        run, args.rev_range and rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
     )
     if not stack_view.commits:
         print("(no commits in range)")
         return int(ExitCode.OK)
 
-    if rebase_underway(run.worktree.repository_dir):
-        print_note("note: a rebase is in progress; this shows the branch as it was before the rebase.")
+    progress = (
+        stack_view.rebase.rebase
+        if stack_view.rebase
+        else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
+    )
+    if progress is not None:
+        print_note(_rebase_note(stack_view.rebase))
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
     stack = run.stack
@@ -299,11 +324,12 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             {
                 **log_commit_json(c),
                 "abandoned": c.abandoned,
+                "rebase": step,
                 **({"resolution_note": notes_by_sha[c.sha]} if c.sha in notes_by_sha else {}),
             }
-            for c in commits
+            for c, step in zip(commits, rebase_steps(stack_view), strict=True)
         ]
-        payload = {"stack": stack_payload, "commits": commit_payload}
+        payload = {"stack": stack_payload, "rebase": rebase_json(stack_view, progress), "commits": commit_payload}
         print(json.dumps(payload, indent=2))
         if stack_view.gerrit_unavailable is not None:
             raise stack_view.gerrit_unavailable

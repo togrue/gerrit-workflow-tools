@@ -221,11 +221,28 @@ For a view that draws the stack, each commit also says:
 - `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
   or dropped here, as `POST /stack/rewrite` refuses and `GET /stack/moves` leaves out; the
   commits above the newest merge can.
-- `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the branch as it
-  was before, and this is where the rebase stands on each commit: `done` (replayed), `current`
-  (it stopped here), `todo` (still to come), or `null` for a commit the rebase does not replay.
-  The top-level `rebase` is `null` without one, else `{applied}`: `false` while the `current`
-  commit is only partly there, stopped on a conflict.
+- `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the one `ger log`
+  shows then: the commits on `HEAD` above the upstream, as they are now (a replayed or amended
+  commit has its new id and its new relation to Gerrit), then the commit it stopped at while
+  that is not applied, and the todo, as they were. This is where the rebase stands on each
+  commit: `done` (replayed), `current` (it stopped here), `todo` (still to come), or `null` for
+  a commit the rebase does not replay (below its `onto`).
+
+The top-level `rebase` is `null` without a rebase, else:
+
+- `branch` — the branch being rebased (`null` for a detached HEAD's); `branch` at the top is
+  `null` meanwhile, since nothing is checked out.
+- `onto`, `orig_head` — the commit it replays onto, and where the branch was when it started
+  (the branch still points there).
+- `stop` — why it is stopped: `edit` (the commit it is at is applied whole: amend it, then
+  continue), `conflict` (paths are still unmerged), `resolved` (the conflict is resolved and
+  added: ready to continue), `paused` (between commits: `exec`, `break`).
+- `applied` — `false` while the `current` commit is only partly there, stopped on a conflict.
+- `current` — the id of the commit it stopped at as the stack shows it, else `null`.
+- `unmerged` — the paths the index holds as unresolved conflicts.
+
+A rebase git runs through `am` (`rebase-apply`) keeps no todo: then the stack is the branch as
+it was, and no commit carries a `rebase` step.
 
 ### `GET /stack/moves`
 

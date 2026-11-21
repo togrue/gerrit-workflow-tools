@@ -46,11 +46,10 @@ def load_edit_attention_stack(run: RunContext):
     Does not prompt for upstream; callers that need a configured upstream must
     require it before calling.
     """
-    from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
+    from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack
     from gerrit_workflow_tools.core.git_run import GitError
 
-    rev_range = resolve_rev_range(None, branch=run.repo.stack_branch)
-    stack_view = load_annotated_stack(run, rev_range)
+    stack_view = load_annotated_stack(run, None)
     if not stack_view.commits:
         raise GitError("no commits in stack")
     # A walk over unknown Gerrit state would report "nothing needs attention": not true, just unknown.
