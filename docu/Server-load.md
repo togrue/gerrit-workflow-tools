@@ -9,6 +9,8 @@ a server you run.
 - A cached change is served without asking for the **trust window** (10 seconds).
 - Past it, Gerrit is asked **lightly** (one query with `SKIP_DIFFSTAT`, naming the changes),
   and details are fetched only for changes whose freshness token moved.
+- With nothing cached to hold a light answer against (a change first seen, a Change-Id or
+  commit no cached change carries), the details are asked for in that first request.
 - Listings (`ger inbox`, the editor's *Review chains*) are asked on every call, lightly.
 - No request asks for the diffstat (`SKIP_DIFFSTAT` everywhere): the line counts `ger` shows
   come from git, and counting them makes Gerrit open the commits of every row.

@@ -291,6 +291,20 @@ class GerritCache(FollowUpCache, RememberedFacts):
 
         return out
 
+    def knows_commits(self, shas: list[str]) -> bool:
+        """Whether a cached change has one of *shas* as a patchset (local only)."""
+        if not shas:
+            return False
+        with self._connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT 1 FROM changes, json_each(changes.payload, '$.revisions') AS revision
+                WHERE revision.key IN ({placeholders(shas)}) LIMIT 1
+                """,
+                [sha.strip().lower() for sha in shas],
+            ).fetchone()
+        return row is not None
+
     def reconcile(self, tokens: Mapping[str, str | None]) -> tuple[dict[str, dict[str, Any]], list[str]]:
         """Split cache keys by whether the cached row still carries Gerrit's freshness token.
 
