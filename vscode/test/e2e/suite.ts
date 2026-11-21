@@ -811,6 +811,164 @@ export async function run(): Promise<void> {
       before = after;
     }
 
+    // --- Rebasing in the terminal ------------------------------------------------------------
+    {
+      // Everything after the first click is git in the terminal, as a user runs it; the extension is only watched.
+      // Fixed names and dates, so every run makes the same commits. Where the views are wrong today, **Today** says
+      // how and names the issue that fixes it: that fix is then a diff of this transcript.
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ger-e2e-rebase-"));
+      const gitEnv = {
+        ...process.env,
+        GIT_AUTHOR_NAME: "Test",
+        GIT_AUTHOR_EMAIL: "test@example.com",
+        GIT_AUTHOR_DATE: "2026-11-12T09:00:00Z",
+        GIT_COMMITTER_NAME: "Test",
+        GIT_COMMITTER_EMAIL: "test@example.com",
+        GIT_COMMITTER_DATE: "2026-11-12T09:00:00Z",
+        GIT_EDITOR: "true",
+      };
+      const gitRun = (args: string[], env: NodeJS.ProcessEnv = {}, input?: string): string =>
+        execFileSync("git", args, { cwd: repo, env: { ...gitEnv, ...env }, input, stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
+      /** A git command that stops the rebase on a conflict: it exits non-zero, which is what is meant. */
+      const gitStops = (args: string[]) => assert.throws(() => gitRun(args), Error, `git ${args.join(" ")} stops on a conflict`);
+      /** `ger edit`'s rebase: interactive, onto the upstream, stopping at the commit with this subject. */
+      const editAt = (subject: string) => gitRun(["rebase", "-i", "@{upstream}"], { GIT_SEQUENCE_EDITOR: `sed -i -e "/ ${subject}$/s/^pick/edit/"` });
+      const write = (file: string, content: string) => fs.writeFileSync(path.join(repo, file), content, "utf8");
+      const stackHeader = () => (api.stackView as unknown as { view?: vscode.WebviewView }).view?.description ?? "(view not drawn)";
+      const below = (sha: string, rev: string) => {
+        try {
+          gitRun(["merge-base", "--is-ancestor", sha, rev]);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      /** Where the commit the Change view shows is in git now: during a rebase, the branch still points where it was. */
+      const shownCommit = (): string => {
+        const sha = api.changeView.diff?.commit;
+        return !sha ? "none" : sha === gitRun(["rev-parse", "HEAD"]) ? "HEAD" : below(sha, "HEAD") ? "below HEAD" : below(sha, "feature") ? "only on the branch as it was before" : "gone from both HEAD and the branch";
+      };
+      /** What the three places this is about show now, in full: the status bar, Local stack with its header, the Change view. */
+      const shown = async () =>
+        [
+          `status bar | ${status()}`,
+          `stack header | ${stackHeader()}`,
+          ...api.stackView.lines().map((line) => `stack  | ${line}`),
+          `change | title: ${api.changeView.heading ?? "(view not drawn)"}`,
+          ...(await api.changeView.lines()).map((line) => `change | ${line}`),
+          `change | (the commit shown is ${shownCommit()})`,
+        ].map(normalize);
+      let n = 0;
+      const inTerminal = async (what: string, expect: string, today: string | undefined, action: () => void) => {
+        ui.script([]);
+        action();
+        await wait(1_000); // past the watcher's quiet time, so the refresh it starts is not still to come
+        await settle();
+        const after = await screen();
+        const said = ui.drain();
+        const changed = lineDiff(before, after);
+        out.push(`## Meanwhile: ${what}`, "", `**Expect:** ${expect}`, "", ...(today ? [`**Today:** ${today}`, ""] : []), "```");
+        out.push(...said.lines, ...(changed.length ? changed : ["(no change)"]), "--- shown now:", ...(await shown()), "```", "");
+        problems.push(...said.problems.map((problem) => `${what}: ${problem}`));
+        before = after;
+        n += 1;
+        await snap(step, `rebase ${n}`);
+      };
+
+      await press(
+        "Click \"test! temporary experiment\" in Local stack",
+        "The Change view shows change 103 as it is now: the commit is the same as on Gerrit.",
+        exec("ger.openChange", await stackRow("test! temporary experiment")),
+      );
+
+      // A ger edit-style stop on a commit, amend, continue.
+      await inTerminal(
+        "you start ger edit's rebase on \"test! temporary experiment\", and it stops there",
+        "Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, \"Add e.txt\" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.",
+        "the banner has no buttons (#56); the header reads detached (#57); the status bar still shows the headline (#62).",
+        () => editAt("test! temporary experiment"),
+      );
+      await inTerminal(
+        "you add a line to c.txt and amend the stopped commit",
+        "The stopped commit shows what it is now: a new SHA, HEAD, changed here since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.",
+        "Local stack shows the commit as before the amend: its old SHA, the same as on Gerrit, and no HEAD row at all; the Change view stays on the old commit (#57).",
+        () => {
+          write("c.txt", "file c.txt\namended at the stop\n");
+          gitRun(["commit", "-q", "--amend", "--no-edit", "-a"]);
+        },
+      );
+      await inTerminal(
+        "you run git rebase --continue, and the rebase finishes",
+        "The banner and the marks go: the branch is back, the amended commit changed here since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
+        undefined,
+        () => gitRun(["rebase", "--continue"]),
+      );
+
+      // A conflict while continuing, resolved.
+      await inTerminal(
+        "you stop at \"Refactor parser init\" the same way, and amend it to also add e.txt",
+        "Local stack marks the rebase stopped at that commit, which shows its new code (changed here since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
+        "the row keeps its old SHA, the same as on Gerrit, and no row is HEAD (#57); the header reads detached (#57); no Continue or Abort (#56); the status bar still shows the headline (#62).",
+        () => {
+          editAt("Refactor parser init");
+          write("e.txt", "from the amend\n");
+          gitRun(["add", "e.txt"]);
+          gitRun(["commit", "-q", "--amend", "--no-edit"]);
+        },
+      );
+      await inTerminal(
+        "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
+        "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Continue, Abort and Skip; \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
+        "no conflicted file and no buttons (#56); the conflicting row is dimmed and only tagged (#58); the commits below keep their SHAs from before the rebase (#57); the status bar still shows the headline (#62).",
+        () => gitStops(["rebase", "--continue"]),
+      );
+      await inTerminal(
+        "you resolve e.txt and git add it",
+        "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue.",
+        "nothing changes: it still says the rebase stopped on a conflict (no issue yet; the conflicted files of #56 would make it visible).",
+        () => {
+          write("e.txt", "from the amend\nfrom the terminal\n");
+          gitRun(["add", "e.txt"]);
+        },
+      );
+      await inTerminal(
+        "you run git rebase --continue, and the rebase finishes",
+        "The banner and the marks go; Local stack shows the branch with \"Refactor parser init\" changed here since the last push and \"Add e.txt\" on top.",
+        undefined,
+        () => gitRun(["rebase", "--continue"]),
+      );
+
+      // The upstream moves on.
+      await inTerminal(
+        "somebody adds c.txt on main, and you git fetch, so origin/main moves on",
+        "Local stack says origin/main has 1 new commit, offers Rebase onto origin/main, and warns that \"test! temporary experiment\" would conflict in c.txt; the commits themselves are unchanged.",
+        "nothing at all changes (#60).",
+        () => {
+          const index = path.join(scratch, "index");
+          const blob = gitRun(["hash-object", "-w", "--stdin"], {}, "file c.txt, from main\n");
+          gitRun(["read-tree", "main"], { GIT_INDEX_FILE: index });
+          gitRun(["update-index", "--add", "--cacheinfo", `100644,${blob},c.txt`], { GIT_INDEX_FILE: index });
+          const tree = gitRun(["write-tree"], { GIT_INDEX_FILE: index });
+          const commit = gitRun(["commit-tree", tree, "-p", "main", "-m", "Add c.txt on main"], { GIT_AUTHOR_NAME: "alice", GIT_AUTHOR_EMAIL: "alice@example.com" });
+          gitRun(["update-ref", "refs/heads/main", commit]);
+          gitRun(["fetch", "-q", "origin", "main"]);
+        },
+      );
+      await inTerminal(
+        "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
+        "Local stack says the rebase stopped on a conflict in c.txt, with Continue, Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
+        "no conflicted file and no buttons (#56); the commits below keep their SHAs from before the rebase (#57); the conflicting row is dimmed (#58); the Change view still explains votes and shows the commit as it was (#59); the header reads detached (#57); the status bar still shows the headline (#62).",
+        () => gitStops(["rebase", "origin/main"]),
+      );
+      await inTerminal(
+        "you run git rebase --abort",
+        "Everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.",
+        "back as before, but nothing says origin/main moved on (#60).",
+        () => gitRun(["rebase", "--abort"]),
+      );
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+
     out.push("## At the end", "", "```", ...before, "```", "");
     if (problems.length) {
       out.push("## The script and the extension disagreed", "", ...problems.map((p) => `- ${p}`), "");
