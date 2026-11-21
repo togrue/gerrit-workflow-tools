@@ -46,12 +46,15 @@ def add_attention_query_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def require_stack_upstream(run: RunContext, rev_range: str | None = None) -> bool:
-    """Prompt for upstream on *rev_range*'s branches (default: the stack); False if declined."""
+def require_stack_upstream(run: RunContext, rev_range: str | None = None, *, interactive: bool = True) -> bool:
+    """Prompt for upstream on *rev_range*'s branches (default: the stack); False if declined.
+
+    With *interactive* off, a missing upstream raises the shared setup guidance instead of prompting.
+    """
     branch = run.repo.stack_branch
     rev_range = rev_range or resolve_rev_range(None, branch=branch)
     return all(
-        require_branch_upstream(run.cwd, name, settings=run.settings)
+        require_branch_upstream(run.cwd, name, settings=run.settings, interactive=interactive)
         for name in branches_needing_upstream(rev_range, branch=branch)
     )
 

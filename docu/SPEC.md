@@ -44,7 +44,7 @@ Every command that prints something worth parsing takes one shared group, `cli_c
 - **`ger log`, `ger inbox`:** a compact view of their own, built from the same model and the same words as the human view (`render/ai_text.py`, words from `render/status_fmt.py`): one line per commit or chain; plain words, not the `p`/`n`/`cr+2` columns that need a legend; a fact only when it has a value (no `0 comments`, no empty lists); change numbers instead of URLs; no colour, hyperlinks or alignment padding; the `next:` lines kept.
 - **every other command with `--json`** (`comment`, `fix`, `reply`, `resolve`, `review`, `sha`): its human output, with colour and hyperlinks forced off.
 
-Under `--ai` colour and hyperlinks are off on stderr too (notes, the CI download meter), Markdown view or not. Neither `--json` nor `--ai` output ever prompts, terminal or not (`cli_common.may_prompt`): a question takes its non-interactive answer, the same as without a terminal (`ger review` checks out in a worktree, `ger fix` stages nothing, `ger reply --publish` and `ger review --vote` need `-y`).
+Under `--ai` colour and hyperlinks are off on stderr too (notes, the CI download meter), Markdown view or not. Neither `--json` nor `--ai` output ever prompts, terminal or not (`cli_common.may_prompt`): a question takes its non-interactive answer, the same as without a terminal (`ger review` checks out in a worktree, `ger fix` stages nothing, `ger reply --publish` and `ger review --vote` need `-y`, `ger log` reports a missing upstream instead of asking for one).
 
 ### Shared concepts
 

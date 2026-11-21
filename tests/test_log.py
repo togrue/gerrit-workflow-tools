@@ -313,6 +313,28 @@ def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkey
     assert "git log failed" not in err
 
 
+@pytest.mark.parametrize("flag", ["--ai", "--json"])
+def test_log_missing_upstream_never_prompts_for_machine_output(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    """On a terminal, ``--ai`` and ``--json`` report the setup hint rather than open the upstream prompt."""
+    _configure_repo(stack_repo)
+    git("branch", "--unset-upstream", cwd=stack_repo, check=False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_toolkit_can_run", lambda: True)
+
+    def _no_prompt(*_args: object, **_kwargs: object) -> str | None:
+        raise AssertionError("prompted for an upstream")
+
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _no_prompt
+    )
+    code, out, err = run_cli(stack_repo, log_main, [flag], monkeypatch)
+    assert code == ExitCode.CONFIG
+    assert out == ""
+    assert "No upstream configured for branch" in err
+
+
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.gerrit.http_rest.resolve_gerrit_web_base",
