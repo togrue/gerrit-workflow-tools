@@ -678,8 +678,8 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
 
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
+    from gerrit_workflow_tools.core.code_facts import merged_equivalent, read_code_facts
     from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-    from gerrit_workflow_tools.core.gerrit_change_status import merged_equivalent, read_code_facts
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
