@@ -95,13 +95,15 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     if (!overview) {
       return []; // the welcome text for the model's state says why, and what to do
     }
-    if (overview.error) {
-      return [{ kind: "info", text: overview.error.message, icon: icon("error", "list.errorForeground") }];
-    }
     const nodes: Node[] = [];
     if (overview.headline) {
+      // A rebase underway still leads when the inbox cannot be read.
       nodes.push({ kind: "headline", headline: overview.headline });
-    } else {
+    }
+    if (overview.error) {
+      return nodes.concat({ kind: "info", text: overview.error.message, icon: icon("error", "list.errorForeground") });
+    }
+    if (!overview.headline) {
       nodes.push({ kind: "info", text: TREE_WORDS.nothingNeedsYou, icon: icon("pass", "testing.iconPassed") });
     }
     // Your own chains first: failed CI and comments there are yours to fix.
@@ -114,7 +116,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     switch (node.kind) {
       case "headline": {
         const item = new vscode.TreeItem(node.headline.text);
-        item.iconPath = icon("target", node.headline.reason === "ci-failed" ? "list.errorForeground" : "list.warningForeground");
+        item.iconPath = icon("target", node.headline.severity === "error" ? "list.errorForeground" : "list.warningForeground");
         item.tooltip = "The most important thing right now. Click to open it.";
         item.command = { command: "ger.openHeadline", title: "Open" };
         return item;

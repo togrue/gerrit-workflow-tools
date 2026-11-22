@@ -1,6 +1,6 @@
 // How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
-import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, ReviewState, Severity, StackMoves } from "./api";
+import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewState, Severity, StackMoves } from "./api";
 
 /** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
 const WORDS: Record<string, string> = {
@@ -48,6 +48,52 @@ export function attentionIcon({ attention_reasons: reasons, severity: level }: R
  */
 export function headlineIcon(headline: Pick<Headline, "reason" | "severity"> | null | undefined): string {
   return headline ? attentionIcon({ attention_reasons: [headline.reason], severity: headline.severity }).icon : "pass";
+}
+
+/** What the status bar says of a rebase underway, by why it stopped, around the commit it is at. */
+const REBASE_ITEM: Record<RebaseStop, (what: string) => string> = {
+  edit: (what) => `Rebase stopped at ${what}`,
+  split: (what) => `Rebase stopped to split ${what}`,
+  conflict: (what) => `Conflict in ${what}`,
+  resolved: (what) => `Conflict resolved in ${what}`,
+  paused: (what) => `Rebase paused at ${what}`,
+};
+
+/** What to do next, by why it stopped; `unmerged` names the conflicted files. */
+const REBASE_NEXT: Record<RebaseStop, (unmerged: string) => string> = {
+  edit: () => "Change the commit and amend it (git commit --amend), then git rebase --continue.",
+  split: () => "Commit what is left of the commit you split, then git rebase --continue.",
+  conflict: (unmerged) => `Resolve the conflicts${unmerged} and git add the files, then git rebase --continue. Or go back with git rebase --abort.`,
+  resolved: () => "The conflicts are resolved: git rebase --continue commits the commit and goes on.",
+  paused: () => "When you are done here, git rebase --continue.",
+};
+
+/** A subject cut short enough for the status bar. */
+function shortSubject(subject: string): string {
+  return subject.length > 30 ? `${subject.slice(0, 29)}…` : subject;
+}
+
+/**
+ * The status bar item while core's headline is a rebase underway: `text`, short, names the commit
+ * it stopped at by its change number when it is on Gerrit, else by its subject; `next` says what
+ * to do. `rebase` is the stack's, for the paths still unmerged and the ways on core allows: where
+ * core refuses Continue with nothing left to resolve, `next` is core's refusal, which names the way
+ * on there is (a resolution committed by hand goes on by Skip), as Local stack's banner does.
+ */
+export function rebaseItem(headline: RebaseHeadline, rebase?: Rebase | null): { text: string; next: string } {
+  const { stop, number, subject } = headline;
+  // A subject is quoted, so "Conflict in" does not read as naming a file.
+  const what = number ? String(number) : subject ? `"${shortSubject(subject)}"` : undefined;
+  const text = !stop ? "Rebase underway" : what ? REBASE_ITEM[stop](what) : stop === "paused" ? "Rebase paused" : "Rebase stopped";
+  const unmerged = rebase?.unmerged ?? [];
+  const where = unmerged.length === 1 ? ` in ${unmerged[0]}` : unmerged.length ? ` in ${plural(unmerged.length, "file")}` : "";
+  const refused = rebase && !unmerged.length && !rebase.actions.includes("continue") ? rebase.refused.continue : undefined;
+  const next = refused
+    ? `${sentence(refused)}.`
+    : stop
+      ? REBASE_NEXT[stop](where)
+      : "Finish it with git rebase --continue, or go back with git rebase --abort.";
+  return { text, next };
 }
 
 /** Every attention reason this knows, in words: what `reasonWords` can say of ours. */
@@ -178,6 +224,19 @@ export function chainsWithActivity(overview: Overview | undefined, seen: Seen): 
 }
 
 /** `seen`, with first sightings recorded and chains that are gone dropped; `mark` keys count as seen now. */
+/**
+ * Whether a loaded headline is news, and the headline to remember: one seen for the first time,
+ * or after a load you caused, is not news. A rebase is yours, never news, and not remembered, so
+ * the inbox's headline from before it is not news again when it ends.
+ */
+export function headlineNews(last: string | undefined, headline: Headline | undefined, quietly: boolean): { news: boolean; last: string | undefined } {
+  if (headline?.section === "local") {
+    return { news: false, last };
+  }
+  const key = headline ? `${headline.reason}:${headline.number}` : undefined;
+  return { news: quietly && headline !== undefined && key !== last, last: key };
+}
+
 export function rememberSeen(overview: Overview | undefined, seen: Seen, mark: Iterable<string> = []): Seen {
   const marked = new Set(mark);
   const next: Seen = {};

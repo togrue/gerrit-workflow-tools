@@ -1,9 +1,10 @@
-// The status bar item: the headline, and a bell with a count when chains had activity.
+// The status bar item: the headline, and a bell with a count when chains had activity. While a
+// rebase is underway core makes it the headline; the item says where it stopped and what is next.
 
 import * as vscode from "vscode";
 
 import { EventFollower } from "./events";
-import { headlineIcon, plural, refreshMode } from "./format";
+import { headlineIcon, plural, rebaseItem, refreshMode } from "./format";
 import { Model } from "./model";
 import { pollSeconds } from "./poller";
 
@@ -28,7 +29,8 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       item.backgroundColor = undefined;
     } else {
       const headline = overview.headline;
-      const text = headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
+      const rebase = headline?.section === "local" ? rebaseItem(headline, model.stack?.rebase) : undefined;
+      const text = rebase ? rebase.text : headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
       const glyph = `$(${headlineIcon(headline)})`;
       // Out of date: the last refresh failed, and this is the answer before it.
       const old = model.stale ? " $(warning)" : "";
@@ -42,7 +44,16 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       if (headline) {
         tooltip.appendText(headline.text).appendMarkdown("\n\n");
       }
-      item.backgroundColor = headline?.reason === "ci-failed" ? new vscode.ThemeColor("statusBarItem.errorBackground") : undefined;
+      if (rebase) {
+        tooltip.appendText(rebase.next).appendMarkdown("\n\n");
+      }
+      // How urgent, core says: failed CI and a conflict are errors, another rebase stop a warning.
+      item.backgroundColor =
+        headline?.severity === "error"
+          ? new vscode.ThemeColor("statusBarItem.errorBackground")
+          : rebase
+            ? new vscode.ThemeColor("statusBarItem.warningBackground")
+            : undefined;
       for (const section of overview.sections ?? []) {
         const title = section.name === "outgoing" ? "Outgoing" : "To review";
         tooltip.appendMarkdown(`**${title}** — ${plural(section.chains.length, "chain")}`);
@@ -61,7 +72,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       if (model.active.size) {
         tooltip.appendMarkdown(`$(bell-dot) New activity on ${plural(model.active.size, "chain")}\n\n`);
       }
-      tooltip.appendMarkdown(headline ? "Click to open it." : "Click to open the overview.");
+      tooltip.appendMarkdown(rebase ? "Click to open Local stack." : headline ? "Click to open it." : "Click to open the overview.");
       // How the views stay current: unobtrusive, only here and in the log.
       tooltip.appendMarkdown("\n\n").appendText(refreshMode(events.events, pollSeconds(events.live)));
     }

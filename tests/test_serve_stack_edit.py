@@ -5,14 +5,19 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import git_dir
+from gerrit_workflow_tools.core.inbox import RebaseHeadline
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, UncommittedChanges
+from gerrit_workflow_tools.render.review_json import headline_json
+from gerrit_workflow_tools.server import views
 from gerrit_workflow_tools.server.api import GerApi
 from gerrit_workflow_tools.server.httpd import failure_response
 from gerrit_workflow_tools.server.request import BadRequest
@@ -101,6 +106,66 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
     (merge / "head-name").write_text("detached HEAD\n", encoding="utf-8")
     detached = rebase_progress(stack_repo)
     assert detached is not None and detached.branch is None
+
+
+def test_a_rebase_underway_is_the_headline_until_it_ends(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _keys, rows = _gerrit(stack_repo, [{}, {}, {"verified": -1}, {}])
+    api = GerApi(stack_repo, gerrit=store)
+    assert _get(api, "/overview")["headline"]["reason"] == "ci-failed"
+
+    git("rebase", "-q", "-i", "HEAD~2", cwd=stack_repo, env={"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"})
+    overview = _get(api, "/overview")
+    # Finishing the rebase comes before failed CI: it leads, naming the commit it stopped at.
+    assert overview["headline"] == {
+        "section": "local",
+        "reason": "rebase",
+        "severity": "warning",
+        "stop": "edit",
+        "chain": None,
+        "number": 102,
+        "subject": "test! temporary experiment",
+        "sha": rows[2].sha,
+        "url": overview["local"]["commits"][2]["gerrit_url"],
+        "text": "Rebase stopped at 102: test! temporary experiment",
+    }
+
+    # The amend adds the file the next commit adds: continuing stops on a conflict there.
+    (stack_repo / "d.txt").write_text("mine\n", encoding="utf-8")
+    git("add", "d.txt", cwd=stack_repo)
+    git("commit", "-q", "--amend", "--no-edit", cwd=stack_repo)
+    git("rebase", "--continue", cwd=stack_repo, env={"GIT_EDITOR": "true"}, check=False)
+    headline = _get(api, "/overview")["headline"]
+    assert (headline["stop"], headline["severity"], headline["number"]) == ("conflict", "error", 103)
+    assert headline["text"] == "Conflict in 103: Cleanup after experiment"
+
+    # The inbox cannot be read: the rebase still leads.
+    with monkeypatch.context() as patch:
+        patch.setattr(views, "load_inbox", _unreachable)
+        overview = _get(api, "/overview")
+    assert overview["error"]["code"] == "GERRIT" and overview["headline"]["stop"] == "conflict"
+
+    git("rebase", "--abort", cwd=stack_repo)
+    assert _get(api, "/overview")["headline"]["reason"] == "ci-failed"
+
+
+def _unreachable(*_args: object, **_kwargs: object) -> NoReturn:
+    raise GerritApiError("Gerrit HTTP 503: unavailable", status=503)
+
+
+def test_a_rebase_between_commits_has_no_commit_in_its_headline() -> None:
+    assert headline_json(RebaseHeadline(RebaseStop.PAUSED, None)) == {
+        "section": "local",
+        "reason": "rebase",
+        "severity": "warning",
+        "stop": "paused",
+        "chain": None,
+        "number": None,
+        "subject": None,
+        "sha": None,
+        "url": None,
+        "text": "Rebase paused",
+    }
+    assert headline_json(RebaseHeadline(None, None))["text"] == "Rebase underway"  # type: ignore[index]
 
 
 # --- How a commit relates to Gerrit -----------------------------------------------------
