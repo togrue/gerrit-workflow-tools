@@ -114,6 +114,9 @@
 
     /** Selection changed: the rows' classes and context objects follow, without redrawing. */
     function refresh() {
+      if (!list) {
+        return;
+      }
       for (const element of list.querySelectorAll(".row")) {
         const row = rowOf(element.dataset.key);
         const on = selected.has(row.key);
@@ -143,13 +146,18 @@
       refresh();
     }
 
-    /** Show the row. While walking with the arrow keys: after a short pause, the keyboard stays here. */
+    /**
+     * Show the row. While walking with the arrow keys: after a short pause, the keyboard stays here.
+     * The row is looked up when the pause is over: a redraw in between may have rewritten or dropped it.
+     */
     function show(key, keepFocus, delay) {
       clearTimeout(openTimer);
-      const row = rowOf(key);
-      if (row) {
-        openTimer = setTimeout(() => open(row, keepFocus), delay);
-      }
+      openTimer = setTimeout(() => {
+        const row = rowOf(key);
+        if (row) {
+          open(row, keepFocus);
+        }
+      }, delay);
     }
 
     function step(to, extend) {
@@ -166,7 +174,7 @@
       show(key, true, 150);
     }
 
-    /** Clicks, keys and right-clicks on the rows of `element`. A click on a row's button is the page's. */
+    /** Clicks, keys and right-clicks on the rows of `element`. A click or Enter on a row's button is the page's. */
     function wire(element) {
       list = element;
       element.addEventListener("click", (event) => {
@@ -191,6 +199,9 @@
         }
       });
       element.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && event.target.closest("button")) {
+          return; // it presses the button
+        }
         const at = focused === null ? -1 : indexOf(focused);
         const keys = {
           ArrowDown: () => step(at + 1, event.shiftKey),
@@ -203,10 +214,8 @@
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
           selected = new Set(rows().map((row) => row.key));
           refresh();
-        } else if (keys[event.key]) {
-          keys[event.key]();
-        } else {
-          return;
+        } else if (!keys[event.key] || keys[event.key]() === false) {
+          return; // with no focused row, Enter and Escape are VS Code's
         }
         event.preventDefault();
       });

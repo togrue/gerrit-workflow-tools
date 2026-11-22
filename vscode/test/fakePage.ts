@@ -180,7 +180,10 @@ export class FakeElement {
   }
 }
 
-/** The page `view` (media/<view>.js after common.js), drawn for `model`: its root, what it posted, and how to send it a message. */
+/**
+ * The page `view` (media/<view>.js after common.js), drawn for `model`: its root, what it posted,
+ * how to send it a message, and `flush` to let what the page put off (`setTimeout`) happen.
+ */
 export function fakePage(view: string, model: unknown) {
   const state = { activeElement: null as FakeElement | null };
   const root = new FakeElement("div", state);
@@ -188,12 +191,21 @@ export function fakePage(view: string, model: unknown) {
   body.append(root);
   const posted: Record<string, unknown>[] = [];
   const windowListeners: Listener[] = [];
+  const timers = new Map<number, () => void>();
+  let nextTimer = 1;
+  const flush = () => {
+    const due = [...timers.values()];
+    timers.clear();
+    due.forEach((run) => run());
+  };
   const document = {
     body,
     scrollingElement: undefined,
     get activeElement() {
       return state.activeElement;
     },
+    querySelectorAll: (selector: string) => body.querySelectorAll(selector),
+    querySelector: (selector: string) => body.querySelector(selector),
     createElement: (tag: string) => new FakeElement(tag.toUpperCase(), state),
     getElementById: (id: string) => (id === "root" ? root : null),
     addEventListener: (type: string, listener: Listener) => body.addEventListener(type, listener),
@@ -205,9 +217,12 @@ export function fakePage(view: string, model: unknown) {
     window,
     document,
     CSS: { escape: (text: string) => text },
-    // No waiting: what a page puts off (opening a row while you walk the list) happens at once.
-    setTimeout: (run: () => void) => run(),
-    clearTimeout: () => undefined,
+    // Nothing runs on its own: `flush` is the pause, whatever its length.
+    setTimeout: (run: () => void) => {
+      timers.set(nextTimer, run);
+      return nextTimer++;
+    },
+    clearTimeout: (id: number) => timers.delete(id),
     IntersectionObserver: class {
       observe(): void {}
       disconnect(): void {}
@@ -220,5 +235,5 @@ export function fakePage(view: string, model: unknown) {
   }
   const send = (data: unknown) => windowListeners.forEach((listener) => listener({ data } as unknown as FakeEvent));
   send({ type: "render", vm: model });
-  return { root, posted, send };
+  return { root, posted, send, flush };
 }
