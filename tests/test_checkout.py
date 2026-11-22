@@ -128,6 +128,39 @@ def test_an_older_patchset_is_updated_and_the_commits_above_it_rebased(
     assert "is 1 commit(s) below HEAD" in out
 
 
+def _merge_above(repo: Path) -> str:
+    """Merge a side branch into feature, the merge itself adding a file no other commit has. The new tip."""
+    git("switch", "-q", "-c", "side", "feature~1", cwd=repo)
+    (repo / "side.txt").write_text("side\n", encoding="utf-8")
+    git("add", "side.txt", cwd=repo)
+    git("commit", "-q", "-m", "side", cwd=repo)
+    git("switch", "-q", "feature", cwd=repo)
+    git("merge", "-q", "--no-ff", "--no-commit", "side", cwd=repo)
+    (repo / "merge_only.txt").write_text("resolved by hand\n", encoding="utf-8")
+    git("add", "merge_only.txt", cwd=repo)
+    git("commit", "-q", "-m", "Merge side", cwd=repo)
+    git("branch", "-q", "-D", "side", cwd=repo)
+    return git_out("rev-parse", "HEAD", cwd=repo)
+
+
+@pytest.mark.parametrize("flag", ["--update", "--force"])
+def test_a_merge_commit_above_the_change_refuses_the_update_and_changes_nothing(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    tip = _merge_above(stack_repo)
+    ps2 = gerrit.upload(stack_repo, 2, 2, "test! reworded experiment")
+    code, out, err = _checkout(stack_repo, gerrit, ["102", flag], monkeypatch)
+    assert code == ExitCode.REFUSED, out
+    assert '"Merge side"' in err and "is a merge commit" in err and "nothing was changed" in err
+    assert f"git rebase --rebase-merges --onto {ps2[:12]}" in err and "-b NAME" in err
+    assert _on(stack_repo) == ("feature", tip)
+    assert (stack_repo / "merge_only.txt").exists()
+    # The way out it names: the patchset on a branch of its own.
+    code, _, err = _checkout(stack_repo, gerrit, ["102", "-b", "ps2"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert _on(stack_repo) == ("ps2", ps2)
+
+
 def test_no_update_switches_to_the_older_patchset_unchanged(
     stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
 ) -> None:

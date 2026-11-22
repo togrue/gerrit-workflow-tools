@@ -25,7 +25,7 @@ from gerrit_workflow_tools.core.git_state import (
 )
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX, refuse_own_edits
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_commits, read_commit_rows
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 
 
@@ -256,6 +256,28 @@ def _refusal_to_rebase(plan: CheckoutPlan, why: str) -> CheckoutRefusal:
     )
 
 
+def _refuse_merge_above(cwd: Path | str, plan: CheckoutPlan) -> None:
+    """Refuse to move a local version that has a merge commit above it.
+
+    ``git rebase`` does not replay a merge: it leaves it out, and with it whatever only the merge
+    records (a conflict resolved by hand, an edit made while merging). The preview cannot tell
+    either: it replays the merge's first-parent diff, which the rebase then never applies.
+    """
+    local, patchset = plan.local, plan.patchset
+    assert local is not None
+    merges = merge_commits(cwd, [commit.sha for commit in local.above])
+    merge = next((commit for commit in local.above if commit.sha in merges), None)
+    if merge is None:
+        return
+    raise CheckoutRefusal(
+        f'"{merge.subject}" ({merge.short_sha}), above change {patchset.number} on {plan.branch}, is a merge commit, '
+        f"which git rebase cannot replay onto patchset {patchset.patch_set}: what only the merge records would be "
+        "lost; nothing was changed. Rebase the commits above the change yourself "
+        f"(git rebase --rebase-merges --onto {patchset.commit[:12]} {local.commit.short_sha} {plan.branch}), "
+        f"or check patchset {patchset.patch_set} out on a branch of its own with -b NAME"
+    )
+
+
 def _merged_commit(cwd: Path | str, plan: CheckoutPlan) -> str:
     """One commit: the patchset with your edits of the local version merged in (base: :attr:`CheckoutPlan.edit_base`).
 
@@ -319,7 +341,8 @@ def _update(cwd: Path | str, plan: CheckoutPlan, target: str | None = None) -> i
 def apply_checkout(
     cwd: Path | str, plan: CheckoutPlan, action: CheckoutAction, *, settings: Settings
 ) -> CheckoutResult:
-    """Do *action*. Refuses before touching anything while the working tree has changes to tracked files.
+    """Do *action*. Refuses before touching anything while the working tree has changes to tracked files,
+    or when a merge commit sits above the local version to move (:func:`_refuse_merge_above`).
 
     The patchset is fetched with its target branch, so a branch created for it tracks an
     up-to-date ``<remote>/<target>``. A local version without a Gerrit destination gets that
@@ -329,6 +352,8 @@ def apply_checkout(
     if action is CheckoutAction.SWITCH and branch == plan.current_branch:
         return CheckoutResult(action, branch, resolve_upstream_abbrev_ref(cwd, branch), unchanged=True)
     refuse_own_edits(cwd, None, rerun="ger checkout")
+    if action in (CheckoutAction.UPDATE, CheckoutAction.MERGE):
+        _refuse_merge_above(cwd, plan)
     rebased, moved_from, merged_from = 0, None, None
     if action is CheckoutAction.SWITCH:
         git("switch", "-q", branch, cwd=cwd)
