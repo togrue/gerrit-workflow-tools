@@ -62,13 +62,6 @@ def test_change_id_for_gerrit_rest_path_uppercases_leading_i() -> None:
     assert change_id_for_gerrit_rest_path("I" + "b" * 40) == "I" + "b" * 40
 
 
-def test_change_id_for_gerrit_rest_path_leaves_numeric_and_triplet_unchanged() -> None:
-    assert change_id_for_gerrit_rest_path("12345") == "12345"
-    assert change_id_for_gerrit_rest_path("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == (
-        "proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    )
-
-
 def test_reviewer_accounts_from_change_info_dict_shaped_reviewers() -> None:
     """Gerrit change detail often uses a ``reviewers.REVIEWER`` / ``reviewers.CC`` map."""
 

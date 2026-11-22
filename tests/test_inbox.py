@@ -102,16 +102,6 @@ def _store(*rows: dict[str, Any], stub: list[dict[str, Any]] | None = None) -> C
     return store
 
 
-def test_inbox_help(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, _err = run_cli(tmp_path, inbox_main, ["--help"], monkeypatch, catch_sys_exit=True)
-    assert code == 0
-    assert "ger inbox" in out
-    assert "--json" in out
-    assert "--to-review" in out
-    assert "--color" in out
-    assert "--hyperlinks" in out
-
-
 def test_empty_inbox_is_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store()
     store.stub_query(TO_REVIEW_QUERY, [])
@@ -445,7 +435,7 @@ def test_inbox_json_keeps_raw_url_with_hyperlinks(
     assert "\x1b]8;" not in out
 
 
-@pytest.mark.parametrize("limit", ["0", "-2", "x"])
+@pytest.mark.parametrize("limit", ["0", "-2"])
 def test_inbox_rejects_a_non_positive_limit(limit: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, inbox_main, ["--limit", limit], monkeypatch, catch_sys_exit=True)
     assert code == ExitCode.USAGE

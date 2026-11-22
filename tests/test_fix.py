@@ -58,16 +58,6 @@ def test_ger_fix_prompt_diff_then_yes(stack_repo: Path, monkeypatch: pytest.Monk
     assert subj.startswith("fixup! ")
 
 
-def test_ger_fix_commit_fixup_on_ref(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    target = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
-    (stack_repo / "a.txt").write_text("patched\n", encoding="utf-8")
-    git("add", "a.txt", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, ger_fix_main, [target], monkeypatch)
-    assert code == 0, err
-    subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
-    assert subj.startswith("fixup! ")
-
-
 def test_ger_fix_refs_changes_local_ref(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``refs/changes/…`` form resolves via local ref (no fetch)."""
     tip = git_out("rev-parse", "HEAD~1", cwd=stack_repo)

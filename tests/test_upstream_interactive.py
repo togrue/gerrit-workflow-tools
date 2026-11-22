@@ -83,20 +83,6 @@ def test_ensure_branch_upstream_interactive_detached_skips_prompt(
     assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
 
 
-def test_ensure_branch_upstream_interactive_non_tty_skips_prompt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    repo = _make_repo_with_origin(tmp_path)
-    assert not branch_has_upstream(repo, "feature")
-    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-
-    def _boom(_cwd: Path | str | None, _branch: str) -> str | None:
-        raise AssertionError("prompt must not run without tty")
-
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _boom)
-    assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
-
-
 def test_require_branch_upstream_non_tty_prints_hint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

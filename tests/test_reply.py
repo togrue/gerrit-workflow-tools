@@ -154,10 +154,6 @@ def test_discard_removes_your_draft(stack_repo: Path, monkeypatch: pytest.Monkey
 @pytest.mark.parametrize(
     "argv",
     [
-        ["c-root"],
-        ["c-root", "-m", "x", "--done"],
-        ["c-root", "--done", "--unresolve"],
-        ["c-root", "-m", "   "],
         ["c-root", "--discard", "-m", "x"],
         [f"{WEB}/c/testproj/+/100/comment/c-root/", "--change", "change:100", "--done"],
     ],

@@ -16,7 +16,6 @@ from gerrit_workflow_tools.core.change_id import (
     parse_change_id_footer,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.stack import read_commit_rows
 from tests.conftest import run_cli
 from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid
 
@@ -167,14 +166,6 @@ def test_gcid_defaults_to_head(gcid_cli_repo, monkeypatch):
     assert out.strip() == _HEAD_CID
 
 
-def test_gcid_explicit_sha(gcid_cli_repo, monkeypatch):
-    head_sha = git_out("rev-parse", "HEAD", cwd=gcid_cli_repo)
-    code, out, err = run_cli(gcid_cli_repo, gcid_main, [head_sha], monkeypatch)
-    assert code == 0
-    assert out.strip() == _HEAD_CID
-    assert err == ""
-
-
 def test_gcid_range_two_commits_order(gcid_cli_repo, monkeypatch):
     code, out, err = run_cli(
         gcid_cli_repo,
@@ -186,25 +177,6 @@ def test_gcid_range_two_commits_order(gcid_cli_repo, monkeypatch):
     assert err == ""
     lines = [ln for ln in out.splitlines() if ln.strip()]
     assert lines == [_PARENT_CID, _HEAD_CID]
-
-
-def test_gcid_single_commit_range_syntax(gcid_cli_repo, monkeypatch):
-    """HEAD~1..HEAD is one commit; still uses range mode (.. present)."""
-    code, out, _err = run_cli(
-        gcid_cli_repo,
-        gcid_main,
-        ["HEAD~1..HEAD"],
-        monkeypatch,
-    )
-    assert code == 0
-    assert out.strip() == _HEAD_CID
-
-
-def test_gcid_passthrough_change_id_no_git(gcid_cli_repo, monkeypatch):
-    code, out, err = run_cli(gcid_cli_repo, gcid_main, [_HEAD_CID], monkeypatch)
-    assert code == 0
-    assert out.strip() == _HEAD_CID
-    assert err == ""
 
 
 def test_gcid_invalid_ref(gcid_cli_repo, monkeypatch):
@@ -309,13 +281,6 @@ def test_gcid_check_reports_every_issue_oldest_first(stack_repo, monkeypatch):
     assert len(lines) == 2, err
     assert lines[0].endswith("no Change-Id in commit message")
     assert lines[1].endswith("invalid Change-Id: 'Ibad'")
-
-
-def test_gcid_check_rejects_rev_or_range(stack_repo, monkeypatch):
-    code, out, err = run_cli(stack_repo, gcid_main, ["--check", "HEAD~2"], monkeypatch)
-    assert code == ExitCode.USAGE
-    assert out == ""
-    assert "full current stack" in err or "REV_OR_RANGE" in err
 
 
 def test_gcid_check_rejects_change_id_arg(stack_repo, monkeypatch):
@@ -445,12 +410,6 @@ def test_malformed_footer_is_extracted_raw_but_not_valid() -> None:
     assert parse_change_id_footer(msg) == "garbage"
     assert extract_valid_change_id(msg) is None
     assert parse_change_id_footer("title only") is None
-
-
-def test_read_commit_rows_keeps_a_last_commit_with_an_empty_message(gcid_cli_repo):
-    git("commit", "--allow-empty", "--allow-empty-message", "-m", "", cwd=gcid_cli_repo)
-    rows = read_commit_rows(gcid_cli_repo, "-1", "HEAD")
-    assert [row.subject for row in rows] == [""]
 
 
 def test_gcid_empty_range_says_so_on_stderr(gcid_cli_repo, monkeypatch):

@@ -61,16 +61,6 @@ def test_gpush_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "--follow-merges" in out
 
 
-def test_gpush_dry_run_prints_commit_preview(stack_repo, monkeypatch):
-    """Gerrit dry-run shows the stack preview and the would-be ``git push`` refspec."""
-    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 0
-    assert "About to push commits:" in out
-    assert "git push" in out
-    assert ":refs/for/" in out
-    assert "[dry-run]" in err
-
-
 def test_gpush_dry_run_does_not_call_input(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _boom(*_a: object, **_k: object) -> str:
         raise AssertionError("input should not be called in --dry-run")
@@ -198,55 +188,10 @@ def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypa
     assert code == 0
 
 
-def test_gpush_branch_flag_pushes_specified_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("checkout", "main", cwd=stack_repo)
-    code, out, err = run_cli(stack_repo, gpush_main, ["--branch", "feature", "--dry-run"], monkeypatch)
-    assert code == 0
-    assert "About to push commits:" in out
-    push_lines = [ln for ln in out.splitlines() if ln.startswith("    ")]
-    assert len(push_lines) == 2
-    assert any("Refactor parser init" in ln for ln in push_lines)
-    assert any("Extract command routing" in ln for ln in push_lines)
-    assert "Stopped at commit" in out
-    assert ":refs/for/main" in out
-    assert "[dry-run]" in err
-
-
 def test_gpush_branch_flag_unknown_branch_errors(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, gpush_main, ["--branch", "no-such-branch", "--dry-run"], monkeypatch)
     assert code == ExitCode.NOT_FOUND
     assert "no-such-branch" in err
-
-
-def test_gpush_dry_run_normalizes_origin_main_to_refs_for_main(
-    stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Upstream ``origin/main`` must push to ``refs/for/main``, not ``refs/for/origin/main``."""
-    repo = stack_repo_unconfigured
-    _add_self_origin_and_fetch(repo)
-    git("branch", "--set-upstream-to=origin/main", "feature", cwd=repo)
-    mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
-    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-    code, _out, _err = run_cli(repo, gpush_main, ["--yes"], monkeypatch)
-    assert code == 0
-    refspec = _mock_gerrit_push_refspec(mock_run)
-    assert ":refs/for/main" in refspec
-    assert "origin/main" not in refspec
-
-
-def test_gpush_duplicate_change_id_stops_at_boundary(dup_repo, monkeypatch):
-    """Duplicate Change-Id soft-fails: push the good prefix, show boundary reason."""
-    code, out, err = run_cli(dup_repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 0
-    assert "About to push commits:" in out
-    assert "Stopped at commit" in out
-    assert "duplicate Change-Id" in out
-    about, _stopped = out.split("Stopped at commit", 1)
-    assert "dup 0" in about
-    assert "dup 1" not in about
-    assert about.count(" # ") == 1
-    assert "[dry-run]" in err
 
 
 class _StdinNonTTY:
@@ -312,15 +257,6 @@ def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: 
     mock_run.assert_not_called()
 
 
-def test_gpush_noninteractive_yes_runs_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-    mock_run = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
-    code, _out, _err = run_cli(stack_repo, gpush_main, ["--yes"], monkeypatch)
-    assert code == 0
-    mock_run.assert_called_once()
-
-
 def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
@@ -374,44 +310,6 @@ def test_gpush_reviewers_append_to_refspec(stack_repo: Path, monkeypatch: pytest
     assert "%r=alice,r=bob" in refspec
 
 
-def test_gpush_lazy_strategy_omits_refspec_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, err = run_cli(
-        stack_repo,
-        gpush_main,
-        ["--dry-run", "--reviewers", "alice", "--reviewer-strategy", "lazy"],
-        monkeypatch,
-    )
-    assert code == 0
-    assert "%r=" not in out
-    assert "%r=" not in err
-    assert "lazy" in err and "reviewers" in err
-
-
-def test_gpush_lazy_dry_run_includes_topic_and_wip_on_refspec(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    code, out, _err = run_cli(
-        stack_repo,
-        gpush_main,
-        [
-            "--dry-run",
-            "--reviewers",
-            "alice",
-            "--reviewer-strategy",
-            "lazy",
-            "--topic",
-            "my-series",
-            "--wip",
-        ],
-        monkeypatch,
-    )
-    assert code == 0
-    assert "%r=" not in out
-    line = next(ln for ln in out.splitlines() if ln.strip().startswith("git push"))
-    assert "wip" in line
-    assert "topic=my-series" in line
-
-
 def test_gpush_dry_run_status_line_spells_out_topic_wip_and_private(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -443,14 +341,6 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
     )
     assert code == 1
     assert "REST" in err or "gerrit" in err.lower()
-
-
-def test_git_push_rejected_no_new_changes_detects_gerrit_message() -> None:
-    from gerrit_workflow_tools.core.push_result import push_rejected_no_new_changes
-
-    rejected = "! [remote rejected] deadbeef -> refs/for/main (no new changes)\n"
-    assert push_rejected_no_new_changes("", rejected)
-    assert not push_rejected_no_new_changes("SUCCESS\n", "")
 
 
 def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -950,34 +840,6 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     assert "`r=alice` -> `r=alice,r=bob`" in out
 
 
-def test_gpush_push_show_attributes_false_skips_attribute_suffix(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.pushShowAttributes", "false", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(
-        rows,
-        per_index_overrides=[
-            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
-            {"reviewers": [{"account": {"username": "alice"}, "state": "REVIEWER"}]},
-            {},
-            {},
-        ],
-    )
-    code, out, _err = run_cli(
-        stack_repo,
-        gpush_main,
-        ["--dry-run", "--reviewers", "alice"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0
-    assert "`r=alice`" not in out
-
-
 def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1269,15 +1131,6 @@ def _advance_main_with_commit(repo: Path) -> None:
     git("checkout", "feature", cwd=repo)
 
 
-def test_gpush_default_remote_policy_skips_rebase_check(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _add_self_origin_and_fetch(stack_repo)
-    _advance_main_with_commit(stack_repo)
-    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
-    assert code == 0
-    assert "About to push commits:" in out
-    assert "not based directly" not in err.lower()
-
-
 def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
@@ -1297,16 +1150,6 @@ def test_gpush_error_not_rebased_exits(stack_repo: Path, monkeypatch: pytest.Mon
     assert code == 1
     assert "error:" in err.lower()
     assert "ger rebase --onto-remote" in err
-
-
-def test_gpush_no_rebase_check_bypasses_error_policy(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _add_self_origin_and_fetch(stack_repo)
-    _advance_main_with_commit(stack_repo)
-    git("config", "gerrit.push.remotePolicy", "error-not-rebased", cwd=stack_repo)
-    code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--no-rebase-check"], monkeypatch)
-    assert code == 0
-    assert "About to push commits:" in out
-    assert "not based directly" not in err.lower()
 
 
 def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

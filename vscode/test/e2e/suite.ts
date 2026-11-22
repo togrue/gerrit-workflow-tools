@@ -896,7 +896,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "you add a line to c.txt and amend the stopped commit",
-        "The stopped commit shows what it is now: a new SHA, HEAD, changed here since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.",
+        "The stopped commit shows what it is now: a new SHA, HEAD, its code changed since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.",
         "Local stack shows the commit as before the amend: its old SHA, the same as on Gerrit, and no HEAD row at all; the Change view stays on the old commit (#57).",
         () => {
           write("c.txt", "file c.txt\namended at the stop\n");
@@ -905,7 +905,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "you run git rebase --continue, and the rebase finishes",
-        "The banner and the marks go: the branch is back, the amended commit changed here since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
+        "The banner and the marks go: the branch is back, the amended commit with its code changed since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
         undefined,
         () => gitRun(["rebase", "--continue"]),
       );
@@ -913,7 +913,7 @@ export async function run(): Promise<void> {
       // A conflict while continuing, resolved.
       await inTerminal(
         "you stop at \"Refactor parser init\" the same way, and amend it to also add e.txt",
-        "Local stack marks the rebase stopped at that commit, which shows its new code (changed here since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
+        "Local stack marks the rebase stopped at that commit, which shows its new code (its code changed since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.",
         "the row keeps its old SHA, the same as on Gerrit, and no row is HEAD (#57); the Change view shows the commit as it was before (#57); the header reads detached (#57); no Continue or Abort (#56); the status bar still shows the headline (#62).",
         () => {
           editAt("Refactor parser init");

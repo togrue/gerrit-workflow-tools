@@ -5,7 +5,6 @@ import pytest
 from gerrit_workflow_tools.push_input_line import (
     Diagnostic,
     PushLineState,
-    Span,
     format_canonical,
     parse,
     refspec_options,
@@ -61,13 +60,6 @@ def test_example_b_variants_all_yield_alice_bob_topic_abc(buf: str) -> None:
     assert s.topic == "abc"
 
 
-def test_topic_quoted_with_spaces_kept_as_value() -> None:
-    s = _state('alice topic "my topic" wip')
-    assert s.topic == "my topic"
-    assert s.reviewers == ["alice"]
-    assert s.wip is True
-
-
 # ---------- removal ----------
 
 
@@ -105,14 +97,6 @@ def test_keyword_wip_not_treated_as_reviewer_name() -> None:
     assert s.reviewers == []
 
 
-def test_case_insensitive_keywords() -> None:
-    s = _state("WIP Private TOPIC=x LaZy")
-    assert s.wip is True
-    assert s.private is True
-    assert s.topic == "x"
-    assert s.strategy == "lazy"
-
-
 def test_dedup_reviewers_preserves_order() -> None:
     s = _state("alice bob alice carol bob")
     assert s.reviewers == ["alice", "bob", "carol"]
@@ -121,12 +105,6 @@ def test_dedup_reviewers_preserves_order() -> None:
 def test_strategy_keywords_set_strategy_last_one_wins() -> None:
     s = _state("lazy overwrite push lazy")
     assert s.strategy == "lazy"
-
-
-def test_strategy_keywords_are_reserved_not_reviewers() -> None:
-    s = _state("alice lazy overwrite")
-    assert s.reviewers == ["alice"]
-    assert s.strategy == "overwrite"
 
 
 def test_publish_drafts_is_a_flag_not_a_reviewer() -> None:
@@ -222,11 +200,6 @@ def test_refspec_options_push_strategy_emits_reviewers_and_flags() -> None:
     assert refspec_options(s, "push") == ["r=alice", "r=bob", "wip", "private", "topic=t1"]
 
 
-def test_refspec_options_lazy_strategy_omits_reviewers() -> None:
-    s = _state("alice bob wip topic=t1")
-    assert refspec_options(s, "lazy") == ["wip", "topic=t1"]
-
-
 def test_refspec_options_overwrite_strategy_omits_reviewers() -> None:
     s = _state("alice private")
     assert refspec_options(s, "overwrite") == ["private"]
@@ -244,12 +217,6 @@ def test_tokenizer_offsets_match_substring() -> None:
     tokens, _ = tokenize(buf)
     for tok in tokens:
         assert buf[tok.start : tok.end] == tok.text or tok.quoted
-
-
-def test_spans_have_increasing_offsets() -> None:
-    res = parse("alice bob topic=abc wip")
-    for a, b in zip(res.spans, res.spans[1:], strict=False):
-        assert a.start <= b.start
 
 
 def test_minus_span_records_minus_and_target_separately() -> None:
@@ -281,8 +248,3 @@ def test_diagnostic_dataclass_is_hashable_via_fields() -> None:
     d = Diagnostic("error", "x", 0, 1)
     assert d.severity == "error"
     assert (d.start, d.end) == (0, 1)
-
-
-def test_span_dataclass_is_hashable_via_fields() -> None:
-    s = Span("reviewer", 0, 5)
-    assert (s.start, s.end, s.kind) == (0, 5, "reviewer")

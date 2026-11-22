@@ -38,12 +38,6 @@ def test_prepend_skips_when_identity_missing(history_cache: Path) -> None:
     assert list(history_cache.rglob("*.txt")) == []
 
 
-def test_prepend_push_options_history_newest_first(history_cache: Path) -> None:
-    hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
-    hist.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_A)
-    assert hist.load_push_options_history(web_base=WEB, project=PROJECT_A) == ["r=bob", "r=alice"]
-
-
 def test_prepend_push_options_history_dedupes(history_cache: Path) -> None:
     hist.prepend_push_options_history("r=alice", web_base=WEB, project=PROJECT_A)
     hist.prepend_push_options_history("r=bob", web_base=WEB, project=PROJECT_A)

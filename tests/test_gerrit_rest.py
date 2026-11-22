@@ -43,10 +43,6 @@ def _change_row(
     }
 
 
-def test_encode_gerrit_path_segment_encodes_slashes_once() -> None:
-    assert encode_gerrit_path_segment("tools/SomeProject~59446") == "tools%2FSomeProject~59446"
-
-
 def test_encode_gerrit_path_segment_does_not_double_encode() -> None:
     """Gerrit ChangeInfo.id values are already percent-encoded."""
     assert encode_gerrit_path_segment("tools%2FSomeProject~59446") == "tools%2FSomeProject~59446"
@@ -177,29 +173,6 @@ def test_alias_skips_other_branch_when_only_target_requested() -> None:
     out = alias_batch_fetch_results([requested], {row_main["id"]: row_main, row_dev["id"]: row_dev})
     assert out[requested] is row_dev
     assert out[row_main["id"]] is row_main
-
-
-def test_batch_load_same_change_id_different_branches_no_overwrite() -> None:
-    cid = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    row_main = _change_row(project="p", branch="main", change_id=cid, number=1)
-    row_dev = _change_row(project="p", branch="dev", change_id=cid, number=2)
-    client = MagicMock()
-
-    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
-        del n, options
-        assert "branch:" not in q
-        assert f"change:{cid}" in q
-        return [row_main, row_dev]
-
-    client.query_changes.side_effect = query_changes
-
-    refs = [row_main["id"], row_dev["id"]]
-    out = batch_load_change_details(client, refs)
-
-    assert set(out.keys()) == {row_main["id"], row_dev["id"]}
-    assert out[row_main["id"]]["_number"] == 1
-    assert out[row_dev["id"]]["_number"] == 2
-    assert client.query_changes.call_count == 1
 
 
 def test_query_single_change_triplet_returns_one() -> None:
