@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -112,8 +113,7 @@ class CiContentStore:
             with contextlib.suppress(OSError):
                 path.unlink()
             return None
-        with contextlib.suppress(OSError):
-            os.utime(path)
+        _mark_used(path)
         return entry
 
     def put(self, key: str, entry: StoredCiContent) -> bool:
@@ -130,6 +130,7 @@ class CiContentStore:
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(kept.to_dict(), separators=(",", ":")), encoding="utf-8")
             os.replace(tmp, path)
+            _mark_used(path)
         except OSError as exc:
             logger.debug("could not store CI content %s: %s", path, exc)
             return False
@@ -162,3 +163,14 @@ class CiContentStore:
                 path.unlink()
                 removed += 1
         return removed
+
+
+def _mark_used(path: Path) -> None:
+    """Stamp *path* as used now, from Python's clock.
+
+    A write gets its mtime from the file system's clock, which on Windows ticks every ~15 ms; when
+    reads and writes are stamped from two clocks, least recently used can tie or come out reversed.
+    """
+    now = time.time_ns()
+    with contextlib.suppress(OSError):
+        os.utime(path, ns=(now, now))

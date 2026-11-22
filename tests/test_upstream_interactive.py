@@ -58,6 +58,8 @@ def test_ensure_branch_upstream_interactive_sets_upstream(tmp_path: Path, monkey
     repo = _make_repo_with_origin(tmp_path)
     assert not branch_has_upstream(repo, "feature")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    # On Windows the prompt also needs stdout to be a console, which pytest's capture is not.
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: True)
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",

@@ -1,0 +1,149 @@
+name: CI
+
+# Every pull request and every push to dev runs what AGENTS.md "Build and check" asks for:
+# ruff, mypy, the unit tests on Linux and Windows, the extension's tests and its e2e run.
+# Nightly and on demand it also runs the integration tests against a real Gerrit in Docker, and
+# the e2e run against the newest VS Code instead of the pinned one.
+
+on:
+  pull_request:
+  push:
+    branches: [dev]
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its older run. Runs on dev are never cancelled: each
+# merge gets its own result, and a merge does not stop the nightly integration tests.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: ruff and mypy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - name: ruff format
+        run: uv run ruff format --check .
+      - name: ruff check
+        run: uv run ruff check .
+      - name: mypy src
+        run: uv run mypy src
+      - name: mypy tests
+        run: uv run mypy tests
+
+  unit:
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    # Linux takes about 1.5 minutes; Windows about 15, as every test spawns git processes.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 40 || 15 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest Python requires-python allows, and a current one on both systems.
+          - { os: ubuntu-latest, python: "3.10" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.13" }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: uv run pytest -q
+
+  extension:
+    name: VS Code extension tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: vscode
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  e2e:
+    name: VS Code e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: vscode
+    env:
+      # Pull requests and pushes use a pinned VS Code, the nightly run the newest. Raise the pin
+      # when the nightly run is green (after `npm run e2e -- --update` if the transcript moved).
+      GER_E2E_VSCODE_VERSION: ${{ github.event_name == 'schedule' && 'latest' || '1.147.0' }}
+      GER_E2E_PNG: ${{ github.workspace }}/e2e-output
+      GER_E2E_TIMEOUT_SECONDS: "900"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Cache VS Code
+        if: env.GER_E2E_VSCODE_VERSION != 'latest'
+        id: vscode-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ger-vscode-test
+          key: vscode-linux-x64-${{ env.GER_E2E_VSCODE_VERSION }}
+      - name: Get VS Code ${{ env.GER_E2E_VSCODE_VERSION }}
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        run: npm run e2e -- --get-vscode
+      # VS Code from the tarball has no setuid sandbox helper; Ubuntu 24.04 otherwise refuses
+      # Electron the user namespaces its sandbox needs.
+      - name: Allow the Electron sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # No display on the runner: run.ts starts VS Code headless. The pictures of every step and
+      # the transcript are uploaded, so a change to the views can be reviewed by looking at them.
+      - name: e2e
+        run: npm run e2e
+      - name: Upload the e2e pictures and transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output
+          path: ${{ github.workspace }}/e2e-output
+          if-no-files-found: ignore
+          retention-days: 14
+
+  integration:
+    name: Integration tests (Gerrit in Docker)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked --group integration
+      - run: uv run --group integration pytest tests/integration -q
+      - name: Gerrit's log
+        if: failure()
+        run: docker logs gerrit-workflow-tools-integration 2>&1 | tail -300 || true

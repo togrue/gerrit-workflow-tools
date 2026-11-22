@@ -1,5 +1,6 @@
-# The full test suite is run manually (see AGENTS.md). The guardrail tests below are
-# fast (no git, no network) and run on every commit.
+# The full test suite runs in CI on every pull request (.github/workflows/ci.yml) and by hand
+# before one (see AGENTS.md). The guardrail tests below are fast (no git, no network) and run
+# on every commit.
 repos:
   - repo: local
     hooks:
