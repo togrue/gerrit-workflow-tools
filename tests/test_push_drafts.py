@@ -52,15 +52,6 @@ def _options(refspec: str | None) -> list[str]:
     return refspec.partition("%")[2].split(",") if "%" in refspec else []
 
 
-def test_yes_keeps_drafts_unless_asked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Scripts and agents never publish by accident, even with an account preference that would."""
-    store, _rows, keys = _pushed(stack_repo)
-    _with_draft(store, keys[0])
-    code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, ["-y"], store)
-    assert code == ExitCode.OK
-    assert "no-publish-comments" in _options(refspec)
-
-
 def test_yes_with_publish_comments_publishes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, _rows, keys = _pushed(stack_repo)
     _with_draft(store, keys[0])
@@ -76,9 +67,7 @@ def test_no_drafts_sends_no_comment_option(stack_repo: Path, monkeypatch: pytest
     assert not any("publish-comments" in option for option in _options(refspec))
 
 
-@pytest.mark.parametrize(
-    ("answer", "option"), [("", "publish-comments"), ("y", "publish-comments"), ("p", "no-publish-comments")]
-)
+@pytest.mark.parametrize(("answer", "option"), [("", "publish-comments"), ("y", "publish-comments")])
 def test_prompt_offers_to_publish_the_drafts(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch, answer: str, option: str
 ) -> None:

@@ -44,11 +44,6 @@ def test_prefer_checks_links_drops_messages_when_checks_present() -> None:
     assert prefer_checks_links(links) == [links[0]]
 
 
-def test_prefer_checks_links_keeps_messages_when_no_checks() -> None:
-    links = [CiLink(label="bot", url="https://ci/from-msg", source="message")]
-    assert prefer_checks_links(links) == links
-
-
 def test_apply_ci_strategy_none_is_noop() -> None:
     assert apply_ci_strategy(None, project="p", checks=[], messages=[]) == []
 

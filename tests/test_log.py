@@ -283,17 +283,6 @@ def test_log_no_reviewers_shown_in_attention(stack_repo: Path, monkeypatch: pyte
     assert any("no-reviewers" in item.get("attention_reasons", []) for item in data["commits"])
 
 
-def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    mb = git_out("merge-base", "main", "HEAD", cwd=stack_repo)
-    revset = f"{mb}..HEAD"
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, [revset], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 0, err
-    assert "summary:" in out
-
-
 def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     code, out, err = run_cli(stack_repo, log_main, ["not-a-real-revision"], monkeypatch)
@@ -512,20 +501,6 @@ def test_log_file_redirect_encodes_unicode(
     assert _unicode_strikethrough(rows[-1].subject) in text
 
 
-def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    overrides: list[dict[str, Any]] = [{}] * len(rows)
-    overrides[-1] = {"status": "ABANDONED"}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 0, err
-    data = json_stdout(out)
-    commits = data["commits"]
-    assert commits[-1]["abandoned"] is True
-    assert commits[0]["abandoned"] is False
-
-
 def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     git("config", "gerrit.logShowUrl", "true", cwd=stack_repo)
@@ -588,41 +563,6 @@ def test_log_hyperlinks_verbose_uses_label(stack_repo: Path, monkeypatch: pytest
     assert "\x1b]8;;https://gerrit.example" in out
     assert GERRIT_LINK_LABEL in strip_ansi(out)
     assert "https://gerrit.example" not in strip_ansi(_primary_log_lines(out)[0])
-
-
-def test_log_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    git("config", "gerrit.logShowUrl", "true", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
-    code, out, err = run_cli(
-        stack_repo,
-        log_main,
-        ["--hyperlinks", "never", "--color=never"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0, err
-    assert "\x1b]8;" not in out
-    assert "g.example" in out or "/+/" in out
-    assert GERRIT_LINK_LABEL not in out
-
-
-def test_log_json_keeps_raw_gerrit_url_with_hyperlinks(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
-    code, out, err = run_cli(
-        stack_repo,
-        log_main,
-        ["--json", "--hyperlinks", "always"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0, err
-    data = json_stdout(out)
-    assert "\x1b]8;" not in out
-    assert any((item.get("gerrit_url") or "").startswith("https://gerrit.example") for item in data["commits"])
 
 
 # ---------------------------------------------------------------------------

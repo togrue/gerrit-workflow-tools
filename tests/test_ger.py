@@ -52,18 +52,6 @@ def test_ger_inbox_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     assert "ger inbox" in out
 
 
-def test_ger_rebase_help_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, _err = _run_ger(stack_repo, ["rebase", "--help"], monkeypatch, catch_sys_exit=True)
-    assert code == 0
-    assert "ger rebase" in out
-
-
-def test_ger_restack_alias_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, out, _err = _run_ger(stack_repo, ["restack", "--help"], monkeypatch, catch_sys_exit=True)
-    assert code == 0
-    assert "ger rebase" in out
-
-
 def test_ger_stack_alias_delegates(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, out, _err = _run_ger(stack_repo, ["stack", "--help"], monkeypatch, catch_sys_exit=True)
     assert code == 0

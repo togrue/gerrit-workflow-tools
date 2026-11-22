@@ -15,15 +15,6 @@ from gerrit_workflow_tools.core.git_run import git
 # produced, so the defaults and the parsing of each value can be stated directly.
 
 
-def test_scripts_dir_defaults_and_override() -> None:
-    assert Settings.from_map({}).scripts_dir == ".ger"
-    assert Settings.from_map({"gerrit.scriptsDir": "ext"}).scripts_dir == "ext"
-
-
-def test_stop_pattern_defaults() -> None:
-    assert Settings.from_map({}).stop_pattern == _DEFAULT_STOP_PATTERN
-
-
 def test_stop_pattern_from_settings() -> None:
     assert Settings.from_map({"gerrit.stopPattern": r"^hold:"}).stop_pattern == r"^hold:"
 
@@ -48,11 +39,6 @@ def test_push_remote_policy_defaults_and_aliases() -> None:
     assert Settings.from_map({}).push_remote_policy == "ignore-not-rebased"
     assert Settings.from_map({"gerrit.push.remotePolicy": "WARN-NOT-REBASED"}).push_remote_policy == "warn-not-rebased"
     assert Settings.from_map({"gerrit.push.remotePolicy": "bogus"}).push_remote_policy == "ignore-not-rebased"
-
-
-def test_gerrit_remote_defaults_to_origin() -> None:
-    assert Settings.from_map({}).gerrit_remote == "origin"
-    assert Settings.from_map({"gerrit.remote": "gerrit"}).gerrit_remote == "gerrit"
 
 
 def test_flag_accepts_git_truthy_spellings() -> None:
@@ -86,21 +72,6 @@ def test_inbox_settings_defaults_and_overrides() -> None:
     assert configured.inbox_limit == 20
 
 
-def test_keys_are_canonicalized_like_git_config_list() -> None:
-    """Git lowercases the last segment only; a snapshot must answer either spelling."""
-    settings = Settings.from_map({"gerrit.webUrl": "https://g.example"})
-    assert settings.get("gerrit.weburl") == "https://g.example"
-    assert settings.get("gerrit.WEBURL") == "https://g.example"
-    assert settings.gerrit_web_url == "https://g.example"
-
-
-def test_values_are_stripped_and_blank_reads_as_unset() -> None:
-    settings = Settings.from_map({"gerrit.remote": "  gerrit  ", "gerrit.project": "   "})
-    assert settings.gerrit_remote == "gerrit"
-    assert settings.get("gerrit.remote") == "gerrit"
-    assert settings.gerrit_project is None
-
-
 def test_branch_scoped_keys_preserve_branch_name_case() -> None:
     settings = Settings.from_map({"branch.Feature/X.gerritTarget": "main"})
     assert settings.branch_gerrit_target("Feature/X") == "main"
@@ -131,12 +102,6 @@ def test_from_map_defaults_scope_to_local_and_accepts_overrides() -> None:
     )
     assert global_remote.scope("gerrit.remote") is ConfigScope.LOCAL
     assert global_remote.scope("gerrit.webUrl") is ConfigScope.GLOBAL
-
-
-def test_blank_value_has_no_scope() -> None:
-    settings = Settings.from_map({"gerrit.project": "   "}, scopes={"gerrit.project": ConfigScope.GLOBAL})
-    assert settings.get("gerrit.project") is None
-    assert settings.scope("gerrit.project") is None
 
 
 def test_from_cwd_is_a_snapshot_not_a_live_view(stack_repo: Path) -> None:

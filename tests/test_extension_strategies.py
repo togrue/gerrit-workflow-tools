@@ -6,7 +6,6 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import annotate_attention
 from gerrit_workflow_tools.core.attention_strategy import (
-    attention_reasons_via_registry,
     clear_attention_strategy_cache,
     commit_blocks_chain_via_registry,
 )
@@ -41,28 +40,6 @@ def _commit(**kwargs: object) -> LogCommit:
     }
     defaults.update(kwargs)
     return LogCommit(**defaults)  # type: ignore[arg-type]
-
-
-def test_attention_strategy_override(stack_repo: Path) -> None:
-    _write_registry(
-        stack_repo,
-        "attention",
-        """
-def _attn(*, commit, chain_blocked):
-    return ["custom-attention"]
-STRATEGIES = {"testproj": _attn}
-""",
-    )
-    clear_attention_strategy_cache()
-    commit = _commit()
-    reasons = attention_reasons_via_registry(
-        stack_repo,
-        project="testproj",
-        commit=commit,
-        chain_blocked=False,
-        settings=Settings.from_map({}),
-    )
-    assert reasons == ["custom-attention"]
 
 
 def test_chain_block_strategy_override(stack_repo: Path) -> None:

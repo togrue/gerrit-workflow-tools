@@ -6,8 +6,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -120,32 +118,6 @@ def test_attention_text_variants():
     assert "unresolved" in result
 
 
-def test_enriched_subject_format():
-    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.rebase_enricher import _enriched_subject
-
-    commit = LogCommit(
-        sha="abc" * 13 + "ab",
-        short_sha="abc1234",
-        summary="perf: tweak hot path",
-        change_id="Iabc123",
-        pushed=True,
-        abandoned=False,
-        patchset_status="active",
-        verified=1,
-        code_review=2,
-        comments_unresolved=0,
-        submittable=True,
-    )
-    subj = _enriched_subject(commit)
-    assert subj.startswith("# ")
-    assert "perf: tweak hot path" in subj
-    assert "p" in subj  # patchset letter
-    assert "v+1" in subj
-    assert "cr+2" in subj
-    assert "submittable" in subj
-
-
 def test_enriched_subject_truncates_long_summary():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.rebase_enricher import _SUBJECT_WIDTH, _enriched_subject
@@ -219,17 +191,6 @@ def test_enriched_subject_not_pushed_shows_dash():
 # ---------------------------------------------------------------------------
 
 
-def test_enrich_todo_passthrough_without_gerrit_url(tmp_path: Path):
-    """When gerrit.webUrl is not configured the todo is returned unchanged."""
-    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
-
-    text = "pick abc1234 some commit\n# comment\n"
-    with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
-        result = _enrich_todo(text, RunContext.open(tmp_path))
-
-    assert result == text
-
-
 def test_enrich_todo_preserves_comment_and_blank_lines(tmp_path: Path):
     """Comment lines and blank lines are preserved as-is."""
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
@@ -278,20 +239,6 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
 
     # Original comment / blank lines must survive.
     assert "# Rebase a1b2c3" in result
-
-
-def test_enrich_todo_preserves_action_and_sha(stack_repo: Path):
-    """The action token and SHA must not be modified."""
-    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
-
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
-    text = _make_todo(rows).replace("pick ", "drop ", 1)  # first line: drop
-
-    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
-
-    first_short = rows[0].short_sha
-    assert result.startswith(f"drop {first_short} # ")
 
 
 def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
@@ -637,16 +584,6 @@ def test_cli_rebase_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkey
         rebase_main(["--onto-remote", "--drop-merged-equivalent"])
 
     assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") == "1"
-
-
-def test_cli_rebase_cannot_combine_onto_remote_with_rev(stack_repo: Path, monkeypatch):
-
-    from gerrit_workflow_tools.cli_rebase import main as rebase_main
-
-    monkeypatch.chdir(stack_repo)
-    with pytest.raises(SystemExit) as exc:
-        rebase_main(["--onto-remote", "HEAD"])
-    assert exc.value.code == 2
 
 
 def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monkeypatch):

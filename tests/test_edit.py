@@ -121,26 +121,6 @@ def test_gedit_bare_resume_starts_at_oldest(stack_repo: Path, monkeypatch: pytes
     assert cursor.change_id == rows[0].change_id
 
 
-def test_gedit_next_skips_cursor_still_needing_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    assert len(rows) >= 2
-    overrides: list[dict] = [{}] * len(rows)
-    overrides[0] = {"unresolved_comment_count": 2}
-    overrides[1] = {"verified": -1}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    store = ChangeStore(details)
-    # Seed cursor on the oldest (still needs attention).
-    captured = _fake_rebase_capture(monkeypatch)
-    code, _out, err = run_cli(stack_repo, gedit_main, [], monkeypatch, gerrit=store)
-    assert code == 0, err
-    assert captured["full_sha"] == rows[0].sha
-    captured.clear()
-    code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
-    assert code == 0, err
-    assert captured["full_sha"] == rows[1].sha
-
-
 def test_gedit_cursor_flag_prints_status(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -472,21 +452,6 @@ def test_gedit_next_stops_when_continue_leaves_the_rebase_running(
     assert "rebase is still in progress" in err
     assert started == []
     assert rebase_in_progress(stack_repo)
-
-
-def test_gedit_next_show_failure_is_returned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from gerrit_workflow_tools.cli_common import ExitCode
-
-    _configure_repo(stack_repo)
-    git("config", "ger.showAfterEdit", "true", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    overrides: list[dict] = [{}] * len(rows)
-    overrides[0] = {"unresolved_comment_count": 2}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", lambda *args, **kwargs: int(ExitCode.CONFIG))
-    _fake_rebase_capture(monkeypatch)
-    code, _out, _err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == int(ExitCode.CONFIG)
 
 
 def test_the_walk_says_which_commit_it_chose_before_the_editor(

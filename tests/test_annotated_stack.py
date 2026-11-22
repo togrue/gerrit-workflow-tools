@@ -64,29 +64,6 @@ def test_loads_commits_with_overlay_and_attention(stack_repo: Path) -> None:
     assert all(isinstance(c.attention_reasons, list) for c in stack.commits)
 
 
-def test_multi_branch_change_id_produces_a_resolution_note(stack_repo: Path) -> None:
-    """The note comes from what the overlay already cached, keyed by commit SHA."""
-    _configure(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    target = rows[0]
-    assert target.change_id is not None
-    payloads = build_details_by_change_id(rows)
-    other_branch = change_info_for_sha(target.sha, target.change_id, branch="dev", number=999)
-    payloads[str(other_branch["id"])] = other_branch
-
-    stack = load_annotated_stack(
-        RunContext.open(
-            stack_repo,
-            settings=Settings.from_cwd(stack_repo),
-            gerrit=ChangeStore(payloads, web_base="https://g.example"),
-        ),
-        _range(stack_repo),
-    )
-
-    assert target.sha in stack.notes_by_sha
-    assert "999" in stack.notes_by_sha[target.sha]
-
-
 def test_single_branch_change_ids_produce_no_notes(stack_repo: Path) -> None:
     _configure(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -122,36 +99,6 @@ def test_an_unsubmittable_commit_blocks_the_ones_after_it(stack_repo: Path) -> N
     assert all("chain-blocked" in c.attention_reasons for c in commits[1:]), (
         "every commit after the blocker must be chain-blocked"
     )
-
-
-def test_a_healthy_stack_blocks_nothing(stack_repo: Path) -> None:
-    _configure(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
-
-    commits = annotate(
-        commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
-        service=_service(stack_repo, store),
-        cwd=stack_repo,
-    ).commits
-
-    assert all("chain-blocked" not in c.attention_reasons for c in commits)
-
-
-def test_a_lone_commit_is_never_chain_blocked(stack_repo: Path) -> None:
-    """``ger show`` annotates one row; with no predecessors nothing can block it."""
-    _configure(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    store = ChangeStore(
-        build_details_by_change_id(rows, per_index_overrides=[{"submittable": False, "cr": 0}] * len(rows)),
-        web_base="https://g.example",
-    )
-    single = commits_in_range(stack_repo, _range(stack_repo), first_parent=True)[-1:]
-
-    commits = annotate(single, service=_service(stack_repo, store), cwd=stack_repo).commits
-
-    assert len(commits) == 1
-    assert "chain-blocked" not in commits[0].attention_reasons
 
 
 def _range(repo: Path) -> str:

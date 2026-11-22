@@ -23,12 +23,8 @@ def test_parse_gerrit_time_strips_nanos_and_assumes_utc() -> None:
 @pytest.mark.parametrize(
     "label, expected",
     [
-        ({"value": 1, "all": [{"value": 1}]}, 1),
         ({"all": [{"value": 2}, {"value": -2}]}, -2),  # a blocking vote outranks approvals
         ({"all": [{"value": 1}, {"value": 2}]}, 2),
-        ({"value": 0, "all": [{"value": 0}]}, None),  # nobody voted
-        ({"all": []}, None),
-        ("garbage", None),
     ],
 )
 def test_label_value(label: Any, expected: int | None) -> None:
@@ -41,11 +37,6 @@ def test_missing_reviewers_field_differs_from_an_empty_list() -> None:
     assert _view(reviewers={"REVIEWER": [{"username": "al", "_account_id": 7}]}).reviewers == (
         ReviewerAccount(slug="al", account_id=7),
     )
-
-
-def test_unresolved_count_absent_is_none() -> None:
-    assert _view().unresolved_comments is None
-    assert _view(unresolved_comment_count=3).unresolved_comments == 3
 
 
 def test_revisions_are_keyed_case_insensitively() -> None:

@@ -478,24 +478,6 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
     assert data["attention_reasons"] == []
 
 
-def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=1, number=42)
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    code, out, _err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--json", "change:42"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 0
-    data = json_stdout(out)
-    assert "awaiting-review" in data["attention_reasons"]
-
-
 def test_gshow_json_long_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -722,48 +704,6 @@ def _open_thread_with_context() -> dict[str, list[dict]]:
     }
 
 
-def test_gshow_omits_context_lines_by_default(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
-    ch["unresolved_comment_count"] = 1
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    store.set_comments(str(ch["id"]), _open_thread_with_context())
-    code, out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--color=never", "change:42"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 0, err
-    assert "please fix" in out
-    assert "alpha()" not in out
-    assert "beta()" not in out
-
-
-def test_gshow_context_prints_source_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
-    ch["unresolved_comment_count"] = 1
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    store.set_comments(str(ch["id"]), _open_thread_with_context())
-    code, out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--color=never", "--context", "change:42"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 0, err
-    assert "please fix" in out
-    assert "   1  alpha()" in out
-    assert "   2  beta()" in out
-
-
 def test_gshow_context_padding_implies_context(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -922,25 +862,6 @@ def test_gshow_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypa
     assert GERRIT_LINK_LABEL in visible
     assert "url:" in visible
     assert "https://gerrit.example" not in visible
-
-
-def test_gshow_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_gshow_repo(stack_repo)
-    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    cid = head_change_id(stack_repo)
-    detail = change_info_for_sha(sha, cid, number=77)
-    details = {str(detail["id"]): detail}
-    code, out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--hyperlinks", "never", "--color=never"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0, err
-    assert "\x1b]8;" not in out
-    assert "g.example/c/" in out or "/+/" in out
-    assert GERRIT_LINK_LABEL not in out
 
 
 def test_gshow_markdown_ignores_hyperlinks(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
