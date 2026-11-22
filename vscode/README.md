@@ -97,6 +97,29 @@ The commits above your upstream, newest first. One row per commit:
   ready to continue: Continue appears, and is the one to press. The index is watched while a rebase
   is stopped, so a `git add` in the terminal shows within a second; Continue from the palette looks
   again before it says no. Nothing can be moved until the rebase is finished or aborted.
+- **Continue saves first, asking.** `ger rebase --continue` sees only the files as they are on
+  disk, so before it runs, any file of the repository with edits only in an editor (the diff of
+  the commit you stand on has your file on its right side) is named in a dialog. **Save All**
+  saves them and runs `ger rebase --continue`; saved edits are not part of the rebase yet, so it
+  then refuses and says what they need (`git add` them at a conflict, amend them in at an edit
+  stop, or `git stash` them). **Continue without saving** runs it with the edits left in the
+  editor: git rewrites the files under them, and VS Code says so when you save. Cancel runs
+  nothing. Nothing is saved unasked.
+- **Diff tabs of commits that left the stack.** A diff opened from the Change view of a local
+  commit in your stack goes on showing that commit once it is no longer in the stack: rewritten
+  (amended, replayed by the rebase, reordered), dropped, or merged past the upstream. Its title
+  then says it is *stale*: `b.txt (6827cbfe) — stale`. Tabs of commits still in the stack (still
+  to be replayed, or left as they were) stay as they are. A diff with your file on its right (it
+  opened on the commit you stood on) is true only while that commit is in the stack and HEAD too:
+  after a commit on top, or a rebase that stops below it, your file is not what the title names,
+  and the tab is stale too, as it is once the commit is merged past the upstream with HEAD still on
+  it. With `ger.closeDiffsOnRebase` on, stale tabs are closed instead, unless they may hold
+  unsaved edits: one that has them, or has your file on its right while VS Code has not read that
+  file in yet, is marked; and the tabs VS Code restores at startup are only marked on the first
+  look, and closed on the next. Only the tabs of the branch checked out are judged: another branch
+  checked out (`ger checkout`, a review checkout, `git switch`) leaves them as they are, and a
+  stale tab whose commit is back (the branch switched back, the rebase aborted) loses its mark.
+  Gerrit's patchsets, compared with each other, never go stale.
 - **A merge commit** in the stack is one row, with a merge icon and marked *merge*, however
   many commits it brings in: those are not part of the stack (as on Gerrit) and are never read.
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where
@@ -214,6 +237,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
 | `ger.pollSeconds` | `120` | Background refresh from Gerrit while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
+| `ger.closeDiffsOnRebase` | `false` | Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open and its title says *stale* (`b.txt (6827cbfe) — stale`). A tab that may hold unsaved edits is never closed. |
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
@@ -423,6 +447,7 @@ printed.
 | `src/comments.ts` | Editor comment threads, stepping, draft replies. |
 | `src/statusBar.ts` | The status bar item: the headline and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
+| `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |

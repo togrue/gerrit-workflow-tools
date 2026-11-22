@@ -5,7 +5,8 @@ import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange } from "./api";
-import { ChangeView, FILE_SCHEME, Location, ThreadArg } from "./changeView";
+import { ChangeView, Location, ThreadArg } from "./changeView";
+import { DiffTabs, FILE_SCHEME } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";
@@ -78,6 +79,7 @@ export interface ExtensionApi {
   threads: CommentThreads;
   statusItem: vscode.StatusBarItem;
   events: EventFollower;
+  diffTabs: DiffTabs;
   /** Replace what talks to the user, for the end-to-end suite. */
   useUi(next: Ui): void;
 }
@@ -117,6 +119,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   });
   let pausedLogged = false;
   const follower = new ShownCommitFollower(model, changeView);
+  const diffTabs = new DiffTabs(model, (line) => log.appendLine(line));
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
       await vscode.commands.executeCommand("ger.openHeadline");
@@ -318,6 +321,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     changePane,
     threads,
     follower,
+    diffTabs,
     statusItem,
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
@@ -341,7 +345,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }),
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView, threads, statusItem, events, useUi };
+  return { model, overviewView, stackView, changeView, threads, statusItem, events, diffTabs, useUi };
 }
 
 export function deactivate(): void {

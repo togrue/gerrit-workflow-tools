@@ -10,13 +10,13 @@ import * as vscode from "vscode";
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
+import { markOf } from "./staleDiffs";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
-
-export const FILE_SCHEME = "ger-file";
 
 /** What the comment commands take: the chain a row of the view stands for. */
 export interface ThreadArg {
@@ -27,11 +27,6 @@ export interface ThreadArg {
 export interface Location {
   path: string;
   line: number | null;
-}
-
-/** A file as it is in a commit: `ger-file:/<path>?<commit>`. */
-export function fileUri(rev: string, file: string): vscode.Uri {
-  return vscode.Uri.from({ scheme: FILE_SCHEME, path: `/${file}`, query: rev });
 }
 
 export class ChangeView extends WebView<ChangeVm> {
@@ -516,7 +511,7 @@ export class ChangeView extends WebView<ChangeVm> {
     const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
     const range = diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
     const title = `${path.posix.basename(file.path)} (${range})`;
-    await vscode.commands.executeCommand("vscode.diff", left, right, title);
+    await openDiff(left, right, title, markOf(diff, this.model.stack, editable));
   }
 
   /** The document a path of the shown change lives in: your file for your local commit, the commit's otherwise. */
