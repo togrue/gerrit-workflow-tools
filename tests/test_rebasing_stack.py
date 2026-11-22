@@ -337,6 +337,28 @@ def test_a_fixup_still_to_replay_is_its_own_row_and_counted(stack_repo: Path, mo
     assert "; 2 commits still to replay, shown as before." in err
 
 
+def test_a_fixup_stopped_on_a_conflict_shows_the_fixup_as_the_stopped_commit(stack_repo: Path) -> None:
+    """git writes ``amend`` (the commit it folds into) for a conflicting fixup: that is no edit stop."""
+    store = _store(stack_repo)
+    before = stack_rows_mb_to_head(stack_repo)
+    _commit_file(stack_repo, "x.txt", "Write x.txt")
+    fixup = _commit_file(stack_repo, "x.txt", "Rewrite x.txt")
+    # pick the top stack commit, drop "Write x.txt": the fixup's change to x.txt has nothing to apply to.
+    todo = "-e 2s/^pick/drop/ -e 3s/^pick/fixup/"
+    git("rebase", "-q", "-i", "HEAD~3", cwd=stack_repo, env={"GIT_SEQUENCE_EDITOR": f"sed -i {todo}"}, check=False)
+    state = git_dir(stack_repo)
+    assert state is not None and (state / "rebase-merge" / "amend").exists(), "the case git leaves behind"
+
+    stack = _load(stack_repo, store)
+
+    assert stack.rebase is not None
+    assert [c.sha for c in stack.commits] == [*(row.sha for row in before), fixup]
+    assert stack.rebase.steps == (None, None, None, DONE, CURRENT)
+    assert stack.rebase.current is not None and stack.rebase.current.sha == fixup
+    progress = stack.rebase.rebase
+    assert (progress.stop, progress.applied, progress.unmerged) == (RebaseStop.CONFLICT, False, ("x.txt",))
+
+
 def _am_stopped(repo: Path) -> None:
     """``git am`` of a patch that does not apply: it stops, with ``rebase-apply`` on disk."""
     patches = repo.parent / "patches"

@@ -78,8 +78,12 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
     )
     # Not applied, and nothing unmerged in the index: resolved, ready to continue.
     assert progress.stop is RebaseStop.RESOLVED
-    # Resolved and committed by an edit stop instead: git notes the commit to amend.
+    # A conflicting fixup also writes `amend` (the commit it folds into): still not applied.
     (merge / "amend").write_text("x\n", encoding="utf-8")
+    folding = rebase_progress(stack_repo)
+    assert folding is not None and folding.applied is False and folding.stop is RebaseStop.RESOLVED
+    # Stopped at an edit instead: git notes the commit to amend, and it is applied.
+    (merge / "done").write_text("pick aaaa111 one\nexec make\nedit bbbb222 two\n", encoding="utf-8")
     again = rebase_progress(stack_repo)
     assert again is not None and again.applied is True and again.stop is RebaseStop.EDIT
     # A detached HEAD's rebase names no branch.
