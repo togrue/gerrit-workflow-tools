@@ -12,6 +12,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseProgress
+from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
 from gerrit_workflow_tools.render.ci_content import ci_content_json
 
 
@@ -196,6 +197,28 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "as_before": not progress.keeps_todo,
         "actions": [action.value for action in progress.actions],
         "refused": {action.value: why for action in RebaseAction if (why := progress.refusal(action))},
+    }
+
+
+def upstream_json(moved: UpstreamMoved | None) -> dict[str, object] | None:
+    """How far the upstream moved on, as ``ger log --json`` and ``GET /stack`` serve it; ``None`` when not told."""
+    if moved is None:
+        return None
+    conflict = moved.conflict
+    return {
+        "name": moved.name,
+        "behind": moved.behind,
+        "argv": list(moved.argv),
+        "conflict": conflict
+        and {
+            "sha": conflict.commit.sha,
+            "summary": conflict.commit.subject,
+            "files": list(conflict.files),
+            "kind": conflict.kind.value,
+        },
+        "preview": moved.preview,
+        "reason": moved.reason,
+        "dropped": [{"sha": c.sha, "summary": c.subject} for c in moved.dropped],
     }
 
 

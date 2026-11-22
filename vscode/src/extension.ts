@@ -16,7 +16,7 @@ import { gerProgram, installGer, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
-import { push, rebaseStep } from "./rebase";
+import { push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
 import { checkout, editCommit, leaveReview, review } from "./review";
@@ -238,6 +238,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.rebase.continue": () => rebaseStep(model, "continue"),
     "ger.rebase.abort": () => rebaseStep(model, "abort"),
     "ger.rebase.skip": () => rebaseStep(model, "skip"),
+    "ger.rebase.upstream": () => rebaseOntoUpstream(model),
     "ger.setup": () => {
       runInTerminal(repo, ["setup"]);
       feedback("ger setup runs in the ger terminal", { icon: "terminal" });

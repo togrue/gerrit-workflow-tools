@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git
@@ -32,12 +33,22 @@ class PreviewUnavailable(RuntimeError):
     """This git cannot simulate the picks; nothing is known about conflicts."""
 
 
+class PickStop(str, Enum):
+    """Why a rebase stops on a pick."""
+
+    CONFLICT = "conflict"
+    EMPTY = "empty"
+    """The pick applies but changes nothing: what it changes is there already. ``git rebase -i``
+    stops on it (``--empty=stop``) for you to drop it (``--skip``) or keep it empty."""
+
+
 @dataclass(frozen=True)
 class PickConflict:
     """The first commit that does not apply in its new place, and the files it conflicts in."""
 
     commit: Commit
     files: tuple[str, ...]
+    kind: PickStop = PickStop.CONFLICT
 
 
 def _plumbing(cwd: Path | str, *args: str) -> str:
@@ -63,7 +74,9 @@ def _pick(cwd: Path | str, tip: str, commit: Commit) -> tuple[str | None, tuple[
     lines = done.stdout.splitlines()
     if done.returncode == 0 and lines:
         return lines[0], ()
-    if done.returncode == 1:
+    # A conflict still writes the tree first. Exit 1 with no tree is git refusing an operand
+    # (before 2.45, a bare tree as ours: "expected commit type"), not a conflict.
+    if done.returncode == 1 and lines:
         return None, tuple(dict.fromkeys(line for line in lines[1:] if line))
     raise PreviewUnavailable(f"git merge-tree failed: {done.stderr.strip().partition(chr(10))[0]}")
 
@@ -93,6 +106,46 @@ def first_conflict(cwd: Path | str, base: str, picks: Sequence[Commit], stack: S
             return None  # same content as the untouched tail sat on before: it replays as it is
         tip = _plumbing(cwd, "commit-tree", tree, "-p", tip, "-m", commit.subject)
     return None
+
+
+def replay_conflict(
+    cwd: Path | str, onto: str, picks: Sequence[Commit], *, onto_tree: str | None = None
+) -> PickConflict | None:
+    """The first of *picks* (oldest first) the rebase stops on when they are replayed in order onto *onto*.
+
+    What ``git rebase -i <onto>`` would meet: a pick that conflicts, or one that becomes empty
+    (its change is upstream already, under another patch id); ``None`` when all apply. *picks*
+    are the commits git replays: those it skips as already upstream are left out by the caller.
+    One ``merge-tree`` per pick, each onto the tree the one before it left (*onto_tree*, the
+    tree of *onto*, saves a ``rev-parse``). A git older than 2.45 takes only commits there:
+    the trees are then written as scratch commits, one ``commit-tree`` per pick.
+    """
+    tip, tip_tree = onto, onto_tree or _plumbing(cwd, "rev-parse", f"{onto}^{{tree}}")
+    on_trees = True
+    for index, commit in enumerate(picks):
+        try:
+            tree, files = _pick(cwd, tip, commit)
+        except PreviewUnavailable:
+            if not on_trees or tip != tip_tree:
+                raise
+            on_trees = False  # git 2.40-2.44: ours must be a commit
+            tip = _plumbing(cwd, "commit-tree", tip_tree, "-m", "ger preview")
+            tree, files = _pick(cwd, tip, commit)
+        if tree is None:
+            return PickConflict(commit, files)
+        if tree == tip_tree and not _started_empty(cwd, commit):
+            return PickConflict(commit, (), PickStop.EMPTY)
+        tip_tree = tree
+        if index + 1 < len(picks):
+            tip = tree if on_trees else _plumbing(cwd, "commit-tree", tree, "-m", commit.subject)
+    return None
+
+
+def _started_empty(cwd: Path | str, commit: Commit) -> bool:
+    """Whether *commit* changes nothing against its parent: ``git rebase`` keeps such a commit, no stop."""
+    trees = git("rev-parse", f"{commit.sha}^{{tree}}", f"{commit.sha}^^{{tree}}", cwd=cwd, check=False)
+    own, parent = [*trees.stdout.split(), "", ""][:2]
+    return trees.returncode == 0 and own == parent
 
 
 def _swapped(commits: Sequence[Commit], i: int) -> list[Commit]:

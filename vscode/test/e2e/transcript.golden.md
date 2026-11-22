@@ -1584,15 +1584,14 @@ change | (the commit shown is below HEAD)
 
 ## Meanwhile: somebody adds c.txt on main, and you git fetch, so origin/main moves on
 
-**Expect:** Local stack says origin/main has 1 new commit, offers Rebase onto origin/main, and warns that "test! temporary experiment" would conflict in c.txt; the commits themselves are unchanged.
-
-**Today:** nothing at all changes (#60).
+**Expect:** Local stack says origin/main has 1 new commit, offers Rebase onto origin/main, and warns that "test! temporary experiment" would conflict in c.txt; the commits themselves are unchanged. The status bar does not change: an upstream that moved on is not urgent.
 
 ```
-(no change)
++ stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1614,13 +1613,15 @@ change | Comments — none
 change | (the commit shown is below HEAD)
 ```
 
-## Meanwhile: you rebase onto origin/main, and "test! temporary experiment" conflicts in c.txt
+## 84. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
 
-**Expect:** Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
+**Expect:** ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
 **Today:** the status bar still shows the headline (#62).
 
 ```
+terminal "ger": runs `ger rebase origin/main`
+status bar message: $(terminal) ger rebase origin/main runs in the ger terminal: it shows the todo, then replays the stack onto origin/main
 + stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ c.txt — conflicted
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1628,6 +1629,7 @@ change | (the commit shown is below HEAD)
 + stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
+- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1669,7 +1671,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 84. Local stack › Skip › Cancel
+## 85. Local stack › Skip › Cancel
 
 **Expect:** A dialog asks before "test! temporary experiment" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
 
@@ -1705,11 +1707,9 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 85. Local stack › Push to Gerrit… (during the rebase) › Abort
+## 86. Local stack › Push to Gerrit… (during the rebase) › Abort
 
 **Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
-
-**Today:** back as before, but nothing says origin/main moved on (#60).
 
 ```
 dialog (warning): Finish the rebase first  [Abort] [Cancel]
@@ -1717,6 +1717,7 @@ dialog (warning): Finish the rebase first  [Abort] [Cancel]
     → pressed "Abort"
 terminal "ger": runs `ger rebase --abort`
 status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the branch goes back to where it was before the rebase
++ stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1741,6 +1742,7 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1773,6 +1775,7 @@ change | (the commit shown is below HEAD)
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
 + stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1803,7 +1806,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 86. Local stack › click "Add e.txt" (still to be replayed)
+## 87. Local stack › click "Add e.txt" (still to be replayed)
 
 **Expect:** The Change view shows "Add e.txt" as it was: it changes e.txt.
 
@@ -1843,7 +1846,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 87. Change › click e.txt under Files
+## 88. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens, its title naming the commit; both sides are that commit's, as it is not the one you stand on. You keep it open (double-click its tab), so the next file opened does not take its place.
 
@@ -1875,7 +1878,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 88. Local stack › click "Refactor parser init" (where it stopped)
+## 89. Local stack › click "Refactor parser init" (where it stopped)
 
 **Expect:** The Change view shows the commit you stand on; the diff tab of "Add e.txt" stays as it is.
 
@@ -1919,7 +1922,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 89. Change › click e.txt under Files
+## 90. Change › click e.txt under Files
 
 **Expect:** e.txt opens on its own (the commit adds it), as your file: you stand on this commit.
 
@@ -1987,7 +1990,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right)
 ```
 
-## 90. Local stack › Continue (e.txt not saved) › Save All
+## 91. Local stack › Continue (e.txt not saved) › Save All
 
 **Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
 
@@ -2032,6 +2035,7 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 **Expect:** The rebase finishes: "Refactor parser init" and the two above it have new SHAs. The diff tab of "Add e.txt" stays open, as it still shows that commit as it was, and its title says it is stale.
 
 ```
++ stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2048,6 +2052,7 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2071,7 +2076,7 @@ change | (the commit shown is below HEAD)
 diff tab | e.txt (<sha>) — stale (ger-file on the right)
 ```
 
-## 91. Settings › ger.closeDiffsOnRebase: on
+## 92. Settings › ger.closeDiffsOnRebase: on
 
 **Expect:** The stale diff tab of "Add e.txt" closes.
 
@@ -2080,6 +2085,7 @@ diff tab | e.txt (<sha>) — stale (ger-file on the right)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2102,7 +2108,7 @@ change | Comments — none
 change | (the commit shown is below HEAD)
 ```
 
-## 92. Local stack › click "Add e.txt"
+## 93. Local stack › click "Add e.txt"
 
 **Expect:** The Change view shows "Add e.txt", now HEAD.
 
@@ -2122,6 +2128,7 @@ change | (the commit shown is below HEAD)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2142,7 +2149,7 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 93. Change › click e.txt under Files
+## 94. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens with your file on its right: you stand on this commit.
 
@@ -2152,6 +2159,7 @@ change | (the commit shown is HEAD)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2182,6 +2190,7 @@ diff tab | e.txt (<sha>) (file on the right, active)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2217,6 +2226,7 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
+- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2318,7 +2328,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 94. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
+## 95. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
 
 **Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
 
@@ -2414,7 +2424,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 95. Local stack › Continue (ger.closeDiffsOnRebase on)
+## 96. Local stack › Continue (ger.closeDiffsOnRebase on)
 
 **Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA. The Change view follows "Add e.txt" to its new commit.
 

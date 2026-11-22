@@ -999,8 +999,8 @@ export async function run(): Promise<void> {
       // The upstream moves on.
       await inTerminal(
         "somebody adds c.txt on main, and you git fetch, so origin/main moves on",
-        "Local stack says origin/main has 1 new commit, offers Rebase onto origin/main, and warns that \"test! temporary experiment\" would conflict in c.txt; the commits themselves are unchanged.",
-        "nothing at all changes (#60).",
+        "Local stack says origin/main has 1 new commit, offers Rebase onto origin/main, and warns that \"test! temporary experiment\" would conflict in c.txt; the commits themselves are unchanged. The status bar does not change: an upstream that moved on is not urgent.",
+        undefined,
         () => {
           const index = path.join(scratch, "index");
           const blob = gitRun(["hash-object", "-w", "--stdin"], {}, "file c.txt, from main\n");
@@ -1013,10 +1013,16 @@ export async function run(): Promise<void> {
         },
       );
       await inTerminal(
-        "you rebase onto origin/main, and \"test! temporary experiment\" conflicts in c.txt",
-        "Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
+        "Local stack › Rebase onto origin/main (\"test! temporary experiment\" conflicts in c.txt, as the row said)",
+        "ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; \"test! temporary experiment\" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; \"Add e.txt\" is dimmed. The Change view of 103 says \"Conflict in c.txt\" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.",
         "the status bar still shows the headline (#62).",
-        () => gitStops(["rebase", "origin/main"]),
+        async () => {
+          await exec("ger.rebase.upstream")();
+          // What the ger terminal runs: ger rebase's todo, saved as it is, is git rebase onto the upstream.
+          gitStops(["rebase", "origin/main"]);
+        },
+        [],
+        true,
       );
       await pressAndRun(
         "Local stack › Skip › Cancel",
@@ -1029,7 +1035,7 @@ export async function run(): Promise<void> {
       await pressAndRun(
         "Local stack › Push to Gerrit… (during the rebase) › Abort",
         "No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.",
-        "back as before, but nothing says origin/main moved on (#60).",
+        undefined,
         "ger.push",
         ["rebase", "--abort"],
         [{ button: "Abort" }],

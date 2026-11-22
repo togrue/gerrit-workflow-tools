@@ -2,8 +2,8 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice } from "./api";
-import { blockedMove, reasonWords, sentence } from "./format";
+import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
+import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
 import { Waiting } from "./state";
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
@@ -223,6 +223,9 @@ export const REBASE_WORDS = {
   resolve: "Open it in the merge editor to resolve it, then stage it (git add).",
   /** Why the palette's Continue, Abort or Skip does not run: there is no rebase. Where there is one, core says why (`rebase.refused`). */
   noRebase: "There is no rebase in progress.",
+  /** Why Rebase onto the upstream does not run: nothing new on it, or a rebase to finish first. */
+  upToDate: "The upstream has no commits the branch does not have: there is nothing to rebase onto.",
+  finishFirst: "A rebase is in progress: finish it or abort it before you rebase onto the upstream.",
   /** What Skip throws away, said before it does: the commit and the resolution so far; Abort brings back the branch, not the resolution. */
   skipLoses: "The rebase goes on without it: the commit and the conflict resolution done so far, staged or not, are thrown away, and once the rebase is finished the branch no longer has this commit. Abort instead brings back the branch as it was before the rebase, but not the resolution.",
   skipGerrit: "Its change stays open on Gerrit until you abandon it there.",
@@ -329,6 +332,55 @@ function rebaseBanner(rebase: Rebase | null | undefined): StackInfo[] {
   const detail = stop === "resolved" ? REBASE_WORDS.ready : stop === "split" ? REBASE_WORDS.onTop : rebase?.as_before ? REBASE_WORDS.asBefore : undefined;
   const banner: StackInfo = { text, detail, icon: "warning", tone: "warn", tooltip: REBASE_WORDS.tooltip, actions: rebaseButtons(rebase) };
   return [banner, ...(rebase?.unmerged ?? []).map(conflictRow)];
+}
+
+/** The upstream row's words: what it says, and what the rebase does where the preview says it stops. */
+export const UPSTREAM_WORDS = {
+  clean: "no conflicts",
+  stops: "the rebase stops there for you to resolve it, or to abort it",
+  stopsEmpty: "the rebase stops there for you to drop it (Skip), or to abort it",
+};
+
+/** Why the preview could not tell, in core's words (`upstream.reason`). */
+export function upstreamUnknown(reason: string | null): string {
+  return `Whether it would conflict cannot be told here${reason ? ` (${reason})` : ""}: the rebase finds out.`;
+}
+
+/** `"Refactor parser init" would conflict in a.txt`, or `… would become empty: its change is already upstream`. */
+export function upstreamStop(stop: UpstreamStop): string {
+  return stop.kind === "empty" ? `"${stop.summary}" would become empty: its change is already upstream` : wouldConflict(stop);
+}
+
+/**
+ * The row that says the upstream moved on (core's `upstream`), with the rebase onto it and what
+ * that would meet; none while it has not, and none during a rebase (core says nothing then: the
+ * banner leads).
+ */
+export function upstreamRow(stack: Stack): StackInfo | undefined {
+  const up = stack.upstream;
+  if (!up?.behind) {
+    return undefined;
+  }
+  const what = up.conflict ? upstreamStop(up.conflict) : undefined;
+  const stops = up.conflict?.kind === "empty" ? UPSTREAM_WORDS.stopsEmpty : UPSTREAM_WORDS.stops;
+  const n = up.dropped.length;
+  const dropped = n ? ` ${n} commit${n === 1 ? " is" : "s are"} already upstream and dropped.` : "";
+  const preview = what ? `Rebasing onto it, ${what}: ${stops}.` : up.preview ? "Every commit applies on it as it is now." : upstreamUnknown(up.reason);
+  const command = `ger ${up.argv.join(" ")}`;
+  return {
+    text: `${up.name} has ${up.behind} new commit${up.behind === 1 ? "" : "s"}`,
+    detail: what ?? (up.preview && stack.commits.length ? UPSTREAM_WORDS.clean : undefined),
+    icon: what ? "warning" : "arrow-down",
+    tone: what ? "warn" : "plain",
+    tooltip: `${up.name} has commits ${stack.branch ?? "the branch"} does not have yet. ${stack.commits.length ? preview + dropped : ""}`.trim(),
+    actions: [
+      {
+        label: `Rebase onto ${up.name}`,
+        title: `${command}, in the ger terminal: it shows the todo, then replays the stack onto ${up.name}`,
+        command: { id: "ger.rebase.upstream", args: [] },
+      },
+    ],
+  };
 }
 
 /** The view's header: the branch, or the one being rebased, and where its stack starts. */
@@ -439,8 +491,13 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   if (local.rebase_in_progress) {
     info.push(...rebaseBanner(local.rebase));
   }
+  const upstream = upstreamRow(local);
+  if (upstream) {
+    info.push(upstream);
+  }
   if (!local.commits.length) {
-    info.push({ text: "No local commits", detail: `${local.branch ?? "HEAD"} is at ${local.stack.target_branch}` });
+    const behind = local.upstream?.behind ? `is behind ${local.upstream.name}` : `is at ${local.stack.target_branch}`;
+    info.push({ text: "No local commits", detail: `${local.branch ?? "HEAD"} ${behind}` });
   }
   const commits = local.commits;
   const fixed = pinned(local);
