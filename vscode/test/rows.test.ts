@@ -7,14 +7,17 @@ import { test } from "node:test";
 import { CommentChain, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { SYNC_ICONS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
+import { SYNC_ICONS, SYNC_WORDS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
 test("the icon says how a commit relates to Gerrit", () => {
   const states = (extra: Partial<StackCommit>) => sync(commit("c", extra));
   assert.equal(states({ patchset_status: "active" }), "same");
-  assert.equal(states({ patchset_status: "newer" }), "changed");
+  assert.equal(states({ patchset_status: "newer", code_change: "rebased" }), "rebased");
+  assert.equal(states({ patchset_status: "newer", code_change: "changed" }), "code-changed");
+  assert.equal(states({ patchset_status: "newer", code_change: "unknown" }), "ahead");
+  assert.equal(states({ patchset_status: "newer", code_change: "changed", diverged: true }), "diverged");
   assert.equal(states({ patchset_status: "newer", diverged: true }), "diverged");
   assert.equal(states({ patchset_status: "outdated" }), "outdated");
   assert.equal(states({ patchset_status: "absent", pushed: false }), "not-pushed");
@@ -65,6 +68,29 @@ test("the stack shows newest first, with HEAD and what push would hold back", ()
   assert.deepEqual(vm.rows.map((row) => row.squash), [true, true, false], "the oldest has nothing below to squash into");
   assert.equal(vm.frozen, null);
   assert.deepEqual(stackLines(vm), ["Three — HEAD · three00 · not on Gerrit", "Two — two0000 · held back · the same as on Gerrit", "One — one0000 · the same as on Gerrit"]);
+});
+
+test("ahead of Gerrit, a row tells new code from only rebased, by core's verdict", () => {
+  const vm = stackVm(
+    stack([
+      commit("Rebased", { patchset_status: "newer", code_change: "rebased", code_review: 2 }),
+      commit("New code", { patchset_status: "newer", code_change: "changed", number: 7, last_pushed_votes: { verified: null, code_review: 2 } }),
+    ]),
+    undefined,
+    never,
+  );
+  const [changed, rebased] = vm.rows;
+  assert.notEqual(changed.syncIcon, rebased.syncIcon, "two icons");
+  assert.deepEqual([changed.syncIcon, rebased.syncIcon], ["diff-modified", "arrow-circle-up"]);
+  assert.deepEqual(changed.notes, ["newcode", "code changed"], "the note sits by the id, where held back would");
+  assert.deepEqual(rebased.notes, ["rebased"], "only rebased needs no note: its icon and tooltip say it");
+  assert.match(changed.tooltip, /^Change 7: its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push$/m);
+  assert.match(rebased.tooltip, /^Change 1: only rebased since the last push: the same code, by patch-id \(whitespace and the message aside\), so Gerrit usually keeps the votes when you push$/m);
+  assert.equal(rebased.syncTitle, SYNC_WORDS.rebased);
+  // The Change view says the same, from the same verdict.
+  const detail = (extra: Partial<StackCommit>) => changeVm(state({ shown: shown(commit("c", { patchset_status: "newer", ...extra })) })).notes?.[0]?.detail;
+  assert.equal(detail({ code_change: "changed" }), SYNC_WORDS["code-changed"]);
+  assert.equal(detail({ code_change: "rebased" }), SYNC_WORDS.rebased);
 });
 
 test("mid-rebase the stack marks where it stands and dims what is not replayed yet", () => {

@@ -6,7 +6,7 @@ import * as path from "node:path";
 
 import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Severity, ShownCommit } from "./api";
 import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
-import { Badge, Tone, badges } from "./stackRows";
+import { Badge, SYNC_WORDS, Tone, badges, sync } from "./stackRows";
 import { Waiting } from "./state";
 
 /** Which version of the change is looked at: your commit, Gerrit's current patchset, or patchset `n`. */
@@ -358,10 +358,8 @@ export function changeVm(state: ChangeState): ChangeVm {
       icon: "history",
       tone: "warn",
       text: "This commit is ahead of Gerrit",
-      // Only rebased, Gerrit keeps the votes on the push; with new code it may not.
-      detail: commit.last_pushed_votes
-        ? "its code changed: the votes are the last pushed patchset's, and Gerrit may not keep them when you push"
-        : "only rebased: the votes stay when you push",
+      // Only rebased, Gerrit keeps the votes on the push; with new code it may not. The row says the same.
+      detail: SYNC_WORDS[sync({ ...commit, diverged: false })],
     });
   } else if (commit.patchset_status === "outdated") {
     notes.push({ icon: "history", tone: "warn", text: "Gerrit has a newer patchset than this commit", detail: "comments and CI below are about Gerrit's version" });

@@ -208,7 +208,9 @@ button.twist:hover {
 .sync-same {
   color: inherit;
 }
-.sync-changed {
+.sync-rebased,
+.sync-code-changed,
+.sync-ahead {
   color: var(--vscode-charts-yellow);
 }
 .sync-outdated {

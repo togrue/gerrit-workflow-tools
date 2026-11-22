@@ -33,6 +33,7 @@ export function memberStatus(member: Member): RowStatus {
     gerrit_url: member.url,
     number: member.number,
     last_pushed_votes: null,
+    code_change: null,
     work_in_progress: member.attention_reasons.includes("wip"),
     attention_reasons: member.attention_reasons,
     severity: member.severity,

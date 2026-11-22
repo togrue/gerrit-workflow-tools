@@ -104,6 +104,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
             if commit.last_pushed_votes
             else None
         ),
+        "code_change": commit.code_change,
         "submittable": commit.submittable,
         "votes": [{"label": vote.label, "value": vote.value, "by": vote.by} for vote in commit.votes],
         "reviewers": [{"name": r.slug, "cc": r.cc} for r in commit.reviewers],

@@ -109,6 +109,8 @@ export interface Reviewer {
   cc: boolean;
 }
 
+export type CodeChange = "rebased" | "changed" | "unknown";
+
 /** The overlay state of one commit: the fields `ger log --json` and `ger show --json` share. */
 export interface CommitStatus {
   sha: string | null;
@@ -127,6 +129,11 @@ export interface CommitStatus {
   number: number | null;
   /** The pushed patchset's votes while this commit is ahead of it with other code (its own votes are then null). */
   last_pushed_votes: { verified: number | null; code_review: number | null } | null;
+  /**
+   * `newer` only, else null: core's verdict on whether its code changed since the pushed patchset
+   * (`changed`), or it is only rebased and keeps its votes (`rebased`); `unknown` when it cannot tell.
+   */
+  code_change: CodeChange | null;
   submittable: boolean;
   work_in_progress: boolean;
   attention_reasons: string[];

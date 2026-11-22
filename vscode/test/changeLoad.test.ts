@@ -28,6 +28,7 @@ function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
     gerrit_url: "https://g/c/7",
     number: 7,
     last_pushed_votes: null,
+    code_change: null,
     submittable: false,
     work_in_progress: false,
     change_status: "NEW",

@@ -11,7 +11,14 @@ from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.code_facts import (
+    CodeChange,
+    CodeFacts,
+    code_change,
+    merged_equivalent,
+    norm_sha,
+    read_code_facts,
+)
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 
@@ -182,37 +189,11 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     diverged: bool = False
     """``newer``, and Gerrit's current patch set is a commit this repository never had: somebody
     else (or another checkout) uploaded it, so a push would put this commit over work it was not built on."""
+    code_change: CodeChange | None = None
+    """``newer`` only: whether its code changed or it is only rebased (then its votes stay)."""
     invalid_footer: str | None = None
     """The **footer value** when the commit has one that is not a valid **Change-Id** (``change_id``
     is then ``None``): what lets attention call the footer invalid rather than missing."""
-
-
-@dataclass(frozen=True)
-class CodeFacts:
-    """What the repository knows about the commits an overlay compares, read for all of them at once."""
-
-    present: frozenset[str] = frozenset()
-    """Which of the asked commits exist here."""
-    patch_ids: dict[str, str] = field(default_factory=dict)
-    """``git patch-id`` of each present single-parent commit with a non-empty diff."""
-
-
-def read_code_facts(cwd: Path | str | None, shas: Iterable[str | None]) -> CodeFacts:
-    """:class:`CodeFacts` for *shas*: three git calls however many there are, none for none."""
-    wanted = sorted({norm_sha(s) for s in shas if s})
-    if not wanted:
-        return CodeFacts()
-    listed = git("cat-file", "--batch-check=%(objectname) %(objecttype)", cwd=cwd, input="\n".join(wanted) + "\n")
-    present = frozenset(line.split()[0] for line in listed.stdout.splitlines() if line.endswith(" commit"))
-    if not present:
-        return CodeFacts()
-    # diff-tree shows nothing for a merge or a root commit: neither gets a patch-id.
-    diffs = git("diff-tree", "-p", "--stdin", cwd=cwd, input="\n".join(sorted(present)) + "\n", check=False)
-    if not diffs.stdout.strip():
-        return CodeFacts(present)
-    ids = git("patch-id", cwd=cwd, input=diffs.stdout, check=False).stdout
-    pairs = (line.split() for line in ids.splitlines())
-    return CodeFacts(present, {commit: pid for pid, commit, *_ in pairs})
 
 
 def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, ChangeView | None]]) -> CodeFacts:
@@ -224,31 +205,6 @@ def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, Cha
         if (change.status or "").upper() == "MERGED" or patchset_status(row.sha, change) == PatchsetStatus.NEWER:
             shas += [row.sha, change.current_revision]
     return read_code_facts(cwd, shas)
-
-
-def merged_equivalent(local_sha: str, change: ChangeView, facts: CodeFacts) -> bool | None:
-    """
-    v1 conservative equivalence: SHA match, else patch-id match when both sides are single-parent
-    and the Gerrit ``current_revision`` exists locally. Merge commits and missing objects → ``None``.
-    """
-    cur = change.current_revision
-    if cur is None:
-        return None
-    if norm_sha(local_sha) == norm_sha(cur):
-        return True
-    if norm_sha(cur) not in facts.present:
-        return None
-    pl = facts.patch_ids.get(norm_sha(local_sha))
-    pg = facts.patch_ids.get(norm_sha(cur))
-    if pl is None or pg is None:
-        return None
-    return pl == pg
-
-
-def norm_sha(sha: str) -> str:
-    """Normalize commit SHA text for case-insensitive comparisons."""
-
-    return sha.strip().lower()
 
 
 def patchset_status(local_sha: str, change: ChangeView) -> PatchsetStatus:
@@ -349,10 +305,9 @@ def build_log_commit(
 
     # Votes and submittability belong to the patch set on Gerrit, not to a commit it has not seen.
     newer = ps == PatchsetStatus.NEWER
-    # Unless the commit's own code is the same (only rebased): Gerrit carries the votes over
-    # on such a push, so they stay.
-    same_code = newer and merged_equivalent(sha, change, facts) is True
-    votes_moved_on = newer and not same_code
+    # Unless the commit is only rebased: Gerrit carries the votes over on such a push, so they stay.
+    code = code_change(sha, change, facts) if newer else None
+    votes_moved_on = newer and code is not CodeChange.REBASED
     current = change.current_revision
     diverged = newer and current is not None and norm_sha(current) not in facts.present
     if votes_moved_on:
@@ -391,6 +346,7 @@ def build_log_commit(
             wip=change.work_in_progress,
             private=change.private,
             diverged=diverged,
+            code_change=code,
         ),
         frozenset(needed),
     )
