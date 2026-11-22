@@ -287,6 +287,18 @@ anyone remembers the report.
 A report is a snapshot file: `npm run gallery -- ger-report.json` draws it (see below), and it can become a
 test fixture.
 
+## Third-party notices
+
+The extension carries [Codicons](https://github.com/microsoft/vscode-codicons), VS Code's icon
+font, © Microsoft Corporation, unchanged:
+
+- the font (`media/codicon.ttf`) is licensed under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); its text is in `media/codicon-LICENSE.txt`;
+- its stylesheet (`media/codicon.css`) is licensed under the MIT License; its text is in
+  `media/codicon-LICENSE-CODE.txt`.
+
+Both files are in the `.vsix`, and so in every ger release that carries the extension.
+
 ## Build and run
 
 ```bash
@@ -306,8 +318,8 @@ are kept out. Needs `uv`.
 *Local stack* and *Change* are webview views: `src/stackRows.ts` and `src/changeRows.ts` build
 what they show as plain data, the pages in `media/` (`stack.js`, `change.js`, `views.css`) only
 draw it and send back what you did. They use VS Code's icon font, which `npm install` copies
-from `@vscode/codicons` into `media/` (a webview cannot reach the editor's own copy). The font is
-Microsoft's [Codicons](https://github.com/microsoft/vscode-codicons), licensed CC BY 4.0.
+from `@vscode/codicons` into `media/` (a webview cannot reach the editor's own copy), together
+with its two licences ([Third-party notices](#third-party-notices)).
 
 The suite presses every button in turn. For the two webview views it calls what their pages
 send (a drop at a line, a button on a comment) and prints their view models as text; how the
