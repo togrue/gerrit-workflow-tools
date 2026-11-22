@@ -246,7 +246,8 @@ The top-level `rebase` is `null` without a rebase, else:
 - `current` — the id of the commit it stopped at as the stack shows it, else `null` (between
   commits, or reset away at a `split`).
 - `unmerged` — the paths the index holds as unresolved conflicts, at whatever stop (a `git stash
-  pop` at an `edit` stop can leave some).
+  pop` at an `edit` stop can leave some). Each is the literal path relative to the worktree's top,
+  as the file is named (`café.txt`), never git's C-quoted form (`"caf\303\251.txt"`).
 - `as_before` — `true` when the stack is the branch as it was before the rebase: a rebase git
   runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo, so no commit carries
   a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say

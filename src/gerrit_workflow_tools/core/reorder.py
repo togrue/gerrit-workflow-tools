@@ -26,7 +26,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
-from gerrit_workflow_tools.core.rebase_state import rebase_refusal
+from gerrit_workflow_tools.core.rebase_state import rebase_refusal, unmerged_paths
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal, uncommitted_changes_refusal
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
@@ -209,7 +209,7 @@ def rewrite_stack(
         done = git("rebase", "-i", "--no-autosquash", stash, base, cwd=cwd, env=env, check=False)
     if done.returncode != 0:
         stopped_at = git("rev-parse", "-q", "--verify", "REBASE_HEAD", cwd=cwd, check=False).stdout.strip()
-        conflicted = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout.split()
+        conflicted = unmerged_paths(cwd)
         git("rebase", "--abort", cwd=cwd, check=False)
         if not conflicted:
             # Not a conflict: git refused for a reason of its own (a hook, no committer identity).

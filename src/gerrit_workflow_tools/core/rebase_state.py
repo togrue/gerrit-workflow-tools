@@ -306,9 +306,17 @@ def rebase_refusal(cwd: Path | str | None) -> str | None:
 
 
 def unmerged_paths(cwd: Path | str | None) -> list[str]:
-    """Paths the index holds as unresolved conflicts (``git diff --diff-filter=U``)."""
-    out = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout or ""
-    return [line for line in out.splitlines() if line.strip()]
+    """Paths the index holds as unresolved conflicts (``git diff --diff-filter=U``), as they are named.
+
+    Read NUL-delimited (``-z``), so a name with a non-ASCII letter, a tab or a quote is the literal
+    path, not git's C-quoted ``"caf\\303\\251.txt"``: callers open it and show it.
+    """
+    return _nul_paths(git("diff", "--name-only", "-z", "--diff-filter=U", cwd=cwd, check=False).stdout)
+
+
+def _nul_paths(out: str | None) -> list[str]:
+    """The paths of a ``--name-only -z`` listing."""
+    return [path for path in (out or "").split("\0") if path]
 
 
 def _walks_on(walk_on: str | None) -> str:
@@ -346,8 +354,7 @@ def _unstaged_paths(cwd: Path | str | None) -> list[str]:
     touched, or changed only in line endings ``core.autocrlf`` takes back, is no change.
     """
     git("update-index", "-q", "--refresh", cwd=cwd, check=False)
-    out = git("diff-files", "--name-only", "--ignore-submodules", cwd=cwd, check=False).stdout or ""
-    return [line for line in out.splitlines() if line.strip()]
+    return _nul_paths(git("diff-files", "--name-only", "-z", "--ignore-submodules", cwd=cwd, check=False).stdout)
 
 
 _SKIP_REFUSALS = {

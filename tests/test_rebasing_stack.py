@@ -383,6 +383,38 @@ def test_a_fixup_stopped_on_a_conflict_shows_the_fixup_as_the_stopped_commit(sta
     assert (progress.stop, progress.applied, progress.unmerged) == (RebaseStop.CONFLICT, False, ("x.txt",))
 
 
+def test_conflicted_paths_are_served_as_named_not_as_git_quotes_them(stack_repo: Path) -> None:
+    """A non-ASCII letter, a tab or a quote in a name: git C-quotes it unless asked for ``-z``.
+
+    The served path is what the Local stack view opens, and what ``ger rebase`` names.
+    """
+    store = _store(stack_repo)
+    names = ["café.txt", 'tab\tand "quote".txt']
+    try:
+        (stack_repo / names[1]).write_text("probe\n", encoding="utf-8")
+        (stack_repo / names[1]).unlink()
+    except OSError:
+        names = names[:1]  # a filesystem without tabs or quotes in names
+    git("checkout", "-q", "main", cwd=stack_repo)
+    for name in names:
+        (stack_repo / name).write_text("upstream\n", encoding="utf-8")
+    git("add", *names, cwd=stack_repo)
+    git("commit", "-q", "-m", "Upstream writes the odd names", cwd=stack_repo)
+    git("update-ref", "refs/remotes/origin/main", git_out("rev-parse", "HEAD", cwd=stack_repo), cwd=stack_repo)
+    git("checkout", "-q", "feature", cwd=stack_repo)
+    for name in names:
+        (stack_repo / name).write_text("feature\n", encoding="utf-8")
+    git("add", *names, cwd=stack_repo)
+    git("commit", "-q", "-m", "Feature writes the odd names", cwd=stack_repo)
+    git("rebase", "-q", "origin/main", cwd=stack_repo, check=False)
+
+    served = _get(GerApi(stack_repo, gerrit=store), "/stack")["rebase"]
+
+    assert (served["stop"], sorted(served["unmerged"])) == ("conflict", sorted(names))
+    assert all((stack_repo / name).is_file() for name in served["unmerged"])
+    assert "café.txt" in served["refused"]["continue"] and "\\303" not in served["refused"]["continue"]
+
+
 def _am_stopped(repo: Path) -> None:
     """``git am`` of a patch that does not apply: it stops, with ``rebase-apply`` on disk."""
     patches = repo.parent / "patches"
