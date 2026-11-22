@@ -10,8 +10,9 @@ from typing import Any
 
 import pytest
 
+from gerrit_workflow_tools.core import ci_content_service
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFetchContext, CiFetched, CiFinding, CiProvenance
-from gerrit_workflow_tools.core.ci_content_service import TAIL_LINES, CiContentService, shape_body
+from gerrit_workflow_tools.core.ci_content_service import TAIL_LINES, CiContentService, parser_fingerprint, shape_body
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore, StoredCiContent
 from gerrit_workflow_tools.core.ci_http import HttpText
 from gerrit_workflow_tools.core.ci_jenkins import JenkinsProvider, parse_jenkins_build_url
@@ -19,6 +20,7 @@ from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_strategy import load_ci_content_providers
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache
+from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
 from gerrit_workflow_tools.render.ci_content import ci_content_json, format_ci_section_human, format_ci_section_markdown
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
 
@@ -160,6 +162,24 @@ def test_running_build_is_never_stored(tmp_path: Path) -> None:
     assert not service.fetch_one(LINK).provenance.cached
 
 
+def test_findings_parsed_by_other_ci_code_are_a_miss(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    http = FakeCiHttp(jenkins_build())
+    service = _service(http, tmp_path)
+    service.fetch_one(LINK)
+    assert service.fetch_one(LINK).provenance.cached
+    monkeypatch.setattr(ci_content_service, "_GER_CI_DIGEST", "the finders changed")
+    assert not service.fetch_one(LINK).provenance.cached, "an upgrade parses the log again"
+    assert service.fetch_one(LINK).provenance.cached, "and keeps what it parsed"
+
+
+def test_same_link_on_two_commits_is_downloaded_once(tmp_path: Path) -> None:
+    http = FakeCiHttp(jenkins_build())
+    service = _service(http, tmp_path)
+    [[first], [second]] = service.fetch_each([([LINK], None), ([LINK], None)])
+    assert len(http.calls) == 2, "api/json and consoleText, once"
+    assert first == second and first.findings
+
+
 def test_body_shapes() -> None:
     body = "\n".join(str(i) for i in range(TAIL_LINES + 5))
     assert shape_body(body, "none") == (None, 0)
@@ -243,6 +263,100 @@ CONTENT_PROVIDERS = [Builds(), "not a provider"]
         content = service.fetch_one(CiLink(label="b", url=url, source="checks"))
         assert content.provenance.provider == "builds"
         assert [f.message for f in content.findings] == ["boom"]
+    finally:
+        clear_extension_registry_cache()
+
+
+_MARKED_PROVIDER = """
+from gerrit_workflow_tools.core.ci_content import CiFetched, CiFinding
+from .marks import MARK
+
+class Builds:
+    id = "builds"
+    def matches(self, url):
+        return True
+    def fetch(self, link, ctx):
+        text = ctx.http.get_text(link.url).text
+        return CiFetched(url=link.url, findings=[CiFinding(tool="custom", kind="error", message=MARK + text)],
+                         cache_verdict="findings")
+
+CONTENT_PROVIDERS = [Builds()]
+"""
+
+
+def _marked_registry(d: Path, mark: str) -> None:
+    """A ``.ger/ci/`` whose provider prefixes each finding with *mark*, kept in a helper module."""
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "registry.py").write_text(_MARKED_PROVIDER, encoding="utf-8")
+    (d / "marks.py").write_text(f"MARK = {mark!r}\n", encoding="utf-8")
+
+
+def test_editing_a_registry_helper_parses_the_log_again(
+    stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A global registry loads after the local one: the local provider still keys on its own code.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    web_base = "https://g.example"
+    _marked_registry(gerrit_config_dir(web_base) / "ci", "global: ")
+    local = stack_repo / ".ger" / "ci"
+    url = "https://builds.example.net/run/1"
+    store = CiContentStore(tmp_path / "store")
+
+    def fetch_in_a_new_process(mark: str) -> CiContent:
+        _marked_registry(local, mark)
+        clear_extension_registry_cache()
+        providers = load_ci_content_providers(stack_repo, settings=Settings.from_map({}), web_base=web_base)
+        service = CiContentService(
+            providers=providers, http=FakeCiHttp({url: "boom"}), settings=Settings.from_map({}), store=store
+        )
+        return service.fetch_one(CiLink(label="b", url=url, source="checks"))
+
+    try:
+        assert not fetch_in_a_new_process("old: ").provenance.cached
+        assert fetch_in_a_new_process("old: ").provenance.cached
+        # Another length: an edit of the same size in the same second would load the old .pyc.
+        again = fetch_in_a_new_process("newer: ")
+        assert not again.provenance.cached
+        assert [f.message for f in again.findings] == ["newer: boom"]
+    finally:
+        clear_extension_registry_cache()
+
+
+def test_a_provider_defined_in_a_helper_module_keys_on_the_registry(stack_repo: Path, tmp_path: Path) -> None:
+    d = stack_repo / ".ger" / "ci"
+    url = "https://builds.example.net/run/1"
+    store = CiContentStore(tmp_path / "store")
+
+    def fetch_in_a_new_process(mark: str) -> CiContent:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "registry.py").write_text("from .provider import Builds\nCONTENT_PROVIDERS = [Builds()]\n", "utf-8")
+        (d / "provider.py").write_text(_MARKED_PROVIDER.replace("from .marks import MARK", f"MARK = {mark!r}"), "utf-8")
+        clear_extension_registry_cache()
+        providers = load_ci_content_providers(stack_repo, settings=Settings.from_map({}))
+        service = CiContentService(
+            providers=providers, http=FakeCiHttp({url: "boom"}), settings=Settings.from_map({}), store=store
+        )
+        return service.fetch_one(CiLink(label="b", url=url, source="checks"))
+
+    try:
+        assert not fetch_in_a_new_process("old: ").provenance.cached
+        assert fetch_in_a_new_process("old: ").provenance.cached
+        again = fetch_in_a_new_process("newer: ")
+        assert not again.provenance.cached
+        assert [f.message for f in again.findings] == ["newer: boom"]
+    finally:
+        clear_extension_registry_cache()
+
+
+def test_a_running_process_keys_on_the_registry_it_loaded(stack_repo: Path, tmp_path: Path) -> None:
+    d = stack_repo / ".ger" / "ci"
+    _marked_registry(d, "old: ")
+    clear_extension_registry_cache()
+    try:
+        [provider, _jenkins] = load_ci_content_providers(stack_repo, settings=Settings.from_map({}))
+        loaded = parser_fingerprint(provider)
+        _marked_registry(d, "newer: ")
+        assert parser_fingerprint(provider) == loaded, "the old code still runs: its findings keep the old key"
     finally:
         clear_extension_registry_cache()
 

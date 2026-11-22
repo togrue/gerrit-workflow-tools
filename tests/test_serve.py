@@ -364,7 +364,8 @@ def test_ci_of_one_change_asks_for_it_and_its_parent_and_agrees_with_the_whole_c
     # Each count includes one ask for who you are: the changes list reviewers, so whether one
     # waits on your review could matter.
     assert (gerrit_calls, ci_calls) == (10, 2)
-    assert (whole_gerrit, whole_ci) == (18, 4), "the whole chain: what the Change view asked before"
+    # The two failing changes name the same build: the whole chain downloads it once too.
+    assert (whole_gerrit, whole_ci) == (18, 2), "the whole chain: what the Change view asked before"
 
 
 def test_show_serves_the_markdown_ger_show_ai_prints(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

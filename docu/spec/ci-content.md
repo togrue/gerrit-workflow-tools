@@ -135,7 +135,7 @@ Fetched logs can be megabytes; the Gerrit ChangeInfo cache is the wrong store.
 
 Provider decides *whether the response is safe to reuse*; core decides *whether we can afford to keep it*.
 
-As built: one JSON file per entry under `~/.cache/ger/<host>/ci_content/`, keyed by provider id + `cache_key` (Jenkins: the build's base URL, so `console`, `consoleText` and `testReport` links share an entry). Budget 64 MiB, least recently used evicted first; bodies over 2 MiB are dropped and findings kept, so `--full` refetches them. Entries exist only for immutable content, so a hit is valid without a staleness check. `ger --refresh` skips reads; `ger cache clear` empties it.
+As built: one JSON file per entry under `~/.cache/ger/<host>/ci_content/`, keyed by provider id + parser fingerprint + `cache_key` (Jenkins: the build's base URL, so `console`, `consoleText` and `testReport` links share an entry). The parser fingerprint (`parser_fingerprint`) digests ger's own `core/ci_*.py` and, for a provider from `.ger/ci/`, every `*.py` of its registry directory, each as the process loaded it: after an upgrade or an edit to a provider, findings parsed by the old code are a miss and the log is parsed again. Commits of one request that name the same link share one download. Budget 64 MiB, least recently used evicted first; bodies over 2 MiB are dropped and findings kept, so `--full` refetches them. Entries exist only for immutable content, so a hit is valid without a staleness check. `ger --refresh` skips reads; `ger cache clear` empties it.
 
 ---
 
