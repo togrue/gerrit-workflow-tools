@@ -34,7 +34,8 @@ T = TypeVar("T")
 _MODULE_CACHE: dict[str, ModuleType | None] = {}
 
 SOURCE_DIGEST = "__ger_source_digest__"
-"""Global a loaded ``registry.py`` finds its directory's :func:`source_digest` under, taken as it loaded."""
+"""Global a loaded ``registry.py``, and each helper module it imports, finds its directory's
+:func:`source_digest` under, taken as it loaded."""
 
 
 def source_digest(paths: Iterable[Path]) -> str:
@@ -144,7 +145,9 @@ def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | N
         raise RegistryLoadError(f"failed to load strategy registry {registry}")
     module = importlib.util.module_from_spec(spec)
     # Taken as it loads, helpers beside it included: what describes the code this process runs.
-    setattr(module, SOURCE_DIGEST, source_digest(p for p in domain_dir.rglob("*.py") if "__pycache__" not in p.parts))
+    digest = source_digest(p for p in domain_dir.rglob("*.py") if "__pycache__" not in p.parts)
+    setattr(module, SOURCE_DIGEST, digest)
+    already_loaded = set(sys.modules)
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
@@ -152,6 +155,11 @@ def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | N
         sys.modules.pop(module_name, None)
         _MODULE_CACHE[cache_key] = None
         raise RegistryLoadError(f"failed to load strategy registry {registry}: {exc}") from exc
+    # A helper the registry imports carries the digest too: code defined there finds it in its globals.
+    for name in set(sys.modules) - already_loaded:
+        helper = sys.modules[name]
+        if name.startswith(f"{package_name}.") and SOURCE_DIGEST not in vars(helper):
+            setattr(helper, SOURCE_DIGEST, digest)
     _MODULE_CACHE[cache_key] = module
     return module
 

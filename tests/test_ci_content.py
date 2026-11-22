@@ -322,6 +322,32 @@ def test_editing_a_registry_helper_parses_the_log_again(
         clear_extension_registry_cache()
 
 
+def test_a_provider_defined_in_a_helper_module_keys_on_the_registry(stack_repo: Path, tmp_path: Path) -> None:
+    d = stack_repo / ".ger" / "ci"
+    url = "https://builds.example.net/run/1"
+    store = CiContentStore(tmp_path / "store")
+
+    def fetch_in_a_new_process(mark: str) -> CiContent:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "registry.py").write_text("from .provider import Builds\nCONTENT_PROVIDERS = [Builds()]\n", "utf-8")
+        (d / "provider.py").write_text(_MARKED_PROVIDER.replace("from .marks import MARK", f"MARK = {mark!r}"), "utf-8")
+        clear_extension_registry_cache()
+        providers = load_ci_content_providers(stack_repo, settings=Settings.from_map({}))
+        service = CiContentService(
+            providers=providers, http=FakeCiHttp({url: "boom"}), settings=Settings.from_map({}), store=store
+        )
+        return service.fetch_one(CiLink(label="b", url=url, source="checks"))
+
+    try:
+        assert not fetch_in_a_new_process("old: ").provenance.cached
+        assert fetch_in_a_new_process("old: ").provenance.cached
+        again = fetch_in_a_new_process("newer: ")
+        assert not again.provenance.cached
+        assert [f.message for f in again.findings] == ["newer: boom"]
+    finally:
+        clear_extension_registry_cache()
+
+
 def test_a_running_process_keys_on_the_registry_it_loaded(stack_repo: Path, tmp_path: Path) -> None:
     d = stack_repo / ".ger" / "ci"
     _marked_registry(d, "old: ")
