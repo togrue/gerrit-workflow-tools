@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -242,17 +244,30 @@ def test_without_a_terminal_continue_keeps_the_callers_git_editor(
 def test_continue_over_a_line_ending_change_git_sees_is_refused_as_git_would(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``core.autocrlf`` and CRLF over an LF blob: ``git diff`` sees nothing, git's refreshed check does."""
+    """``core.autocrlf`` and CRLF over an LF blob: ``git diff`` sees nothing, git's refreshed check
+    does. On Windows the fixture writes its files in text mode, so the blob may already hold CR LF
+    and there is no change at all; ger is held to what ``git rebase --continue`` itself does on a
+    copy of the same repository."""
     _stop_to_edit(stack_repo)
     git("config", "core.autocrlf", "true", cwd=stack_repo)
     text = (stack_repo / "c.txt").read_text(encoding="utf-8")
     (stack_repo / "c.txt").write_bytes(text.replace("\n", "\r\n").encode())
+    copy = stack_repo.parent / "copy"
+    shutil.copytree(stack_repo, copy, symlinks=True)
+    by_git = git("rebase", "--continue", cwd=copy, check=False, env={**os.environ, "GIT_EDITOR": "true"})
+    git_refuses = by_git.returncode != 0
+    if git_refuses:
+        assert "You must edit all merge conflicts" in by_git.stdout, by_git  # git's refusal over unstaged changes
 
     code, err = _rebase(stack_repo, ["--continue"], monkeypatch)
 
-    assert code == ExitCode.USAGE
-    assert "you have unstaged changes to c.txt" in err
-    assert rebase_in_progress(stack_repo)
+    if git_refuses:
+        assert code == ExitCode.USAGE
+        assert "you have unstaged changes to c.txt" in err
+        assert rebase_in_progress(stack_repo)
+    else:
+        assert code == 0, err
+        assert not rebase_in_progress(stack_repo)
 
 
 def test_continue_counts_what_git_counts_as_unstaged(
