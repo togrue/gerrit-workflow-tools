@@ -7,12 +7,14 @@ whether that is fatal (``ger ci``) or a note in its output (``ger show``).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
+from types import ModuleType
 from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.ci_content import (
@@ -28,6 +30,7 @@ from gerrit_workflow_tools.core.ci_http import CiHttp, Progress, UrllibCiHttp
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_paths import resolve_finding_paths, tracked_paths
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.ger_registry import SOURCE_DIGEST, source_digest
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 
@@ -36,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 TAIL_LINES = 60
 """Log lines a ``tail`` body keeps (``ger ci -v``)."""
+
+_GER_CI_DIGEST = source_digest(Path(__file__).resolve().parent.glob("ci_*.py"))
+"""ger's own CI code (``core/ci_*.py``), taken at import: the code this process runs."""
 
 
 def _now() -> str:
@@ -115,10 +121,15 @@ class CiContentService:
         """:meth:`fetch` for each ``(links, commit)`` group, every link of every group in parallel.
 
         A stack's commits each have their own builds: fetching them one commit after the other
-        would make the slowest log of each commit add up.
+        would make the slowest log of each commit add up. Commits that name the same link share
+        one download.
         """
-        jobs = [partial(self.fetch_one, link, body=body, commit=commit) for links, commit in groups for link in links]
-        flat = iter(parallel_map(jobs))
+        pairs = [(link, commit) for links, commit in groups for link in links]
+        unique = list(dict.fromkeys(link for link, _commit in pairs))
+        by_link = dict(
+            zip(unique, parallel_map(partial(self._fetch_logged, link, body) for link in unique), strict=True)
+        )
+        flat = iter(self._resolved(by_link[link], commit) for link, commit in pairs)
         return [[next(flat) for _ in links] for links, _commit in groups]
 
     def fetch_one(self, link: CiLink, *, body: BodyMode = "none", commit: str | None = None) -> CiContent:
@@ -127,7 +138,9 @@ class CiContentService:
         Paths are resolved here, after the store: what is kept is what the log said, and one
         build's findings can be read against whichever commit asks.
         """
-        content = self._fetch_logged(link, body)
+        return self._resolved(self._fetch_logged(link, body), commit)
+
+    def _resolved(self, content: CiContent, commit: str | None) -> CiContent:
         if commit is None or self.cwd is None or not content.findings:
             return content
         return replace(content, findings=resolve_finding_paths(content.findings, tracked_paths(self.cwd, commit)))
@@ -138,7 +151,7 @@ class CiContentService:
             host = urlparse(link.url).hostname or link.url
             return _failed(link, None, f"no CI content provider matches {host}")
         provider_id = str(getattr(provider, "id", type(provider).__name__))
-        key = f"{provider_id}:{_cache_key(provider, link.url)}"
+        key = f"{provider_id}:{parser_fingerprint(provider)}:{_cache_key(provider, link.url)}"
 
         stored = None if self.refresh or self.store is None else self.store.get(key)
         if stored is not None and (body == "none" or stored.body is not None):
@@ -168,6 +181,22 @@ class CiContentService:
             body=text,
             body_omitted_lines=omitted,
         )
+
+
+def parser_fingerprint(provider: CiContentProvider) -> str:
+    """What made a stored entry's findings: ger's CI code and the provider's registry, as loaded.
+
+    Part of the store key, so findings parsed by other code are a miss, not served as current.
+    A provider from ``.ger/ci/`` carries the digest its registry directory had when it loaded;
+    one from elsewhere (ger's own Jenkins provider, a test double) adds nothing to ger's.
+    """
+    if isinstance(provider, ModuleType):
+        namespace = vars(provider)
+    else:
+        namespace = getattr(getattr(type(provider), "fetch", None), "__globals__", None) or {}
+    loaded = namespace.get(SOURCE_DIGEST)
+    combined = f"{_GER_CI_DIGEST}:{loaded if isinstance(loaded, str) else ''}"
+    return hashlib.sha256(combined.encode("ascii")).hexdigest()[:16]
 
 
 def _cache_key(provider: CiContentProvider, url: str) -> str:
