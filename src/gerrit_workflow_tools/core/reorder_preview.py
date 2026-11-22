@@ -74,7 +74,9 @@ def _pick(cwd: Path | str, tip: str, commit: Commit) -> tuple[str | None, tuple[
     lines = done.stdout.splitlines()
     if done.returncode == 0 and lines:
         return lines[0], ()
-    if done.returncode == 1:
+    # A conflict still writes the tree first. Exit 1 with no tree is git refusing an operand
+    # (before 2.45, a bare tree as ours: "expected commit type"), not a conflict.
+    if done.returncode == 1 and lines:
         return None, tuple(dict.fromkeys(line for line in lines[1:] if line))
     raise PreviewUnavailable(f"git merge-tree failed: {done.stderr.strip().partition(chr(10))[0]}")
 

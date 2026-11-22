@@ -293,7 +293,8 @@ rev-list --count --left-right`, and one `git rev-parse --abbrev-ref` when the br
 not spell the upstream as a remote branch (`branch.<name>.merge` not under `refs/heads/`, or the
 remote `.`); only once the upstream has moved on, also one `git rev-parse` of it and, the first
 time, one `git rev-list --cherry-pick` and one `git merge-tree` per commit up to the first that
-stops (a git older than 2.45 takes only commits there: one `git commit-tree` per commit too). The
+stops (a git older than 2.45 takes only commits there: it refuses the second `git merge-tree`
+once, and then one `git commit-tree` per commit goes too). The
 preview is remembered by the server process under object ids (the upstream's tip, the stack's
 commits) and what the merge depends on (the merge settings, the git program), so a refresh with
 nothing moved simulates nothing again. `ger log --json` serves the same object, and its text ends

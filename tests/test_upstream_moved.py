@@ -209,25 +209,43 @@ def test_a_commit_already_upstream_is_left_out_as_git_rebase_leaves_it_out(stack
     assert _rebase_i(stack_repo) == 0, "the rebase it previews goes through"
 
 
-def test_an_old_git_that_takes_no_tree_as_ours_is_handed_commits(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """git 2.40-2.44: ``merge-tree --write-tree`` wants commits on both sides; the preview writes scratch commits."""
+def _git_before_2_45(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``merge-tree --write-tree`` as git 2.40-2.44 answers a bare tree as ours: exit 1, nothing on stdout."""
     real = reorder_preview.git
 
     def old_git(*args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         if args[0] == "merge-tree" and "--write-tree" in args:
             ours = args[-2]
             if git_out("cat-file", "-t", ours, cwd=kwargs["cwd"]) != "commit":
-                return subprocess.CompletedProcess(["git", *args], 128, "", f"fatal: {ours} is not a commit\n")
+                said = f"error: {ours}: expected commit type, but the object dereferences to tree type\n"
+                return subprocess.CompletedProcess(["git", *args], 1, "", said)
         return real(*args, **kwargs)
 
     monkeypatch.setattr(reorder_preview, "git", old_git)
+
+
+def test_an_old_git_that_takes_no_tree_as_ours_is_handed_commits(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git 2.40-2.44: ``merge-tree --write-tree`` wants commits on both sides; the preview writes scratch commits."""
+    _git_before_2_45(monkeypatch)
     _main_moves_on(stack_repo, {"d.txt": "d, from main\n"})
     moved = _moved(stack_repo)
     assert moved is not None and moved.preview, moved
     assert moved.conflict is not None
     assert (moved.conflict.commit.subject, moved.conflict.files) == ("Cleanup after experiment", ("d.txt",))
+
+
+def test_an_old_git_refusing_a_tree_is_not_read_as_a_conflict(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit 1 with no tree is not a conflict: a clean rebase of several picks previews clean, as it runs."""
+    _git_before_2_45(monkeypatch)
+    _main_moves_on(stack_repo, {"z.txt": "z\n"})
+    moved = _moved(stack_repo)
+    assert moved == UpstreamMoved("origin/main", 1, conflict=None, preview=True)
+    assert len(get_stack_snapshot(stack_repo, settings=Settings.from_cwd(stack_repo)).commits) > 2
+    assert _rebase_i(stack_repo) == 0, "the rebase it previews goes through"
 
 
 def test_a_tag_named_like_the_branch_does_not_hide_how_far_the_upstream_moved(stack_repo: Path) -> None:
