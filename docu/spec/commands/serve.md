@@ -275,17 +275,29 @@ then `branch` (here and at the top) is `null`, and so are `stack.target_branch` 
 
 `upstream` is how far the working branch's upstream moved on past the stack, after a `git
 fetch`: `name` (`origin/main`, as the branch config names it), `behind` (the commits it has that
-the branch has not, as `git status` counts them), and the rebase onto it previewed as
-[`GET /stack/moves`](#get-stackmoves) previews a swap, nothing touched: `conflict` is `null` when
-every commit of the stack would apply on the upstream as it is now, else `sha` and `summary` of
-the first that would not and the `files` it conflicts in; `preview` is `false` when that cannot
-be told (git older than 2.40, or a merge in the stack: `git rebase` does not replay it), and
-`conflict` is `null` then too. `ger rebase <name>` is the rebase it previews. `upstream` is
-`null` without a working branch or an upstream, and while a rebase is underway: that one is
-finished first. Cost: one `git rev-list --count --left-right`; only once the upstream has moved
-on, also one `git rev-list` for merges and one `git merge-tree` per commit up to the first that
-conflicts, so the preview grows with the stack only while there is something to rebase onto.
-`ger log --json` serves the same object, and its text ends with it as a `next:` line.
+the branch has not, as `git status` counts them), `argv` (the one ger command that rebases onto
+it, `ger` left out: `["rebase", "origin/main"]`, with `--drop-merged-equivalent` once a commit of
+the stack is merged on Gerrit with the same code: a client runs it as it is), and the rebase
+onto it previewed as [`GET /stack/moves`](#get-stackmoves) previews a swap, nothing touched. The
+preview replays the commits `git rebase` would: not those whose patch is upstream already, nor
+those `--drop-merged-equivalent` drops; `dropped` lists them (`sha`, `summary`). `conflict` is
+`null` when every other commit would apply on the upstream as it is now, else the first the
+rebase would stop on: `sha`, `summary`, `kind` (`conflict`, with the `files` it conflicts in; or
+`empty`, `files` empty: it applies but changes nothing, its change is already upstream under
+another patch, and `git rebase -i` stops there for you to drop it with `--skip`). `preview` is
+`false` when that cannot be told, `conflict` `null` then too, and `reason` says why in words (a
+merge in the stack: `git rebase` does not replay it; or a git older than 2.40, with git's own
+error); `reason` is `null` when there is a preview. `upstream` is `null` without a working branch
+or an upstream, and while a rebase is underway: that one is finished first. Cost: one `git
+rev-list --count --left-right`, and one `git rev-parse --abbrev-ref` when the branch config does
+not spell the upstream as a remote branch (`branch.<name>.merge` not under `refs/heads/`, or the
+remote `.`); only once the upstream has moved on, also one `git rev-parse` of it and, the first
+time, one `git rev-list --cherry-pick` and one `git merge-tree` per commit up to the first that
+stops (a git older than 2.45 takes only commits there: one `git commit-tree` per commit too). The
+preview is remembered by the server process under object ids (the upstream's tip, the stack's
+commits) and what the merge depends on (the merge settings, the git program), so a refresh with
+nothing moved simulates nothing again. `ger log --json` serves the same object, and its text ends
+with it as a `next:` line.
 
 `push_blocked` is why `ger push` would refuse a Gerrit push now, whatever the stack holds, or
 `null`: `reason` is `rebase` (the branch still points at the commits from before it) or `am` (a

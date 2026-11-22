@@ -208,9 +208,17 @@ def upstream_json(moved: UpstreamMoved | None) -> dict[str, object] | None:
     return {
         "name": moved.name,
         "behind": moved.behind,
+        "argv": list(moved.argv),
         "conflict": conflict
-        and {"sha": conflict.commit.sha, "summary": conflict.commit.subject, "files": list(conflict.files)},
+        and {
+            "sha": conflict.commit.sha,
+            "summary": conflict.commit.subject,
+            "files": list(conflict.files),
+            "kind": conflict.kind.value,
+        },
         "preview": moved.preview,
+        "reason": moved.reason,
+        "dropped": [{"sha": c.sha, "summary": c.subject} for c in moved.dropped],
     }
 
 

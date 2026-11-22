@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -31,7 +32,7 @@ from gerrit_workflow_tools.core.commit_diff import commit_diff, show_commit_diff
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
-from gerrit_workflow_tools.core.git_run import UnknownRevisionError, git, git_out
+from gerrit_workflow_tools.core.git_run import UnknownRevisionError, _run_git, git, git_out
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
@@ -136,7 +137,8 @@ def test_stack_says_how_far_the_upstream_moved_and_what_rebasing_onto_it_would_m
     """``upstream`` is ``ger log --json``'s; no word of it while a rebase is underway (that one comes first)."""
     store, _keys, rows = _gerrit(stack_repo)
     api = GerApi(stack_repo, gerrit=store)
-    assert _get(api, "/stack")["upstream"] == {"name": "origin/main", "behind": 0, "conflict": None, "preview": True}
+    quiet = {"argv": ["rebase", "origin/main"], "preview": True, "reason": None, "dropped": []}
+    assert _get(api, "/stack")["upstream"] == {"name": "origin/main", "behind": 0, "conflict": None, **quiet}
 
     who = {"GIT_COMMITTER_NAME": "alice", "GIT_COMMITTER_EMAIL": "a@example.com"}
     who |= {"GIT_AUTHOR_NAME": "alice", "GIT_AUTHOR_EMAIL": "a@example.com"}
@@ -149,11 +151,19 @@ def test_stack_says_how_far_the_upstream_moved_and_what_rebasing_onto_it_would_m
         "commit-tree", tree, "-p", "origin/main", "-m", "Add a.txt on main", cwd=stack_repo, env=who
     ).stdout.strip()
     git("update-ref", "refs/remotes/origin/main", moved_on, cwd=stack_repo)
-    conflict = {"sha": rows[0].sha, "summary": "Refactor parser init", "files": ["a.txt"]}
+    conflict = {"sha": rows[0].sha, "summary": "Refactor parser init", "files": ["a.txt"], "kind": "conflict"}
     stack = _get(api, "/stack")
-    assert stack["upstream"] == {"name": "origin/main", "behind": 1, "conflict": conflict, "preview": True}
+    assert stack["upstream"] == {"name": "origin/main", "behind": 1, "conflict": conflict, **quiet}
     _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert json.loads(out)["upstream"] == stack["upstream"], "one model, two shells"
+
+    # Every refresh asks again, but with nothing moved the preview is remembered: no merge is simulated.
+    with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
+        assert _get(api, "/stack")["upstream"] == stack["upstream"]
+    simulated = [
+        c.args for c in run.call_args_list if c.args[0] in ("merge-tree", "commit-tree") or "--cherry-pick" in c.args
+    ]
+    assert simulated == []
 
     assert git("rebase", "origin/main", cwd=stack_repo, env=who, check=False).returncode != 0
     stack = _get(api, "/stack")

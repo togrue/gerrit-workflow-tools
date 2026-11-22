@@ -539,7 +539,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept) |
-| `core/reorder_preview.py` | Whether a rewrite would conflict, simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PreviewUnavailable` |
+| `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PickStop`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
 | `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
@@ -551,7 +551,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |
-| `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`) and whether rebasing onto it would conflict: `upstream_moved`, `UpstreamMoved` |
+| `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`), the one command that rebases onto it, and where that rebase would stop (remembered under object ids); what `--drop-merged-equivalent` drops: `upstream_moved`, `UpstreamMoved`, `merged_with_same_code` |
 | `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)

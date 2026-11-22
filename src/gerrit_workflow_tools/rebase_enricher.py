@@ -13,13 +13,12 @@ from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    LogCommit,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_editor import resolve_git_editor, run_git_editor
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, read_commit_rows
+from gerrit_workflow_tools.core.upstream_moved import merged_with_same_code
 from gerrit_workflow_tools.render.status_fmt import (
     attention_text as _attention_text,
     code_review_token as _fmt_cr,
@@ -173,7 +172,7 @@ def _enrich_todo(text: str, run: RunContext) -> str:  # pylint: disable=too-many
             if log_commit is not None:
                 newline = "\n" if line.endswith("\n") else ""
                 action = parts[0]
-                if drop_merged and log_commit.patchset_status == "merged-same" and log_commit.merged_equivalent is True:
+                if drop_merged and merged_with_same_code(log_commit):
                     if action == "pick":
                         action = "drop"
                     elif action == "p":

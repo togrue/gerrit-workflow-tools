@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_rebase import main as rebase_main
+from gerrit_workflow_tools.core import reorder_preview
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.reorder_preview import PickStop
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, upstream_moved
 from tests.change_store import ChangeStore
@@ -111,7 +115,9 @@ def test_a_merge_in_the_stack_is_not_previewed(stack_repo: Path) -> None:
     git("checkout", "-q", "feature", cwd=stack_repo)
     git("merge", "-q", "--no-edit", "side", cwd=stack_repo, env=_ENV)
     _main_moves_on(stack_repo, {"z.txt": "z\n"})
-    assert _moved(stack_repo) == UpstreamMoved("origin/main", 1, preview=False)
+    assert _moved(stack_repo) == UpstreamMoved(
+        "origin/main", 1, preview=False, reason="a merge in the stack: git rebase does not replay it"
+    )
 
 
 def _store(repo: Path) -> ChangeStore:
@@ -122,7 +128,15 @@ def test_ger_log_says_it_in_text_and_json(stack_repo: Path, monkeypatch: pytest.
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     store = _store(stack_repo)
     _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
-    assert json.loads(out)["upstream"] == {"name": "origin/main", "behind": 0, "conflict": None, "preview": True}
+    assert json.loads(out)["upstream"] == {
+        "name": "origin/main",
+        "behind": 0,
+        "argv": ["rebase", "origin/main"],
+        "conflict": None,
+        "preview": True,
+        "reason": None,
+        "dropped": [],
+    }
     _code, out, _err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert "new commit" not in out
 
@@ -132,8 +146,11 @@ def test_ger_log_says_it_in_text_and_json(stack_repo: Path, monkeypatch: pytest.
     assert json.loads(out)["upstream"] == {
         "name": "origin/main",
         "behind": 1,
-        "conflict": {"sha": stopping, "summary": "test! temporary experiment", "files": ["c.txt"]},
+        "argv": ["rebase", "origin/main"],
+        "conflict": {"sha": stopping, "summary": "test! temporary experiment", "files": ["c.txt"], "kind": "conflict"},
         "preview": True,
+        "reason": None,
+        "dropped": [],
     }
     _code, out, _err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert (
@@ -155,3 +172,95 @@ def test_ger_rebase_onto_the_upstream_is_the_rebase_previewed(
     assert code == 0, err
     assert git_out("merge-base", "HEAD", "origin/main", cwd=stack_repo) == tip
     assert _moved(stack_repo) == UpstreamMoved("origin/main", 0)
+
+
+def _rebase_i(repo: Path, *, todo: str = "true") -> int:
+    """``git rebase -i origin/main``, the todo as it is (or edited by *todo*): what ``ger rebase origin/main`` runs."""
+    return git(
+        "rebase", "-i", "origin/main", cwd=repo, env={**_ENV, "GIT_SEQUENCE_EDITOR": todo}, check=False
+    ).returncode
+
+
+def test_a_commit_whose_change_is_upstream_under_another_patch_stops_the_rebase_as_empty(stack_repo: Path) -> None:
+    """A clean merge that changes nothing: ``git rebase -i`` stops there (``--empty=stop``), and the preview says so."""
+    _main_moves_on(stack_repo, {"a.txt": "file a.txt\n", "z.txt": "z\n"}, "Main has a.txt and more")
+    moved = _moved(stack_repo)
+    assert moved is not None and moved.preview and moved.conflict is not None
+    assert (moved.conflict.commit.subject, moved.conflict.kind) == ("Refactor parser init", PickStop.EMPTY)
+    assert moved.dropped == ()
+    assert moved.advice() == (
+        "origin/main has 1 new commit; rebase onto it with `ger rebase origin/main`; "
+        '"Refactor parser init" would become empty: its change is already upstream'
+    )
+    assert _rebase_i(stack_repo) != 0, "the rebase it previews stops there"
+    assert git_out("diff", "--name-only", "--diff-filter=U", cwd=stack_repo) == "", "on no conflict"
+    assert "Refactor parser init" in (stack_repo / ".git" / "rebase-merge" / "message").read_text()
+
+
+def test_a_commit_already_upstream_is_left_out_as_git_rebase_leaves_it_out(stack_repo: Path) -> None:
+    """The same patch upstream, then changed there: git skips the commit, so it cannot conflict."""
+    _main_moves_on(stack_repo, {"a.txt": "file a.txt\n"}, "Refactor parser init, picked onto main")
+    _main_moves_on(stack_repo, {"a.txt": "changed on main\n"})
+    moved = _moved(stack_repo)
+    assert moved is not None and moved.preview
+    assert moved.conflict is None
+    assert [c.subject for c in moved.dropped] == ["Refactor parser init"]
+    assert moved.advice().endswith("; 1 commit is already upstream and dropped")
+    assert _rebase_i(stack_repo) == 0, "the rebase it previews goes through"
+
+
+def test_an_old_git_that_takes_no_tree_as_ours_is_handed_commits(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git 2.40-2.44: ``merge-tree --write-tree`` wants commits on both sides; the preview writes scratch commits."""
+    real = reorder_preview.git
+
+    def old_git(*args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if args[0] == "merge-tree" and "--write-tree" in args:
+            ours = args[-2]
+            if git_out("cat-file", "-t", ours, cwd=kwargs["cwd"]) != "commit":
+                return subprocess.CompletedProcess(["git", *args], 128, "", f"fatal: {ours} is not a commit\n")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(reorder_preview, "git", old_git)
+    _main_moves_on(stack_repo, {"d.txt": "d, from main\n"})
+    moved = _moved(stack_repo)
+    assert moved is not None and moved.preview, moved
+    assert moved.conflict is not None
+    assert (moved.conflict.commit.subject, moved.conflict.files) == ("Cleanup after experiment", ("d.txt",))
+
+
+def test_a_tag_named_like_the_branch_does_not_hide_how_far_the_upstream_moved(stack_repo: Path) -> None:
+    tip = _main_moves_on(stack_repo, {"z.txt": "z\n"})
+    settings = Settings.from_cwd(stack_repo)
+    commits = get_stack_snapshot(stack_repo, settings=settings).commits
+    git("tag", "feature", tip, cwd=stack_repo)  # ``feature`` alone now names the tag, already at origin/main
+    moved = upstream_moved(stack_repo, "feature", commits, settings=settings)
+    assert moved is not None and moved.behind == 1
+
+
+def test_a_commit_merged_on_gerrit_is_dropped_by_the_one_rebase_ger_log_names(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Merged on Gerrit and upstream moved on: one command, which drops it, and a preview without it."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED"}]))
+    # Gerrit merged it rebased: the same code, another patch than git's patch id would match.
+    _main_moves_on(stack_repo, {"a.txt": "file a.txt\n", "z.txt": "z\n"}, "Refactor parser init")
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    upstream = json.loads(out)["upstream"]
+    assert upstream["argv"] == ["rebase", "origin/main", "--drop-merged-equivalent"]
+    assert upstream["conflict"] is None, "without the merged commit nothing stops the rebase"
+    assert upstream["dropped"] == [{"sha": rows[0].sha, "summary": "Refactor parser init"}]
+    _code, out, _err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    commands = [line for line in out.splitlines() if "`ger rebase" in line]
+    assert commands == [
+        "next: origin/main has 1 new commit; rebase onto it with "
+        "`ger rebase origin/main --drop-merged-equivalent`; 1 commit is already upstream and dropped"
+    ], out
+    # What that command runs: the todo with the merged commit dropped (as the enricher drops it), onto origin/main.
+    assert _rebase_i(stack_repo, todo=f"sed -i 's/^pick {rows[0].short_sha}/drop {rows[0].short_sha}/'") == 0
+    assert git_out("log", "--format=%s", "origin/main..HEAD", cwd=stack_repo).splitlines()[-1] == (
+        "Extract command routing"
+    )

@@ -38,7 +38,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetS
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
-from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, upstream_moved
+from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, merged_same, upstream_moved
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -106,7 +106,7 @@ def next_steps(commits: list[LogCommit], upstream: UpstreamMoved | None = None) 
     if upstream and upstream.behind:
         lines.append(f"next: {upstream.advice()}")
     merged = [c for c in commits if c.patchset_status in (PatchsetStatus.MERGED_SAME, PatchsetStatus.MERGED_DRIFT)]
-    if merged:
+    if merged and not (upstream and upstream.behind):
         lines.append(
             f"next: {merged[0].short_sha} is merged on Gerrit; drop it and rebase onto the target with "
             "`ger rebase --onto-remote --drop-merged-equivalent`"
@@ -316,7 +316,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         print_note(_rebase_note(progress, stack_view.rebase))
     # The default stack only, and not during a rebase: that one is finished first.
     on_stack = args.rev_range is None and progress is None
-    moved = upstream_moved(run.cwd, run.repo.working_branch, stack_view.rows, settings=settings) if on_stack else None
+    merged, branch = merged_same(stack_view.commits), run.repo.working_branch
+    moved = upstream_moved(run.cwd, branch, stack_view.rows, settings=settings, merged=merged) if on_stack else None
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
     stack = run.repo.shown_stack

@@ -26,7 +26,9 @@ upstream's new commits. To rebase onto the upstream as fetched, name it: `ger re
 That is the rebase `ger log` advises once the upstream moved on (`next: origin/main has 1 new
 commit; …`), the one `GET /stack`'s `upstream` previews, and what the VS Code extension's
 *Rebase onto origin/main* runs. Unlike `--onto-remote` it takes the upstream of the branch
-whatever its remote, the same commits the local stack is counted from.
+whatever its remote, the same commits the local stack is counted from. With a commit of the stack merged on Gerrit,
+that advice is `ger rebase origin/main --drop-merged-equivalent`: the flag applies to a `REV` as
+it does to `--onto-remote`.
 
 ### Change resolution
 

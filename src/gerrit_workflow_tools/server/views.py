@@ -33,7 +33,7 @@ from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, pinned_below, pinned_count
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
-from gerrit_workflow_tools.core.upstream_moved import upstream_moved
+from gerrit_workflow_tools.core.upstream_moved import merged_same, upstream_moved
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import (
@@ -119,7 +119,9 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     ]
     underway = rebase_underway(ctx.run.worktree.repository_dir)
     # During a rebase that one is finished first: nothing is said about rebasing onto the upstream.
-    moved = None if underway else upstream_moved(cwd, ctx.run.repo.working_branch, view.rows, settings=settings)
+    branch = ctx.run.repo.working_branch
+    merged = merged_same(view.commits)
+    moved = None if underway else upstream_moved(cwd, branch, view.rows, settings=settings, merged=merged)
     return {
         "branch": ctx.run.worktree.branch,
         "head": head,
