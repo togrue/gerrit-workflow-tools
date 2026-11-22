@@ -1078,7 +1078,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "Local stack › Continue (e.txt not saved) › Save All",
-        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and will say what saved edits still need, and offers Save All. Pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.",
+        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.",
         undefined,
         async () => {
           await exec("ger.rebase.continue")();
@@ -1141,14 +1141,37 @@ export async function run(): Promise<void> {
             gitRun(["add", "c.txt"]);
           },
         );
+        const notes = vscode.Uri.file(path.join(repo, "notes.txt"));
+        const tabsOf = (uri: vscode.Uri): vscode.Tab[] =>
+          vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri.toString());
+        await inTerminal(
+          "you create notes.txt, a file git does not track, and an extension edits it without saving",
+          "Nothing in the views changes: notes.txt is no part of the stack. VS Code opens a tab of it behind the others, as it does for every file with unsaved edits.",
+          undefined,
+          async () => {
+            write("notes.txt", "");
+            await vscode.workspace.openTextDocument(notes);
+            const edit = new vscode.WorkspaceEdit();
+            edit.insert(notes, new vscode.Position(0, 0), "a note\n");
+            assert.ok(await vscode.workspace.applyEdit(edit));
+            assert.ok(await until(() => tabsOf(notes).length === 1), "VS Code opened a tab of notes.txt");
+            assert.ok(!tabsOf(notes)[0].isActive, "behind the others");
+          },
+        );
         await pressAndRun(
-          "Local stack › Continue (e.txt not saved) › Cancel",
-          "A dialog names e.txt, whose edits are only in the stale diff tab, and offers Save All. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.",
+          "Local stack › Continue (e.txt and notes.txt not saved) › Cancel",
+          "A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.",
           undefined,
           "ger.rebase.continue",
           undefined,
           [{ dismiss: true }],
         );
+        await inTerminal("you save notes.txt, close its tab and delete it", "Nothing changes.", undefined, async () => {
+          const document = vscode.workspace.textDocuments.find((open) => open.uri.toString() === notes.toString());
+          assert.ok(document && (await document.save()), "notes.txt is saved");
+          await vscode.window.tabGroups.close(tabsOf(notes));
+          fs.rmSync(notes.fsPath);
+        });
         await inTerminal(
           "you revert e.txt in the stale diff tab (File › Revert File)",
           "The stale diff tab of \"Add e.txt\" has no unsaved edits any more, so with ger.closeDiffsOnRebase on it closes once the views refresh; the editor of e.txt opened earlier is in front again.",

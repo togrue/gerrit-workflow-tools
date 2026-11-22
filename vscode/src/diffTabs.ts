@@ -4,7 +4,6 @@
 // title, or closed (`ger.closeDiffsOnRebase`), and unmarked once it is again; see staleDiffs.ts for
 // the rule. Also your files of the repository: their paths, and which have unsaved edits.
 
-import { execFile } from "node:child_process";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -51,10 +50,27 @@ function markedDiff(tab: vscode.Tab): { input: vscode.TabInputTextDiff; mark: Di
   return mark ? { input, mark } : undefined;
 }
 
+/** The tab open now with the diff `input`, in any group; undefined once it is closed. */
+function openTab(input: vscode.TabInputTextDiff): vscode.Tab | undefined {
+  const original = input.original.toString();
+  const modified = input.modified.toString();
+  return vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .find((tab) => tab.input instanceof vscode.TabInputTextDiff && tab.input.original.toString() === original && tab.input.modified.toString() === modified);
+}
+
+/** Whether the document `uri` is loaded, so that its `isDirty` is known. */
+function loaded(uri: vscode.Uri): boolean {
+  const name = uri.toString();
+  return vscode.workspace.textDocuments.some((document) => document.uri.toString() === name);
+}
+
 /** Keeps the extension's diff tabs true to the local stack: on each new stack, and when the setting changes. */
 export class DiffTabs implements vscode.Disposable {
   private readonly listeners: vscode.Disposable[];
   private running: Promise<void> = Promise.resolve();
+  /** No stack has been judged yet: the tabs are as VS Code restored them. */
+  private first = true;
 
   constructor(
     private readonly model: Model,
@@ -79,7 +95,10 @@ export class DiffTabs implements vscode.Disposable {
     this.running = this.running.then(() => this.apply()).catch((error: unknown) => this.log(`Diff tabs: ${String(error)}`));
   }
 
-  /** Each tab on its own: one that cannot be closed or reopened is logged, and the others are still seen to. */
+  /**
+   * Each tab on its own: one that cannot be closed or reopened is logged, and the others are still
+   * seen to. A tab closed meanwhile (by you, while an earlier one was reopened) is left closed.
+   */
   private async apply(): Promise<void> {
     const stack = this.model.stack;
     if (!stack) {
@@ -87,10 +106,16 @@ export class DiffTabs implements vscode.Disposable {
     }
     const now = stackNow(stack);
     const close = setting("closeDiffsOnRebase", false);
-    for (const tab of vscode.window.tabGroups.all.flatMap((group) => group.tabs)) {
-      const diff = markedDiff(tab);
-      const fate = diff ? fateOf(diff.mark, tab.isDirty, now, close) : "keep";
-      if (!diff || fate === "keep") {
+    const first = this.first;
+    this.first = false;
+    for (const seen of vscode.window.tabGroups.all.flatMap((group) => group.tabs)) {
+      const diff = markedDiff(seen);
+      const tab = diff && openTab(diff.input);
+      if (!diff || !tab) {
+        continue;
+      }
+      const fate = fateOf(diff.mark, { dirty: tab.isDirty, loaded: loaded(diff.input.modified), first }, now, close);
+      if (fate === "keep") {
         continue;
       }
       try {
@@ -123,33 +148,20 @@ async function reopen(tab: vscode.Tab, input: vscode.TabInputTextDiff, mark: Dif
   // `background` (passed on by VS Code, not in its typings): a tab behind another stays behind it.
   const options: vscode.TextDocumentShowOptions & { background: boolean } = { viewColumn: tab.group.viewColumn, preserveFocus: true, preview: tab.isPreview, background: !tab.isActive };
   await vscode.commands.executeCommand("vscode.diff", original, input.modified, title, options);
-  const old = tab.group.tabs.find(
-    (open) => open.input instanceof vscode.TabInputTextDiff && open.input.original.toString() === input.original.toString() && open.input.modified.toString() === input.modified.toString(),
-  );
+  const old = openTab(input);
   if (old) {
     await vscode.window.tabGroups.close(old, true);
   }
 }
 
 /**
- * Your files in `repo` that git tracks, with edits only in an editor: what `ger rebase --continue`
- * would not see. An untracked or ignored file is no part of the rebase. When git cannot say which
- * are tracked, every one is named: asking once too often loses nothing.
+ * Your files in `repo` with edits only in an editor: what `ger rebase --continue` would not see.
+ * Every one is named, also one git does not track: asking once too often loses nothing, and the
+ * extension does not ask git itself.
  */
-export async function unsavedInRepo(repo: string): Promise<Unsaved[]> {
-  const dirty = vscode.workspace.textDocuments
-    .filter((document) => document.isDirty)
-    .map((document) => ({ document, name: repoPath(repo, document.uri) }))
-    .filter((file): file is { document: vscode.TextDocument; name: string } => file.name !== undefined);
-  const tracked = dirty.length ? await trackedOf(repo, dirty.map((file) => file.name)) : undefined;
-  return dirty.filter((file) => !tracked || tracked.has(file.name)).map(({ document, name }) => ({ name, save: () => document.save() }));
-}
-
-/** Which of `names` git tracks (one `git ls-files`); undefined when git cannot say. */
-function trackedOf(repo: string, names: string[]): Promise<Set<string> | undefined> {
-  return new Promise((resolve) => {
-    execFile("git", ["ls-files", "-z", "--full-name", "--", ...names.map((name) => `:(literal)${name}`)], { cwd: repo, windowsHide: true }, (error, stdout) => {
-      resolve(error ? undefined : new Set(stdout.split("\0").filter(Boolean)));
-    });
+export function unsavedInRepo(repo: string): Unsaved[] {
+  return vscode.workspace.textDocuments.flatMap((document) => {
+    const name = document.isDirty ? repoPath(repo, document.uri) : undefined;
+    return name === undefined ? [] : [{ name, save: () => document.save() }];
   });
 }

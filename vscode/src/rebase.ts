@@ -37,7 +37,7 @@ export async function rebaseStep(model: Model, step: RebaseAction): Promise<void
   if (step === "skip" && !(await confirmSkip(model))) {
     return;
   }
-  if (step === "continue" && !(await saveBeforeContinue(ui(), await unsavedInRepo(model.repo)))) {
+  if (step === "continue" && !(await saveBeforeContinue(ui(), unsavedInRepo(model.repo)))) {
     return;
   }
   runInTerminal(model.repo, ["rebase", `--${step}`]);

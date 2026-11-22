@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { DiffMark, SAVE_ALL, StackNow, Unsaved, fateOf, liveTitle, markFragment, markOf, readMark, saveBeforeContinue, stackNow, staleTitle } from "../src/staleDiffs";
+import { CONTINUE_UNSAVED, DiffMark, SAVE_ALL, StackNow, TabNow, Unsaved, fateOf, liveTitle, markFragment, markOf, readMark, saveBeforeContinue, stackNow, staleTitle } from "../src/staleDiffs";
 import { ScriptedUi } from "./e2e/scriptedUi";
 import { commit, diff, stack } from "./fixtures";
 
@@ -9,6 +9,9 @@ const live: DiffMark = { commit: "aaa", branch: "feature", own: false, stale: fa
 const stale: DiffMark = { ...live, stale: true };
 const own: DiffMark = { ...live, own: true };
 /** The stack of branch `feature`, HEAD on its last commit. */
+/** A tab as a later sweep sees it, its right side loaded; `dirty`: with unsaved edits. */
+const clean: TabNow = { dirty: false, loaded: true, first: false };
+const dirty: TabNow = { ...clean, dirty: true };
 const now = (commits: string[], extra: Partial<StackNow> = {}): StackNow => ({ branch: "feature", head: commits.at(-1) ?? null, commits: new Set(commits), ...extra });
 
 test("a diff tab's mark is read back as written; a tab without one is not the extension's stack diff", () => {
@@ -20,47 +23,63 @@ test("a diff tab's mark is read back as written; a tab without one is not the ex
 });
 
 test("a tab of a commit still in the stack stays as it is, setting on or off", () => {
-  assert.equal(fateOf(live, false, now(["aaa", "bbb"]), false), "keep");
-  assert.equal(fateOf(live, false, now(["aaa", "bbb"]), true), "keep");
+  assert.equal(fateOf(live, clean, now(["aaa", "bbb"]), false), "keep");
+  assert.equal(fateOf(live, clean, now(["aaa", "bbb"]), true), "keep");
 });
 
 test("a tab of a commit that left the stack is marked stale, or closed with the setting on", () => {
-  assert.equal(fateOf(live, false, now(["bbb"]), false), "mark");
-  assert.equal(fateOf(live, false, now(["bbb"]), true), "close");
+  assert.equal(fateOf(live, clean, now(["bbb"]), false), "mark");
+  assert.equal(fateOf(live, clean, now(["bbb"]), true), "close");
 });
 
 test("a tab with unsaved edits is never closed: it is marked instead", () => {
-  assert.equal(fateOf(live, true, now([]), true), "mark");
-  assert.equal(fateOf(stale, true, now([]), true), "keep");
-  assert.equal(fateOf(own, true, now(["aaa", "bbb"]), true), "mark");
+  assert.equal(fateOf(live, dirty, now([]), true), "mark");
+  assert.equal(fateOf(stale, dirty, now([]), true), "keep");
+  assert.equal(fateOf(own, dirty, now(["aaa", "bbb"]), true), "mark");
+});
+
+test("a tab that may hold unsaved edits VS Code has not read in is marked, not closed, and closed on a later sweep", () => {
+  // Your file on the right, its document not loaded (a tab restored at startup): it may have edits.
+  const unread: TabNow = { ...clean, loaded: false };
+  assert.equal(fateOf(own, unread, now(["zzz", "aaa"], { head: "zzz" }), true), "mark");
+  assert.equal(fateOf({ ...own, stale: true }, unread, now(["zzz", "aaa"], { head: "zzz" }), true), "keep");
+  assert.equal(fateOf({ ...own, stale: true }, clean, now(["zzz", "aaa"], { head: "zzz" }), true), "close");
+  // Both sides the commit's: nothing of yours to lose, loaded or not.
+  assert.equal(fateOf(live, unread, now(["bbb"]), true), "close");
+  // The first sweep since the extension started closes nothing: the tabs are as VS Code restored them.
+  const restored: TabNow = { ...clean, first: true };
+  assert.equal(fateOf(live, restored, now(["bbb"]), true), "mark");
+  assert.equal(fateOf(stale, restored, now(["bbb"]), true), "keep");
+  assert.equal(fateOf(stale, restored, now(["aaa"]), true), "unmark");
+  assert.equal(fateOf(stale, clean, now(["bbb"]), true), "close");
 });
 
 test("a tab already marked stale stays so; the setting turned on closes it", () => {
-  assert.equal(fateOf(stale, false, now([]), false), "keep");
-  assert.equal(fateOf(stale, false, now([]), true), "close");
+  assert.equal(fateOf(stale, clean, now([]), false), "keep");
+  assert.equal(fateOf(stale, clean, now([]), true), "close");
 });
 
 test("a tab with your file on its right is true only while its commit is HEAD", () => {
   // Standing on it: kept.
-  assert.equal(fateOf(own, false, now(["aaa"]), false), "keep");
+  assert.equal(fateOf(own, clean, now(["aaa"]), false), "keep");
   // A commit on top of it, or a rebase stopped below it (it is still to be replayed): your file is another state.
-  assert.equal(fateOf(own, false, now(["aaa", "bbb"]), false), "mark");
-  assert.equal(fateOf(own, false, now(["zzz", "aaa"], { head: "zzz" }), true), "close");
+  assert.equal(fateOf(own, clean, now(["aaa", "bbb"]), false), "mark");
+  assert.equal(fateOf(own, clean, now(["zzz", "aaa"], { head: "zzz" }), true), "close");
   // A diff of the commit's own files is still true there.
-  assert.equal(fateOf(live, false, now(["zzz", "aaa"], { head: "zzz" }), false), "keep");
+  assert.equal(fateOf(live, clean, now(["zzz", "aaa"], { head: "zzz" }), false), "keep");
   // HEAD on it again (the commit on top dropped, the rebase aborted): unmarked.
-  assert.equal(fateOf({ ...own, stale: true }, false, now(["aaa"]), false), "unmark");
-  assert.equal(fateOf({ ...own, stale: true }, false, now(["aaa", "bbb"]), false), "keep");
+  assert.equal(fateOf({ ...own, stale: true }, clean, now(["aaa"]), false), "unmark");
+  assert.equal(fateOf({ ...own, stale: true }, clean, now(["aaa", "bbb"]), false), "keep");
 });
 
 test("a tab of another branch's stack is not judged, and a stale one is unmarked once its commit is back", () => {
   // Another branch checked out: its stack holds none of feature's commits, and nothing is said.
-  assert.equal(fateOf(live, false, now(["ccc"], { branch: "change-900" }), false), "keep");
-  assert.equal(fateOf(live, false, now(["ccc"], { branch: "change-900" }), true), "keep");
-  assert.equal(fateOf(own, false, now(["ccc"], { branch: null }), true), "keep");
+  assert.equal(fateOf(live, clean, now(["ccc"], { branch: "change-900" }), false), "keep");
+  assert.equal(fateOf(live, clean, now(["ccc"], { branch: "change-900" }), true), "keep");
+  assert.equal(fateOf(own, clean, now(["ccc"], { branch: null }), true), "keep");
   // feature back (or a rebase aborted): the commit is in its stack again.
-  assert.equal(fateOf(stale, false, now(["aaa", "bbb"]), false), "unmark");
-  assert.equal(fateOf(stale, true, now(["aaa"]), true), "unmark");
+  assert.equal(fateOf(stale, clean, now(["aaa", "bbb"]), false), "unmark");
+  assert.equal(fateOf(stale, dirty, now(["aaa"]), true), "unmark");
 });
 
 test("during a rebase the tab is judged against the branch being rebased", () => {
@@ -117,8 +136,8 @@ test("unsaved edits are named in a dialog; Save All saves each, then goes on", a
   const { lines, problems } = ui.drain();
   assert.deepEqual(problems, []);
   assert.deepEqual(lines, [
-    "dialog (warning): Save 2 files before the rebase goes on?  [Save All] [Cancel]",
-    "    detail: b.txt and src/e.txt have edits that are not saved. ger rebase --continue sees only the files on disk: saved, it says what the edits still need before the rebase can go on.",
+    "dialog (warning): Save 2 files first? ger rebase --continue then says what they still need.  [Save All] [Continue without saving] [Cancel]",
+    "    detail: b.txt and src/e.txt have edits that are not saved, and ger rebase --continue sees only the files on disk. Continue without saving: the edits stay in the editor, git rewrites the files under them, and VS Code says so when you save.",
     '    → pressed "Save All"',
   ]);
 });
@@ -129,7 +148,16 @@ test("cancelled, nothing is saved and the rebase does not go on", async () => {
   ui.script([{ dismiss: true }]);
   assert.equal(await saveBeforeContinue(ui, unsaved), false);
   assert.deepEqual(saved, []);
-  assert.equal(ui.drain().lines[0], "dialog (warning): Save e.txt before the rebase goes on?  [Save All] [Cancel]");
+  assert.equal(ui.drain().lines[0], "dialog (warning): Save e.txt first? ger rebase --continue then says what it still needs.  [Save All] [Continue without saving] [Cancel]");
+});
+
+test("Continue without saving goes on and leaves the edits in the editor", async () => {
+  const ui = new ScriptedUi((line) => line);
+  const { unsaved, saved } = files("e.txt");
+  ui.script([{ button: CONTINUE_UNSAVED }]);
+  assert.equal(await saveBeforeContinue(ui, unsaved), true);
+  assert.deepEqual(saved, []);
+  assert.deepEqual(ui.drain().problems, []);
 });
 
 test("a file that cannot be saved stops the rebase, and says which", async () => {

@@ -1973,11 +1973,11 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 
 ## 90. Local stack › Continue (e.txt not saved) › Save All
 
-**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and will say what saved edits still need, and offers Save All. Pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
+**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
 
 ```
-dialog (warning): Save e.txt before the rebase goes on?  [Save All] [Cancel]
-    detail: e.txt has edits that are not saved. ger rebase --continue sees only the files on disk: saved, it says what the edits still need before the rebase can go on.
+dialog (warning): Save e.txt first? ger rebase --continue then says what it still needs.  [Save All] [Continue without saving] [Cancel]
+    detail: e.txt has edits that are not saved, and ger rebase --continue sees only the files on disk. Continue without saving: the edits stay in the editor, git rewrites the files under them, and VS Code says so when you save.
     → pressed "Save All"
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
@@ -2271,14 +2271,76 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 94. Local stack › Continue (e.txt not saved) › Cancel
+## Meanwhile: you create notes.txt, a file git does not track, and an extension edits it without saving
 
-**Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and offers Save All. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
+**Expect:** Nothing in the views changes: notes.txt is no part of the stack. VS Code opens a tab of it behind the others, as it does for every file with unsaved edits.
 
 ```
-dialog (warning): Save e.txt before the rebase goes on?  [Save All] [Cancel]
-    detail: e.txt has edits that are not saved. ger rebase --continue sees only the files on disk: saved, it says what the edits still need before the rebase can go on.
+(no change)
+--- shown now:
+status bar | $(error) CI failed: 102  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is HEAD)
+stack  | (test! temporary experiment is only on the branch as it was before)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
+change | Comments — none
+change | (the commit shown is only on the branch as it was before)
+diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
+```
+
+## 94. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
+
+**Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
+
+```
+dialog (warning): Save 2 files first? ger rebase --continue then says what they still need.  [Save All] [Continue without saving] [Cancel]
+    detail: e.txt and notes.txt have edits that are not saved, and ger rebase --continue sees only the files on disk. Continue without saving: the edits stay in the editor, git rewrites the files under them, and VS Code says so when you save.
     → cancelled
+(no change)
+--- shown now:
+status bar | $(error) CI failed: 102  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — <sha> · held back · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Refactor parser init — HEAD · <sha> · changed here since the last push  [last pushed review +2, last pushed ci bad]
+stack  | Extract command routing — <sha> · changed here since the last push  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · changed here since the last push  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is HEAD)
+stack  | (test! temporary experiment is only on the branch as it was before)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
+change | Comments — none
+change | (the commit shown is only on the branch as it was before)
+diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
+```
+
+## Meanwhile: you save notes.txt, close its tab and delete it
+
+**Expect:** Nothing changes.
+
+```
 (no change)
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1

@@ -98,19 +98,24 @@ The commits above your upstream, newest first. One row per commit:
   is stopped, so a `git add` in the terminal shows within a second; Continue from the palette looks
   again before it says no. Nothing can be moved until the rebase is finished or aborted.
 - **Continue saves first, asking.** `ger rebase --continue` sees only the files as they are on
-  disk, so before it runs, any file git tracks with edits only in an editor (the diff of the commit
-  you stand on has your file on its right side) is named in a dialog: **Save All**, then
-  `ger rebase --continue` runs, or Cancel and nothing runs. Nothing is saved unasked. Saved edits
-  are not part of the rebase yet: `ger rebase --continue` then refuses and says what they need
-  (`git add` them at a conflict, amend them in at an edit stop, or `git stash` them).
-- **Diff tabs of rewritten commits.** A diff opened from the Change view of a local commit in your
-  stack still shows that commit once it has been rewritten (amended, replayed by the rebase,
-  reordered) or rebased away. Its title then says so: `b.txt (6827cbfe) — stale`. Tabs of commits
-  still in the stack (still to be replayed, or left as they were) stay as they are. A diff with your
-  file on its right (it opened on the commit you stood on) is true only while that commit is HEAD:
-  after a commit on top, or a rebase that stops below it, your file is not what the title names, and
-  the tab is stale too. With `ger.closeDiffsOnRebase` on, stale tabs are closed instead, unless
-  they hold unsaved edits. Only the tabs of the branch checked out are judged: another branch
+  disk, so before it runs, any file of the repository with edits only in an editor (the diff of
+  the commit you stand on has your file on its right side) is named in a dialog. **Save All**
+  saves them and runs `ger rebase --continue`; saved edits are not part of the rebase yet, so it
+  then refuses and says what they need (`git add` them at a conflict, amend them in at an edit
+  stop, or `git stash` them). **Continue without saving** runs it with the edits left in the
+  editor: git rewrites the files under them, and VS Code says so when you save. Cancel runs
+  nothing. Nothing is saved unasked.
+- **Diff tabs of commits that left the stack.** A diff opened from the Change view of a local
+  commit in your stack goes on showing that commit once it is no longer in the stack: rewritten
+  (amended, replayed by the rebase, reordered), dropped, or merged past the upstream. Its title
+  then says it is *stale*: `b.txt (6827cbfe) — stale`. Tabs of commits still in the stack (still
+  to be replayed, or left as they were) stay as they are. A diff with your file on its right (it
+  opened on the commit you stood on) is true only while that commit is HEAD: after a commit on
+  top, or a rebase that stops below it, your file is not what the title names, and the tab is
+  stale too. With `ger.closeDiffsOnRebase` on, stale tabs are closed instead, unless they may hold
+  unsaved edits: one that has them, or has your file on its right while VS Code has not read that
+  file in yet, is marked; and the tabs VS Code restores at startup are only marked on the first
+  look, and closed on the next. Only the tabs of the branch checked out are judged: another branch
   checked out (`ger checkout`, a review checkout, `git switch`) leaves them as they are, and a
   stale tab whose commit is back (the branch switched back, the rebase aborted) loses its mark.
   Gerrit's patchsets, compared with each other, never go stale.
@@ -218,7 +223,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 | `ger.agentCommand` | empty | Terminal command that starts your agent; `{brief}` is the runbook file, `{rev}` the commit, e.g. `claude "Follow the runbook in {brief}"`. Empty: the runbook is copied to the clipboard. |
 | `ger.pollSeconds` | `120` | Background refresh from Gerrit while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
-| `ger.closeDiffsOnRebase` | `false` | Close a diff tab opened from the Change view once it no longer shows the commit its title names: the commit was rewritten (a rebase goes on or ends, in the views or in a terminal, an amend, a reorder), or, with your file on its right, HEAD moved off it. Off: the tab stays open and its title says *stale* (`b.txt (6827cbfe) — stale`). A tab with unsaved edits is never closed. |
+| `ger.closeDiffsOnRebase` | `false` | Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open and its title says *stale* (`b.txt (6827cbfe) — stale`). A tab that may hold unsaved edits is never closed. |
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
