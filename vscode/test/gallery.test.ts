@@ -143,6 +143,8 @@ test("the scenarios show the states of Change that matter for layout", () => {
   assert.ok(threads.some((row) => row.body.includes("suggested fix:")) && threads.some((row) => row.edit && row.discard) && threads.some((row) => row.draft));
   assert.deepEqual([...new Set(changes.flatMap((vm) => (vm.ci ? [vm.ci.state] : [])))].sort(), ["closed", "error", "loaded", "loading"]);
   assert.ok(changes.some((vm) => vm.ci?.state === "loaded" && !vm.ci.links.length), "a failed build without a link");
+  assert.ok(changes.some((vm) => (vm.conflicts?.rows.length ?? 0) > 1 && vm.head?.actions?.length), "a rebase stopped on a conflict in several files, with its buttons");
+  assert.ok(changes.some((vm) => !vm.conflicts && vm.head?.actions?.some((action) => action.primary)), "its conflicts resolved, Continue the one to press");
   assert.deepEqual([...new Set(findings.map((row) => row.icon))].sort(), ["circle-outline", "flame", "question"], "inherited, introduced, origin unknown");
   assert.ok(links.some((link) => link.warnings.length) && links.some((link) => link.detail.startsWith("could not be read")));
   // What a page only shows once opened is pressed open, so a picture has it.

@@ -294,6 +294,16 @@ function changeScenarios(): Scenario[] {
     scenario("Change: CI findings, their origin unknown", { change: ciLoaded(null) }),
     scenario("Change: CI findings could not be fetched", { change: change({ shown: theChange(FAILING), ci: { state: "error", error: "Gerrit unreachable: connection refused (gerrit.example.org:443)" } }) }),
     scenario("Change: CI failed without a link to its log", { change: change({ shown: theChange({ ...FAILING, ci_links: [] }), ci: { state: "loaded", contents: [], introduced: null } }) }),
+    scenario("Change: a rebase stopped here on a conflict", {
+      change: change({
+        shown: theChange({ patchset_status: "newer", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }),
+        readOnly: "A rebase is in progress: finish or abort it first.",
+        stopped: { stop: "conflict", unmerged: [TREE, "tests/integration/routing/test_longest_prefix_matching_with_overlapping_registrations.py"], actions: ["abort", "skip"] },
+      }),
+    }),
+    scenario("Change: a rebase stopped here, its conflicts resolved", {
+      change: change({ shown: theChange(FAILING), readOnly: "A rebase is in progress: finish or abort it first.", stopped: { stop: "resolved", unmerged: [], actions: ["continue", "abort", "skip"] } }),
+    }),
     scenario("Change: loading, drawn from the clicked stack row", { change: change({ shown: theChange({ attention_reasons: [] }), base: undefined, patchsets: undefined, loading: fromRow }) }),
     scenario("Change: loading someone's change", {
       change: change({ local: false, shown: theChange({ local_commit: false, comments_unresolved: 2, attention_reasons: ["unresolved-comments"] }), base: undefined, patchsets: undefined, version: "current", readOnly: REMOTE, loading: fromRow }),

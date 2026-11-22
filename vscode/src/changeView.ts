@@ -1,15 +1,17 @@
 // "Change": one change in detail — what it needs, its commit message (editable for your own
 // commit), which version is compared with what, its files (as diffs), its comment chains and,
-// on demand, the CI findings with the ones this change introduced on top. A webview
+// on demand, the CI findings with the ones this change introduced on top. Stopped there by a rebase
+// on a conflict, it says so first, with the conflicted files and the rebase's buttons. A webview
 // (media/change.js) draws the view model of changeRows.ts; this loads it and acts on its clicks.
 
 import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail, ciRevs, sameChange } from "./changeLoad";
+import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { ChangeTarget, Model, describeError } from "./model";
+import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
@@ -336,6 +338,8 @@ export class ChangeView extends WebView<ChangeVm> {
       mode: this.mode,
       readOnly: this.readOnly(),
       ci: this.ci,
+      // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
+      stopped: this.target && stoppedHere(this.target, this.model.stack),
     });
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };
@@ -405,6 +409,8 @@ export class ChangeView extends WebView<ChangeVm> {
         return this.applyMessage(message.text as string);
       case "command":
         return vscode.commands.executeCommand(message.command as string);
+      case "conflict":
+        return openConflict(this.model, message.path as string);
       default:
         return undefined;
     }

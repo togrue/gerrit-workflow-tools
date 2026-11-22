@@ -206,6 +206,7 @@ export const MARKER_WORDS = {
   rebase: "The rebase stopped here, with this commit applied.",
   conflict: "The rebase stopped here on a conflict: this commit is not applied yet.",
   resolved: "The rebase stopped here on a conflict, now resolved: Continue commits it.",
+  stopped: "The rebase stopped here: HEAD has moved on from where it stopped, and there is no telling how this commit stands.",
 };
 
 /** The banner above a stack a rebase is underway on. */
@@ -235,8 +236,12 @@ export const REBASE_ACTIONS: Record<RebaseAction, { label: string; title: string
   skip: { label: "Skip", title: "Leave out the commit it stopped at, and go on without it (ger rebase --skip)", command: "ger.rebase.skip" },
 };
 
-/** The banner's buttons: the ways on core allows from where the rebase stopped (`rebase.actions`); Continue is the one to press once resolved. */
-export function rebaseButtons(rebase: Rebase | null | undefined): StackAction[] {
+/**
+ * The buttons to go on with a stopped rebase: the ways on core allows from there (`rebase.actions`);
+ * Continue is the one to press once resolved. Local stack's banner and the Change view of the commit
+ * it stopped at both draw them with this, so they cannot disagree.
+ */
+export function rebaseButtons(rebase: Pick<Rebase, "stop" | "actions"> | null | undefined): StackAction[] {
   return (rebase?.actions ?? []).map((action) => ({
     label: REBASE_ACTIONS[action].label,
     title: REBASE_ACTIONS[action].title,
@@ -291,14 +296,39 @@ export function pushWaysOn(stack: Stack | undefined): RebaseAction[] {
   return (stack?.rebase?.actions ?? ["continue", "abort"]).filter((action) => action !== "skip");
 }
 
+/** How the rebase underway stands at the commit it stopped at (`stoppedAt`). */
+export type StoppedAt = "conflict" | "resolved" | "applied" | "stopped";
+
+/**
+ * Where the rebase underway stopped at `commit`, by core's verdict: the commit's `rebase` step says
+ * it stopped there, the stack's `stop` whether on a conflict still open or resolved, else its
+ * `applied` whether the commit is in whole; `stopped` where core cannot tell (a `null` stop, the
+ * commit not applied: a resolution committed by hand as another commit), and null when it did not
+ * stop at this commit. Local stack marks the row with it; the Change view of that commit says it.
+ */
+export function stoppedAt(commit: Pick<StackCommit, "rebase">, stack: Pick<Stack, "rebase">): StoppedAt | null {
+  const rebase = stack.rebase;
+  if (commit.rebase !== "current" || !rebase) {
+    return null;
+  }
+  if (rebase.stop === "conflict" || rebase.stop === "resolved") {
+    return rebase.stop;
+  }
+  return rebase.applied ? "applied" : "stopped";
+}
+
+/** A file still conflicted, under the banner and in the Change view's Conflicts: a click opens it to resolve. */
+export function conflictRow(file: string): StackInfo {
+  return { text: file, detail: REBASE_WORDS.conflicted, icon: "warning", tone: "bad", tooltip: REBASE_WORDS.resolve, conflict: file };
+}
+
 function rebaseBanner(rebase: Rebase | null | undefined): StackInfo[] {
   const stop = rebase?.stop ?? null;
   const said: Partial<Record<string, string>> = { conflict: REBASE_WORDS.conflict, resolved: REBASE_WORDS.resolved, split: REBASE_WORDS.split };
   const text = said[stop ?? ""] ?? REBASE_WORDS.progress;
   const detail = stop === "resolved" ? REBASE_WORDS.ready : stop === "split" ? REBASE_WORDS.onTop : rebase?.as_before ? REBASE_WORDS.asBefore : undefined;
   const banner: StackInfo = { text, detail, icon: "warning", tone: "warn", tooltip: REBASE_WORDS.tooltip, actions: rebaseButtons(rebase) };
-  const files = (rebase?.unmerged ?? []).map((file): StackInfo => ({ text: file, detail: REBASE_WORDS.conflicted, icon: "warning", tone: "bad", tooltip: REBASE_WORDS.resolve, conflict: file }));
-  return [banner, ...files];
+  return [banner, ...(rebase?.unmerged ?? []).map(conflictRow)];
 }
 
 /** The view's header: the branch, or the one being rebased, and where its stack starts. */
@@ -324,10 +354,8 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   const [below, above] = [stack.commits[index - 1], stack.commits[index + 1]];
   const isPinned = index < pinnedBelow;
   const state = sync(commit);
-  const stopped = commit.rebase === "current";
-  const conflict = stopped && stack.rebase?.stop === "conflict";
-  const resolved = stopped && stack.rebase?.stop === "resolved";
-  const marker = stopped ? (conflict ? "conflict" : "rebase") : null;
+  const stopped = stoppedAt(commit, stack);
+  const marker = stopped ? (stopped === "conflict" ? "conflict" : "rebase") : null;
   const up = above && conflicts(commit.sha, above.sha);
   const down = below && conflicts(below.sha, commit.sha);
   const notes = [commit.is_head ? "HEAD" : "", commit.short_sha, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
@@ -335,7 +363,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
     reasonWords(commit.attention_reasons) || "no open issues",
-    marker ? MARKER_WORDS[resolved ? "resolved" : marker] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
+    stopped ? MARKER_WORDS[stopped === "applied" ? "rebase" : stopped] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
     commit.merge ? MERGE_WORDS : "",
     isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",
@@ -420,6 +448,11 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   return { info, rows, frozen: frozen(local), movable: commits.length - fixed };
 }
 
+/** Buttons as the transcript shows them: `[Continue] [Abort]`, the one to press now in bold. */
+export function actionsText(actions: StackAction[] | undefined): string {
+  return (actions ?? []).map((a) => (a.primary ? `[**${a.label}**]` : `[${a.label}]`)).join(" ");
+}
+
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */
 export function stackLines(vm: StackVm): string[] {
   if (vm.waiting) {
@@ -428,7 +461,7 @@ export function stackLines(vm: StackVm): string[] {
   const said = (badge: Badge | null) => (badge ? `${badge.stale ? "last pushed " : ""}${badge.kind}${badge.text ? ` ${badge.text}` : ` ${badge.tone}`}` : "");
   return [
     ...vm.info.map((info) => {
-      const buttons = (info.actions ?? []).map((a) => (a.primary ? `[**${a.label}**]` : `[${a.label}]`)).join(" ");
+      const buttons = actionsText(info.actions);
       return `${info.conflict ? "  ⚠ " : ""}${info.text}${info.detail ? ` — ${info.detail}` : ""}${buttons ? `  ${buttons}` : ""}`;
     }),
     ...vm.rows.map((r) => {

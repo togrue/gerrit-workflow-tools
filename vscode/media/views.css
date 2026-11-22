@@ -104,6 +104,11 @@ body {
   padding-left: 34px;
 }
 
+/* In the Change view's Conflicts section: lined up with the Files rows below it. */
+.section .info.conflict {
+  padding-left: 24px;
+}
+
 /* Icon buttons that show on the row under the pointer, as a tree's inline actions do. */
 .actions {
   display: none;

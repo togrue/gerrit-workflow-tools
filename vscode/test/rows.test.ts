@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
+import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -117,6 +117,35 @@ test("mid-rebase the stack marks where it stands and dims only what is still to 
   assert.deepEqual([resolved.rows[1].marker, resolved.rows[1].dim], ["rebase", false]);
   assert.deepEqual([resolved.info[0].text, resolved.info[0].detail], ["A rebase stopped with its conflicts resolved", "ready to continue"]);
   assert.match(resolved.rows[1].tooltip, /now resolved: Continue commits it/);
+});
+
+test("where the rebase stopped at a commit is core's: its step, then whether the commit is applied, then the stop", () => {
+  const at = (rebase: Partial<Rebase>, step: StackCommit["rebase"] = "current") => stoppedAt({ rebase: step }, { rebase: { ...REBASE, ...rebase } });
+  assert.equal(at({ stop: "edit", applied: true }), "applied");
+  assert.equal(at({ stop: "split", applied: true, current: null }), "applied");
+  assert.equal(at({ stop: null, applied: true }), "applied", "core cannot tell why, but the commit is in");
+  assert.equal(at({ stop: "conflict", applied: false, unmerged: ["e.txt"] }), "conflict");
+  assert.equal(at({ stop: "resolved", applied: false }), "resolved");
+  assert.equal(at({ stop: null, applied: false }), "stopped", "core cannot tell: no conflict inferred from a commit not applied");
+  assert.equal(at({ stop: "conflict", applied: false }, "done"), null, "not the commit it stopped at");
+  assert.equal(stoppedAt({ rebase: "current" }, { rebase: null }), null, "no rebase");
+});
+
+test("a resolution committed by hand as another commit is no conflict: core serves no stop, and the row and the Change view say none (PR #90)", () => {
+  // GET /stack as core serves it then (tests/test_rebase_go_on.py): the original commit keeps its `current` step, not applied, and no stop.
+  const commits = [commit("My own resolution", { rebase: "done", is_head: true }), commit("Two", { rebase: "current" }), commit("Three", { rebase: "todo" })];
+  const byHand: Rebase = { ...REBASE, stop: null, applied: false, unmerged: [], actions: ["continue", "abort"], refused: {} };
+  const vm = stackVm(stack(commits, { branch: null, rebase_in_progress: true, rebase: byHand }), undefined, never);
+  const two = vm.rows.find((row) => row.summary === "Two");
+  assert.equal(two?.marker, "rebase", "a neutral marker, not a conflict");
+  assert.match(two?.tooltip ?? "", /no telling how this commit stands/);
+  assert.doesNotMatch(two?.tooltip ?? "", /conflict/);
+  assert.deepEqual([vm.info[0].text, vm.info.length], ["A rebase is in progress", 1], "no conflict words, no conflicted files");
+  assert.deepEqual(
+    (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""}`),
+    ["Continue", "Abort"],
+    "the ways on core serves, none pressed as the one after a resolution",
+  );
 });
 
 test("the rebase banner offers the ways on core allows from where it stopped, and lists the files still conflicted", () => {
@@ -252,6 +281,47 @@ test("the change view shows the message, the files with their line counts, and w
     "  logo.png — added binary",
     "Comments — none",
   ]);
+});
+
+test("stopped by a rebase on a conflict, the change view says what is left and how to go on, not what its votes will do", () => {
+  const ahead = shown({ patchset_status: "newer", attention_reasons: ["ahead-of-gerrit", "ci-failed"], ci_failures: ["Verified"], verified: -1 });
+  const conflict = changeVm(state({ shown: ahead, stopped: { stop: "conflict", unmerged: ["src/d.txt"], actions: ON_CONFLICT } }));
+  assert.equal(conflict.head?.text, "Conflict in src/d.txt — resolve it, then Continue");
+  assert.deepEqual([conflict.head?.icon, conflict.head?.tone], ["warning", "bad"]);
+  assert.deepEqual(conflict.head?.actions?.map((action) => action.command.id), ["ger.rebase.abort", "ger.rebase.skip"], "the ways on core serves: no Continue over open conflicts");
+  assert.deepEqual(conflict.notes, [], "\"ahead of Gerrit… only rebased: the votes stay\" is not true yet");
+  // What Gerrit has stays true: a newer patchset there, and the last pushed patchset's failed builds and their logs.
+  const outdated = changeVm(state({ shown: shown({ patchset_status: "outdated" }), stopped: { stop: "conflict", unmerged: ["src/d.txt"], actions: ON_CONFLICT } }));
+  assert.deepEqual(outdated.notes?.map((note) => note.text), ["Gerrit has a newer patchset than this commit"]);
+  assert.deepEqual([conflict.ci?.summary, conflict.ci?.state], ["Verified", "closed"], "the failed builds are named");
+  const logs = (stopped: ChangeState["stopped"], contents: ReturnType<typeof content>[]) =>
+    changeVm(state({ shown: ahead, stopped, ci: { state: "loaded", contents, introduced: null } }));
+  const atConflict: ChangeState["stopped"] = { stop: "conflict", unmerged: ["src/d.txt"], actions: ON_CONFLICT };
+  assert.deepEqual(logs(atConflict, [content(true, [finding("undeclared identifier", "error", "e1")])]).ci?.links.map((link) => link.url), [content(true, []).provenance.url], "its log links");
+  // Why there is no log is about this commit's build, which there is not yet: not said.
+  assert.deepEqual(changeLines(logs(atConflict, [])).slice(-1), ["CI — Verified"]);
+  assert.deepEqual(changeLines(logs(undefined, [])).slice(-2), ["CI — Verified", "  No CI link was found for the failed build"], "applied, it is said");
+  // The conflicted files and the buttons are the banner's: one function draws each, from the same served stop.
+  const banner = stackVm(stack([commit("One", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["src/d.txt"], actions: ON_CONFLICT } }), undefined, never).info;
+  assert.deepEqual(conflict.conflicts?.rows, banner.slice(1));
+  assert.deepEqual(conflict.head?.actions, banner[0].actions);
+  assert.deepEqual([conflict.files?.title, conflict.files?.rows.length], ["Files, as before the rebase", 2], "the commit as it was, and it says so");
+  assert.deepEqual(changeLines(conflict).slice(0, 6), [
+    "Conflict in src/d.txt — resolve it, then Continue — V-1  [Abort] [Skip]",
+    "Commit message — Extract routing  (editable)",
+    "Showing — Local commit extract · Against its base commit",
+    "Conflicts — 1 file",
+    "  ⚠ src/d.txt — conflicted",
+    "Files, as before the rebase — 2 · +12 −3",
+  ]);
+  assert.equal(changeVm(state({ stopped: { stop: "conflict", unmerged: ["a", "b", "c"], actions: ON_CONFLICT } })).head?.text, "Conflicts in 3 files — resolve them, then Continue");
+  // Resolved and added: Continue is the one to press; the rows stay hidden until it is applied.
+  const resolved = changeVm(state({ shown: ahead, stopped: { stop: "resolved", unmerged: [], actions: RESOLVED } }));
+  assert.equal(resolved.head?.text, "Conflicts resolved — Continue");
+  assert.deepEqual(resolved.head?.actions?.map((action) => `${action.label}${action.primary ? "!" : ""}`), ["Continue!", "Abort", "Skip"]);
+  assert.deepEqual([resolved.conflicts, resolved.notes, resolved.ci?.summary], [undefined, [], "Verified"]);
+  // A patchset of the change is no commit the rebase holds: its files are not labelled as it.
+  assert.equal(changeVm(state({ stopped: { stop: "conflict", unmerged: ["a"], actions: ON_CONFLICT }, version: 3 })).files?.title, "Files");
 });
 
 test("the change view says the subject once, in the commit message: its title bar names only the change number", () => {
