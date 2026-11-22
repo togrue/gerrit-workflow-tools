@@ -1,29 +1,22 @@
-// "Local stack": the rows of src/stackRows.ts, newest first. Selection (one or several rows),
-// arrow-key walking, drag and drop with a line where the commits will land, and the context
-// object each row hands to VS Code's context menu (`webview/context` in package.json).
+// "Local stack": the rows of src/stackRows.ts, newest first. Selection (one or several rows) and
+// arrow-key walking are common.js's rowSelection; here are the rows, drag and drop with a line
+// where the commits will land, and the context object each row hands to VS Code's context menu
+// (`webview/context` in package.json).
 
 (function () {
-  const { h, icon, post, panel, listen } = window.ger;
+  const { h, icon, post, panel, listen, rowSelection } = window.ger;
   const root = document.getElementById("root");
 
   let vm = { info: [], rows: [], frozen: null, movable: 0 };
-  /** Row keys (the Change-Id, so a rewrite keeps the selection). */
-  let selected = new Set();
-  let focused = null;
-  let anchor = null;
   let list = null;
   let line = null;
   let dragging = false;
-  let openTimer;
 
-  const rowOf = (key) => vm.rows.find((row) => row.key === key);
-  const indexOf = (key) => vm.rows.findIndex((row) => row.key === key);
-  const selectedRows = () => vm.rows.filter((row) => selected.has(row.key));
-
-  /** What a command from the context menu gets: the row, and every selected row when it is one of several. */
-  function context(row) {
-    const rows = selected.has(row.key) && selected.size > 1 ? selectedRows() : [row];
-    return JSON.stringify({
+  /** Row keys are the Change-Id, so a rewrite keeps the selection. */
+  const selection = rowSelection({
+    rows: () => vm.rows,
+    open: (row, keepFocus) => post("open", { sha: row.sha, keepFocus }),
+    context: (row, rows) => ({
       webviewSection: "commit",
       preventDefaultContextMenuItems: true,
       sha: row.sha,
@@ -32,8 +25,8 @@
       gerSquash: row.squash,
       gerChangeId: rows.some((r) => r.changeId),
       gerMulti: rows.length > 1,
-    });
-  }
+    }),
+  });
 
   const BADGE_KINDS = ["comments", "review", "ci"];
 
@@ -41,18 +34,16 @@
   const badge = (item, slot) => window.ger.badge(item, BADGE_KINDS[slot]);
 
   function rowElement(row, slots) {
-    const classes = ["row", selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : "", row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
+    const { classes, ...attributes } = selection.attributes(row);
+    const all = ["row", ...classes, row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
     const marker = row.marker ? icon("debug-stackframe", row.marker === "conflict" ? "bad" : "warn") : null;
     return h(
       "div",
       {
-        class: classes.filter(Boolean).join(" "),
-        role: "option",
-        "aria-selected": selected.has(row.key) ? "true" : "false",
+        class: all.filter(Boolean).join(" "),
+        ...attributes,
         draggable: "true",
         title: row.tooltip,
-        "data-key": row.key,
-        "data-vscode-context": context(row),
       },
       h("span", { class: "marker" }, marker),
       h("span", { class: `codicon codicon-${row.syncIcon} sync sync-${row.sync}`, title: row.syncTitle }),
@@ -82,10 +73,7 @@
 
   function draw(next) {
     vm = next;
-    const keys = new Set(vm.rows.map((row) => row.key));
-    selected = new Set([...selected].filter((key) => keys.has(key)));
-    focused = keys.has(focused) ? focused : null;
-    anchor = keys.has(anchor) ? anchor : focused;
+    selection.keep();
     const hadFocus = list !== null && document.activeElement === list;
     const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
     if (vm.waiting) {
@@ -118,60 +106,6 @@
     }
   }
 
-  /** Selection changed: the rows' classes and context objects follow, without redrawing. */
-  function refresh() {
-    for (const element of list.querySelectorAll(".row")) {
-      const row = rowOf(element.dataset.key);
-      const on = selected.has(row.key);
-      element.classList.toggle("selected", on);
-      element.classList.toggle("focused", focused === row.key);
-      element.setAttribute("aria-selected", on ? "true" : "false");
-      element.setAttribute("data-vscode-context", context(row));
-    }
-  }
-
-  function select(key, mode) {
-    if (mode === "range" && anchor !== null) {
-      const [from, to] = [indexOf(anchor), indexOf(key)].sort((a, b) => a - b);
-      selected = new Set(vm.rows.slice(from, to + 1).map((row) => row.key));
-    } else if (mode === "toggle") {
-      if (selected.has(key)) {
-        selected.delete(key);
-      } else {
-        selected.add(key);
-      }
-      anchor = key;
-    } else {
-      selected = new Set([key]);
-      anchor = key;
-    }
-    focused = key;
-    refresh();
-  }
-
-  /** Show the commit in the Change view. While walking with the arrow keys: after a short pause, the keyboard stays here. */
-  function open(key, keepFocus, delay) {
-    clearTimeout(openTimer);
-    const row = rowOf(key);
-    if (row) {
-      openTimer = setTimeout(() => post("open", { sha: row.sha, keepFocus }), delay);
-    }
-  }
-
-  function step(to, extend) {
-    if (!vm.rows.length) {
-      return;
-    }
-    const index = Math.max(0, Math.min(vm.rows.length - 1, to));
-    const key = vm.rows[index].key;
-    select(key, extend ? "range" : "single");
-    const element = list.querySelector(`.row[data-key="${CSS.escape(key)}"]`);
-    if (element) {
-      element.scrollIntoView({ block: "nearest" });
-    }
-    open(key, true, 150);
-  }
-
   // --- Drag and drop ----------------------------------------------------------------
 
   /** Where a drop at `y` lands: the gap above row `n`, or under the last row. */
@@ -190,8 +124,8 @@
       return false;
     }
     const keys = vm.rows.map((row) => row.key);
-    const stays = (key) => !selected.has(key);
-    const next = [...keys.slice(0, gap).filter(stays), ...keys.filter((key) => selected.has(key)), ...keys.slice(gap).filter(stays)];
+    const stays = (key) => !selection.has(key);
+    const next = [...keys.slice(0, gap).filter(stays), ...keys.filter((key) => selection.has(key)), ...keys.slice(gap).filter(stays)];
     return next.some((key, index) => key !== keys[index]);
   }
 
@@ -214,51 +148,13 @@
   }
 
   function wire(element) {
+    selection.wire(element);
     element.addEventListener("click", (event) => {
       const row = event.target.closest(".row");
-      if (!row) {
-        return;
-      }
-      const key = row.dataset.key;
       const button = event.target.closest("button");
-      if (button) {
-        post("command", { command: button.dataset.command, args: [{ sha: rowOf(key).sha }] });
-        return;
+      if (row && button) {
+        post("command", { command: button.dataset.command, args: [{ sha: selection.rowOf(row.dataset.key).sha }] });
       }
-      select(key, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single");
-      open(key, true, 0);
-    });
-    element.addEventListener("dblclick", (event) => {
-      const row = event.target.closest(".row");
-      if (row && !event.target.closest("button")) {
-        open(row.dataset.key, false, 0);
-      }
-    });
-    element.addEventListener("contextmenu", (event) => {
-      const row = event.target.closest(".row");
-      if (row && !selected.has(row.dataset.key)) {
-        select(row.dataset.key, "single");
-      }
-    });
-    element.addEventListener("keydown", (event) => {
-      const at = focused === null ? -1 : indexOf(focused);
-      const keys = {
-        ArrowDown: () => step(at + 1, event.shiftKey),
-        ArrowUp: () => step(at < 0 ? 0 : at - 1, event.shiftKey),
-        Home: () => step(0, event.shiftKey),
-        End: () => step(vm.rows.length - 1, event.shiftKey),
-        Enter: () => focused !== null && open(focused, false, 0),
-        Escape: () => focused !== null && select(focused, "single"),
-      };
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
-        selected = new Set(vm.rows.map((row) => row.key));
-        refresh();
-      } else if (keys[event.key]) {
-        keys[event.key]();
-      } else {
-        return;
-      }
-      event.preventDefault();
     });
     element.addEventListener("dragstart", (event) => {
       const row = event.target.closest(".row");
@@ -269,10 +165,10 @@
         }
         return;
       }
-      if (!selected.has(row.dataset.key)) {
-        select(row.dataset.key, "single");
+      if (!selection.has(row.dataset.key)) {
+        selection.select(row.dataset.key, "single");
       }
-      if (selectedRows().some((r) => r.pinned)) {
+      if (selection.selectedRows().some((r) => r.pinned)) {
         event.preventDefault();
         post("pinned"); // the extension says why the merge and what is below it stay
         return;
@@ -280,7 +176,7 @@
       dragging = true;
       list.classList.add("dragging");
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", selectedRows().map((r) => r.sha).join("\n"));
+      event.dataTransfer.setData("text/plain", selection.selectedRows().map((r) => r.sha).join("\n"));
     });
     element.addEventListener("dragover", (event) => {
       if (dragging) {
@@ -300,7 +196,7 @@
       }
       event.preventDefault();
       const gap = gapAt(event.clientY);
-      const shas = selectedRows().map((row) => row.sha);
+      const shas = selection.selectedRows().map((row) => row.sha);
       const changes = moves(gap);
       endDrag();
       if (changes) {
@@ -321,7 +217,7 @@
     if (dragging && list && !list.contains(event.target)) {
       event.preventDefault();
       const gap = gapAt(event.clientY);
-      const shas = selectedRows().map((row) => row.sha);
+      const shas = selection.selectedRows().map((row) => row.sha);
       const changes = moves(gap);
       endDrag();
       if (changes) {

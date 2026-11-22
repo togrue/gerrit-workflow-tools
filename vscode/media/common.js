@@ -1,6 +1,6 @@
-// Shared by the pages of the webview views (stack.js, change.js): building DOM, icons, and
-// talking to the extension. The pages hold no Gerrit or git logic: they draw the view model the
-// extension sends (`{type: "render", vm}`) and say what the user did.
+// Shared by the pages of the webview views (stack.js, change.js): building DOM, icons, talking to
+// the extension, and the selection of a list of rows. The pages hold no Gerrit or git logic: they
+// draw the view model the extension sends (`{type: "render", vm}`) and say what the user did.
 
 (function () {
   const vscode = acquireVsCodeApi();
@@ -72,6 +72,158 @@
     post("ready");
   }
 
+  /**
+   * The selection of a list of rows, as Local stack has it: one or several rows, the focused one,
+   * walking with the arrow keys, and what a row hands VS Code's context menu. `rows()` gives the
+   * rows as shown, each with a `key` that survives a redraw. `open(row, keepFocus)` shows a row;
+   * `context(row, rows)` is its `data-vscode-context`, `rows` being what a command on it acts on.
+   * The page draws the list; `wire(list)` makes its `.row` elements (with `data-key`) answer.
+   */
+  function rowSelection({ rows, open, context }) {
+    let selected = new Set();
+    let focused = null;
+    let anchor = null;
+    let list = null;
+    let openTimer;
+
+    const rowOf = (key) => rows().find((row) => row.key === key);
+    const indexOf = (key) => rows().findIndex((row) => row.key === key);
+    const selectedRows = () => rows().filter((row) => selected.has(row.key));
+
+    /** What a command from the context menu gets: the row, and every selected row when it is one of several. */
+    const contextOf = (row) => JSON.stringify(context(row, selected.has(row.key) && selected.size > 1 ? selectedRows() : [row]));
+
+    /** What a row element needs from the selection: its classes, and its attributes. */
+    function attributes(row) {
+      return {
+        classes: [selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : ""],
+        role: "option",
+        "aria-selected": selected.has(row.key) ? "true" : "false",
+        "data-key": row.key,
+        "data-vscode-context": contextOf(row),
+      };
+    }
+
+    /** The rows changed: forget the ones that went. */
+    function keep() {
+      const keys = new Set(rows().map((row) => row.key));
+      selected = new Set([...selected].filter((key) => keys.has(key)));
+      focused = keys.has(focused) ? focused : null;
+      anchor = keys.has(anchor) ? anchor : focused;
+    }
+
+    /** Selection changed: the rows' classes and context objects follow, without redrawing. */
+    function refresh() {
+      if (!list) {
+        return;
+      }
+      for (const element of list.querySelectorAll(".row")) {
+        const row = rowOf(element.dataset.key);
+        const on = selected.has(row.key);
+        element.classList.toggle("selected", on);
+        element.classList.toggle("focused", focused === row.key);
+        element.setAttribute("aria-selected", on ? "true" : "false");
+        element.setAttribute("data-vscode-context", contextOf(row));
+      }
+    }
+
+    function select(key, mode) {
+      if (mode === "range" && anchor !== null) {
+        const [from, to] = [indexOf(anchor), indexOf(key)].sort((a, b) => a - b);
+        selected = new Set(rows().slice(from, to + 1).map((row) => row.key));
+      } else if (mode === "toggle") {
+        if (selected.has(key)) {
+          selected.delete(key);
+        } else {
+          selected.add(key);
+        }
+        anchor = key;
+      } else {
+        selected = new Set([key]);
+        anchor = key;
+      }
+      focused = key;
+      refresh();
+    }
+
+    /**
+     * Show the row. While walking with the arrow keys: after a short pause, the keyboard stays here.
+     * The row is looked up when the pause is over: a redraw in between may have rewritten or dropped it.
+     */
+    function show(key, keepFocus, delay) {
+      clearTimeout(openTimer);
+      openTimer = setTimeout(() => {
+        const row = rowOf(key);
+        if (row) {
+          open(row, keepFocus);
+        }
+      }, delay);
+    }
+
+    function step(to, extend) {
+      const all = rows();
+      if (!all.length) {
+        return;
+      }
+      const key = all[Math.max(0, Math.min(all.length - 1, to))].key;
+      select(key, extend ? "range" : "single");
+      const element = list.querySelector(`.row[data-key="${CSS.escape(key)}"]`);
+      if (element) {
+        element.scrollIntoView({ block: "nearest" });
+      }
+      show(key, true, 150);
+    }
+
+    /** Clicks, keys and right-clicks on the rows of `element`. A click or Enter on a row's button is the page's. */
+    function wire(element) {
+      list = element;
+      element.addEventListener("click", (event) => {
+        const row = event.target.closest(".row");
+        if (!row || event.target.closest("button")) {
+          return;
+        }
+        const key = row.dataset.key;
+        select(key, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single");
+        show(key, true, 0);
+      });
+      element.addEventListener("dblclick", (event) => {
+        const row = event.target.closest(".row");
+        if (row && !event.target.closest("button")) {
+          show(row.dataset.key, false, 0);
+        }
+      });
+      element.addEventListener("contextmenu", (event) => {
+        const row = event.target.closest(".row");
+        if (row && !selected.has(row.dataset.key)) {
+          select(row.dataset.key, "single");
+        }
+      });
+      element.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && event.target.closest("button")) {
+          return; // it presses the button
+        }
+        const at = focused === null ? -1 : indexOf(focused);
+        const keys = {
+          ArrowDown: () => step(at + 1, event.shiftKey),
+          ArrowUp: () => step(at < 0 ? 0 : at - 1, event.shiftKey),
+          Home: () => step(0, event.shiftKey),
+          End: () => step(rows().length - 1, event.shiftKey),
+          Enter: () => focused !== null && show(focused, false, 0),
+          Escape: () => focused !== null && select(focused, "single"),
+        };
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+          selected = new Set(rows().map((row) => row.key));
+          refresh();
+        } else if (!keys[event.key] || keys[event.key]() === false) {
+          return; // with no focused row, Enter and Escape are VS Code's
+        }
+        event.preventDefault();
+      });
+    }
+
+    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key) };
+  }
+
   window.ger = {
     h,
     icon,
@@ -79,6 +231,7 @@
     post,
     panel,
     listen,
+    rowSelection,
     getState: () => vscode.getState() || {},
     setState: (state) => vscode.setState(state),
   };
