@@ -273,6 +273,20 @@ then `branch` (here and at the top) is `null`, and so are `stack.target_branch` 
 `stack.push_branch`. A `git am` underway is no rebase: `rebase_in_progress` is `false` and
 `rebase` is `null`, but a rewrite or a push refuses, saying to finish or abort it.
 
+`upstream` is how far the working branch's upstream moved on past the stack, after a `git
+fetch`: `name` (`origin/main`, as the branch config names it), `behind` (the commits it has that
+the branch has not, as `git status` counts them), and the rebase onto it previewed as
+[`GET /stack/moves`](#get-stackmoves) previews a swap, nothing touched: `conflict` is `null` when
+every commit of the stack would apply on the upstream as it is now, else `sha` and `summary` of
+the first that would not and the `files` it conflicts in; `preview` is `false` when that cannot
+be told (git older than 2.40, or a merge in the stack: `git rebase` does not replay it), and
+`conflict` is `null` then too. `ger rebase <name>` is the rebase it previews. `upstream` is
+`null` without a working branch or an upstream, and while a rebase is underway: that one is
+finished first. Cost: one `git rev-list --count --left-right`; only once the upstream has moved
+on, also one `git rev-list` for merges and one `git merge-tree` per commit up to the first that
+conflicts, so the preview grows with the stack only while there is something to rebase onto.
+`ger log --json` serves the same object, and its text ends with it as a `next:` line.
+
 `push_blocked` is why `ger push` would refuse a Gerrit push now, whatever the stack holds, or
 `null`: `reason` is `rebase` (the branch still points at the commits from before it) or `am` (a
 `git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it

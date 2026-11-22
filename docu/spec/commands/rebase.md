@@ -21,6 +21,13 @@ ger rebase --continue | --abort | --skip
 
 `REV` — base commit, Change-Id, or ref (default: merge-base with target). Not used with `--onto-remote`.
 
+Without `REV` the todo is replayed where it is, onto the fork point: nothing moves onto the
+upstream's new commits. To rebase onto the upstream as fetched, name it: `ger rebase origin/main`.
+That is the rebase `ger log` advises once the upstream moved on (`next: origin/main has 1 new
+commit; …`), the one `GET /stack`'s `upstream` previews, and what the VS Code extension's
+*Rebase onto origin/main* runs. Unlike `--onto-remote` it takes the upstream of the branch
+whatever its remote, the same commits the local stack is counted from.
+
 ### Change resolution
 
 `REV` is resolved by `resolve_stack_changeish`, the same path as [`ger fix`](fix.md) and

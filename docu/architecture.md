@@ -551,6 +551,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |
+| `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`) and whether rebasing onto it would conflict: `upstream_moved`, `UpstreamMoved` |
 | `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)
@@ -611,7 +612,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line) |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
-| `server/views.py` | Read endpoints: health, overview, stack (with rebase progress), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
+| `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
 | `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |

@@ -205,6 +205,8 @@ export interface Stack {
   rebase?: Rebase | null;
   /** Why `ger push` would refuse now, whatever the stack holds (core's verdict, and its words); null when it would not. */
   push_blocked?: PushBlocked | null;
+  /** How far the upstream moved on past the stack, and the rebase onto it previewed; null without one, and during a rebase. */
+  upstream?: UpstreamMoved | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
   stack: { project: string; target_branch: string | null; push_branch: string | null };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
@@ -216,6 +218,17 @@ export interface MoveConflict {
   sha: string;
   summary: string;
   files: string[];
+}
+
+/** `GET /stack`'s `upstream`: the commits the upstream has that the branch has not, and what `ger rebase <name>` would meet. */
+export interface UpstreamMoved {
+  /** `origin/main`, as the branch config names it: `ger rebase <name>` rebases onto it. */
+  name: string;
+  behind: number;
+  /** The first commit that would not apply on it as it is now; null when all would (or `preview` is false). */
+  conflict: MoveConflict | null;
+  /** False when the rebase could not be previewed (an old git, a merge in the stack): nothing is known. */
+  preview: boolean;
 }
 
 /** The conflict preview: one entry per adjacent pair of the stack, oldest first. */

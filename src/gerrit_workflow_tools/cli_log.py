@@ -38,6 +38,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetS
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
+from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, upstream_moved
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -46,7 +47,7 @@ from gerrit_workflow_tools.render.commit_row import (
     oneline_body,
     oneline_line,
 )
-from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps
+from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps, upstream_json
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -99,9 +100,11 @@ def _format_summary_dashboard_line(
     return f"{color_text('summary:', f'{ANSI_BOLD}{ANSI_CYAN}')} {color_text(' · ', ANSI_DIM).join(stats)}"
 
 
-def next_steps(commits: list[LogCommit]) -> list[str]:
+def next_steps(commits: list[LogCommit], upstream: UpstreamMoved | None = None) -> list[str]:
     """One ``next:`` line per state the stack is in that has a ger command for it, oldest commit first."""
     lines: list[str] = []
+    if upstream and upstream.behind:
+        lines.append(f"next: {upstream.advice()}")
     merged = [c for c in commits if c.patchset_status in (PatchsetStatus.MERGED_SAME, PatchsetStatus.MERGED_DRIFT)]
     if merged:
         lines.append(
@@ -311,6 +314,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     )
     if progress is not None:
         print_note(_rebase_note(progress, stack_view.rebase))
+    # The default stack only, and not during a rebase: that one is finished first.
+    on_stack = args.rev_range is None and progress is None
+    moved = upstream_moved(run.cwd, run.repo.working_branch, stack_view.rows, settings=settings) if on_stack else None
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
     stack = run.repo.shown_stack
@@ -341,7 +347,13 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             }
             for c, step in zip(commits, rebase_steps(stack_view), strict=True)
         ]
-        payload = {"stack": stack_payload, "rebase": rebase_json(stack_view, progress), "commits": commit_payload}
+        rebase = rebase_json(stack_view, progress)
+        payload = {
+            "stack": stack_payload,
+            "rebase": rebase,
+            "upstream": upstream_json(moved),
+            "commits": commit_payload,
+        }
         print(json.dumps(payload, indent=2))
         if stack_view.gerrit_unavailable is not None:
             raise stack_view.gerrit_unavailable
@@ -359,7 +371,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     if out_fmt == "ai":
         ready = len(commits) - len(blocked)
         lines = stack_ai_lines(
-            commits, project=stack.project, branch=stack.push_branch, ready=ready, next_lines=next_steps(commits)
+            commits, project=stack.project, branch=stack.push_branch, ready=ready, next_lines=next_steps(commits, moved)
         )
         print("\n".join(lines))
     else:
@@ -373,7 +385,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         )
         print()
         print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
-        for line in next_steps(commits):
+        for line in next_steps(commits, moved):
             print(color_text(line, ANSI_DIM))
     if stack_view.gerrit_unavailable is not None:
         raise stack_view.gerrit_unavailable

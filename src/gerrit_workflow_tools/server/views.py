@@ -33,9 +33,16 @@ from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, pinned_below, pinned_count
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
+from gerrit_workflow_tools.core.upstream_moved import upstream_moved
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
-from gerrit_workflow_tools.render.show_json import commit_json_payload, log_commit_json, rebase_json, rebase_steps
+from gerrit_workflow_tools.render.show_json import (
+    commit_json_payload,
+    log_commit_json,
+    rebase_json,
+    rebase_steps,
+    upstream_json,
+)
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.suggested_fixes import comment_text
 from gerrit_workflow_tools.server.diff_views import commit_files
@@ -110,11 +117,15 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
         }
         for index, c in enumerate(view.commits)
     ]
+    underway = rebase_underway(ctx.run.worktree.repository_dir)
+    # During a rebase that one is finished first: nothing is said about rebasing onto the upstream.
+    moved = None if underway else upstream_moved(cwd, ctx.run.repo.working_branch, view.rows, settings=settings)
     return {
         "branch": ctx.run.worktree.branch,
         "head": head,
-        "rebase_in_progress": rebase_underway(ctx.run.worktree.repository_dir),
+        "rebase_in_progress": underway,
         "rebase": rebase_json(view, progress),
+        "upstream": upstream_json(moved),
         "push_blocked": _push_blocked_json(ctx),
         "stack": {
             "project": context.project,

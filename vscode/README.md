@@ -120,6 +120,17 @@ The commits above your upstream, newest first. One row per commit:
   checked out (`ger checkout`, a review checkout, `git switch`) leaves them as they are, and a
   stale tab whose commit is back (the branch switched back, the rebase aborted) loses its mark.
   Gerrit's patchsets, compared with each other, never go stale.
+- **The upstream moved on** (after a `git fetch`, `origin/main` has commits your branch has not):
+  a row above the stack says so, *origin/main has 1 new commit*, with **Rebase onto
+  origin/main**, which runs `ger rebase origin/main` in the *ger* terminal (it shows the todo
+  first). Before you press it, the row says what the rebase would meet, previewed by `ger serve`
+  without touching your worktree (`GET /stack`'s `upstream`): *no conflicts*, or the first commit
+  that would not apply and where (*"Refactor parser init" would conflict in a.txt*), with a
+  warning icon. With a merge in the stack, or a git older than 2.40, it cannot tell, and the
+  tooltip says so. During a rebase there is no such row: the banner leads, and the row is back
+  once the rebase is finished or aborted. The status bar does not show it: an upstream that
+  moved on is not urgent, and the status bar is the change that most wants you. `ger log` ends
+  with the same advice as a `next:` line.
 - **A merge commit** in the stack is one row, with a merge icon and marked *merge*, however
   many commits it brings in: those are not part of the stack (as on Gerrit) and are never read.
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where
