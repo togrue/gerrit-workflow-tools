@@ -368,6 +368,12 @@
         "body"
       ]
     },
+    "FindingSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
     "CiLinkSource": {
       "enum": [
         "checks",
@@ -412,12 +418,6 @@
         "unknown"
       ]
     },
-    "FindingSeverity": {
-      "enum": [
-        "error",
-        "warning"
-      ]
-    },
     "PushBlocker": {
       "description": "What is underway in the worktree that no Gerrit push may run over, whatever the stack holds.",
       "enum": [
@@ -451,6 +451,14 @@
         "todo"
       ]
     },
+    "StepAction": {
+      "enum": [
+        "pick",
+        "fixup",
+        "fixup-take-message",
+        "drop"
+      ]
+    },
     "PickStop": {
       "description": "Why a rebase stops on a pick.",
       "enum": [
@@ -473,14 +481,6 @@
         {
           "$ref": "#/$defs/RebaseHeadline"
         }
-      ]
-    },
-    "StepAction": {
-      "enum": [
-        "pick",
-        "fixup",
-        "fixup-take-message",
-        "drop"
       ]
     },
     "StackStep": {
@@ -908,7 +908,15 @@
           "type": "string"
         },
         "commit": {
-          "type": "string"
+          "description": "The local commit the location was checked against; null when Gerrit's is not fetched.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "path": {
           "type": "string"
@@ -2736,7 +2744,14 @@
       "type": "object",
       "properties": {
         "number": {
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "current": {
           "anyOf": [
@@ -3073,6 +3088,41 @@
       ],
       "additionalProperties": false
     },
+    "SectionSummary": {
+      "description": "Counts over one section's chains.",
+      "type": "object",
+      "properties": {
+        "chains": {
+          "type": "integer"
+        },
+        "changes": {
+          "type": "integer"
+        },
+        "oldest_unreviewed_seconds": {
+          "type": "integer"
+        },
+        "oldest_wait_seconds": {
+          "type": "integer"
+        },
+        "ci_failures": {
+          "description": "Chains with failed CI.",
+          "type": "integer"
+        },
+        "comments": {
+          "description": "Chains with unresolved comments.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "chains",
+        "changes",
+        "oldest_unreviewed_seconds",
+        "oldest_wait_seconds",
+        "ci_failures",
+        "comments"
+      ],
+      "additionalProperties": false
+    },
     "Section": {
       "type": "object",
       "properties": {
@@ -3083,10 +3133,7 @@
           "type": "string"
         },
         "summary": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer"
-          }
+          "$ref": "#/$defs/SectionSummary"
         },
         "chains": {
           "type": "array",
@@ -4261,7 +4308,7 @@
         },
         "wait": {
           "description": "Seconds to wait at most.",
-          "type": "number"
+          "type": "integer"
         }
       },
       "required": [],

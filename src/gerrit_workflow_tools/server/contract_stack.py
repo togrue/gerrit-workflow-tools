@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.attention import Severity
 from gerrit_workflow_tools.core.push_checks import PushBlocker
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep
+from gerrit_workflow_tools.core.reorder import StepAction
 from gerrit_workflow_tools.core.reorder_preview import PickStop
 from gerrit_workflow_tools.server.contract_commit import Overlay
 
@@ -88,10 +89,23 @@ class Chain(TypedDict):
 SectionName = Literal["to-review", "outgoing"]
 
 
+class SectionSummary(TypedDict):
+    """Counts over one section's chains."""
+
+    chains: int
+    changes: int
+    oldest_unreviewed_seconds: int
+    oldest_wait_seconds: int
+    ci_failures: int
+    """Chains with failed CI."""
+    comments: int
+    """Chains with unresolved comments."""
+
+
 class Section(TypedDict):
     name: SectionName
     query: str
-    summary: dict[str, int]
+    summary: SectionSummary
     chains: list[Chain]
 
 
@@ -326,9 +340,6 @@ class UpstreamChoice(TypedDict):
 class UpstreamSet(TypedDict):
     branch: str
     upstream: str
-
-
-StepAction = Literal["pick", "fixup", "fixup-take-message", "drop"]
 
 
 class StackStepAction(TypedDict):

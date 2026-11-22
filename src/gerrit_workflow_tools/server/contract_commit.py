@@ -11,7 +11,7 @@ from typing_extensions import NotRequired, TypedDict
 
 from gerrit_workflow_tools.core.attention import Severity
 from gerrit_workflow_tools.core.changeish import ChangeishKind
-from gerrit_workflow_tools.core.ci_content import CacheVerdict
+from gerrit_workflow_tools.core.ci_content import CacheVerdict, Severity as FindingSeverity
 from gerrit_workflow_tools.core.ci_links import CiLinkSource
 from gerrit_workflow_tools.core.code_facts import CodeChange
 from gerrit_workflow_tools.core.gerrit.resolution import SelectedReason
@@ -172,8 +172,6 @@ NewCommentState = Literal["draft", "local-draft", "note"]
 
 # --- CI ----------------------------------------------------------------------------------------
 
-FindingSeverity = Literal["error", "warning"]
-
 
 class CiFinding(TypedDict):
     tool: str
@@ -312,7 +310,7 @@ class PatchsetEntry(TypedDict):
 class Patchsets(TypedDict):
     """The patchsets Gerrit has of one change, oldest first."""
 
-    number: int
+    number: int | None
     current: int | None
     reviewed: int | None
     """The newest patchset you posted on."""

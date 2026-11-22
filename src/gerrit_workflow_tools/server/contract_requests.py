@@ -10,6 +10,7 @@ from typing import Literal
 
 from typing_extensions import NotRequired, TypedDict
 
+from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.review_checkout import ReviewMode
 from gerrit_workflow_tools.server.contract_commit import NewCommentState
 from gerrit_workflow_tools.server.contract_stack import StackStep
@@ -26,7 +27,7 @@ class Query(TypedDict):
 class ActivityQuery(TypedDict):
     since: NotRequired[int]
     """Answer once the sequence moves past this; at once without it."""
-    wait: NotRequired[float]
+    wait: NotRequired[int]
     """Seconds to wait at most."""
 
 
@@ -38,9 +39,6 @@ class OverviewQuery(Query):
 
 class StackQuery(Query):
     pipelines: NotRequired[bool]
-
-
-CommentSelection = Literal["unresolved", "all", "resolved"]
 
 
 class ShowQuery(Query):

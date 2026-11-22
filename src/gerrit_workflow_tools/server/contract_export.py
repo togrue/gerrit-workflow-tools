@@ -118,11 +118,14 @@ def _read_module(model: _Model, module: ModuleType) -> None:
             and (doc := _trailing_doc(following))
         }
     for name, value in vars(module).items():
-        if name.startswith("_") or name in model.aliases:
+        if name.startswith("_"):
             continue
         if _is_alias(value) or (isinstance(value, type) and issubclass(value, enum.Enum)):
-            model.aliases[name] = value
+            if model.aliases.setdefault(name, value) != value:
+                raise TypeError(f"the contract names two different types {name}")
         elif is_typeddict(value) and value.__module__ == module.__name__:
+            if name in model.objects:
+                raise TypeError(f"the contract defines {name} twice")
             model.objects[name] = value
 
 

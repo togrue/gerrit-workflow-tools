@@ -13,6 +13,7 @@ A string after a field is its documentation and goes into the generated files. A
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Literal
@@ -173,7 +174,8 @@ class CommentWritten(TypedDict):
 
     action: Literal["created"]
     change: str
-    commit: str
+    commit: str | None
+    """The local commit the location was checked against; null when Gerrit's is not fetched."""
     path: str
     line: int | None
     range: CommentRange | None
@@ -235,6 +237,11 @@ class Runbook(TypedDict):
 # --- Endpoints --------------------------------------------------------------------------------
 
 
+def path_pattern(path: str) -> str:
+    """A regular expression for an endpoint's *path*: each ``{name}`` is one path segment, captured."""
+    return re.sub(r"\{\w+\}", "([^/]+)", path)
+
+
 @dataclass(frozen=True)
 class Endpoint:
     """One call: ``{name}`` in ``path`` is a path segment."""
@@ -280,6 +287,3 @@ ENDPOINTS: tuple[Endpoint, ...] = (
 
 MODULES: tuple[ModuleType, ...] = (contract_commit, contract_stack, contract_requests)
 """Where the rest of the contract lives; with this module, everything the generated files hold."""
-
-EXTRA_TYPES: tuple[type, ...] = (Hello, ErrorAnswer)
-"""Types outside any endpoint that a client still needs."""

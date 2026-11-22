@@ -16,11 +16,11 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server import actions, diff_views, views
 from gerrit_workflow_tools.server.activity import Activity
+from gerrit_workflow_tools.server.contract import path_pattern
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
 
 PREFIX = f"/api/v{views.API_VERSION}"
-_SEGMENT = re.compile(r"\{\w+\}")
 
 Endpoint = Callable[[Context, Request], dict[str, Any]]
 
@@ -110,7 +110,7 @@ class GerApi:
             raise NoRoute(f"no such endpoint: {path} (the API lives under {PREFIX}/)")
         tail = path[len(PREFIX) :].rstrip("/")
         for route_method, route, endpoint in ROUTES:
-            match = re.fullmatch(_SEGMENT.sub("([^/]+)", route), tail)
+            match = re.fullmatch(path_pattern(route), tail)
             if match is None or route_method != method:
                 continue
             request = Request(query=query or {}, body=body or {}, path_args=match.groups())

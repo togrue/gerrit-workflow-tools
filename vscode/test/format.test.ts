@@ -53,7 +53,7 @@ function chain(key: string, lastActivity: string, extra: Partial<Chain> = {}): C
 }
 
 function overview(...chains: Chain[]): Overview {
-  return { host: "g", sections: [{ name: "to-review", query: "", summary: {}, chains }], local: { error: { code: "GIT", message: "" }, needs_upstream: false } };
+  return { host: "g", sections: [{ name: "to-review", query: "", summary: { chains: chains.length, changes: 0, oldest_unreviewed_seconds: 0, oldest_wait_seconds: 0, ci_failures: 0, comments: 0 }, chains }], local: { error: { code: "GIT", message: "" }, needs_upstream: false } };
 }
 
 test("the icon follows the severity core gave; unresolved comments draw the comment bubble only as a warning", () => {

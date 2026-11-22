@@ -146,8 +146,9 @@ them out as:
   client in any other language; `endpoints` there is the same map.
 
 `tests/test_serve_contract.py` fails when either file is stale or a route is missing from
-`ENDPOINTS`. Every answer an endpoint gives in any test is held against its type, strictly: a
-key the contract does not name fails as much as a missing or mistyped one. A field added to an
+`ENDPOINTS`. Every call the server answers in any test is held against the contract, strictly:
+its answer and its body against their types (a key the contract does not name fails as much as
+a missing or mistyped one), and its query to the parameters its query type names. A field added to an
 answer is added to the contract in the same change, and the generated files with it.
 
 ---

@@ -16,6 +16,8 @@ export type ChangeishKind = "git-rev" | "change-id" | "triplet" | "change-number
 
 export type CacheVerdict = "none" | "findings" | "body";
 
+export type FindingSeverity = "error" | "warning";
+
 export type CiLinkSource = "checks" | "message";
 
 /** How a commit ahead of Gerrit's current patch set differs from it: what decides whether its votes stay. */
@@ -27,8 +29,6 @@ export type CommentState = "note" | "local-draft" | "draft" | "published";
 
 /** Bounded Gerrit-vs-local patchset states for one commit. */
 export type PatchsetStatus = "active" | "newer" | "outdated" | "absent" | "merged-same" | "merged-drift" | "merged-unknown" | "unknown";
-
-export type FindingSeverity = "error" | "warning";
 
 /** What is underway in the worktree that no Gerrit push may run over, whatever the stack holds. */
 export type PushBlocker = "rebase" | "am";
@@ -46,6 +46,8 @@ export type RebaseStop = "edit" | "split" | "conflict" | "resolved" | "paused";
 /** Where a rebase underway stands on one commit of the **local stack**. */
 export type RebaseStep = "done" | "current" | "todo";
 
+export type StepAction = "pick" | "fixup" | "fixup-take-message" | "drop";
+
 /** Why a rebase stops on a pick. */
 export type PickStop = "conflict" | "empty";
 
@@ -53,8 +55,6 @@ export type SectionName = "to-review" | "outgoing";
 
 /** The headline: the one thing that most wants you, as core picks it. */
 export type Headline = ChainHeadline | RebaseHeadline;
-
-export type StepAction = "pick" | "fixup" | "fixup-take-message" | "drop";
 
 /** A commit id (kept as it is), or what to do with it: fold into the commit below, or drop. */
 export type StackStep = string | StackStepAction;
@@ -158,7 +158,8 @@ export interface Replied {
 export interface CommentWritten {
   action: "created";
   change: string;
-  commit: string;
+  /** The local commit the location was checked against; null when Gerrit's is not fetched. */
+  commit: string | null;
   path: string;
   line: number | null;
   range: CommentRange | null;
@@ -543,7 +544,7 @@ export interface PatchsetEntry {
 
 /** The patchsets Gerrit has of one change, oldest first. */
 export interface Patchsets {
-  number: number;
+  number: number | null;
   current: number | null;
   /** The newest patchset you posted on. */
   reviewed: number | null;
@@ -616,10 +617,22 @@ export interface Chain {
   local?: boolean;
 }
 
+/** Counts over one section's chains. */
+export interface SectionSummary {
+  chains: number;
+  changes: number;
+  oldest_unreviewed_seconds: number;
+  oldest_wait_seconds: number;
+  /** Chains with failed CI. */
+  ci_failures: number;
+  /** Chains with unresolved comments. */
+  comments: number;
+}
+
 export interface Section {
   name: SectionName;
   query: string;
-  summary: Record<string, number>;
+  summary: SectionSummary;
   chains: Chain[];
 }
 
