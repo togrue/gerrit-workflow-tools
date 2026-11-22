@@ -115,7 +115,7 @@ test("the status bar says where a rebase stopped, by the change number or else t
   assert.equal(text(at("split", null, null)), "Rebase stopped");
 
   // What to do next, with the conflicted files.
-  const rebase = (unmerged: string[]): Rebase => ({ branch: "feature", onto: null, orig_head: null, stop: "conflict", applied: false, current: null, unmerged, as_before: false });
+  const rebase = (unmerged: string[]): Rebase => ({ branch: "feature", onto: null, orig_head: null, stop: "conflict", applied: false, current: null, unmerged, as_before: false, actions: ["abort", "skip"], refused: { continue: "the index has unresolved conflicts" } });
   assert.match(rebaseItem(at("edit", 101)).next, /amend .*git rebase --continue/);
   assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt"])).next, /^Resolve the conflicts in d\.txt and git add/);
   assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt", "e.txt"])).next, /conflicts in 2 files .*git rebase --abort/);

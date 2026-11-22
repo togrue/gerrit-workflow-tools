@@ -1272,9 +1272,11 @@ notification (warning): Still out of date: fake ger: down for this test
 
 **Expect:** Local stack says a rebase is underway, with Continue and Abort, and marks that commit as where it stopped, with HEAD on it; the commits below are done, "Add e.txt" is dimmed, still to be replayed. The header says the branch is being rebased. The Change view of 103 says its message cannot be edited during the rebase. The status bar says the rebase stopped at 103.
 
-**Today:** the status bar still shows the headline (#62).
-
 ```
++ status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
+- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ chains | Rebase stopped at 103: test! temporary experiment
+- chains | CI failed on 102: Refactor parser init
 + stack  | A rebase is in progress  [Continue] [Abort]
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
@@ -1283,7 +1285,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1329,7 +1331,7 @@ change | (the commit shown is HEAD)
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
 - change |     FAILURE — generic · also fails on the parent
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1360,6 +1362,10 @@ change | (the commit shown is HEAD)
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
++ status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
++ chains | CI failed on 102: Refactor parser init
+- chains | Rebase stopped at 103: test! temporary experiment
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | A rebase is in progress  [Continue] [Abort]
@@ -1395,9 +1401,11 @@ change | (the commit shown is below HEAD)
 
 **Expect:** Local stack marks the rebase stopped at that commit, which shows its new code (its code changed since the last push) and HEAD; the two above are dimmed, still to be replayed. The status bar says the rebase stopped at 102.
 
-**Today:** the status bar still shows the headline (#62).
-
 ```
++ status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
+- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ chains | Rebase stopped at 102: Refactor parser init
+- chains | CI failed on 102: Refactor parser init
 + stack  | A rebase is in progress  [Continue] [Abort]
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
@@ -1408,7 +1416,7 @@ change | (the commit shown is below HEAD)
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1436,9 +1444,11 @@ change | (the commit shown is only on the branch as it was before)
 
 **Expect:** Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Abort and Skip (no Continue while e.txt is conflicted); "Add e.txt" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in "Add e.txt".
 
-**Today:** the status bar still shows the headline (#62).
-
 ```
++ status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
+- status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
++ chains | Conflict in "Add e.txt"
+- chains | Rebase stopped at 102: Refactor parser init
 + stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ e.txt — conflicted
 + stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
@@ -1449,7 +1459,7 @@ change | (the commit shown is only on the branch as it was before)
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
 - stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ e.txt — conflicted
@@ -1482,7 +1492,7 @@ change | (the commit shown is HEAD)
 + editor | Merging: e.txt (merge editor, file)
 - editor | Preview ger-runbook-<id>.md (webview)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ e.txt — conflicted
@@ -1512,6 +1522,10 @@ change | (the commit shown is HEAD)
 **Expect:** Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at "Add e.txt", ready to Continue, which now appears as the prominent button.
 
 ```
++ status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
+- status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
++ chains | Conflict resolved in "Add e.txt"
+- chains | Conflict in "Add e.txt"
 + stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 + stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
 - stack  | A rebase stopped on a conflict  [Abort] [Skip]
@@ -1520,7 +1534,7 @@ change | (the commit shown is HEAD)
 + editor | Preview ger-runbook-<id>.md (webview)
 - editor | Merging: e.txt (merge editor, file)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
@@ -1551,6 +1565,10 @@ change | (the commit shown is HEAD)
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
++ status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
++ chains | CI failed on 102: Refactor parser init
+- chains | Conflict resolved in "Add e.txt"
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
@@ -1617,11 +1635,13 @@ change | (the commit shown is below HEAD)
 
 **Expect:** ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
-**Today:** the status bar still shows the headline (#62).
-
 ```
 terminal "ger": runs `ger rebase origin/main`
 status bar message: $(terminal) ger rebase origin/main runs in the ger terminal: it shows the todo, then replays the stack onto origin/main
++ status bar | $(error) Conflict in 103  $(bell-dot) 1
+- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ chains | Conflict in 103: test! temporary experiment
+- chains | CI failed on 102: Refactor parser init
 + stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ c.txt — conflicted
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1645,7 +1665,7 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + change | Files, as before the rebase — 1 · +2 −0
 - change | Files — 1 · +2 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ c.txt — conflicted
@@ -1681,7 +1701,7 @@ dialog (warning): Skip "test! temporary experiment"?  [Skip] [Cancel]
     → cancelled
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ c.txt — conflicted
@@ -1717,6 +1737,10 @@ dialog (warning): Finish the rebase first  [Abort] [Cancel]
     → pressed "Abort"
 terminal "ger": runs `ger rebase --abort`
 status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the branch goes back to where it was before the rebase
++ status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(error) Conflict in 103  $(bell-dot) 1
++ chains | CI failed on 102: Refactor parser init
+- chains | Conflict in 103: test! temporary experiment
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1768,9 +1792,11 @@ change | (the commit shown is below HEAD)
 
 **Expect:** Local stack marks the rebase stopped at "Refactor parser init", HEAD on it; the two above are dimmed, still to be replayed.
 
-**Today:** the status bar still shows the headline (#62).
-
 ```
++ status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
+- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ chains | Rebase stopped at 102: Refactor parser init
+- chains | CI failed on 102: Refactor parser init
 + stack  | A rebase is in progress  [Continue] [Abort]
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
@@ -1782,7 +1808,7 @@ change | (the commit shown is below HEAD)
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1823,7 +1849,7 @@ change | (the commit shown is only on the branch as it was before)
 - change | Files — 1 · +2 −0
 - change |   c.txt — added +2 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1854,7 +1880,7 @@ change | (the commit shown is only on the branch as it was before)
 + editor | e.txt (<sha>) (diff, ger-file ↔ ger-file)
 - editor | Preview ger-runbook-<id>.md (webview)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1896,7 +1922,7 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 - change | Files — 1 · +1 −0
 - change |   e.txt — modified +1 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1930,7 +1956,7 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 + editor | e.txt (file, line 1)
 - editor | e.txt (<sha>) (diff, ger-file ↔ ger-file)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -1964,7 +1990,7 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 + editor | e.txt (file, line 2)
 - editor | e.txt (file, line 1)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2004,7 +2030,7 @@ ger terminal | error: you have unstaged changes to e.txt; amend them in (`git co
 ger terminal | (exit 2)
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase is in progress  [Continue] [Abort]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2035,6 +2061,10 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 **Expect:** The rebase finishes: "Refactor parser init" and the two above it have new SHAs. The diff tab of "Add e.txt" stays open, as it still shows that commit as it was, and its title says it is stale.
 
 ```
++ status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
++ chains | CI failed on 102: Refactor parser init
+- chains | Rebase stopped at 102: Refactor parser init
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2216,9 +2246,13 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 
 **Expect:** Local stack says the rebase stopped on a conflict in c.txt. "Add e.txt" is still to be replayed, but its diff tab has your file on the right, which is now the worktree of the stopped rebase, not that commit: its title says it is stale. It is not closed, though ger.closeDiffsOnRebase is on: it holds unsaved edits, which are kept.
 
-**Today:** the Change view still explains votes and shows the commit as it was (#59); the status bar still shows the headline (#62).
+**Today:** the Change view still explains votes and shows the commit as it was (#59).
 
 ```
++ status bar | $(error) Conflict in 103  $(bell-dot) 1
+- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ chains | Conflict in 103: test! temporary experiment
+- chains | CI failed on 102: Refactor parser init
 + stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ c.txt — conflicted
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2237,7 +2271,7 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + editor | e.txt (<sha>) — stale (diff, ger-file ↔ file)
 - editor | e.txt (<sha>) (diff, ger-file ↔ file)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped on a conflict  [Abort] [Skip]
 stack  |   ⚠ c.txt — conflicted
@@ -2267,13 +2301,17 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 **Expect:** Nothing is conflicted any more; the rebase is ready to Continue.
 
 ```
++ status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
+- status bar | $(error) Conflict in 103  $(bell-dot) 1
++ chains | Conflict resolved in 103: test! temporary experiment
+- chains | Conflict in 103: test! temporary experiment
 + stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 - stack  | A rebase stopped on a conflict  [Abort] [Skip]
 - stack  |   ⚠ c.txt — conflicted
 + stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2304,7 +2342,7 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2338,7 +2376,7 @@ dialog (warning): Save 2 files first? ger rebase --continue then says what they 
     → cancelled
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2369,7 +2407,7 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2401,7 +2439,7 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 + editor | e.txt (file, line 2)
 - editor | e.txt (<sha>) — stale (diff, ger-file ↔ file)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
 stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2433,6 +2471,10 @@ change | (the commit shown is only on the branch as it was before)
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
++ status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
++ chains | CI failed on 102: Refactor parser init
+- chains | Conflict resolved in 103: test! temporary experiment
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
