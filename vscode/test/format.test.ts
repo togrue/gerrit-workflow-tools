@@ -123,6 +123,19 @@ test("the status bar says where a rebase stopped, by the change number or else t
   for (const stop of ["edit", "split", "conflict", "resolved", "paused", null] as const) {
     assert.match(rebaseItem(at(stop, 101)).next, /git rebase --continue/, String(stop));
   }
+  // A resolution committed by hand under the apply backend: core serves no stop, refuses Continue
+  // and offers Skip; the status bar says what core says, not "git rebase --continue".
+  const byHand: Rebase = {
+    ...rebase([]),
+    stop: null,
+    refused: { continue: "the commit it stopped on was committed by hand, so nothing is left to apply and `git rebase --continue` would stop again: `git rebase --skip` goes on from HEAD, or `git rebase --abort`" },
+  };
+  assert.equal(
+    rebaseItem(at(null, 101), byHand).next,
+    "The commit it stopped on was committed by hand, so nothing is left to apply and `git rebase --continue` would stop again: `git rebase --skip` goes on from HEAD, or `git rebase --abort`.",
+  );
+  // Where core allows Continue, its refusals of other ways on change nothing.
+  assert.match(rebaseItem(at(null, 101), { ...byHand, actions: ["continue", "abort"], refused: { skip: "no" } }).next, /^Finish it with git rebase --continue/);
 });
 
 test("votes and ages read like ger's own output", () => {

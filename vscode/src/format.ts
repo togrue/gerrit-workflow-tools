@@ -76,7 +76,9 @@ function shortSubject(subject: string): string {
 /**
  * The status bar item while core's headline is a rebase underway: `text`, short, names the commit
  * it stopped at by its change number when it is on Gerrit, else by its subject; `next` says what
- * to do. `rebase` is the stack's, for the paths still unmerged.
+ * to do. `rebase` is the stack's, for the paths still unmerged and the ways on core allows: where
+ * core refuses Continue with nothing left to resolve, `next` is core's refusal, which names the way
+ * on there is (a resolution committed by hand goes on by Skip), as Local stack's banner does.
  */
 export function rebaseItem(headline: RebaseHeadline, rebase?: Rebase | null): { text: string; next: string } {
   const { stop, number, subject } = headline;
@@ -85,7 +87,12 @@ export function rebaseItem(headline: RebaseHeadline, rebase?: Rebase | null): { 
   const text = !stop ? "Rebase underway" : what ? REBASE_ITEM[stop](what) : stop === "paused" ? "Rebase paused" : "Rebase stopped";
   const unmerged = rebase?.unmerged ?? [];
   const where = unmerged.length === 1 ? ` in ${unmerged[0]}` : unmerged.length ? ` in ${plural(unmerged.length, "file")}` : "";
-  const next = stop ? REBASE_NEXT[stop](where) : "Finish it with git rebase --continue, or go back with git rebase --abort.";
+  const refused = rebase && !unmerged.length && !rebase.actions.includes("continue") ? rebase.refused.continue : undefined;
+  const next = refused
+    ? `${sentence(refused)}.`
+    : stop
+      ? REBASE_NEXT[stop](where)
+      : "Finish it with git rebase --continue, or go back with git rebase --abort.";
   return { text, next };
 }
 
