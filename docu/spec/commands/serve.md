@@ -221,11 +221,62 @@ For a view that draws the stack, each commit also says:
 - `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
   or dropped here, as `POST /stack/rewrite` refuses and `GET /stack/moves` leaves out; the
   commits above the newest merge can.
-- `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the branch as it
-  was before, and this is where the rebase stands on each commit: `done` (replayed), `current`
-  (it stopped here), `todo` (still to come), or `null` for a commit the rebase does not replay.
-  The top-level `rebase` is `null` without one, else `{applied}`: `false` while the `current`
-  commit is only partly there, stopped on a conflict.
+- `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the one `ger log`
+  shows then: the commits on `HEAD` above the upstream, as they are now (a replayed or amended
+  commit has its new id and its new relation to Gerrit), then the commit it stopped at while
+  that is not applied, and the todo, as they were. This is where the rebase stands on each
+  commit: `done` (replayed), `current` (it stopped here), `todo` (still to come), or `null` for
+  a commit the rebase does not replay (below its `onto`).
+
+The top-level `rebase` is `null` without a rebase, else:
+
+- `branch` — the branch being rebased (`null` for a detached HEAD's); `branch` at the top is
+  `null` meanwhile, since nothing is checked out.
+- `onto`, `orig_head` — the commit it replays onto, and where the branch was when it started
+  (the branch still points there).
+- `stop` — why it is stopped: `edit` (the commit it is at is applied whole: amend it, then
+  continue; also a conflict resolved and committed by hand), `split` (stopped to edit a commit,
+  and `HEAD` has moved on from it: the commits above it, or above where it sat once it was reset
+  away, were made at the stop; continue goes on from `HEAD`), `conflict` (paths are still
+  unmerged), `resolved` (the conflict is resolved and added: ready to continue), `paused`
+  (between commits: `exec`, `break`), or `null` when core cannot tell: `HEAD` moved off where
+  git stopped on a conflict, onto a commit that is not the one it stopped at as far as core can
+  tell (another subject, no Change-Id), or under a rebase through `am`, whatever the commit.
+- `applied` — `false` while the `current` commit is only partly there, stopped on a conflict.
+- `current` — the id of the commit it stopped at as the stack shows it, else `null` (between
+  commits, or reset away at a `split`).
+- `unmerged` — the paths the index holds as unresolved conflicts, at whatever stop (a `git stash
+  pop` at an `edit` stop can leave some). Each is the literal path relative to the worktree's top,
+  as the file is named (`café.txt`), never git's C-quoted form (`"caf\303\251.txt"`).
+- `as_before` — `true` when the stack is the branch as it was before the rebase: a rebase git
+  runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo, so no commit carries
+  a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say
+  which. It is about the backend: `ger log` with an explicit range shows that range as it is
+  now either way.
+- `actions` — the ways on from this stop, in order, by the verdict `ger rebase` refuses by
+  (`RebaseProgress.actions`; `ger rebase --continue|--skip` and `ger edit -n` judge the stop as
+  this serves it, `stopped_rebase`): `continue` unless paths are still unmerged, `abort` always,
+  `skip` at a `conflict` or `resolved` stop, where it leaves out the commit not applied yet (at
+  an `edit`, `split` or `paused` stop the commit is in, and `git rebase --skip` would only throw
+  away what is not committed). At a `null` stop where the conflict was committed by hand,
+  `skip` once the index and work tree hold nothing it would throw away: it keeps `HEAD` and goes
+  on. Then a rebase through `am` has nothing left to continue with (git would stop again, "No
+  changes"), so `continue` is left out there. A client offers these and no others. `continue`
+  can still be refused over unstaged changes, which this does not look at.
+- `refused` — for each way on `actions` leaves out, the refusal `ger rebase --<action>` prints
+  for it, by action (`{"skip": "--skip leaves out …"}`): what a client says when one is asked for
+  anyway.
+
+`ger log`'s [During a rebase](log.md#during-a-rebase) says where `HEAD` is at each stop, how
+`fixup`/`squash` and merge lines of the todo are shown, and what a detached HEAD's rebase shows:
+then `branch` (here and at the top) is `null`, and so are `stack.target_branch` and
+`stack.push_branch`. A `git am` underway is no rebase: `rebase_in_progress` is `false` and
+`rebase` is `null`, but a rewrite or a push refuses, saying to finish or abort it.
+
+`push_blocked` is why `ger push` would refuse a Gerrit push now, whatever the stack holds, or
+`null`: `reason` is `rebase` (the branch still points at the commits from before it) or `am` (a
+`git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
+starts `ger push`, so it can offer to finish the rebase instead.
 
 ### `GET /stack/moves`
 

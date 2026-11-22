@@ -16,9 +16,10 @@ from gerrit_workflow_tools.cli_common import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
+from gerrit_workflow_tools.core.rebase_state import RebaseAction
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
-from gerrit_workflow_tools.rebase_run import require_history_rewrite, run_interactive_rebase
+from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "labels, unresolved comment count, and an actionable attention note.\n\n"
             "Without a terminal (scripts, agents) no editor opens: the todo runs as annotated, so\n"
             "`ger rebase --autosquash` folds `ger fix` commits and `--onto-remote --drop-merged-equivalent`\n"
-            "drops commits Gerrit has merged, unattended."
+            "drops commits Gerrit has merged, unattended.\n\n"
+            "--continue, --abort and --skip go on with the rebase underway, as git's own options do."
         ),
     )
     p.add_argument(
@@ -75,6 +77,31 @@ def _build_parser() -> argparse.ArgumentParser:
             "Without it, git's rebase.autosquash decides, as for `git rebase -i`."
         ),
     )
+    underway = p.add_mutually_exclusive_group()
+    underway.add_argument(
+        "--continue",
+        dest="go_on",
+        action="store_const",
+        const="continue",
+        help="Go on with the rebase underway once the stopped commit is amended or its conflicts are added.",
+    )
+    underway.add_argument(
+        "--abort",
+        dest="go_on",
+        action="store_const",
+        const="abort",
+        help="Stop the rebase underway: the branch goes back to where it was before it.",
+    )
+    underway.add_argument(
+        "--skip",
+        dest="go_on",
+        action="store_const",
+        const="skip",
+        help=(
+            "Leave out the commit the rebase underway stopped on with a conflict, and go on without it. "
+            "Refused at any other stop, where git would only throw away uncommitted changes."
+        ),
+    )
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands and enricher steps to stderr.",
@@ -101,6 +128,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
 
+    if args.go_on:
+        if args.rev or args.onto_remote or args.no_onto_remote or args.drop_merged_equivalent or args.autosquash:
+            p.error(f"--{args.go_on} goes on with the rebase underway: it takes no REV and no other option")
+        return go_on_with_rebase(cwd, RebaseAction(args.go_on))
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 

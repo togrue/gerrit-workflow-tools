@@ -11,8 +11,12 @@ One commit as read by a single `git log` — sha, short sha, subject, body, and 
 _Avoid_: commit, log line, record
 
 **Local stack**:
-The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing. Loaded one way, `get_stack_snapshot`; the overlay, ready strategies and the highlighter all take the same `Commit` rows.
+The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing. Loaded one way, `get_stack_snapshot`; the overlay, ready strategies and the highlighter all take the same `Commit` rows. While a rebase is underway, the stack `ger log` and `ger serve` show is the **rebasing stack**.
 _Avoid_: chain, series, branch commits
+
+**Rebasing stack**:
+The **local stack** while a rebase is underway: the commits on `HEAD` above the upstream as they are now, then the commit the rebase stopped at while it is not applied, then the todo, as they were. Each commit carries its **rebase step** — `done`, `current` or `todo`, none for one below the rebase's `onto` — and the stack carries why the rebase stopped (`edit`, `split`, `conflict`, `resolved`, `paused`) and the paths still unmerged. Not a second stack: the **Gerrit overlay** finds each commit by its Change-Id as for any other.
+_Avoid_: live stack, stack as it was, rebase view
 
 **Ready boundary**:
 The first commit in the **local stack** that a ready-boundary strategy (or the configured stop pattern) marks as blocking. Everything below it is pushable; it and everything above are held back.

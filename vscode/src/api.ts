@@ -161,13 +161,52 @@ export interface StackCommit extends CommitStatus {
   rebase?: "done" | "current" | "todo" | null;
 }
 
+/** Why a rebase underway is stopped: core's verdict, the shell's words. */
+export type RebaseStop = "edit" | "split" | "conflict" | "resolved" | "paused";
+
+/** A way on from where a rebase stopped: `ger rebase --<action>`. */
+export type RebaseAction = "continue" | "abort" | "skip";
+
+/** A rebase underway, as `GET /stack` serves it. */
+export interface Rebase {
+  /** The branch being rebased; null for a detached HEAD's. */
+  branch: string | null;
+  onto: string | null;
+  orig_head: string | null;
+  /** Null when core cannot tell what `git rebase --continue` would do from here. */
+  stop: RebaseStop | null;
+  /** False while the commit it stopped at is only partly there (a conflict, resolved or not). */
+  applied: boolean;
+  /** The commit it stopped at, as the stack shows it. */
+  current: string | null;
+  /** Paths the index still holds as unresolved conflicts. */
+  unmerged: string[];
+  /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
+  as_before: boolean;
+  /** The ways on core allows from this stop, in order: the only ones to offer. */
+  actions: RebaseAction[];
+  /** For each way on `actions` leaves out, the refusal `ger rebase --<action>` prints: what to say when it is asked for anyway. */
+  refused: Partial<Record<RebaseAction, string>>;
+}
+
+/** What is underway that no Gerrit push may run over: `GET /stack`'s `push_blocked`. */
+export interface PushBlocked {
+  reason: "rebase" | "am";
+  /** The refusal `ger push` prints. */
+  message: string;
+}
+
 export interface Stack {
+  /** The branch checked out: null while a rebase runs (see `rebase.branch`). */
   branch: string | null;
   head: string | null;
   rebase_in_progress: boolean;
-  /** With a rebase underway: `applied` is false while the commit it stopped at is only partly there (a conflict). */
-  rebase?: { applied: boolean } | null;
-  stack: { project: string; target_branch: string; push_branch: string };
+  /** The rebase underway; the stack is then as the rebase has it so far, the rest as it was. */
+  rebase?: Rebase | null;
+  /** Why `ger push` would refuse now, whatever the stack holds (core's verdict, and its words); null when it would not. */
+  push_blocked?: PushBlocked | null;
+  /** The branches are null without a working branch (a detached HEAD's rebase). */
+  stack: { project: string; target_branch: string | null; push_branch: string | null };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
   commits: StackCommit[];
 }

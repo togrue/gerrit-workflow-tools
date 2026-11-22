@@ -11,7 +11,7 @@ import pytest
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import git_dir
-from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, UncommittedChanges
 from gerrit_workflow_tools.server.api import GerApi
 from gerrit_workflow_tools.server.httpd import failure_response
@@ -32,10 +32,34 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
     edit_first = {"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"}
     git("rebase", "-q", "-i", "HEAD~2", cwd=stack_repo, env=edit_first, check=False)
     stack = _get(api, "/stack")
-    # The branch as it was: the two commits below the rebase are not replayed at all.
+    # The two commits below the rebase are not replayed at all; it stopped at the third, applied.
     assert [c["sha"] for c in stack["commits"]] == [row.sha for row in rows]
     assert [c["rebase"] for c in stack["commits"]] == [None, None, "current", "todo"]
-    assert stack["rebase"] == {"applied": True}, "stopped to edit: the commit is there, whole"
+    assert stack["rebase"] == {
+        "branch": "feature",
+        "onto": rows[1].sha,
+        "orig_head": rows[3].sha,
+        "stop": "edit",
+        "applied": True,
+        "current": rows[2].sha,
+        "unmerged": [],
+        "as_before": False,
+        "actions": ["continue", "abort"],
+        "refused": {
+            "skip": "--skip leaves out a commit the rebase stopped on with a conflict, but it stopped with the "
+            "commit applied (an `edit`, or a conflict's resolution committed by hand): `git rebase --skip` would "
+            "only throw away your uncommitted changes; go on with `git rebase --continue`, or `git rebase --abort`"
+        },
+    }
+
+    # Amended: the stack shows the commit as it is now, HEAD, changed here since the last push.
+    (stack_repo / "c.txt").write_text("amended\n", encoding="utf-8")
+    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    stack = _get(api, "/stack")
+    amended = stack["commits"][2]
+    assert (amended["sha"], amended["is_head"], amended["patchset_status"]) == (head, True, "newer")
+    assert stack["rebase"]["current"] == head and stack["branch"] is None
 
 
 def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack_repo: Path) -> None:
@@ -43,23 +67,40 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
     assert state is not None
     merge = state / "rebase-merge"
     merge.mkdir()
+    (merge / "head-name").write_text("refs/heads/feature\n", encoding="utf-8")
     (merge / "done").write_text("pick aaaa111 one\nexec make\nfixup -C bbbb222 two\n", encoding="utf-8")
     (merge / "git-rebase-todo").write_text(
         "# comment\npick cccc333 three\nbreak\ndrop dddd444 four\n", encoding="utf-8"
     )
     (state / "REBASE_HEAD").write_text("bbbb222\n", encoding="utf-8")
+    # HEAD where git left it on the conflict: here, on its onto.
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    (merge / "onto").write_text(f"{head}\n", encoding="utf-8")
+    git("update-ref", "--no-deref", "HEAD", head, cwd=stack_repo)
     progress = rebase_progress(stack_repo)
-    assert progress == RebaseProgress(done=("aaaa111",), current="bbbb222", applied=False, todo=("cccc333",))
-    assert [progress.state_of(sha) for sha in ("aaaa111f", "bbbb222f", "cccc333f", "dddd444f")] == [
-        "done",
-        "current",
-        "todo",
-        None,
-    ]
-    # Resolved and committed by an edit stop instead: git notes the commit to amend.
+    assert progress == RebaseProgress(
+        done=("aaaa111",),
+        current="bbbb222",
+        applied=False,
+        todo=("cccc333",),
+        branch="feature",
+        onto=head,
+        settled=frozenset({"aaaa111", head}),
+    )
+    # Not applied, and nothing unmerged in the index: resolved, ready to continue.
+    assert progress.stop is RebaseStop.RESOLVED
+    # A conflicting fixup also writes `amend` (the commit it folds into): still not applied.
     (merge / "amend").write_text("x\n", encoding="utf-8")
+    folding = rebase_progress(stack_repo)
+    assert folding is not None and folding.applied is False and folding.stop is RebaseStop.RESOLVED
+    # Stopped at an edit instead: git notes the commit to amend, and it is applied.
+    (merge / "done").write_text("pick aaaa111 one\nexec make\nedit bbbb222 two\n", encoding="utf-8")
     again = rebase_progress(stack_repo)
-    assert again is not None and again.applied is True
+    assert again is not None and again.applied is True and again.stop is RebaseStop.EDIT
+    # A detached HEAD's rebase names no branch.
+    (merge / "head-name").write_text("detached HEAD\n", encoding="utf-8")
+    detached = rebase_progress(stack_repo)
+    assert detached is not None and detached.branch is None
 
 
 # --- How a commit relates to Gerrit -----------------------------------------------------

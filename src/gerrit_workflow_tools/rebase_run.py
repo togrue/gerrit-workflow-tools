@@ -7,12 +7,20 @@ one ``next:`` line from :func:`~gerrit_workflow_tools.core.rebase_state.conflict
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.rebase_state import conflict_next_step, history_rewrite_refusal
+from gerrit_workflow_tools.core.rebase_state import (
+    RebaseAction,
+    conflict_next_step,
+    go_on_refusal,
+)
+from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
+from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
+from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -44,10 +52,21 @@ def run_interactive_rebase(
     return code
 
 
-def continue_rebase(cwd: Path, *, walk_on: str | None = None) -> int:
-    """``git rebase --continue``; return git's exit code. Output goes to the terminal."""
-    code = git("rebase", "--continue", cwd=cwd, check=False, capture=False).returncode
-    _print_conflict_next_step(cwd, walk_on)
+def go_on_with_rebase(cwd: Path, action: RebaseAction, *, walk_on: str | None = None) -> int:
+    """``git rebase --<action>`` of the rebase underway; return git's exit code. Output goes to the terminal.
+
+    Refused first (:class:`UsageError`) where :func:`go_on_refusal` says git must not run: ``ger
+    rebase --continue|--skip`` and ``ger edit -n`` go on the same way. Without a terminal nobody can
+    edit a message (a resolved conflict's commit, a later ``reword`` or ``squash``), so it is taken as
+    it is, unless the caller set ``GIT_EDITOR``. A stop on the next conflict ends with the shared next
+    step, naming *walk_on* as the way on to the next attention stop.
+    """
+    if refusal := go_on_refusal(cwd, action, stopped_rebase(cwd), walk_on=walk_on):
+        raise UsageError(refusal)
+    env = None if stdin_is_terminal() or "GIT_EDITOR" in os.environ else {"GIT_EDITOR": "true"}
+    code = git("rebase", f"--{action.value}", cwd=cwd, env=env, check=False, capture=False).returncode
+    if action is not RebaseAction.ABORT:
+        _print_conflict_next_step(cwd, walk_on)
     return code
 
 

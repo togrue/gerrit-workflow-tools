@@ -25,7 +25,7 @@ from gerrit_workflow_tools.core.change_id import (
 from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import current_branch
-from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
+from gerrit_workflow_tools.core.rebase_state import am_in_progress, rebase_in_progress
 from gerrit_workflow_tools.core.reword import move_head, rewrite_messages
 from gerrit_workflow_tools.core.stack import (
     Commit,
@@ -96,6 +96,8 @@ def _ensure_safe_for_fix(cwd: Path) -> None:
         raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=int(ExitCode.USAGE))
     if rebase_in_progress(cwd):
         raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
+    if am_in_progress(cwd):
+        raise ChangeIdError("error: --fix cannot run during an in-progress `git am`", code=int(ExitCode.USAGE))
 
 
 def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:

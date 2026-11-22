@@ -26,13 +26,9 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name
-from gerrit_workflow_tools.core.rebase_state import (
-    rebase_in_progress,
-    rebase_refusal,
-    submodule_refusal,
-    uncommitted_changes_refusal,
-)
+from gerrit_workflow_tools.core.rebase_state import rebase_refusal, unmerged_paths
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
+from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal, uncommitted_changes_refusal
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 
@@ -213,7 +209,7 @@ def rewrite_stack(
         done = git("rebase", "-i", "--no-autosquash", stash, base, cwd=cwd, env=env, check=False)
     if done.returncode != 0:
         stopped_at = git("rev-parse", "-q", "--verify", "REBASE_HEAD", cwd=cwd, check=False).stdout.strip()
-        conflicted = git("diff", "--name-only", "--diff-filter=U", cwd=cwd, check=False).stdout.split()
+        conflicted = unmerged_paths(cwd)
         git("rebase", "--abort", cwd=cwd, check=False)
         if not conflicted:
             # Not a conflict: git refused for a reason of its own (a hook, no committer identity).
@@ -241,8 +237,8 @@ def undo_rewrite(cwd: Path | str, rewrite_head: str, previous_head: str) -> None
         raise ReorderRefusal("the branch has moved since the rewrite; undo it by hand from the reflog")
     if commit_sha_or_none(cwd, previous_head) is None:
         raise ReorderRefusal(f"{previous_head[:12]} is not a commit here")
-    if rebase_in_progress(cwd) or checked_out_branch_name(cwd) is None:
-        raise ReorderRefusal("a rebase is in progress or HEAD is detached; nothing was undone")
+    if rebase_refusal(cwd) or checked_out_branch_name(cwd) is None:
+        raise ReorderRefusal("a rebase or `git am` is in progress, or HEAD is detached; nothing was undone")
     back = git("reset", "--keep", "-q", previous_head, cwd=cwd, check=False)
     if back.returncode != 0:
         raise ReorderRefusal("your uncommitted changes are in the way of the undo; nothing was changed")

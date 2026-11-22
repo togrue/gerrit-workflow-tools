@@ -91,6 +91,14 @@ function secretViews(word: string, hex: string, digit: number) {
     { branch: `${word}-branch`, upstream: null, suggested: `origin/${word}-main`, why: `the ${word} branch nearest to it`, candidates: [`origin/${word}-main`] },
     never,
   );
+  const rebasing = stackVm(
+    stack(
+      commits.map((c, index) => ({ ...c, rebase: (["done", "current", "todo"] as const)[index] })),
+      { branch: null, rebase_in_progress: true, rebase: { branch: `${word}-branch`, onto: sha(9), orig_head: sha(3), stop: "conflict", applied: false, current: sha(2), unmerged: [paths.tree, paths.top], as_before: false, actions: ["abort", "skip"], refused: { continue: "the index has unresolved conflicts" } } },
+    ),
+    undefined,
+    never,
+  );
   const on = (path: string, n: number | null) => ({ path, line: n === null ? null : line(n) });
   const chains: CommentChain[] = [
     chain(`${word}-root-1`, [comment(`${word} should be per segment.\nSecond line of ${word}.`, { ...on(paths.tree, 1), author: people.alice }), comment(`${word} agreed`, { ...on(paths.tree, 1), author: people.bob })], on(paths.tree, 1)),
@@ -121,7 +129,7 @@ function secretViews(word: string, hex: string, digit: number) {
       },
     }),
   );
-  return { stack: stackView, noUpstream, change, chains: tree(word, number), secrets: { sha, number, line } };
+  return { stack: stackView, noUpstream, rebasing, change, chains: tree(word, number), secrets: { sha, number, line } };
 }
 
 const FIRST = () => secretViews("zqxv", "a3f9c1", 7);
@@ -136,6 +144,19 @@ test("every field of the view models is classified: a new one fails here until i
   const { stack, noUpstream, change, chains } = FIRST();
   assert.deepEqual(anonymize({ stack, change, chains }).unclassified, []);
   assert.deepEqual(anonymize({ stack: noUpstream, change: { problem: "x" }, chains: [] }).unclassified, []);
+  assert.deepEqual(anonymize({ stack: FIRST().rebasing, change: { problem: "x" }, chains: [] }).unclassified, []);
+});
+
+test("a stopped rebase keeps its banner and buttons; each conflicted file's row names the file as its path is replaced", () => {
+  const out = anonymize({ stack: FIRST().rebasing, change: null, chains: null }, seeded(5)).stack as StackVm;
+  assert.doesNotMatch(JSON.stringify(out), /zqxv|a3f9c1/);
+  assert.equal(out.info[0].text, "A rebase stopped on a conflict");
+  assert.deepEqual(out.info[0].actions?.map((action) => [action.label, action.command.id]), [["Abort", "ger.rebase.abort"], ["Skip", "ger.rebase.skip"]]);
+  assert.deepEqual(out.info.slice(1).map((info) => [info.text === info.conflict, info.detail, info.tooltip]), [
+    [true, "conflicted", "Open it in the merge editor to resolve it, then stage it (git add)."],
+    [true, "conflicted", "Open it in the merge editor to resolve it, then stage it (git add)."],
+  ]);
+  assert.deepEqual(out.rows.map((row) => [row.marker, row.dim]), [[null, true], ["conflict", false], [null, false]]);
 });
 
 test("a field nobody classified is replaced, key and all, whatever its type", () => {
@@ -183,6 +204,7 @@ test("nothing from the repository or Gerrit is in a report: no word, name, path,
   for (const views of [
     { stack, change, chains },
     { stack: noUpstream, change: { problem: "ger show failed: zqxv is not in /home/zqxv/repo" } as ChangeVm, chains: [] },
+    { stack: FIRST().rebasing, change: null, chains: null },
     { stack: null, change: { empty: "Loading 74211: zqxv subject…" } as ChangeVm, chains: null },
   ]) {
     const text = reportText({ extension: "1.2.3", editor: "1.95.0", os: "linux 6.8.0", state: "ready", events: "live", outOfDate: false, ...views }, seeded(4));

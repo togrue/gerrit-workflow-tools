@@ -79,7 +79,11 @@ class Worktree:
         return Path(abs_cwd(self.cwd)) / raw if p.returncode == 0 and raw else None
 
     def rebasing_branch(self) -> str | None:
-        """Branch git is rebasing, from its rebase state on disk (read now, not from the snapshot)."""
+        """Branch git is rebasing, from its rebase state on disk (read now, not from the snapshot).
+
+        ``None`` for a rebase of a detached HEAD (git writes ``detached HEAD`` as its ``head-name``)
+        and during a ``git am``, which keeps its branch checked out.
+        """
         repo_dir = self.repository_dir
         if repo_dir is None:
             return None
@@ -91,15 +95,15 @@ class Worktree:
                 branch = head_name.read_text(encoding="utf-8").strip()
             except OSError:
                 continue
-            return branch.removeprefix("refs/heads/") or None
+            return branch.removeprefix("refs/heads/") or None if branch.startswith("refs/heads/") else None
         return None
 
     def working_branch(self, *, settings: Settings) -> str | None:
         """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
 
         The checked-out branch when there is one. During a rebase, the branch git is
-        rebasing. Otherwise on a detached HEAD, a local branch that points at ``HEAD``
-        (preferring a Gerrit upstream, then any upstream).
+        rebasing, and ``None`` for a detached HEAD's rebase. Otherwise on a detached HEAD, a local
+        branch that points at ``HEAD`` (preferring a Gerrit upstream, then any upstream).
         """
         checked = self.branch
         if checked:
@@ -107,10 +111,30 @@ class Worktree:
         rebasing = self.rebasing_branch()
         if rebasing:
             return rebasing
+        if rebase_underway(self.repository_dir):
+            # A detached HEAD's rebase: HEAD moves with it, so a branch that happens to point at
+            # it now is not the one being worked on. There is none.
+            return None
         candidates = _branches_pointing_at_head(self.cwd)
         if not candidates:
             return None
         return min(candidates, key=lambda b: _push_context_branch_rank(self.cwd, b, settings=settings))
+
+
+def rebase_underway(repo_dir: Path | None) -> bool:
+    """``rebase_in_progress`` (core/rebase_state.py) for a git dir already known
+    (``run.worktree.repository_dir``).
+
+    ``git am`` keeps its state in ``rebase-apply`` too, marked ``applying``; see :func:`am_underway`.
+    """
+    if repo_dir is None:
+        return False
+    return (repo_dir / "rebase-merge").exists() or ((repo_dir / "rebase-apply").exists() and not am_underway(repo_dir))
+
+
+def am_underway(repo_dir: Path | None) -> bool:
+    """True while a ``git am`` is underway: the checked-out branch moves with each patch it applies."""
+    return repo_dir is not None and (repo_dir / "rebase-apply" / "applying").exists()
 
 
 def repo_toplevel(cwd: Path | str | None) -> Path | None:

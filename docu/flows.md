@@ -47,6 +47,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Find the commits that need attention | `ger log`, `ger show --first-attention` | *Local stack* view, *Open the Most Important Change* | `tests/test_log.py`, `tests/test_attention_agreement.py` | ships |
 | Work on a change that exists only on Gerrit | `ger checkout CHANGEISH` (a `change-<n>` branch tracking the target branch) | *Check Out to Work On* | `tests/test_checkout.py` | ships |
 | Edit a commit: stop a rebase at it | `ger edit REV`, `ger edit --first-attention-commit`, `ger edit -n` | *Edit Commit Here* | `tests/test_edit.py`, `tests/test_edit_attention.py` | ships |
+| Go on with a stopped rebase | `ger rebase --continue`, `ger rebase --abort`, `ger rebase --skip` | *Continue*, *Abort*, *Skip* on the *Local stack* banner, the conflicted files under it | `tests/test_rebase_go_on.py` | ships |
 | See the CI failures of this commit | `ger ci REV`, `ger show --ci REV` | *CI* group in the *Change* view | `tests/test_ci.py` | ships |
 | Diff the local commit against the patchset CI checked | — | — | — | **gap** |
 | Step to the next issue, comments and CI findings alike | `ger show -n` (next commit with attention) | *Next Unresolved Comment* (comments only) | `tests/test_attention_cursor.py` | partial: no single walk over comments and findings |
@@ -93,6 +94,9 @@ A **gap** names the work that would close it.
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
 | `ger.push` | `ger push` | |
+| `ger.rebase.continue` | `ger rebase --continue` | the button on the *Local stack* banner, also offered when you push during a rebase |
+| `ger.rebase.abort` | `ger rebase --abort` | |
+| `ger.rebase.skip` | `ger rebase --skip` | offered only where the rebase stopped on a conflict; asks first |
 | `ger.setup` | `ger setup` | runs in a terminal; offered when the checkout lacks Gerrit settings |
 | `ger.installCli` | `ger vscode install` is the same step from the other side | installs the ger release with the extension's version, in a terminal (uv or pipx); offered when ger is not found |
 | `ger.stack.squash` | **gap** | `ger rebase` squashes interactively only |

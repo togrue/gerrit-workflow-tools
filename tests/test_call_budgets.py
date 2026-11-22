@@ -163,6 +163,29 @@ def test_log_ahead_of_gerrit_does_not_scale_with_stack_size(
     assert counts[1] == counts[0] <= _LOG_GIT_BUDGET + 3, counts
 
 
+def test_log_during_a_rebase_does_not_scale_with_stack_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stopped on a conflict at the first commit, the rest still to replay: one more ``git log`` for
+    the todo and one ``git diff`` for the unmerged paths, however many commits it holds."""
+    counts: list[int] = []
+    for n in (5, 20):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / f"cache{n}"))
+        repo = _make_linear_stack(tmp_path / f"n{n}", n)
+        store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(repo)))
+        git("checkout", "-q", "main", cwd=repo)
+        (repo / "f.txt").write_text("upstream\n", encoding="utf-8")
+        git("commit", "-q", "-am", "upstream", cwd=repo)
+        git("update-ref", "refs/remotes/origin/main", "main", cwd=repo)
+        git("checkout", "-q", "feature", cwd=repo)
+        git("rebase", "-q", "origin/main", cwd=repo, check=False)
+        with _count_git() as run:
+            code, out, err = run_cli(repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        assert code in (0, 1), err
+        assert f"commit {n}" in out and "stopped on a conflict" in err
+        assert len(store.queries()) == 1
+        counts.append(run.call_count)
+    assert counts[1] == counts[0] <= _LOG_GIT_BUDGET + 2, counts
+
+
 def _rev_parse_calls(run: MagicMock) -> list[tuple[str, ...]]:
     return [call.args for call in run.call_args_list if call.args[:1] == ("rev-parse",)]
 

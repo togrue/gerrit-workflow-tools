@@ -15,6 +15,7 @@ import { gerProgram, installGer, runInTerminal } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
+import { push, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
 import { checkout, editCommit, leaveReview, review } from "./review";
@@ -230,10 +231,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
-    "ger.push": () => {
-      runInTerminal(repo, ["push"]);
-      feedback("ger push runs in the ger terminal: it shows what it will push and asks first", { icon: "terminal", milliseconds: 8000 });
-    },
+    "ger.push": () => push(model),
+    "ger.rebase.continue": () => rebaseStep(model, "continue"),
+    "ger.rebase.abort": () => rebaseStep(model, "abort"),
+    "ger.rebase.skip": () => rebaseStep(model, "skip"),
     "ger.setup": () => {
       runInTerminal(repo, ["setup"]);
       feedback("ger setup runs in the ger terminal", { icon: "terminal" });
@@ -308,7 +309,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
           void model.refresh();
         }
-      })
+      }, () => Boolean(model.stack?.rebase))
     : undefined;
   context.subscriptions.push(
     model,

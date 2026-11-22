@@ -18,7 +18,7 @@ import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, READ_ONLY, YOURS } f
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
-import { MARKER_WORDS, MERGE_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
+import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -150,7 +150,8 @@ const TOOLTIP_LINE = ours([
   "Still to be replayed by the rebase.",
   "Held back by the ready boundary: ger push will not send it.",
   "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped.",
-  "The marker shows where the rebase stands; dimmed commits are not replayed yet. Finish with git rebase --continue, or go back with git rebase --abort.",
+  REBASE_WORDS.tooltip,
+  REBASE_WORDS.resolve,
   "The log was cut: findings may be incomplete.",
   new RegExp(`${COUNT} unresolved comments?`),
   "No reviewers assigned: nobody is asked to review it",
@@ -172,17 +173,29 @@ const BADGE: Shape = {
 /** A row's key is its Change-Id or its commit: it becomes what that field becomes. */
 const ROW_KEY = string((text, names, row) => (text === row.changeId ? names.changeId(text) : names.key(text)));
 
+/** A banner's words, or a line about the upstream ("<branch> has no upstream…", "Track <branch>", an error of git's: filler). */
+const INFO_TEXT = ours([REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
+
 const STACK: Shape = {
   waiting: WAITING,
   info: [
     {
-      // "<branch> has no upstream…", "Track <branch>" and an error of git's have their words in them: filler.
-      text: ours(["A rebase stopped on a conflict", "A rebase is in progress", "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]),
-      detail: ours(["this is the branch as it was before"]),
+      // A conflicted file's row says its path: it becomes what its `conflict` becomes.
+      text: string((text, names, info) => String((text === info.conflict ? PATH : INFO_TEXT)(text, names, info))),
+      detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted]),
       icon: ICON,
       tone: TONE,
       tooltip: TOOLTIP,
       command: { id: ours(["ger.setUpstream"]), args: [TEXT] },
+      conflict: PATH,
+      actions: [
+        {
+          label: ours(Object.values(REBASE_ACTIONS).map((action) => action.label)),
+          title: ours(Object.values(REBASE_ACTIONS).map((action) => action.title)),
+          command: { id: ours(Object.values(REBASE_ACTIONS).map((action) => action.command)), args: [TEXT] },
+          primary: KEEP,
+        },
+      ],
     },
   ],
   rows: [

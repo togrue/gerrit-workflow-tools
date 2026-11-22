@@ -4,10 +4,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CommentChain, StackCommit } from "../src/api";
+import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { SYNC_ICONS, SYNC_WORDS, badges, frozen, pinned, pinnedWhy, reviewerWords, stackLines, sync, stackVm } from "../src/stackRows";
+import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -93,17 +93,119 @@ test("ahead of Gerrit, a row tells new code from only rebased, by core's verdict
   assert.equal(detail({ code_change: "rebased" }), SYNC_WORDS.rebased);
 });
 
-test("mid-rebase the stack marks where it stands and dims what is not replayed yet", () => {
-  const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current" }), commit("Three", { rebase: "todo" })];
-  const stopped = stackVm(stack(commits, { rebase_in_progress: true, rebase: { applied: true } }), undefined, never);
+/** What core says of Skip at an edit stop (`RebaseProgress.refusal`). */
+const SKIP_REFUSED = "--skip leaves out a commit the rebase stopped on with a conflict, but it stopped with the commit applied (an `edit`)";
+const REBASE: Rebase = { branch: "feature", onto: "base000", orig_head: "three00", stop: "edit", applied: true, current: "two0000", unmerged: [], as_before: false, actions: ["continue", "abort"], refused: { skip: SKIP_REFUSED } };
+/** What core allows on a conflict, unresolved and resolved (`RebaseProgress.actions`). */
+const ON_CONFLICT: RebaseAction[] = ["abort", "skip"];
+const RESOLVED: RebaseAction[] = ["continue", "abort", "skip"];
+
+test("mid-rebase the stack marks where it stands and dims only what is still to be replayed", () => {
+  const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current", is_head: true }), commit("Three", { rebase: "todo" })];
+  const stopped = stackVm(stack(commits, { branch: null, rebase_in_progress: true, rebase: REBASE }), undefined, never);
   assert.deepEqual(stopped.rows.map((row) => [row.summary, row.marker, row.dim]), [["Three", null, true], ["Two", "rebase", false], ["One", null, false]]);
   assert.match(stopped.frozen ?? "", /rebase is in progress/);
-  assert.equal(stopped.info[0].text, "A rebase is in progress");
-  // On a conflict the commit it stopped at is only partly there: marked, and dim.
-  const conflict = stackVm(stack(commits, { rebase_in_progress: true, rebase: { applied: false } }), undefined, never);
-  assert.deepEqual([conflict.rows[1].marker, conflict.rows[1].dim], ["conflict", true]);
+  assert.deepEqual([stopped.info[0].text, stopped.info[0].detail], ["A rebase is in progress", undefined], "the stack is the live one: nothing is as it was");
+  assert.equal(stackLines(stopped)[2], "▶ Two — HEAD · two0000 · the same as on Gerrit");
+  // On a conflict the commit it stopped at is what wants you: a conflict marker, not dimmed; what is still to come stays dim.
+  const conflict = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT } }), undefined, never);
+  assert.deepEqual(conflict.rows.map((row) => [row.marker, row.dim]), [[null, true], ["conflict", false], [null, false]]);
   assert.equal(conflict.info[0].text, "A rebase stopped on a conflict");
-  assert.equal(stackLines(conflict)[2], "▶! Two — two0000 · the same as on Gerrit  (dim)");
+  assert.equal(stackLines(conflict)[3], "⚠ Two — HEAD · two0000 · the same as on Gerrit");
+  // Resolved and added: no conflict any more, ready to continue.
+  const resolved = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "resolved", applied: false, actions: RESOLVED } }), undefined, never);
+  assert.deepEqual([resolved.rows[1].marker, resolved.rows[1].dim], ["rebase", false]);
+  assert.deepEqual([resolved.info[0].text, resolved.info[0].detail], ["A rebase stopped with its conflicts resolved", "ready to continue"]);
+  assert.match(resolved.rows[1].tooltip, /now resolved: Continue commits it/);
+});
+
+test("the rebase banner offers the ways on core allows from where it stopped, and lists the files still conflicted", () => {
+  const commits = [commit("One", { rebase: "done" }), commit("Two", { rebase: "current", is_head: true }), commit("Three", { rebase: "todo" })];
+  const at = (rebase: Partial<Rebase>) => stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } }), undefined, never);
+  const buttons = (vm: StackVm) => (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""} ${action.command.id}`);
+  // Applied whole (an edit, a split): core offers nothing to skip, only to go on or go back.
+  assert.deepEqual(buttons(at({ stop: "edit" })), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  const split = at({ stop: "split", current: null });
+  assert.deepEqual(buttons(split), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual([split.info[0].text, split.info[0].detail], ["A rebase stopped while you split a commit", "Continue replays the rest on top of HEAD"]);
+  // Still conflicted: no Continue until it is resolved; the commit can be left out. Resolved, Continue is the one to press.
+  const conflict = at({ stop: "conflict", applied: false, unmerged: ["src/e.txt", "f.txt"], actions: ON_CONFLICT });
+  assert.deepEqual(buttons(conflict), ["Abort ger.rebase.abort", "Skip ger.rebase.skip"]);
+  assert.deepEqual(buttons(at({ stop: "resolved", applied: false, actions: RESOLVED })), ["Continue! ger.rebase.continue", "Abort ger.rebase.abort", "Skip ger.rebase.skip"]);
+  // Each file still unmerged is a row under the banner; a click opens it to resolve.
+  assert.deepEqual(conflict.info.slice(1).map((info) => [info.text, info.conflict, info.tone]), [["src/e.txt", "src/e.txt", "bad"], ["f.txt", "f.txt", "bad"]]);
+  assert.deepEqual(stackLines(conflict).slice(0, 3), ["A rebase stopped on a conflict  [Abort] [Skip]", "  ⚠ src/e.txt — conflicted", "  ⚠ f.txt — conflicted"]);
+  assert.equal(stackLines(at({ stop: "resolved", applied: false, actions: RESOLVED }))[0], "A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]");
+  // The buttons are core's verdict, not the extension's reading of `stop`.
+  assert.deepEqual(buttons(at({ stop: "resolved", applied: false, actions: ["abort"] })), ["Abort ger.rebase.abort"]);
+  assert.equal(stackVm(stack(commits), undefined, never).info.length, 0, "no rebase, no banner");
+});
+
+test("the palette's Continue and Skip run only where core allows them, and say why not", () => {
+  const at = (rebase: Partial<Rebase>) => stack([commit("Two", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } });
+  // Why not is core's refusal, as ger rebase prints it: one wording per stop, not the extension's.
+  assert.equal(rebaseNotNow(at({}), "skip"), `${SKIP_REFUSED[0].toUpperCase()}${SKIP_REFUSED.slice(1)}.`);
+  assert.equal(rebaseNotNow(at({}), "continue"), undefined);
+  const conflict = at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT, refused: { continue: "the index has unresolved conflicts; resolve the conflicts in e.txt" } });
+  assert.equal(rebaseNotNow(conflict, "continue"), "The index has unresolved conflicts; resolve the conflicts in e.txt.");
+  assert.equal(rebaseNotNow(conflict, "skip"), undefined);
+  assert.equal(rebaseNotNow(at({ actions: ["abort"], refused: {} }), "skip"), undefined, "core said nothing: ger rebase decides");
+  assert.equal(rebaseNotNow(stack([commit("Two")]), "abort"), REBASE_WORDS.noRebase);
+  assert.equal(rebaseNotNow(undefined, "skip"), undefined, "before the stack is in, ger rebase decides");
+});
+
+test("the palette's Continue looks again before it says no: a git add in the terminal may have resolved the stop", async () => {
+  const at = (rebase: Partial<Rebase>) => stack([commit("Two", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } });
+  const conflict = at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT, refused: { continue: "the index has unresolved conflicts; resolve the conflicts in e.txt" } });
+  const resolved = at({ stop: "resolved", applied: false, actions: RESOLVED });
+  // Loaded before the git add; the refresh reads the stop as it is now: Continue goes ahead.
+  let refreshes = 0;
+  const staged = { stack: conflict, refresh: async () => void (refreshes++, (staged.stack = resolved)) };
+  assert.equal(await rebaseNotNowFresh(staged, "continue"), undefined);
+  assert.equal(refreshes, 1);
+  // Still conflicted after the fresh look: core's refusal, as before.
+  const still = { stack: conflict, refresh: async () => void refreshes++ };
+  assert.equal(await rebaseNotNowFresh(still, "continue"), "The index has unresolved conflicts; resolve the conflicts in e.txt.");
+  assert.equal(refreshes, 2);
+  // Allowed already: no extra load before the terminal runs it.
+  assert.equal(await rebaseNotNowFresh({ stack: resolved, refresh: async () => void refreshes++ }, "continue"), undefined);
+  assert.equal(refreshes, 2);
+});
+
+test("Skip says what it throws away: the commit and the resolution so far; Abort brings back the branch, not the resolution", () => {
+  const conflicted = (pushed: boolean) => stack([commit("Two", { rebase: "current", pushed })], { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT } });
+  const { message, detail } = skipQuestion(conflicted(false));
+  assert.equal(message, 'Skip "Two"?');
+  assert.match(detail, /the commit and the conflict resolution done so far, staged or not, are thrown away/);
+  assert.match(detail, /Abort instead brings back the branch as it was before the rebase, but not the resolution\.$/);
+  assert.doesNotMatch(detail, /Abort brings it back/);
+  assert.match(skipQuestion(conflicted(true)).detail, /Its change stays open on Gerrit until you abandon it there\.$/);
+});
+
+test("Push during a rebase offers only the ways on core allows: no Continue while files are conflicted", () => {
+  const at = (rebase: Partial<Rebase>) => stack([commit("Two", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } });
+  assert.deepEqual(pushWaysOn(at({})), ["continue", "abort"]);
+  assert.deepEqual(pushWaysOn(at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT })), ["abort"]);
+  assert.deepEqual(pushWaysOn(at({ stop: "resolved", applied: false, actions: RESOLVED })), ["continue", "abort"]);
+});
+
+test("a rebase that says nothing of its commits shows the branch as it was, and says so", () => {
+  const vm = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, current: null, unmerged: ["e.txt"], as_before: true, actions: ON_CONFLICT } }), undefined, never);
+  assert.deepEqual([vm.info[0].text, vm.info[0].detail], ["A rebase stopped on a conflict", "this is the branch as it was before"]);
+  assert.deepEqual(vm.info.slice(1).map((info) => info.conflict), ["e.txt"], "it still names what is conflicted");
+  // Core says whether the stack is as before; no row having a step (all below onto) does not make it so.
+  const live = stackVm(stack([commit("One")], { rebase_in_progress: true, rebase: { ...REBASE, stop: "paused", current: null } }), undefined, never);
+  assert.deepEqual([live.info[0].text, live.info[0].detail], ["A rebase is in progress", undefined]);
+});
+
+test("the header names the branch being rebased", () => {
+  assert.equal(stackWhere(stack([commit("One")], { branch: "feature" })), "feature → origin/main");
+  assert.equal(stackWhere(stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: REBASE })), "feature (rebasing) → origin/main");
+  assert.equal(stackWhere(stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: { ...REBASE, branch: null } })), "detached (rebasing) → origin/main");
+  assert.equal(stackWhere(stack([commit("One")], { branch: null })), "detached → origin/main");
+  // A detached HEAD's rebase has no working branch, so no target branch: its stack starts at the rebase's onto.
+  const detached = stack([commit("One")], { branch: null, rebase_in_progress: true, rebase: { ...REBASE, branch: null } });
+  assert.equal(stackWhere({ ...detached, stack: { ...detached.stack, target_branch: null, push_branch: null } }), "detached (rebasing)");
 });
 
 test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {

@@ -35,11 +35,16 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.rebase_state import edit_stop_next_step, rebase_in_progress, unmerged_paths
+from gerrit_workflow_tools.core.rebase_state import (
+    RebaseAction,
+    edit_stop_next_step,
+    rebase_in_progress,
+    unmerged_paths,
+)
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
-from gerrit_workflow_tools.rebase_run import continue_rebase, require_history_rewrite, run_interactive_rebase
+from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
 
 
@@ -206,12 +211,13 @@ _WALK = {"first": "oldest needing attention", "next": "next needing attention", 
 def _continue_stopped_rebase(cwd: Path) -> int:
     """Finish the rebase a previous edit left stopped.
 
-    Returns 0 when that rebase is done. Git's own code when ``--continue`` fails.
+    Returns 0 when that rebase is done. Git's own code when ``--continue`` fails; refused first, as
+    ``ger rebase --continue`` is, over unresolved conflicts or unstaged changes.
     ``ExitCode.GIT`` when git exited 0 but a rebase is still underway, so a new one
     cannot start.
     """
     print("continuing the rebase", file=sys.stderr)
-    code = continue_rebase(cwd, walk_on=_WALK_ON)
+    code = go_on_with_rebase(cwd, RebaseAction.CONTINUE, walk_on=_WALK_ON)
     if not rebase_in_progress(cwd):
         if code == 0:
             print("rebase finished", file=sys.stderr)

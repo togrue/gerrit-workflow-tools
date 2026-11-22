@@ -36,7 +36,8 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
+from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -45,7 +46,7 @@ from gerrit_workflow_tools.render.commit_row import (
     oneline_body,
     oneline_line,
 )
-from gerrit_workflow_tools.render.show_json import log_commit_json
+from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -245,6 +246,37 @@ def _render_text_output(  # pylint: disable=too-many-arguments,too-many-locals
                 print(f"{ind}{line}")
 
 
+_STOPS = {
+    RebaseStop.EDIT: "stopped{at} to edit it",
+    RebaseStop.SPLIT: (
+        "stopped{at} to edit it, and HEAD has moved on from it: the commits above it were made at the stop"
+    ),
+    RebaseStop.CONFLICT: "stopped on a conflict{at} in {paths}",
+    RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for `git rebase --continue`",
+    RebaseStop.PAUSED: "stopped between commits",
+}
+
+
+def _rebase_note(progress: RebaseProgress, rebasing: RebasingStack | None) -> str:
+    """The note above a stack a rebase is underway on: whose, where it stopped, what is shown as it was."""
+    current = rebasing.current if rebasing else None
+    at = f' at {current.short_sha} "{current.subject}"' if current else ""
+    if not current and progress.current and progress.stop is RebaseStop.SPLIT:
+        at = f" at {progress.current[:7]}"
+    stop = progress.stop
+    said = _STOPS[stop].format(at=at, paths=", ".join(progress.unmerged)) if stop else "stopped"
+    whose = f"note: a rebase is in progress on {progress.branch or 'a detached HEAD'}, {said}"
+    if rebasing is None:
+        # No rebasing stack: the backend keeps no todo (the branch as it was), or a range was asked for (as it is).
+        shown = (
+            "the branch as it was before the rebase" if not progress.keeps_todo else "the range asked for, as it is now"
+        )
+        return f"{whose}; this shows {shown}."
+    todo = rebasing.steps.count(RebaseStep.TODO)
+    rest = f"; {todo} commit{'s' if todo != 1 else ''} still to replay, shown as before" if todo else ""
+    return f"{whose}{rest}."
+
+
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """CLI entry for ``ger log``: show local commits vs Gerrit labels, comments, and CI status."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit))
@@ -266,17 +298,22 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         return int(ExitCode.REFUSED)
 
     stack_view = load_annotated_stack(
-        run, rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
+        run, args.rev_range and rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
     )
     if not stack_view.commits:
         print("(no commits in range)")
         return int(ExitCode.OK)
 
-    if rebase_underway(run.worktree.repository_dir):
-        print_note("note: a rebase is in progress; this shows the branch as it was before the rebase.")
+    progress = (
+        stack_view.rebase.rebase
+        if stack_view.rebase
+        else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
+    )
+    if progress is not None:
+        print_note(_rebase_note(progress, stack_view.rebase))
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
-    stack = run.stack
+    stack = run.repo.shown_stack
     summary_highlighter = build_summary_highlighter(
         settings,
         root=run.repo.root,
@@ -291,19 +328,20 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     if out_fmt == "json":
         stack_payload = {
             "project": stack.project,
-            "target_branch": stack.target_branch,
-            "push_branch": stack.push_branch,
+            "target_branch": stack.target_branch or None,
+            "push_branch": stack.push_branch or None,
         }
 
         commit_payload = [
             {
                 **log_commit_json(c),
                 "abandoned": c.abandoned,
+                "rebase": step,
                 **({"resolution_note": notes_by_sha[c.sha]} if c.sha in notes_by_sha else {}),
             }
-            for c in commits
+            for c, step in zip(commits, rebase_steps(stack_view), strict=True)
         ]
-        payload = {"stack": stack_payload, "commits": commit_payload}
+        payload = {"stack": stack_payload, "rebase": rebase_json(stack_view, progress), "commits": commit_payload}
         print(json.dumps(payload, indent=2))
         if stack_view.gerrit_unavailable is not None:
             raise stack_view.gerrit_unavailable

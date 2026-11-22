@@ -6,7 +6,8 @@ import * as vscode from "vscode";
 import { GerApiError, GerClient, Rewritten, StackCommit, StackStep } from "./api";
 import { blockedMove, movedTo, sentence } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
-import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm } from "./stackRows";
+import { openConflict } from "./rebase";
+import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm, stackWhere } from "./stackRows";
 import { waitingFor } from "./state";
 import { feedback, ui } from "./ui";
 import { Message, WebView } from "./webview";
@@ -50,7 +51,7 @@ export class StackView extends WebView<StackVm> {
 
   protected decorate(view: vscode.WebviewView): void {
     const stack = this.model.stack;
-    const where = stack ? `${stack.branch ?? "detached"} → ${stack.stack.target_branch}` : undefined;
+    const where = stack ? stackWhere(stack) : undefined;
     view.description = where && this.model.stale ? `${where} · out of date` : where;
   }
 
@@ -84,6 +85,8 @@ export class StackView extends WebView<StackVm> {
         return this.explainFrozen();
       case "pinned":
         return this.explainPinned(true);
+      case "conflict":
+        return openConflict(this.model, message.path as string);
       case "command":
         return vscode.commands.executeCommand(message.command as string, ...((message.args as unknown[] | undefined) ?? []));
       default:
