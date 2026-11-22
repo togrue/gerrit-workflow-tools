@@ -8,6 +8,9 @@ as asked or exactly as it was. Runs ``git rebase -i`` with this module as the se
 A merge commit cannot be replayed by ``git rebase``: it and every commit below it stay where
 they are, and the rewrite starts on top of it. The commits the merge brings in are never walked.
 
+The stack stays on the commit it sits on: an upstream that has moved on is not rebased onto
+(:func:`~gerrit_workflow_tools.core.stack.rewrite_base`).
+
 Folding never merges two commit messages: a message with two **Change-Id** footers is not a
 Gerrit change. One of the two messages survives whole, and with it its Change-Id.
 """
@@ -29,7 +32,7 @@ from gerrit_workflow_tools.core.git_state import checked_out_branch_name
 from gerrit_workflow_tools.core.rebase_state import rebase_refusal, unmerged_paths
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal, uncommitted_changes_refusal
-from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count
+from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count, rewrite_base
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 
 
@@ -189,8 +192,8 @@ def rewrite_stack(
     if [(c.sha, action) for c, action in resolved] == [(c.sha, "pick") for c in snapshot.commits]:
         return StackRewrite(list(snapshot.commits), head)
     _refuse_unless_ready(cwd, autostash=autostash)
-    # Only what is above the newest merge is replayed, onto that merge.
-    base = snapshot.commits[pinned - 1].sha if pinned else snapshot.upstream_tip
+    # Only what is above the newest merge is replayed, onto that merge; else the stack, where it sits.
+    base = rewrite_base(cwd, snapshot, pinned)
     movable, replayed = snapshot.commits[pinned:], resolved[pinned:]
     kept = [commit for commit, action in replayed if action != "drop"]
     if conflict := _preview(cwd, base, kept, movable):

@@ -262,6 +262,34 @@ def test_commits_above_the_newest_merge_still_move_and_the_merged_side_is_never_
     assert [row.sha for row in rows] == now[:4]
 
 
+# --- Rewriting under an upstream that has moved on -----------------------------------------
+
+
+def test_a_rewrite_leaves_the_stack_on_its_base_when_the_upstream_has_moved_on(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    base = git_out("merge-base", "HEAD", "origin/main", cwd=stack_repo)
+    # Upstream gained a file of its own, and one the top of the stack adds too: rebasing would conflict.
+    git("switch", "-q", "--detach", "origin/main", cwd=stack_repo)
+    (stack_repo / "upstream_only.txt").write_text("upstream\n", encoding="utf-8")
+    (stack_repo / "d.txt").write_text("upstream's d.txt\n", encoding="utf-8")
+    git("add", "upstream_only.txt", "d.txt", cwd=stack_repo)
+    git("commit", "-q", "-m", "Upstream moves on", cwd=stack_repo)
+    git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=stack_repo)
+    git("switch", "-q", "feature", cwd=stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+
+    # The preview answers for the rewrite that is run: where the stack sits, the top pair swaps freely.
+    moves = _get(api, "/stack/moves")
+    assert moves["swaps"][-1] == {"lower": rows[2].sha, "upper": rows[3].sha, "conflict": None}
+
+    _post(api, "/stack/rewrite", {"steps": [rows[0].sha, rows[1].sha, rows[3].sha, rows[2].sha]})
+    after = stack_rows_mb_to_head(stack_repo)
+    assert [row.subject for row in after] == [rows[i].subject for i in (0, 1, 3, 2)]
+    assert [row.sha for row in after[:2]] == [rows[0].sha, rows[1].sha], "what is below the swap is not replayed"
+    assert git_out("merge-base", "HEAD", "origin/main", cwd=stack_repo) == base, "no rebase onto the new upstream"
+    assert not (stack_repo / "upstream_only.txt").exists()
+
+
 # --- Rewriting with uncommitted changes -------------------------------------------------
 
 
