@@ -30,13 +30,18 @@ _ENV = {
 }
 
 
-def _main_moves_on(repo: Path, files: dict[str, str], subject: str = "Somebody else's commit") -> str:
-    """A commit on ``main`` with *files*, fetched as ``origin/main``; the worktree is not touched."""
+def _main_moves_on(
+    repo: Path, files: dict[str, str], subject: str = "Somebody else's commit", *, blobs: dict[str, str] | None = None
+) -> str:
+    """A commit on ``main`` with *files* (contents) and *blobs* (blob ids), fetched as ``origin/main``;
+    the worktree is not touched."""
     index = repo / ".git" / "upstream-index"
     env = {**_ENV, "GIT_INDEX_FILE": str(index)}
     git("read-tree", "origin/main", cwd=repo, env=env)
     for name, content in files.items():
         blob = git("hash-object", "-w", "--stdin", cwd=repo, input=content).stdout.strip()
+        git("update-index", "--add", "--cacheinfo", f"100644,{blob},{name}", cwd=repo, env=env)
+    for name, blob in (blobs or {}).items():
         git("update-index", "--add", "--cacheinfo", f"100644,{blob},{name}", cwd=repo, env=env)
     tree = git_out("write-tree", cwd=repo, env=env)
     index.unlink()
@@ -183,7 +188,9 @@ def _rebase_i(repo: Path, *, todo: str = "true") -> int:
 
 def test_a_commit_whose_change_is_upstream_under_another_patch_stops_the_rebase_as_empty(stack_repo: Path) -> None:
     """A clean merge that changes nothing: ``git rebase -i`` stops there (``--empty=stop``), and the preview says so."""
-    _main_moves_on(stack_repo, {"a.txt": "file a.txt\n", "z.txt": "z\n"}, "Main has a.txt and more")
+    # The stack's own blob: the fixture writes a.txt in text mode, CR LF on Windows.
+    same_a = git_out("rev-parse", "HEAD:a.txt", cwd=stack_repo)
+    _main_moves_on(stack_repo, {"z.txt": "z\n"}, "Main has a.txt and more", blobs={"a.txt": same_a})
     moved = _moved(stack_repo)
     assert moved is not None and moved.preview and moved.conflict is not None
     assert (moved.conflict.commit.subject, moved.conflict.kind) == ("Refactor parser init", PickStop.EMPTY)
