@@ -616,6 +616,11 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
+| `server/contract.py` | The serve contract: `ENDPOINTS` (each call's query, body and answer) and the shapes of activity, health, the review checkout, comment actions and the runbook, as `TypedDict`s. `MODULES` names the rest |
+| `server/contract_commit.py` | The serve contract for one commit: overlay, comments, CI findings, resolution, diff, `ShownCommit` |
+| `server/contract_stack.py` | The serve contract for the local stack and the inbox: `Stack`, conflict preview, upstream, rewrite steps, review chains, headline, `Overview`, `ApiError` |
+| `server/contract_requests.py` | The serve contract for what a client sends: each call's query and each action's body |
+| `server/contract_export.py` | The serve contract written out (TypeScript, JSON Schema) and `problems`, which checks a JSON value against a contract type |
 | `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 
 ---
@@ -647,7 +652,12 @@ contract between engine and shell is worth keeping clean.
    endpoint is *parse → call → serialise*. Neither composes an answer from several core
    modules, as `server/views.py`, `cli_log.py` and `cli_show.py` do today.
 2. **One contract, generated.** `--json` and HTTP serialise the same result types. The
-   TypeScript types of `vscode/` are generated from them, not mirrored by hand. The contract
+   TypeScript types of `vscode/` are generated from them, not mirrored by hand. *Begun:* the
+   wire shapes of `ger serve` are `TypedDict`s in `server/contract*.py`, from which
+   `vscode/src/contract.ts` and a JSON Schema are generated, and the tests hold every answer
+   to them ([serve.md § The contract](spec/commands/serve.md#the-contract)). Still to come:
+   the endpoints build those types from core's result dataclasses, not from dicts, and
+   `--json` serialises the same ones. The contract
    is not presentation: the JSON builders (`render/show_json.py`, `render/review_json.py`,
    the JSON half of `render/agent_runbook.py`) leave `render/`, which then only formats text
    for a terminal. The service imports neither `render/` nor `cli_common.py`; today it needs

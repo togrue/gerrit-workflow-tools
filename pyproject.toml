@@ -12,6 +12,8 @@ requires-python = ">=3.10"
 dependencies = [
     "prompt-toolkit>=3.0",
     "requests>=2.28",
+    # The serve contract's TypedDicts: NotRequired and is_typeddict are not in 3.10's typing.
+    "typing-extensions>=4.6",
 ]
 
 [dependency-groups]

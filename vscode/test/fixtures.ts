@@ -5,7 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Severity, ShownCommit, Stack, StackCommit } from "../src/api";
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, Resolution, Severity, ShownCommit, Stack, StackCommit } from "../src/api";
 import { ChangeState } from "../src/changeRows";
 
 /** What core says each attention reason weighs (`REASON_SEVERITY`); tests/test_attention_severity.py holds attention.json to it. */
@@ -35,19 +35,27 @@ export function commit(summary: string, extra: Partial<StackCommit> = {}): Stack
     comments_unresolved: 0,
     ci_failures: [],
     ci_links: [],
+    ci_pipelines: [],
     gerrit_url: "https://g/c/1",
     number: 1,
     last_pushed_votes: null,
     code_change: null,
     submittable: false,
+    votes: [],
     work_in_progress: false,
+    private: false,
     change_status: "NEW",
+    merged_equivalent: null,
     updated: null,
     abandoned: false,
     reviewers: [],
     is_head: false,
     held_back: false,
     needs_edit: false,
+    diverged: false,
+    merge: false,
+    pinned: false,
+    rebase: null,
     ...extra,
     ...attended(extra.attention_reasons ?? [], extra.severity),
   };
@@ -59,6 +67,9 @@ export function stack(commits: StackCommit[], extra: Partial<Stack> = {}): Stack
     branch: "feature",
     head: commits.at(-1)?.sha ?? null,
     rebase_in_progress: false,
+    rebase: null,
+    push_blocked: null,
+    upstream: null,
     stack: { project: "p", target_branch: "origin/main", push_branch: "main" },
     summary: { commits: commits.length, ready: 0, attention: 0, needs_edit: 0, not_on_gerrit: 0 },
     commits,
@@ -69,10 +80,18 @@ export function stack(commits: StackCommit[], extra: Partial<Stack> = {}): Stack
 /** The conflict preview when no two neighbours conflict. */
 export const never = () => undefined;
 
+/** How `rev` resolved: to the commit it names, here. */
+export function resolution(input: string): Resolution {
+  return { input, kind: "git-rev", ambiguous: false, alternatives: [] };
+}
+
 export const shown = (extra: Partial<ShownCommit> = {}): ShownCommit => ({
   ...commit("Extract routing"),
   local_commit: true,
+  comments: [],
   comment_chains: [],
+  resolution: resolution("HEAD"),
+  new_comment: "local-draft",
   ...extra,
   ...attended(extra.attention_reasons ?? [], extra.severity),
 });
@@ -101,7 +120,7 @@ export const patchsets: Patchsets = { number: 1, current: 3, reviewed: 2, patchs
 
 /** A published comment by Alice on `a.py:4`. */
 export function comment(message: string, extra: Partial<Comment> = {}): Comment {
-  return { path: "a.py", line: 4, message, text: message, markdown: message, patch_set: 1, state: "published", url: null, author: "Alice", ...extra };
+  return { path: "a.py", line: 4, message, text: message, markdown: message, patch_set: 1, draft: false, state: "published", url: null, author: "Alice", ...extra };
 }
 
 /** An open comment chain on `a.py:4`. */
@@ -113,6 +132,11 @@ export function chain(root_id: string, comments: Comment[], extra: Partial<Comme
     start_line: null,
     url: null,
     resolved: false,
+    anchor_moved: false,
+    anchored_path: null,
+    anchored_start_line: null,
+    anchored_line: null,
+    anchored_text: null,
     resolved_after_publish: false,
     outdated: false,
     held: false,
@@ -131,7 +155,9 @@ export function content(collapse_warnings: boolean, findings: CiFinding[], extra
   return {
     label: "jenkins",
     url,
-    provenance: { url, provider: "jenkins", build: "Widget #55", fetched_at: null, truncated: false, cached: false, error: null, ...extra },
+    build_url: url,
+    source: "message",
+    provenance: { url, provider: "jenkins", build: "Widget #55", fetched_at: null, truncated: false, cache_verdict: "none", cached: false, error: null, ...extra },
     findings,
     collapse_warnings,
   };

@@ -156,7 +156,7 @@ def test_serve_spec_documents_every_route() -> None:
     reads = {path.split("?")[0] for path in re.findall(r"^### `GET (/[^`\s]*)", spec, re.M)}
     actions = set(re.findall(r"^\|\s*`(/[^`]+)`\s*\|", spec, re.M))
     documented = {("GET", re.sub(r"<[^>]+>", "*", p)) for p in reads} | {("POST", p) for p in actions}
-    served = {(method, path.replace("([^/]+)", "*")) for method, path, _ in (*ROUTES, *UNLOCKED_ROUTES)}
+    served = {(method, re.sub(r"\{\w+\}", "*", path)) for method, path, _ in (*ROUTES, *UNLOCKED_ROUTES)}
     assert documented == served, (
         "docu/spec/commands/serve.md must document exactly the routes in server/api.py ROUTES.\n"
         f"  served, not documented: {sorted(served - documented)}\n"

@@ -7,7 +7,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
+import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit, ViewedCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
 import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
@@ -58,7 +58,7 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /** `/show`'s answer for the change selected; undefined until it has come. */
-  get shown(): ShownCommit | undefined {
+  get shown(): ViewedCommit | undefined {
     return this.detail.shown;
   }
 

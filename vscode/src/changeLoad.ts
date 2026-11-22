@@ -2,7 +2,7 @@
 // from what the clicked row knows; each answer of ger serve fills in its part as it comes, and an
 // answer for a change selected before is dropped. Pure: no `vscode`, no I/O.
 
-import type { Chain, CommitStatus, Diff, Member, ShownCommit, Stack } from "./api";
+import type { Chain, CommitStatus, Diff, Member, ShownCommit, Stack, ViewedCommit } from "./api";
 import type { ChangeState, Loading, Stopped } from "./changeRows";
 import type { ChangeTarget } from "./model";
 import { stoppedAt } from "./stackRows";
@@ -31,14 +31,19 @@ export function memberStatus(member: Member): RowStatus {
     comments_unresolved: member.comments_unresolved,
     ci_failures: [],
     ci_links: [],
+    ci_pipelines: [],
     gerrit_url: member.url,
     number: member.number,
     last_pushed_votes: null,
     code_change: null,
+    votes: [],
+    reviewers: [],
     work_in_progress: member.attention_reasons.includes("wip"),
+    private: false,
     attention_reasons: member.attention_reasons,
     severity: member.severity,
     change_status: "NEW",
+    merged_equivalent: null,
     updated: null,
   };
 }
@@ -72,7 +77,7 @@ export function memberTarget(member: Member, chain: Chain, stack: Stack | undefi
 export type Part = "commit" | "base" | "delta";
 
 /** The commit as the row said it, for the view to draw until `/show` answers. */
-export function standIn(known: RowStatus, local: boolean): ShownCommit {
+export function standIn(known: RowStatus, local: boolean): ViewedCommit {
   return { ...known, submittable: known.submittable ?? false, local_commit: local, comment_chains: [] };
 }
 
@@ -195,7 +200,7 @@ export class ChangeDetail {
   }
 
   /** The commit to draw: as `/show` answered, else as its row said; undefined with neither. */
-  commit(): ShownCommit | undefined {
+  commit(): ViewedCommit | undefined {
     const known = this.target?.known;
     return this.shown ?? (known && this.target ? standIn(known, this.target.local) : undefined);
   }

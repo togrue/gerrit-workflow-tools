@@ -461,7 +461,8 @@ printed.
 
 | File | Role |
 |------|------|
-| `src/api.ts` | The API types and the HTTP client. No `vscode` import. |
+| `src/contract.ts` | The API types, generated from `server/contract.py` (`scripts/generate_serve_contract.py`). Never edited by hand. |
+| `src/api.ts` | The HTTP client, typed by `contract.ts`'s `Endpoints`, and the few types only the client adds. No `vscode` import. |
 | `src/server.ts` | Starts and stops `ger serve`. No `vscode` import. |
 | `src/format.ts` | Words, ages, urgency, activity tracking. Pure, unit-tested. |
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
@@ -488,5 +489,6 @@ printed.
 | `test/fixtures.ts` | API-shaped commits, diffs, comment chains and CI logs: shared by the unit tests and the gallery's scenarios. |
 | `test/gallery/` | The webview gallery (`npm run gallery`): scenarios, the stand-in for VS Code (theme, `acquireVsCodeApi()`), the page around the frames, pictures. Not in the `.vsix`. |
 
-When the API grows a field, add it to `src/api.ts` first: the types there are the extension's
-copy of the contract.
+When the API grows a field, add it to `src/gerrit_workflow_tools/server/contract*.py` and run
+`uv run python scripts/generate_serve_contract.py`: `src/contract.ts` follows. The Python tests
+fail on an answer that strays from the contract, and on a `contract.ts` that is stale.

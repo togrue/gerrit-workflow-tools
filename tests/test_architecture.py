@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 from dataclasses import dataclass, field
+from importlib import metadata
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_ger import _COMMANDS
@@ -89,6 +91,35 @@ def _check(rule: str, found: set[str], debt: dict[str, str], fix: str) -> None:
         lines.append(f"{rule} — exception(s) no longer needed; delete them from {Path(__file__).name}:")
         lines += [f"  {v}" for v in stale]
     assert not lines, "\n".join(lines)
+
+
+# --- Runtime dependencies --------------------------------------------------------------
+
+
+def test_every_third_party_import_is_a_declared_dependency() -> None:
+    """A clean install gets only ``[project] dependencies``: a dev tool's own dependency is not there."""
+    declared = {
+        re.split(r"[\s;<>=!~\[]", req, maxsplit=1)[0].lower().replace("_", "-")
+        for req in metadata.requires("gerrit-workflow-tools") or []
+        if "extra ==" not in req
+    }
+    distributions = metadata.packages_distributions()
+    missing: set[str] = set()
+    for rel, src in SOURCES.items():
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                names = [node.module]
+            else:
+                continue
+            for top in {name.partition(".")[0] for name in names} - {PKG, "__future__"}:
+                if top in sys.stdlib_module_names:
+                    continue
+                dists = {d.lower().replace("_", "-") for d in distributions.get(top, [top])}
+                if not dists & declared:
+                    missing.add(f"{rel}: {top}")
+    assert not missing, f"imported but not in pyproject.toml [project] dependencies: {sorted(missing)}"
 
 
 # --- Layer direction ---------------------------------------------------------------

@@ -112,7 +112,7 @@ function secretViews(word: string, hex: string, digit: number) {
   ];
   const change = changeVm(
     state({
-      shown: shown({ ...commits[1], ci_links: [{ label: `${word}-verify`, url: `https://ci.${word}.example/1`, source: "message" }] }),
+      shown: shown({ ...commits[1], ci_links: [{ label: `${word}-verify`, url: `https://ci.${word}.example/1`, build_url: `https://ci.${word}.example/1`, source: "message" }] }),
       chains,
       base: diff({ message: `${commits[1].summary}\n\nBecause of ${word}.\n\nBug: ${word.toUpperCase()}-${number(9)}\nChange-Id: I${sha(102)}`, author: `${people.alice} <${word}@${word}.example>`, files }),
       ci: {

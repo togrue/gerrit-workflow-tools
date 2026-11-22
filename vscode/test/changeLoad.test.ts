@@ -9,38 +9,19 @@ import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange, stoppedHe
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
-import { attended, stack } from "./fixtures";
+import { attended, commit, resolution, stack } from "./fixtures";
 
 function row(summary: string, extra: Partial<StackCommit> = {}): StackCommit {
-  const sha = summary.toLowerCase().replace(/\W/g, "").padEnd(40, "0");
-  return {
-    sha,
-    short_sha: sha.slice(0, 7),
-    change_id: `I${sha}`,
-    summary,
-    pushed: true,
-    patchset_status: "active",
+  return commit(summary, {
     verified: 1,
     code_review: 2,
     comments_unresolved: 1,
-    ci_failures: [],
-    ci_links: [],
     gerrit_url: "https://g/c/7",
     number: 7,
-    last_pushed_votes: null,
-    code_change: null,
-    submittable: false,
-    work_in_progress: false,
-    change_status: "NEW",
-    updated: null,
-    abandoned: false,
-    reviewers: [],
     is_head: true,
-    held_back: false,
-    needs_edit: false,
     ...extra,
     ...attended(extra.attention_reasons ?? ["unresolved-comments"]),
-  };
+  });
 }
 
 /** What a click on a Local stack row opens (stackView.commitTarget). */
@@ -51,7 +32,7 @@ function target(commit: StackCommit): ChangeTarget {
 /** `/show`'s answer for `commit`, its files with it. */
 function answer(commit: StackCommit): ShownCommit {
   const chain = { root_id: "c1", path: "a.py", line: 3, resolved: false, comments: [{ comment_id: "c1", author: "Ann", message: "Rename this", state: "published" }] };
-  return { ...commit, local_commit: true, comment_chains: [chain] as ShownCommit["comment_chains"], new_comment: "draft" };
+  return { ...commit, local_commit: true, comments: [], comment_chains: [chain] as ShownCommit["comment_chains"], resolution: resolution(commit.sha), new_comment: "draft" };
 }
 
 function files(subject: string): Diff {
@@ -215,12 +196,12 @@ test("answers out of order: the review delta before the commit fills in its hint
   const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
-  const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, up_to_date: false, identical: false, rebased: false } };
+  const delta = { ...files("Add cache"), since: { patch_set: 1, current_patch_set: 2, to_patch_set: 2, up_to_date: false, identical: false, rebased: false } };
   assert.ok(detail.arrive(token, "delta", delta));
   let vm = drawn(detail, { version: "current" });
   assert.equal(vm.hint?.text, "Since your review: patchset 1 → 2 · 1 file");
   assert.deepEqual([vm.loading, vm.comments?.summary, vm.head?.text], [{ message: true, readOnly: "" }, "loading…", "Loading…"]);
-  const shown: ShownCommit = { ...memberStatus(member), submittable: true, local_commit: false, comment_chains: [] };
+  const shown: ShownCommit = { ...memberStatus(member), submittable: true, local_commit: false, comments: [], comment_chains: [], resolution: resolution("change:12"), new_comment: "draft" };
   assert.ok(detail.arrive(token, "commit", shown));
   assert.ok(detail.arrive(token, "base", files("Add cache")));
   vm = drawn(detail, { version: "current" });
@@ -234,7 +215,7 @@ test("while it is not known whether the change is ready to submit, the head wear
   const token = detail.select({ rev: "change:12", title: "12: Add cache", number: 12, local: false, known: memberStatus(member) }, false);
   let head = drawn(detail, { version: "current" }).head;
   assert.deepEqual([head?.text, head?.icon, head?.tone], ["Loading…", "loading", undefined]);
-  detail.arrive(token, "commit", { ...memberStatus(member), submittable: false, local_commit: false, comment_chains: [] });
+  detail.arrive(token, "commit", { ...memberStatus(member), submittable: false, local_commit: false, comments: [], comment_chains: [], resolution: resolution("change:12"), new_comment: "draft" });
   head = drawn(detail, { version: "current" }).head;
   assert.equal(head?.text, "Nothing to do");
   assert.notEqual(head?.icon, "loading");

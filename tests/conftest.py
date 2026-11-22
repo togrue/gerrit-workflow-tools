@@ -20,6 +20,7 @@ from tests.fixtures import (
     make_repo_duplicate_change_id,
     make_stack_repo,
 )
+from tests.serve_contract_check import hold_answers_to_the_contract
 
 
 # Cumulative fixture setup seconds when GWT_TEST_PROFILE=1 (see pytest_fixture_setup).
@@ -37,6 +38,12 @@ def _reset_hyperlink_mode() -> Generator[None]:
     from gerrit_workflow_tools.cli_style import set_hyperlink_mode
 
     set_hyperlink_mode(False)
+
+
+@pytest.fixture(autouse=True)
+def _serve_answers_keep_the_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every answer ``ger serve`` gives in any test is held against server/contract.py."""
+    hold_answers_to_the_contract(monkeypatch)
 
 
 def pytest_configure(config: pytest.Config) -> None:
