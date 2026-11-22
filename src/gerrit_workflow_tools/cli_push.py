@@ -367,8 +367,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         if not require_branch_upstream(cwd, branch, settings=settings):
             return 1
         mode = ger_push_mode(cwd, branch, settings=settings)
-    if mode is None:
-        raise missing_upstream_error(branch)
+    if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
+        raise missing_upstream_error(branch, askable=False)
     if args.i and mode == "vanilla":
         raise UsageError("-i applies only to Gerrit push (upstream on gerrit.remote)")
     if mode == "vanilla":

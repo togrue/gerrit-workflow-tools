@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream import (
+    NeedsUpstreamError,
     branch_has_upstream,
     local_branch_exists,
     missing_upstream_error,
@@ -92,6 +93,11 @@ def ensure_branch_upstream_interactive(cwd: Path | str | None, branch: str, *, s
         return True
     if not prompt_toolkit_can_run():
         return False
+    return ask_branch_upstream(cwd, branch, settings=settings)
+
+
+def ask_branch_upstream(cwd: Path | str | None, branch: str, *, settings: Settings) -> bool:
+    """Ask for *branch*'s upstream and set it; ``False`` when the user aborts or names no remote branch."""
     choice = prompt_upstream_abbrev_interactive(cwd, branch, settings=settings)
     if not choice:
         return False
@@ -120,3 +126,21 @@ def require_branch_upstream(
     if not prompt_toolkit_can_run():
         raise missing_upstream_error(branch)
     return False
+
+
+def ask_for_needed_upstream(error: NeedsUpstreamError, asked: set[str]) -> bool | None:
+    """Ask for the upstream *error* lacks: ``True`` once set, ``False`` when declined, ``None`` when no one can ask.
+
+    Asks once per branch (*asked* collects them), for an existing local branch still without an
+    upstream, when the error allows it and a prompt can run. The caller decides whether the
+    command may ask at all (``cli_common.run_cli_command``).
+    """
+    branch = error.branch
+    if not error.askable or branch in asked or not prompt_toolkit_can_run():
+        return None
+    cwd = Path.cwd()
+    if not local_branch_exists(cwd, branch) or branch_has_upstream(cwd, branch):
+        return None
+    asked.add(branch)
+    sys.stdout.flush()  # What the command showed before it stopped comes before the question.
+    return ask_branch_upstream(cwd, branch, settings=Settings.from_cwd(cwd))

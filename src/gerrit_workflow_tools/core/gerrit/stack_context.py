@@ -12,10 +12,15 @@ from gerrit_workflow_tools.core.git_state import (
     refs_for_push_branch_name,
     resolve_working_branch,
 )
+from gerrit_workflow_tools.core.upstream import NeedsUpstreamError, branch_has_upstream
 
 
 class ChangeResolutionError(RuntimeError):
     """Changeish could not be resolved (not found, invalid input, missing stack context)."""
+
+
+class NoDestinationBranchError(NeedsUpstreamError, ChangeResolutionError):
+    """The stack has no Gerrit destination because its branch has no upstream (and no ``gerritTarget``)."""
 
 
 @dataclass(frozen=True)
@@ -66,12 +71,15 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, 
     target = effective_gerrit_destination_branch(cwd, branch_name, settings=settings)
     if not target:
         remote = settings.gerrit_remote
-        raise ChangeResolutionError(
+        message = (
             f"No Gerrit destination branch for branch {branch_name!r}. "
             f"Set upstream to a branch on `{remote}` (`gerrit.remote`), "
             f"e.g. `git branch --set-upstream-to={remote}/<branch>`, "
             f"or configure `branch.{branch_name}.gerritTarget`."
         )
+        if branch_name != "HEAD" and not branch_has_upstream(cwd, branch_name):
+            raise NoDestinationBranchError(message, branch=branch_name)
+        raise ChangeResolutionError(message)
 
     push_branch = refs_for_push_branch_name(target, settings=settings)
     return StackContext(project=project, target_branch=target, push_branch=push_branch)

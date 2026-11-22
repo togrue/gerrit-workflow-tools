@@ -88,7 +88,7 @@ git config branch.$(git branch --show-current).gerritReviewers alice,bob
 | `branch.<name>.gerritTarget` | Push target differs from upstream inference (e.g. feature branch tracks `origin/dev` but pushes to `main`) |
 | `branch.<name>.gerritReviewers` | Default reviewers on every `ger push` for this branch |
 
-If `ger log` errors about missing upstream, set it with `git branch --set-upstream-to=<remote>/<branch>` or follow the interactive prompt.
+Without an upstream, `ger` asks for one on a terminal (it suggests what the branch was created from). Elsewhere, set it with `git branch --set-upstream-to=<remote>/<branch>`.
 
 ---
 

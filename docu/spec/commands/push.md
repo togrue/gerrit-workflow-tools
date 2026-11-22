@@ -56,7 +56,7 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 | **Gerrit** | `branch.*.gerritTarget` set, **or** upstream remote == `gerrit.remote` | Ready range (stop pattern + Change-Id) → `git push <tip>:refs/for/<target>[%options]` |
 | **Vanilla** | Upstream on another remote | Plain `git push`; Gerrit-specific flags ignored (warning printed) |
 
-No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --set-upstream-to=<remote>/<branch>`) or `branch.<name>.gerritTarget`. On a TTY, several commands prompt interactively via `ensure_branch_upstream_interactive`.
+No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --set-upstream-to=<remote>/<branch>`) or `branch.<name>.gerritTarget`. On a TTY, every command that needs the upstream asks for it ([SPEC § A missing upstream](../../SPEC.md#a-missing-upstream)); `ger push` asks before its preview, and not under `--dry-run` or `-y`.
 
 ---
 

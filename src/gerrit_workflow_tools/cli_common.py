@@ -15,6 +15,7 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from enum import IntEnum
 from pathlib import Path
 from typing import TypeVar
@@ -44,7 +45,8 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
+from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
+from gerrit_workflow_tools.core.upstream_interactive import ask_for_needed_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
@@ -121,6 +123,10 @@ def failure_exit(error: BaseException) -> tuple[ExitCode, str] | None:
     return None
 
 
+_MAY_ASK_FOR_UPSTREAM: ContextVar[bool] = ContextVar("may_ask_for_upstream", default=False)
+"""Whether the running command may ask for a missing upstream: set by :func:`init_cli_runtime` from its args."""
+
+
 def run_cli_command(body: Callable[[], int]) -> int:
     """Run a command body, turning known failures into a message and an exit code.
 
@@ -132,19 +138,39 @@ def run_cli_command(body: Callable[[], int]) -> int:
     usage errors) and ``KeyboardInterrupt`` derive from ``BaseException`` and pass through
     untouched, as do exit codes a command returns after running a child process — those
     are git's codes, not ours.
+
+    It is also the one place a missing upstream is asked for, however deep the need: on a
+    :class:`NeedsUpstreamError` (raised reading the stack, before anything changed) the user
+    sets the upstream and *body* runs again from the start; declining exits ``REFUSED``.
     """
+    scope = _MAY_ASK_FOR_UPSTREAM.set(False)
+    asked: set[str] = set()
     try:
-        return body()
-    except Exception as error:  # pylint: disable=broad-exception-caught
-        failure = failure_exit(error)
-        if failure is None:
-            raise
-        code, prefix = failure
-        sys.stdout.flush()  # What the command did show comes first, the reason it stopped last.
-        print(f"{prefix}: {error}" if prefix else str(error), file=sys.stderr)
-        return int(code)
+        while True:
+            try:
+                return body()
+            except NeedsUpstreamError as error:
+                answer = ask_for_needed_upstream(error, asked) if _MAY_ASK_FOR_UPSTREAM.get() else None
+                if answer is None:
+                    return _report_failure(error)
+                if not answer:
+                    return int(ExitCode.REFUSED)
+            except Exception as error:  # pylint: disable=broad-exception-caught
+                return _report_failure(error)
     finally:
+        _MAY_ASK_FOR_UPSTREAM.reset(scope)
         print_call_trace_summary()
+
+
+def _report_failure(error: Exception) -> int:
+    """Print a known failure and return its exit code; re-raise anything else (a bug)."""
+    failure = failure_exit(error)
+    if failure is None:
+        raise error
+    code, prefix = failure
+    sys.stdout.flush()  # What the command did show comes first, the reason it stopped last.
+    print(f"{prefix}: {error}" if prefix else str(error), file=sys.stderr)
+    return int(code)
 
 
 def print_note(note: str | None) -> None:
@@ -367,6 +393,7 @@ def init_cli_runtime(
     init_color_mode(color="never" if plain else getattr(args, "color", "auto"))
     init_hyperlink_mode(hyperlinks="never" if plain else getattr(args, "hyperlinks", "auto"))
     settings = Settings.from_cwd(cwd)
+    _MAY_ASK_FOR_UPSTREAM.set(may_prompt(args) and not getattr(args, "dry_run", False))
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")
     run = RunContext.open(cwd, settings=settings, gerrit=gerrit, refresh=refresh_requested())
