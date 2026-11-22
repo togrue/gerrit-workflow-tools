@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- One frame of the gallery alone, at an exact size: what `npm run gallery -- --png` takes a
+     picture of. A headless browser lays its window out no narrower than about 500px whatever
+     size it is asked for, and the picture is the top left of that: so the frame sits there in
+     an iframe, which is as narrow as the side bar it stands for.
+     shot.html?frame=frames/<id>.html&width=300&height=154 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ger for VS Code: one gallery frame</title>
+<style>
+html, body { margin: 0; }
+iframe { display: block; border: 0; }
+</style>
+</head>
+<body>
+<script>
+const asked = new URLSearchParams(location.search);
+const frame = document.createElement("iframe");
+frame.src = asked.get("frame");
+frame.width = asked.get("width");
+frame.height = asked.get("height");
+document.body.append(frame);
+</script>
+</body>
+</html>

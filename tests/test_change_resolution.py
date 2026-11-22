@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeAmbiguousError,
@@ -76,12 +75,6 @@ def _mock_client(rows_by_query: dict[str, list[dict[str, Any]]] | None = None) -
 
 # The changeish grammar itself is covered by tests/test_changeish.py; this module covers what
 # a parsed changeish *resolves to*.
-
-
-def test_triplet_build_parse_round_trip() -> None:
-    triplet = build_triplet("group/proj", "main", CHANGE_ID)
-    assert triplet == f"group/proj~main~{CHANGE_ID}"
-    assert parse(triplet).change_id == CHANGE_ID
 
 
 def test_empty_changeish_is_rejected_at_resolution() -> None:
@@ -171,24 +164,6 @@ def test_resolve_stack_context_errors_when_destination_missing(tmp_path: Path) -
         resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
 
-def test_narrowing_target_branch_selected(stack_repo: Path) -> None:
-    _configure_stack_repo_project(stack_repo)
-    rows = [
-        _change_row(number=120045, branch="main"),
-        _change_row(number=119870, branch="release-2.1"),
-    ]
-    client = _mock_client({f"change:{CHANGE_ID}": rows})
-
-    resolution = resolve_changeish(CHANGE_ID, client=client, cwd=stack_repo, settings=Settings.from_cwd(stack_repo))
-
-    assert resolution.selected is not None
-    assert resolution.selected.number == 120045
-    assert resolution.selected_reason == "target-branch"
-    assert resolution.ambiguous is True
-    assert len(resolution.alternatives) == 1
-    assert resolution.alternatives[0].number == 119870
-
-
 def test_narrowing_prefer_open_on_target_branch(stack_repo: Path) -> None:
     _configure_stack_repo_project(stack_repo)
     rows = [
@@ -220,6 +195,9 @@ def test_narrowing_two_open_on_target_raises(stack_repo: Path) -> None:
     assert len(exc.value.alternatives) == 2
     nums = {alt.number for alt in exc.value.alternatives}
     assert nums == {120045, 120046}
+    # The message lists them, so the next invocation can name one exactly (spec §3.1 step 3).
+    assert "change:120045 (" in str(exc.value) and "change:120046 (" in str(exc.value)
+    assert "Name one by its change: number or triplet" in str(exc.value)
 
 
 def test_change_id_only_on_other_branch_is_absent(stack_repo: Path) -> None:

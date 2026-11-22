@@ -14,7 +14,7 @@ from tests.conftest import run_cli
 from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 from tests.integration.integration_helpers import (
-    first_change_id_from_tip,
+    first_change_triplet_from_tip,
     prepare_topic_repo,
 )
 from tests.integration.repo_builder import build_linear_chain
@@ -35,23 +35,23 @@ def test_set_topic_sets_and_clears(
     code, _out, err = run_cli(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
     assert code == 0, err
 
-    change_id = first_change_id_from_tip(gerrit_admin_session, ctx.project_verified, topic_branch)
-    assert change_id, "expected an open change after push"
+    change_ref = first_change_triplet_from_tip(gerrit_admin_session, ctx.project_verified, topic_branch)
+    assert change_ref, "expected an open change after push"
 
     # HttpGerritRest reads credentials from the git config set by prepare_topic_repo.
     client = HttpGerritRest.from_settings(Settings.from_cwd(repo), web_base=ctx.http_base)
 
     # --- set a non-empty topic ---
     new_topic = f"my-topic-{secrets.token_hex(3)}"
-    client.set_topic(change_id, new_topic)  # must not raise
+    client.set_topic(change_ref, new_topic)  # must not raise
 
-    enc = quote_change_id(change_id)
+    enc = quote_change_id(change_ref)
     detail = gerrit_admin_session.get_json(f"changes/{enc}/detail")
     assert isinstance(detail, dict)
     assert detail.get("topic") == new_topic, f"expected topic {new_topic!r} on Gerrit, got {detail.get('topic')!r}"
 
     # --- clear the topic ---
-    client.set_topic(change_id, None)  # must not raise
+    client.set_topic(change_ref, None)  # must not raise
 
     detail_after = gerrit_admin_session.get_json(f"changes/{enc}/detail")
     assert isinstance(detail_after, dict)

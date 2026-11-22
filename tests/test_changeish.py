@@ -5,7 +5,13 @@ from __future__ import annotations
 
 import pytest
 
-from gerrit_workflow_tools.core.changeish import Changeish, is_change_id, parse
+from gerrit_workflow_tools.core.changeish import (
+    Changeish,
+    as_change_only,
+    is_change_id,
+    parse,
+    unresolved_rev_message,
+)
 from tests.fixtures import _cid
 
 
@@ -156,3 +162,35 @@ def test_changeish_is_frozen() -> None:
 
 def test_parse_round_trips_through_raw() -> None:
     assert parse("  HEAD~1  ") == Changeish(raw="HEAD~1", kind="git-rev", rev="HEAD~1")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("692", "change:692"),
+        (" 692 ", "change:692"),
+        ("c692", "change:692"),
+        ("C692", "change:692"),
+        ("change:692", "change:692"),
+        ("I" + "a" * 40, "I" + "a" * 40),
+        ("cafe12", "cafe12"),
+        ("https://g/c/p/+/692", "https://g/c/p/+/692"),
+    ],
+)
+def test_as_change_only_reads_numbers_as_changes(raw: str, expected: str) -> None:
+    assert as_change_only(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("rev", "expected"),
+    [
+        ("nosuch", "cannot resolve 'nosuch': no commit by that name"),
+        ("692", "cannot resolve '692': no commit by that name; did you mean change:692?"),
+        (
+            "Ibadcafe",
+            "cannot resolve 'Ibadcafe': no commit by that name, and no Change-Id either (I plus 40 hex digits)",
+        ),
+    ],
+)
+def test_an_unresolved_rev_names_what_is_missing(rev: str, expected: str) -> None:
+    assert unresolved_rev_message(rev) == expected

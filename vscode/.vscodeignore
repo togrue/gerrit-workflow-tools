@@ -1,0 +1,11 @@
+src/**
+test/**
+out/test/**
+out/gallery/**
+**/*.map
+tsconfig.json
+.gitignore
+.vscode/**
+node_modules/**
+scripts/**
+media/.gitignore

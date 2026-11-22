@@ -1,9 +1,9 @@
-# `ger review` *(planned)*
+# `ger review`
 
 | | |
 |--|--|
-| **Status** | **Planned**: not in `cli_ger.py` yet |
-| **Module** | cli_review.py (new); checkout and review state in core/review_checkout.py (new); votes on `CommentApi` in `core/gerrit/comments.py` |
+| **Status** | **Implemented** |
+| **Module** | `cli_review.py`; checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
 | **Requires** | A git repository, `gerrit.webUrl`, credentials |
 
 Review someone else's change in your editor. `ger review` checks the change out, shows *what this commit changed* to every git tool you already use, walks up and down its review chain, and publishes your comments with your vote.
@@ -28,15 +28,15 @@ ger review --done           -> back to how things were
 ## Usage
 
 ```
-ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force] [--json]
-ger review (--next | --prev) [--stage | --no-stage] [--force] [--json]
-ger review (--stage | --unstage) [--json]
-ger review --status [--json]
-ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json]
-ger review --done [--force] [--json]
+ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force] [--json | --ai]
+ger review (--next | --prev) [--stage | --no-stage] [--force] [--json | --ai]
+ger review (--stage | --unstage) [--json | --ai]
+ger review --status [--json | --ai]
+ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json | --ai]
+ger review --done [--force] [--json | --ai]
 ```
 
-`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a change number, a Gerrit URL, a triplet. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
+`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a Gerrit URL, a triplet, `change:N`. A bare number is a change number here, not a git revision. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
 
 ---
 
@@ -49,7 +49,7 @@ Two **review checkout** modes, set by `ger.reviewCheckout`:
 | **Review worktree** (default) | `worktree` | One reusable worktree, at `ger.reviewWorktree` (default: `<repository>-review` beside the main worktree). Created on first use with `git worktree add`, reused after. Your own branch, stack and working tree are never touched |
 | **In place** | `branch` | The change is checked out in the current worktree, like a manual `git fetch` + `git switch` |
 
-**First use asks.** When `ger.reviewCheckout` is unset and stdin is a terminal, `ger review` asks once: `Check out reviews in a separate worktree (w, default) or in this checkout (b)?` and writes the answer to the repository's local git config. Without a terminal it uses the review worktree and writes nothing. `--in-worktree` and `--in-place` override the setting for one run.
+**First use asks.** When `ger.reviewCheckout` is unset and stdin is a terminal, `ger review` asks once: `Check out reviews in a separate worktree (w, default) or in this checkout (b)?` and writes the answer to the repository's local git config. Without a terminal, or with `--json` or `--ai`, it uses the review worktree and writes nothing. `--in-worktree` and `--in-place` override the setting for one run.
 
 `ger review` acts on the review worktree whichever worktree you run it from. Its output names the worktree's path, so you can open it in your editor.
 
@@ -61,7 +61,7 @@ A `change-<number>` branch that already exists is moved to the fetched patchset,
 
 ### Leaving the checkout clean
 
-Before switching to another change, `ger review` checks that the worktree holds nothing of yours: no unstaged edits, and an index that is either clean or exactly the staged review. Otherwise it exits `1` and lists the files. Untracked files are left alone and do not count. `--force` does not override this check; ger never throws your edits away.
+Before switching to another change, `ger review` checks that the worktree holds nothing of yours: no unstaged edits, and an index that is either clean or exactly the staged review. Otherwise it exits `2` (`USAGE`, as `ger checkout` and `ger edit` do for the same reason), lists the files, and says to commit or stash them. Untracked files are left alone and do not count, and so does a submodule's own state (edits inside it, another commit checked out); a submodule staged at another commit, or a file put where a submodule is recorded, refuses with its own message, naming it, in the wording `ger checkout` and `ger edit` use. While the review is staged it gives only the step that unstages it (`git restore --staged --source=<change> PATH`): committing would commit the change under review with it. `--force` does not override this check; ger never throws your edits away.
 
 In place, the branch you were on before the first `ger review` is remembered, so `--done` can go back to it.
 
@@ -125,9 +125,15 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
   worktree: /home/me/src/proj-review
   chain: 1233 <- [1234] <- 1235
   https://host/c/proj/+/1234
+  since your review of patchset 2: src/router.py (+12 -3), tests/test_router.py (+20 -0)
+    git diff 1a2b3c4d5e6f 9f8e7d6c5b4a
 ```
 
-**JSON** (`--json`): the review state, plus `chain` (change numbers, base first) and `url`.
+When you have reviewed an older patchset of the change (posted a vote, comment or reply on it), the last two lines say what changed since: the **review delta** (`core/review_delta.py`, the one the VS Code extension shows), narrowed to the files either patchset touched when it was rebased, and the `git diff` that shows it. Nothing is said for patchset 1 or a patchset you already reviewed, and a failure to compute it never fails the review.
+
+**`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
+
+**JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta.
 
 ---
 
@@ -136,8 +142,8 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
 | Code | When |
 |------|------|
 | `0` | Done |
-| `1` | The worktree holds your edits; a `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined |
-| `2` | Bad usage; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
+| `1` | A `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined |
+| `2` | Bad usage; the worktree holds your edits; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
 | `3` | The changeish or patchset resolves to nothing |
 | `5` | Gerrit failed |
 | `7` | A git command failed (fetch, worktree, switch) |

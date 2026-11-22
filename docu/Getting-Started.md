@@ -10,7 +10,7 @@ First-run checklist for using **`ger`** in a Gerrit repository. Complete these s
 
 | Requirement | Why |
 |-------------|-----|
-| Python 3.11+ (see project `pyproject.toml`) | Runs the `ger` CLI |
+| Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) or pipx | Runs and installs the `ger` CLI |
 | A Git clone of a Gerrit-backed repo | `ger` reads git history and config from the current directory |
 | Gerrit HTTPS URL and API credentials | REST calls for review state (`ger log`, `ger show`, `ger push` preview) |
 | `commit-msg` hook | Gerrit Change-Ids on new commits |
@@ -20,21 +20,27 @@ First-run checklist for using **`ger`** in a Gerrit repository. Complete these s
 
 ## 1. Install `ger`
 
-From the [project README](../README.md#install):
+One command, no clone (more ways: [project README](../README.md#install)):
 
 ```bash
-pip install --user .
-# or:  pipx install .
-# or:  uv pip install --user .
+uv tool install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
+# or:  pipx install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
 ```
 
-Ensure the install directory is on `PATH` (e.g. `~/.local/bin` on Linux/macOS). Verify:
+Verify:
 
 ```bash
 ger --help
 ```
 
-Optional but recommended: [bash completion](Completion.md) — `ger bash-completion --install`.
+Not found? uv and pipx put `ger` in `~/.local/bin`; `uv tool update-shell` (or `pipx ensurepath`) adds that to `PATH` for new terminals.
+
+Optional:
+
+- The VS Code extension that matches this ger: `ger vscode install` ([spec](spec/commands/vscode.md)).
+- [Bash completion](Completion.md): `ger bash-completion --install`.
+
+To update, run the install command again with `--force`, then `ger vscode install` again.
 
 ---
 
@@ -82,7 +88,7 @@ git config branch.$(git branch --show-current).gerritReviewers alice,bob
 | `branch.<name>.gerritTarget` | Push target differs from upstream inference (e.g. feature branch tracks `origin/dev` but pushes to `main`) |
 | `branch.<name>.gerritReviewers` | Default reviewers on every `ger push` for this branch |
 
-If `ger log` errors about missing upstream, set it with `git branch --set-upstream-to=<remote>/<branch>` or follow the interactive prompt.
+Without an upstream, `ger` asks for one on a terminal (it suggests what the branch was created from). Elsewhere, set it with `git branch --set-upstream-to=<remote>/<branch>`.
 
 ---
 
@@ -132,8 +138,14 @@ ger log              → see what needs attention
 ger show <ref>       → read comments and votes on one change
 ger push             → push the ready prefix of your stack
 ger edit / ger rebase → rework commits in the middle of the stack
+ger checkout <change> → work on a change from Gerrit, on a branch tracking its target
+ger ci               → why CI failed, from the CI logs
+ger reply <id> --done → answer a review comment (a draft until you push)
+ger inbox            → chains waiting on your review, and your own outgoing ones
+ger review <change>  → check one out in the review worktree, then --vote and --done
 ```
 
+- **The workflows, step by step:** [flows.md](flows.md)
 - **Reading `ger log` output:** [Reading-ger-log.md](Reading-ger-log.md)
 - **Command reference:** [SPEC.md](SPEC.md)
 - **All config keys:** [Configuration.md](Configuration.md)

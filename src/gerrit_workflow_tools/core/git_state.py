@@ -9,7 +9,6 @@ answer (e.g. whether the upstream's remote is ``gerrit.remote``). The dependency
 from __future__ import annotations
 
 import logging
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -20,32 +19,26 @@ from gerrit_workflow_tools.core.git_run import GitError, abs_cwd, git, git_out
 
 logger = logging.getLogger(__name__)
 
-_WORKTREE_LOCK = threading.Lock()
-_WORKTREE_BY_CWD: dict[str, Worktree] = {}
-
 
 @dataclass(frozen=True)
 class Worktree:
-    """Live repository identity from one ``git rev-parse`` (toplevel, HEAD branch, git-dir)."""
+    """The repository at a directory as one ``git rev-parse`` answered: toplevel, HEAD branch, git-dir.
+
+    A value, read when asked for (:meth:`from_cwd`), never remembered here. A run reads its
+    own once (``run.worktree``); work that switches branches reads again after it does.
+    """
 
     toplevel: Path | None
     checked_out_branch: str | None
     """Named branch at HEAD, or ``None`` when detached (``abbrev-ref`` is ``HEAD``)."""
     git_dir: Path | None
+    cwd: Path | str | None = None
+    """Where it was read; git runs here when a reader needs more than the snapshot."""
 
     @classmethod
     def from_cwd(cls, cwd: Path | str | None) -> Worktree:
+        """The repository at *cwd* as it is now."""
         cwd_abs = abs_cwd(cwd)
-        with _WORKTREE_LOCK:
-            cached = _WORKTREE_BY_CWD.get(cwd_abs)
-            if cached is not None:
-                return cached
-            loaded = cls._load(cwd, cwd_abs)
-            _WORKTREE_BY_CWD[cwd_abs] = loaded
-            return loaded
-
-    @classmethod
-    def _load(cls, cwd: Path | str | None, cwd_abs: str) -> Worktree:
         p = git(
             "rev-parse",
             "--show-toplevel",
@@ -56,7 +49,7 @@ class Worktree:
             check=False,
         )
         if p.returncode != 0 or not (p.stdout or "").strip():
-            return cls(toplevel=None, checked_out_branch=None, git_dir=None)
+            return cls(toplevel=None, checked_out_branch=None, git_dir=None, cwd=cwd)
         lines = [line.strip() for line in p.stdout.splitlines() if line.strip()]
         top_raw = lines[0] if lines else ""
         abbrev = lines[1] if len(lines) > 1 else ""
@@ -64,13 +57,84 @@ class Worktree:
         toplevel = Path(top_raw) if top_raw else None
         checked = abbrev if abbrev and abbrev != "HEAD" else None
         git_dir = Path(cwd_abs) / git_dir_raw if git_dir_raw else None
-        return cls(toplevel=toplevel, checked_out_branch=checked, git_dir=git_dir)
+        return cls(toplevel=toplevel, checked_out_branch=checked, git_dir=git_dir, cwd=cwd)
+
+    @property
+    def branch(self) -> str | None:
+        """The named branch checked out, or ``None`` when HEAD is detached (unborn HEAD too)."""
+        if self.toplevel is not None:
+            return self.checked_out_branch
+        p = git("branch", "--show-current", cwd=self.cwd, check=False)
+        if p.returncode != 0:
+            return None
+        return (p.stdout or "").strip() or None
+
+    @property
+    def repository_dir(self) -> Path | None:
+        """The git dir, also when HEAD is unborn; ``None`` outside a repository."""
+        if self.toplevel is not None:
+            return self.git_dir
+        p = git("rev-parse", "--git-dir", cwd=self.cwd, check=False)
+        raw = (p.stdout or "").strip()
+        return Path(abs_cwd(self.cwd)) / raw if p.returncode == 0 and raw else None
+
+    def rebasing_branch(self) -> str | None:
+        """Branch git is rebasing, from its rebase state on disk (read now, not from the snapshot).
+
+        ``None`` for a rebase of a detached HEAD (git writes ``detached HEAD`` as its ``head-name``)
+        and during a ``git am``, which keeps its branch checked out.
+        """
+        repo_dir = self.repository_dir
+        if repo_dir is None:
+            return None
+        for state_dir in ("rebase-merge", "rebase-apply"):
+            head_name = repo_dir / state_dir / "head-name"
+            if not head_name.exists():
+                continue
+            try:
+                branch = head_name.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            return branch.removeprefix("refs/heads/") or None if branch.startswith("refs/heads/") else None
+        return None
+
+    def working_branch(self, *, settings: Settings) -> str | None:
+        """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
+
+        The checked-out branch when there is one. During a rebase, the branch git is
+        rebasing, and ``None`` for a detached HEAD's rebase. Otherwise on a detached HEAD, a local
+        branch that points at ``HEAD`` (preferring a Gerrit upstream, then any upstream).
+        """
+        checked = self.branch
+        if checked:
+            return checked
+        rebasing = self.rebasing_branch()
+        if rebasing:
+            return rebasing
+        if rebase_underway(self.repository_dir):
+            # A detached HEAD's rebase: HEAD moves with it, so a branch that happens to point at
+            # it now is not the one being worked on. There is none.
+            return None
+        candidates = _branches_pointing_at_head(self.cwd)
+        if not candidates:
+            return None
+        return min(candidates, key=lambda b: _push_context_branch_rank(self.cwd, b, settings=settings))
 
 
-def clear_worktree_cache() -> None:
-    """Drop memoized :class:`Worktree` snapshots (tests and :func:`clear_git_cache`)."""
-    with _WORKTREE_LOCK:
-        _WORKTREE_BY_CWD.clear()
+def rebase_underway(repo_dir: Path | None) -> bool:
+    """``rebase_in_progress`` (core/rebase_state.py) for a git dir already known
+    (``run.worktree.repository_dir``).
+
+    ``git am`` keeps its state in ``rebase-apply`` too, marked ``applying``; see :func:`am_underway`.
+    """
+    if repo_dir is None:
+        return False
+    return (repo_dir / "rebase-merge").exists() or ((repo_dir / "rebase-apply").exists() and not am_underway(repo_dir))
+
+
+def am_underway(repo_dir: Path | None) -> bool:
+    """True while a ``git am`` is underway: the checked-out branch moves with each patch it applies."""
+    return repo_dir is not None and (repo_dir / "rebase-apply" / "applying").exists()
 
 
 def repo_toplevel(cwd: Path | str | None) -> Path | None:
@@ -96,46 +160,20 @@ def is_detached_head(cwd: Path | str | None) -> bool:
 
 def checked_out_branch_name(cwd: Path | str | None) -> str | None:
     """Named branch checked out, or ``None`` when HEAD is detached."""
-    wt = Worktree.from_cwd(cwd)
-    if wt.toplevel is None:
-        p = git("branch", "--show-current", cwd=cwd, check=False)
-        if p.returncode != 0:
-            return None
-        return (p.stdout or "").strip() or None
-    return wt.checked_out_branch
+    return Worktree.from_cwd(cwd).branch
 
 
 def git_dir(cwd: Path | str | None) -> Path | None:
     """The repository's git dir, also when HEAD is unborn; ``None`` outside a repository."""
-    wt = Worktree.from_cwd(cwd)
-    if wt.toplevel is not None:
-        return wt.git_dir
-    p = git("rev-parse", "--git-dir", cwd=cwd, check=False)
-    raw = (p.stdout or "").strip()
-    return Path(abs_cwd(cwd)) / raw if p.returncode == 0 and raw else None
+    return Worktree.from_cwd(cwd).repository_dir
 
 
-def rebase_in_progress(cwd: Path | str | None) -> bool:
-    """True while git has a rebase underway, including one stopped at a commit."""
-    repo_dir = git_dir(cwd)
-    return repo_dir is not None and any((repo_dir / d).exists() for d in ("rebase-merge", "rebase-apply"))
+LAST_PUSH_PREFIX = "lastPush/"
+"""ger's own marker branches, ``lastPush/<branch>``: bookkeeping, never a branch you work on."""
 
 
-def rebase_in_progress_branch(cwd: Path | str | None) -> str | None:
-    """Branch currently being rebased, if Git has an in-progress rebase state."""
-    repo_dir = git_dir(cwd)
-    if repo_dir is None:
-        return None
-    for state_dir in ("rebase-merge", "rebase-apply"):
-        head_name = repo_dir / state_dir / "head-name"
-        if not head_name.exists():
-            continue
-        try:
-            branch = head_name.read_text(encoding="utf-8").strip()
-        except OSError:
-            continue
-        return branch.removeprefix("refs/heads/") or None
-    return None
+def is_bookkeeping_branch(name: str) -> bool:
+    return name.startswith(LAST_PUSH_PREFIX)
 
 
 def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
@@ -145,7 +183,7 @@ def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
     names: list[str] = []
     for line in (p.stdout or "").splitlines():
         name = line.strip().lstrip("* ").strip()
-        if not name or name.startswith("("):
+        if not name or name.startswith("(") or is_bookkeeping_branch(name):
             continue
         names.append(name)
     return names
@@ -161,22 +199,8 @@ def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: 
 
 
 def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str | None:
-    """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
-
-    Uses the checked-out branch when present. During rebase, uses Git's recorded rebased
-    branch. Otherwise on detached HEAD, picks a local branch that points at ``HEAD``
-    (preferring Gerrit upstream, then any upstream).
-    """
-    checked = checked_out_branch_name(cwd)
-    if checked:
-        return checked
-    rebasing = rebase_in_progress_branch(cwd)
-    if rebasing:
-        return rebasing
-    candidates = _branches_pointing_at_head(cwd)
-    if not candidates:
-        return None
-    return min(candidates, key=lambda b: _push_context_branch_rank(cwd, b, settings=settings))
+    """The working branch of the repository at *cwd* as it is now (:meth:`Worktree.working_branch`)."""
+    return Worktree.from_cwd(cwd).working_branch(settings=settings)
 
 
 def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:
@@ -187,6 +211,21 @@ def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:
     unchanged (e.g. ``main``, ``release/1.0``).
     """
     return target.removeprefix(f"{settings.gerrit_remote}/")
+
+
+def configured_upstream_abbrev(settings: Settings, branch: str) -> str | None:
+    """Remote-tracking abbrev from ``branch.<branch>.remote`` + ``merge``, read from *settings* alone.
+
+    Returns ``origin/main`` only when ``merge`` is ``refs/heads/…`` (what
+    ``git branch --set-upstream-to`` writes). Any other ``merge`` shape returns
+    ``None`` so callers fall back to ``git rev-parse …@{upstream}``.
+    """
+    remote = settings.branch_remote(branch)
+    merge = settings.branch_merge(branch)
+    if not remote or not merge or remote == "." or not merge.startswith("refs/heads/"):
+        return None
+    branch_name = merge.removeprefix("refs/heads/")
+    return f"{remote}/{branch_name}" if branch_name else None
 
 
 def upstream_abbrev_sym(cwd: Path | str | None, branch: str | None = None) -> str | None:
@@ -206,7 +245,7 @@ def resolve_upstream_abbrev_ref(
 ) -> str | None:
     """Return ``git rev-parse --abbrev-ref`` of the upstream, or ``None``."""
     if branch and settings is not None:
-        configured = settings.branch_upstream_abbrev(branch)
+        configured = configured_upstream_abbrev(settings, branch)
         if configured:
             return configured
     sym = upstream_abbrev_sym(cwd, branch)
@@ -274,58 +313,6 @@ def ger_push_mode(
     if not parsed:
         return None
     return "gerrit" if parsed[0] == settings.gerrit_remote else "vanilla"
-
-
-# pylint: disable=too-many-locals
-def infer_nearest_remote_tracking_branch(
-    cwd: Path | str | None,
-    head: str = "HEAD",
-    *,
-    settings: Settings,
-) -> tuple[str, int, int, int] | None:
-    """Pick the remote-tracking ref with minimum symmetric divergence from *head*.
-
-    For each ref under the Gerrit remote's ``refs/remotes/<remote>/`` namespace
-    (excluding ``*/HEAD``), compute ``merge-base(head, ref)`` then
-    ``ahead = |mb..head|`` and ``behind = |mb..ref|``; minimize ``ahead + behind``,
-    then *ahead*, then abbreviated ref name for stable tie-breaks.
-
-    Returns ``(abbrev_ref, symmetric_total, ahead, behind)`` where *abbrev_ref* is suitable for
-    ``git branch --set-upstream-to`` (e.g. ``origin/main``), or ``None`` if no candidate applies.
-    """
-    remote_ref_prefix = f"refs/remotes/{settings.gerrit_remote}/"
-    p = git("for-each-ref", "--format=%(refname)", remote_ref_prefix, cwd=cwd, check=False)
-    if p.returncode != 0 or not (p.stdout or "").strip():
-        return None
-    best_key: tuple[int, int, str] | None = None
-    best_value: tuple[str, int, int, int] | None = None
-    for line in (p.stdout or "").splitlines():
-        ref = line.strip()
-        if not ref or ref.endswith("/HEAD"):
-            continue
-        mb_p = git("merge-base", head, ref, cwd=cwd, check=False)
-        if mb_p.returncode != 0:
-            continue
-        mb = mb_p.stdout.strip()
-        ahead_p = git("rev-list", "--count", f"{mb}..{head}", cwd=cwd, check=False)
-        behind_p = git("rev-list", "--count", f"{mb}..{ref}", cwd=cwd, check=False)
-        if ahead_p.returncode != 0 or behind_p.returncode != 0:
-            continue
-        try:
-            ahead = int(ahead_p.stdout.strip())
-            behind = int(behind_p.stdout.strip())
-        except ValueError:
-            continue
-        sym = ahead + behind
-        abbrev_p = git("rev-parse", "--abbrev-ref", ref, cwd=cwd, check=False)
-        if abbrev_p.returncode != 0:
-            continue
-        abbrev = abbrev_p.stdout.strip()
-        key = (sym, ahead, abbrev)
-        if best_key is None or key < best_key:
-            best_key = key
-            best_value = (abbrev, sym, ahead, behind)
-    return best_value
 
 
 def head_is_linear_on_remote_gerrit_target(

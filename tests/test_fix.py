@@ -18,7 +18,7 @@ from tests.fixtures import _cid
 def test_ger_fix_requires_staged_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (stack_repo / "a.txt").write_text("unstaged only\n", encoding="utf-8")
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "staged" in err.lower()
 
 
@@ -38,7 +38,7 @@ def test_ger_fix_prompt_declines_on_no(stack_repo: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
-    assert code == 1
+    assert code == 2
     assert "staged" in err.lower()
     # Declined: working tree still dirty, index still empty
     assert git("diff", "--quiet", cwd=stack_repo, check=False).returncode != 0
@@ -54,16 +54,6 @@ def test_ger_fix_prompt_diff_then_yes(stack_repo: Path, monkeypatch: pytest.Monk
     assert code == 0, err
     assert "see the diff" in err
     assert "diff --git" in err or "---" in err
-    subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
-    assert subj.startswith("fixup! ")
-
-
-def test_ger_fix_commit_fixup_on_ref(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    target = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
-    (stack_repo / "a.txt").write_text("patched\n", encoding="utf-8")
-    git("add", "a.txt", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, ger_fix_main, [target], monkeypatch)
-    assert code == 0, err
     subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
     assert subj.startswith("fixup! ")
 
@@ -114,7 +104,7 @@ def test_ger_fix_change_id_needs_no_gerrit_config(stack_repo: Path, monkeypatch:
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
     assert "gerrit.webUrl" not in err
 
 
@@ -130,7 +120,7 @@ def test_ger_fix_change_not_on_stack_is_an_error(stack_repo: Path, monkeypatch: 
     git("add", "c.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch, gerrit=ChangeStore(details))
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
     assert "fetch" not in err.lower()
 
 
@@ -153,14 +143,14 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
     def _gerrit_must_not_run(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("Gerrit must not be consulted for a bare integer changeish")
 
-    # Guards the shared resolver now, since that is where the client gets built.
-    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.change_resolution.HttpGerritRest", _gerrit_must_not_run)
+    # The service builds its client on first use, so this trips on any attempt to ask Gerrit.
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest", _gerrit_must_not_run)
 
     (stack_repo / "a.txt").write_text("bare int\n", encoding="utf-8")
     git("add", "a.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["42424242"], monkeypatch)
     assert code != 0
-    assert "not a valid commit" in err.lower()
+    assert "cannot resolve '42424242': no commit by that name; did you mean change:42424242?" in err
 
 
 def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,3 +209,32 @@ def test_fix_prints_the_new_commit(stack_repo: Path, monkeypatch: pytest.MonkeyP
     code, out, _err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
     assert code == 0
     assert out.strip() == git_out("log", "-1", "--format=%h %s", cwd=stack_repo)
+
+
+def test_fix_hint_folds_the_fixup_and_ger_edit_never_folds_it_behind_your_back(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``ger fix`` names ``ger rebase --autosquash``; ``ger edit`` keeps fixups even with rebase.autosquash."""
+    from gerrit_workflow_tools.cli_edit import main as edit_main
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "rebase.autosquash", "true", cwd=stack_repo)
+    monkeypatch.setenv("GIT_EDITOR", "true")
+    target = git_out("log", "-1", "--format=%s", "HEAD~2", cwd=stack_repo)
+    (stack_repo / "fixup.txt").write_text("x", encoding="utf-8")
+    git("add", "fixup.txt", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~2"], monkeypatch)
+    assert code == 0, err
+    assert err.strip().endswith("next: squash it with `ger rebase --autosquash`")
+    count = len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split())
+
+    code, _out, err = run_cli(stack_repo, edit_main, ["--drop", "HEAD~1"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == 0, err
+    assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == f"fixup! {target}"
+    assert len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split()) == count - 1
+
+    code, _out, err = run_cli(stack_repo, rebase_main, ["--autosquash"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == 0, err
+    subjects = git_out("log", "--format=%s", "@{u}..HEAD", cwd=stack_repo).splitlines()
+    assert target in subjects and not any(s.startswith("fixup!") for s in subjects)

@@ -30,6 +30,7 @@ from gerrit_workflow_tools.push_input_line import (
     KW_LAZY,
     KW_OVERWRITE,
     KW_PRIVATE,
+    KW_PUBLISH_DRAFTS,
     KW_PUSH,
     KW_R,
     KW_TOPIC,
@@ -56,6 +57,7 @@ _STYLE_BY_KIND: dict[SpanKind, str] = {
     "keyword_push": "fg:#4a7ebb bold",
     "keyword_lazy": "fg:#4a7ebb bold",
     "keyword_overwrite": "fg:#4a7ebb bold",
+    "keyword_publish_drafts": "fg:ansiblue bold",
     "equals": "fg:ansiwhite",
     "comma": "fg:ansiwhite",
     "reviewer": "fg:ansibrightgreen",
@@ -136,6 +138,7 @@ class PushOptionsCompleter(Completer):
             (KW_PUSH, "reviewers via %r= on push"),
             (KW_LAZY, "reviewers via REST only when missing"),
             (KW_OVERWRITE, "reviewers via REST on all changes"),
+            (KW_PUBLISH_DRAFTS, "publish your drafts with the push"),
         ]
         seed_names = list(self._reviewer_seeds)
         if self._catalog is not None:
@@ -208,7 +211,7 @@ def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> Format
     if catalog is not None:
         hint = catalog.default_toolbar_hint()
     else:
-        hint = "keywords: r= topic= wip private push lazy overwrite"
+        hint = "keywords: r= topic= wip private push lazy overwrite publish-drafts"
     return FormattedText([("fg:#808080", hint)])
 
 
@@ -219,7 +222,7 @@ def prompt_push_options_line(
     message: str = "Push options: ",
     cwd: Path | None = None,
     settings: Settings,
-    change_id_hint: str | None = None,
+    change_ref: str | None = None,
     web_base: str | None = None,
     project: str | None = None,
     session_strategy: str | None = None,
@@ -246,7 +249,7 @@ def prompt_push_options_line(
         cwd=cwd,
         settings=settings,
         reviewer_seeds=seed_list,
-        change_id_hint=change_id_hint,
+        change_ref=change_ref,
         on_update=_invalidate_prompt,
     )
     completion_candidates = catalog.completion_candidates()
@@ -272,16 +275,18 @@ def prompt_branch_push_options(
     branch: str | None = None,
     *,
     settings: Settings,
-    change_id_hint: str | None = None,
+    change_ref: str | None = None,
     reviewer_flag_segments: list[str] | None = None,
     session_strategy: ReviewerStrategy | None = None,
     message: str = "Push options: ",
     prefill: bool = True,
+    suffix: str = "",
 ) -> ParseResult:
     """Open the highlighted push-options input line for *branch*, history keyed by the stack's project.
 
     With *prefill* the line starts with the reviewers ``--reviewers`` / the registry /
-    ``branch.*.gerritReviewers`` give; without it, the line is empty.
+    ``branch.*.gerritReviewers`` give; without it, the line is empty. A *suffix* (such as
+    ``publish-drafts``) ends the starting line either way.
     """
     seeds = branch_reviewers(branch, settings=settings) if branch is not None else []
     web_base, project = push_options_history_identity(cwd, settings=settings)
@@ -289,12 +294,13 @@ def prompt_branch_push_options(
     if prefill and cwd is not None and branch is not None:
         reviewers = resolve_push_reviewers(cwd, branch, reviewer_flag_segments or [], settings=settings)
         default = f"r={','.join(reviewers)}" if reviewers else ""
+    default = " ".join(part for part in (default, suffix) if part)
     return prompt_push_options_line(
         reviewer_seeds=seeds,
         message=message,
         cwd=cwd,
         settings=settings,
-        change_id_hint=change_id_hint,
+        change_ref=change_ref,
         web_base=web_base,
         project=project,
         default=default,

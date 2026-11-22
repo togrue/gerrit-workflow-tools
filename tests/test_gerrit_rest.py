@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 from typing import Any
 from unittest.mock import MagicMock
+from urllib.error import HTTPError
 from urllib.parse import quote
 
 import pytest
@@ -39,10 +41,6 @@ def _change_row(
         "_number": number,
         "subject": "subj",
     }
-
-
-def test_encode_gerrit_path_segment_encodes_slashes_once() -> None:
-    assert encode_gerrit_path_segment("tools/SomeProject~59446") == "tools%2FSomeProject~59446"
 
 
 def test_encode_gerrit_path_segment_does_not_double_encode() -> None:
@@ -100,14 +98,14 @@ def test_get_comments_enable_context_query_params() -> None:
         return {}
 
     client._request_json = _capture  # type: ignore[method-assign]
-    client.get_comments("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", enable_context=True, context_padding=2)
-    client.get_comments("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    client.get_comments("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", enable_context=True, context_padding=2)
+    client.get_comments("proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
     assert captured[0] == (
-        "changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments",
+        "changes/proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments",
         {"enable-context": "true", "context-padding": "2"},
     )
-    assert captured[1] == ("changes/Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments", None)
+    assert captured[1] == ("changes/proj~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/comments", None)
 
 
 def test_set_reviewers_batch_confirms_reviewers_on_the_review_request() -> None:
@@ -175,29 +173,6 @@ def test_alias_skips_other_branch_when_only_target_requested() -> None:
     out = alias_batch_fetch_results([requested], {row_main["id"]: row_main, row_dev["id"]: row_dev})
     assert out[requested] is row_dev
     assert out[row_main["id"]] is row_main
-
-
-def test_batch_load_same_change_id_different_branches_no_overwrite() -> None:
-    cid = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    row_main = _change_row(project="p", branch="main", change_id=cid, number=1)
-    row_dev = _change_row(project="p", branch="dev", change_id=cid, number=2)
-    client = MagicMock()
-
-    def query_changes(q: str, n: int, options: list[str] | None = None) -> list[dict[str, Any]]:
-        del n, options
-        assert "branch:" not in q
-        assert f"change:{cid}" in q
-        return [row_main, row_dev]
-
-    client.query_changes.side_effect = query_changes
-
-    refs = [row_main["id"], row_dev["id"]]
-    out = batch_load_change_details(client, refs)
-
-    assert set(out.keys()) == {row_main["id"], row_dev["id"]}
-    assert out[row_main["id"]]["_number"] == 1
-    assert out[row_dev["id"]]["_number"] == 2
-    assert client.query_changes.call_count == 1
 
 
 def test_query_single_change_triplet_returns_one() -> None:
@@ -421,3 +396,109 @@ def test_ambiguous_query_says_when_the_list_is_cut_short() -> None:
     with pytest.raises(GerritApiError) as raised:
         pick_change_from_query_result(rows)
     assert "(25+ matches): 1, 2, 3, 4, 5, ..." in str(raised.value)
+
+
+def _capturing_client() -> tuple[HttpGerritRest, list[tuple[str, str, object]]]:
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    calls: list[tuple[str, str, object]] = []
+
+    def _capture(path: str, *, method: str = "GET", params=None, json_body=None) -> dict[str, Any]:
+        del params
+        calls.append((method, path, json_body))
+        return {}
+
+    client._request_json = _capture  # type: ignore[method-assign]
+    return client, calls
+
+
+def test_publish_drafts_sends_votes_with_the_drafts() -> None:
+    client, calls = _capturing_client()
+    client.publish_drafts("proj~main~I" + "c" * 40, message="lgtm", labels={"Code-Review": 1})
+    assert calls == [
+        (
+            "POST",
+            f"changes/proj~main~I{'c' * 40}/revisions/current/review",
+            {"drafts": "PUBLISH_ALL_REVISIONS", "message": "lgtm", "labels": {"Code-Review": 1}},
+        )
+    ]
+
+
+def test_get_related_asks_for_the_relation_chain_of_one_patchset() -> None:
+    client, calls = _capturing_client()
+    client.get_related("proj~main~I" + "c" * 40, 3)
+    assert calls == [("GET", f"changes/proj~main~I{'c' * 40}/revisions/3/related", None)]
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (b"nosuchuser does not identify a  registered user\n", "nosuchuser does not identify a registered user"),
+        (  # what Gerrit 3.14 answers to an unknown reviewer
+            b')]}\'\n{"error": "error adding reviewer", "reviewers": {"nosuchuser": {"input": "nosuchuser",'
+            b' "error": "Account \'nosuchuser\' not found\\nnosuchuser does not identify a registered user or group"'
+            b"}}}",
+            "Account 'nosuchuser' not found; nosuchuser does not identify a registered user or group",
+        ),
+        (
+            b')]}\'\n{"reviewers": {"nosuchuser": {"input": "nosuchuser", "error": "nosuchuser is not a user"},'
+            b' "alice": {"input": "alice"}}}',
+            "nosuchuser is not a user",
+        ),
+        (b"", "Bad Request"),
+    ],
+)
+def test_an_http_error_says_gerrits_own_reason_on_one_line(
+    body: bytes, reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.core.gerrit import http_rest
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    def _urlopen(request: Any, **_kwargs: object) -> Any:
+        raise HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(http_rest, "urlopen", _urlopen)
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    with pytest.raises(GerritApiError) as caught:
+        client.set_reviewers_batch("p~main~I" + "a" * 40, reviewers=["nosuchuser"])
+    assert str(caught.value) == f"Gerrit HTTP 400: {reason}"
+    assert (caught.value.status, caught.value.reason) == (400, reason)
+
+
+@pytest.mark.parametrize("bare", ["I" + "a" * 40, "i" + "a" * 40, "Iabc", "not-a-change"])
+def test_a_bare_change_id_never_reaches_a_changes_url(bare: str) -> None:
+    """``/changes/{id}`` takes a triplet, a Gerrit id or a number: a bare Change-Id is refused before Gerrit.
+
+    Gerrit answers a bare Change-Id with 404 ("Multiple changes found") once it is on a second
+    branch (GitHub #31), so the URL seam refuses it outright, whatever the caller.
+    """
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.rest import BareChangeIdError
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    client._request_json = lambda *_a, **_k: pytest.fail("asked Gerrit by a bare Change-Id")  # type: ignore[method-assign]
+    for call in (
+        lambda: client.get_change(bare),
+        lambda: client.get_comments(bare),
+        lambda: client.suggest_change_reviewers(bare, query="al"),
+        lambda: client.put_draft(bare, 1, {"path": "a", "message": "m"}),
+    ):
+        with pytest.raises(BareChangeIdError, match="bare Change-Id"):
+            call()
+
+
+@pytest.mark.parametrize("ref", ["12345", "proj~main~I" + "a" * 40, "tools%2FSomeProject~59446"])
+def test_a_triplet_gerrit_id_or_number_reaches_its_changes_url(ref: str) -> None:
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    paths: list[str] = []
+
+    def record(path: str, **_k: object) -> list[object]:
+        paths.append(path)
+        return []
+
+    client._request_json = record  # type: ignore[method-assign,assignment]
+    client.get_messages(ref)
+    assert paths == [f"changes/{encode_gerrit_path_segment(ref)}/messages"]

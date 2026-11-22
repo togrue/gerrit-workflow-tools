@@ -5,22 +5,27 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import socket
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.parse import urlencode, urlsplit
+from urllib.request import Request
 
 from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url, record_call
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     LOG_QUERY_OPTIONS,
     GerritApiError,
-    change_id_for_gerrit_rest_path,
+    GerritUnavailableError,
+    change_path_id,
     encode_gerrit_path_segment,
+    gerrit_error_reason,
     resolve_gerrit_web_base,
 )
+from gerrit_workflow_tools.core.http_connect import urlopen
 
 
 logger = logging.getLogger(__name__)
@@ -35,8 +40,8 @@ def set_log_gerrit_response_bodies(enabled: bool) -> None:
 
 
 def _change_path(change_id: str, suffix: str = "") -> str:
-    """``changes/<id><suffix>``, with the id in the form and encoding Gerrit expects."""
-    return f"changes/{encode_gerrit_path_segment(change_id_for_gerrit_rest_path(change_id))}{suffix}"
+    """``changes/<id><suffix>`` for a triplet, Gerrit id or number; a bare Change-Id raises (:func:`change_path_id`)."""
+    return f"changes/{encode_gerrit_path_segment(change_path_id(change_id))}{suffix}"
 
 
 def _draft_path(change_id: str, revision: int | str, draft_id: str | None) -> str:
@@ -57,6 +62,27 @@ def _strip_magic_json_prefix(raw: str) -> str:
         if nl != -1:
             return s[nl + 1 :]
     return raw
+
+
+def _error_body(error: HTTPError) -> str:
+    try:
+        return error.read().decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return ""
+
+
+def _why_unreachable(error: OSError) -> str:
+    """A few words on why a connection failed, without the platform's localized prose."""
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ConnectionRefusedError):
+        return "connection refused"
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "timed out"
+    if isinstance(reason, socket.gaierror):
+        return "unknown host"
+    if isinstance(reason, OSError) and reason.strerror:
+        return reason.strerror
+    return str(reason)
 
 
 @dataclass(frozen=True)
@@ -92,6 +118,11 @@ class HttpGerritRest:
         """
         self.web_base = web_base.rstrip("/")
         self.auth = auth
+
+    @property
+    def host(self) -> str:
+        """``host[:port]`` of :attr:`web_base`, which is how a failure names the server."""
+        return urlsplit(self.web_base).netloc or self.web_base
 
     @classmethod
     def from_settings(cls, settings: Settings, *, web_base: str | None = None) -> HttpGerritRest:
@@ -143,12 +174,17 @@ class HttpGerritRest:
             with urlopen(req, timeout=120) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
         except HTTPError as e:
-            raise GerritApiError(
-                f"Gerrit HTTP {e.code} for {url}: {e.reason}",
-                status=e.code,
-            ) from e
-        except URLError as e:
-            raise GerritApiError(f"Gerrit request failed: {e.reason!r}") from e
+            if e.code == 401:
+                raise GerritUnavailableError(
+                    f"Gerrit at {self.host} rejected the credentials (HTTP 401); "
+                    "check gerrit.user and gerrit.token, or run `ger setup`",
+                    status=e.code,
+                ) from e
+            reason = gerrit_error_reason(_error_body(e), str(e.reason))
+            logger.info("%s %s -> HTTP %s: %s", method, url, e.code, reason)
+            raise GerritApiError(f"Gerrit HTTP {e.code}: {reason}", status=e.code, reason=reason) from e
+        except (URLError, OSError) as e:
+            raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({_why_unreachable(e)})") from e
         finally:
             record_call("gerrit", label, time.perf_counter() - t0)
 
@@ -275,16 +311,21 @@ class HttpGerritRest:
         self._request_json(_change_path(change_id, "/topic"), method="PUT", json_body={"topic": topic or ""})
 
     def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
-        """Mark *change_id* work-in-progress when *on*, otherwise ready for review."""
+        """Mark *change_id* work-in-progress when *on*, otherwise ready for review.
+
+        Gerrit answers ``200 OK`` with a bare JSON string or no body, not an object.
+        """
         path = _change_path(change_id, "/wip" if on else "/ready")
-        return self._request_dict("set WIP", path, method="POST", json_body={})
+        answer = self._request_json(path, method="POST", json_body={})
+        return answer if isinstance(answer, dict) else {}
 
     def set_private(self, change_id: str, on: bool) -> dict[str, Any]:
-        """Mark *change_id* private when *on*, otherwise remove the private flag."""
+        """Mark *change_id* private when *on*, otherwise remove the private flag (answers as for WIP)."""
         path = _change_path(change_id, "/private")
-        if on:
-            return self._request_dict("set private", path, method="POST", json_body={})
-        return self._request_dict("set private", path, method="DELETE")
+        answer = (
+            self._request_json(path, method="POST", json_body={}) if on else self._request_json(path, method="DELETE")
+        )
+        return answer if isinstance(answer, dict) else {}
 
     def get_comments(
         self,
@@ -315,13 +356,30 @@ class HttpGerritRest:
         """DELETE ``…/revisions/<rev>/drafts/<id>``."""
         self._request_json(_draft_path(change_id, revision, draft_id), method="DELETE")
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
-        """POST a review that publishes the caller's drafts on all revisions, as the web UI's Send."""
-        review: dict[str, Any] = {"drafts": "PUBLISH_ALL_REVISIONS"}
+    def publish_drafts(
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """POST a review, as the web UI's Send: every draft (*draft_ids* ``None``), only those, or none."""
+        # Gerrit honours draft_ids_to_publish only with a publishing mode: with KEEP it publishes
+        # nothing at all (checked against 3.14). So: all, the named ones, or none.
+        review: dict[str, Any] = {"drafts": "PUBLISH_ALL_REVISIONS" if draft_ids is None or draft_ids else "KEEP"}
+        if draft_ids:
+            review["draft_ids_to_publish"] = list(draft_ids)
         if message:
             review["message"] = message
+        if labels:
+            review.update(labels=dict(labels))
         path = _change_path(change_id, "/revisions/current/review")
         return self._request_dict("publish drafts", path, method="POST", json_body=review)
+
+    def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
+        """GET ``changes/<id>/revisions/<rev>/related``."""
+        return self._request_dict("related changes", _change_path(change_id, f"/revisions/{revision}/related"))
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """GET ``changes/<id>/revisions/current/checks`` (Checks plugin) and return raw rows.

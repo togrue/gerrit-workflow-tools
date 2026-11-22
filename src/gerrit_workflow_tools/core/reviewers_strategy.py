@@ -19,7 +19,7 @@ clear_reviewers_strategy_cache = _REGISTRY.clear_cache
 
 
 def default_reviewers_via_registry(
-    cwd: Path | str | None,
+    root: Path | None,
     *,
     project: str,
     branch: str,
@@ -33,4 +33,4 @@ def default_reviewers_via_registry(
         raw = strategy(branch=branch, commits=commits, settings=settings)
         return [str(name).strip() for name in raw if str(name).strip()]
 
-    return _REGISTRY.run(cwd, project, invoke=_invoke, builtin=lambda: None, settings=settings, web_base=web_base)
+    return _REGISTRY.run(root, project, invoke=_invoke, builtin=lambda: None, settings=settings, web_base=web_base)

@@ -13,10 +13,11 @@ When a callable raises at runtime, the next tier is tried, then built-in.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import logging
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -24,7 +25,6 @@ from typing import Any, TypeVar
 
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
-from gerrit_workflow_tools.core.git_state import repo_toplevel
 
 
 logger = logging.getLogger(__name__)
@@ -33,13 +33,33 @@ T = TypeVar("T")
 
 _MODULE_CACHE: dict[str, ModuleType | None] = {}
 
+SOURCE_DIGEST = "__ger_source_digest__"
+"""Global a loaded ``registry.py``, and each helper module it imports, finds its directory's
+:func:`source_digest` under, taken as it loaded."""
+
+
+def source_digest(paths: Iterable[Path]) -> str:
+    """One digest over the names and contents of *paths*, in sorted order; unreadable files count by name."""
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        try:
+            content = path.read_bytes()
+        except OSError:
+            content = b""
+        digest.update(path.name.encode("utf-8") + b"\0" + content + b"\0")
+    return digest.hexdigest()
+
 
 class RegistryLoadError(ConfigError):
     """``registry.py`` exists but could not be imported."""
 
 
-def resolve_scripts_root(cwd: Path | str | None, scripts_dir: str) -> Path | None:
-    """Resolve ``gerrit.scriptsDir`` to an absolute path (may not exist yet)."""
+def resolve_scripts_root(root: Path | None, scripts_dir: str) -> Path | None:
+    """Resolve ``gerrit.scriptsDir`` to an absolute path (may not exist yet).
+
+    A relative directory is relative to *root*, the repository's top level; there is none
+    outside a work tree.
+    """
 
     raw = scripts_dir.strip()
     if not raw:
@@ -47,16 +67,15 @@ def resolve_scripts_root(cwd: Path | str | None, scripts_dir: str) -> Path | Non
     path = Path(raw).expanduser()
     if path.is_absolute():
         return path
-    top = repo_toplevel(cwd)
-    if top is None:
+    if root is None:
         return None
-    return (top / path).resolve()
+    return (root / path).resolve()
 
 
-def local_domain_dir(cwd: Path | str | None, scripts_dir: str, domain: str) -> Path | None:
+def local_domain_dir(root: Path | None, scripts_dir: str, domain: str) -> Path | None:
     """Return ``<scriptsRoot>/<domain>`` when ``registry.py`` exists there."""
 
-    root = resolve_scripts_root(cwd, scripts_dir)
+    root = resolve_scripts_root(root, scripts_dir)
     if root is None:
         return None
     path = root / domain
@@ -125,6 +144,10 @@ def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | N
         _MODULE_CACHE[cache_key] = None
         raise RegistryLoadError(f"failed to load strategy registry {registry}")
     module = importlib.util.module_from_spec(spec)
+    # Taken as it loads, helpers beside it included: what describes the code this process runs.
+    digest = source_digest(p for p in domain_dir.rglob("*.py") if "__pycache__" not in p.parts)
+    setattr(module, SOURCE_DIGEST, digest)
+    already_loaded = set(sys.modules)
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
@@ -132,6 +155,11 @@ def _load_registry_module(domain_dir: Path, package_name: str) -> ModuleType | N
         sys.modules.pop(module_name, None)
         _MODULE_CACHE[cache_key] = None
         raise RegistryLoadError(f"failed to load strategy registry {registry}: {exc}") from exc
+    # A helper the registry imports carries the digest too: code defined there finds it in its globals.
+    for name in set(sys.modules) - already_loaded:
+        helper = sys.modules[name]
+        if name.startswith(f"{package_name}.") and SOURCE_DIGEST not in vars(helper):
+            setattr(helper, SOURCE_DIGEST, digest)
     _MODULE_CACHE[cache_key] = module
     return module
 
@@ -163,7 +191,7 @@ def _callable_from_module(
 
 
 def resolve_tier_callables(
-    cwd: Path | str | None,
+    root: Path | None,
     project: str,
     *,
     domain: str,
@@ -175,7 +203,7 @@ def resolve_tier_callables(
 ) -> tuple[Callable[..., Any] | None, Callable[..., Any] | None]:
     """Return ``(local, global)`` callables for *project* (each may be ``None``)."""
 
-    snap = settings if settings is not None else Settings.from_cwd(cwd)
+    snap = settings if settings is not None else Settings.from_cwd(root)
     host_base = web_base if web_base is not None else snap.gerrit_web_url
 
     def _tier_callable(domain_dir: Path | None) -> Callable[..., Any] | None:
@@ -185,13 +213,13 @@ def resolve_tier_callables(
         return _callable_from_module(module, project, strategies_attr=strategies_attr, getter_attr=getter_attr)
 
     return (
-        _tier_callable(local_domain_dir(cwd, snap.scripts_dir, domain)),
+        _tier_callable(local_domain_dir(root, snap.scripts_dir, domain)),
         _tier_callable(global_domain_dir(host_base, domain)),
     )
 
 
 def resolve_registry_callable(
-    cwd: Path | str | None,
+    root: Path | None,
     project: str,
     *,
     domain: str,
@@ -204,7 +232,7 @@ def resolve_registry_callable(
     """Return the first matching callable: local, then global, else ``None``."""
 
     local_callable, global_callable = resolve_tier_callables(
-        cwd,
+        root,
         project,
         domain=domain,
         package_name=package_name,
@@ -254,7 +282,7 @@ class ExtensionRegistry:
 
     def run(
         self,
-        cwd: Path | str | None,
+        root: Path | None,
         project: str,
         *,
         invoke: Callable[[Callable[..., Any]], T],
@@ -264,7 +292,7 @@ class ExtensionRegistry:
     ) -> T:
         """*invoke* the local, then the global strategy for *project*, else *builtin*."""
         tiers = resolve_tier_callables(
-            cwd,
+            root,
             project,
             domain=self.domain,
             package_name=self.package_name,
@@ -274,6 +302,20 @@ class ExtensionRegistry:
             getter_attr=self.getter_attr,
         )
         return run_registry_callables(tiers, invoke=invoke, builtin=builtin, label=self.label, project=project)
+
+    def tier_modules(
+        self,
+        root: Path | None,
+        *,
+        settings: Settings | None = None,
+        web_base: str | None = None,
+    ) -> list[ModuleType]:
+        """The loaded ``registry.py`` modules, local tier first — for attributes not keyed by project."""
+        snap = settings if settings is not None else Settings.from_cwd(root)
+        host_base = web_base if web_base is not None else snap.gerrit_web_url
+        dirs = (local_domain_dir(root, snap.scripts_dir, self.domain), global_domain_dir(host_base, self.domain))
+        modules = [_load_registry_module(d, self.package_name) for d in dirs if d is not None]
+        return [m for m in modules if m is not None]
 
     def clear_cache(self) -> None:
         """Drop this registry's loaded modules (tests)."""

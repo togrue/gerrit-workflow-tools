@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_IMAGE = "gerritcodereview/gerrit:3.14.0-rc5-ubuntu24"
 CONTAINER_NAME = "gerrit-workflow-tools-integration"
 
+# Gerrit experiments the test server runs with, set in its gerrit.config before it starts.
+# ``allow_fix_suggestions_in_comments`` lets a human comment carry ``fix_suggestions``
+# (3.14 refuses them otherwise: "feature flag prohibits setting fixSuggestions").
+EXPERIMENTS = ("GerritBackendFeature__allow_fix_suggestions_in_comments",)
+_SITE_CONFIG = "/var/gerrit/etc/gerrit.config"
+
 
 @dataclass(frozen=True)
 class PublishedPorts:
@@ -65,6 +71,35 @@ def _port_bindings(host_http_port: int, host_ssh_port: int) -> dict[str, tuple[s
         "8080/tcp": ("0.0.0.0", host_http_port),
         "29418/tcp": ("0.0.0.0", host_ssh_port),
     }
+
+
+def _configured_entrypoint(client: object, image: str) -> list[str]:
+    """The image's own entrypoint and command, run after *EXPERIMENTS* are written to gerrit.config.
+
+    The official image's entrypoint sets ``gerrit.canonicalWebUrl`` with ``git config`` on every
+    start; this does the same for ``experiments.enabled`` first, then ``exec``s the original.
+    """
+    images = client.images  # type: ignore[attr-defined]
+    try:
+        found = images.get(image)
+    except Exception:  # pylint: disable=broad-exception-caught
+        found = images.pull(image)
+    config = found.attrs.get("Config") or {}
+    original = [*(config.get("Entrypoint") or []), *(config.get("Cmd") or [])]
+    script = f"git config -f {_SITE_CONFIG} --unset-all experiments.enabled; " + "".join(
+        f"git config -f {_SITE_CONFIG} --add experiments.enabled {name}; " for name in EXPERIMENTS
+    )
+    return ["/bin/sh", "-c", f'{script}exec "$@"', "sh", *original]
+
+
+def _has_experiments(container: object) -> bool:
+    """Whether *container* was started by :func:`_configured_entrypoint` with today's *EXPERIMENTS*."""
+    try:
+        c: Container = container  # type: ignore[assignment]
+        entrypoint = " ".join((c.attrs.get("Config") or {}).get("Entrypoint") or [])
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+    return all(name in entrypoint for name in EXPERIMENTS)
 
 
 def wait_http_ready(http_url: str, *, timeout_s: float = 240.0, poll_s: float = 2.0) -> None:
@@ -142,7 +177,11 @@ def start_gerrit_container(
         if existing.status != "running":
             existing.start()
         actual = _container_published_ports(existing)
-        if actual is not None and (actual.http != host_http_port or actual.ssh != host_ssh_port):
+        if not _has_experiments(existing):
+            logger.warning("Container %s predates the experiments %s; recreating", CONTAINER_NAME, EXPERIMENTS)
+            stop_container(existing, remove=True)
+            existing = None
+        elif actual is not None and (actual.http != host_http_port or actual.ssh != host_ssh_port):
             logger.warning(
                 "Container %s publishes HTTP %s and SSH %s but local.env requests %s and %s; recreating",
                 CONTAINER_NAME,
@@ -186,6 +225,7 @@ def start_gerrit_container(
             detach=True,
             name=CONTAINER_NAME,
             hostname="gerrit",
+            entrypoint=_configured_entrypoint(client, image),
             ports=_port_bindings(host_http_port, host_ssh_port),
             environment={
                 "CANONICAL_WEB_URL": canonical,

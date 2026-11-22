@@ -20,6 +20,7 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 | [Reading-ger-log.md](Reading-ger-log.md) | Columns, tokens, attention hints, summary line |
 | [Configuration.md](Configuration.md) | All `gerrit.*` and `branch.*` git config keys |
 | [Completion.md](Completion.md) | Bash tab completion install |
+| [Server-load.md](Server-load.md) | What each command asks of the Gerrit server, and how to read that off the server's log |
 
 ---
 
@@ -27,12 +28,16 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 
 | Document | Role |
 |----------|------|
+| [flows.md](flows.md) | The review, rework and local-review workflows step by step: CLI command, VS Code command, tests, gaps |
 | [SPEC.md](SPEC.md) | **Index** — command registry, conventions (source of truth for CLI behavior) |
 | [architecture.md](architecture.md) | System design, shared concepts, module map |
 | [../CONTEXT.md](../CONTEXT.md) | Domain vocabulary — binding terms for code, docs and design discussion |
 | [adr/](adr/) | Architecture decision records — decisions and, more importantly, why the obvious alternative was rejected |
 | [spec/exit-codes.md](spec/exit-codes.md) | Exit-code contract shared by every command |
 | [spec/commands/](spec/commands/) | One spec per shipped `ger` command |
+| [spec/commands/serve.md](spec/commands/serve.md) | `ger serve`: the local HTTP service behind the VS Code extension in `vscode/` |
+| [spec/ci-content.md](spec/ci-content.md) | Design: **CI content** behind **CI links** (`ger ci`, opt-in `ger show --ci`) |
+| [gerrit-ci-strategies.md](gerrit-ci-strategies.md) | Custom **CI strategies** / **CI content providers**; copyable samples in [`example/hooks/`](../example/hooks/) |
 
 When docs and code disagree, fix the code or update the spec — see [SPEC.md](SPEC.md).
 
@@ -46,6 +51,7 @@ Read [adr/](adr/) before "simplifying" something that looks odd — that is what
 |-------|----------|
 | Install & unit tests | [../README.md](../README.md) (Development) |
 | Integration tests (Docker Gerrit) | [../tests/integration/README.md](../tests/integration/README.md) |
+| Which tests are redundant, and why | [test-redundancy.md](test-redundancy.md) |
 | Coding agents | [../AGENTS.md](../AGENTS.md) |
 
 ---
@@ -60,9 +66,18 @@ Every term (*local stack*, *ready boundary*, *target branch*, *triplet*, …) is
 
 ```bash
 ger log                  # stack vs Gerrit — see Reading-ger-log.md
-ger inbox                # chains waiting on your review
+ger inbox                # chains waiting on your review, and your own (this project; --all)
 ger show <ref>           # one change, full comments
+ger ci                   # why CI failed: findings from the CI logs
 ger push                 # push ready prefix
+ger checkout <change>    # work on a change from Gerrit (or update your copy of it)
+
+ger review <change>      # check out someone's change in the review worktree
+ger comment app.py:42 -m "..."   # comment on a line (a draft until you send it)
+ger review --vote CR+1   # send your comments with the vote
+ger review --done        # leave the review
 ```
+
+Every step of the review, rework and local-review flows: [flows.md](flows.md).
 
 Command details: [SPEC.md](SPEC.md) → [spec/commands/](spec/commands/).

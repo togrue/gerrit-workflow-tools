@@ -53,13 +53,16 @@ def ensure_utf8_stdio() -> None:
     On Windows (and some other locales), ``ger log > file`` attaches a legacy
     encoding such as cp1252. Combining strikethrough and other CLI glyphs then
     raise ``UnicodeEncodeError``. Reconfigure when the stream supports it.
+
+    Lines end in a bare newline on every platform: piped into ``grep``, ``cut`` or ``xargs``
+    (Git Bash on Windows), the carriage return of text-mode translation would land in the values.
     """
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if not callable(reconfigure):
             continue
         with contextlib.suppress(OSError, ValueError, AttributeError):
-            reconfigure(encoding="utf-8")
+            reconfigure(encoding="utf-8", newline="\n")
 
 
 def set_color_mode(enabled: bool) -> None:
@@ -74,15 +77,17 @@ def is_color_enabled() -> bool:
 
 
 def init_color_mode(*, color: str = "auto") -> bool:
-    """Initialize global color mode from ``--color`` and output TTY capability."""
-    out = sys.stdout
-    tty = bool(getattr(out, "isatty", lambda: False)())
+    """Initialize global color mode (stdout and stderr) from ``--color``, ``NO_COLOR`` and the TTY.
+
+    ``auto`` colours a terminal unless ``NO_COLOR`` is set to anything non-empty (no-color.org);
+    ``always`` and ``never`` win over both.
+    """
     if color == "always":
         enabled = True
     elif color == "never":
         enabled = False
     else:
-        enabled = tty
+        enabled = _stdout_is_tty() and not os.environ.get("NO_COLOR")
     set_color_mode(enabled)
     return enabled
 

@@ -8,13 +8,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.change_id import ChangeIdRow, first_change_id_boundary
+from gerrit_workflow_tools.core.changeish import not_in_stack_message
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, git_out
+from gerrit_workflow_tools.core.gerrit.change_resolution import local_commit_sha
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
     find_ready_boundary_via_registry,
 )
-from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
+from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, Commit, get_stack_snapshot, is_unsquashed_fixup
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 if TYPE_CHECKING:
@@ -39,8 +43,8 @@ def change_id_boundary_for_commits(commits: list[Commit]) -> BoundaryResult:
     """Ready boundary at the first missing/malformed/duplicate Change-Id, if any."""
     rows = [ChangeIdRow(sha=c.sha, short_sha=c.short_sha, change_id=c.change_id) for c in commits]
     block_index, reason = first_change_id_boundary(rows, strict=True)
-    if block_index is not None and commits[block_index].subject.startswith(("fixup! ", "squash! ")):
-        reason = "it is an unsquashed fixup commit; squash it with `git rebase -i --autosquash`"
+    if block_index is not None and is_unsquashed_fixup(commits[block_index].subject):
+        reason = f"it is an unsquashed fixup commit; {UNSQUASHED_FIXUP_ADVICE}"
     return BoundaryResult(block_index=block_index, reason=reason)
 
 
@@ -70,6 +74,7 @@ def _ready_result_from_block(
     boundary_reason: str,
     until_sha: str | None,
     until: str | None,
+    all_lifts_boundary: bool = False,
 ) -> ReadyResult:
     """Build :class:`ReadyResult` from a composed block index (and optional ``--until``)."""
     if block_idx is not None and (block_idx < 0 or block_idx >= len(shas)):
@@ -108,8 +113,10 @@ def _ready_result_from_block(
     if until_sha:
         uidx = shas.index(until_sha)
         if uidx >= block_idx:
-            raise GitError(
-                f"revision {until!r} is at or after the ready boundary; choose a commit before the blocking commit."
+            way_out = ", or pass --all to push past it" if all_lifts_boundary else ""
+            raise UsageError(
+                f"revision {until!r} is at or after the ready boundary ({shas[block_idx][:7]}: {boundary_reason}); "
+                f"push an earlier commit{way_out}"
             )
         tip_idx = uidx
         tip = until_sha
@@ -133,6 +140,7 @@ def compute_ready(
     head: str = "HEAD",
     all_commits: bool = False,
     until: str | None = None,
+    until_sha: str | None = None,
     first_parent: bool = True,
     stop_pattern: str,
     project: str = "",
@@ -143,7 +151,8 @@ def compute_ready(
     """Compute how many commits are safe to push before a ready boundary (or entire stack with ``--all``).
 
     Change-Id errors always tighten the tip (including with ``--all``). Stop pattern / ready
-    strategies are ignored when ``all_commits`` is true.
+    strategies are ignored when ``all_commits`` is true. *until* is the tip as the user named it;
+    *until_sha* is that commit when the caller resolved it already (``ger push`` takes a changeish).
     """
     snap = get_stack_snapshot(cwd, branch, head=head, first_parent=first_parent, settings=settings)
     target_tip = snap.upstream_tip
@@ -158,17 +167,16 @@ def compute_ready(
         project,
     )
 
-    until_sha: str | None = None
     if until:
-        until_sha = git_out("rev-parse", until.strip(), cwd=cwd)
+        until_sha = until_sha or local_commit_sha(cwd, until.strip())
         if until_sha not in shas:
-            raise GitError(f"commit {until} is not in the current stack")
+            raise ChangeResolutionError(not_in_stack_message(until.strip(), until_sha))
 
     if all_commits:
         strategy = BoundaryResult(block_index=None, reason="ignored (--all)")
     else:
         strategy = find_ready_boundary_via_registry(
-            cwd,
+            repo_toplevel(cwd),
             project=project,
             commits=ready_rows,
             stop_pattern=stop_pattern,
@@ -189,4 +197,5 @@ def compute_ready(
         boundary_reason=boundary_reason,
         until_sha=until_sha,
         until=until,
+        all_lifts_boundary=boundary is strategy and strategy.block_index is not None,
     )

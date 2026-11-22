@@ -1,8 +1,8 @@
-# `ger reply` *(planned)*
+# `ger reply`
 
 | | |
 |--|--|
-| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard), `ger reply --publish` and publishing with `ger push` are implemented; the guided reply is planned (see [Delivery](#delivery)) |
+| **Status** | **Partial**: `ger reply CHAIN` (write, update, discard), `ger reply --publish` and publishing with `ger push` are implemented. Planned (see [Delivery](#delivery)): the guided reply, the `unpublished-drafts` attention reason, and `ger edit` listing the open chains at each stop |
 | **Module** | `cli_reply.py`; draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
 | **Requires** | `gerrit.webUrl`, credentials |
 
@@ -22,27 +22,24 @@ ger reply    answer the comments on the commit you're on
 ger push     publish the fixes and the answers together
 ```
 
-A human:
+What works today, for a human or an agent (an agent runs with `GER_NO_PUBLISH=1` in its environment):
 
 ```text
-ger edit                    -> stops at a commit and lists its open chains
-  ...fix the code, git commit --amend...
-ger reply                   -> per chain: [d]one, [r]eply in $EDITOR, [s]kip
-ger edit -n                 -> next commit
-ger push                    -> "Push and publish 3 drafts? [Y/n]"
-```
-
-An agent, with `GER_NO_PUBLISH=1` in its environment:
-
-```text
-ger edit --json             -> the stop, with its open chains, ids and code context
+ger edit --first-attention-commit  -> rebase stops at the oldest commit that needs work
+ger show --json                    -> its open chains, with their root ids (--ai for Markdown)
   ...fix the code, run the tests, git commit --amend...
-ger reply <id> --done       -> draft "Done", resolving the chain
-ger reply <id> -F -         -> draft a longer answer from stdin; the chain stays open
-ger edit -n --json          -> next commit, until exit 10 (nothing left)
+ger reply <id> --done              -> draft "Done", resolving the chain
+ger reply <id> -F -                -> draft a longer answer from stdin; the chain stays open
+ger edit -n                        -> continue the rebase, stop at the next commit;
+                                      exit 7 when none is left
+ger push                           -> push options line "publish-drafts": Enter pushes and publishes
 ```
 
-The agent stops there and reports. The human reads the drafts in `ger show --stack` and runs `ger push`.
+Planned ([Delivery](#delivery) steps 7 and 8): `ger edit` lists the open chains at each stop
+(`--json` for agents), and a bare `ger reply` walks them with `[d]one`, `[r]eply in $EDITOR`,
+`[s]kip`.
+
+An agent stops before the push and reports. The human reads the drafts in `ger show --stack` and runs `ger push`.
 
 Publishing with the push matters. A "Done" that arrives before the patchset that does it sends the reviewer to old code. Gerrit's `publish-comments` push option publishes the drafts in the same update, so there is one notification and the fix is already there when the reviewer looks.
 
@@ -51,13 +48,15 @@ Publishing with the push matters. A "Done" that arrives before the patchset that
 ## Usage
 
 ```
-ger reply                                      (TTY) step through the open chains of HEAD's change
-ger reply [--change CHANGEISH] CHAIN (-m MSG ... | -F FILE | --done) [--resolve | --unresolve] [--json]
-ger reply [--change CHANGEISH] CHAIN --discard [--json]
-ger reply --publish [REV ... | --stack] [-m MSG] [--dry-run] [-y] [--json]
+ger reply                                      (TTY, planned) step through the open chains of HEAD's change
+ger reply [--change CHANGEISH] CHAIN (-m MSG ... | -F FILE | --done) [--resolve | --unresolve] [--json | --ai]
+ger reply [--change CHANGEISH] CHAIN --discard [--json | --ai]
+ger reply --publish [REV ...] [--only ID ... | --keep-drafts] [--vote LABEL=N ...] [-m MSG] [--dry-run] [-y] [--json | --ai]
 ```
 
 ### Guided reply
+
+*Planned ([Delivery](#delivery) step 8). Today a bare `ger reply` exits `2`.*
 
 `ger reply` with no `CHAIN` on a TTY walks the open chains of HEAD's change, the commit an edit stop leaves you on. For each one it prints the chain and asks `[d]one  [r]eply  [s]kip  [q]uit`. *Reply* opens your editor (the same editor lookup git uses) with the chain quoted as `#` lines, which are dropped from the message, as in `git commit`. A chain that already has your draft shows it and offers `[k]eep` in place of *skip*. Without a TTY and without `CHAIN`, it exits `2`.
 
@@ -98,15 +97,22 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 ### Publishing
 
-`ger reply --publish` publishes **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with no `REV`. Changes without drafts are skipped and listed as such.
+`ger reply --publish` sends your review: by default **all your drafts on each target change**, on every patchset. This matches the web UI's *Send*: it includes drafts you wrote in the browser, not only those `ger reply` made. The targets are the `REV` changeishes, or the whole local stack with no `REV`. Changes without drafts are skipped and listed as such.
+
+- `--only ID` (repeatable) publishes just those drafts: the draft's own id, or any comment id of its chain (the `CHAIN` that `ger reply` answered); your other drafts stay drafts. An id that is none of your drafts on the targets exits `3` before anything is sent. This is how an agent sends its own answers without publishing a draft the human keeps for later.
+- `--keep-drafts` publishes no draft at all: only the `-m` message and `--vote` votes go out, with every draft kept. What an agent uses for a change-level note on a change where the human has drafts pending.
+- `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`) votes with the review.
+- `-m MSG` is the change message. On a change you **named** as `REV`, `-m` or `--vote` alone posts even with no draft to publish: a change-level note or a vote, with every draft kept (Gerrit's `drafts: KEEP`). With no `REV` it never goes to every change of the stack: only changes that have drafts to publish get it.
+
+`ger review --vote` is the reviewer-flow spelling of the same review POST (`GerritComments.publish_drafts`): it publishes every draft on the change under review.
 
 | Option | Effect |
 |--------|--------|
 | `-m MSG` | Top-level change message posted with the drafts. It is posted only on changes that have drafts |
 | `--dry-run` | List what would be published and exit `0`. Allowed under the publish guard |
-| `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json`, which never prompts |
+| `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json` or `--ai`, which never prompt |
 
-Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s) on M change(s)? [y/N]` (default **no**: this one sends mail). Declining, or a run without `-y` that cannot prompt, publishes nothing and exits `1`. Each published change prints `published N draft(s) on <subject>`.
+Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
 
 Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
 
@@ -117,13 +123,13 @@ Add retry helper  https://host/c/proj/+/123
   src/retry.py:80: "The table is 8 entries..."
 ```
 
-With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "status": ...}]}`, where `status` is `published`, `dry-run`, `no-drafts` or `failed` (then with `error`).
+With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "labels": {...}, "status": ...}]}`, where `status` is `published`, `dry-run`, `no-drafts` or `failed` (then with `error`).
 
 ### Publishing with `ger push`
 
 `ger push` looks for your drafts on the changes it is about to push: one `has:draft` query for those change numbers. When there are any:
 
-- **On a TTY**, the status line gains `Drafts keep N` and the prompt becomes `Push and publish N draft(s)? [Y/n/p/r]`. Yes adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Answering `p` pushes without publishing.
+- **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `gerrit.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N draft(s)? [Y/n/p/r]`, and `p` pushes without publishing.
 - **With `-y`**, drafts are published only when `--publish-comments` is also given. Scripts and agents never publish by accident.
 - Drafts on a change the push does **not** update (behind the ready boundary, or with nothing new) stay drafts. The preview lists them by change.
 
@@ -163,9 +169,11 @@ Drafts are shown inside their chain, so the human review step reads them where t
 
 ## Changes to attention (`ger log`, the attention walk)
 
+*Planned ([Delivery](#delivery) step 6). Today a chain answered by a draft still counts as `unresolved-comments`.*
+
 When every unresolved chain on a commit has a draft that resolves it, the comments token (`com`) turns **blue** in `ger log` and `ger show`, and that commit's reason `unresolved-comments` becomes `unpublished-drafts`:
 
-- `ger log` still exits `1`. Something still waits on you: publishing.
+- `ger log` still flags the commit. Something still waits on you: publishing.
 - **Edit attention** does not count `unpublished-drafts`. The code is fixed and nothing is left to edit, so `ger edit --first-attention-commit` and `ger show --first-attention` move past the commit. Without this, the walk would keep landing on chains the author has already answered.
 - A chain that still has no resolving draft keeps `unresolved-comments`, so a commit with both reasons stays in the walk.
 
@@ -178,7 +186,7 @@ This follows the same rule as a locally rewritten commit (`v?`, issue #39): ger 
 Drafts live in Gerrit's All-Users repository, not in the change's NoteDb meta ref. So `meta_rev_id` does not move when a draft changes, and the follow-up cache key ([ADR-0007](../../adr/0007-follow-up-cache-key-is-note-db-meta.md)) cannot vouch for a cached draft. **Drafts are therefore never cached.** They are fetched live, as cheaply as possible:
 
 - **`ger show`:** one drafts GET per shown change.
-- **`ger log`:** one `has:draft` query restricted to the stack's change numbers. Then a drafts GET only for the changes it returns. A stack with no drafts costs one query.
+- **`ger push`** (and, with Delivery step 6, `ger log`): one `has:draft` query restricted to the stack's change numbers. Then a drafts GET only for the changes it returns. A stack with no drafts costs one query.
 - **Offline / cache-only:** drafts are not fetched. `ger log` and `ger show` print `drafts not checked (offline)` and keep `unresolved-comments`. They do not guess.
 
 Writing or discarding a draft needs no invalidation: drafts are never cached, and the published comments did not change. A publish does change them, so it invalidates the change's cached entries with `invalidate_changes`, as `set_reviewers` does today. The meta ref moves anyway, but invalidating makes the next `ger show` refetch straight away, inside the 10-second trust window too.
@@ -212,6 +220,8 @@ draft reply on src/app.py:42 (change 123, patchset 3) -> resolves
   https://host/c/proj/+/123/comment/a1b2c3d4_5e6f7a8b/
 updated draft on src/app.py:42 (replaced: "Will do, after the refactor")
 ```
+
+**`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 
 **JSON** (`--json`): one object per action.
 
@@ -250,8 +260,7 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 
 ## Out of scope
 
-- **Comments on commits that are not on Gerrit.** A Gerrit draft sits on a patchset, so it cannot exist before the first push. Push the commit as WIP instead: reviewers are not notified about WIP changes, and once the change exists, drafts and `ger reply` work as usual. A local comment store would need its own line anchoring, its own drift handling, and a way to turn local notes into Gerrit drafts at push time: a second comment system beside Gerrit's.
-- **Starting a new chain** (commenting on a line nobody has commented on). That is reviewing, not answering. It needs a file/line grammar and diff awareness this spec does not add.
+- **Comments on commits that are not on Gerrit**, and **starting a new chain**. Both are [`ger comment`](comment.md): local drafts and notes, and new chains on a line or range.
 - **Votes.** No `--label`. The author loop does not need them, and a vote is not a draft: it publishes at once.
 - **Batch input** (many replies from one JSON document). One call per chain is fine for agents: each is one PUT, and the chain lookup is served from the cache.
 - **Fix suggestions** (Gerrit's suggested-edit payload on a comment).
@@ -282,10 +291,3 @@ Built in this order. Each step works on its own.
 | 7 | `ger edit` lists the open chains on every stop, `--json` for agents | |
 | 8 | Guided `ger reply` | |
 | 9 | Agent skill | |
-
-## Docs to update when this ships
-
-- [SPEC.md](../../SPEC.md): move `ger reply` from *Planned commands* into the registry.
-- [CONTEXT.md](../../../CONTEXT.md): define **comment chain** (the term the code already uses) and **draft reply**.
-- [show.md](show.md), [log.md](log.md), [push.md](push.md): the sections above.
-- [exit-codes.md](../exit-codes.md): nothing; no new codes.

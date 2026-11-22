@@ -36,12 +36,17 @@ default-groups = ["dev"]
 [project.scripts]
 ger = "gerrit_workflow_tools.cli_ger:main"
 
+[tool.hatch.build]
+# The VS Code extension package, put there by scripts/build_release.py (git-ignored, so named here).
+artifacts = ["src/gerrit_workflow_tools/vscode_extension/*.vsix"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/gerrit_workflow_tools"]
 force-include = { "contrib/completion/ger.bash" = "gerrit_workflow_tools/completion/ger.bash" }
 
 [tool.hatch.build.targets.sdist]
-include = ["src/gerrit_workflow_tools"]
+# contrib/completion: the wheel built from this sdist force-includes it.
+include = ["src/gerrit_workflow_tools", "contrib/completion/ger.bash"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

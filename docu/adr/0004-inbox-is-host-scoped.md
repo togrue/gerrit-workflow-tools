@@ -15,4 +15,10 @@ Reusing `GerritService.fetch_gerrit_data(commits)` as a "query variant" was also
 
 - Credentials and `gerrit.webUrl` still come from git config (`Settings.from_cwd` is directory-aware and reads global config outside a repo). That is host identity, not stack context.
 - Chain assembly is a pure function over ChangeInfo payloads (`core/review_chain.py`). Tests drive it through `ChangeStore` with no clone.
+- Host-scoped is about *where it may run*, not about *what it shows*. Run inside a clone, the
+  inbox is narrowed to that clone's Gerrit project (`core/inbox.py:project_scope`), because
+  chains of other projects are noise next to the code you have open. The project comes from
+  `gerrit.project` or the remote URL — still not a stack context: no upstream, branch or triplet.
+  `ger inbox --all` (and `GET /overview?all=1`) show the whole host; outside a clone the inbox
+  is the host, or `inbox.projects`.
 - `ger cache --clear` remains unrelated to any future inbox watermark: the watermark is *state* (what you have already been notified about), not a discardable replica of Gerrit.

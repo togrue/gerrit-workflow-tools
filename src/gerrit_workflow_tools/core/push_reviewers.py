@@ -4,18 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, resolve_gerrit_web_base
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet, resolve_stack_context
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
+    removable_reviewer_ids,
+    reviewer_account_ids,
     reviewer_accounts_from_change_info,
+    reviewer_handles,
 )
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 
 
@@ -75,14 +78,9 @@ def credential_error(strategy: ReviewerStrategy, reviewers: Sequence[str], setti
     return None
 
 
-def push_marks(
-    cwd: Path,
-    rows: Sequence[Commit],
-    *,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> dict[str, PushMark]:
-    stack = resolve_stack_context(cwd, settings=settings)
+def push_marks(run: RunContext, rows: Sequence[Commit]) -> dict[str, PushMark]:
+    settings = run.settings
+    stack = run.stack
     triplets = {
         row.change_id: build_triplet(stack.project, stack.push_branch, row.change_id) for row in rows if row.change_id
     }
@@ -94,8 +92,7 @@ def push_marks(
             "Gerrit credentials are not configured; set gerrit.user and "
             "gerrit.token (or gerrit.password) for REST access."
         )
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    by_triplet = service.changes.get_payloads(list(triplets.values()))
+    by_triplet = run.gerrit.changes.get_payloads(list(triplets.values()))
     marks: dict[str, PushMark] = {}
     for change_id, triplet in triplets.items():
         detail = by_triplet.get(triplet)
@@ -111,8 +108,8 @@ def push_marks(
     return marks
 
 
-def change_refs_for_commits(cwd: Path, commits: Sequence[Commit], *, settings: Settings) -> list[str]:
-    stack = resolve_stack_context(cwd, settings=settings)
+def change_refs_for_commits(run: RunContext, commits: Sequence[Commit]) -> list[str]:
+    stack = run.stack
     triplets = (build_triplet(stack.project, stack.push_branch, c.change_id) for c in commits if c.change_id)
     return list(dict.fromkeys(triplets))
 
@@ -139,14 +136,29 @@ def apply_reviewer_strategy_after_push_service(
 
     outcomes: list[ReviewerApplyChangeOutcome] = []
     issues: list[ReviewerApplyIssue] = []
+    kept: dict[str, list[str]] = {}
     try:
         details_by_triplet = service.changes.get_payloads(change_refs)
     except GerritApiError as error:
         return _apply_failed(f"could not load changes: {error}")
 
-    # Named reviewers stay: Gerrit reports nothing for one already on the change, so removing
-    # them after the add would take them off again.
-    wanted = {name.casefold() for name in reviewers}
+    # Overwrite compares people by account id: a reviewer named by email, full name or id is the
+    # same person as the slug Gerrit reports. Removals need to know every wanted person: a name
+    # that resolves to no single account (a group, whose members Gerrit adds) or a failed lookup
+    # turns them off for the run, and everyone present stays.
+    wanted_ids: dict[str, int | None] = {}
+    lookup_failed = False
+    if strategy == ReviewerStrategy.OVERWRITE:
+        try:
+            wanted_ids = reviewer_account_ids(
+                service.rest, reviewers, known=reviewer_handles(details_by_triplet.values())
+            )
+        except GerritApiError as error:
+            lookup_failed = True
+            issues.append(_not_applied(f"removed no reviewers: could not look up {', '.join(reviewers)}: {error}"))
+    keep_ids = {account_id for account_id in wanted_ids.values() if account_id is not None}
+    unresolved = [name for name in reviewers if wanted_ids.get(name) is None]
+    held: dict[str, list[str]] = {}
     for triplet in change_refs:
         detail = details_by_triplet.get(triplet)
         if detail is None:
@@ -162,22 +174,56 @@ def apply_reviewer_strategy_after_push_service(
             outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=()))
             continue
 
+        add = list(reviewers)
         remove: list[int] = []
+        held_here: list[str] = []
         if strategy == ReviewerStrategy.OVERWRITE:
             reviewers_only = reviewer_accounts_from_change_info(detail, roles=("REVIEWER",))
-            remove = [
-                account.account_id
-                for account in reviewers_only
-                if account.account_id is not None and account.slug.casefold() not in wanted
-            ]
-        try:
-            service.changes.set_reviewers(triplet, add=reviewers, remove=remove)
-        except GerritApiError as error:
-            issues.append(_not_applied(f"could not update reviewers on {triplet}: {error}"))
-            continue
+            present_ids = {account.account_id for account in reviewers_only if account.account_id is not None}
+            # Only who is missing is added; asking Gerrit again for someone present is needless.
+            add = [name for name in reviewers if name in unresolved or wanted_ids[name] not in present_ids]
+            # Gerrit refuses the delete for a reviewer the caller may not remove
+            # (a negative vote, for a change owner): keep them and say so.
+            removable = removable_reviewer_ids(detail)
+            for account in reviewers_only:
+                if account.account_id is None or account.account_id in keep_ids:
+                    continue
+                if unresolved:
+                    held_here.append(account.slug)
+                elif removable is None or account.account_id in removable:
+                    remove.append(account.account_id)
+                else:
+                    kept.setdefault(account.slug, []).append(footer_change_id)
+        if add or remove:
+            try:
+                service.changes.set_reviewers(triplet, add=add, remove=remove)
+            except GerritApiError as error:
+                issues.append(_not_applied(f"could not update reviewers on {triplet}: {error}"))
+                continue
+        for slug in held_here:
+            held.setdefault(slug, []).append(footer_change_id)
         outcomes.append(ReviewerApplyChangeOutcome(change_id=footer_change_id, reviewers_assigned=tuple(reviewers)))
 
     ok = not issues
+    for slug, change_ids in kept.items():
+        where = "1 change" if len(change_ids) == 1 else f"{len(change_ids)} changes"
+        issues.append(
+            ReviewerApplyIssue(
+                "warning",
+                f"kept {slug} on {where}: Gerrit does not let you remove them "
+                "(a negative vote needs the Remove Reviewer right)",
+            )
+        )
+    if held and not lookup_failed:
+        held_on = len({change_id for change_ids in held.values() for change_id in change_ids})
+        where = "1 change" if held_on == 1 else f"{held_on} changes"
+        issues.append(
+            ReviewerApplyIssue(
+                "warning",
+                f"kept {', '.join(held)} on {where}: {', '.join(unresolved)} names no single account "
+                "(a group?), so overwrite cannot tell who to remove",
+            )
+        )
     if strategy == ReviewerStrategy.LAZY and ok and not any(outcome.reviewers_assigned for outcome in outcomes):
         names = ", ".join(reviewers)
         issues.append(

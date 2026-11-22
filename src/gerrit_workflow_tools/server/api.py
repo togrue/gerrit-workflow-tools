@@ -1,0 +1,116 @@
+"""The ``ger serve`` API: which endpoint answers which call, and the per-request context it runs in.
+
+Transport-free, so tests drive it without a socket: :meth:`GerApi.handle` takes a method,
+a path, query parameters and a JSON body, and returns a JSON value or raises.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from typing import Any
+
+from gerrit_workflow_tools.core.ci_http import CiHttp
+from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.server import actions, diff_views, views
+from gerrit_workflow_tools.server.activity import Activity
+from gerrit_workflow_tools.server.request import Context, NoRoute, Request
+
+
+PREFIX = f"/api/v{views.API_VERSION}"
+
+Endpoint = Callable[[Context, Request], dict[str, Any]]
+
+ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
+    ("GET", "/health", views.health),
+    ("GET", "/overview", views.overview),
+    ("GET", "/stack", views.stack),
+    ("GET", "/stack/moves", views.stack_moves),
+    ("GET", "/stack/upstream", views.stack_upstream),
+    ("GET", "/chains/([^/]+)", views.chain),
+    ("GET", "/show", views.show),
+    ("GET", "/diff", diff_views.diff),
+    ("GET", "/patchsets", diff_views.patchsets),
+    ("GET", "/file", diff_views.file),
+    ("GET", "/review", views.review),
+    ("GET", "/agent/runbook", views.agent_runbook),
+    ("POST", "/review/open", actions.review_open),
+    ("POST", "/review/done", actions.review_done),
+    ("POST", "/comments/reply", actions.reply),
+    ("POST", "/comments/new", actions.new_comment),
+    ("POST", "/comments/edit", actions.edit_own_comment),
+    ("POST", "/comments/discard", actions.discard_own_comment),
+    ("POST", "/comments/hold", actions.hold),
+    ("POST", "/stack/upstream", actions.set_upstream),
+    ("POST", "/stack/rewrite", actions.rewrite),
+    ("POST", "/stack/reword", actions.reword),
+    ("POST", "/stack/undo", actions.undo),
+)
+
+
+def _activity(activity: Activity, req: Request) -> dict[str, Any]:
+    """``activity`` and ``events`` once the activity sequence moves past ``since``, or after ``wait`` seconds."""
+    activity.wait(req.number("since"), req.number("wait") or 0)
+    return activity.json()
+
+
+# Calls that may wait, so they must not queue behind the serialised ones: no Context, no git, no Gerrit.
+UNLOCKED_ROUTES: tuple[tuple[str, str, Callable[[Activity, Request], dict[str, Any]]], ...] = (
+    ("GET", "/activity", _activity),
+)
+
+
+class GerApi:
+    """The endpoints over one repository.
+
+    Not safe for concurrent calls: a request may move the working tree (a reorder, a
+    rebase step) under another that is reading it. The HTTP layer serialises requests.
+    """
+
+    def __init__(
+        self,
+        cwd: Path | str,
+        *,
+        gerrit: GerritRest | None = None,
+        ci_http: CiHttp | None = None,
+        activity: Activity | None = None,
+    ) -> None:
+        self.cwd = Path(cwd)
+        self._gerrit = gerrit
+        self._ci_http = ci_http
+        self.activity = activity if activity is not None else Activity()
+
+    def _context(self, *, refresh: bool) -> Context:
+        """A fresh run per request: the repository may have changed since the last one."""
+        run = RunContext.open(self.cwd, gerrit=self._gerrit, refresh=refresh)
+        return Context(run=run, ci_http=self._ci_http, activity=self.activity)
+
+    def handle_unlocked(
+        self, method: str, path: str, query: Mapping[str, list[str]] | None = None
+    ) -> dict[str, Any] | None:
+        """Answer a call of :data:`UNLOCKED_ROUTES`, beside the request being served; ``None`` for any other."""
+        for route_method, route, endpoint in UNLOCKED_ROUTES:
+            if method == route_method and path.rstrip("/") == f"{PREFIX}{route}":
+                return endpoint(self.activity, Request(query=query or {}))
+        return None
+
+    def handle(
+        self,
+        method: str,
+        path: str,
+        query: Mapping[str, list[str]] | None = None,
+        body: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Answer one call. Raises :class:`NoRoute` for an unknown one; core's errors pass through."""
+        if not path.startswith(PREFIX + "/"):
+            raise NoRoute(f"no such endpoint: {path} (the API lives under {PREFIX}/)")
+        tail = path[len(PREFIX) :].rstrip("/")
+        for route_method, pattern, endpoint in ROUTES:
+            match = re.fullmatch(pattern, tail)
+            if match is None or route_method != method:
+                continue
+            request = Request(query=query or {}, body=body or {}, path_args=match.groups())
+            return endpoint(self._context(refresh=request.flag("refresh")), request)
+        raise NoRoute(f"no such endpoint: {method} {path}")

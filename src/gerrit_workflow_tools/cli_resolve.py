@@ -8,19 +8,20 @@ import json
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
+    changeish_help,
     init_cli_runtime,
     print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.core.changeish import unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
     resolve_changeish,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 
 
 _EXIT_USAGE = 2
@@ -35,12 +36,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "changeish",
         metavar="CHANGEISH",
-        help=(
-            "Git ref, Change-Id (I…), triplet (project~branch~I…), change: number, "
-            "refs/changes/… ref, Gerrit URL, or q: search query."
-        ),
+        help=changeish_help("What to resolve; also q:<search query>"),
     )
-    add_json_arg(p)
+    add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,
@@ -67,18 +65,20 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
 
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
+    service = run.gerrit
     resolution = resolve_changeish(
         args.changeish,
         client=service.rest,
         cwd=cwd,
         settings=settings,
         explicit_target=True,
+        changes=service.changes,
     )
     if resolution.selected is None and resolution.kind == "change-id":
-        raise ChangeResolutionError(f"Gerrit change not found for {args.changeish!r}")
+        raise ChangeResolutionError(unresolved_change_message(args.changeish))
 
     print_resolution_note(resolution)
 

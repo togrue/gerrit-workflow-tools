@@ -48,7 +48,11 @@ cli_common.py     shared CLI runtime: ExitCode, run_cli_command, init_cli_runtim
 core/             the domain: stack, changeish resolution, attention, CI, reviewers
 core/gerrit/      talking to Gerrit: the GerritRest seam, GerritService, SQLite cache
 render/           shared output formatting
+server/           ger serve: HTTP in, core call, JSON out (a peer of the cli_ layer)
 ```
+
+`vscode/` at the repository root is the VS Code extension, a client of `ger serve` with its
+own build (`npm`). It holds no Gerrit logic: a field it needs is added to core and served.
 
 Everything two commands could share is shared: argument parsing, the runtime
 bootstrap, exit-code mapping, output formatting, and the domain model itself. A command
@@ -60,9 +64,15 @@ Fixed obligations on every command:
 - Build the runtime with `cli_common.init_cli_runtime`. Do not re-inline it. `ger bash-completion`
   alone is exempt, to stay fast at shell startup.
 - Wrap the body in `cli_common.run_cli_command`. That is the only place errors map to codes.
-- Reach Gerrit through `GerritService.from_cwd(...)`. Never construct HTTP yourself.
+- Reach Gerrit through the run context's service: `init_cli_runtime(args, gerrit=gerrit)` returns the
+  run, and `run.gerrit` is its `GerritService`. Never construct HTTP yourself.
 - Exit with the shared codes in `cli_common.ExitCode`
   ([spec/exit-codes.md](docu/spec/exit-codes.md)). One reason, one code, every command.
+
+What a run reads once (settings, worktree, working branch, stack context) lives on the run
+(`run.repo`); pass it, or the answer, down. Never add a process-wide memo of git or config
+answers: only a key that cannot change, such as an object id, may be memoised
+([ADR-0014](docu/adr/0014-memos-live-on-the-run.md)).
 
 Across the `core/` boundary, pass dataclasses and enums, not tuples or raw REST dicts.
 Normalise a REST payload once, in `core/`, and reuse the result everywhere.
@@ -98,9 +108,13 @@ if [ -f ./scripts/pytest-on-remote.sh ]; then
 else
   uv run pytest -q
 fi
-uv run ruff format . && uv run ruff check --fix .
-uv run mypy
+bash check.sh       # ruff format, ruff check --fix, mypy src, mypy tests
+cd vscode && npm ci && npm test && npm run e2e   # headless Linux: npm run e2e -- --get-vscode first
 ```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same on every pull request,
+pytest on Linux and Windows. The integration tests against Gerrit in Docker run nightly and on
+demand. A pull request is merged into `dev` only when CI is green.
 
 Prefer a test that pins agreement *between* commands over another per-module test.
 Copies drift silently when each is only tested against itself.
@@ -122,5 +136,5 @@ an ADR.
 | What is still duplicated? | [architecture.md § Consolidation backlog](docu/architecture.md#consolidation-backlog) |
 | How should this command behave? | [docu/SPEC.md](docu/SPEC.md), [docu/spec/commands/](docu/spec/commands/) |
 | Why is it done this odd way? | [docu/adr/](docu/adr/). Read before "simplifying" |
-| What does Gerrit's API return? | [docu/gerrit/md/](docu/gerrit/md/) |
+| What does Gerrit's API return? | [Gerrit REST API](https://gerrit-review.googlesource.com/Documentation/rest-api.html) |
 | Which git config keys exist? | [docu/Configuration.md](docu/Configuration.md) |

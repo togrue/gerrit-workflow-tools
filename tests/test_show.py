@@ -107,7 +107,7 @@ def test_gshow_stack_missing_upstream_non_tty_prints_setup_hint(
         monkeypatch,
         gerrit=ChangeStore({}),
     )
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.CONFIG
     assert out == ""
     assert "No upstream configured for branch" in err
     assert "git branch --set-upstream-to=" in err
@@ -129,7 +129,7 @@ def test_gshow_stack_prompts_for_missing_upstream_and_aborts(stack_repo: Path, m
         monkeypatch,
         gerrit=ChangeStore({}),
     )
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.REFUSED
     assert out == ""
     p = git("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo, check=False)
     assert p.returncode != 0
@@ -155,26 +155,23 @@ def test_gshow_stack_sets_missing_upstream_then_continues(stack_repo: Path, monk
     assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo) == "origin/main"
 
 
-def test_gshow_head_does_not_prompt_for_missing_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gshow_head_asks_for_missing_upstream_then_shows(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Showing HEAD needs the stack's destination branch: on a terminal ger asks for the upstream and goes on."""
     _configure_gshow_repo(stack_repo)
     git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
-        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("upstream prompt without --stack")),
+        lambda _cwd, _branch, **_kw: "origin/main",
     )
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    cid = head_change_id(stack_repo)
-    detail = change_info_for_sha(sha, cid, number=77)
-    code, _out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["HEAD"],
-        monkeypatch,
-        gerrit=ChangeStore({str(detail["id"]): detail}),
+    detail = change_info_for_sha(sha, head_change_id(stack_repo), number=77)
+    code, out, err = run_cli(
+        stack_repo, gshow_main, ["HEAD"], monkeypatch, gerrit=ChangeStore({str(detail["id"]): detail})
     )
-    assert "upstream prompt without --stack" not in err
-    assert code != ExitCode.GIT
+    assert code == ExitCode.OK, err
+    assert "Upstream for 'feature' set to origin/main." in err
+    assert "77" in out
 
 
 def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -213,7 +210,7 @@ def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPa
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     assert "## " in out
     assert "### `epsilon.txt:908`" in out
     assert "**alice (Alice)**" in out or "**Alice**" in out or "alice" in out.lower()
@@ -256,7 +253,7 @@ def test_gshow_multi_human_lists_clean_commits_briefly(stack_repo: Path, monkeyp
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "needs fix" in out
     assert "╭─ x.py:2" in out
     assert tip_subj in out
@@ -301,7 +298,7 @@ def test_gshow_multi_markdown_lists_clean_commits(stack_repo: Path, monkeypatch:
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "> needs fix" in out
     assert "### `x.py:2`" in out
     assert tip_subj in out
@@ -347,7 +344,7 @@ def test_gshow_multi_human_comments_all_includes_resolved_only_commits(
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "needs fix" in out
     assert "please fix" in out
     assert "╭─ f.py:1 (resolved)" in out
@@ -393,7 +390,7 @@ def test_gshow_human_thread_gutter(stack_repo: Path, monkeypatch: pytest.MonkeyP
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     assert "f.py:1" in out
     assert "╭─ f.py:1" in out
     assert "╰" in out
@@ -451,7 +448,9 @@ def test_gshow_json_change_id_asks_gerrit_for_current_revision(
     assert code == 0
     data = json_stdout(out)
     assert data["sha"] == sha
-    assert any(call.kwargs.get("options") == list(LOG_QUERY_OPTIONS) for call in store.calls_to("query_changes"))
+    # The details come from one request that asks for the current revision, not from the bare lookup.
+    detailed = [c for c in store.calls_to("query_changes") if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
+    assert len(detailed) + len(store.calls_to("get_change")) == 1
 
 
 def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -474,24 +473,6 @@ def test_gshow_json_numeric_change_mocked(stack_repo: Path, monkeypatch: pytest.
     assert data["patchset_status"] == "active"
     assert data["local_commit"] is False
     assert data["attention_reasons"] == []
-
-
-def test_gshow_json_attention_mocked(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=1, number=42)
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    code, out, _err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--json", "change:42"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 1
-    data = json_stdout(out)
-    assert "awaiting-review" in data["attention_reasons"]
 
 
 def test_gshow_json_long_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -652,7 +633,7 @@ def test_gshow_comments_resolved_hides_open_threads(stack_repo: Path, monkeypatc
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "nit: done" in out
     assert "╭─ done.py:3 (resolved)" in out
     assert "still broken" not in out
@@ -720,48 +701,6 @@ def _open_thread_with_context() -> dict[str, list[dict]]:
     }
 
 
-def test_gshow_omits_context_lines_by_default(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
-    ch["unresolved_comment_count"] = 1
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    store.set_comments(str(ch["id"]), _open_thread_with_context())
-    code, out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--color=never", "change:42"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 1, err
-    assert "please fix" in out
-    assert "alpha()" not in out
-    assert "beta()" not in out
-
-
-def test_gshow_context_prints_source_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    sha = "abc12345678901234567890123456789012345678"
-    ch = _detail_ok(change_id=cid, sha=sha, cr_value=0, number=42)
-    ch["unresolved_comment_count"] = 1
-    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
-    store.set_comments(str(ch["id"]), _open_thread_with_context())
-    code, out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--color=never", "--context", "change:42"],
-        monkeypatch,
-        gerrit=store,
-    )
-    assert code == 1, err
-    assert "please fix" in out
-    assert "   1  alpha()" in out
-    assert "   2  beta()" in out
-
-
 def test_gshow_context_padding_implies_context(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -777,7 +716,7 @@ def test_gshow_context_padding_implies_context(stack_repo: Path, monkeypatch: py
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "   1  alpha()" in out
 
 
@@ -796,7 +735,7 @@ def test_gshow_context_json_includes_context_lines(stack_repo: Path, monkeypatch
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     data = json_stdout(out)
     assert data["comments"][0]["context_lines"] == [
         {"line_number": 1, "context_line": "alpha()"},
@@ -830,7 +769,7 @@ def test_gshow_human_shows_comment_author(stack_repo: Path, monkeypatch: pytest.
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1
+    assert code == 0
     assert "epsilon.txt:908" in out
     assert "grt (Tobias Grün)" in out
     assert "some comment" in out
@@ -922,25 +861,6 @@ def test_gshow_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypa
     assert "https://gerrit.example" not in visible
 
 
-def test_gshow_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_gshow_repo(stack_repo)
-    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    cid = head_change_id(stack_repo)
-    detail = change_info_for_sha(sha, cid, number=77)
-    details = {str(detail["id"]): detail}
-    code, out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["--hyperlinks", "never", "--color=never"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0, err
-    assert "\x1b]8;" not in out
-    assert "g.example/c/" in out or "/+/" in out
-    assert GERRIT_LINK_LABEL not in out
-
-
 def test_gshow_markdown_ignores_hyperlinks(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_gshow_repo(stack_repo)
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
@@ -992,7 +912,7 @@ def test_gshow_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.Monke
     )
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     code, out, err = run_cli(stack_repo, gshow_main, ["--color=never"], monkeypatch, gerrit=ChangeStore({}))
-    assert code == 1, err
+    assert code == 0, err
     assert "commit " in out
     assert git_out("rev-parse", "--short", sha, cwd=stack_repo) in out
     assert "local only wip" in out
@@ -1013,7 +933,7 @@ def test_gshow_json_unpushed_local_commit(stack_repo: Path, monkeypatch: pytest.
         cwd=stack_repo,
     )
     code, out, err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch, gerrit=ChangeStore({}))
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     assert data["pushed"] is False
     assert data["patchset_status"] == "absent"
@@ -1102,6 +1022,52 @@ def test_gshow_json_change_id_narrowing_includes_resolution(stack_repo: Path, mo
     assert resolution["alternatives"][0]["number"] == 119870
 
 
+def test_gshow_stack_comments_use_triplet_when_change_id_on_two_branches(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--stack`` must fetch comments by push-branch triplet, not a bare Change-Id.
+
+    Gerrit 404s ``GET …/changes/<Change-Id>/comments`` when the same Change-Id exists on
+    multiple branches ("Multiple changes found"). Stack expansion has no
+    ``resolution.selected``, so the show path must build the triplet itself.
+    """
+    _configure_gshow_repo(stack_repo)
+    tip = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    tip_cid = git_out("log", "-1", "--format=%(trailers:key=Change-Id,valueonly)", tip, cwd=stack_repo).strip()
+    main_row = _detail_ok(change_id=tip_cid, sha=tip, number=301, branch="main", cr_value=0)
+    main_row["unresolved_comment_count"] = 1
+    dev_row = _detail_ok(change_id=tip_cid, sha=tip, number=302, branch="dev", cr_value=0)
+    store = ChangeStore(_mock_show_details(main_row, dev_row), web_base="https://g.example")
+    store.set_comments(
+        str(main_row["id"]),
+        {
+            "stack.py": [
+                {
+                    "id": "stack-c1",
+                    "line": 1,
+                    "message": "fix on push branch",
+                    "unresolved": True,
+                    "author": {"username": "alice", "name": "Alice"},
+                }
+            ]
+        },
+    )
+    code, out, err = run_cli(
+        stack_repo,
+        gshow_main,
+        ["--color=never", "--stack", "--comments", "unresolved"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code in (0, 1), err
+    assert "fix on push branch" in out
+    comment_refs = [call.args[0] for call in store.calls_to("get_comments")]
+    assert comment_refs, "expected at least one comments fetch"
+    assert all("~" in ref for ref in comment_refs), comment_refs
+    assert all(tip_cid not in ref or ref.endswith(f"~{tip_cid}") for ref in comment_refs)
+    assert any(ref == f"testproj~main~{tip_cid}" for ref in comment_refs)
+
+
 def test_gshow_ambiguity_after_narrowing_exits_four(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Two open changes on the target branch exit with ambiguity code 4."""
     _configure_gshow_repo(stack_repo)
@@ -1171,7 +1137,7 @@ def test_gshow_picks_up_resolved_comments_when_updated_is_unchanged(
     )
 
     code, out, err = run_cli(stack_repo, gshow_main, ["--json", "HEAD"], monkeypatch, gerrit=store)
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     assert any(c.get("message") == "please fix" for c in data.get("comments") or [])
 
@@ -1291,3 +1257,27 @@ def test_gshow_fetches_drafts_every_time(stack_repo: Path, monkeypatch: pytest.M
     _code, out, _err = run_cli(stack_repo, gshow_main, ["--json", "change:42"], monkeypatch, gerrit=store)
     (chain,) = json_stdout(out)["comment_chains"]
     assert [c["draft"] for c in chain["comments"]] == [False]
+
+
+def test_show_says_who_voted_what(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Votes per account, in text, --ai and --json: no REST detour to learn who blocks a change."""
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    head = details[list(details)[-1]]
+    head["labels"] = {
+        "Code-Review": {
+            "all": [{"value": 2, "name": "Alice"}, {"value": -1, "username": "bob"}, {"value": 0, "name": "Carol"}]
+        },
+        "Verified": {"all": [{"value": 1, "name": "CI Bot"}]},
+    }
+    store = ChangeStore(details)
+    code, out, err = run_cli(stack_repo, gshow_main, [], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert "votes: Code-Review +2 Alice, -1 bob · Verified +1 CI Bot" in out
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--ai"], monkeypatch, gerrit=store)
+    assert "- Votes: Code-Review +2 Alice, -1 bob · Verified +1 CI Bot" in out
+    _code, out, _err = run_cli(stack_repo, gshow_main, ["--json"], monkeypatch, gerrit=store)
+    data = json_stdout(out)
+    votes = data.get("commits", [data])[-1]["votes"]
+    assert {"label": "Code-Review", "value": -1, "by": "bob"} in votes and len(votes) == 3

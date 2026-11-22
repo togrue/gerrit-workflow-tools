@@ -143,6 +143,24 @@ class Changeish:
         return None
 
 
+_INBOX_NUMBER_RE = re.compile(r"^[cC](\d+)$")
+
+
+def as_change_only(raw: str) -> str:
+    """*raw* as written for an argument that can only name a Gerrit change.
+
+    Where the argument cannot be a commit (``--change``, ``ger review CHANGEISH``), a bare
+    number is that change, and so is ``ger inbox``'s ``c<n>`` token: both become
+    ``change:<n>``. Everything else is returned unchanged for :func:`parse`. Arguments that
+    may be a commit keep the git-revision-first rule; see :func:`unresolved_rev_message`.
+    """
+    s = raw.strip()
+    if _DIGITS_RE.fullmatch(s):
+        return f"change:{s}"
+    inbox = _INBOX_NUMBER_RE.fullmatch(s)
+    return f"change:{inbox[1]}" if inbox else s
+
+
 def address_problem(parsed: Changeish, *, web_base: str | None) -> str | None:
     """Why *parsed* cannot be the address it looks like, or ``None`` when it can be."""
     if parsed.kind == "change-ref" and parsed.number is not None:
@@ -154,6 +172,45 @@ def address_problem(parsed: Changeish, *, web_base: str | None) -> str | None:
         if host and own_host and host.lower() != own_host.lower():
             return f"{parsed.raw!r} is not on the configured Gerrit host {own_host}"
     return None
+
+
+_CHANGE_ID_LOOKALIKE_RE = re.compile(r"^[iI][0-9A-Za-z]{6,}$")
+
+
+# The not-found family: every command says "cannot resolve '<input>': <what is missing>",
+# with the endings below, so one input reads the same wherever it fails.
+
+
+def unresolved_rev_message(rev: str) -> str:
+    """What to tell the user when *rev*, read as a git revision, names no commit.
+
+    A bare number is a git rev by design, so the message says how to name the change
+    instead; a near-miss Change-Id says what a valid one is.
+    """
+    message = f"cannot resolve {rev!r}: no commit by that name"
+    if _DIGITS_RE.fullmatch(rev):
+        return f"{message}; did you mean change:{rev}?"
+    if _CHANGE_ID_LOOKALIKE_RE.fullmatch(rev) and not is_change_id(rev):
+        return f"{message}, and no Change-Id either (I plus 40 hex digits)"
+    return message
+
+
+def unresolved_change_message(raw: str) -> str:
+    """What to tell the user when *raw*, read as a Gerrit change, names none on Gerrit."""
+    missing = "no Gerrit change has that Change-Id" if is_change_id(raw) else "Gerrit has no such change"
+    return f"cannot resolve {raw!r}: {missing}"
+
+
+def not_in_stack_message(raw: str, sha: str | None = None) -> str:
+    """What to tell the user when *raw* names something, but no commit of the local stack."""
+    if sha:
+        return f"cannot resolve {raw!r}: commit {sha[:8]} is not in the local stack"
+    return f"cannot resolve {raw!r}: no commit in the local stack has that Change-Id"
+
+
+def no_commit_with_change_id_message(change_id: str) -> str:
+    """What ``ger sha`` says when no commit it searched carries *change_id*."""
+    return f"cannot resolve {change_id!r}: no commit has that Change-Id"
 
 
 def parse(s: str) -> Changeish:

@@ -14,9 +14,13 @@ If you use Gerrit with single-commit changes only, or you already have a workflo
 
 - You work with **multi-commit stacks** on Gerrit and want a **compact view of the chain** vs what is on the server (`ger log`, `ger show`).
 - You want **branch-local Gerrit settings** (target branch, reviewers via `branch.*` git config) and **push** commands that understand your stack (`ger push`).
-- You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger sha` / `ger change-id`).
+- You **reorder or edit commits in the middle of a stack** and want helpers built for that workflow (`ger edit`, `ger fix`, `ger rebase`).
+- You **pick up a change** from another machine or a colleague, or a new patchset of it: `ger checkout 1234` puts it on a branch tracking its target branch, or updates the copy you already have.
+- You **review other people's chains** from your editor: find them (`ger inbox`), check one out in a review worktree (`ger review`), comment, and vote (`ger comment`, `ger review --vote`).
+- You **work through review comments and CI failures** on your own stack, or hand that to an agent (`ger show`, `ger ci`, `ger reply`, private notes with `ger comment --note`).
+- You want all of that in **VS Code** too: the extension in [`vscode/`](vscode/README.md) does it through `ger serve`.
 
-**Documentation:** [Getting started](docu/Getting-Started.md) · [Reading `ger log`](docu/Reading-ger-log.md) · [Full index](docu/README.md)
+**Documentation:** [Getting started](docu/Getting-Started.md) · [Workflows, step by step](docu/flows.md) · [Reading `ger log`](docu/Reading-ger-log.md) · [Full index](docu/README.md)
 
 ### Change-Id vs Gerrit change identity
 
@@ -24,30 +28,49 @@ Each commit carries a footer **Change-Id** (`I…`), but Gerrit's unique key for
 
 ## Install
 
-From a clone of this repo:
+One command, no clone. It needs git, Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) (or pipx):
 
 ```bash
-pip install --user .
-# or:  pipx install .
+uv tool install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
+# or:  pipx install https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger.tar.gz
 ```
 
-Ensure the install directory is on `PATH`, then configure Gerrit:
+Then, once per machine:
 
 ```bash
-ger setup
-ger --help
+ger setup             # asks for your Gerrit address and credentials
+ger vscode install    # optional: the VS Code extension that came with this ger
 ```
 
-For PATH details, bash completion, the Change-Id hook, branch settings, and verification: **[Getting started](docu/Getting-Started.md)**.
+To update, run the install command again with `--force`, then `ger vscode install` again.
+
+**Starting from VS Code instead:** install [`ger-vscode.vsix`](https://github.com/togrue/gerrit-workflow-tools/releases/latest/download/ger-vscode.vsix) (*Extensions: Install from VSIX…*). Its *Review chains* view offers **Install ger** when ger is missing, and **Run ger setup** after that.
+
+If `ger` is not found afterwards, `uv tool update-shell` (or `pipx ensurepath`) puts its directory on `PATH`. Bash completion, the Change-Id hook, branch settings, and verification: **[Getting started](docu/Getting-Started.md)**.
+
+<details>
+<summary>Other ways to install</summary>
+
+- The development version: `uv tool install git+https://github.com/togrue/gerrit-workflow-tools`. It carries no extension; build that with `npm run package` in `vscode/`.
+- From a clone: `uv tool install .` or `pipx install .`
+- A release built locally: `python scripts/build_release.py` writes the same files a release publishes to `dist/release/`.
+
+</details>
 
 <details>
 <summary><strong>Development</strong></summary>
 
 Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). This is **not** required to install and run **`ger`** as an end user.
 
+### VS Code
+
+`ger serve` is a local HTTP service over the same core; the extension in [`vscode/`](vscode/README.md)
+uses it to show your review chains, the local stack, comments, diffs and CI findings in the editor,
+and to reorder the stack by drag and drop. API: [docu/spec/commands/serve.md](docu/spec/commands/serve.md).
+
 ### Testing
 
-Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in).
+Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in). The extension has its own: `npm test` and `npm run e2e` in `vscode/` (the e2e run drives the real `ger serve` over a fake Gerrit).
 
 ### Integration tests (optional)
 

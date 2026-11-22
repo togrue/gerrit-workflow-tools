@@ -12,7 +12,7 @@ Grammar (best effort, case-insensitive keywords)::
     removal  := '-' (keyword | reviewer)
     rclause  := ('r' '=' list) | ('r' WS+ list)        # list = name (',' name)*
     topic    := ('topic' '=' value) | ('topic' WS+ value)
-    flag     := 'wip' | 'private'
+    flag     := 'wip' | 'private' | 'publish-drafts'
     strategy := 'push' | 'lazy' | 'overwrite'
     reviewer := bare-word that is not a reserved keyword
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from gerrit_workflow_tools.core.push import refspec_option_segments
+from gerrit_workflow_tools.core.push_options import refspec_option_segments
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy as ReviewerStrategyEnum
 
 
@@ -37,6 +37,7 @@ KW_PRIVATE = "private"
 KW_PUSH = "push"
 KW_LAZY = "lazy"
 KW_OVERWRITE = "overwrite"
+KW_PUBLISH_DRAFTS = "publish-drafts"
 
 SpanKind = Literal[
     "whitespace",
@@ -48,6 +49,7 @@ SpanKind = Literal[
     "keyword_push",
     "keyword_lazy",
     "keyword_overwrite",
+    "keyword_publish_drafts",
     "equals",
     "comma",
     "reviewer",
@@ -96,6 +98,8 @@ class PushLineState:
     wip: bool = False
     private: bool = False
     strategy: ReviewerStrategy = "push"
+    publish_drafts: bool = False
+    """Publish your drafts on the updated changes with the push (``publish-drafts``)."""
 
     def add_reviewer(self, name: str) -> None:
         """Append ``name`` if non-empty and not already present."""
@@ -186,23 +190,31 @@ def _split_reviewers(raw: str, base_offset: int, spans: list[Span]) -> list[str]
     return out
 
 
+_KEYWORD_KINDS: dict[str, SpanKind] = {
+    KW_R: "keyword_r",
+    KW_TOPIC: "keyword_topic",
+    KW_WIP: "keyword_wip",
+    KW_PRIVATE: "keyword_private",
+    KW_PUSH: "keyword_push",
+    KW_LAZY: "keyword_lazy",
+    KW_OVERWRITE: "keyword_overwrite",
+    KW_PUBLISH_DRAFTS: "keyword_publish_drafts",
+}
+_FLAG_FIELDS: dict[SpanKind, str] = {
+    "keyword_wip": "wip",
+    "keyword_private": "private",
+    "keyword_publish_drafts": "publish_drafts",
+}
+"""The keywords that switch a :class:`PushLineState` flag on (and, after ``-``, off), by the field they set."""
+_STRATEGIES: dict[SpanKind, ReviewerStrategy] = {
+    "keyword_push": "push",
+    "keyword_lazy": "lazy",
+    "keyword_overwrite": "overwrite",
+}
+
+
 def _classify_keyword(word: str) -> SpanKind | None:
-    low = word.lower()
-    if low == KW_R:
-        return "keyword_r"
-    if low == KW_TOPIC:
-        return "keyword_topic"
-    if low == KW_WIP:
-        return "keyword_wip"
-    if low == KW_PRIVATE:
-        return "keyword_private"
-    if low == KW_PUSH:
-        return "keyword_push"
-    if low == KW_LAZY:
-        return "keyword_lazy"
-    if low == KW_OVERWRITE:
-        return "keyword_overwrite"
-    return None
+    return _KEYWORD_KINDS.get(word.lower())
 
 
 def parse(buf: str) -> ParseResult:  # pylint: disable=too-many-branches,too-many-statements,too-many-locals
@@ -238,17 +250,14 @@ def parse(buf: str) -> ParseResult:  # pylint: disable=too-many-branches,too-man
             if kw == "keyword_r":
                 spans.append(Span("keyword_r", inner_start, inner_end))
                 state.reviewers.clear()
-            elif kw == "keyword_wip":
-                spans.append(Span("keyword_wip", inner_start, inner_end))
-                state.wip = False
-            elif kw == "keyword_private":
-                spans.append(Span("keyword_private", inner_start, inner_end))
-                state.private = False
+            elif kw in _FLAG_FIELDS:
+                spans.append(Span(kw, inner_start, inner_end))
+                setattr(state, _FLAG_FIELDS[kw], False)
             elif kw == "keyword_topic":
                 spans.append(Span("keyword_topic", inner_start, inner_end))
                 state.topic = None
                 topic_seen_at = None
-            elif kw in ("keyword_push", "keyword_lazy", "keyword_overwrite"):
+            elif kw in _STRATEGIES:
                 spans.append(Span(kw, inner_start, inner_end))
                 state.strategy = "push"
             else:
@@ -325,29 +334,12 @@ def parse(buf: str) -> ParseResult:  # pylint: disable=too-many-branches,too-man
             topic_seen_at = (tok.start, nxt.end)
             i += 2
             continue
-        if kw == "keyword_wip":
-            spans.append(Span("keyword_wip", tok.start, tok.end))
-            state.wip = True
-            i += 1
-            continue
-        if kw == "keyword_private":
-            spans.append(Span("keyword_private", tok.start, tok.end))
-            state.private = True
-            i += 1
-            continue
-        if kw == "keyword_push":
-            spans.append(Span("keyword_push", tok.start, tok.end))
-            state.strategy = "push"
-            i += 1
-            continue
-        if kw == "keyword_lazy":
-            spans.append(Span("keyword_lazy", tok.start, tok.end))
-            state.strategy = "lazy"
-            i += 1
-            continue
-        if kw == "keyword_overwrite":
-            spans.append(Span("keyword_overwrite", tok.start, tok.end))
-            state.strategy = "overwrite"
+        if kw in _FLAG_FIELDS or kw in _STRATEGIES:
+            spans.append(Span(kw, tok.start, tok.end))
+            if kw in _FLAG_FIELDS:
+                setattr(state, _FLAG_FIELDS[kw], True)
+            else:
+                state.strategy = _STRATEGIES[kw]
             i += 1
             continue
 
@@ -386,8 +378,8 @@ def format_canonical(state: PushLineState, *, include_strategy: bool = True) -> 
     """Render ``state`` as a stable, ergonomic line.
 
     Reviewers come first as ``r=alice,bob``, then optional ``topic=…``, then
-    flags (``wip private``), and finally a non-default strategy keyword
-    (``lazy``/``overwrite``) when ``include_strategy`` is true.
+    flags (``wip private``), then a non-default strategy keyword
+    (``lazy``/``overwrite``) when ``include_strategy`` is true, and ``publish-drafts`` last.
 
     Persisted push-options history omits strategy (``include_strategy=False``).
     """
@@ -403,6 +395,8 @@ def format_canonical(state: PushLineState, *, include_strategy: bool = True) -> 
         parts.append("private")
     if include_strategy and state.strategy != "push":
         parts.append(state.strategy)
+    if state.publish_drafts:
+        parts.append(KW_PUBLISH_DRAFTS)
     return " ".join(parts)
 
 

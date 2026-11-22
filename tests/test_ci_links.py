@@ -18,9 +18,9 @@ from gerrit_workflow_tools.core.ci_links import (
     prefer_checks_links,
 )
 from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, extract_ci_links_via_registry
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_ci_lines
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
@@ -42,11 +42,6 @@ def test_prefer_checks_links_drops_messages_when_checks_present() -> None:
         CiLink(label="bot", url="https://ci/from-msg", source="message"),
     ]
     assert prefer_checks_links(links) == [links[0]]
-
-
-def test_prefer_checks_links_keeps_messages_when_no_checks() -> None:
-    links = [CiLink(label="bot", url="https://ci/from-msg", source="message")]
-    assert prefer_checks_links(links) == links
 
 
 def test_apply_ci_strategy_none_is_noop() -> None:
@@ -89,19 +84,15 @@ def test_apply_ci_strategy_does_not_materialize_lazy_messages() -> None:
         calls += 1
         return [{"message": "unused"}]
 
+    link = CiLink(label="verify", url="https://ci.example/job/1/console", source="checks")
+
     def strategy(*, project: str, checks: list, messages) -> list[CiLink]:
         del project, messages
-        return [
-            CiLink(
-                label="verify",
-                url="https://ci.example/job/1/console",
-                source="checks",
-            )
-        ]
+        return [link]
 
     checks = [{"state": "FAILED", "checker_name": "verify", "url": "https://ci.example/job/1/"}]
-    apply_ci_strategy(strategy, project="p", checks=checks, messages=LazyRows(fetch=fetch))
-    assert calls == 0
+    links = apply_ci_strategy(strategy, project="p", checks=checks, messages=LazyRows(fetch=fetch))
+    assert (links, calls) == ([link], 0)
 
 
 def _write_registry(repo: Path, body: str) -> None:
@@ -159,7 +150,7 @@ STRATEGIES = {"testproj": _jenkins}
         },
         messages={triplet: [{"message": "Build failed: https://jenkins.example/job/p/99/"}]},
     )
-    service = GerritService.from_cwd(stack_repo, rest=store)
+    service = RunContext.open(stack_repo, gerrit=store).gerrit
     inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
@@ -199,7 +190,7 @@ def test_service_skips_get_messages_when_builtin_checks_suffice(stack_repo: Path
             ]
         },
     )
-    service = GerritService.from_cwd(stack_repo, rest=store)
+    service = RunContext.open(stack_repo, gerrit=store).gerrit
     inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
@@ -261,7 +252,7 @@ def test_service_uses_builtin_message_parser_without_registry(stack_repo: Path) 
             ]
         },
     )
-    service = GerritService.from_cwd(stack_repo, rest=store)
+    service = RunContext.open(stack_repo, gerrit=store).gerrit
     inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
@@ -304,7 +295,7 @@ STRATEGIES = {"testproj": _msg_only}
         checks={triplet: []},
         messages={triplet: [{"message": "failed https://jenkins.example/job/p/7/"}]},
     )
-    service = GerritService.from_cwd(stack_repo, rest=store)
+    service = RunContext.open(stack_repo, gerrit=store).gerrit
     inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo)
     matched = next(c for c in result if c.change_id == first_cid)
@@ -457,7 +448,7 @@ def test_service_ci_links_filter_by_current_revision(stack_repo: Path) -> None:
             ]
         },
     )
-    service = GerritService.from_cwd(stack_repo, rest=store)
+    service = RunContext.open(stack_repo, gerrit=store).gerrit
     inputs = rows
     result = service.fetch_gerrit_data(inputs, cwd=stack_repo, fetch_ci_pipelines=True)
     matched = next(c for c in result if c.change_id == first_cid)

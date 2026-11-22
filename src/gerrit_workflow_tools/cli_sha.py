@@ -2,7 +2,7 @@
 ``ger sha`` — resolve a commit SHA from a Gerrit Change-Id in the current commit chain
 
 USAGE
-    ger sha [--range REV_RANGE] [--all] [--short | --subject | --json] CHANGE_ID
+    ger sha [--range REV_RANGE] [--all] [--short | --subject] [--json | --ai] CHANGE_ID
 
 DESCRIPTION
     Searches commits in the selected revision range for a commit message footer
@@ -31,6 +31,9 @@ OPTIONS
     --json
         Print a JSON object with keys: change_id, sha, subject.
 
+    --ai, --format ai
+        The same line as without it (with --short / --subject too), colour off: text for a model to read.
+
 DEFAULT RANGE
     If --range is omitted, ger sha searches the current Gerrit stack using:
       1. configured Gerrit base range, if available
@@ -57,14 +60,15 @@ from gerrit_workflow_tools.cli_attention import add_attention_query_args, resolv
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
-from gerrit_workflow_tools.core.git_state import current_branch, resolve_working_branch
+from gerrit_workflow_tools.core.changeish import no_commit_with_change_id_message
+from gerrit_workflow_tools.core.git_state import current_branch
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 
@@ -111,8 +115,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print abbreviated SHA and commit subject.",
     )
-    add_json_arg(out_group)
 
+    add_output_format_args(ap)
     add_color_args(ap)
     add_verbose_and_debug_log_args(ap)
     return ap
@@ -126,8 +130,11 @@ def main(argv: list[str] | None = None) -> int:
 def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,too-many-locals
     ap = _build_parser()
     args = ap.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    run, _summary_highlighter = init_cli_runtime(args)
+    cwd, settings = run.cwd, run.settings
 
+    if args.json_ and (args.short or args.subject):
+        ap.error("--short and --subject pick a text line; they do not combine with --json")
     if (args.first_attention or args.next_attention) and (args.rev_range or args.all_commits):
         ap.error("cannot combine attention targeting with --range / --all")
     if args.first_attention and args.change_id:
@@ -139,13 +146,12 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
     printed_change_id = args.change_id or ""
 
     if args.first_attention or args.next_attention:
-        branch = resolve_working_branch(cwd, settings=settings)
+        branch = run.repo.working_branch
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
-            return int(ExitCode.ATTENTION)
+            return int(ExitCode.REFUSED)
         resolved = resolve_attention_query_or_exit(
-            cwd,
+            run,
             args,
-            settings=settings,
             branch=branch,
             after_changeish=args.change_id if args.next_attention else None,
         )
@@ -182,7 +188,7 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
                 matches.append((c.sha, c.short_sha, c.subject))
 
         if not matches:
-            print(f"error: no commit found with Change-Id {args.change_id}", file=sys.stderr)
+            print(f"error: {no_commit_with_change_id_message(args.change_id)}", file=sys.stderr)
             return int(ExitCode.NOT_FOUND)
 
         if len(matches) > 1 and not args.all_commits:

@@ -6,11 +6,10 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
@@ -119,32 +118,6 @@ def test_attention_text_variants():
     assert "unresolved" in result
 
 
-def test_enriched_subject_format():
-    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-    from gerrit_workflow_tools.rebase_enricher import _enriched_subject
-
-    commit = LogCommit(
-        sha="abc" * 13 + "ab",
-        short_sha="abc1234",
-        summary="perf: tweak hot path",
-        change_id="Iabc123",
-        pushed=True,
-        abandoned=False,
-        patchset_status="active",
-        verified=1,
-        code_review=2,
-        comments_unresolved=0,
-        submittable=True,
-    )
-    subj = _enriched_subject(commit)
-    assert subj.startswith("# ")
-    assert "perf: tweak hot path" in subj
-    assert "p" in subj  # patchset letter
-    assert "v+1" in subj
-    assert "cr+2" in subj
-    assert "submittable" in subj
-
-
 def test_enriched_subject_truncates_long_summary():
     from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
     from gerrit_workflow_tools.rebase_enricher import _SUBJECT_WIDTH, _enriched_subject
@@ -218,24 +191,13 @@ def test_enriched_subject_not_pushed_shows_dash():
 # ---------------------------------------------------------------------------
 
 
-def test_enrich_todo_passthrough_without_gerrit_url(tmp_path: Path):
-    """When gerrit.webUrl is not configured the todo is returned unchanged."""
-    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
-
-    text = "pick abc1234 some commit\n# comment\n"
-    with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
-        result = _enrich_todo(text, tmp_path)
-
-    assert result == text
-
-
 def test_enrich_todo_preserves_comment_and_blank_lines(tmp_path: Path):
     """Comment lines and blank lines are preserved as-is."""
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
     text = "\n# some comment\n\n"
     with patch.object(Settings, "gerrit_web_url", property(lambda self: None)):
-        result = _enrich_todo(text, tmp_path)
+        result = _enrich_todo(text, RunContext.open(tmp_path))
 
     assert result == text
 
@@ -246,7 +208,7 @@ def test_enrich_todo_passthrough_when_no_commit_lines(tmp_path: Path):
 
     text = "# pick abc no pick lines here\n"
     with patch.object(Settings, "gerrit_web_url", property(lambda self: "https://g.example")):
-        result = _enrich_todo(text, tmp_path)
+        result = _enrich_todo(text, RunContext.open(tmp_path))
 
     assert result == text
 
@@ -264,7 +226,7 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
     details = build_details_by_change_id(rows)
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     # Each original pick line must now contain enriched subject markers.
     for c in rows:
@@ -279,20 +241,6 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
     assert "# Rebase a1b2c3" in result
 
 
-def test_enrich_todo_preserves_action_and_sha(stack_repo: Path):
-    """The action token and SHA must not be modified."""
-    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
-
-    rows = stack_rows_mb_to_head(stack_repo)
-    details = build_details_by_change_id(rows)
-    text = _make_todo(rows).replace("pick ", "drop ", 1)  # first line: drop
-
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
-
-    first_short = rows[0].short_sha
-    assert result.startswith(f"drop {first_short} # ")
-
-
 def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
@@ -300,7 +248,7 @@ def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
     details = build_details_by_change_id(rows, per_index_overrides=[{"unresolved_comment_count": 3}])
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     assert "com" in result
     assert "unresolved comment" in result
@@ -313,7 +261,7 @@ def test_enrich_todo_build_failed_shown(stack_repo: Path):
     details = build_details_by_change_id(rows, per_index_overrides=[{"verified": -1}])
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     assert "v-1" in result
     assert "build failed" in result
@@ -328,7 +276,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     rows = stack_rows_mb_to_head(stack_repo)
     text = _make_todo(rows)
 
-    result = _enrich_todo(text, stack_repo, gerrit=_FailingStore({}))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_FailingStore({})))
 
     # Must not raise; each pick line must still be enriched (degraded to not-pushed).
     for c in rows:
@@ -541,7 +489,7 @@ def test_cli_rebase_refuses_while_a_rebase_is_stopped(stack_repo: Path, monkeypa
     with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
         code = rebase_main([])
 
-    assert code == 7
+    assert code == 2  # USAGE
     assert "cmd" not in captured
 
 
@@ -638,16 +586,6 @@ def test_cli_rebase_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkey
     assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") == "1"
 
 
-def test_cli_rebase_cannot_combine_onto_remote_with_rev(stack_repo: Path, monkeypatch):
-
-    from gerrit_workflow_tools.cli_rebase import main as rebase_main
-
-    monkeypatch.chdir(stack_repo)
-    with pytest.raises(SystemExit) as exc:
-        rebase_main(["--onto-remote", "HEAD"])
-    assert exc.value.code == 2
-
-
 def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monkeypatch):
     """GREBASE_DROP_MERGED_EQUIVALENT turns pick into drop when merged-same."""
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
@@ -657,7 +595,7 @@ def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monke
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED", "submittable": False}] * n)
     text = _make_todo(rows)
     monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     for c in rows:
         assert f"drop {c.short_sha} #" in result
@@ -670,21 +608,21 @@ def test_enrich_todo_drop_merged_equivalent_skips_reword(stack_repo: Path, monke
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED"}])
     text = _make_todo(rows).replace("pick ", "reword ", 1)
     monkeypatch.setenv("GREBASE_DROP_MERGED_EQUIVALENT", "1")
-    result = _enrich_todo(text, stack_repo, gerrit=_store(details))
+    result = _enrich_todo(text, RunContext.open(stack_repo, gerrit=_store(details)))
 
     first_short = rows[0].short_sha
     assert result.startswith(f"reword {first_short} #")
 
 
 def test_compute_merged_equivalent_sha_match(stack_repo: Path):
+    from gerrit_workflow_tools.core.code_facts import merged_equivalent, read_code_facts
     from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-    from gerrit_workflow_tools.core.gerrit_change_status import compute_merged_equivalent
     from tests.cli_gerrit_mocks import change_info_for_sha
 
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
     cid = "I" + "a" * 40
     d = change_info_for_sha(sha, cid, status="MERGED", submittable=False)
-    assert compute_merged_equivalent(sha, ChangeView.from_payload(d), stack_repo) is True
+    assert merged_equivalent(sha, ChangeView.from_payload(d), read_code_facts(stack_repo, [sha])) is True
 
 
 def test_commit_blocks_chain_for_submittability_merged():

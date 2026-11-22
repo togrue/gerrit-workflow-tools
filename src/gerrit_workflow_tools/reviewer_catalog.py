@@ -32,7 +32,7 @@ from gerrit_workflow_tools.core.reviewer_completion import (
 from gerrit_workflow_tools.push_input_line import PushLineState
 
 
-_DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite"
+_DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts"
 _REQUEST_INTERVAL_SECONDS = 0.5
 
 _JobKind = Literal["warmup_plugin", "warmup_suggest", "complete", "validate"]
@@ -59,7 +59,7 @@ class _Job:
 
 
 class ReviewerCatalog:
-    """Holds completion candidates and soft reviewer validation state."""
+    """Completion candidates and soft reviewer validation; *change_ref* is a triplet or number, never a Change-Id."""
 
     def __init__(
         self,
@@ -67,14 +67,14 @@ class ReviewerCatalog:
         client: ReviewerLookup | None,
         status_note: str | None = None,
         candidates: list[str] | None = None,
-        change_id_hint: str | None = None,
+        change_ref: str | None = None,
         project: str | None = None,
         on_update: Callable[[], None] | None = None,
         start_worker: bool = True,
     ) -> None:
         self._client = client
         self.status_note = status_note
-        self._change_id_hint = change_id_hint
+        self._change_ref = change_ref
         self._project = project
         self._on_update = on_update
         self._candidates: list[str] = []
@@ -116,18 +116,18 @@ class ReviewerCatalog:
         cwd: Path | None,
         settings: Settings,
         reviewer_seeds: list[str],
-        change_id_hint: str | None,
+        change_ref: str | None,
         on_update: Callable[[], None] | None = None,
     ) -> ReviewerCatalog:
         """Build a catalog; Gerrit REST warmup runs in the background."""
         if cwd is None:
-            return cls(client=None, status_note=None, candidates=reviewer_seeds, change_id_hint=None)
+            return cls(client=None, status_note=None, candidates=reviewer_seeds, change_ref=None)
         if not _gerrit_creds_configured(settings):
             return cls(
                 client=None,
                 status_note="Gerrit reviewer validation unavailable (missing gerrit.user + token/password).",
                 candidates=reviewer_seeds,
-                change_id_hint=None,
+                change_ref=None,
             )
         try:
             client = HttpGerritRest.from_settings(settings)
@@ -136,7 +136,7 @@ class ReviewerCatalog:
                 client=None,
                 status_note="Gerrit reviewer validation unavailable (missing gerrit.webUrl).",
                 candidates=reviewer_seeds,
-                change_id_hint=None,
+                change_ref=None,
             )
 
         try:
@@ -149,7 +149,7 @@ class ReviewerCatalog:
             client=client,
             status_note=None,
             candidates=reviewer_seeds,
-            change_id_hint=change_id_hint,
+            change_ref=change_ref,
             project=project,
             on_update=on_update,
         )
@@ -252,14 +252,14 @@ class ReviewerCatalog:
             if self._project and not self._warmup_plugin_queued:
                 self._warmup_plugin_queued = True
                 self._submit_unlocked(_Job(kind="warmup_plugin", key="warmup_plugin", generation=0))
-            if self._change_id_hint and not self._warmup_suggest_queued:
+            if self._change_ref and not self._warmup_suggest_queued:
                 self._warmup_suggest_queued = True
                 self._submit_unlocked(
                     _Job(
                         kind="warmup_suggest",
                         key="warmup_suggest",
                         generation=0,
-                        token=self._change_id_hint,
+                        token=self._change_ref,
                     )
                 )
 
@@ -388,7 +388,7 @@ class ReviewerCatalog:
         try:
             out = fetch_reviewer_slugs_for_prefix(
                 client,
-                change_id=self._change_id_hint,
+                change_id=self._change_ref,
                 token=job.token,
                 n=100,
             )

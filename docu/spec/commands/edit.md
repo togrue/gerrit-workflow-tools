@@ -24,7 +24,7 @@ ger reword [REV] [--edit | --drop] [--first-attention-commit | -n | --next]
 
 `REV` is resolved by `resolve_stack_changeish` — the same path as [`ger fix`](fix.md), [`ger reword`](edit.md) and [`ger rebase`](rebase.md). Change-Ids, triplets, `change:<n>`, `refs/changes/…` refs, URLs and `q:` queries all map to the stack commit with that identity; anything not **in** the stack is an error, because an interactive rebase over the stack cannot touch it.
 
-A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` query costs one Gerrit round trip to learn the Change-Id, and a `refs/changes/…` ref the repository already has needs none. Change-Id matching is case-insensitive. When Gerrit narrowing occurred, the **resolution note** is printed to stderr. Shared changeish grammar: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
+A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` query costs one Gerrit round trip to learn the Change-Id, and a `refs/changes/…` ref the repository already has needs none. Change-Id matching is case-insensitive. When Gerrit narrowing occurred, the **resolution note** is printed to stderr. A triplet or `change:<n>` naming a **sibling** on another branch still maps to the stack commit with that Change-Id; a stderr note says which branch that commit targets. Shared changeish grammar: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
 
 ---
 
@@ -39,7 +39,7 @@ A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` qu
 | `--cursor-history` | Print recent walk events from `.git/ger/attention-history.jsonl` and exit |
 | `--set-cursor CHANGEISH` | Set the cursor without starting a rebase |
 | `--reword` / `--edit` / `--drop` | Override action (mutually exclusive per command) |
-| `--debug-log`, `-v` | Standard helpers |
+| `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 ---
 
@@ -53,7 +53,9 @@ Bare `ger edit` (**resume**):
 2. No usable cursor → oldest edit-attention commit; set cursor.
 3. Cursor still has edit attention → stop there; refresh `touchedAt`.
 4. Cursor no longer has edit attention → next tip-ward; advance cursor.
-5. None left → error `no commit needs edit attention…`.
+5. None left → `no commit needs edit attention…`, exit `10`. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows `rebase finished`.
+
+Before the editor opens, a walk-chosen target is announced on stderr, e.g. `rewording 89d87be Add feature 3 (next needing attention: 1 unresolved comment)`. An explicit `REV` is not announced: you named it.
 
 Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuration.md](../../Configuration.md#attention-cursor-ger-and-branch-local). ADR: [0009](../../adr/0009-attention-cursor-is-change-id-walk-state.md).
 
@@ -61,14 +63,16 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
 
 ## Behavior
 
-1. `ger edit -n` / `--next`, when a rebase is already in progress, runs `git rebase --continue` before resolving the next commit. The cursor does not move unless that rebase finishes and the next one starts. A failed continue returns git's exit code. If git exits 0 but the rebase is still underway, the command exits `7`.
-2. Any other `ger edit` or `ger reword` invocation refuses with exit `7` while a rebase is in progress, before the cursor moves. `ger rebase` makes the same refusal.
+1. `ger edit -n` / `--next`, when a rebase is already in progress, runs `git rebase --continue` before resolving the next commit, the way `ger rebase --continue` does ([rebase.md](rebase.md#going-on-with-a-rebase-underway)): one shared `rebase_run.go_on_with_rebase`, so it refuses with exit `2` where that does: over unresolved conflicts or unstaged changes to tracked files, and without a terminal it takes a message as it is unless `GIT_EDITOR` is set. The cursor does not move unless that rebase finishes and the next one starts. A failed continue returns git's exit code. If git exits 0 but the rebase is still underway, the command exits `7`.
+2. Any other `ger edit` or `ger reword` invocation refuses with exit `2` (`USAGE`) while a rebase is in progress (or a `git am`, with its own hint), before the cursor moves, and so does a work tree with uncommitted changes to tracked files (git would refuse the rebase). What counts is what `git stash` would save: a submodule with modified or untracked content inside it, or checked out at another commit than the one recorded, does not count. A submodule *staged* at another commit refuses with its own message, after uncommitted changes: commit it or `git restore --staged` it (the message gives the command for every such path). Git's own check before the rebase leaves it out, so the rebase would start and then stop at its first commit ("your local changes would be overwritten"), and an `edit` stop it reached would fold the staged submodule commit into the amended commit. A file or symlink put where a submodule is recorded, unstaged, refuses with its own message as well: `git stash` does not save it and the rebase would delete it, so commit it or move it out of the way. `ger rebase` makes the same refusals, with the same messages: one shared check, `rebase_run.require_history_rewrite`.
 3. Resolve target commit in stack (explicit `REV`, or attention walk).
-4. `git rebase -i <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`).
-5. `ger reword` warns when a Change-Id left the stack: the next push would create a new change and leave the old one open. `ger edit` cannot tell, because the commit is amended after it returns.
+4. `git rebase -i --no-autosquash <merge-base>` with custom `GIT_SEQUENCE_EDITOR` marking only the target line (`edit` / `reword` / `drop`). `--no-autosquash` whatever `rebase.autosquash` says: the todo never opens, so a fold would happen unseen and take the `fixup!` commit's sha with it. Folding is `ger rebase --autosquash`.
+5. `ger reword` warns when a Change-Id left the stack: the next push would create a new change and leave the old one open. The warning gives the remedy: put the `Change-Id:` footer back with `ger reword <sha>` to keep updating the old change, or abandon it on Gerrit. `ger edit` cannot tell, because the commit is amended after it returns.
+   `--drop` says what it dropped and how to undo the whole rewrite: `dropped <sha> <subject>`, then `to get it back: git reset --keep <pre-rebase HEAD>` (keeps uncommitted edits, refuses to overwrite them).
+   A rebase that stops on a conflict (here, or in the `git rebase --continue` that `-n` runs) ends with one shared next step, the same for every ger-started rebase: `next: resolve the conflicts in <paths>, `git add` them, then `git rebase --continue` to finish; `git rebase --abort` goes back to where the rebase started`. During an attention walk (`ger edit -n`, `--first-attention-commit`, or the cursor) it also names the way on, between the two: `` `ger edit -n` finishes and goes on to the next commit needing attention``. `rebase_run.run_interactive_rebase` / `go_on_with_rebase` print it from `rebase_state.conflict_next_step`.
 6. The attention cursor moves only once the rebase has started (it exited `0`, or stopped with a conflict) and the target's Change-Id is known.
-7. For `edit`, the user amends, then `ger edit -n` continues the rebase and walks to the next edit-attention commit.
-8. When `gerrit.editNextShow` is true, this was `ger edit --next` (not `ger reword`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Unset, the flag is off and `--next` only moves.
+7. For `edit`, the stop says `next: amend it, then `git rebase --continue` to finish; `ger edit -n` finishes and goes on to the next commit needing attention` (`rebase_state.edit_stop_next_step`): `git rebase --continue` only finishes the rewrite; `ger edit -n` continues the rebase and walks to the next edit-attention commit.
+8. When `ger.showAfterEdit` is on (the default), this was `ger edit --next` or `ger edit --first-attention-commit` (not `ger reword`, not `ger edit REV`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Off, the walk only moves.
 
 ---
 
@@ -80,7 +84,7 @@ codes [`ger fix`](fix.md) uses for the same failures.
 | Code | Meaning |
 |------|---------|
 | `0` | Rebase completed (or git's own exit code) |
-| `1` | `ATTENTION` — declined the upstream prompt |
+| `1` | `REFUSED` — declined the upstream prompt |
 | `2` | Usage error (bad arguments) |
 | `3` | `NOT_FOUND` — no commit in the stack matches `REV` |
 | `4` | `AMBIGUOUS` — several stack commits share the Change-Id |
@@ -95,5 +99,5 @@ codes [`ger fix`](fix.md) uses for the same failures.
 - [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
 - [`ger log`](log.md)
 - [`ger show`](show.md) / [`ger sha`](sha-change-id.md) — read-only `--first-attention` / `--next-attention`
-- [Configuration.md](../../Configuration.md#ger-edit) — `gerrit.editNextShow`
+- [Configuration.md](../../Configuration.md#ger-edit) — `ger.showAfterEdit`
 - [`ger rebase`](rebase.md)

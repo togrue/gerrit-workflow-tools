@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.core.git_run import git
+from tests.change_store import tag_parallel_jobs
 from tests.fixtures import (
     configure_gerrit_target,
     finalize_git_template,
@@ -25,15 +26,8 @@ from tests.fixtures import (
 _FIXTURE_PROFILE_SECONDS: dict[str, float] = defaultdict(float)
 _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)
 
-
-@pytest.fixture(autouse=True)
-def _clear_git_semantic_caches() -> Generator[None]:
-    """Process-lifetime Worktree / stack-context memos must not leak between tests."""
-    from gerrit_workflow_tools.core.git_run import clear_git_cache
-
-    clear_git_cache()
-    yield
-    clear_git_cache()
+# The stub global git config of this pytest process (see pytest_configure); None without isolation.
+_STUB_GLOBAL: Path | None = None
 
 
 @pytest.fixture(autouse=True)
@@ -51,15 +45,19 @@ def pytest_configure(config: pytest.Config) -> None:
     The stub global file supplies only ``user.*`` so ``git commit`` works without per-call
     ``GIT_AUTHOR_*`` env. Production uses full ``git config --list`` (standard precedence);
     without this, tests would pick up the developer's ``gerrit.*`` keys and become flaky.
+
+    The stub lives in a directory of this process: two runs at once (two worktrees, two agents)
+    must not read each other's writes. Each test then gets its own copy of it
+    (``_isolate_git_global_config``), so what ``ger setup`` writes does not reach the next test.
     """
+    global _STUB_GLOBAL
     if os.environ.get("GERRIT_WORKFLOW_TOOLS_NO_GIT_CONFIG_ISOLATION", "").lower() in (
         "1",
         "true",
         "yes",
     ):
         return
-    base = Path(tempfile.gettempdir()) / "gerrit-workflow-tools-test-gitconfig"
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix="gerrit-workflow-tools-test-gitconfig-"))
     stub_global = base / "stub-global"
     stub_system = base / "stub-system"
     stub_global.write_text(
@@ -69,6 +67,13 @@ def pytest_configure(config: pytest.Config) -> None:
     stub_system.write_text("", encoding="utf-8")
     os.environ.setdefault("GIT_CONFIG_GLOBAL", str(stub_global))
     os.environ.setdefault("GIT_CONFIG_SYSTEM", str(stub_system))
+    _STUB_GLOBAL = stub_global
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove this process's stub git config directory."""
+    if _STUB_GLOBAL is not None:
+        shutil.rmtree(_STUB_GLOBAL.parent, ignore_errors=True)
 
 
 def _test_profile_enabled() -> bool:
@@ -175,6 +180,25 @@ def _isolate_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_git_global_config(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give each test its own copy of the stub global git config, so a test that writes to it
+    (``ger setup``, the recent upstreams) leaves the next test the stub as it was."""
+    if _STUB_GLOBAL is None or os.environ.get("GIT_CONFIG_GLOBAL") != str(_STUB_GLOBAL):
+        return
+    # Not in tmp_path, where a test's repository may be and would see an untracked file.
+    own = tmp_path_factory.mktemp("gitconfig") / "global"
+    shutil.copyfile(_STUB_GLOBAL, own)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(own))
+
+
+@pytest.fixture
+def parallel_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tag each ``parallel_map`` job's calls, so ``ChangeStore.ordered_calls`` can order them."""
+
+    tag_parallel_jobs(monkeypatch)
+
+
 @pytest.fixture
 def dup_repo(tmp_path: Path, _dup_repo_template: Path) -> Path:
     return _copy_git_repo(_dup_repo_template, tmp_path / "dup")
@@ -188,6 +212,7 @@ def run_cli(
     *,
     catch_sys_exit: bool = False,
     gerrit: object | None = None,
+    ci_http: object | None = None,
 ) -> tuple[int, str, str]:
     """Run a CLI main with cwd set; capture stdout and stderr.
 
@@ -196,7 +221,8 @@ def run_cli(
 
     Pass *gerrit* to hand the command a ``GerritRest`` implementation (usually a
     :class:`ChangeStore`) instead of letting it build an ``HttpGerritRest``. Commands that
-    take no ``gerrit`` parameter must not be given one.
+    take no ``gerrit`` parameter must not be given one. *ci_http* likewise hands ``ger ci`` /
+    ``ger show`` a fake CI HTTP seam.
     """
     import io
     import sys
@@ -206,7 +232,9 @@ def run_cli(
     err_buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", out_buf)
     monkeypatch.setattr(sys, "stderr", err_buf)
-    kwargs = {"gerrit": gerrit} if gerrit is not None else {}
+    kwargs: dict[str, object] = {"gerrit": gerrit} if gerrit is not None else {}
+    if ci_http is not None:
+        kwargs["ci_http"] = ci_http
     try:
         code = main_fn(list(argv), **kwargs)
     except SystemExit as e:

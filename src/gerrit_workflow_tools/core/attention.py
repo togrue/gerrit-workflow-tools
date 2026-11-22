@@ -1,4 +1,5 @@
-"""Attention: the verdict that a commit needs the author's action.
+"""Attention: the verdict that a commit needs the author's action, or, on somebody's change that
+waits on your review, yours.
 
 The one owner of that verdict. ``ger log``'s exit code, ``ger edit --first-attention-commit``,
 the trailing ``# …`` hints, the rebase todo and the inbox all read the reasons computed here,
@@ -9,11 +10,13 @@ Render maps reasons to text; it never re-derives them from votes or patchset sta
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.stack import is_unsquashed_fixup
 
 
 class NoEditAttentionError(GitError):
@@ -24,23 +27,95 @@ class Attention:  # pylint: disable=too-few-public-methods
     """Reason names. Plain strings, because attention strategies return plain strings."""
 
     MISSING_CHANGE_ID = "missing-change-id"
+    INVALID_CHANGE_ID = "invalid-change-id"
+    """A footer value that is not a valid Change-Id: there is a footer, Gerrit cannot use it."""
+    UNSQUASHED_FIXUP = "unsquashed-fixup"
+    """A ``fixup!``/``squash!`` commit with no Change-Id: the same commit ``ger push`` stops at."""
     ABANDONED = "abandoned"
     NOT_PUSHED = "not-pushed"
     MERGED_DRIFT = "merged-drift"
     MERGED_UNKNOWN = "merged-unknown"
     CHAIN_BLOCKED = "chain-blocked"
     AHEAD_OF_GERRIT = "ahead-of-gerrit"
+    DIVERGED = "diverged"
+    """Ahead of Gerrit, and Gerrit's current patch set is one this repository never had: a push
+    would replace somebody's upload with a commit not built on it."""
     OUTDATED_PATCHSET = "outdated-patchset"
     CI_FAILED = "ci-failed"
     NO_REVIEWERS = "no-reviewers"
     REVIEW_ISSUES = "review-issues"
     AWAITING_REVIEW = "awaiting-review"
     UNRESOLVED_COMMENTS = "unresolved-comments"
+    WAITING_ON_YOU = "waiting-on-you"
+    """Somebody else's change asks for your review: the *to review* section's query matches it."""
     WIP = "wip"
+    GERRIT_UNKNOWN = "gerrit-unknown"
+    """Gerrit could not be asked, so this commit's review state is unknown."""
+
+
+# What a change's author waits for from its reviewers: to a reviewer it is asked of, that is them.
+_WAITING_FOR_REVIEWERS = frozenset({Attention.NO_REVIEWERS, Attention.AWAITING_REVIEW})
+
+
+def as_your_review(reasons: Sequence[str]) -> list[str]:
+    """*reasons* of somebody's change that waits on your review, as you see it.
+
+    :data:`Attention.WAITING_ON_YOU` leads; no reviewers and awaiting review are gone, as what
+    the author waits for is you. Everything else about the change (CI, comments, votes) stays.
+    """
+    return [Attention.WAITING_ON_YOU, *(reason for reason in reasons if reason not in _WAITING_FOR_REVIEWERS)]
 
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``).
 EDIT_ATTENTION_REASONS = frozenset({Attention.UNRESOLVED_COMMENTS, Attention.CI_FAILED})
+
+
+class Severity(str, Enum):
+    """How urgent attention is, most urgent first: what a viewer colours and orders by."""
+
+    ERROR = "error"
+    """Broken: it cannot go in as it is, or what went in is not what you have."""
+    WARNING = "warning"
+    """Someone or something asks for a change."""
+    PENDING = "pending"
+    """Waiting: on a push, on reviewers, on Gerrit, or on an earlier change."""
+    OK = "ok"
+
+
+# Every reason in :class:`Attention` has one; tests/test_attention_severity.py keeps it total.
+REASON_SEVERITY: dict[str, Severity] = {
+    Attention.CI_FAILED: Severity.ERROR,
+    Attention.MERGED_DRIFT: Severity.ERROR,
+    Attention.ABANDONED: Severity.ERROR,
+    Attention.MISSING_CHANGE_ID: Severity.ERROR,
+    Attention.INVALID_CHANGE_ID: Severity.ERROR,
+    Attention.UNSQUASHED_FIXUP: Severity.ERROR,
+    Attention.DIVERGED: Severity.ERROR,
+    Attention.UNRESOLVED_COMMENTS: Severity.WARNING,
+    Attention.REVIEW_ISSUES: Severity.WARNING,
+    Attention.OUTDATED_PATCHSET: Severity.WARNING,
+    Attention.MERGED_UNKNOWN: Severity.WARNING,
+    Attention.NOT_PUSHED: Severity.PENDING,
+    Attention.AHEAD_OF_GERRIT: Severity.PENDING,
+    Attention.AWAITING_REVIEW: Severity.PENDING,
+    Attention.NO_REVIEWERS: Severity.PENDING,
+    Attention.WAITING_ON_YOU: Severity.PENDING,
+    Attention.CHAIN_BLOCKED: Severity.PENDING,
+    Attention.WIP: Severity.PENDING,
+    Attention.GERRIT_UNKNOWN: Severity.PENDING,
+}
+
+_SEVERITY_ORDER = tuple(Severity)
+
+
+def attention_severity(reasons: Sequence[str]) -> Severity:
+    """The most urgent severity among *reasons*; ``ok`` for none.
+
+    A reason a project's attention strategy made up is a warning: it asks for something, and
+    nothing here knows what.
+    """
+    found = [REASON_SEVERITY.get(reason, Severity.WARNING) for reason in reasons]
+    return min(found, key=_SEVERITY_ORDER.index, default=Severity.OK)
 
 
 def ci_failed(verified: int | None, ci_failures: Sequence[str] = ()) -> bool:
@@ -58,8 +133,13 @@ _MERGED_REASON = {
 def _settled_reasons(commit: LogCommit, *, chain_blocked: bool) -> list[str] | None:
     """Reasons for a commit with no open review to judge, or ``None`` when it has one."""
     if not commit.change_id and commit.patchset_status != PatchsetStatus.MERGED_SAME:
-        # Prefer missing-change-id over only not-pushed: overlay cannot match Gerrit without a footer.
-        return [Attention.MISSING_CHANGE_ID]
+        # Prefer these over only not-pushed: overlay cannot match Gerrit without a valid footer.
+        # Same order as the push boundary: a fixup subject wins, then an invalid footer, then none.
+        if is_unsquashed_fixup(commit.summary):
+            return [Attention.UNSQUASHED_FIXUP]
+        return [Attention.INVALID_CHANGE_ID if commit.invalid_footer else Attention.MISSING_CHANGE_ID]
+    if commit.patchset_status == PatchsetStatus.UNKNOWN:
+        return [Attention.GERRIT_UNKNOWN]
     if commit.abandoned:
         return [Attention.ABANDONED]
     if commit.patchset_status == PatchsetStatus.ABSENT:
@@ -80,7 +160,7 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
         return settled
     reasons: list[str] = [Attention.WIP] if commit.wip else []
     if commit.patchset_status == PatchsetStatus.NEWER:
-        reasons.append(Attention.AHEAD_OF_GERRIT)
+        reasons.append(Attention.DIVERGED if commit.diverged else Attention.AHEAD_OF_GERRIT)
     if commit.patchset_status == PatchsetStatus.OUTDATED:
         reasons.append(Attention.OUTDATED_PATCHSET)
     if ci_failed(commit.verified, commit.ci_failures):
@@ -124,7 +204,7 @@ def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
 def annotate_attention(
     commits: list[LogCommit],
     *,
-    cwd: Path | str | None = None,
+    root: Path | None = None,
     project: str = "",
     settings: Settings | None = None,
     web_base: str | None = None,
@@ -144,7 +224,7 @@ def annotate_attention(
     for commit in commits:
         chain_blocked = commit.pushed and prefix_chain_blocks
         commit.attention_reasons = attention_reasons_via_registry(
-            cwd,
+            root,
             project=project,
             commit=commit,
             chain_blocked=chain_blocked,
@@ -152,7 +232,7 @@ def annotate_attention(
             web_base=web_base,
         )
         if commit.pushed and commit_blocks_chain_via_registry(
-            cwd,
+            root,
             project=project,
             commit=commit,
             settings=settings,
