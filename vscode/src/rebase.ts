@@ -10,7 +10,7 @@ import { runInTerminal } from "./launch";
 import { sentence } from "./format";
 import { Model } from "./model";
 import { RebaseAction } from "./api";
-import { REBASE_ACTIONS, pushWaysOn, rebaseNotNow, skipQuestion } from "./stackRows";
+import { REBASE_ACTIONS, pushWaysOn, rebaseNotNowFresh, skipQuestion } from "./stackRows";
 import { feedback, ui } from "./ui";
 
 const SAID: Record<RebaseAction, string> = {
@@ -22,10 +22,11 @@ const SAID: Record<RebaseAction, string> = {
 /**
  * `ger rebase --<step>` in the ger terminal, where git can open an editor or say why not. Only a
  * way on core allows from this stop: the palette has Skip only where it does (`ger.rebaseSkippable`),
- * and says why not when it is run anyway. Skip asks first: it leaves a commit out.
+ * and says why not when it is run anyway, after a fresh look at the stack (a `git add` in the terminal
+ * may have resolved it since). Skip asks first: it leaves a commit out.
  */
 export async function rebaseStep(model: Model, step: RebaseAction): Promise<void> {
-  const notNow = rebaseNotNow(model.stack, step);
+  const notNow = await rebaseNotNowFresh(model, step);
   if (notNow) {
     await ui().message("warning", notNow, {}, []);
     return;

@@ -309,7 +309,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
           void model.refresh();
         }
-      })
+      }, () => Boolean(model.stack?.rebase))
     : undefined;
   context.subscriptions.push(
     model,

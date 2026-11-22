@@ -94,8 +94,9 @@ The commits above your upstream, newest first. One row per commit:
   it is what wants you. The files still conflicted are listed under the banner; click one to
   resolve it in VS Code's merge editor (the file itself, with its conflict markers, where the
   built-in Git extension cannot open one). Once they are resolved and added, the banner says it is
-  ready to continue: Continue appears, and is the one to press. Nothing can be moved until the rebase is
-  finished or aborted.
+  ready to continue: Continue appears, and is the one to press. The index is watched while a rebase
+  is stopped, so a `git add` in the terminal shows within a second; Continue from the palette looks
+  again before it says no. Nothing can be moved until the rebase is finished or aborted.
 - **A merge commit** in the stack is one row, with a merge icon and marked *merge*, however
   many commits it brings in: those are not part of the stack (as on Gerrit) and are never read.
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where

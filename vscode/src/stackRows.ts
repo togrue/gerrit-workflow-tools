@@ -260,6 +260,25 @@ export function rebaseNotNow(stack: Stack | undefined, action: RebaseAction): st
   return refused ? `${sentence(refused)}.` : undefined;
 }
 
+/** What {@link rebaseNotNowFresh} looks at: the model's last stack, and a way to load it again. */
+export interface StackSource {
+  readonly stack: Stack | undefined;
+  refresh(): Promise<void>;
+}
+
+/**
+ * {@link rebaseNotNow}, said only after one more look: the stack shown may predate a `git add` of
+ * the resolved files in the terminal (the index watch waits for a quiet moment, then a refresh), and
+ * a stale verdict must not turn Continue away.
+ */
+export async function rebaseNotNowFresh(source: StackSource, action: RebaseAction): Promise<string | undefined> {
+  if (!rebaseNotNow(source.stack, action)) {
+    return undefined;
+  }
+  await source.refresh();
+  return rebaseNotNow(source.stack, action);
+}
+
 /** Skip's question: what is left out, and what that throws away. */
 export function skipQuestion(stack: Stack | undefined): { message: string; detail: string } {
   const stopped = stack?.commits.find((commit) => commit.rebase === "current");

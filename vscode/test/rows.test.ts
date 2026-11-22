@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
-import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, reviewerWords, skipQuestion, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
+import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -152,6 +152,24 @@ test("the palette's Continue and Skip run only where core allows them, and say w
   assert.equal(rebaseNotNow(at({ actions: ["abort"], refused: {} }), "skip"), undefined, "core said nothing: ger rebase decides");
   assert.equal(rebaseNotNow(stack([commit("Two")]), "abort"), REBASE_WORDS.noRebase);
   assert.equal(rebaseNotNow(undefined, "skip"), undefined, "before the stack is in, ger rebase decides");
+});
+
+test("the palette's Continue looks again before it says no: a git add in the terminal may have resolved the stop", async () => {
+  const at = (rebase: Partial<Rebase>) => stack([commit("Two", { rebase: "current" })], { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } });
+  const conflict = at({ stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT, refused: { continue: "the index has unresolved conflicts; resolve the conflicts in e.txt" } });
+  const resolved = at({ stop: "resolved", applied: false, actions: RESOLVED });
+  // Loaded before the git add; the refresh reads the stop as it is now: Continue goes ahead.
+  let refreshes = 0;
+  const staged = { stack: conflict, refresh: async () => void (refreshes++, (staged.stack = resolved)) };
+  assert.equal(await rebaseNotNowFresh(staged, "continue"), undefined);
+  assert.equal(refreshes, 1);
+  // Still conflicted after the fresh look: core's refusal, as before.
+  const still = { stack: conflict, refresh: async () => void refreshes++ };
+  assert.equal(await rebaseNotNowFresh(still, "continue"), "The index has unresolved conflicts; resolve the conflicts in e.txt.");
+  assert.equal(refreshes, 2);
+  // Allowed already: no extra load before the terminal runs it.
+  assert.equal(await rebaseNotNowFresh({ stack: resolved, refresh: async () => void refreshes++ }, "continue"), undefined);
+  assert.equal(refreshes, 2);
 });
 
 test("Skip says what it throws away: the commit and the resolution so far; Abort brings back the branch, not the resolution", () => {
