@@ -267,4 +267,6 @@ test("the commit a rebase stopped at before applying it is told from the stack h
   assert.equal(stoppedHere(mine(commits[2]), at("conflict", ["d.txt"])), undefined, "a commit still to come");
   assert.equal(stoppedHere({ rev: "change:7", title: "theirs", local: false }, at("conflict", ["d.txt"])), undefined, "a change only on Gerrit");
   assert.equal(stoppedHere(mine(commits[1]), undefined), undefined, "no stack held yet");
+  const byHand = stack(commits, { rebase_in_progress: true, rebase: { branch: "feature", onto: null, orig_head: null, stop: null, applied: false, current: commits[1].sha, unmerged: [], as_before: false, actions: ["continue", "abort"], refused: {} } });
+  assert.equal(stoppedHere(mine(commits[1]), byHand), undefined, "a resolution committed by hand as another commit: core serves no stop, so no conflict and no Conflicts resolved");
 });

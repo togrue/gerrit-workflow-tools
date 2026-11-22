@@ -112,7 +112,7 @@ export function ciRevs(target: ChangeTarget, stack: Stack | undefined): { revs: 
  * The rebase underway stopped at the commit `target` names before applying it: on a conflict, or
  * with the conflicts resolved. Core's verdict, read from the stack the extension already holds
  * (the commit's `rebase` step, the stack's `stop` and `unmerged`), as Local stack reads it for the
- * row; undefined for anything else.
+ * row; undefined for anything else, a stop core cannot tell (`null`) too: no conflict is inferred.
  */
 export function stoppedHere(target: ChangeTarget, stack: Stack | undefined): Stopped | undefined {
   const commit = target.local ? stack?.commits.find((c) => c.sha === target.rev) : undefined;

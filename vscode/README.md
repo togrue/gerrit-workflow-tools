@@ -129,7 +129,9 @@ The commits above your upstream, newest first. One row per commit:
   last pushed patchset and their logs; only why there is no log to read is left out. Once the
   conflicts are resolved and added, it says *Conflicts resolved — Continue*, and Continue is the one
   to press. A rebase through `git rebase --apply` keeps no todo, so which commit it stopped on
-  cannot be told: no Change view says it, and the banner lists the conflicts.
+  cannot be told: no Change view says it, and the banner lists the conflicts. Nor does it where
+  core cannot tell why it stopped (a resolution committed by hand as another commit, with another
+  subject and no Change-Id): Local stack marks the commit it stopped at as stopped, not conflicted.
 - **Commit message**: the whole message. For a commit of your local stack it is a text box:
   edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's message. Only
   the message is rewritten — uncommitted changes stay where they are, nothing can conflict —

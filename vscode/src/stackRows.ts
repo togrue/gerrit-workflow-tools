@@ -206,6 +206,7 @@ export const MARKER_WORDS = {
   rebase: "The rebase stopped here, with this commit applied.",
   conflict: "The rebase stopped here on a conflict: this commit is not applied yet.",
   resolved: "The rebase stopped here on a conflict, now resolved: Continue commits it.",
+  stopped: "The rebase stopped here: HEAD has moved on from where it stopped, and there is no telling how this commit stands.",
 };
 
 /** The banner above a stack a rebase is underway on. */
@@ -295,22 +296,25 @@ export function pushWaysOn(stack: Stack | undefined): RebaseAction[] {
   return (stack?.rebase?.actions ?? ["continue", "abort"]).filter((action) => action !== "skip");
 }
 
+/** How the rebase underway stands at the commit it stopped at (`stoppedAt`). */
+export type StoppedAt = "conflict" | "resolved" | "applied" | "stopped";
+
 /**
  * Where the rebase underway stopped at `commit`, by core's verdict: the commit's `rebase` step says
- * it stopped there, the stack's `applied` whether the commit is in whole, and its `stop` whether a
- * conflict is still open or resolved; null when it did not stop at this commit. Local stack marks
- * the row with it; the Change view of that commit says it.
+ * it stopped there, the stack's `stop` whether on a conflict still open or resolved, else its
+ * `applied` whether the commit is in whole; `stopped` where core cannot tell (a `null` stop, the
+ * commit not applied: a resolution committed by hand as another commit), and null when it did not
+ * stop at this commit. Local stack marks the row with it; the Change view of that commit says it.
  */
-export function stoppedAt(commit: Pick<StackCommit, "rebase">, stack: Pick<Stack, "rebase">): "conflict" | "resolved" | "applied" | null {
+export function stoppedAt(commit: Pick<StackCommit, "rebase">, stack: Pick<Stack, "rebase">): StoppedAt | null {
   const rebase = stack.rebase;
   if (commit.rebase !== "current" || !rebase) {
     return null;
   }
-  if (rebase.applied) {
-    return "applied";
+  if (rebase.stop === "conflict" || rebase.stop === "resolved") {
+    return rebase.stop;
   }
-  // Only partly there: a conflict, resolved once nothing is unmerged.
-  return rebase.stop === "resolved" ? "resolved" : "conflict";
+  return rebase.applied ? "applied" : "stopped";
 }
 
 /** A file still conflicted, under the banner and in the Change view's Conflicts: a click opens it to resolve. */
@@ -359,7 +363,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
     reasonWords(commit.attention_reasons) || "no open issues",
-    marker ? MARKER_WORDS[stopped === "resolved" ? "resolved" : marker] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
+    stopped ? MARKER_WORDS[stopped === "applied" ? "rebase" : stopped] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
     commit.merge ? MERGE_WORDS : "",
     isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",

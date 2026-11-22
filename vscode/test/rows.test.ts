@@ -126,9 +126,26 @@ test("where the rebase stopped at a commit is core's: its step, then whether the
   assert.equal(at({ stop: null, applied: true }), "applied", "core cannot tell why, but the commit is in");
   assert.equal(at({ stop: "conflict", applied: false, unmerged: ["e.txt"] }), "conflict");
   assert.equal(at({ stop: "resolved", applied: false }), "resolved");
-  assert.equal(at({ stop: null, applied: false, unmerged: ["e.txt"] }), "conflict", "only partly there: a conflict, whatever else core cannot tell");
+  assert.equal(at({ stop: null, applied: false }), "stopped", "core cannot tell: no conflict inferred from a commit not applied");
   assert.equal(at({ stop: "conflict", applied: false }, "done"), null, "not the commit it stopped at");
   assert.equal(stoppedAt({ rebase: "current" }, { rebase: null }), null, "no rebase");
+});
+
+test("a resolution committed by hand as another commit is no conflict: core serves no stop, and the row and the Change view say none (PR #90)", () => {
+  // GET /stack as core serves it then (tests/test_rebase_go_on.py): the original commit keeps its `current` step, not applied, and no stop.
+  const commits = [commit("My own resolution", { rebase: "done", is_head: true }), commit("Two", { rebase: "current" }), commit("Three", { rebase: "todo" })];
+  const byHand: Rebase = { ...REBASE, stop: null, applied: false, unmerged: [], actions: ["continue", "abort"], refused: {} };
+  const vm = stackVm(stack(commits, { branch: null, rebase_in_progress: true, rebase: byHand }), undefined, never);
+  const two = vm.rows.find((row) => row.summary === "Two");
+  assert.equal(two?.marker, "rebase", "a neutral marker, not a conflict");
+  assert.match(two?.tooltip ?? "", /no telling how this commit stands/);
+  assert.doesNotMatch(two?.tooltip ?? "", /conflict/);
+  assert.deepEqual([vm.info[0].text, vm.info.length], ["A rebase is in progress", 1], "no conflict words, no conflicted files");
+  assert.deepEqual(
+    (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""}`),
+    ["Continue", "Abort"],
+    "the ways on core serves, none pressed as the one after a resolution",
+  );
 });
 
 test("the rebase banner offers the ways on core allows from where it stopped, and lists the files still conflicted", () => {
