@@ -122,12 +122,16 @@ The commits above your upstream, newest first. One row per commit:
   Gerrit's patchsets, compared with each other, never go stale.
 - **The upstream moved on** (after a `git fetch`, `origin/main` has commits your branch has not):
   a row above the stack says so, *origin/main has 1 new commit*, with **Rebase onto
-  origin/main**, which runs `ger rebase origin/main` in the *ger* terminal (it shows the todo
-  first). Before you press it, the row says what the rebase would meet, previewed by `ger serve`
-  without touching your worktree (`GET /stack`'s `upstream`): *no conflicts*, or the first commit
-  that would not apply and where (*"Refactor parser init" would conflict in a.txt*), with a
-  warning icon. With a merge in the stack, or a git older than 2.40, it cannot tell, and the
-  tooltip says so. During a rebase there is no such row: the banner leads, and the row is back
+  origin/main**, which runs core's one command for it in the *ger* terminal (it shows the todo
+  first): `ger rebase origin/main`, or `ger rebase origin/main --drop-merged-equivalent` once a
+  commit is merged on Gerrit with the same code. Before you press it, the row says what the
+  rebase would meet, previewed by `ger serve` without touching your worktree (`GET /stack`'s
+  `upstream`), on the commits the rebase replays (not those already upstream, which it drops, as
+  the tooltip says): *no conflicts*, or the first commit it would stop on, with a warning icon:
+  one that would not apply and where (*"Refactor parser init" would conflict in a.txt*), or one
+  that would become empty because its change is already upstream (you drop it with Skip). With
+  a merge in the stack, or a git older than 2.40, it cannot tell, and the tooltip says why in
+  `ger serve`'s words. With no local commits, the row below says the branch is behind it. During a rebase there is no such row: the banner leads, and the row is back
   once the rebase is finished or aborted. The status bar does not show it: an upstream that
   moved on is not urgent, and the status bar is the change that most wants you. `ger log` ends
   with the same advice as a `next:` line.

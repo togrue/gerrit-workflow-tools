@@ -45,7 +45,7 @@ export async function rebaseStep(model: Model, step: RebaseAction): Promise<void
 }
 
 /**
- * Rebase onto the upstream: `ger rebase <upstream>` in the ger terminal, where it shows the todo
+ * Rebase onto the upstream: core's one command for it (`upstream.argv`) in the ger terminal, where it shows the todo
  * first. Only once core says the upstream moved on (`upstream.behind`); a conflict the preview
  * foresaw stops the rebase there, and the banner takes over.
  */
@@ -55,8 +55,8 @@ export async function rebaseOntoUpstream(model: Model): Promise<void> {
     await ui().message("info", model.stack?.rebase_in_progress ? REBASE_WORDS.finishFirst : REBASE_WORDS.upToDate, {}, []);
     return;
   }
-  runInTerminal(model.repo, ["rebase", upstream.name]);
-  feedback(`ger rebase ${upstream.name} runs in the ger terminal: it shows the todo, then replays the stack onto ${upstream.name}`, { icon: "terminal", milliseconds: 8000 });
+  runInTerminal(model.repo, upstream.argv);
+  feedback(`ger ${upstream.argv.join(" ")} runs in the ger terminal: it shows the todo, then replays the stack onto ${upstream.name}`, { icon: "terminal", milliseconds: 8000 });
 }
 
 async function confirmSkip(model: Model): Promise<boolean> {
