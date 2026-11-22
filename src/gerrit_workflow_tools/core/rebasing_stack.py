@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
-from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
 
 
@@ -56,6 +56,28 @@ def _same_change(a: Commit, b: Commit) -> bool:
     return a.subject == b.subject
 
 
+def _stopped_on_head(
+    replayed: list[Commit], start: int, made_at: int, rebase: RebaseProgress, was: Commit | None
+) -> int | None:
+    """Where on ``HEAD`` the commit the rebase stopped at is now, or ``None`` while it is not there.
+
+    Applied whole, it is where git left ``HEAD`` (``amend``), or at ``HEAD`` when git noted no
+    amend. Otherwise it may be among the commits made by hand from *made_at* on: an amend of it, a
+    re-made commit, or a conflict resolution committed instead of continued.
+    """
+    if rebase.current is None:
+        return None
+    if rebase.applied and rebase.amend is None:
+        return len(replayed) - 1 if len(replayed) > start else None
+    if rebase.applied:
+        at = next((i for i, row in enumerate(replayed) if row.sha == rebase.amend), None)
+        if at is not None:
+            return at
+    if was is None:
+        return None
+    return next((i for i in range(made_at, len(replayed)) if _same_change(replayed[i], was)), None)
+
+
 def load_rebasing_stack(
     cwd: Path | str | None, base: str, rebase: RebaseProgress, *, first_parent: bool = True
 ) -> RebasingStack:
@@ -69,50 +91,22 @@ def load_rebasing_stack(
     replayed = commits_in_range(cwd, f"{base}..HEAD", first_parent=first_parent)
     start = next((i + 1 for i, row in enumerate(replayed) if row.sha == rebase.onto), 0)
     steps: list[RebaseStep | None] = [None] * start + [RebaseStep.DONE] * (len(replayed) - start)
-    # The top commits git did not make: made by hand at the stop.
-    made = len(replayed) - next(
-        (i + 1 for i in range(len(replayed) - 1, start - 1, -1) if replayed[i].sha in rebase.settled), start
-    )
-    at = next((i for i, row in enumerate(replayed) if rebase.amend and row.sha == rebase.amend), None)
-    # The stopped commit as it was: a row while not applied; for an edit, only to tell an amend once HEAD left it.
-    stopped = [rebase.current] if rebase.current and (not rebase.applied or (rebase.amend and at is None)) else []
-    pending = [*stopped, *rebase.todo]
-    read = read_commit_rows(cwd, "--no-walk=unsorted", *pending) if pending else []
-    found = [next((r for r in read if r.sha.startswith(want)), None) for want in pending]
-    was = found[0] if stopped else None
-    if not rebase.applied and was is not None and made:
-        # Resolved and committed by hand: the commit is applied, at HEAD or below what was made on it.
-        made_at = len(replayed) - made
-        mine = next((i for i in range(made_at, len(replayed)) if _same_change(replayed[i], was)), None)
-        if mine is not None:
-            steps[mine] = RebaseStep.CURRENT
-            rebase = replace(rebase, applied=True, unmerged=(), moved=mine < len(replayed) - 1)
-    elif rebase.stop is RebaseStop.EDIT:
-        if at is not None:
-            steps[at] = RebaseStep.CURRENT
-            rebase = replace(rebase, moved=at < len(replayed) - 1)
-        elif rebase.amend is None and len(replayed) > start:
-            steps[-1] = RebaseStep.CURRENT  # applied, with nothing to tell where git left HEAD
-        elif (
-            mine := next(
-                (
-                    i
-                    for i in range(len(replayed) - made, len(replayed))
-                    if was is not None and _same_change(replayed[i], was)
-                ),
-                None,
-            )
-        ) is not None:
-            # Amended (or re-made with its Change-Id), maybe with commits made on top: still the same change.
-            steps[mine] = RebaseStep.CURRENT
-            rebase = replace(rebase, moved=mine < len(replayed) - 1)
-        elif rebase.amend is not None:
-            rebase = replace(rebase, moved=True)  # reset away, maybe split into new commits
-    if stopped and rebase.applied:
-        found[0] = None
+    # The top commits from made_at on are not git's: made by hand at the stop.
+    made_at = next((i + 1 for i in range(len(replayed) - 1, start - 1, -1) if replayed[i].sha in rebase.settled), start)
+    wanted = [rebase.current, *rebase.todo] if rebase.current else list(rebase.todo)
+    read = read_commit_rows(cwd, "--no-walk=unsorted", *wanted) if wanted else []
+    found = [next((r for r in read if r.sha.startswith(want)), None) for want in wanted]
+    was = found.pop(0) if rebase.current else None
+
     rows: list[Commit] = []
-    for index, row in enumerate(found):
-        if row is not None:
-            rows.append(row)
-            steps.append(RebaseStep.CURRENT if index < len(stopped) else RebaseStep.TODO)
-    return RebasingStack(rebase=rebase, commits=(*replayed, *rows), steps=tuple(steps))
+    if (at := _stopped_on_head(replayed, start, made_at, rebase, was)) is not None:
+        steps[at] = RebaseStep.CURRENT
+        rebase = replace(rebase, applied=True, unmerged=(), moved=at < len(replayed) - 1)
+    elif rebase.applied and rebase.amend is not None:
+        rebase = replace(rebase, moved=True)  # applied, then reset away: maybe split into new commits
+    elif was is not None and not rebase.applied:
+        rows.append(was)
+        steps.append(RebaseStep.CURRENT)
+    todo = [row for row in found if row is not None]
+    steps += [RebaseStep.TODO] * len(todo)
+    return RebasingStack(rebase=rebase, commits=(*replayed, *rows, *todo), steps=tuple(steps))

@@ -100,23 +100,29 @@ class RebaseProgress:
         return RebaseStop.CONFLICT if self.unmerged else RebaseStop.RESOLVED
 
 
-_REPLAYING = frozenset({"pick", "p", "reword", "r", "edit", "e", "squash", "s", "fixup", "f"})
+_FOLDING = frozenset({"squash", "s", "fixup", "f"})
+_REPLAYING = frozenset({"pick", "p", "reword", "r", "edit", "e"}) | _FOLDING
 
 
-def _todo_ids(path: Path) -> list[str | None]:
-    """One entry per command line of a rebase todo file: the commit it replays, or ``None``."""
+def _todo_lines(path: Path) -> list[tuple[str, str | None]]:
+    """One ``(command, commit)`` per command line of a rebase todo file; ``None`` for a commit it does not replay."""
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
-    ids: list[str | None] = []
+    entries: list[tuple[str, str | None]] = []
     for line in lines:
         words = line.split()
         if not words or words[0].startswith("#"):
             continue
         args = [word for word in words[1:] if not word.startswith("-")]
-        ids.append(args[0].lower() if words[0] in _REPLAYING and args else None)
-    return ids
+        entries.append((words[0], args[0].lower() if words[0] in _REPLAYING and args else None))
+    return entries
+
+
+def _todo_ids(path: Path) -> list[str | None]:
+    """One entry per command line of a rebase todo file: the commit it replays, or ``None``."""
+    return [sha for _, sha in _todo_lines(path)]
 
 
 def _state_word(path: Path) -> str | None:
@@ -156,11 +162,14 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
     state = repo_dir / "rebase-merge"
     if not state.exists():
         return _apply_progress(cwd, repo_dir)
-    done = _todo_ids(state / "done")
+    done_lines = _todo_lines(state / "done")
+    done = [sha for _, sha in done_lines]
     current = done[-1] if done else None
     amend = _state_word(state / "amend")
-    # A stop with the commit in hand leaves REBASE_HEAD; `amend` is there only when it was applied whole.
-    applied = current is None or not (repo_dir / "REBASE_HEAD").exists() or amend is not None
+    # A stop with the commit in hand leaves REBASE_HEAD; `amend` is there only when it was applied whole,
+    # except that a squash or fixup stopped on a conflict writes `amend` too: the commit it folds into.
+    folding = bool(done_lines) and done_lines[-1][0] in _FOLDING
+    applied = current is None or not (repo_dir / "REBASE_HEAD").exists() or (amend is not None and not folding)
     onto = _state_word(state / "onto")
     settled = {sha for sha in done[:-1] if sha} | set(_rewritten(state / "rewritten-list"))
     return RebaseProgress(
