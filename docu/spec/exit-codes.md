@@ -12,7 +12,7 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 | `3` | `NOT_FOUND` | A changeish, Change-Id or git revision resolved to nothing |
 | `4` | `AMBIGUOUS` | Several candidates survived narrowing; the message lists them as `change:N (triplet, status)`, `--json` under `alternatives` |
 | `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable. Never reported as `NOT_FOUND`: only Gerrit's own 404 means "no such change". The message is one line ending in Gerrit's own reason from the response body (`Gerrit HTTP 400: nosuchuser does not identify a registered user or group`), else the HTTP status phrase. A command that can still show local state (`ger log`, `ger show`) shows it, with the Gerrit state unknown, then exits `5` |
-| `6` | `CONFIG` | Required git configuration is missing (`gerrit.webUrl`, credentials, or the branch's upstream when no prompt can set it; declining the prompt is `1`) |
+| `6` | `CONFIG` | Required git configuration is missing (`gerrit.webUrl`, credentials, or the branch's upstream when no prompt can set it; declining the prompt is `1`; see [SPEC § A missing upstream](../SPEC.md#a-missing-upstream)) |
 | `7` | `GIT` | A git command failed, or the command runs outside a git repository (`error: not a git repository`, checked once in `init_cli_runtime`; `ger inbox`, `setup`, `config`, `cache` and `fetch-api` run anywhere) |
 | `8` | `DUPLICATE_CHANGE_ID` | The same Change-Id appears on more than one local commit |
 | `9` | `MISSING_CHANGE_ID` | A local commit has no Change-Id footer |

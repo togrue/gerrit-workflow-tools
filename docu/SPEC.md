@@ -46,6 +46,10 @@ Every command that prints something worth parsing takes one shared group, `cli_c
 
 Under `--ai` colour and hyperlinks are off on stderr too (notes, the CI download meter), Markdown view or not. Neither `--json` nor `--ai` output ever prompts, terminal or not (`cli_common.may_prompt`): a question takes its non-interactive answer, the same as without a terminal (`ger review` checks out in a worktree, `ger fix` stages nothing, `ger reply --publish` and `ger review --vote` need `-y`, `ger log` reports a missing upstream instead of asking for one).
 
+### A missing upstream
+
+Every command that needs the working branch's upstream asks for it on a terminal, rather than failing, whichever path led there: the **local stack** (`ger log`, `show --stack`), or the stack's **target branch** for a changeish such as `HEAD` (`ger show`, `ci`, `comment`, `fix`, `reply`). It asks once per branch, offering what the branch was created from (else the nearest branch of the Gerrit remote), sets the answer with `git branch --set-upstream-to`, and runs the command again from the start. `cli_common.run_cli_command` does this for every command, on a `core.upstream.NeedsUpstreamError`. Declining exits `1` (`REFUSED`). It never asks under `--json` or `--ai`, under `--dry-run` (which writes nothing), under `ger push -y`, or without a terminal: then the command reports the missing upstream and exits as before (`6`, or `3` when the target branch could not be found). A command that can do without the upstream (`ger show 12345`) never asks.
+
 ### Shared concepts
 
 Defined once in [CONTEXT.md](../CONTEXT.md): **local stack**, **ready boundary**, **target branch**, **Change-Id**, **attention**, **patchset status**. The patchset tokens (`p` / `n` / `o` / `-` …) are listed in [Reading-ger-log.md](Reading-ger-log.md#status-columns).

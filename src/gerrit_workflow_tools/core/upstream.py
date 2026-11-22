@@ -18,13 +18,31 @@ from gerrit_workflow_tools.core.git_run import UnknownRevisionError, commit_sha_
 logger = logging.getLogger(__name__)
 
 
-def missing_upstream_error(branch: str) -> ConfigError:
+class NeedsUpstreamError(Exception):
+    """Failed only because *branch* has no upstream: a caller that can ask for one may set it and try again.
+
+    *askable* is off where the command already asked, or decided not to (``ger push -y``).
+    """
+
+    def __init__(self, message: str, *, branch: str, askable: bool = True) -> None:
+        super().__init__(message)
+        self.branch = branch
+        self.askable = askable
+
+
+class MissingUpstreamError(NeedsUpstreamError, ConfigError):
+    """*branch* has no upstream, and the command needs it (exit ``CONFIG``)."""
+
+
+def missing_upstream_error(branch: str, *, askable: bool = True) -> MissingUpstreamError:
     """The one error, and the one hint, every command gives for a branch with no upstream."""
-    return ConfigError(
+    return MissingUpstreamError(
         f"No upstream configured for branch {branch!r}.\n"
         "Set an upstream, e.g.:\n"
         "  git branch --set-upstream-to=<remote>/<branch>\n"
-        "Fetch from your Gerrit remote first if the tracking branch is missing."
+        "Fetch from your Gerrit remote first if the tracking branch is missing.",
+        branch=branch,
+        askable=askable,
     )
 
 

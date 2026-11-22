@@ -87,7 +87,7 @@ With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_line
 | Code | Meaning |
 |------|---------|
 | `0` | Ran fine, whether or not some target's CI failed (the findings are the output) |
-| `1` | `REFUSED` — you declined the `--stack` upstream prompt |
+| `1` | `REFUSED` — you declined the upstream prompt |
 | `3` / `4` | Changeish not found / ambiguous |
 | `11` | A CI link's content could not be fetched or parsed |
 

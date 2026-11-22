@@ -155,26 +155,23 @@ def test_gshow_stack_sets_missing_upstream_then_continues(stack_repo: Path, monk
     assert git_out("rev-parse", "--abbrev-ref", "feature@{upstream}", cwd=stack_repo) == "origin/main"
 
 
-def test_gshow_head_does_not_prompt_for_missing_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gshow_head_asks_for_missing_upstream_then_shows(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Showing HEAD needs the stack's destination branch: on a terminal ger asks for the upstream and goes on."""
     _configure_gshow_repo(stack_repo)
     git("branch", "--unset-upstream", "feature", cwd=stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
-        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("upstream prompt without --stack")),
+        lambda _cwd, _branch, **_kw: "origin/main",
     )
     sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    cid = head_change_id(stack_repo)
-    detail = change_info_for_sha(sha, cid, number=77)
-    code, _out, err = run_cli(
-        stack_repo,
-        gshow_main,
-        ["HEAD"],
-        monkeypatch,
-        gerrit=ChangeStore({str(detail["id"]): detail}),
+    detail = change_info_for_sha(sha, head_change_id(stack_repo), number=77)
+    code, out, err = run_cli(
+        stack_repo, gshow_main, ["HEAD"], monkeypatch, gerrit=ChangeStore({str(detail["id"]): detail})
     )
-    assert "upstream prompt without --stack" not in err
-    assert code != ExitCode.GIT
+    assert code == ExitCode.OK, err
+    assert "Upstream for 'feature' set to origin/main." in err
+    assert "77" in out
 
 
 def test_gshow_markdown_ai_format(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -194,7 +194,7 @@ flowchart LR
 
 `git_state.py` answers what the repository currently looks like — branch, HEAD, upstream, and the Gerrit push destination; `rebase_state.py`, one step above it, answers whether a rebase is underway and what that means for the next command. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
-`upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` prompts with that suggestion when a branch lacks `@{upstream}` — used by log, push, edit, rebase, change-id, sha. `ger serve` offers the same suggestion through `GET /stack/upstream`.
+`upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` prompts with that suggestion when a branch lacks `@{upstream}`: up front in log, push, edit, rebase, change-id, sha and `show --stack`, and for every command through `run_cli_command`, which asks when a `NeedsUpstreamError` (raised by `missing_upstream_error`, and by `resolve_stack_context` as `NoDestinationBranchError`) reaches it and runs the command again. `ger serve` offers the same suggestion through `GET /stack/upstream`.
 
 ---
 
