@@ -72,6 +72,18 @@ test("a tab with your file on its right is true only while its commit is HEAD", 
   assert.equal(fateOf({ ...own, stale: true }, clean, now(["aaa", "bbb"]), false), "keep");
 });
 
+test("a tab with your file on its right goes stale when its commit leaves the stack with HEAD still on it", () => {
+  // Submitted, and reachable from upstream after a fetch: the stack is empty, HEAD has not moved.
+  const merged = now([], { head: "aaa" });
+  assert.equal(fateOf(own, clean, merged, false), "mark");
+  assert.equal(fateOf(own, clean, merged, true), "close");
+  // With unsaved edits, or its document not read in, it is marked, never closed.
+  assert.equal(fateOf(own, dirty, merged, true), "mark");
+  assert.equal(fateOf(own, { ...clean, loaded: false }, merged, true), "mark");
+  // As a diff of the commit's own files is.
+  assert.equal(fateOf(live, clean, merged, true), "close");
+});
+
 test("a tab of another branch's stack is not judged, and a stale one is unmarked once its commit is back", () => {
   // Another branch checked out: its stack holds none of feature's commits, and nothing is said.
   assert.equal(fateOf(live, clean, now(["ccc"], { branch: "change-900" }), false), "keep");

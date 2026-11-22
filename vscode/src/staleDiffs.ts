@@ -95,10 +95,11 @@ export interface TabNow {
 
 /**
  * What to do with a diff tab now that the stack is `now`. A tab of another branch's stack is not
- * judged: it stays as it is until that branch is back. A diff of the commit's own files is true
- * while the commit is in the stack (still to be replayed, or left as it was); one with your file on
- * its right, only while that commit is HEAD: after a commit on top, an amend, or a rebase that stops
- * below it, your file is another state than the title names. Untrue, its tab is closed when `close`
+ * judged: it stays as it is until that branch is back. A diff is true while its commit is in the
+ * stack (still to be replayed, or left as it was), not once it left it (rewritten, or merged past
+ * upstream after a fetch, HEAD unchanged); one with your file on its right, only while that commit is
+ * also HEAD: after a commit on top, an amend, or a rebase that stops below it, your file is another
+ * state than the title names. Untrue, its tab is closed when `close`
  * (`ger.closeDiffsOnRebase`), else marked stale; true again (an abort, the branch back), a tab
  * marked stale is unmarked. A tab that may hold unsaved edits is never closed (the edits would
  * go): one that has them, one with your file on its right whose document is not loaded, and any on
@@ -108,7 +109,7 @@ export function fateOf(mark: DiffMark, tab: TabNow, now: StackNow, close: boolea
   if (mark.branch !== now.branch) {
     return "keep";
   }
-  const live = mark.own ? now.head === mark.commit : now.commits.has(mark.commit);
+  const live = now.commits.has(mark.commit) && (!mark.own || now.head === mark.commit);
   if (live) {
     return mark.stale ? "unmark" : "keep";
   }

@@ -110,9 +110,10 @@ The commits above your upstream, newest first. One row per commit:
   (amended, replayed by the rebase, reordered), dropped, or merged past the upstream. Its title
   then says it is *stale*: `b.txt (6827cbfe) — stale`. Tabs of commits still in the stack (still
   to be replayed, or left as they were) stay as they are. A diff with your file on its right (it
-  opened on the commit you stood on) is true only while that commit is HEAD: after a commit on
-  top, or a rebase that stops below it, your file is not what the title names, and the tab is
-  stale too. With `ger.closeDiffsOnRebase` on, stale tabs are closed instead, unless they may hold
+  opened on the commit you stood on) is true only while that commit is in the stack and HEAD too:
+  after a commit on top, or a rebase that stops below it, your file is not what the title names,
+  and the tab is stale too, as it is once the commit is merged past the upstream with HEAD still on
+  it. With `ger.closeDiffsOnRebase` on, stale tabs are closed instead, unless they may hold
   unsaved edits: one that has them, or has your file on its right while VS Code has not read that
   file in yet, is marked; and the tabs VS Code restores at startup are only marked on the first
   look, and closed on the next. Only the tabs of the branch checked out are judged: another branch
