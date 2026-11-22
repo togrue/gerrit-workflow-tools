@@ -157,13 +157,13 @@ def test_stack_says_how_far_the_upstream_moved_and_what_rebasing_onto_it_would_m
     _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert json.loads(out)["upstream"] == stack["upstream"], "one model, two shells"
 
-    # Every refresh asks again, but with nothing moved the preview is remembered: no merge is simulated.
+    # Every refresh simulates it again (attributes may have changed, ADR-0014), at the same cost.
     with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
         assert _get(api, "/stack")["upstream"] == stack["upstream"]
     simulated = [
-        c.args for c in run.call_args_list if c.args[0] in ("merge-tree", "commit-tree") or "--cherry-pick" in c.args
+        c.args[0] for c in run.call_args_list if c.args[0] in ("merge-tree", "commit-tree") or "--cherry-pick" in c.args
     ]
-    assert simulated == []
+    assert simulated == ["rev-list", "merge-tree"], "one cherry-pick walk, one merge up to the conflict"
 
     assert git("rebase", "origin/main", cwd=stack_repo, env=who, check=False).returncode != 0
     stack = _get(api, "/stack")

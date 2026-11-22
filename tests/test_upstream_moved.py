@@ -248,6 +248,21 @@ def test_an_old_git_refusing_a_tree_is_not_read_as_a_conflict(
     assert _rebase_i(stack_repo) == 0, "the rebase it previews goes through"
 
 
+def test_an_attribute_changed_between_two_calls_shows_in_the_second(stack_repo: Path) -> None:
+    """Same commits, same upstream: ``a.txt merge=union`` in ``.git/info/attributes`` merges the conflict away."""
+    _main_moves_on(stack_repo, {"a.txt": "file a.txt, from main\n"})
+    settings = Settings.from_cwd(stack_repo)
+    commits = get_stack_snapshot(stack_repo, settings=settings).commits
+    first = upstream_moved(stack_repo, "feature", commits, settings=settings)
+    assert first is not None and first.conflict is not None
+    assert (first.conflict.commit.subject, first.conflict.files) == ("Refactor parser init", ("a.txt",))
+    (stack_repo / ".git" / "info").mkdir(exist_ok=True)
+    (stack_repo / ".git" / "info" / "attributes").write_text("a.txt merge=union\n", encoding="utf-8")
+    second = upstream_moved(stack_repo, "feature", commits, settings=settings)
+    assert second is not None and second.preview and second.conflict is None, second
+    assert _rebase_i(stack_repo) == 0, "the rebase it previews goes through"
+
+
 def test_a_tag_named_like_the_branch_does_not_hide_how_far_the_upstream_moved(stack_repo: Path) -> None:
     tip = _main_moves_on(stack_repo, {"z.txt": "z\n"})
     settings = Settings.from_cwd(stack_repo)

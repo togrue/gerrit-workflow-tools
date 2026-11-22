@@ -291,13 +291,13 @@ error); `reason` is `null` when there is a preview. `upstream` is `null` without
 or an upstream, and while a rebase is underway: that one is finished first. Cost: one `git
 rev-list --count --left-right`, and one `git rev-parse --abbrev-ref` when the branch config does
 not spell the upstream as a remote branch (`branch.<name>.merge` not under `refs/heads/`, or the
-remote `.`); only once the upstream has moved on, also one `git rev-parse` of it and, the first
-time, one `git rev-list --cherry-pick` and one `git merge-tree` per commit up to the first that
-stops (a git older than 2.45 takes only commits there: it refuses the second `git merge-tree`
-once, and then one `git commit-tree` per commit goes too). The
-preview is remembered by the server process under object ids (the upstream's tip, the stack's
-commits) and what the merge depends on (the merge settings, the git program), so a refresh with
-nothing moved simulates nothing again. `ger log --json` serves the same object, and its text ends
+remote `.`); only once the upstream has moved on, also one `git rev-parse` of it, one `git
+rev-list --cherry-pick` and one `git merge-tree` per commit up to the first that stops (a git
+older than 2.45 takes only commits there: it refuses the second `git merge-tree` once, and then
+one `git commit-tree` per commit goes too). Each request simulates it again: the merge also
+depends on attributes (`.git/info/attributes`, `.gitattributes`, `core.attributesFile`) and merge
+drivers, which change with no object id changing, so nothing could tell a remembered preview is
+still true. `ger log --json` serves the same object, and its text ends
 with it as a `next:` line.
 
 `push_blocked` is why `ger push` would refuse a Gerrit push now, whatever the stack holds, or

@@ -551,7 +551,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |
-| `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`), the one command that rebases onto it, and where that rebase would stop (remembered under object ids); what `--drop-merged-equivalent` drops: `upstream_moved`, `UpstreamMoved`, `merged_with_same_code` |
+| `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`), the one command that rebases onto it, and where that rebase would stop (simulated on every call); what `--drop-merged-equivalent` drops: `upstream_moved`, `UpstreamMoved`, `merged_with_same_code` |
 | `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)

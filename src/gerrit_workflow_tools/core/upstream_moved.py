@@ -7,17 +7,15 @@ would replay, chosen as it chooses them, replayed in order onto the new upstream
 per commit, until one would stop the rebase. Nothing is said during a rebase underway: that
 one is finished first.
 
-The preview is remembered for the process under object ids and the settings it depends on
-(ADR-0014): the next ``GET /stack`` with nothing moved runs no ``merge-tree``.
+The preview is simulated anew on every call: what a merge does also depends on attributes
+(``.git/info/attributes``, ``.gitattributes``, ``core.attributesFile``) and merge drivers, which
+change without any object id changing, so no key for a process-wide memo is complete (ADR-0014).
 """
 
 from __future__ import annotations
 
-import os
-import shutil
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
@@ -96,7 +94,7 @@ def upstream_moved(
     *merged* are the shas of *commits* merged on Gerrit with the same code (:func:`merged_same`, from
     the **Gerrit overlay**): the rebase drops them, and so does the preview. ``None`` without a branch or
     an upstream. One ``git rev-list --count --left-right``; when the upstream has moved on, also one
-    ``git rev-parse`` of it and, unless remembered, one ``git rev-list --cherry-pick`` for the commits
+    ``git rev-parse`` of it, one ``git rev-list --cherry-pick`` for the commits
     git would replay and one ``git merge-tree`` per commit replayed, up to the first that would stop.
     """
     if branch is None:
@@ -117,7 +115,7 @@ def upstream_moved(
     onto, onto_tree = [*tips.stdout.split(), "", ""][:2]
     if tips.returncode != 0 or not onto_tree:
         return UpstreamMoved(name, behind, preview=False, reason=f"{name} cannot be read", drop_merged=bool(drop))
-    replay = _replay(str(cwd), onto, onto_tree, tuple(commits), drop, _merge_settings(settings), _git_program())
+    replay = _replay(cwd, onto, onto_tree, commits, drop)
     return UpstreamMoved(name, behind, *replay, drop_merged=bool(drop))
 
 
@@ -125,22 +123,8 @@ _Replay = tuple[PickConflict | None, bool, str | None, tuple[Commit, ...]]
 """``(conflict, preview, reason, dropped)`` of :class:`UpstreamMoved`."""
 
 
-@lru_cache(maxsize=8)
-def _replay(
-    cwd: str,
-    onto: str,
-    onto_tree: str,
-    commits: tuple[Commit, ...],
-    drop: frozenset[str],
-    _merge: tuple[tuple[str, str], ...],
-    _program: tuple[str, int, int] | None,
-) -> _Replay:
-    """The rebase of *commits* onto *onto*, previewed; remembered under keys that cannot change.
-
-    *onto* and the commits are object ids, *drop* and the merge settings are values: nothing here
-    can go stale (ADR-0014). The settings and the git program are in the key only because the
-    merge depends on them.
-    """
+def _replay(cwd: Path | str, onto: str, onto_tree: str, commits: Sequence[Commit], drop: frozenset[str]) -> _Replay:
+    """The rebase of *commits* onto *onto*, previewed; *drop* are the shas it leaves out."""
     # The commits git replays, as ``git rebase`` chooses them: not those whose patch is upstream already.
     listed = git(
         "rev-list", "--cherry-pick", "--right-only", "--parents", f"{onto}...{commits[-1].sha}", cwd=cwd, check=False
@@ -157,20 +141,6 @@ def _replay(
         return replay_conflict(cwd, onto, picks, onto_tree=onto_tree), True, None, dropped
     except PreviewUnavailable as error:
         return None, False, f"this git cannot simulate it ({error})", dropped
-
-
-def _merge_settings(settings: Settings) -> tuple[tuple[str, str], ...]:
-    """The settings ``git merge-tree`` reads (renames, attributes, line endings), as a key."""
-    return tuple(sorted((k, v) for k, v in settings.values.items() if k.startswith(("merge.", "diff.", "core."))))
-
-
-def _git_program() -> tuple[str, int, int] | None:
-    """The git that runs, as a key: another git (an upgrade) may merge otherwise. One ``stat``, no subprocess."""
-    found = shutil.which("git")
-    if found is None:
-        return None
-    st = os.stat(found)
-    return found, st.st_mtime_ns, st.st_size
 
 
 def _upstream_name(cwd: Path | str, branch: str) -> str:
