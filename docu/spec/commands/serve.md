@@ -514,6 +514,11 @@ top of it), or a commit does not apply in its new place. The last is found out b
 simulation as `GET /stack/moves`, and the message names the commit and the files it
 conflicts in. Where git is too old for that, the rebase is tried and aborted.
 
+A rewrite replays the stack where it sits: onto the newest merge commit, else onto the commit
+the stack forked off its upstream at. An upstream that has moved on since is not rebased onto
+(that is `ger rebase`'s to do, which `GET /stack` offers as `upstream.argv`), and
+`GET /stack/moves` previews against the same commit.
+
 ---
 
 ## What stays on the command line
