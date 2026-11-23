@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from gerrit_workflow_tools.core.comment_anchor import CommentRange
+from gerrit_workflow_tools.core.gerrit.rest import printable_path
 
 
 # A fence opened by ```suggestion on a line of its own, closed by the first line that is only
@@ -44,14 +45,14 @@ class FixReplacement:
         (so ``5.3-5.9`` is characters 3 to 9 of line 5, ``5.3-7.0`` runs up to the start of
         line 7). An insertion is the one position it goes in before: ``path:5.3``.
         """
-        rng = self.range
+        rng, path = self.range, printable_path(self.path)
         start, end = rng.start_line, rng.end_line
         if self.inserts:
-            return f"{self.path}:{start}.{rng.start_character + 1}"
+            return f"{path}:{start}.{rng.start_character + 1}"
         if rng.start_character == 0 and rng.end_character == 0 and end > start:
             # Whole lines; the end line is not touched.
-            return f"{self.path}:{start}" if end - 1 == start else f"{self.path}:{start}-{end - 1}"
-        return f"{self.path}:{start}.{rng.start_character + 1}-{end}.{rng.end_character}"
+            return f"{path}:{start}" if end - 1 == start else f"{path}:{start}-{end - 1}"
+        return f"{path}:{start}.{rng.start_character + 1}-{end}.{rng.end_character}"
 
     def lines(self) -> list[str]:
         """The replacement's lines, without line endings; a final line ending adds no line."""

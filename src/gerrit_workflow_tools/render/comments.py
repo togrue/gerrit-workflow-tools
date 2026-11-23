@@ -15,6 +15,7 @@ from gerrit_workflow_tools.cli_style import (
     visible_len,
 )
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
+from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
     ContextLine,
@@ -38,11 +39,12 @@ _HEADING_CHROME = 4
 
 def chain_location(chain: CommentChain) -> str:
     """``path:line`` when a line is known, ``path:start-end`` for a range, otherwise just the path."""
+    path = printable_path(chain.path)
     if chain.start_line is not None and chain.start_line != chain.line:
-        return f"{chain.path}:{chain.start_line}-{chain.line}"
+        return f"{path}:{chain.start_line}-{chain.line}"
     if chain.line is not None:
-        return f"{chain.path}:{chain.line}"
-    return chain.path
+        return f"{path}:{chain.line}"
+    return path
 
 
 # How a local comment is headed, human and Markdown.
@@ -61,7 +63,7 @@ def anchor_suffix(chain: CommentChain) -> str:
         return ""
     was = anchor.anchored.describe()
     if anchor.anchored.path == anchor.shown.path:
-        was = was.removeprefix(f"{anchor.anchored.path}:")
+        was = was.removeprefix(f"{printable_path(anchor.anchored.path)}:")
     return f" (moved from {was})"
 
 

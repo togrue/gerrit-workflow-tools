@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, collect_comment_chains
 from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key
-from gerrit_workflow_tools.core.gerrit.rest import parallel_map
+from gerrit_workflow_tools.core.gerrit.rest import parallel_map, printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 
@@ -200,7 +200,7 @@ class CommentApi:
         """Delete your draft in *chain* and return it. A chain without one is not found."""
         existing = chain.draft
         if existing is None or existing.comment_id is None:
-            raise ChangeResolutionError(f"no draft of yours in the chain at {chain.path}")
+            raise ChangeResolutionError(f"no draft of yours in the chain at {printable_path(chain.path)}")
         revision = existing.patch_set if existing.patch_set is not None else "current"
         self._service.rest.delete_draft(self._key(change_id), revision, existing.comment_id)
         return existing

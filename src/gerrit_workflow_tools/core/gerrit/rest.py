@@ -54,24 +54,34 @@ def _error_texts(value: Any) -> list[str]:
 
 _NEWLINE = re.compile(r"\r\n?")
 _TERMINAL_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+_PATH_CONTROLS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 def strip_terminal_controls(value: Any) -> Any:
-    """*value* with every string in it (keys too) safe to print: no terminal control characters.
+    """*value* with its text safe to print: no terminal control characters in any string but a file path.
 
     Gerrit text is written by whoever can comment on a change or name their account, and an
     escape sequence in it could hide or forge output, set the window title or write the
     clipboard. Line breaks become ``\\n`` first (``\\r\\n`` and a lone ``\\r``, as Python's universal
     newlines read them), so a CRLF message keeps its lines and a ``\\r`` cannot overwrite one.
     Then every C0 control but ``\\n`` and ``\\t``, DEL and every C1 control is removed.
+
+    File paths are identities, not text: a comment is looked up and written back by its path,
+    and git allows any character in one. So keys (the file maps are keyed by path) and
+    ``path`` values are left as Gerrit sent them, and shown through :func:`printable_path`.
     """
     if isinstance(value, str):
         return _TERMINAL_CONTROLS.sub("", _NEWLINE.sub("\n", value))
     if isinstance(value, dict):
-        return {strip_terminal_controls(k): strip_terminal_controls(v) for k, v in value.items()}
+        return {k: v if k == "path" else strip_terminal_controls(v) for k, v in value.items()}
     if isinstance(value, list):
         return [strip_terminal_controls(item) for item in value]
     return value
+
+
+def printable_path(path: str) -> str:
+    """*path* as it may be printed: each control character, line breaks too, written as ``\\xNN``."""
+    return _PATH_CONTROLS.sub(lambda m: f"\\x{ord(m.group()):02x}", path)
 
 
 def gerrit_error_reason(body: str, status_phrase: str) -> str:

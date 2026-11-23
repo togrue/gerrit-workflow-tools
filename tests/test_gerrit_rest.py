@@ -508,14 +508,16 @@ def test_gerrit_text_reaches_core_without_terminal_control_characters(monkeypatc
     """A commenter's escape sequences (OSC 52 clipboard write, a forged colour) never leave the seam.
 
     CRLF and a lone CR become ``\\n``, so a Windows-typed comment keeps its lines and a CR cannot
-    overwrite one; ``\\t`` stays; C0, DEL and C1 controls go, in keys as well as values.
+    overwrite one; ``\\t`` stays; C0, DEL and C1 controls go. File paths are identities and stay
+    as Gerrit sent them: two files whose names differ by a control character keep their comments.
     """
     from gerrit_workflow_tools.core.gerrit import http_rest
     from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
 
     payload = (
-        b')]}\'\n{"src/a\\u001b.py": [{"id": "c1", "author": {"name": "Mallory\\u009b2J"},'
-        b' "message": "LGTM\\u001b]52;c;cm0gLXJmIH4=\\u0007\\r\\nsee\\tline 2\\rhidden\\u007f\\u001b[31m"}]}'
+        b')]}\'\n{"src/a\\u001b.py": [{"id": "c1", "path": "src/a\\u001b.py", "author": {"name": "Mallory\\u009b2J"},'
+        b' "message": "LGTM\\u001b]52;c;cm0gLXJmIH4=\\u0007\\r\\nsee\\tline 2\\rhidden\\u007f\\u001b[31m"}],'
+        b' "src/a.py": [{"id": "c2", "message": "plain"}]}'
     )
 
     class _Response(io.BytesIO):
@@ -528,9 +530,15 @@ def test_gerrit_text_reaches_core_without_terminal_control_characters(monkeypatc
     comments = client.get_comments("p~main~I" + "a" * 40)
 
     assert comments == {
-        "src/a.py": [
-            {"id": "c1", "author": {"name": "Mallory2J"}, "message": "LGTM]52;c;cm0gLXJmIH4=\nsee\tline 2\nhidden[31m"}
-        ]
+        "src/a\x1b.py": [
+            {
+                "id": "c1",
+                "path": "src/a\x1b.py",
+                "author": {"name": "Mallory2J"},
+                "message": "LGTM]52;c;cm0gLXJmIH4=\nsee\tline 2\nhidden[31m",
+            }
+        ],
+        "src/a.py": [{"id": "c2", "message": "plain"}],
     }
 
 
