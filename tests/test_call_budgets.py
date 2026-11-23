@@ -304,21 +304,42 @@ def test_no_request_asks_gerrit_for_the_diffstat(stack_repo: Path, monkeypatch: 
     assert "SKIP_DIFFSTAT" in LOG_QUERY_OPTIONS  # what GET changes/<id> sends
 
 
-def test_fix_local_ref_makes_no_gerrit_calls(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``ger fix`` on a local stack ref never asks Gerrit (ADR-0003)."""
-    (web_stack_repo / "a.txt").write_text("fix budget\n", encoding="utf-8")
-    git("add", "a.txt", cwd=web_stack_repo)
-    store = ChangeStore({})
+def _fix_twice(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, store: ChangeStore, target: str) -> list[int]:
+    """Run ``ger fix TARGET`` cold, then warm; the Gerrit calls each run made."""
+    made: list[int] = []
+    for attempt in ("cold", "warm"):
+        (stack_repo / "a.txt").write_text(f"fix budget {attempt}\n", encoding="utf-8")
+        git("add", "a.txt", cwd=stack_repo)
+        before = len(store.calls)
+        with _count_git() as run:
+            code, _out, err = run_cli(stack_repo, fix_main, [target], monkeypatch, gerrit=store)
+        assert code == 0, err
+        assert run.call_count <= _FIX_GIT_BUDGET, (
+            f"git subprocesses={run.call_count} budget={_FIX_GIT_BUDGET}; "
+            f"args={[c.args[:4] for c in run.call_args_list]}"
+        )
+        assert git_out("log", "-1", "--format=%s", cwd=stack_repo).startswith("fixup! ")
+        made.append(len(store.calls) - before)
+    return made
 
-    with _count_git() as run:
-        code, _out, err = run_cli(web_stack_repo, fix_main, ["HEAD~1"], monkeypatch, gerrit=store)
 
-    assert code == 0, err
-    assert store.calls == []
-    assert run.call_count <= _FIX_GIT_BUDGET, (
-        f"git subprocesses={run.call_count} budget={_FIX_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
-    )
-    assert git_out("log", "-1", "--format=%s", cwd=web_stack_repo).startswith("fixup! ")
+@pytest.mark.parametrize("by_change_id", [False, True], ids=["local-ref", "change-id"])
+def test_fix_asks_gerrit_at_most_once_and_not_at_all_when_warm(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch, by_change_id: bool
+) -> None:
+    """``ger fix`` resolves on the local stack (ADR-0003); only whether Gerrit closed the change is asked.
+
+    One request with a cold cache, none inside the trust window.
+    """
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    cid = rows[1].change_id
+    assert cid
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    made = _fix_twice(web_stack_repo, monkeypatch, store, cid if by_change_id else rows[1].sha)
+
+    assert made == [1, 0], store.calls
+    assert [call.method for call in store.calls] == ["query_changes"]
 
 
 def test_log_warm_second_run_zero_rest_calls(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -393,23 +414,6 @@ def test_log_after_the_trust_window_is_one_probe_and_then_nothing(
 
     clock["t"] = 1029
     assert log_calls() == []
-
-
-def test_fix_change_id_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bare Change-Id is matched on the local stack — zero REST (ADR-0003)."""
-    rows = stack_rows_mb_to_head(stack_repo)
-    cid = rows[1].change_id
-    assert cid
-    (stack_repo / "b.txt").write_text("fix by cid\n", encoding="utf-8")
-    git("add", "b.txt", cwd=stack_repo)
-    store = ChangeStore(build_details_by_change_id(rows))
-
-    with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, fix_main, [cid], monkeypatch, gerrit=store)
-
-    assert code == 0, err
-    assert store.calls == []
-    assert run.call_count <= _FIX_GIT_BUDGET
 
 
 def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(

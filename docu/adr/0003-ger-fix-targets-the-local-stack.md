@@ -15,3 +15,9 @@ A change that exists on Gerrit but not on your stack is now an error rather than
 `cli_fix` no longer carries its own `refs/changes/…` regex, its own Gerrit implementation construction, or its own fetch helpers. A `refs/changes/…` argument is still accepted — it is classified as `change-ref` like everywhere else — but it now has to name a commit on the stack.
 
 This is a deliberate difference from `ger show` and `ger resolve`, which do report on changes anywhere on Gerrit. Those commands read; `ger fix` writes a commit into your history, and the only history it can write into is your own.
+
+## Addendum: a closed change is refused (#105)
+
+Resolution still never asks Gerrit for a Change-Id, a triplet or a git rev. One question is asked after it: whether Gerrit already **merged** or **abandoned** the target's change. Git alone cannot tell, because a change submitted after your last `git fetch` is still on the local stack, and a `fixup!` for it goes nowhere. Such a target exits `2` (`USAGE`), with the same check and wording as `ger edit` and `ger reword` (`rewrite_refusal.closed_change_refusal`).
+
+The question costs **at most one** request (`ChangeApi.on_push_branch`) and **none** while the cache holds the push branch's change inside the trust window ([ADR-0001](0001-offline-is-a-trust-window-not-a-gerritrest.md)). `tests/test_call_budgets.py` pins exactly that, cold and then warm. It stays optional: when Gerrit cannot be asked (no `gerrit.webUrl`, no credentials, unreachable), the git-only check stands and `ger fix I…` works offline as before.
