@@ -58,6 +58,8 @@ What is below the local version is replaced by what is below the patchset on Ger
 
 Before rebasing, each commit above is replayed in the object store (`git merge-tree`, as `ger serve`'s stack moves preview). When one would conflict, `ger checkout` exits `1` before changing anything, names the commit and the files, and says how to do it by hand or how to check the patchset out on its own branch with `-b NAME`. A git too old for the preview tries the rebase and aborts it on a conflict, which leaves the branch as it was.
 
+A **merge commit** above the local version is not replayed at all: `git rebase` leaves a merge out, and with it what only the merge records (a conflict you resolved by hand). So `ger checkout` exits `1` before changing anything, names the merge, and offers the same two ways out, the rebase by hand with `--rebase-merges`. `--force` does not override this; `--no-update` and `-b NAME` are unaffected.
+
 A forced update of a version that was never pushed works the same way; the branch's old tip is printed on stderr so your version can be recovered.
 
 A local version's branch keeps its upstream. One with no Gerrit destination gets `<remote>/<target>` as its upstream.
@@ -89,7 +91,7 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 | Code | When |
 |------|------|
 | `0` | Done, including switching to a local version you chose not to update |
-| `1` | Needs your decision: the local version holds edits Gerrit never had (and `--update` was not given, or its merge conflicts); the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly |
+| `1` | Needs your decision: the local version holds edits Gerrit never had (and `--update` was not given, or its merge conflicts); the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly, or one of them is a merge commit |
 | `2` | Bad usage; a rebase is in progress; changes to tracked files are in the way |
 | `3` | The changeish or patchset resolves to nothing |
 | `4` | The Change-Id names changes on several target branches and narrowing could not pick one |
