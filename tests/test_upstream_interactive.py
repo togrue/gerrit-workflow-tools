@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TextIO, cast
 
 import pytest
 
-from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import is_detached_head
+from gerrit_workflow_tools.core.upstream import branch_has_upstream, read_recent_upstream_abbrevs
 from gerrit_workflow_tools.core.upstream_interactive import (
-    branch_has_upstream,
+    _is_windows_console,
     ensure_branch_upstream_interactive,
     prompt_upstream_abbrev_interactive,
-    read_recent_upstream_abbrevs,
     require_branch_upstream,
 )
 
@@ -57,6 +58,8 @@ def test_ensure_branch_upstream_interactive_sets_upstream(tmp_path: Path, monkey
     repo = _make_repo_with_origin(tmp_path)
     assert not branch_has_upstream(repo, "feature")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
+    # On Windows the prompt also needs stdout to be a console, which pytest's capture is not.
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: True)
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",
@@ -80,20 +83,6 @@ def test_ensure_branch_upstream_interactive_detached_skips_prompt(
     assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
 
 
-def test_ensure_branch_upstream_interactive_non_tty_skips_prompt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    repo = _make_repo_with_origin(tmp_path)
-    assert not branch_has_upstream(repo, "feature")
-    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
-
-    def _boom(_cwd: Path | str | None, _branch: str) -> str | None:
-        raise AssertionError("prompt must not run without tty")
-
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _boom)
-    assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
-
-
 def test_require_branch_upstream_non_tty_prints_hint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -101,11 +90,12 @@ def test_require_branch_upstream_non_tty_prints_hint(
     assert not branch_has_upstream(repo, "feature")
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
 
-    assert not require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
+    with pytest.raises(ConfigError) as caught:
+        require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
 
-    err = capsys.readouterr().err
-    assert "No upstream configured for branch 'feature'" in err
-    assert "git branch --set-upstream-to=" in err
+    assert "No upstream configured for branch 'feature'" in str(caught.value)
+    assert "git branch --set-upstream-to=" in str(caught.value)
+    assert capsys.readouterr().err == ""
 
 
 def test_upstream_prompt_refuses_a_local_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,5 +122,18 @@ def test_missing_upstream_without_a_console_reports_instead_of_prompting(
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
 
-    assert require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo)) is False
-    assert "No upstream configured" in capsys.readouterr().err
+    with pytest.raises(ConfigError, match="No upstream configured"):
+        require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
+
+
+class _NoConsoleApi(_StdinTTY):
+    """A tty whose handle must not be asked for: reaching the console API is the failure."""
+
+    def fileno(self) -> int:
+        raise AssertionError("the Windows console API was consulted off Windows")
+
+
+def test_off_windows_a_tty_is_trusted_without_asking_the_console_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    assert _is_windows_console(cast(TextIO, _NoConsoleApi()))

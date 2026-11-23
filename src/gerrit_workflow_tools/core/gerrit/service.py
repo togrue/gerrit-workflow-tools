@@ -3,37 +3,31 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_SECONDS, GerritCache
-from gerrit_workflow_tools.core.gerrit.change_queries import (
-    batch_load_change_details,
-    batch_load_changes_by_commit,
-    delta_changes_since,
-    probe_changes_updated,
-)
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi
-from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest, gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
     change_id_for_gerrit_rest_path,
     parallel_map,
+    self_account_id as account_id_of_self,
 )
-from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet, resolve_stack_context
-from gerrit_workflow_tools.core.review_chain import (
-    INBOX_QUERY_OPTIONS,
-    ReviewChain,
-    assemble_review_chains,
-    missing_parent_shas,
-)
+from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet
+from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains, missing_parent_shas
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.repository import Repository
 
 
 logger = logging.getLogger(__name__)
@@ -47,22 +41,20 @@ class GerritService:
 
     def __init__(
         self,
-        rest: GerritRest,
-        cache: GerritCache,
+        rest: GerritRest | None = None,
+        cache: GerritCache | None = None,
         *,
         trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
         refresh: bool = False,
-        cwd: Path | str | None = None,
-        settings: Settings | None = None,
+        repo: Repository,
     ) -> None:
-        self.rest = rest
-        self.cache = cache
-        # Settings for *cwd*, read once. Explicit for the same reason cwd is: nothing
-        # below this layer may reach for process-wide configuration.
-        self.settings = settings if settings is not None else Settings.from_cwd(cwd)
-        # The repo this service reports on. Explicit, because GerritRest has no cwd to
-        # scavenge it from; defaults to the process cwd for callers that don't care.
-        self.cwd = str(cwd) if cwd is not None else os.getcwd()
+        # Both are built on first use when not supplied: a service that is never asked
+        # anything never needs ``gerrit.webUrl``, credentials or the cache file.
+        self._rest = rest
+        self._cache = cache
+        # The repository of the run this service belongs to: its settings, its working
+        # branch and the stack context on it, each read once for the run.
+        self.repo = repo
         self.trust_window_seconds = trust_window_seconds
         self.refresh = refresh
         # Whether this host serves the Checks plugin: True / False / None when not yet
@@ -72,41 +64,43 @@ class GerritService:
         self.changes = ChangeApi(self)
         self.comments = CommentApi(self)
 
-    @classmethod
-    def from_cwd(
-        cls,
-        cwd: Path | str | None,
-        *,
-        settings: Settings | None = None,
-        refresh: bool = False,
-        trust_window_seconds: int = DEFAULT_CHANGE_TRUST_WINDOW_SECONDS,
-        rest: GerritRest | None = None,
-        cache: GerritCache | None = None,
-    ) -> GerritService:
-        """Construct a service from git-configured Gerrit settings.
+    @property
+    def settings(self) -> Settings:
+        """The run's **Settings** snapshot."""
+        return self.repo.settings
 
-        Pass *rest* to supply the Gerrit implementation instead of building an
-        :class:`HttpGerritRest`. Doing so also skips ``gerrit.webUrl`` resolution — the web
-        base comes from the implementation — so callers that inject need no Gerrit config.
-        *settings* defaults to one read from
-        *cwd*; pass it when the caller has already taken a snapshot, so the whole command
-        works from a single ``git config --list --show-scope``.
+    @property
+    def cwd(self) -> Path:
+        """The repository this service reports on."""
+        return self.repo.cwd
+
+    @property
+    def configured(self) -> bool:
+        """Whether this service can reach a Gerrit: a client was supplied, or ``gerrit.webUrl`` is set."""
+        return self._rest is not None or bool(self.settings.gerrit_web_url)
+
+    @property
+    def credentials_configured(self) -> bool:
+        """Whether asking this Gerrit can authenticate: a client was supplied, or credentials are set."""
+        return self._rest is not None or gerrit_auth_from_settings(self.settings) is not None
+
+    @property
+    def rest(self) -> GerritRest:
+        """The Gerrit seam. Built from :attr:`settings` on first use when none was supplied.
+
+        Raises :class:`ConfigError` then when ``gerrit.webUrl`` is unset, so only the work
+        that genuinely asks Gerrit needs it configured.
         """
+        if self._rest is None:
+            self._rest = HttpGerritRest.from_settings(self.settings)
+        return self._rest
 
-        if os.environ.get("GER_CACHE_REFRESH", "").strip().lower() in ("1", "true", "yes"):
-            refresh = True
-        resolved = settings if settings is not None else Settings.from_cwd(cwd)
-        if rest is None:
-            rest = HttpGerritRest.from_settings(resolved)
-        web_base = rest.web_base
-        return cls(
-            rest,
-            cache if cache is not None else GerritCache.for_web_base(web_base),
-            refresh=refresh,
-            trust_window_seconds=trust_window_seconds,
-            cwd=cwd,
-            settings=resolved,
-        )
+    @property
+    def cache(self) -> GerritCache:
+        """The Gerrit cache for this host. Opened on first use when none was supplied."""
+        if self._cache is None:
+            self._cache = GerritCache.for_web_base(self.rest.web_base)
+        return self._cache
 
     @property
     def web_base(self) -> str:
@@ -114,16 +108,38 @@ class GerritService:
 
         return self.rest.web_base
 
+    def self_account_id(self) -> int | None:
+        """The calling user's account id, or ``None`` when Gerrit will not say.
+
+        Asked once per user and host and then remembered: an account id never changes, and
+        every inbox load and review delta needs it.
+        """
+        user = self.settings.get("gerrit.user") or ""
+        known = None if self.refresh else self.cache.account_id(user)
+        if known is not None:
+            return known
+        asked = account_id_of_self(self.rest)
+        if asked is not None:
+            self.cache.set_account_id(user, asked)
+        return asked
+
     def stack_context(self) -> StackContext:
-        """The stack context for this service (memoised by :func:`resolve_stack_context`)."""
-        return resolve_stack_context(self.cwd, settings=self.settings)
+        """The stack context of the run's working branch (:attr:`Repository.stack`)."""
+        return self.repo.stack
 
     def cache_key(self, change_ref: str, ctx: StackContext | None = None) -> str:
-        """Map a change ref to its cache key: triplets and numbers verbatim, Change-Ids via the stack context."""
+        """The one key a change is cached by and addressed by in every ``/changes/{id}`` request.
+
+        Triplets, Gerrit ids and numbers verbatim; a bare Change-Id becomes the push branch's
+        triplet, spelled with Gerrit's leading ``I`` even when given as ``i…``. A bare Change-Id is
+        never a key: Gerrit answers it with 404 ("Multiple changes found") once the Change-Id is on
+        a second branch, and the ``/changes/{id}`` seam refuses it (:func:`change_path_id`).
+        Without a stack context (*ctx* or the run's) a bare Change-Id raises ``ChangeResolutionError``.
+        """
         if "~" in change_ref or change_ref.isdigit():
             return change_ref
         ctx = ctx or self.stack_context()
-        return build_triplet(ctx.project, ctx.push_branch, change_ref)
+        return build_triplet(ctx.project, ctx.push_branch, change_id_for_gerrit_rest_path(change_ref))
 
     def fetch_gerrit_data(
         self,
@@ -131,15 +147,24 @@ class GerritService:
         *,
         cwd: Path | str | None = None,
         fetch_ci_pipelines: bool = False,
+        triplets: Sequence[str | None] | None = None,
     ) -> list[Any]:
-        """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups."""
+        """Return ``LogCommit`` rows enriched with cached Gerrit data and parallel follow-ups.
 
-        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit
+        Each row is overlaid with the push branch's change carrying its Change-Id, unless
+        *triplets* (one per row) names the change for it: a change shown for itself.
+        """
+
+        from gerrit_workflow_tools.core.gerrit_change_status import build_log_commit, overlay_code_facts
 
         stack = self.stack_context()
-
-        change_ids = [row.valid_change_id for row in commits if row.valid_change_id]
-        detail_map = self.changes.get_payloads(change_ids) if change_ids else {}
+        keys = [
+            named
+            or (build_triplet(stack.project, stack.push_branch, row.valid_change_id) if row.valid_change_id else None)
+            for row, named in zip(commits, triplets or [None] * len(commits), strict=True)
+        ]
+        refs = [key for key in keys if key]
+        detail_map = self.changes.get_payloads(refs) if refs else {}
         by_triplet: dict[str, ChangeView] = {}
         for ref, payload in detail_map.items():
             view = ChangeView.from_payload(payload)
@@ -147,13 +172,12 @@ class GerritService:
             if view.key:
                 by_triplet[view.key] = view
 
+        changes = [by_triplet.get(key) if key else None for key in keys]
+        facts = overlay_code_facts(cwd, zip(commits, changes, strict=True))
         result: list[Any] = []
         follow_ups: list[Callable[[], None]] = []
-        for row in commits:
-            change: ChangeView | None = None
-            if row.valid_change_id:
-                change = by_triplet.get(build_triplet(stack.project, stack.push_branch, row.valid_change_id))
-            lc, needed = build_log_commit(row, change, self.web_base, cwd)
+        for row, change in zip(commits, changes, strict=True):
+            lc, needed = build_log_commit(row, change, self.web_base, facts)
             if fetch_ci_pipelines and lc.pushed:
                 needed = needed | frozenset({"checks"})
             result.append(lc)
@@ -208,25 +232,18 @@ class GerritService:
         """Query Gerrit and assemble **review chains**. Never resolves stack context.
 
         The inbox is scoped to a Gerrit host, not a working directory: this path
-        must not call :func:`resolve_stack_context`. Live query, then one batched
-        ``commit:<sha>`` follow-up for parents missing from the result set.
+        must not call :func:`resolve_stack_context`. Gerrit is always asked what matches
+        (:meth:`ChangeApi.query`: a light listing, details from the cache where current),
+        then once more, batched, for parents missing from the result set.
         """
         moment = now if now is not None else datetime.now(timezone.utc)
-        queried = self.rest.query_changes(query, n=500, options=list(INBOX_QUERY_OPTIONS))
-        rows = [ChangeView.from_payload(row) for row in queried if isinstance(row, dict)]
-        account_id = self_account_id
-        if account_id is None:
-            try:
-                raw = self.rest.get_account("self").get("_account_id")
-                account_id = raw if isinstance(raw, int) else None
-            except GerritApiError:
-                account_id = None
+        rows = [ChangeView.from_payload(row) for row in self.changes.query(query)]
+        account_id = self_account_id if self_account_id is not None else self.self_account_id()
         parent_shas = missing_parent_shas(rows)
         follow_up_rows: list[ChangeView] = []
         unmatched: set[str] = set()
         if parent_shas:
-            fetched = batch_load_changes_by_commit(self.rest, parent_shas, options=list(INBOX_QUERY_OPTIONS))
-            follow_up_rows = [ChangeView.from_payload(payload) for payload in fetched.values()]
+            follow_up_rows = [ChangeView.from_payload(payload) for payload in self.changes.by_commit(parent_shas)]
             current_shas = {change.current_revision for change in follow_up_rows if change.current_revision}
             for sha in parent_shas:
                 # A parent found only as an older patch set: the chain is partial.
@@ -316,7 +333,7 @@ class GerritService:
             else:
                 messages_arg = message_rows
             links = extract_ci_links_via_registry(
-                self.cwd,
+                self.repo.root,
                 project=project,
                 checks=check_rows,
                 messages=messages_arg,
@@ -339,66 +356,3 @@ class GerritService:
         else:
             pipelines = []
         return names, links, pipelines
-
-
-class ChangeApi:
-    """Cache-aware ChangeInfo operations."""
-
-    def __init__(self, service: GerritService) -> None:
-        self._service = service
-
-    def find_by_footer_change_ids(self, change_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """Return already-known ChangeInfo rows grouped by footer Change-Id, across all branches.
-
-        Answers from local state only — this never contacts Gerrit. It relies on a prior
-        :meth:`get_payloads` having stored every branch carrying these Change-Ids, which the
-        stack overlay's project-scoped ``OR`` batch does as a side effect. Call it after the
-        overlay, not before: on a cold cache it returns nothing rather than fetching.
-
-        Used to derive multi-branch resolution notes without a per-Change-Id query storm.
-        """
-
-        return self._service.cache.find_payloads_by_footer_change_ids(change_ids)
-
-    def get_payloads(self, change_ids: list[str]) -> dict[str, dict[str, Any]]:
-        """Return raw ChangeInfo payloads keyed by Gerrit triplet ``id``."""
-
-        service = self._service
-        stack: StackContext | None
-        try:
-            stack = service.stack_context()
-        except Exception:  # pylint: disable=broad-exception-caught
-            stack = None
-
-        return service.cache.load_changes(
-            [service.cache_key(ref, stack) for ref in change_ids],
-            probe_updated=partial(probe_changes_updated, service.rest),
-            fetch_changes=partial(batch_load_change_details, service.rest),
-            fetch_delta=partial(delta_changes_since, service.rest, stack.project) if stack else None,
-            scope_key=f"{service.cache.host}~{stack.project}" if stack else None,
-            trust_window_seconds=service.trust_window_seconds,
-            refresh=service.refresh,
-        )
-
-    def set_reviewers(
-        self,
-        change_id: str,
-        *,
-        add: list[str] | None = None,
-        remove: list[int] | None = None,
-        ccs: list[str] | None = None,
-    ) -> None:
-        """Add reviewers, then remove reviewers, via REST, and cache fresh ChangeInfo.
-
-        Adds run first because Gerrit rejects an unknown reviewer: a failed add must leave the
-        existing reviewers in place. Any failure, in the writes or the re-read, drops the
-        cached row instead.
-        """
-        service = self._service
-        rest_ref = change_id_for_gerrit_rest_path(change_id)
-        cache_key = service.cache_key(change_id)
-        service.cache.invalidate_changes([cache_key])
-        if add or ccs:
-            service.rest.set_reviewers_batch(rest_ref, reviewers=add or [], ccs=ccs or [])
-        parallel_map([partial(service.rest.delete_reviewer, rest_ref, account_id) for account_id in remove or []])
-        service.cache.upsert_changes({cache_key: service.rest.get_change(rest_ref)})

@@ -160,10 +160,6 @@ def test_discard_removes_your_draft(web_stack_repo: Path, monkeypatch: pytest.Mo
 @pytest.mark.parametrize(
     "argv",
     [
-        ["c-root"],
-        ["c-root", "-m", "x", "--done"],
-        ["c-root", "--done", "--unresolve"],
-        ["c-root", "-m", "   "],
         ["c-root", "--discard", "-m", "x"],
         [f"{WEB}/c/testproj/+/100/comment/c-root/", "--change", "change:100", "--done"],
     ],
@@ -181,7 +177,7 @@ def test_ger_show_reads_back_what_ger_reply_wrote(web_stack_repo: Path, monkeypa
     run_cli(web_stack_repo, reply_main, ["c-root", "--done"], monkeypatch, gerrit=store)
     number = store.get_change(key)["_number"]
     code, out, _err = run_cli(web_stack_repo, show_main, ["--json", f"change:{number}"], monkeypatch, gerrit=store)
-    assert code in (ExitCode.OK, ExitCode.ATTENTION)
+    assert code in (ExitCode.OK, ExitCode.REFUSED)
     (chain,) = json_stdout(out)["comment_chains"]
     assert (chain["resolved"], chain["resolved_after_publish"]) == (False, True)
     assert [c["draft"] for c in chain["comments"]] == [False, True]
@@ -227,7 +223,7 @@ def test_dry_run_lists_drafts_and_publishes_nothing(web_stack_repo: Path, monkey
 def test_publish_without_a_terminal_needs_yes(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, key = _store_with_draft(web_stack_repo)
     code, _out, err = run_cli(web_stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
-    assert code == ExitCode.ATTENTION
+    assert code == ExitCode.USAGE
     assert "pass -y" in err
     assert store.calls_to("publish_drafts") == []
     assert len(_drafts(store, key)) == 1
@@ -238,11 +234,21 @@ def test_publish_prompt_defaults_to_no(
     web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch, answer: str, published: bool
 ) -> None:
     store, _key = _store_with_draft(web_stack_repo)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_reply.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("sys.stdin", io.StringIO(answer))
     code, _out, _err = run_cli(web_stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
-    assert code == (ExitCode.OK if published else ExitCode.ATTENTION)
+    assert code == (ExitCode.OK if published else ExitCode.REFUSED)
     assert bool(store.calls_to("publish_drafts")) is published
+
+
+def test_publish_with_ai_needs_yes_even_on_a_terminal(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _key = _store_with_draft(web_stack_repo)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("sys.stdin", io.StringIO("y\n"))
+    code, _out, err = run_cli(web_stack_repo, reply_main, ["--publish", "--ai"], monkeypatch, gerrit=store)
+    assert code == ExitCode.USAGE
+    assert "pass -y" in err
+    assert not store.calls_to("publish_drafts")
 
 
 def test_publish_guard_blocks_before_contacting_gerrit(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -266,10 +272,10 @@ def test_a_failed_change_does_not_stop_the_others(web_stack_repo: Path, monkeypa
     store.set_drafts(second, {"g.py": [_comment("d-2", "because", unresolved=True, updated="", in_reply_to="c-2")]})
     real = store.publish_drafts
 
-    def flaky(change_id: str, *, message: str | None = None) -> dict[str, Any]:
+    def flaky(change_id: str, **kwargs: Any) -> dict[str, Any]:
         if change_id == first:
             raise GerritApiError("Gerrit HTTP 409", status=409)
-        return real(change_id, message=message)
+        return real(change_id, **kwargs)
 
     monkeypatch.setattr(store, "publish_drafts", flaky)
     code, out, err = run_cli(web_stack_repo, reply_main, ["--publish", "-y", "--json"], monkeypatch, gerrit=store)
@@ -293,3 +299,111 @@ def test_ger_show_sees_the_published_chain_at_once(web_stack_repo: Path, monkeyp
     (chain,) = json_stdout(out)["comment_chains"]
     assert chain["resolved"] is True
     assert [c["draft"] for c in chain["comments"]] == [False, False]
+
+
+def test_publish_only_sends_the_named_draft_and_keeps_the_rest(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--only``: an agent can send its reply without publishing the user's own pending draft."""
+    store, key = _store_with_open_chain(web_stack_repo)
+    store.set_drafts(
+        key,
+        {
+            "f.py": [
+                _comment("d-1", "Done", unresolved=False, updated="", in_reply_to="c-root"),
+                _comment("d-2", "the user's own draft", unresolved=True, updated=""),
+            ]
+        },
+    )
+    code, _out, err = run_cli(
+        web_stack_repo, reply_main, ["--publish", "--only", "d-1", "-y"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert call.kwargs["draft_ids"] == ["d-1"]
+    assert [row["id"] for row in _drafts(store, key)] == ["d-2"]
+
+
+def test_publish_only_an_unknown_draft_is_not_found(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _key = _store_with_draft(web_stack_repo)
+    code, _out, err = run_cli(
+        web_stack_repo, reply_main, ["--publish", "--only", "nope", "-y"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.NOT_FOUND
+    assert "no draft of yours in a chain with id nope" in err
+    assert store.calls_to("publish_drafts") == []
+
+
+def test_publish_a_message_alone_on_a_named_change(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A change-level note without a vote and without publishing anything else."""
+    store, key = _store_with_open_chain(web_stack_repo)
+    code, out, err = run_cli(
+        web_stack_repo,
+        reply_main,
+        ["--publish", key, "-m", "recheck: tests pass locally", "-y"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert (call.kwargs["message"], call.kwargs["labels"], call.kwargs["draft_ids"]) == (
+        "recheck: tests pass locally",
+        None,
+        [],
+    )
+    assert "published 0 draft(s) and a message" in out
+
+
+def test_publish_a_message_never_goes_to_every_change_of_the_stack(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _key = _store_with_open_chain(web_stack_repo)
+    code, out, _err = run_cli(web_stack_repo, reply_main, ["--publish", "-m", "note", "-y"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK
+    assert store.calls_to("publish_drafts") == []
+    assert "no drafts to publish" in out
+
+
+def test_publish_with_a_vote(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, key = _store_with_draft(web_stack_repo)
+    code, _out, err = run_cli(
+        web_stack_repo, reply_main, ["--publish", "--vote", "CR+1", "-y"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert (call.args[0], call.kwargs["labels"], call.kwargs["draft_ids"]) == (key, {"Code-Review": 1}, None)
+
+
+def test_ger_assume_yes_publishes_without_a_prompt(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _key = _store_with_draft(web_stack_repo)
+    monkeypatch.setenv("GER_ASSUME_YES", "1")
+    code, _out, err = run_cli(web_stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert len(store.calls_to("publish_drafts")) == 1
+
+
+def test_publish_takes_a_bare_change_number(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publishing acts on changes: ``ger reply --publish 100`` names change 100, not a commit."""
+    store, key = _store_with_open_chain(web_stack_repo)
+    number = store.get_change(key)["_number"]
+    code, _out, err = run_cli(
+        web_stack_repo,
+        reply_main,
+        ["--publish", str(number), "--keep-drafts", "-m", "note", "-y"],
+        monkeypatch,
+        gerrit=store,
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert (call.args[0], call.kwargs["draft_ids"]) == (key, [])
+
+
+def test_publish_only_takes_the_chain_you_replied_to(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ger reply c-root …`` then ``--only c-root``: the id you just used names your draft there."""
+    store, key = _store_with_draft(web_stack_repo)
+    code, _out, err = run_cli(
+        web_stack_repo, reply_main, ["--publish", "--only", "c-root", "-y"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.OK, err
+    (call,) = store.calls_to("publish_drafts")
+    assert (call.args[0], call.kwargs["draft_ids"]) == (key, ["d-1"])

@@ -1,0 +1,479 @@
+{
+ "core/anchor_mapping.py": [
+  "tests/test_anchor_mapping.py"
+ ],
+ "core/annotated_stack.py": [
+  "tests/test_annotated_stack.py"
+ ],
+ "core/attention_cursor.py": [
+  "tests/test_attention_cursor.py"
+ ],
+ "cli_bash_completion.py": [
+  "tests/test_bash_completion.py"
+ ],
+ "core/call_trace.py": [
+  "tests/test_call_trace.py"
+ ],
+ "core/gerrit/change_resolution.py": [
+  "tests/test_change_resolution.py"
+ ],
+ "core/gerrit/change_view.py": [
+  "tests/test_change_view.py"
+ ],
+ "core/changeish.py": [
+  "tests/test_changeish.py"
+ ],
+ "cli_checkout.py": [
+  "tests/test_checkout.py"
+ ],
+ "cli_ci.py": [
+  "tests/test_ci.py"
+ ],
+ "core/ci_content.py": [
+  "tests/test_ci_content.py"
+ ],
+ "render/ci_content.py": [
+  "tests/test_ci_content.py"
+ ],
+ "core/ci_findings.py": [
+  "tests/test_ci_findings.py"
+ ],
+ "core/ci_links.py": [
+  "tests/test_ci_links.py"
+ ],
+ "core/ci_paths.py": [
+  "tests/test_ci_paths.py"
+ ],
+ "cli_comment.py": [
+  "tests/test_comment.py"
+ ],
+ "core/comment_chains.py": [
+  "tests/test_comment_chains.py"
+ ],
+ "cli_config.py": [
+  "tests/test_config.py"
+ ],
+ "core/config.py": [
+  "tests/test_config.py"
+ ],
+ "core/config_form.py": [
+  "tests/test_config_form.py"
+ ],
+ "cli_edit.py": [
+  "tests/test_edit.py"
+ ],
+ "core/gerrit/event_stream.py": [
+  "tests/test_event_stream.py"
+ ],
+ "cli_fetch_api.py": [
+  "tests/test_fetch_api.py"
+ ],
+ "cli_fix.py": [
+  "tests/test_fix.py"
+ ],
+ "cli_ger.py": [
+  "tests/test_ger.py"
+ ],
+ "core/ger_registry.py": [
+  "tests/test_ger_registry.py"
+ ],
+ "core/gerrit_message_parsing.py": [
+  "tests/test_gerrit_message_parsing.py"
+ ],
+ "core/gerrit_project_id.py": [
+  "tests/test_gerrit_project_id.py"
+ ],
+ "core/git_run.py": [
+  "tests/test_git_run.py"
+ ],
+ "core/git_state.py": [
+  "tests/test_git_state.py"
+ ],
+ "cli_inbox.py": [
+  "tests/test_inbox.py"
+ ],
+ "core/inbox.py": [
+  "tests/test_inbox.py"
+ ],
+ "core/local_comments.py": [
+  "tests/test_local_comments.py"
+ ],
+ "cli_log.py": [
+  "tests/test_log.py"
+ ],
+ "cli_push.py": [
+  "tests/test_push.py"
+ ],
+ "core/push.py": [
+  "tests/test_push.py"
+ ],
+ "push_input_line.py": [
+  "tests/test_push_input_line.py"
+ ],
+ "push_input_prompt.py": [
+  "tests/test_push_input_prompt.py"
+ ],
+ "core/push_reviewers.py": [
+  "tests/test_push_reviewers.py"
+ ],
+ "core/ready_calc.py": [
+  "tests/test_ready_calc.py"
+ ],
+ "rebase_enricher.py": [
+  "tests/test_rebase_enricher.py"
+ ],
+ "rebase_sequence_editor.py": [
+  "tests/test_rebase_sequence_editor.py"
+ ],
+ "cli_reply.py": [
+  "tests/test_reply.py"
+ ],
+ "cli_resolve.py": [
+  "tests/test_resolve.py"
+ ],
+ "cli_review.py": [
+  "tests/test_review.py"
+ ],
+ "core/review_chain.py": [
+  "tests/test_review_chain.py"
+ ],
+ "reviewer_catalog.py": [
+  "tests/test_reviewer_catalog.py"
+ ],
+ "core/reviewer_completion.py": [
+  "tests/test_reviewer_completion.py"
+ ],
+ "core/run_context.py": [
+  "tests/test_run_context.py"
+ ],
+ "cli_serve.py": [
+  "tests/test_serve.py"
+ ],
+ "cli_setup.py": [
+  "tests/test_setup.py"
+ ],
+ "cli_sha.py": [
+  "tests/test_sha.py"
+ ],
+ "cli_show.py": [
+  "tests/test_show.py"
+ ],
+ "core/upstream_interactive.py": [
+  "tests/test_upstream_interactive.py"
+ ],
+ "render/wrap.py": [
+  "tests/test_wrap.py"
+ ],
+ "bash_completion_generator.py": [
+  "tests/test_bash_completion.py"
+ ],
+ "cli_style.py": [
+  "tests/test_cli_style.py"
+ ],
+ "push_options_history.py": [
+  "tests/test_push.py"
+ ],
+ "push_outcome.py": [
+  "tests/test_push.py"
+ ],
+ "push_preview.py": [
+  "tests/test_push.py"
+ ],
+ "core/ci_content_service.py": [
+  "tests/test_ci_content.py"
+ ],
+ "core/ci_content_store.py": [
+  "tests/test_ci_content.py"
+ ],
+ "core/ci_findings_blocks.py": [
+  "tests/test_ci_findings.py"
+ ],
+ "core/ci_findings_located.py": [
+  "tests/test_ci_findings.py"
+ ],
+ "core/ci_findings_tests.py": [
+  "tests/test_ci_findings.py"
+ ],
+ "core/ci_findings_tests_jvm.py": [
+  "tests/test_ci_findings.py"
+ ],
+ "core/ci_http.py": [
+  "tests/test_ci.py"
+ ],
+ "core/ci_jenkins.py": [
+  "tests/test_ci.py"
+ ],
+ "core/ci_log.py": [
+  "tests/test_ci.py"
+ ],
+ "core/ci_strategy.py": [
+  "tests/test_ci.py"
+ ],
+ "core/comment_anchor.py": [
+  "tests/test_comment.py"
+ ],
+ "core/comment_target.py": [
+  "tests/test_comment.py"
+ ],
+ "core/comment_write.py": [
+  "tests/test_comment.py"
+ ],
+ "core/config_editor_file.py": [
+  "tests/test_config.py"
+ ],
+ "core/config_write.py": [
+  "tests/test_config.py"
+ ],
+ "core/edit_attention_walk.py": [
+  "tests/test_edit_attention.py"
+ ],
+ "core/push_checks.py": [
+  "tests/test_push.py"
+ ],
+ "core/push_options.py": [
+  "tests/test_push.py"
+ ],
+ "core/push_result.py": [
+  "tests/test_push.py"
+ ],
+ "core/push_unchanged.py": [
+  "tests/test_push.py"
+ ],
+ "core/review_checkout.py": [
+  "tests/test_review.py"
+ ],
+ "core/review_delta.py": [
+  "tests/test_review.py"
+ ],
+ "core/review_target.py": [
+  "tests/test_review.py"
+ ],
+ "render/review_json.py": [
+  "tests/test_review.py"
+ ],
+ "render/show_json.py": [
+  "tests/test_show.py"
+ ],
+ "render/show_markdown.py": [
+  "tests/test_show.py"
+ ],
+ "server/actions.py": [
+  "tests/test_serve.py"
+ ],
+ "server/activity.py": [
+  "tests/test_serve.py"
+ ],
+ "server/api.py": [
+  "tests/test_serve.py"
+ ],
+ "server/diff_views.py": [
+  "tests/test_serve.py"
+ ],
+ "server/httpd.py": [
+  "tests/test_serve.py"
+ ],
+ "server/request.py": [
+  "tests/test_serve.py"
+ ],
+ "server/views.py": [
+  "tests/test_serve.py"
+ ],
+ "core/gerrit/cache.py": [
+  "tests/test_gerrit_cache.py"
+ ],
+ "core/gerrit/cache_facts.py": [
+  "tests/test_gerrit_cache.py"
+ ],
+ "core/gerrit/cache_follow_ups.py": [
+  "tests/test_gerrit_cache.py"
+ ],
+ "core/gerrit/cache_rows.py": [
+  "tests/test_gerrit_cache.py"
+ ],
+ "core/gerrit/cache_schema.py": [
+  "tests/test_gerrit_cache.py"
+ ],
+ "core/gerrit/rest.py": [
+  "tests/test_gerrit_rest.py"
+ ],
+ "cli_changeid.py": [
+  "tests/test_change_resolution_consistency.py",
+  "tests/test_cid.py",
+  "tests/test_shared_refusals.py"
+ ],
+ "cli_common.py": [
+  "tests/test_change_resolution_consistency.py",
+  "tests/test_checkout.py",
+  "tests/test_ci.py",
+  "tests/test_cid.py",
+  "tests/test_comment.py",
+  "tests/test_edit.py",
+  "tests/test_fetch_api.py",
+  "tests/test_fix.py",
+  "tests/test_gerrit_unavailable.py",
+  "tests/test_inbox.py",
+  "tests/test_local_comments.py",
+  "tests/test_log.py",
+  "tests/test_push.py",
+  "tests/test_push_drafts.py",
+  "tests/test_reply.py",
+  "tests/test_resolve.py",
+  "tests/test_review.py",
+  "tests/test_run_context.py",
+  "tests/test_serve.py",
+  "tests/test_serve_events.py",
+  "tests/test_sha.py",
+  "tests/test_shared_refusals.py",
+  "tests/test_show.py"
+ ],
+ "cli_rebase.py": [
+  "tests/test_edit.py",
+  "tests/test_fix.py",
+  "tests/test_gerrit_unavailable.py",
+  "tests/test_rebase_enricher.py",
+  "tests/test_shared_refusals.py"
+ ],
+ "summary_highlight.py": [
+  "tests/test_ger_registry.py"
+ ],
+ "core/attention.py": [
+  "tests/test_attention_agreement.py",
+  "tests/test_attention_cursor.py",
+  "tests/test_edit_attention.py",
+  "tests/test_extension_strategies.py",
+  "tests/test_log.py",
+  "tests/test_rebase_enricher.py"
+ ],
+ "core/attention_strategy.py": [
+  "tests/test_attention_agreement.py",
+  "tests/test_extension_strategies.py"
+ ],
+ "core/change_id.py": [
+  "tests/test_cid.py",
+  "tests/test_fix.py",
+  "tests/test_rebase_enricher.py"
+ ],
+ "core/commit_diff.py": [
+  "tests/test_serve.py"
+ ],
+ "core/editor_extension.py": [
+  "tests/test_vscode_install.py"
+ ],
+ "core/gerrit_change_status.py": [
+  "tests/test_attention_agreement.py",
+  "tests/test_attention_cursor.py",
+  "tests/test_ci_links.py",
+  "tests/test_edit_attention.py",
+  "tests/test_extension_strategies.py",
+  "tests/test_log.py",
+  "tests/test_rebase_enricher.py",
+  "tests/test_show_comments_render.py",
+  "tests/test_wrap.py"
+ ],
+ "core/gerrit_patchset.py": [
+  "tests/test_checkout.py",
+  "tests/test_review.py",
+  "tests/test_serve.py",
+  "tests/test_serve_stack_edit.py"
+ ],
+ "core/gerrit_show.py": [
+  "tests/test_show_comments_render.py"
+ ],
+ "core/git_editor.py": [
+  "tests/test_rebase_enricher.py"
+ ],
+ "core/ready_strategy.py": [
+  "tests/test_ger_registry.py"
+ ],
+ "core/rebase_state.py": [
+  "tests/test_edit.py",
+  "tests/test_serve.py",
+  "tests/test_serve_stack_edit.py"
+ ],
+ "core/reorder.py": [
+  "tests/test_serve.py",
+  "tests/test_serve_stack_edit.py"
+ ],
+ "core/reorder_preview.py": [
+  "tests/test_serve.py"
+ ],
+ "core/repository.py": [
+  "tests/test_fetch_follow_ups.py",
+  "tests/test_gerrit_service_batch.py",
+  "tests/test_run_context.py"
+ ],
+ "core/reviewer.py": [
+  "tests/test_attention_agreement.py",
+  "tests/test_change_store.py",
+  "tests/test_change_view.py",
+  "tests/test_fetch_follow_ups.py",
+  "tests/test_log.py",
+  "tests/test_push_plan.py",
+  "tests/test_push_reviewers.py",
+  "tests/test_reviewer_completion.py",
+  "tests/test_reviewer_list.py"
+ ],
+ "core/reviewers_strategy.py": [
+  "tests/test_extension_strategies.py"
+ ],
+ "core/stack.py": [
+  "tests/test_annotated_stack.py",
+  "tests/test_checkout.py",
+  "tests/test_cid.py",
+  "tests/test_extension_strategies.py",
+  "tests/test_fetch_follow_ups.py",
+  "tests/test_ger_registry.py",
+  "tests/test_log.py",
+  "tests/test_push.py",
+  "tests/test_push_drafts.py",
+  "tests/test_push_plan.py",
+  "tests/test_ready_calc.py",
+  "tests/test_rebase_enricher.py",
+  "tests/test_serve.py",
+  "tests/test_stack_commits.py"
+ ],
+ "core/upstream.py": [
+  "tests/test_git_state.py",
+  "tests/test_upstream_interactive.py"
+ ],
+ "render/comments.py": [
+  "tests/test_comment_chains.py",
+  "tests/test_show_comments_render.py",
+  "tests/test_wrap.py"
+ ],
+ "render/commit_row.py": [
+  "tests/test_attention_agreement.py",
+  "tests/test_ci_links.py"
+ ],
+ "render/status_fmt.py": [
+  "tests/test_attention_agreement.py",
+  "tests/test_rebase_enricher.py"
+ ],
+ "core/gerrit/change_queries.py": [
+  "tests/test_gerrit_cache.py",
+  "tests/test_gerrit_rest.py",
+  "tests/test_gerrit_service_batch.py"
+ ],
+ "core/gerrit/event_source.py": [
+  "tests/test_event_stream.py"
+ ],
+ "core/gerrit/http_rest.py": [
+  "tests/test_gerrit_rest.py",
+  "tests/test_gerrit_unavailable.py"
+ ],
+ "core/gerrit/paths.py": [
+  "tests/test_push_input_prompt.py"
+ ],
+ "core/gerrit/service.py": [
+  "tests/test_annotated_stack.py",
+  "tests/test_fetch_follow_ups.py",
+  "tests/test_gerrit_service_batch.py",
+  "tests/test_inbox.py"
+ ],
+ "core/gerrit/stack_context.py": [
+  "tests/test_change_resolution.py",
+  "tests/test_change_resolution_consistency.py",
+  "tests/test_fetch_follow_ups.py",
+  "tests/test_gerrit_service_batch.py"
+ ]
+}

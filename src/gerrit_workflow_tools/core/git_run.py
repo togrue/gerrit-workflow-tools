@@ -7,10 +7,10 @@ import os
 import re
 import subprocess
 import time
-from functools import lru_cache
 from pathlib import Path
 
 from gerrit_workflow_tools.core.call_trace import record_call
+from gerrit_workflow_tools.core.changeish import unresolved_rev_message
 
 
 logger = logging.getLogger(__name__)
@@ -18,34 +18,9 @@ logger = logging.getLogger(__name__)
 # Cap logged stdout/stderr so huge blobs (e.g. binary mis-invocation) do not flood the log.
 _LOG_IO_CAP = 1000
 
-# Read-only subcommands safe to cache for the lifetime of a single CLI run.
-_CACHEABLE_SUBCOMMANDS = frozenset({"rev-parse", "log"})
-
-# Commands that change the current branch or HEAD identity. Worktree / stack-context
-# snapshots must not outlive them (same-process CLI and the long-running service).
-_HEAD_IDENTITY_SUBCOMMANDS = frozenset(
-    {
-        "checkout",
-        "switch",
-        "rebase",
-        "reset",
-        "symbolic-ref",
-        "worktree",
-        "bisect",
-    }
-)
-
-# `git branch` flags that rename a branch or change its upstream.
-_BRANCH_IDENTITY_FLAGS = frozenset({"-m", "-M", "--move", "-u", "--unset-upstream", "-t", "--track"})
-
 _UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
 
 _NAMED_REVISION_RE = re.compile(r"(?:ambiguous argument|bad revision|no such branch:) '([^']+)'")
-
-# `git config` flags that only read. Anything else may write, and upstream config is stack context.
-_CONFIG_READ_FLAGS = frozenset(
-    {"-l", "--list", "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--show-origin", "--show-scope"}
-)
 
 
 class GitError(RuntimeError):
@@ -73,39 +48,12 @@ def is_unknown_revision(stderr: str) -> bool:
 
 
 def unknown_revision_error(cwd: Path | str | None, stderr: str, returncode: int) -> UnknownRevisionError:
-    """An error naming the side of a range git could not resolve, without git's ``--`` hint."""
+    """An error naming the side of a range git could not resolve, in the words every command uses."""
     match = _NAMED_REVISION_RE.search(stderr)
     name = match.group(1) if match else ""
     missing = [part for part in re.split(r"\.{2,3}", name) if part and commit_sha_or_none(cwd, part) is None]
-    return UnknownRevisionError(f"unknown revision {missing[0] if missing else name!r}", returncode=returncode)
-
-
-def _clear_semantic_snapshots() -> None:
-    """Drop Worktree and stack-context memos (lazy imports: this module is substrate)."""
-    from gerrit_workflow_tools.core.gerrit.stack_context import clear_stack_context_cache
-    from gerrit_workflow_tools.core.git_state import clear_worktree_cache
-
-    clear_worktree_cache()
-    clear_stack_context_cache()
-
-
-def _invalidates_head_identity(args: tuple[str, ...]) -> bool:
-    """True when *args* can change the current branch name or HEAD attachment."""
-    if not args:
-        return False
-    if args[0] in _HEAD_IDENTITY_SUBCOMMANDS:
-        return True
-    if args[0] == "branch":
-        return any(a in _BRANCH_IDENTITY_FLAGS or a.startswith("--set-upstream-to") for a in args[1:])
-    if args[0] == "config":
-        return not any(a in _CONFIG_READ_FLAGS for a in args[1:])
-    return False
-
-
-def clear_git_cache() -> None:
-    """Drop all cached ``rev-parse`` / ``log`` results and semantic git snapshots."""
-    _git_cached.cache_clear()
-    _clear_semantic_snapshots()
+    rev = (missing[0] if missing else name).split("@{")[0] or name
+    return UnknownRevisionError(unresolved_rev_message(rev), returncode=returncode)
 
 
 def abs_cwd(cwd: Path | str | None) -> str:
@@ -127,32 +75,34 @@ def _run_git(
     logger.debug("run: %s (cwd=%s)", " ".join(cmd), cwd_str or ".")
     merged = {**os.environ, **env} if env else None
     t0 = time.perf_counter()
-    result = subprocess.run(
-        cmd,
-        cwd=cwd,
-        env=merged,
-        input=input_text,
-        # Git writes UTF-8 whatever the console code page says; text=True alone uses the locale.
-        encoding="utf-8",
-        errors="replace",
-        capture_output=capture,
-        check=False,
-    )
+    result: subprocess.CompletedProcess[str]
+    if input_text is None:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=merged,
+            # Git writes UTF-8 whatever the console code page says; text=True alone uses the locale.
+            encoding="utf-8",
+            errors="replace",
+            capture_output=capture,
+            check=False,
+        )
+    else:
+        # Bytes in: a text-mode pipe turns every LF of the input into CR LF on Windows, and git
+        # would store that — in a commit message given to `commit-tree`, in a diff given to `patch-id`.
+        raw = subprocess.run(
+            cmd, cwd=cwd, env=merged, input=input_text.encode("utf-8"), capture_output=capture, check=False
+        )
+        result = subprocess.CompletedProcess(raw.args, raw.returncode, _as_text(raw.stdout), _as_text(raw.stderr))
     record_call("git", " ".join(cmd), time.perf_counter() - t0)
     return result
 
 
-@lru_cache(maxsize=512)
-def _git_cached(
-    args: tuple[str, ...],
-    cwd_abs: str,
-    env_key: tuple[tuple[str, str], ...] | None,
-) -> subprocess.CompletedProcess[str]:
-    env = dict(env_key) if env_key else None
-    p = _run_git(*args, cwd=cwd_abs, env=env)
-    if p.returncode != 0:
-        _git_cached.cache_clear()
-    return p
+def _as_text(output: bytes | None) -> str:
+    """Git's output as text mode reads it: UTF-8, with every line ending a line feed."""
+    if output is None:
+        return None  # type: ignore[return-value]  # not captured, as in text mode
+    return output.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _raise_if_failed(
@@ -180,17 +130,13 @@ def git(
 ) -> subprocess.CompletedProcess[str]:
     """Run git with given args; cwd defaults to current directory.
 
-    Pass *input* to feed stdin (disables the rev-parse/log cache for that call). Pass
-    ``capture=False`` for a git that talks to the terminal itself, such as ``rebase -i``.
+    Every call runs git: nothing here remembers an answer, so nothing has to guess when one
+    went stale. What a run reads once it keeps itself (``core/repository.py``).
+
+    Pass *input* to feed stdin. Pass ``capture=False`` for a git that talks to the terminal
+    itself, such as ``rebase -i``.
     """
-    if input is not None or not args or args[0] not in _CACHEABLE_SUBCOMMANDS:
-        _git_cached.cache_clear()
-        if _invalidates_head_identity(args):
-            _clear_semantic_snapshots()
-        p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
-    else:
-        env_key = tuple(sorted(env.items())) if env else None
-        p = _git_cached(args, abs_cwd(cwd), env_key)
+    p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
     _raise_if_failed(args, p, check=check)
     return p
 

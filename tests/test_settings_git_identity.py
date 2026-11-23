@@ -6,43 +6,42 @@ from pathlib import Path
 from unittest.mock import patch
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit import stack_context as cr
-from gerrit_workflow_tools.core.git_run import _run_git, clear_git_cache, git
+from gerrit_workflow_tools.core.git_run import _run_git, git
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
-    repo_toplevel,
+    configured_upstream_abbrev,
     resolve_upstream_abbrev_ref,
 )
 
 
-def test_branch_upstream_abbrev_from_refs_heads_merge() -> None:
+def test_configured_upstream_abbrev_from_refs_heads_merge() -> None:
     settings = Settings.from_map(
         {
             "branch.feature.remote": "origin",
             "branch.feature.merge": "refs/heads/main",
         }
     )
-    assert settings.branch_upstream_abbrev("feature") == "origin/main"
+    assert configured_upstream_abbrev(settings, "feature") == "origin/main"
 
 
-def test_branch_upstream_abbrev_nonstandard_merge_returns_none() -> None:
+def test_configured_upstream_abbrev_nonstandard_merge_returns_none() -> None:
     settings = Settings.from_map(
         {
             "branch.feature.remote": "origin",
             "branch.feature.merge": "refs/remotes/origin/main",
         }
     )
-    assert settings.branch_upstream_abbrev("feature") is None
+    assert configured_upstream_abbrev(settings, "feature") is None
 
 
-def test_branch_upstream_abbrev_local_dot_remote_returns_none() -> None:
+def test_configured_upstream_abbrev_local_dot_remote_returns_none() -> None:
     settings = Settings.from_map(
         {
             "branch.feature.remote": ".",
             "branch.feature.merge": "refs/heads/main",
         }
     )
-    assert settings.branch_upstream_abbrev("feature") is None
+    assert configured_upstream_abbrev(settings, "feature") is None
 
 
 def test_resolve_upstream_abbrev_ref_settings_first(tmp_path: Path) -> None:
@@ -60,26 +59,8 @@ def test_resolve_upstream_abbrev_ref_settings_first(tmp_path: Path) -> None:
         assert resolve_upstream_abbrev_ref(tmp_path, "feature", settings=settings) == "origin/main"
 
 
-def test_worktree_memo_survives_non_cacheable_git(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    (repo / "f").write_text("x\n", encoding="utf-8")
-    git("add", "f", cwd=repo)
-    git("commit", "-m", "init", cwd=repo)
-
-    clear_git_cache()
-    with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
-        first = repo_toplevel(repo)
-        git("remote", "add", "origin", repo.as_uri(), cwd=repo)
-        second = repo_toplevel(repo)
-    assert first == second == repo.resolve()
-    combined = [c for c in run.call_args_list if c.args and c.args[0] == "rev-parse" and "--show-toplevel" in c.args]
-    assert len(combined) == 1
-
-
-def test_checkout_invalidates_worktree_memo(tmp_path: Path) -> None:
-    """``git checkout`` in-process must drop the Worktree snapshot (second CLI command)."""
+def test_the_checked_out_branch_is_read_anew_after_a_checkout(tmp_path: Path) -> None:
+    """Nothing remembers the worktree across reads: after ``git checkout`` the next read sees the new branch."""
     repo = tmp_path / "repo"
     repo.mkdir()
     git("init", "-b", "main", cwd=repo)
@@ -88,7 +69,6 @@ def test_checkout_invalidates_worktree_memo(tmp_path: Path) -> None:
     git("commit", "-m", "init", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
 
-    clear_git_cache()
     with patch("gerrit_workflow_tools.core.git_run._run_git", wraps=_run_git) as run:
         assert checked_out_branch_name(repo) == "feature"
         git("checkout", "main", cwd=repo)
@@ -97,61 +77,3 @@ def test_checkout_invalidates_worktree_memo(tmp_path: Path) -> None:
         c for c in run.call_args_list if c.args and c.args[0] == "rev-parse" and "--show-toplevel" in c.args
     ]
     assert len(toplevel_parses) == 2
-
-
-def test_resolve_stack_context_memoized(tmp_path: Path) -> None:
-    settings = Settings.from_map(
-        {
-            "gerrit.project": "proj",
-            "branch.feature.remote": "origin",
-            "branch.feature.merge": "refs/heads/main",
-            "branch.feature.gerrittarget": "main",
-        }
-    )
-    calls = {"n": 0}
-    original = cr._resolve_stack_context_uncached
-
-    def counting(*args: object, **kwargs: object) -> cr.StackContext:
-        calls["n"] += 1
-        return original(*args, **kwargs)  # type: ignore[arg-type]
-
-    with patch.object(cr, "_resolve_stack_context_uncached", side_effect=counting):
-        a = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings)
-        b = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings)
-    assert a == b
-    assert calls["n"] == 1
-
-
-def test_resolve_stack_context_cache_is_keyed_by_settings_values(tmp_path: Path) -> None:
-    def settings_for(target: str) -> Settings:
-        return Settings.from_map({"gerrit.project": "proj", "branch.feature.gerrittarget": target})
-
-    clear_git_cache()
-    first = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings_for("main"))
-    # A distinct but equal snapshot hits the memo; a snapshot with other values must not.
-    with patch.object(cr, "_resolve_stack_context_uncached", side_effect=AssertionError("memo miss")):
-        assert cr.resolve_stack_context(tmp_path, branch="feature", settings=settings_for("main")) == first
-    other = cr.resolve_stack_context(tmp_path, branch="feature", settings=settings_for("dev"))
-    assert other != first
-
-
-def test_config_write_and_set_upstream_clear_stack_context_cache(tmp_path: Path) -> None:
-    repo = tmp_path / "r"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    settings = Settings.from_map({"gerrit.project": "proj", "branch.main.gerrittarget": "main"})
-    for args in (("config", "user.name", "x"), ("branch", "--set-upstream-to=origin/main", "main")):
-        cr.resolve_stack_context(repo, branch="main", settings=settings)
-        assert cr._STACK_CONTEXT_CACHE
-        git(*args, cwd=repo, check=False)
-        assert not cr._STACK_CONTEXT_CACHE, args
-
-
-def test_config_read_keeps_stack_context_cache(tmp_path: Path) -> None:
-    repo = tmp_path / "r"
-    repo.mkdir()
-    git("init", "-b", "main", cwd=repo)
-    settings = Settings.from_map({"gerrit.project": "proj", "branch.main.gerrittarget": "main"})
-    cr.resolve_stack_context(repo, branch="main", settings=settings)
-    git("config", "--list", cwd=repo)
-    assert cr._STACK_CONTEXT_CACHE

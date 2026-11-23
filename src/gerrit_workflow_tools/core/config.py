@@ -55,7 +55,7 @@ _TRUTHY = ("1", "true", "yes", "on")
 _REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
 _DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
 _DEFAULT_WRAP_WIDTH = 120
-EDIT_NEXT_SHOW_KEY = "gerrit.editNextShow"
+SHOW_AFTER_EDIT_KEY = "ger.showAfterEdit"
 
 _SCOPE_BY_NAME = {scope.value: scope for scope in ConfigScope}
 
@@ -134,6 +134,11 @@ class Settings:
             for key in values:
                 resolved_scopes.setdefault(key, ConfigScope.LOCAL)
         return cls(values=values, scopes=resolved_scopes)
+
+    @property
+    def in_repository(self) -> bool:
+        """Read inside a git repository, which always has local config. Free: no subprocess."""
+        return any(scope in (ConfigScope.LOCAL, ConfigScope.WORKTREE) for scope in self.scopes.values())
 
     def get(self, key: str) -> str | None:
         """Return the value for *key*, stripped, or ``None`` when unset or blank.
@@ -252,25 +257,6 @@ class Settings:
         """``branch.<branch>.merge`` when set (often ``refs/heads/<name>``)."""
         return self.get(f"branch.{branch}.merge")
 
-    def branch_upstream_abbrev(self, branch: str) -> str | None:
-        """Remote-tracking abbrev from ``branch.<branch>.remote`` + ``merge``.
-
-        Returns ``origin/main`` only when ``merge`` is ``refs/heads/…`` (what
-        ``git branch --set-upstream-to`` writes). Any other ``merge`` shape returns
-        ``None`` so callers fall back to ``git rev-parse …@{upstream}``.
-        """
-        remote = self.branch_remote(branch)
-        merge = self.branch_merge(branch)
-        if not remote or not merge or remote == ".":
-            return None
-        prefix = "refs/heads/"
-        if not merge.startswith(prefix):
-            return None
-        branch_name = merge[len(prefix) :]
-        if not branch_name:
-            return None
-        return f"{remote}/{branch_name}"
-
     # -- Per-command defaults -----------------------------------------------------
 
     @property
@@ -287,6 +273,7 @@ class Settings:
         return {
             "show_attributes": self.flag("gerrit.pushShowAttributes"),
             "last_pushed_branch": self.flag("gerrit.lastPushedBranch", default=True),
+            "publish_drafts": self.flag("gerrit.pushPublishDrafts", default=True),
         }
 
     @property
@@ -298,12 +285,50 @@ class Settings:
         }
 
     @property
-    def edit_next_show(self) -> bool:
-        """``gerrit.editNextShow``: run ``ger show`` after a successful ``ger edit --next``.
+    def show_after_edit(self) -> bool:
+        """``ger.showAfterEdit``: run ``ger show`` after ``ger edit --next`` or ``--first-attention-commit`` stops.
 
-        Unset is off. ``ger edit --next`` only moves unless this flag is set.
+        On when unset.
         """
-        return self.flag(EDIT_NEXT_SHOW_KEY)
+        return self.flag(SHOW_AFTER_EDIT_KEY, default=True)
+
+    @property
+    def show_ci_content(self) -> bool:
+        """``ger.showCiContent``: attach **CI findings** to ``ger show`` (``--ci`` / ``--no-ci`` override)."""
+        return self.flag("ger.showCiContent")
+
+    def ci_credential(self, host: str) -> str | None:
+        """``ger.ciCredential.<host>``: secret for CI content providers on *host* (key matched case-insensitively)."""
+        want = f"ger.cicredential.{host}".lower()
+        return next((v.strip() for k, v in self.values.items() if k.lower() == want and v.strip()), None)
+
+    @property
+    def review_checkout(self) -> str | None:
+        """``ger.reviewCheckout``: ``worktree`` or ``branch``; ``None`` when unset (ask on first use)."""
+        value = (self.get("ger.reviewCheckout") or "").strip().lower()
+        return value if value in ("worktree", "branch") else None
+
+    @property
+    def review_worktree(self) -> str | None:
+        """``ger.reviewWorktree``: where the review worktree lives; ``None`` for the default."""
+        return self.get("ger.reviewWorktree")
+
+    @property
+    def review_stage(self) -> bool:
+        """``ger.reviewStage``: stage the reviewed change's diff. Default on."""
+        return self.flag("ger.reviewStage", default=True)
+
+    @property
+    def event_stream(self) -> str:
+        """``ger.eventStream``: ``auto`` (the default: try once, quietly), ``on`` or ``off``."""
+        value = (self.get("ger.eventStream") or "").lower()
+        if value in _TRUTHY:
+            return "on"
+        return "off" if value in ("0", "false", "no", "off") else "auto"
+
+    def event_stream_ssh(self, part: str) -> str | None:
+        """``ger.eventStreamHost``, ``…Port`` or ``…User`` (*part*: ``Host``, ``Port``, ``User``): ssh overrides."""
+        return self.get(f"ger.eventStream{part}")
 
     @property
     def inbox_require_verified(self) -> bool:

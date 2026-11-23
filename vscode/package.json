@@ -1,0 +1,339 @@
+{
+  "name": "ger-vscode",
+  "displayName": "ger — Gerrit stacked reviews",
+  "description": "Your Gerrit review chains, the local stack, comments, diffs and CI findings, next to your code. A client of `ger serve`.",
+  "version": "0.1.0",
+  "publisher": "gerrit-workflow-tools",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/togrue/gerrit-workflow-tools",
+    "directory": "vscode"
+  },
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:.git",
+    "onStartupFinished"
+  ],
+  "main": "./out/src/extension.js",
+  "scripts": {
+    "postinstall": "node scripts/copy-codicons.js",
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "test": "tsc -p . && node --test \"out/test/**/*.test.js\"",
+    "e2e": "tsc -p . && node out/test/e2e/run.js",
+    "gallery": "tsc -p . && node out/test/gallery/run.js",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.85.0",
+    "@vscode/codicons": "0.0.36",
+    "typescript": "^5.4.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode nothing is started: ger runs git and the program in `ger.executable` in the repository, which an untrusted repository could make run its own code. `ger.executable` and `ger.agentCommand` are only read from your user settings there.",
+      "restrictedConfigurations": ["ger.executable", "ger.agentCommand"]
+    }
+  },
+  "contributes": {
+    "configuration": {
+      "title": "ger",
+      "properties": {
+        "ger.executable": {
+          "type": "string",
+          "default": "ger",
+          "scope": "machine-overridable",
+          "order": 1,
+          "markdownDescription": "How to run ger: a program on the `PATH` (`ger`), a path to it (`C:\\Program Files\\ger\\ger.exe`), or a command line (`uv run ger`), where quotes keep a path with blanks together. The extension starts `<this> serve` in the git checkout, and runs `ger push`, `ger edit` and `ger setup` this way in a terminal."
+        },
+        "ger.agentCommand": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 2,
+          "markdownDescription": "Terminal command that starts a coding agent. `{brief}` is replaced by the path of a Markdown runbook (what to fix in which commit, and the rules), `{rev}` by the commit when it is about one. Example: `claude \"Fix the review comments and CI failures described in {brief}\"`. Empty: the runbook is copied to the clipboard instead."
+        },
+        "ger.pollSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 15,
+          "scope": "window",
+          "order": 3,
+          "markdownDescription": "How often, in seconds, the views refresh in the background while the window has focus. They also refresh when the window regains focus. While `ger serve` follows Gerrit's event stream, the views refresh when something happens, and this poll slows to every 15 minutes (or this, when longer)."
+        },
+        "ger.notify": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "order": 4,
+          "markdownDescription": "Show a notification when a background refresh finds that something new has become the most important change (the status bar headline). A change you caused yourself is not announced: the status bar shows it."
+        },
+        "ger.closeDiffsOnRebase": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "order": 5,
+          "markdownDescription": "Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open, its title marked *stale*. A tab that may hold unsaved edits is never closed."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ger",
+          "title": "Gerrit",
+          "icon": "media/ger.svg"
+        }
+      ]
+    },
+    "views": {
+      "ger": [
+        {
+          "id": "ger.overview",
+          "name": "Review chains"
+        },
+        {
+          "id": "ger.stack",
+          "name": "Local stack",
+          "type": "webview"
+        },
+        {
+          "id": "ger.change",
+          "name": "Change",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ger.overview",
+        "contents": "Open a folder with a Gerrit checkout to see your review chains and your local stack.\n[Open Folder](command:workbench.action.files.openFolder)",
+        "when": "workbenchState == empty"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "None of the folders in this window is in a git checkout. Open the folder of a Gerrit checkout.\n[Open Folder](command:workbench.action.files.openFolder)",
+        "when": "workbenchState != empty && ger.state == no-repo"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "ger starts once you trust this folder: it runs git and the program in **ger.executable** here, which a repository you do not trust could make run its own code.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "ger.state == untrusted"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "Starting `ger serve`…\n[Show Log](command:ger.showLog)",
+        "when": "ger.state == starting"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "The program that runs ger was not found. Install it (in a terminal, with uv or pipx), then press Retry.\n[Install ger](command:ger.installCli)\n[Retry](command:ger.refresh)\nAlready installed? Set **ger.executable** to how to run it (for example `uv run ger`, or the full path of the program).\n[Open Settings](command:workbench.action.openSettings?%5B%22ger.executable%22%5D)",
+        "when": "ger.state == no-executable"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "This repository is not set up for Gerrit yet: ger needs its web address (`gerrit.webUrl`) and your credentials, and `ger setup` asks for them.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
+        "when": "ger.state == setup"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "`ger serve` stopped or failed. The log says why.\n[Retry](command:ger.refresh)\n[Show Log](command:ger.showLog)",
+        "when": "ger.state == failed"
+      }
+    ],
+    "commands": [
+      { "command": "ger.refresh", "title": "Refresh from Gerrit", "category": "ger", "icon": "$(refresh)" },
+      { "command": "ger.showLog", "title": "Show Log", "category": "ger" },
+      { "command": "ger.reportIssue", "title": "Report Issue…", "category": "ger" },
+      { "command": "ger.openHeadline", "title": "Open the Most Important Change", "category": "ger" },
+      { "command": "ger.markSeen", "title": "Mark All Activity as Seen", "category": "ger", "icon": "$(check-all)" },
+      { "command": "ger.openChange", "title": "Show Change", "category": "ger" },
+      { "command": "ger.openInGerrit", "title": "Open in Gerrit", "category": "ger", "icon": "$(link-external)" },
+      { "command": "ger.review", "title": "Review Change", "category": "ger", "icon": "$(eye)" },
+      { "command": "ger.checkout", "title": "Check Out to Work On", "category": "ger", "icon": "$(cloud-download)" },
+      { "command": "ger.stack.edit", "title": "Edit Commit Here", "category": "ger", "icon": "$(edit)" },
+      { "command": "ger.reviewDone", "title": "Leave Review Checkout", "category": "ger" },
+      { "command": "ger.push", "title": "Push to Gerrit…", "category": "ger", "icon": "$(cloud-upload)" },
+      { "command": "ger.rebase.continue", "title": "Continue the Rebase", "category": "ger" },
+      { "command": "ger.rebase.abort", "title": "Abort the Rebase", "category": "ger" },
+      { "command": "ger.rebase.skip", "title": "Skip the Commit the Rebase Stopped At…", "category": "ger" },
+      { "command": "ger.rebase.upstream", "title": "Rebase onto the Upstream", "category": "ger" },
+      { "command": "ger.setup", "title": "Set Up Gerrit Access (ger setup)…", "category": "ger" },
+      { "command": "ger.installCli", "title": "Install ger…", "category": "ger" },
+      { "command": "ger.stack.squash", "title": "Squash into Commit Below", "category": "ger" },
+      { "command": "ger.stack.squashTakeMessage", "title": "Squash into Commit Below, Keeping This Message", "category": "ger" },
+      { "command": "ger.stack.drop", "title": "Drop Commit…", "category": "ger" },
+      { "command": "ger.copyChangeId", "title": "Copy Change-Id", "category": "ger" },
+      { "command": "ger.copySha", "title": "Copy SHA", "category": "ger" },
+      { "command": "ger.sortChains", "title": "Sort Chains…", "category": "ger", "icon": "$(sort-precedence)" },
+      { "command": "ger.openDiff", "title": "Open Diff", "category": "ger" },
+      { "command": "ger.openLocation", "title": "Go to Location", "category": "ger" },
+      { "command": "ger.nextComment", "title": "Next Unresolved Comment", "category": "ger", "icon": "$(arrow-down)" },
+      { "command": "ger.prevComment", "title": "Previous Unresolved Comment", "category": "ger", "icon": "$(arrow-up)" },
+      { "command": "ger.reply", "title": "Reply as Draft…", "category": "ger", "icon": "$(reply)" },
+      { "command": "ger.replyDone", "title": "Reply Done and Resolve as Draft", "category": "ger", "icon": "$(check)" },
+      { "command": "ger.thread.reply", "title": "Save", "category": "ger" },
+      { "command": "ger.thread.cancel", "title": "Cancel", "category": "ger" },
+      { "command": "ger.thread.markResolved", "title": "Resolved: No (Click to Resolve It with Your Reply)", "category": "ger", "icon": "$(circle-large-outline)" },
+      { "command": "ger.thread.markUnresolved", "title": "Resolved: Yes (Click to Leave It Unresolved)", "category": "ger", "icon": "$(pass-filled)" },
+      { "command": "ger.comment.saveDraft", "title": "Save Draft (on Gerrit, only you see it)", "category": "ger" },
+      { "command": "ger.comment.saveLocalDraft", "title": "Save Local Draft (not on Gerrit yet)", "category": "ger" },
+      { "command": "ger.comment.saveNote", "title": "Save Private Note (never uploaded)", "category": "ger" },
+      { "command": "ger.comment.add", "title": "Add Comment", "category": "ger", "icon": "$(comment)" },
+      { "command": "ger.comment.cancelNew", "title": "Cancel", "category": "ger" },
+      { "command": "ger.comment.file", "title": "Comment on This File…", "category": "ger" },
+      { "command": "ger.comment.edit", "title": "Edit Comment", "category": "ger", "icon": "$(edit)" },
+      { "command": "ger.comment.save", "title": "Save", "category": "ger" },
+      { "command": "ger.comment.cancel", "title": "Cancel", "category": "ger" },
+      { "command": "ger.comment.delete", "title": "Delete Comment…", "category": "ger", "icon": "$(trash)" },
+      { "command": "ger.comment.discard", "title": "Discard", "category": "ger" },
+      { "command": "ger.comment.escape", "title": "Leave the Comment Box", "category": "ger" },
+      { "command": "ger.comment.close", "title": "Close the Comment", "category": "ger" },
+      { "command": "ger.chain.edit", "title": "Edit Your Comment…", "category": "ger", "icon": "$(edit)" },
+      { "command": "ger.chain.delete", "title": "Delete Your Comment…", "category": "ger", "icon": "$(trash)" },
+      { "command": "ger.setUpstream", "title": "Set Upstream Branch…", "category": "ger", "icon": "$(git-branch)" },
+      { "command": "ger.agentBrief", "title": "Hand to Agent…", "category": "ger", "icon": "$(hubot)" },
+      { "command": "ger.agentWalk", "title": "Fix Stack with Agent…", "category": "ger", "icon": "$(hubot)" },
+      { "command": "ger.hold", "title": "Keep for Me (Not for the Agent)", "category": "ger", "icon": "$(person)" },
+      { "command": "ger.release", "title": "Let the Agent Handle It", "category": "ger", "icon": "$(hubot)" }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "ger.openHeadline", "when": "ger.ready" },
+        { "command": "ger.markSeen", "when": "ger.ready" },
+        { "command": "ger.openInGerrit", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.review", "when": "ger.ready && ger.changeShown && !ger.changeIsLocal" },
+        { "command": "ger.checkout", "when": "ger.ready && ger.changeShown && !ger.changeIsLocal" },
+        { "command": "ger.stack.edit", "when": "ger.ready && ger.changeShown && ger.changeIsLocal" },
+        { "command": "ger.reviewDone", "when": "ger.ready && ger.reviewOpen" },
+        { "command": "ger.push", "when": "ger.ready" },
+        { "command": "ger.rebase.continue", "when": "ger.ready && ger.rebasing" },
+        { "command": "ger.rebase.abort", "when": "ger.ready && ger.rebasing" },
+        { "command": "ger.rebase.skip", "when": "ger.ready && ger.rebasing && ger.rebaseSkippable" },
+        { "command": "ger.rebase.upstream", "when": "ger.ready && !ger.rebasing" },
+        { "command": "ger.setup", "when": "ger.state != no-repo" },
+        { "command": "ger.installCli", "when": "ger.state == no-executable" },
+        { "command": "ger.nextComment", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.prevComment", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.setUpstream", "when": "ger.ready" },
+        { "command": "ger.agentBrief", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.agentWalk", "when": "ger.ready" },
+        { "command": "ger.openChange", "when": "false" },
+        { "command": "ger.openDiff", "when": "false" },
+        { "command": "ger.openLocation", "when": "false" },
+        { "command": "ger.stack.squash", "when": "false" },
+        { "command": "ger.stack.squashTakeMessage", "when": "false" },
+        { "command": "ger.stack.drop", "when": "false" },
+        { "command": "ger.copyChangeId", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.copySha", "when": "ger.ready && ger.changeShown" },
+        { "command": "ger.sortChains", "when": "ger.ready" },
+        { "command": "ger.reply", "when": "false" },
+        { "command": "ger.hold", "when": "false" },
+        { "command": "ger.release", "when": "false" },
+        { "command": "ger.replyDone", "when": "false" },
+        { "command": "ger.thread.reply", "when": "false" },
+        { "command": "ger.thread.cancel", "when": "false" },
+        { "command": "ger.thread.markResolved", "when": "false" },
+        { "command": "ger.thread.markUnresolved", "when": "false" },
+        { "command": "ger.comment.saveDraft", "when": "false" },
+        { "command": "ger.comment.saveLocalDraft", "when": "false" },
+        { "command": "ger.comment.saveNote", "when": "false" },
+        { "command": "ger.comment.add", "when": "ger.ready" },
+        { "command": "ger.comment.cancelNew", "when": "false" },
+        { "command": "ger.comment.file", "when": "false" },
+        { "command": "ger.comment.edit", "when": "false" },
+        { "command": "ger.comment.save", "when": "false" },
+        { "command": "ger.comment.cancel", "when": "false" },
+        { "command": "ger.comment.delete", "when": "false" },
+        { "command": "ger.comment.discard", "when": "false" },
+        { "command": "ger.comment.escape", "when": "false" },
+        { "command": "ger.comment.close", "when": "false" },
+        { "command": "ger.chain.edit", "when": "false" },
+        { "command": "ger.chain.delete", "when": "false" }
+      ],
+      "editor/context": [
+        { "command": "ger.comment.add", "when": "ger.ready && ger.canComment", "group": "1_ger@1" }
+      ],
+      "editor/lineNumber/context": [
+        { "command": "ger.comment.add", "when": "ger.ready && ger.canComment", "group": "1_ger@1" }
+      ],
+      "comments/comment/title": [
+        { "command": "ger.comment.edit", "when": "commentController == ger && comment == yours", "group": "inline@1" },
+        { "command": "ger.comment.delete", "when": "commentController == ger && comment == yours", "group": "inline@2" }
+      ],
+      "comments/comment/context": [
+        { "command": "ger.comment.save", "when": "commentController == ger", "group": "inline@1" },
+        { "command": "ger.comment.cancel", "when": "commentController == ger", "group": "inline@2" },
+        { "command": "ger.comment.discard", "when": "commentController == ger && comment == yours", "group": "inline@3" }
+      ],
+      "view/title": [
+        { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
+        { "command": "ger.markSeen", "when": "view == ger.overview && ger.ready", "group": "navigation@2" },
+        { "command": "ger.sortChains", "when": "view == ger.overview && ger.ready", "group": "navigation@3" },
+        { "command": "ger.reportIssue", "when": "view == ger.overview", "group": "9_help@1" },
+        { "command": "ger.agentWalk", "when": "view == ger.stack && ger.ready", "group": "navigation@0" },
+        { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
+        { "command": "ger.push", "when": "view == ger.stack && ger.ready", "group": "navigation@1" },
+        { "command": "ger.setUpstream", "when": "view == ger.stack && ger.ready", "group": "1_branch@1" },
+        { "command": "ger.agentBrief", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@3" },
+        { "command": "ger.review", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "1_open@1" },
+        { "command": "ger.checkout", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "navigation@4" },
+        { "command": "ger.stack.edit", "when": "view == ger.change && ger.ready && ger.changeShown && ger.changeIsLocal", "group": "navigation@4" },
+        { "command": "ger.openInGerrit", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "1_open@2" },
+        { "command": "ger.reviewDone", "when": "view == ger.change && ger.ready && ger.reviewOpen" }
+      ],
+      "view/item/context": [
+        { "command": "ger.review", "when": "viewItem =~ /^ger\\.change(?!.*\\.local)/", "group": "inline@1" },
+        { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.change(?!.*\\.local)/", "group": "inline@2" },
+        { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.change.*\\.local/", "group": "inline@1" },
+        { "command": "ger.openInGerrit", "when": "viewItem =~ /^ger\\.(change|chain)/ && viewItem =~ /\\.url/", "group": "inline@5" },
+        { "command": "ger.review", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@1" },
+        { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@2" },
+        { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.chain.*\\.local/", "group": "0_open@1" },
+        { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.change/", "group": "1_ger@1" },
+        { "command": "ger.copyChangeId", "when": "viewItem =~ /^ger\\.(change|chain)/", "group": "9_copy@1" },
+        { "command": "ger.copySha", "when": "viewItem =~ /^ger\\.(change|chain)/", "group": "9_copy@2" }
+      ],
+      "webview/context": [
+        { "command": "ger.stack.edit", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "0_open@1" },
+        { "command": "ger.openInGerrit", "when": "webviewId == ger.stack && webviewSection == commit && gerUrl && !gerMulti", "group": "0_open@2" },
+        { "command": "ger.agentBrief", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "1_ger@1" },
+        { "command": "ger.stack.squash", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@1" },
+        { "command": "ger.stack.squashTakeMessage", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@2" },
+        { "command": "ger.stack.drop", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "2_stack@3" },
+        { "command": "ger.copyChangeId", "when": "webviewId == ger.stack && webviewSection == commit && gerChangeId", "group": "9_copy@1" },
+        { "command": "ger.copySha", "when": "webviewId == ger.stack && webviewSection == commit", "group": "9_copy@2" }
+      ],
+      "comments/commentThread/title": [
+        { "command": "ger.thread.markResolved", "when": "commentController == ger && commentThread == unresolved", "group": "inline@1" },
+        { "command": "ger.thread.markUnresolved", "when": "commentController == ger && commentThread == resolved", "group": "inline@1" }
+      ],
+      "comments/commentThread/context": [
+        { "command": "ger.thread.reply", "when": "commentController == ger && !commentThreadIsEmpty", "group": "inline@1" },
+        { "command": "ger.thread.cancel", "when": "commentController == ger && !commentThreadIsEmpty", "group": "inline@2" },
+        { "command": "ger.comment.saveDraft", "when": "commentController == ger && commentThreadIsEmpty && ger.newComment == draft", "group": "inline@1" },
+        { "command": "ger.comment.saveLocalDraft", "when": "commentController == ger && commentThreadIsEmpty && ger.newComment == local-draft", "group": "inline@1" },
+        { "command": "ger.comment.saveNote", "when": "commentController == ger && commentThreadIsEmpty", "group": "inline@2" },
+        { "command": "ger.comment.cancelNew", "when": "commentController == ger && commentThreadIsEmpty", "group": "inline@3" }
+      ]
+    },
+    "keybindings": [
+      { "command": "ger.comment.add", "key": "ctrl+alt+c", "when": "ger.ready && ger.canComment && editorTextFocus" },
+      { "command": "ger.comment.escape", "key": "escape", "when": "commentEditorFocused && commentController == ger && !commentThreadIsEmpty && !comment" },
+      { "command": "ger.comment.close", "key": "escape", "when": "commentFocused && !commentEditorFocused && commentController == ger" },
+      { "command": "ger.comment.close", "key": "escape", "when": "editorTextFocus && !commentEditorFocused && !commentFocused && commentWidgetVisible && ger.canComment && !editorHasSelection && !editorHasMultipleSelections && !findWidgetVisible && !suggestWidgetVisible && !parameterHintsVisible && !inlineSuggestionVisible && !renameInputVisible && !referenceSearchVisible && !markersNavigationVisible && !inSnippetMode && !editorHoverVisible && !isInEmbeddedEditor" },
+      { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" },
+      { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" }
+    ]
+  }
+}

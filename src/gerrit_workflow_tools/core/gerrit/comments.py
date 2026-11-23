@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, collect_comment_chains
-from gerrit_workflow_tools.core.gerrit.cache import comments_context_key
+from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
@@ -35,7 +35,7 @@ class ChainMatch:
     """A comment chain and the change it was found on."""
 
     change: str
-    """REST key of the change (triplet or Change-Id)."""
+    """The change's unique key (:meth:`GerritService.cache_key`), never a bare Change-Id."""
     chain: CommentChain
 
 
@@ -53,10 +53,19 @@ class DraftReply:
 
 
 class CommentApi:
-    """Comment chains for one change: published comments through the cache, drafts live."""
+    """Comment chains for one change: published comments through the cache, drafts live.
+
+    Every public method takes a change as a triplet, a Gerrit id or a number. A bare Change-Id
+    is narrowed once, on entry, to the push branch's change (:meth:`GerritService.cache_key`);
+    without a stack context that raises ``ChangeResolutionError``. Gerrit is never asked by the
+    bare Change-Id: that 404s ("Multiple changes found") once it is on a second branch.
+    """
 
     def __init__(self, service: GerritService) -> None:
         self._service = service
+
+    def _key(self, change_id: str) -> str:
+        return self._service.cache_key(change_id)
 
     def get_chains(
         self,
@@ -67,8 +76,26 @@ class CommentApi:
         comments: CommentSelection = "unresolved",
     ) -> list[CommentChain]:
         """Comment chains of *change_id* selected by *comments*, with your drafts in their chains."""
-        file_map = self.get_file_map(change_id, change_updated=change_updated, context_padding=context_padding)
-        return collect_comment_chains(file_map, comments=comments, drafts=self.get_drafts(change_id))
+        return self._chains(
+            self._key(change_id), change_updated=change_updated, context_padding=context_padding, comments=comments
+        )
+
+    def _chains(
+        self,
+        key: str,
+        *,
+        change_updated: str | None = None,
+        context_padding: int | None = None,
+        comments: CommentSelection = "unresolved",
+    ) -> list[CommentChain]:
+        # Two independent round trips (drafts are never cached): asked side by side, not one after the other.
+        file_map, drafts = parallel_map(
+            [
+                partial(self._file_map, key, change_updated=change_updated, context_padding=context_padding),
+                partial(self._drafts, key),
+            ]
+        )
+        return collect_comment_chains(file_map, comments=comments, drafts=drafts)
 
     def chains_with_drafts(self, change_id: str, *, change_updated: str | None = None) -> list[CommentChain]:
         """The chains of *change_id* that hold a draft of yours: what a publish would send."""
@@ -82,12 +109,13 @@ class CommentApi:
         """
 
         def matches(change: str, freshness: str | None) -> list[ChainMatch]:
-            chains = self.get_chains(change, change_updated=freshness, comments="all")
+            chains = self._chains(change, change_updated=freshness, comments="all")
             return [
                 ChainMatch(change, chain) for chain in chains if any(c.comment_id == comment_id for c in chain.comments)
             ]
 
-        found = parallel_map(partial(matches, change, freshness) for change, freshness in changes.items())
+        keyed = {self._key(change): freshness for change, freshness in changes.items()}
+        found = parallel_map(partial(matches, change, freshness) for change, freshness in keyed.items())
         return [match for per_change in found for match in per_change]
 
     def save_reply(self, change_id: str, chain: CommentChain, message: str, *, unresolved: bool | None) -> DraftReply:
@@ -109,7 +137,7 @@ class CommentApi:
             body["side"] = "PARENT"
         revision = basis.patch_set if basis.patch_set is not None else "current"
         row = self._service.rest.put_draft(
-            change_id, revision, body, draft_id=existing.comment_id if existing else None
+            self._key(change_id), revision, body, draft_id=existing.comment_id if existing else None
         )
         draft_id = row.get("id")
         return DraftReply(
@@ -120,25 +148,80 @@ class CommentApi:
             replaced_message=existing.message if existing else None,
         )
 
+    def create_draft(self, change_id: str, patch_set: int, comment: Mapping[str, Any]) -> str | None:
+        """Start a new chain: a draft *comment* (CommentInput fields) on *patch_set*; return its id."""
+        row = self._service.rest.put_draft(self._key(change_id), patch_set, dict(comment))
+        draft_id = row.get("id")
+        return draft_id if isinstance(draft_id, str) else None
+
+    def edit_draft(
+        self, change_id: str, draft_id: str, message: str, *, unresolved: bool | None = None
+    ) -> InlineComment | None:
+        """Give your draft *draft_id* the text *message* and return it as it was; ``None`` if absent.
+
+        Everything else it says goes back as Gerrit has it (place, side, what it answers), so
+        the draft stays where it is. *unresolved* ``None`` keeps its flag.
+        """
+        key = self._key(change_id)
+        for path, rows in self._drafts(key).items():
+            for row in rows:
+                if row.get("id") != draft_id:
+                    continue
+                flag = bool(row.get("unresolved")) if unresolved is None else unresolved
+                body: dict[str, Any] = {"path": path, "message": message, "unresolved": flag}
+                body.update({key: row[key] for key in ("line", "range", "side", "in_reply_to") if key in row})
+                patch_set = row.get("patch_set")
+                revision = patch_set if isinstance(patch_set, int) else "current"
+                self._service.rest.put_draft(key, revision, body, draft_id=draft_id)
+                line = row.get("line")
+                return InlineComment(
+                    path=path,
+                    line=line if isinstance(line, int) else None,
+                    message=str(row.get("message", "")),
+                    comment_id=draft_id,
+                    patch_set=patch_set if isinstance(patch_set, int) else None,
+                    unresolved=bool(row.get("unresolved")),
+                    draft=True,
+                )
+        return None
+
+    def discard_draft(self, change_id: str, draft_id: str) -> InlineComment | None:
+        """Delete your draft *draft_id* on any patchset of *change_id* and return it; ``None`` if absent."""
+        key = self._key(change_id)
+        for chain in self._chains(key, comments="all"):
+            for comment in chain.comments:
+                if comment.draft and comment.comment_id == draft_id:
+                    revision = comment.patch_set if comment.patch_set is not None else "current"
+                    self._service.rest.delete_draft(key, revision, draft_id)
+                    return comment
+        return None
+
     def discard_reply(self, change_id: str, chain: CommentChain) -> InlineComment:
         """Delete your draft in *chain* and return it. A chain without one is not found."""
         existing = chain.draft
         if existing is None or existing.comment_id is None:
             raise ChangeResolutionError(f"no draft of yours in the chain at {chain.path}")
         revision = existing.patch_set if existing.patch_set is not None else "current"
-        self._service.rest.delete_draft(change_id, revision, existing.comment_id)
+        self._service.rest.delete_draft(self._key(change_id), revision, existing.comment_id)
         return existing
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> None:
-        """Publish your drafts on *change_id*, then drop its cached rows.
+    def publish_drafts(
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
+    ) -> None:
+        """Publish your drafts on *change_id* (all, or *draft_ids*) with *labels* voted; drop its cached rows.
 
         Publishing moves the change's meta ref, but inside the trust window the probe is
         skipped; invalidating makes the next read see the published chains straight away.
         Callers check :func:`publish_blocked` first: the guard is policy, this is the act.
         """
-        service = self._service
-        service.rest.publish_drafts(change_id, message=message)
-        service.cache.invalidate_changes([service.cache_key(change_id)])
+        key = self._key(change_id)
+        self._service.rest.publish_drafts(key, message=message, labels=labels, draft_ids=draft_ids)
+        self._service.cache.invalidate_changes([key])
 
     def get_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
         """Your drafts on every patchset of *change_id*, always fetched.
@@ -146,7 +229,10 @@ class CommentApi:
         Never cached: drafts live in All-Users, not in the change's NoteDb meta ref, so the
         follow-up freshness token (ADR-0007) does not move when a draft does.
         """
-        return self._service.rest.list_drafts(change_id)
+        return self._drafts(self._key(change_id))
+
+    def _drafts(self, key: str) -> dict[str, list[dict[str, Any]]]:
+        return self._service.rest.list_drafts(key)
 
     def get_file_map(
         self,
@@ -156,14 +242,18 @@ class CommentApi:
         context_padding: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Return raw published Gerrit comments grouped by file path."""
+        return self._file_map(self._key(change_id), change_updated=change_updated, context_padding=context_padding)
 
+    def _file_map(
+        self, key: str, *, change_updated: str | None, context_padding: int | None
+    ) -> dict[str, list[dict[str, Any]]]:
         rest = self._service.rest
         fetch = rest.get_comments
         if context_padding is not None:
             fetch = partial(rest.get_comments, enable_context=True, context_padding=context_padding)
 
         return self._service.cache.load_comments(
-            change_id,
+            key,
             fetch_comments=fetch,
             change_updated=change_updated,
             trust_window_seconds=self._service.trust_window_seconds,

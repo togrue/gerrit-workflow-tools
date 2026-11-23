@@ -16,7 +16,8 @@ from gerrit_workflow_tools.cli_edit import (
 )
 from gerrit_workflow_tools.cli_rebase import main as grebase_main
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -53,7 +54,7 @@ def test_resolve_first_edit_attention_oldest_ci_failed(web_stack_repo: Path, mon
         overrides[-1] = {"unresolved_comment_count": 3}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     sha = resolve_first_edit_attention_sha(
-        web_stack_repo, settings=Settings.from_cwd(web_stack_repo), gerrit=ChangeStore(details)
+        RunContext.open(web_stack_repo, settings=Settings.from_cwd(web_stack_repo), gerrit=ChangeStore(details))
     )
     assert sha == rows[0].sha
 
@@ -66,7 +67,7 @@ def test_resolve_first_edit_attention_none_when_green(stack_repo: Path, monkeypa
     details = build_details_by_change_id(rows)
     with pytest.raises(GitError, match="no commit needs edit attention"):
         resolve_first_edit_attention_sha(
-            stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore(details)
+            RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore(details))
         )
 
 
@@ -117,25 +118,6 @@ def test_gedit_bare_resume_starts_at_oldest(web_stack_repo: Path, monkeypatch: p
     assert cursor.change_id == rows[0].change_id
 
 
-def test_gedit_next_skips_cursor_still_needing_attention(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = stack_rows_mb_to_head(web_stack_repo)
-    assert len(rows) >= 2
-    overrides: list[dict] = [{}] * len(rows)
-    overrides[0] = {"unresolved_comment_count": 2}
-    overrides[1] = {"verified": -1}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    store = ChangeStore(details)
-    # Seed cursor on the oldest (still needs attention).
-    captured = _fake_rebase_capture(monkeypatch)
-    code, _out, err = run_cli(web_stack_repo, gedit_main, [], monkeypatch, gerrit=store)
-    assert code == 0, err
-    assert captured["full_sha"] == rows[0].sha
-    captured.clear()
-    code, _out, err = run_cli(web_stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
-    assert code == 0, err
-    assert captured["full_sha"] == rows[1].sha
-
-
 def test_gedit_cursor_flag_prints_status(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{}] * len(rows)
@@ -174,7 +156,7 @@ def test_rebase_in_progress_is_refused_before_anything_moves(
 
     code, _out, err = run_cli(web_stack_repo, main_fn, argv, monkeypatch, gerrit=store)
 
-    assert code == ExitCode.GIT
+    assert code == ExitCode.USAGE
     assert "git rebase --continue" in err
     assert git("config", "branch.feature.gerAttentionCursor", cwd=web_stack_repo, check=False).returncode != 0
 
@@ -259,7 +241,10 @@ def test_gedit_says_where_it_stopped_and_what_comes_next(web_stack_repo: Path, m
 
     assert code == 0
     assert f"stopped at {rows[0].short_sha} {rows[0].subject}" in err
-    assert "then `ger edit -n`" in err
+    assert err.rstrip().endswith(
+        "next: amend it, then `git rebase --continue` to finish; "
+        "`ger edit -n` finishes and goes on to the next commit needing attention"
+    )
 
 
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -268,7 +253,7 @@ def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: 
 
     code, _out, err = run_cli(stack_repo, gedit_main, ["I" + "f" * 40], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
 
 
 def test_gedit_ambiguous_change_id_exits_ambiguous(dup_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -288,7 +273,7 @@ def test_gedit_rejects_a_commit_below_the_stack(stack_repo: Path, monkeypatch: p
     upstream_tip = git_out("rev-parse", "@{upstream}", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, gedit_main, [upstream_tip], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "not in the current local stack" in err
+    assert "is not in the local stack" in err
 
 
 def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -296,12 +281,22 @@ def test_greword_shares_the_same_exit_codes(stack_repo: Path, monkeypatch: pytes
 
     code, _out, err = run_cli(stack_repo, greword_main, ["I" + "f" * 40], monkeypatch)
     assert code == ExitCode.NOT_FOUND
-    assert "no commit in current stack" in err
+    assert "no commit in the local stack has that Change-Id" in err
 
 
-def test_gedit_next_runs_show_only_when_edit_next_show_is_set(
-    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("config", "shows"),
+    [
+        ({}, True),
+        ({"ger.showAfterEdit": "false"}, False),
+        ({"ger.showAfterEdit": "true"}, True),
+    ],
+)
+@pytest.mark.parametrize("walk", [["-n"], ["--first-attention-commit"]])
+def test_gedit_walk_runs_show_unless_show_after_edit_is_off(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch, config: dict[str, str], shows: bool, walk: list[str]
 ) -> None:
+    """Issue #33: on by default, for --next and --first-attention-commit."""
     rows = stack_rows_mb_to_head(web_stack_repo)
     assert len(rows) >= 2
     overrides: list[dict] = [{}] * len(rows)
@@ -319,18 +314,15 @@ def test_gedit_next_runs_show_only_when_edit_next_show_is_set(
     monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", _run_show)
     _fake_rebase_capture(monkeypatch)
 
-    code, _out, err = run_cli(web_stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+    for key, value in config.items():
+        git("config", key, value, cwd=web_stack_repo)
+    code, _out, err = run_cli(web_stack_repo, gedit_main, walk, monkeypatch, gerrit=store)
     assert code == 0, err
-    assert calls == []
-
-    git("config", "gerrit.editNextShow", "true", cwd=web_stack_repo)
-    code, _out, err = run_cli(web_stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
-    assert code == 0, err
-    assert calls == [[rows[1].sha]]
+    assert calls == ([[rows[0].sha]] if shows else [])
 
 
-def test_greword_next_ignores_edit_next_show(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.editNextShow", "true", cwd=web_stack_repo)
+def test_greword_next_ignores_show_after_edit(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "ger.showAfterEdit", "true", cwd=web_stack_repo)
     rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{}] * len(rows)
     overrides[0] = {"unresolved_comment_count": 2}
@@ -352,7 +344,7 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
-    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+    from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -364,7 +356,10 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
     code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
     assert code == 0, err
     assert rebase_in_progress(stack_repo)
-    assert "then `ger edit -n`" in err
+    assert err.rstrip().endswith(
+        "next: amend it, then `git rebase --continue` to finish; "
+        "`ger edit -n` finishes and goes on to the next commit needing attention"
+    )
 
     code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
     assert code == 0, err
@@ -379,7 +374,7 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
 
 def test_gedit_next_does_not_walk_when_continue_fails(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from gerrit_workflow_tools.core.attention_cursor import load_branch_cursor
-    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+    from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -417,7 +412,7 @@ def test_gedit_next_does_not_walk_when_continue_fails(stack_repo: Path, monkeypa
 def test_gedit_next_stops_when_continue_leaves_the_rebase_running(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from gerrit_workflow_tools.core.git_state import rebase_in_progress
+    from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
@@ -447,16 +442,72 @@ def test_gedit_next_stops_when_continue_leaves_the_rebase_running(
     assert rebase_in_progress(stack_repo)
 
 
-def test_gedit_next_show_failure_is_returned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from gerrit_workflow_tools.cli_common import ExitCode
-
-    _configure_repo(stack_repo)
-    git("config", "gerrit.editNextShow", "true", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_the_walk_says_which_commit_it_chose_before_the_editor(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{}] * len(rows)
     overrides[0] = {"unresolved_comment_count": 2}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", lambda *args, **kwargs: int(ExitCode.CONFIG))
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
     _fake_rebase_capture(monkeypatch)
-    code, _out, _err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == int(ExitCode.CONFIG)
+
+    code, _out, err = run_cli(web_stack_repo, greword_main, ["--first-attention-commit"], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert f"rewording {rows[0].short_sha} {rows[0].subject} (oldest needing attention: 2 unresolved comments)" in err
+
+
+def test_the_walk_ending_after_a_continued_rebase_is_no_error(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+    code, _out, err = run_cli(web_stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+    assert code == 0, err
+
+    code, _out, err = run_cli(web_stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
+
+    assert code == ExitCode.NO_EDIT_ATTENTION
+    assert err.rstrip().endswith(
+        "rebase finished\nno commit needs edit attention (unresolved comments or build failed)"
+    )
+    assert "error:" not in err
+
+
+def test_drop_says_what_it_dropped_and_how_to_get_it_back(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    before = git_out("rev-parse", "HEAD", cwd=web_stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+
+    code, _out, err = run_cli(web_stack_repo, gedit_main, ["--drop", rows[-1].sha], monkeypatch, gerrit=store)
+
+    assert code == 0, err
+    assert f"dropped {rows[-1].short_sha} {rows[-1].subject}" in err
+    undo = err.split("to get it back: ")[1].split()
+    git(*undo[1:], cwd=web_stack_repo)
+    assert git_out("rev-parse", "HEAD", cwd=web_stack_repo) == before
+
+
+def test_reword_warning_says_how_to_keep_the_old_change(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    tip = rows[-1]
+    real_run = subprocess.run
+
+    def rewording_rebase(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+            git("commit", "--amend", "--allow-empty", "-m", "no change id here", cwd=web_stack_repo)
+            return subprocess.CompletedProcess(cmd, 0)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", rewording_rebase)
+    code, _out, err = run_cli(
+        web_stack_repo, greword_main, [tip.sha], monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows))
+    )
+
+    assert code == 0
+    assert "The old change stays open on Gerrit" in err
+    assert f"put `Change-Id: {tip.change_id}` back with `ger reword" in err

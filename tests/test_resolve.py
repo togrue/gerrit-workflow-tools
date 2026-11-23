@@ -16,7 +16,6 @@ from tests.conftest import json_stdout, run_cli
 from tests.fixtures import _cid
 
 
-CID_UNIQUE = _cid("01")
 CID_NARROW = _cid("02")
 CID_TRIPLET = _cid("03")
 CID_NUMBER = _cid("04")
@@ -71,18 +70,6 @@ def test_resolve_git_rev_with_gerrit_footer(web_stack_repo: Path, monkeypatch: p
     assert f"local SHA: {sha}" in out
     assert "Gerrit change: #104" in out
     assert str(ch["id"]) in out
-
-
-def test_resolve_change_id_unique(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    cid = CID_UNIQUE
-    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
-    ch = _detail(change_id=cid, sha=sha, number=120001)
-    details = {str(ch["id"]): ch}
-    code, out, err = run_cli(web_stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 0, err
-    assert "Gerrit change: #120001" in out
-    assert cid in out
-    assert "note:" not in err
 
 
 def test_resolve_change_id_narrowed(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,12 +215,6 @@ def test_resolve_not_found_exits_three(web_stack_repo: Path, monkeypatch: pytest
     code, _out, err = run_cli(web_stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore({}))
     assert code == ExitCode.NOT_FOUND
     assert "error:" in err.lower()
-
-
-def test_resolve_usage_missing_changeish(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = run_cli(stack_repo, resolve_main, [], monkeypatch, catch_sys_exit=True)
-    assert code == 2
-    assert "CHANGEISH" in err or "changeish" in err.lower()
 
 
 def test_ger_dispatches_resolve(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

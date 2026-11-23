@@ -17,7 +17,9 @@ call records.
 
 It also **records calls** (:attr:`calls`), for the few tests that care about *how* Gerrit was
 asked rather than what came back — e.g. proving the stack overlay never falls back to
-per-Change-Id queries.
+per-Change-Id queries. Core sends some requests concurrently (``parallel_map``), so the raw
+:attr:`calls` order is not deterministic there: under the ``parallel_jobs`` fixture
+:meth:`ChangeStore.ordered_calls` gives the order that is.
 
 Freshness is deliberately not modelled: writes do not bump ``updated``. The store answers
 questions; deciding what is stale is the cache's job, above the seam.
@@ -26,11 +28,15 @@ questions; deciding what is stale is the cache's job, above the seam.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+import threading
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError
+from gerrit_workflow_tools.core.gerrit import rest
+from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS, GerritApiError, change_path_id
 
 
 DEFAULT_WEB_BASE = "https://gerrit.example"
@@ -104,13 +110,100 @@ def shape_change_info(row: dict[str, Any], options: list[str] | tuple[str, ...] 
     return out
 
 
+def _row_account_id(row: dict[str, Any]) -> object:
+    account = row.get("account")
+    return account.get("_account_id") if isinstance(account, dict) else None
+
+
+# --- Which parallel job made a call -----------------------------------------------------
+
+JobPath = tuple[tuple[int, int], ...]
+"""Where a call ran: one ``(batch, job)`` step per ``parallel_map`` it is nested in; ``()`` outside.
+
+*job* is the submission index, which ``parallel_map`` fixes from its input order. While the
+store records, *batch* is an id unique to the executor; :meth:`ChangeStore.ordered_calls`
+renumbers it to the batch's position among the batches its caller started.
+"""
+
+_job = threading.local()
+_batch_ids = iter(range(1 << 62))
+
+
+def _current_job() -> JobPath:
+    return getattr(_job, "path", ())
+
+
+class _JobTaggingExecutor(ThreadPoolExecutor):
+    """A ``ThreadPoolExecutor`` that marks each submitted job's thread with its :data:`JobPath`."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._parent = _current_job()
+        self._batch = next(_batch_ids)
+        self._submitted = 0
+
+    def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Future[Any]:
+        path = (*self._parent, (self._batch, self._submitted))
+        self._submitted += 1
+
+        def run() -> Any:
+            outer = _current_job()
+            _job.path = path
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                _job.path = outer
+
+        return super().submit(run)
+
+
+def tag_parallel_jobs(monkeypatch: Any) -> None:
+    """Make every ``parallel_map`` job tag the calls it makes (the ``parallel_jobs`` fixture)."""
+    monkeypatch.setattr(rest, "ThreadPoolExecutor", _JobTaggingExecutor)
+
+
 @dataclass(frozen=True)
 class RecordedCall:
-    """One call made through the store."""
+    """One call made through the store.
+
+    *job* says which ``parallel_map`` job made it and *thread* where it ran; neither is part
+    of equality.
+    """
 
     method: str
     args: tuple[Any, ...] = ()
     kwargs: dict[str, Any] = field(default_factory=dict)
+    job: JobPath = field(default=(), compare=False)
+    thread: str = field(default="", compare=False)
+
+
+def _in_deterministic_order(calls: Sequence[RecordedCall], depth: int = 0) -> Iterator[RecordedCall]:
+    """*calls* (all in one job at *depth*) with each nested batch's jobs in submission order.
+
+    The job at *depth* runs sequentially, and it waits for a batch it starts, so its own calls
+    and its batches keep their recorded order; only the calls of a batch's jobs interleave.
+    """
+    batches = 0
+    i = 0
+    while i < len(calls):
+        job = calls[i].job
+        if len(job) == depth:
+            yield calls[i]
+            i += 1
+            continue
+        batch = job[depth][0]
+        end = i
+        while end < len(calls) and len(calls[end].job) > depth and calls[end].job[depth][0] == batch:
+            end += 1
+        by_job: dict[int, list[RecordedCall]] = {}
+        for call in calls[i:end]:
+            by_job.setdefault(call.job[depth][1], []).append(call)
+        for index in sorted(by_job):
+            for call in _in_deterministic_order(by_job[index], depth + 1):
+                path = call.job
+                yield replace(call, job=(*path[:depth], (batches, path[depth][1]), *path[depth + 1 :]))
+        batches += 1
+        i = end
 
 
 class ChangeStore:
@@ -127,13 +220,16 @@ class ChangeStore:
         messages: dict[str, list[dict[str, Any]]] | None = None,
         project_reviewers: dict[str, list[dict[str, Any]]] | None = None,
         self_account_id: int | None = None,
+        groups: dict[str, list[int]] | None = None,
     ) -> None:
         self.web_base = web_base.rstrip("/")
         self._changes: dict[str, dict[str, Any]] = dict(changes or {})
         self._accounts: dict[int, dict[str, Any]] = dict(accounts or {})
         self._self_account_id = self_account_id
+        self._groups = {name.casefold(): list(members) for name, members in (groups or {}).items()}
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
         self._drafts: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        self._related: dict[str, list[dict[str, Any]]] = {}
         self._checks: dict[str, list[dict[str, Any]]] = dict(checks or {})
         self._messages: dict[str, list[dict[str, Any]]] = dict(messages or {})
         self._project_reviewers = dict(project_reviewers) if project_reviewers is not None else None
@@ -150,6 +246,10 @@ class ChangeStore:
         syntax such as ``status:open``). Prefer seeding payloads where possible.
         """
         self._stubbed_queries[query] = rows
+
+    def add_change(self, payload: dict[str, Any]) -> None:
+        """Seed one more ChangeInfo, keyed by its Gerrit ``id``."""
+        self._changes[payload["id"]] = payload
 
     def set_comments(self, change_ref: str, file_map: dict[str, list[dict[str, Any]]]) -> None:
         """Seed inline comments for one change."""
@@ -175,10 +275,23 @@ class ChangeStore:
         """Every Gerrit search query string this store was asked, in order."""
         return [str(call.args[0]) for call in self.calls_to("query_changes") if call.args]
 
+    def ordered_calls(self) -> list[RecordedCall]:
+        """:attr:`calls` in the order that does not depend on thread timing, each with its *job*.
+
+        Calls a caller makes itself keep their order; the jobs of a ``parallel_map`` it starts
+        follow in submission order, each job's own calls in order. Two runs that asked Gerrit
+        the same way give equal lists, *job* included. Needs the ``parallel_jobs`` fixture.
+        """
+        untagged = [call for call in self.calls if not call.job and call.thread.startswith("ThreadPoolExecutor")]
+        if untagged:
+            raise AssertionError(f"calls from an untagged pool thread; use the parallel_jobs fixture: {untagged}")
+        return list(_in_deterministic_order(self.calls))
+
     # -- internals -------------------------------------------------------------
 
     def _record(self, method: str, *args: Any, **kwargs: Any) -> None:
-        self.calls.append(RecordedCall(method=method, args=args, kwargs=kwargs))
+        thread = threading.current_thread().name
+        self.calls.append(RecordedCall(method, args, kwargs, job=_current_job(), thread=thread))
 
     def _lookup_rows(self, ref: str) -> list[dict[str, Any]]:
         """Rows matching a Gerrit id, numeric change id, triplet, or bare Change-Id."""
@@ -199,7 +312,7 @@ class ChangeStore:
     def _row_or_raise(self, ref: str) -> dict[str, Any]:
         rows = self._lookup_rows(ref)
         if not rows:
-            raise GerritApiError(f"no matching change {ref}")
+            raise GerritApiError(f"Gerrit HTTP 404: no matching change {ref}", status=404)
         return rows[0]
 
     def _payload_id(self, ref: str) -> str:
@@ -209,6 +322,20 @@ class ChangeStore:
             if isinstance(payload_id, str) and payload_id:
                 return payload_id
         return ref
+
+    def _require_unique_change_ref(self, ref: str) -> str:
+        """Resolve *ref*, the ``{id}`` of a ``/changes/{id}/…`` request, to one change id.
+
+        Every per-change operation of the store goes through here. Like
+        :class:`HttpGerritRest`'s URL seam (:func:`change_path_id`), a bare Change-Id raises
+        :class:`BareChangeIdError` whether or not it is ambiguous: ger must never send one.
+        """
+        return self._payload_id(change_path_id(ref))
+
+    def _unique_row_or_raise(self, ref: str) -> dict[str, Any]:
+        """:meth:`_row_or_raise` for a ``/changes/{id}`` request: an ambiguous bare Change-Id 404s."""
+        self._require_unique_change_ref(ref)
+        return self._row_or_raise(ref)
 
     def _query_rows(self, query: str) -> list[dict[str, Any]]:
         """Evaluate the query shapes this project actually issues.
@@ -305,6 +432,31 @@ class ChangeStore:
                     out.extend({"account": account, "state": role} for account in bucket if isinstance(account, dict))
         return out
 
+    def _find_account(self, ref: int | str) -> dict[str, Any] | None:
+        """The seeded account *ref* names, as ``accounts/{ref}`` resolves it: id, username, email or full name."""
+        if isinstance(ref, int) or (isinstance(ref, str) and ref.isdigit()):
+            return self._accounts.get(int(ref))
+        needle = ref.strip().casefold()
+        for field_name in ("username", "email", "name"):
+            for row in self._accounts.values():
+                value = row.get(field_name)
+                if isinstance(value, str) and value.casefold() == needle:
+                    return row
+        return None
+
+    def _accounts_named(self, name: str) -> list[dict[str, Any]]:
+        """The accounts a reviewer input *name* adds: one account, or a seeded group's members."""
+        members = self._groups.get(name.strip().casefold())
+        if members is not None:
+            return [self._accounts[account_id] for account_id in members]
+        return [self._account_or_reject(name)]
+
+    def _account_or_reject(self, name: str) -> dict[str, Any]:
+        account = self._find_account(name)
+        if account is None:
+            raise GerritApiError(f"Gerrit HTTP 400: {name} does not identify a registered user or group", status=400)
+        return account
+
     # -- GerritRest: reads -----------------------------------------------------
 
     def query_changes(self, query: str, *, n: int = 25, options: list[str] | None = None) -> list[dict[str, Any]]:
@@ -312,7 +464,27 @@ class ChangeStore:
         self._record("query_changes", query, n=n, options=options)
         if query in self._stubbed_queries:
             return list(self._stubbed_queries[query])[:n]
-        return [shape_change_info(row, options) for row in self._query_rows(query)[:n]]
+        rows = [row for row in self._query_rows(query) if self._matches_self_terms(query, row)]
+        return [shape_change_info(row, options) for row in rows[:n]]
+
+    def _matches_self_terms(self, query: str, row: dict[str, Any]) -> bool:
+        """Whether *row* passes the *to review* query's ``reviewer:self``, ``-owner:self`` and ``-is:wip``.
+
+        The rest of such a query is not modelled; these decide whose review a change waits on.
+        Terms are matched whole, so ``-reviewer:self`` is not ``reviewer:self``.
+        """
+        terms = set(re.split(r"[\s()]+", query))
+        if "reviewer:self" in terms:
+            reviewers = {
+                entry["account"].get("_account_id")
+                for entry in self._reviewer_rows(row)
+                if entry["state"] == "REVIEWER"
+            }
+            if self._self_account_id is None or self._self_account_id not in reviewers:
+                return False
+        if "-owner:self" in terms and (row.get("owner") or {}).get("_account_id") == self._self_account_id:
+            return False
+        return not ("-is:wip" in terms and row.get("work_in_progress"))
 
     def query_accounts(self, query: str, *, n: int = 10) -> list[dict[str, Any]]:
         """Return AccountInfo rows whose username, email or name contains *query*."""
@@ -331,7 +503,7 @@ class ChangeStore:
     def get_change(self, change_id: str) -> dict[str, Any]:
         """Return one ChangeInfo, shaped like :class:`HttpGerritRest`'s ``LOG_QUERY_OPTIONS`` fetch."""
         self._record("get_change", change_id)
-        return shape_change_info(self._row_or_raise(change_id), LOG_QUERY_OPTIONS)
+        return shape_change_info(self._unique_row_or_raise(change_id), LOG_QUERY_OPTIONS)
 
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
@@ -342,17 +514,11 @@ class ChangeStore:
             else:
                 payload = next(iter(self._accounts.values()), None)
             if payload is None:
-                raise GerritApiError("no matching account self")
+                raise GerritApiError("Gerrit HTTP 404: no matching account self", status=404)
             return payload
-        try:
-            payload = self._accounts.get(int(account_id))
-        except (TypeError, ValueError):
-            payload = next(
-                (row for row in self._accounts.values() if row.get("username") == account_id),
-                None,
-            )
+        payload = self._find_account(account_id)
         if payload is None:
-            raise GerritApiError(f"no matching account {account_id}")
+            raise GerritApiError(f"Gerrit HTTP 404: no matching account {account_id}", status=404)
         return payload
 
     def get_comments(
@@ -365,7 +531,7 @@ class ChangeStore:
         """Return inline comments grouped by file path."""
         del context_padding
         self._record("get_comments", change_id)
-        payload = self._comments.get(self._payload_id(change_id), {})
+        payload = self._comments.get(self._require_unique_change_ref(change_id), {})
         if enable_context:
             return payload
         return {path: [_without_comment_context(row) for row in rows] for path, rows in payload.items()}
@@ -375,7 +541,7 @@ class ChangeStore:
         self._record("list_drafts", change_id)
         return {
             path: [dict(row) for row in rows]
-            for path, rows in self._drafts.get(self._payload_id(change_id), {}).items()
+            for path, rows in self._drafts.get(self._require_unique_change_ref(change_id), {}).items()
         }
 
     def put_draft(
@@ -383,7 +549,7 @@ class ChangeStore:
     ) -> dict[str, Any]:
         """Create or update a draft the way Gerrit does: the reply lands on *revision*."""
         self._record("put_draft", change_id, revision, comment, draft_id=draft_id)
-        file_map = self._drafts.setdefault(self._payload_id(change_id), {})
+        file_map = self._drafts.setdefault(self._require_unique_change_ref(change_id), {})
         if draft_id is not None:
             for rows in file_map.values():
                 rows[:] = [row for row in rows if row.get("id") != draft_id]
@@ -394,34 +560,72 @@ class ChangeStore:
     def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
         """Delete one draft."""
         self._record("delete_draft", change_id, revision, draft_id)
-        for rows in self._drafts.get(self._payload_id(change_id), {}).values():
+        for rows in self._drafts.get(self._require_unique_change_ref(change_id), {}).values():
             rows[:] = [row for row in rows if row.get("id") != draft_id]
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
-        """Move every draft into the published comments, the way Gerrit's review POST does."""
-        self._record("publish_drafts", change_id, message=message)
-        key = self._payload_id(change_id)
+    def publish_drafts(
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Move the drafts (all, or *draft_ids*) into the published comments and apply *labels*, as Gerrit does."""
+        self._record(
+            "publish_drafts",
+            change_id,
+            message=message,
+            labels=dict(labels) if labels else None,
+            draft_ids=list(draft_ids) if draft_ids is not None else None,
+        )
+        key = self._require_unique_change_ref(change_id)
+        payload_labels = self._unique_row_or_raise(change_id).setdefault("labels", {})
+        for name, value in (labels or {}).items():
+            payload_labels[name] = {"value": value, "all": [{"value": value}]}
         published = self._comments.setdefault(key, {})
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f000")
-        for path, rows in self._drafts.pop(key, {}).items():
+        if message:
+            self._messages.setdefault(key, []).append({"message": message})
+        drafts = self._drafts.pop(key, {})
+        for path, rows in drafts.items():
+            chosen = [row for row in rows if draft_ids is None or row.get("id") in draft_ids]
+            kept = [row for row in rows if row not in chosen]
+            if kept:
+                self._drafts.setdefault(key, {})[path] = kept
             # Gerrit stamps publish time: a published draft becomes its chain's newest comment.
-            published.setdefault(path, []).extend({**row, "updated": stamp} for row in rows)
+            published.setdefault(path, []).extend({**row, "updated": stamp} for row in chosen)
         return {}
+
+    def upload_patchset(self, change_ref: str, sha: str, number: int) -> None:
+        """Make *sha* the change's new current patchset *number*, as a push from elsewhere would."""
+        row = self._row_or_raise(change_ref)
+        row["revisions"] = {**row.get("revisions", {}), sha: {"_number": number}}
+        row["current_revision"] = sha
+
+    def set_related(self, change_ref: str, rows: list[dict[str, Any]]) -> None:
+        """Seed ``GET …/related`` for one change: RelatedChangeAndCommitInfo rows, newest first."""
+        self._related[self._payload_id(change_ref)] = rows
+
+    def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
+        """Return the seeded relation chain; a change with none seeded is alone (``changes: []``)."""
+        self._record("get_related", change_id, revision)
+        return {"changes": self._related.get(self._require_unique_change_ref(change_id), [])}
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
         self._record("get_checks", change_id)
-        return self._checks.get(self._payload_id(change_id), [])
+        return self._checks.get(self._require_unique_change_ref(change_id), [])
 
     def get_messages(self, change_id: str) -> list[dict[str, Any]]:
         """Return change message rows for one change."""
         self._record("get_messages", change_id)
-        return self._messages.get(self._payload_id(change_id), [])
+        return self._messages.get(self._require_unique_change_ref(change_id), [])
 
     def list_change_reviewers(self, change_id: str) -> list[dict[str, Any]]:
         """Return reviewer rows for one change."""
         self._record("list_change_reviewers", change_id)
-        return self._reviewer_rows(self._row_or_raise(change_id))
+        return self._reviewer_rows(self._unique_row_or_raise(change_id))
 
     def suggest_change_reviewers(
         self,
@@ -432,6 +636,7 @@ class ChangeStore:
     ) -> list[dict[str, Any]]:
         """Return suggested reviewer rows for one change."""
         self._record("suggest_change_reviewers", change_id, query=query, n=n)
+        self._unique_row_or_raise(change_id)
         accounts = self.query_accounts(query, n=n) if query else list(self._accounts.values())[:n]
         return [{"account": payload} for payload in accounts]
 
@@ -451,11 +656,38 @@ class ChangeStore:
         reviewers: list[str] | None = None,
         ccs: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Add reviewers and CCs to one change; later reads observe them."""
+        """Add reviewers and CCs to one change; later reads observe them.
+
+        With seeded accounts every name must identify an account or a seeded group (else the
+        whole request is a 400 and nothing changes); a group adds its members.
+        """
         self._record("set_reviewers_batch", change_id, reviewers=reviewers, ccs=ccs)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         rows = self._reviewer_rows(payload)
+        # Like Gerrit: the change owner is never added as its reviewer or CC; the request
+        # still succeeds.
+        owner = payload.get("owner")
+        owner_id = owner.get("_account_id") if isinstance(owner, dict) else None
+        if self._accounts:
+            # Like Gerrit: every name must identify an account; one already on the change is
+            # re-asserted in the requested state, not added twice.
+            # A group name adds its members; it is no account, so ``accounts/{name}`` 404s on it.
+            wanted = [
+                (account, state)
+                for names, state in ((reviewers or [], "REVIEWER"), (ccs or [], "CC"))
+                for name in names
+                for account in self._accounts_named(name)
+            ]
+            for account, state in wanted:
+                if account["_account_id"] == owner_id:
+                    continue
+                rows = [row for row in rows if _row_account_id(row) != account["_account_id"]]
+                rows.append({"account": dict(account), "state": state})
+            payload["reviewers"] = rows
+            return {}
         existing = {str(row.get("account", {}).get("username")) for row in rows if isinstance(row.get("account"), dict)}
+        if isinstance(owner, dict) and isinstance(owner.get("username"), str):
+            existing.add(owner["username"])
         for names, state in ((reviewers or [], "REVIEWER"), (ccs or [], "CC")):
             for name in names:
                 if name in existing:
@@ -469,29 +701,33 @@ class ChangeStore:
     def delete_reviewer(self, change_id: str, account_id: int) -> Any:
         """Remove one reviewer or CC from a change."""
         self._record("delete_reviewer", change_id, account_id)
-        payload = self._row_or_raise(change_id)
-        payload["reviewers"] = [
-            row
-            for row in self._reviewer_rows(payload)
-            if not (isinstance(row.get("account"), dict) and row["account"].get("_account_id") == account_id)
-        ]
+        payload = self._unique_row_or_raise(change_id)
+        rows = self._reviewer_rows(payload)
+        if all(_row_account_id(row) != account_id for row in rows):
+            raise GerritApiError(f"Gerrit HTTP 404: Not found: {account_id}", status=404)
+        removable = payload.get("removable_reviewers")
+        if isinstance(removable, list) and all(
+            not isinstance(row, dict) or row.get("_account_id") != account_id for row in removable
+        ):
+            raise GerritApiError("Gerrit HTTP 403: remove reviewer not permitted", status=403)
+        payload["reviewers"] = [row for row in rows if _row_account_id(row) != account_id]
         return None
 
     def set_topic(self, change_id: str, topic: str | None) -> None:
         """Set or clear the change topic."""
         self._record("set_topic", change_id, topic)
-        self._row_or_raise(change_id)["topic"] = topic or None
+        self._unique_row_or_raise(change_id)["topic"] = topic or None
 
     def set_wip(self, change_id: str, on: bool) -> dict[str, Any]:
         """Mark a change work-in-progress or ready for review."""
         self._record("set_wip", change_id, on)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         payload["work_in_progress"] = on
         return payload
 
     def set_private(self, change_id: str, on: bool) -> dict[str, Any]:
         """Set or clear the private flag on a change."""
         self._record("set_private", change_id, on)
-        payload = self._row_or_raise(change_id)
+        payload = self._unique_row_or_raise(change_id)
         payload["is_private"] = on
         return payload

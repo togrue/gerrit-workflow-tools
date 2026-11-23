@@ -6,10 +6,16 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.change_queries import alias_batch_fetch_results, batch_load_change_details
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext
+from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.repository import Repository
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 
 
@@ -35,11 +41,11 @@ def test_get_payloads_resolves_stack_context_once(tmp_path: Path) -> None:
     cache = MagicMock()
     cache.load_changes.return_value = {}
 
-    service = GerritService(rest, cache, cwd=tmp_path)
+    service = GerritService(rest, cache, repo=Repository(tmp_path, Settings.from_cwd(tmp_path)))
     change_ids = [_change_id(i) for i in range(50)]
 
     with patch(
-        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        "gerrit_workflow_tools.core.repository.resolve_stack_context",
         side_effect=counting_resolve,
     ):
         service.changes.get_payloads(change_ids)
@@ -125,9 +131,9 @@ def test_fetch_payloads_aliases_target_branch_only(tmp_path: Path) -> None:
 
     cache.load_changes.side_effect = load_changes
 
-    service = GerritService(rest, cache, cwd=tmp_path)
+    service = GerritService(rest, cache, repo=Repository(tmp_path, Settings.from_cwd(tmp_path)))
     with patch(
-        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        "gerrit_workflow_tools.core.repository.resolve_stack_context",
         return_value=_stack(),
     ):
         payloads = service.changes.get_payloads([cid])
@@ -160,10 +166,14 @@ def test_find_by_footer_change_ids_returns_every_branch_after_an_overlay_fetch(t
         },
     }
     store = ChangeStore(rows)
-    service = GerritService(store, GerritCache(tmp_path / "cache.db", web_base=store.web_base), cwd=tmp_path)
+    service = GerritService(
+        store,
+        GerritCache(tmp_path / "cache.db", web_base=store.web_base),
+        repo=Repository(tmp_path, Settings.from_cwd(tmp_path)),
+    )
 
     with patch(
-        "gerrit_workflow_tools.core.gerrit.service.resolve_stack_context",
+        "gerrit_workflow_tools.core.repository.resolve_stack_context",
         return_value=StackContext(project="proj", target_branch="main", push_branch="main"),
     ):
         # Cold: nothing stored yet, so the lookup finds nothing rather than fetching.
@@ -176,3 +186,14 @@ def test_find_by_footer_change_ids_returns_every_branch_after_an_overlay_fetch(t
     assert sorted(row["branch"] for row in found[cid]) == ["dev", "main"]
     # The lookup itself is local: the only query issued was the overlay's batch fetch.
     assert len(store.queries()) == 1
+
+
+def test_service_builds_its_client_only_when_asked(tmp_path: Path) -> None:
+    """Constructing a service asks nothing of the Gerrit config; the first use of its client does."""
+    git("init", "-q", cwd=tmp_path)
+    service = RunContext.open(tmp_path, settings=Settings.from_cwd(tmp_path)).gerrit
+
+    with pytest.raises(ConfigError):
+        _ = service.rest
+    with pytest.raises(ConfigError):
+        _ = service.cache

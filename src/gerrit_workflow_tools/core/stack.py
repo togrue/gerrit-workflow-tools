@@ -10,7 +10,8 @@ from pathlib import Path
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out, is_unknown_revision, unknown_revision_error
-from gerrit_workflow_tools.core.git_state import resolve_branch_for_branch_config
+from gerrit_workflow_tools.core.git_state import configured_upstream_abbrev, resolve_branch_for_branch_config
+from gerrit_workflow_tools.core.upstream import missing_upstream_error
 
 
 logger = logging.getLogger(__name__)
@@ -44,17 +45,12 @@ def upstream_tracking_tip_and_display(
     """
     snap = settings if settings is not None else Settings.from_cwd(cwd)
     b = _resolve_stack_branch(cwd, branch, settings=snap)
-    display = snap.branch_upstream_abbrev(b)
+    display = configured_upstream_abbrev(snap, b)
     if not display:
         upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
         upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
         if upstream_name.returncode != 0:
-            raise GitError(
-                f"No upstream configured for branch {b!r}.\n"
-                "Set an upstream, e.g.:\n"
-                "  git branch --set-upstream-to=<remote>/<branch>\n"
-                "Fetch from your Gerrit remote first if the tracking branch is missing."
-            )
+            raise missing_upstream_error(b)
         display = upstream_name.stdout.strip()
     upstream_ref = git("rev-parse", "--verify", display, cwd=cwd, check=False)
     if upstream_ref.returncode != 0:
@@ -63,6 +59,11 @@ def upstream_tracking_tip_and_display(
             f"Fetch from your remote so the tracking branch exists."
         )
     return (upstream_ref.stdout.strip(), display)
+
+
+def abbreviated_sha(sha: str) -> str:
+    """*sha* as ger shows a commit it did not read through ``git log`` (git's own default length, 7)."""
+    return sha[:7]
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,13 @@ class StackSnapshot:
 
     upstream_tip: str
     commits: tuple[Commit, ...]
+    upstream: str = ""
+    """The upstream as the user names it (``origin/main``), for advice that quotes it."""
+
+    def carrying(self, change_id: str) -> list[Commit]:
+        """The stack commits whose footer is *change_id*, case-insensitively (the grammar accepts either)."""
+        want = change_id.lower()
+        return [c for c in self.commits if c.valid_change_id and c.valid_change_id.lower() == want]
 
 
 def get_stack_snapshot(
@@ -98,20 +106,18 @@ def get_stack_snapshot(
     branch: str | None = None,
     *,
     head: str = "HEAD",
-    first_parent: bool = False,
+    first_parent: bool = True,
     settings: Settings | None = None,
 ) -> StackSnapshot:
     """The **local stack**: the upstream tip SHA and oldest-first ``upstream_tip..head`` commits.
 
-    The one way to load the stack. *first_parent* follows Gerrit's relation-chain
-    semantics (merged side branches are not stack members).
+    The one way to load the stack. It follows first parents only, as Gerrit's relation chain
+    does: a merge is one commit of the stack, and the commits it brings in are not walked.
+    ``first_parent=False`` is ``--follow-merges``.
     """
-    upstream_tip, _display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
+    upstream_tip, display = upstream_tracking_tip_and_display(cwd, branch, settings=settings)
     rows_list = commits_in_range(cwd, f"{upstream_tip}..{head}", first_parent=first_parent)
-    return StackSnapshot(
-        upstream_tip=upstream_tip,
-        commits=tuple(rows_list),
-    )
+    return StackSnapshot(upstream_tip=upstream_tip, commits=tuple(rows_list), upstream=display)
 
 
 def merge_base_with_target(
@@ -210,6 +216,25 @@ def read_commit_rows(cwd: Path | str | None, *log_args: str) -> list[Commit]:
 
 
 @dataclass(frozen=True)
+class CommitMeta:
+    """Author, date and full message of one commit, as ``ger show`` prints them."""
+
+    author_line: str
+    date: str
+    body: str
+
+
+def read_commit_meta(cwd: Path | str | None, sha: str) -> CommitMeta:
+    """``Author <email>``, the author date and the message body of *sha*, from one ``git show``."""
+    lines = git_out("show", "-s", "--no-patch", "--format=%an%n%ae%n%ad%n%B", sha, cwd=cwd).splitlines()
+    while lines and lines[-1] == "":
+        lines.pop()
+    author, email, date = [*lines, "", "", ""][:3]
+    body = "\n".join(lines[3:]).rstrip("\n")
+    return CommitMeta(author_line=f"{author} <{email}>" if email else author, date=date, body=body)
+
+
+@dataclass(frozen=True)
 class RewriteCommit:
     """One commit with everything a message-only ``commit-tree`` rewrite needs."""
 
@@ -223,10 +248,13 @@ class RewriteCommit:
 
 
 def read_rewrite_rows(cwd: Path | str | None, rev_spec: str) -> list[RewriteCommit]:
-    """Oldest-first commits in *rev_spec* with tree, parents and idents, from one ``git log``."""
+    """Oldest-first first-parent commits in *rev_spec* with tree, parents and idents, from one ``git log``.
+
+    A merge's other parents are named in its row but not walked: they stay as they are.
+    """
     rows: list[RewriteCommit] = []
     for sha, tree, parents, an, ae, ad, cn, ce, cd, subject, body in _log_records(
-        cwd, _REWRITE_ROW_FMT, 11, "--reverse", "--date=raw", rev_spec
+        cwd, _REWRITE_ROW_FMT, 11, "--reverse", "--first-parent", "--date=raw", rev_spec
     ):
         rows.append(
             RewriteCommit(
@@ -253,16 +281,46 @@ def commits_in_range(
     cwd: Path | str | None,
     rev_range: str,
     *,
-    first_parent: bool = False,
+    first_parent: bool = True,
 ) -> list[Commit]:
     """
     Oldest-first commits in *rev_range* (e.g. ``upstream_tip..HEAD``).
 
-    One ``git log`` call.  Pass *first_parent=True* to restrict traversal to
-    first-parent edges only (i.e. ignore commits reachable via merge parents).
+    One ``git log`` call along first-parent edges: the commits a merge brings in are not
+    walked. ``first_parent=False`` follows every parent (``--follow-merges``).
     """
     extra: list[str] = ["--first-parent"] if first_parent else []
     return read_commit_rows(cwd, "--reverse", *extra, rev_range)
+
+
+def merge_commits(cwd: Path | str | None, shas: Sequence[str]) -> frozenset[str]:
+    """Which of *shas* are merge commits: one ``git rev-list --no-walk``, none for no *shas*."""
+    if not shas:
+        return frozenset()
+    listed = git("rev-list", "--no-walk", "--min-parents=2", *shas, cwd=cwd, check=False)
+    return frozenset(listed.stdout.split())
+
+
+def pinned_count(cwd: Path | str | None, commits: Sequence[Commit]) -> int:
+    """How many of *commits* (oldest first) cannot be replayed elsewhere: the newest merge and all below it.
+
+    ``git rebase`` cannot recreate a merge, so the commits from the bottom up to the newest
+    merge stay where they are; the ones above it can still be reordered, folded or dropped.
+    """
+    return pinned_below([c.sha for c in commits], merge_commits(cwd, [c.sha for c in commits]))
+
+
+def pinned_below(shas: Sequence[str], merges: frozenset[str]) -> int:
+    """:func:`pinned_count` for *shas* (oldest first) whose *merges* are already known: no git call."""
+    return next((len(shas) - i for i, sha in enumerate(reversed(shas)) if sha in merges), 0)
+
+
+UNSQUASHED_FIXUP_ADVICE = "squash it with `ger rebase --autosquash`"
+
+
+def is_unsquashed_fixup(subject: str) -> bool:
+    """A ``fixup!``/``squash!`` commit still in the stack: the one test ``ger log`` and ``ger push`` share."""
+    return subject.startswith((_FIXUP_PREFIX, "squash! "))
 
 
 def fixup_target_sha(commits: Sequence[Commit], sha: str) -> str:

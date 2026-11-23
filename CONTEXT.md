@@ -11,8 +11,12 @@ One commit as read by a single `git log` — sha, short sha, subject, body, and 
 _Avoid_: commit, log line, record
 
 **Local stack**:
-The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing. Loaded one way, `get_stack_snapshot`; the overlay, ready strategies and the highlighter all take the same `Commit` rows.
+The commits in `upstream_tip..HEAD` (or an explicit rev-range). Not "every open Gerrit change" — only what sits locally above the tracking branch. A selection of **commit rows**, not a separate kind of thing. Loaded one way, `get_stack_snapshot`; the overlay, ready strategies and the highlighter all take the same `Commit` rows. While a rebase is underway, the stack `ger log` and `ger serve` show is the **rebasing stack**.
 _Avoid_: chain, series, branch commits
+
+**Rebasing stack**:
+The **local stack** while a rebase is underway: the commits on `HEAD` above the upstream as they are now, then the commit the rebase stopped at while it is not applied, then the todo, as they were. Each commit carries its **rebase step** — `done`, `current` or `todo`, none for one below the rebase's `onto` — and the stack carries why the rebase stopped (`edit`, `split`, `conflict`, `resolved`, `paused`) and the paths still unmerged. Not a second stack: the **Gerrit overlay** finds each commit by its Change-Id as for any other.
+_Avoid_: live stack, stack as it was, rebase view
 
 **Ready boundary**:
 The first commit in the **local stack** that a ready-boundary strategy (or the configured stop pattern) marks as blocking. Everything below it is pushable; it and everything above are held back.
@@ -29,6 +33,14 @@ _Avoid_: using either name for the other
 **Settings**:
 An immutable snapshot of the repository's effective `git config`, read once per command with a single `git config --list --show-scope`. Carries each key's value and the scope that won (`local`, `global`, …). Values written after the snapshot are not visible in it; the answer is a new snapshot, not an invalidation. Settings only — nothing in it asks what the repository currently looks like.
 _Avoid_: config, config cache, options
+
+**Run context**:
+One command run, or one request `ger serve` answers: the repository it works in — its **Settings** snapshot, its worktree, its **working branch** and the **stack context** on it — and the Gerrit service it asks, built once at the entry point and handed down. Whatever a run reads once and shares lives on it, for exactly as long as the run; work that changes what it read (switching branches) reads again itself.
+_Avoid_: session, environment, runtime (for the object)
+
+**Working branch**:
+The branch a command works on: the checked-out branch; while a rebase is underway, the branch being rebased; on any other detached HEAD, a local branch pointing at it (preferring one with a Gerrit upstream). Its `branch.<name>.*` config applies, and its upstream defines the stack. There may be none.
+_Avoid_: current branch (that is only the checked-out one)
 
 **Repository state**:
 What the repository looks like right now — branch, detached HEAD, in-progress rebase, upstream, remote-tracking refs, the Gerrit push destination. Answered by running git, not by reading **Settings**, though interpreting the answer may consult them (e.g. whether the upstream's remote is `gerrit.remote`). The dependency runs one way: **Settings** never asks about **repository state**.
@@ -48,6 +60,10 @@ _Avoid_: calling an unvalidated footer value a Change-Id
 `project~branch~Change-Id` — Gerrit's canonical key for a review. The cache primary key and the path segment for follow-up REST calls.
 _Avoid_: change key, full id
 
+**Sibling**:
+Another Gerrit change with the same **Change-Id** on a different branch — a cherry-pick of the change to `dev` is the sibling of the one on `main`. A **local stack** commit belongs to the sibling on its **push branch** only; naming the other sibling (by **triplet** or `change:N`) names that change, not the commit.
+_Avoid_: twin, duplicate (for a change on another branch)
+
 **Changeish**:
 Any input that might name a commit or a Gerrit change: a git rev, **Change-Id**, **triplet**, `change:N`, `refs/changes/…` ref, Gerrit URL, or `q:` query. Resolution classifies it before acting on it.
 _Avoid_: ref, target, identifier
@@ -63,7 +79,7 @@ The step that takes local commit rows and returns them enriched with Gerrit stat
 _Avoid_: enrichment, sync, fetch
 
 **Patchset status**:
-How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`).
+How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`). `unknown` when Gerrit could not be asked at all (unreachable, credentials rejected): not even absence is known. A `newer` commit has **diverged** when Gerrit's current patch set is a commit this repository never had: it was uploaded from elsewhere, and the local commit was not built on it. Otherwise a `newer` commit's **code change** says whether it is only `rebased` (the same `git patch-id` as Gerrit's current patch set, so the votes usually stay), `changed`, or `unknown` (a merge, root or empty commit on either side).
 _Avoid_: state, sync status
 
 **Annotated stack**:
@@ -99,8 +115,12 @@ Time since the last activity on a **review chain**: `now − max(updated)` over 
 _Avoid_: using this for "how long since I reviewed"
 
 **Inbox section**:
-One Gerrit query plus the **review chains** assembled from it. `ger inbox` currently ships **to review** (open chains where you are a reviewer). *Waiting on others* is planned.
-_Avoid_: inbox tab, queue (unqualified)
+One Gerrit query plus the **review chains** assembled from it. Two exist: **to review** (open chains where you are a reviewer) and **outgoing** (open chains you own). `ger inbox` prints both and `ger serve` serves both, each narrowed to the current clone's project unless asked for every project.
+_Avoid_: inbox tab, queue (unqualified), incoming (for *to review*)
+
+**Headline**:
+The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain, then unresolved comments, then a negative vote; with none of those, the *to review* chain with the largest **unreviewed age**. While a rebase is underway in the checkout, the rebase leads instead: where it stopped, on the **rebasing stack**. What an editor's status bar shows.
+_Avoid_: top issue, main alert, status (unqualified)
 
 **Reviewer strategy**:
 How reviewers get applied on push: `push` (magic ref option), `lazy` (REST, only where none exist), `overwrite` (REST, replace reviewers on every change; CC stays).
@@ -130,11 +150,31 @@ _Avoid_: build URL (unqualified), CI failure (the name alone)
 Callable (built-in or under ``.ger/ci/registry.py``, keyed by ``gerrit.project``) that turns Checks rows and/or change messages into **CI links**. Built-in parsing covers common Jenkins Gerrit trigger messages; override per project when needed.
 _Avoid_: CI plugin, hook script, config regex
 
+**CI content provider**:
+Matches a **CI link** URL (by host/pattern) and knows how to fetch and parse what sits behind it. Distinct from a **CI strategy**, which only discovers and transforms links. Built-in providers (e.g. Jenkins) sit behind this seam; they are not domain concepts of their own.
+_Avoid_: link content provider, CI plugin, log scraper (unqualified)
+
+**CI content**:
+What a **CI content provider** returns for one **CI link**: **provenance**, **CI findings**, and an optional body (raw or truncated log text). One result shape; views differ by which parts a command asks for.
+_Avoid_: CI log (unqualified), build output, console dump
+
+**CI finding**:
+One normalized, fingerprintable failure or diagnostic extracted from **CI content** (tool/kind, severity, path, line, message, …). What `ger show` attaches when CI content is enabled, and what `ger ci` prints by default. An error leads; a warning is listed below the errors and collapsed when an error explains the failure. Its path is the file of the commit CI ran on, wherever the build agent kept it.
+_Avoid_: error (unqualified), log line, failure (the Checks name alone)
+
+**Introduced findings**:
+**CI findings** on a change that are not present on its parent’s findings, compared by fingerprint along a chain. Unknown — not empty — where the parent's findings cannot be had. Served by `ger serve`; not yet part of `ger ci` / `ger show` or of edit-attention stops.
+_Avoid_: new errors, delta failures, regression set
+
 ### Reviewing and comments
 
 **Review checkout**:
 Where `ger review` checks a change out: the **review worktree** (one reusable worktree beside the main one, the default) or **in place** (the current worktree). Set by `ger.reviewCheckout`. Either way the change sits on a `change-<number>` branch.
 _Avoid_: review clone, sandbox
+
+**Local version**:
+A commit carrying a change's **Change-Id** on a local branch, above `gerrit.remote` — your copy of the change. It *is* a patchset (Gerrit has its commit), is *another* patchset (pushed once, since updated), or holds edits Gerrit never had. `ger checkout` switches to it, updates it, or refuses to overwrite it accordingly. A branch pushing to another **target branch** holds a cherry-pick, not a local version.
+_Avoid_: local copy, local change, working copy
 
 **Staged review**:
 A review checkout with HEAD detached at the change's parent and the change's diff in the index, so every git tool shows the commit as staged changes. The `change-<number>` branch stays on the change.
@@ -144,16 +184,32 @@ _Avoid_: soft reset mode, diff mode
 What is being reviewed in one worktree — change, patchset, commit, staged or not — recorded under that worktree's git dir. Not Gerrit state, and not the **attention cursor**.
 _Avoid_: current review (unqualified), session
 
+**Review delta**:
+What changed in a change since the patchset you last reviewed — the newest one you posted a vote or comment on. After a rebase it is narrowed to the files the change touches. Nothing to do with **unreviewed age**, which is a clock.
+_Avoid_: interdiff, patchset diff (unqualified), what's new
+
+**Agent runbook**:
+The **attention walk** written down as work an agent can do unattended: per commit needing edit attention, the comment chains to address and the **CI findings** to fix there, with the rules (amend in place, reply as draft, never publish). Inherited findings and **holds** are named but excluded.
+_Avoid_: agent prompt, brief (for the whole walk), task list
+
+**Hold**:
+A comment chain you keep for yourself because it needs a decision, not a fix. The **agent runbook** lists it as left for a human. Local to the repository; not a **comment state** and not Gerrit state.
+_Avoid_: needs-human flag, skip list, ignore
+
 **Comment state**:
 Where a comment is in its life: **note** (local, private, never uploaded), **local draft** (local, meant for Gerrit), **draft** (on Gerrit, visible only to you), **published**. "Private" is not a comment state: in Gerrit it names a kind of *change*.
 _Avoid_: private comment, pending comment, unsent comment
+
+**Suggested edit**:
+A reviewer's proposed change to the code a comment is on: a ```` ```suggestion ```` block in the comment's text, which replaces the comment's lines (the common case), or a Gerrit **fix suggestion** (`fix_suggestions`, with a `fix_id`), which Gerrit stores on a human comment only when the experiment `GerritBackendFeature__allow_fix_suggestions_in_comments` is enabled. Shown with the comment; not applied by ger.
+_Avoid_: patch suggestion, code suggestion (unqualified), fix (alone; `ger fix` is something else)
 
 **Local comment store**:
 The `refs/ger/comments` ref holding every note and local draft of a repository, keyed by **triplet**. Shared by all worktrees. Not a cache: it is the only copy.
 _Avoid_: comment cache, comment db, notes (for the store)
 
 **Anchor**:
-Where a local comment sits: the blob of the file it was written on, the range in it, and the anchored text. Written once and never updated; showing the comment on another version maps it from the anchor.
+Where a local comment sits: the blob of the file it was written on, the range in it, and the anchored text. Written once and never updated; showing the comment on another version maps it from the anchor. When the anchored lines themselves changed, the comment is **outdated**: shown next to where they were, with the anchored text. (Not the `outdated` patchset status.)
 _Avoid_: position, location (for the stored value)
 
 ### Talking to Gerrit
@@ -175,8 +231,16 @@ One ChangeInfo payload, parsed once in `core/gerrit/` — labels, revisions and 
 _Avoid_: detail, payload (for the parsed value), change dict
 
 **Trust window**:
-How long a cached ChangeInfo is served without re-checking Gerrit. Offline / cache-only operation is an unbounded trust window with the freshness probe skipped — it is a policy, not a separate **GerritRest**.
+How long a cached ChangeInfo is served without re-checking Gerrit. It starts when the row is fetched, and again whenever Gerrit confirms the row is current (ADR-0013). "Gerrit has no such change" is trusted for the same window, no longer. Offline / cache-only operation is an unbounded trust window with the freshness probe skipped — it is a policy, not a separate **GerritRest**.
 _Avoid_: TTL, cache timeout, offline mode
+
+**Event stream**:
+Gerrit's `stream-events` feed, read over ssh (`core/gerrit/event_stream.py`). Optional: without ssh, a key Gerrit accepts or the *Stream Events* capability, `ger` polls exactly as before. An event only narrows the **trust window** — the cached rows of the change it names are dropped — and never puts data into the cache (ADR-0012).
+_Avoid_: notifications, webhooks, push updates, live mode
+
+**Activity sequence**:
+A number `ger serve` raises whenever a client should look again: an **event stream** event that concerns this repository, or the stream becoming live or ceasing to be. A client remembers the last one it saw and long-polls `GET /activity` for the next. It says *when* to refresh, never *what* changed.
+_Avoid_: revision (a git or Gerrit revision), version, generation, counter
 
 ## Flagged ambiguities
 

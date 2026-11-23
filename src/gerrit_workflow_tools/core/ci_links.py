@@ -10,7 +10,7 @@ message-derived ones.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
@@ -26,6 +26,14 @@ class CiLink:
     label: str
     url: str
     source: CiLinkSource
+    origin_url: str | None = field(default=None, compare=False)
+    """The URL as the CI message or Checks row gave it, when :attr:`url` was derived from it (a
+    Jenkins build URL turned into its console page). What to quote when naming the build."""
+
+    @property
+    def build_url(self) -> str:
+        """The build's URL as CI reported it: :attr:`origin_url`, else :attr:`url`."""
+        return self.origin_url or self.url
 
 
 @dataclass(frozen=True)

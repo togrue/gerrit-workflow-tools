@@ -102,8 +102,31 @@ it as follows.
 
 ### 2.2 Disambiguation rules
 
-- A **bare integer** (`120045`) is a **git revision**, never a change number. To
-  mean the change, write `change:120045`.
+- A **bare integer** (`120045`) is a **git revision**, never a change number, wherever the
+  argument names a commit first: `ger show`, `ger edit`, `ger reword`, `ger fix`, `ger rebase`,
+  `ger push`, `ger resolve`, `ger ci`. To mean the change, write `change:120045`. When no
+  commit has that name, every command says so the same way and points there: `cannot resolve
+  '120045': no commit by that name; did you mean change:120045?` (exit `3`). An `I…` token
+  that is not a valid Change-Id gets `…, and no Change-Id either (I plus 40 hex digits)`.
+- Where the argument can only ever be a Gerrit change — `ger checkout CHANGEISH`,
+  `ger review CHANGEISH` and every `--change` option (`ger comment`, `ger reply`,
+  `ger review --vote`) — a bare integer **is** the change number: nobody checks out or
+  reviews a commit by an all-digit SHA. `ger inbox`'s `c<n>` token is accepted there too. One
+  rule decides it, `changeish.as_change_only`: `gerrit_patchset.resolve_change` applies it to
+  the positionals, `cli_common.add_change_option` to every `--change`.
+  Every command's help says which of the two its argument is, from one shared wording
+  (`cli_common.changeish_help`).
+- **Not found reads the same everywhere**: `cannot resolve '<input>': <what is missing>`, with
+  exactly these endings, all from `core/changeish.py` (exit `3`):
+
+  | Ending | When |
+  |--------|------|
+  | `no commit by that name` (+ the `change:` hint for digits) | a git revision names no commit |
+  | `Gerrit has no such change` | a change number, triplet, URL or `refs/changes/…` ref: Gerrit answered 404 |
+  | `no Gerrit change has that Change-Id` | a Change-Id Gerrit has no change for |
+  | `commit <sha> is not in the local stack` | `ger edit` / `reword` / `fix` / `push REV`: the commit exists, outside the stack |
+  | `no commit in the local stack has that Change-Id` | the same commands, for a Change-Id or change |
+  | `no commit has that Change-Id` | `ger sha`, which searches commits rather than the stack |
 - A **triplet**, **change number**, **change ref**, and **URL** each identify
   **exactly one** Gerrit change. No ambiguity is possible; if the change does not
   exist, that is a not-found error, not an ambiguity error.
@@ -157,7 +180,9 @@ matches **more than one** open Gerrit change:
    (rare — e.g. an abandoned change plus a new one), prefer **open/active** over
    `ABANDONED`/`MERGED`. If that still leaves more than one, **stop and list the
    candidates** (each with its number and triplet) so the next invocation can be
-   exact. This is a resolution error (exit code for ambiguity), not a silent pick.
+   exact. This is a resolution error (exit code for ambiguity), not a silent pick:
+
+   > `error: ambiguous Change-Id: matches changes on other branches (not 'main'): change:120045 (proj~release-2.1~I8f3c…, NEW), change:119870 (proj~release-2.0~I8f3c…, NEW). Name one by its change: number or triplet`
 4. **None on the target branch?** If the Change-Id matches only changes on *other*
    branches:
    - **Read-only overlay** commands (`ger log`, `ger show HEAD`) treat the local
@@ -173,6 +198,18 @@ matches **more than one** open Gerrit change:
 - **Never overwrite silently.** Two changes with the same Change-Id are two rows,
   cached and displayed independently. The disk cache keys on the **triplet /
   `ChangeInfo.id`**, never on the bare Change-Id.
+- **Resolved once, addressed uniquely after.** Once a change is resolved (by a query scoped
+  to project and branch), every later request for it (detail, comments, drafts, reviewers,
+  checks, messages, review) names it by a unique id, the triplet, Gerrit's `ChangeInfo.id`
+  or its number, never by the bare Change-Id: Gerrit answers `/changes/<Change-Id>/…` with
+  404 ("Multiple changes found") as soon as the Change-Id is on a second branch. This is
+  enforced at the URL seam: `change_path_id` refuses any `{id}` of a `/changes/{id}`
+  request that has no `~` and is not all digits, with an internal error and before Gerrit
+  is asked (a bug in `ger`, not a Gerrit failure). `ChangeApi` and `CommentApi` accept a bare
+  Change-Id from their callers and narrow it once, on entry, to the push branch's triplet
+  (`GerritService.cache_key`, spelling a leading `i` as Gerrit's `I`); without a stack
+  context that narrowing fails with a resolution error. Reviewer completion on the
+  `ger push` options line asks about the push branch's triplet of the pushed tip.
 - **The guess is always visible.** Any time `ger` narrows an ambiguous input, it
   tells you what it picked and why, and how to override. Silence is only allowed
   when the input was already unique.
@@ -190,8 +227,8 @@ All commands share the changeish grammar. Command-specific notes:
 | [`ger log`](commands/log.md) | `REV_RANGE` | Enrich each local commit against the change **on the target branch** (triplet-resolved). A duplicate Change-Id on another branch is ignored for status; may surface as a note. |
 | [`ger show`](commands/show.md) | `REV` | Full changeish. Resolves local commit + one Gerrit change; applies §3 when the arg is a bare Change-Id. `--json` includes the `resolution` block ([§5](#5-machine-readable-resolution-for-automation)). |
 | [`ger push`](commands/push.md) | `REV` (until-boundary) | Pushes to `refs/for/<target>`; the target branch is authoritative, so pushed changes are inherently target-scoped. Local Change-Id validation from `ger change-id --check` remains a **local-git** check. |
-| [`ger fix`](commands/fix.md) | `REF_OR_CHANGE` | Full changeish → resolve to a single commit SHA (fetch `refs/changes/…` when the change isn't local). Ambiguous bare Change-Id follows §3. |
-| [`ger edit`](commands/edit.md) / `reword` | `REV` in stack | Changeish restricted to the local stack; resolves to one stack commit. Change numbers/triplets map to the stack commit sharing that Change-Id, else error. |
+| [`ger fix`](commands/fix.md) | `REF_OR_CHANGE` | Full changeish → the stack commit carrying that change's Change-Id, never fetched ([ADR-0003](../adr/0003-ger-fix-targets-the-local-stack.md)); as `ger edit` for a **sibling** on another branch. |
+| [`ger edit`](commands/edit.md) / `reword` | `REV` in stack | Changeish restricted to the local stack; resolves to one stack commit. Change numbers/triplets map to the stack commit sharing that Change-Id, else error — also for a **sibling** on another branch, with a note that the commit targets the push branch. |
 | [`ger rebase`](commands/rebase.md) | `REV` base | Changeish for the base commit; enrichment uses target-branch resolution. |
 | [`ger assign`](commands/assign.md) *(planned)* | `<targets>` | Accepts one or many changeishes (or the implicit stack). Mutations act on **resolved triplets**, so each target is unambiguous before any REST write. |
 | [`ger sha`](commands/sha-change-id.md) | `<change-id>` | Stays **local-git only**: Change-Id → local SHA. A duplicate **in local history** now exits `8` (`DUPLICATE_CHANGE_ID`), distinct from Gerrit-side ambiguity (`4`). |
@@ -247,7 +284,17 @@ object so an agent never has to scrape human text:
   even if one was ultimately selected. Agents can gate on this.
 - `alternatives` — every other match, fully qualified, so the agent can re-issue
   an exact request.
-- `local_sha` — present when the changeish maps to a commit in the working repo.
+- `local_sha` — present when the changeish maps to a commit in the working repo: the commit a
+  git rev names, else the **local stack** commit carrying the selected change's Change-Id,
+  however the change was addressed (Change-Id, triplet, `change:` number, URL, …) — provided
+  that commit pushes to the selected change (same project and push branch). It is worked out
+  once, in `resolve_changeish`, so every command reports the same one.
+- `local_sibling` — present instead of `local_sha` when the selected change is a **sibling**
+  on another branch than the one the local stack commit with its Change-Id pushes to:
+  `{"sha", "branch", "number"}`, that commit, its push branch, and the change it pushes to
+  when the resolution already saw it (else `null`). Commands that read (`ger show`,
+  `ger resolve`, `ger serve`) then report the selected change as one with no local commit,
+  and every command that resolved it prints a one-line note naming the commit and its branch.
 
 ### 5.1 Automation contract
 
@@ -276,8 +323,8 @@ Exit codes are shared across every command: see **[exit-codes.md](exit-codes.md)
 
 | Code | Meaning |
 |------|---------|
-| `0` | Resolved to exactly one target (no attention required, where applicable) |
-| `1` | Resolved, but attention/no-op condition |
+| `0` | Resolved to exactly one target, whatever attention it reports |
+| `1` | Did not go ahead: you declined a prompt |
 | `2` | Usage error — malformed changeish, unknown prefix |
 | `3` | Not found — the changeish resolved to nothing |
 | `4` | **Ambiguous** — multiple matches survived narrowing; `alternatives` lists them |

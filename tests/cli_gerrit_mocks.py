@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.git_run import git_out
@@ -106,16 +105,28 @@ def build_details_by_change_id(
     return out
 
 
-def gerrit_client_class_stub(inst: object) -> MagicMock:
-    """Stand-in for the ``HttpGerritRest`` class where both construction paths yield *inst*.
+def at_older_patchsets(details: dict[str, dict[str, Any]], repo: Path) -> dict[str, dict[str, Any]]:
+    """*details* with Gerrit at an older patchset of each change, so a push sends every local commit.
 
-    Production builds clients via ``HttpGerritRest.from_settings(settings)``;
-    patching the class with a plain ``return_value`` only covers ``HttpGerritRest(...)`` and
-    leaves ``.from_settings()`` handing back a fresh auto-mock.
+    The older patchset is a commit *repo* has (its ``main``), as a patchset you pushed is: one it
+    never had would make the change **diverged**, which a push refuses.
     """
-    cls = MagicMock(return_value=inst)
-    cls.from_settings.return_value = inst
-    return cls
+    older = git_out("rev-parse", "main", cwd=repo)
+    for detail in details.values():
+        detail["current_revision"] = older
+        detail["revisions"] = {older: {"_number": 1}}
+    return details
+
+
+WEB_EDIT_SHA = "e" * 40
+"""Gerrit's patchset 2 made on the web: a commit no local repository has."""
+
+
+def web_edit(detail: dict[str, Any], local_sha: str, *, keep_local_patchset: bool = True) -> dict[str, Any]:
+    """*detail* with a patchset 2 made on Gerrit; the local commit its patchset 1 (outdated), or none (diverged)."""
+    detail["current_revision"] = WEB_EDIT_SHA
+    detail["revisions"] = {WEB_EDIT_SHA: {"_number": 2}} | ({local_sha: {"_number": 1}} if keep_local_patchset else {})
+    return detail
 
 
 def head_change_id(repo: Path) -> str:

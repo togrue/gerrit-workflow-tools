@@ -13,12 +13,14 @@ How **`ger`** is structured, which module owns each concept, and how data flows 
 | `src/gerrit_workflow_tools/core/` | Domain logic: git stack, config, Gerrit status, REST |
 | `src/gerrit_workflow_tools/core/gerrit/` | Gerrit REST client, SQLite cache, service orchestration, change resolution |
 | `src/gerrit_workflow_tools/render/` | Terminal formatting for commit rows, status tokens and comments |
+| `src/gerrit_workflow_tools/server/` | `ger serve`: the local HTTP service over core |
 | `src/gerrit_workflow_tools/*.py` (package root) | Presentation helpers not tied to a single command |
 | `contrib/completion/ger.bash` | Shipped bash completion script |
 | `docu/` | User guides, specs, this document |
 | `tests/` | Unit tests (default `pytest` run) |
 | `tests/integration/` | Docker + real Gerrit tests (opt-in) |
 | `scripts/` | Dev helpers (e.g. remote test sync) |
+| `vscode/` | The VS Code extension: a client of `ger serve` (TypeScript, its own build) |
 
 Entry point: `pyproject.toml` registers `ger = gerrit_workflow_tools.cli_ger:main`.
 
@@ -35,6 +37,18 @@ flowchart TB
   subgraph cli [CLI layer — src/gerrit_workflow_tools/cli_*.py]
     common[cli_common.py · cli_style.py]
     commands[cli_log · cli_show · cli_push · cli_edit · …]
+    serve_cmd[cli_serve.py]
+  end
+
+  subgraph clients [Clients of the service]
+    vscode[VS Code extension · vscode/]
+  end
+
+  subgraph local_service [Local service, the daemon — server/]
+    httpd[httpd.py · token, loopback, request lock]
+    api[api.py · routes, one run context per request]
+    endpoints[views.py · actions.py · diff_views.py]
+    activity[activity.py · activity sequence]
   end
 
   subgraph presentation [Presentation — render/ + package root]
@@ -47,10 +61,11 @@ flowchart TB
   subgraph core [Core domain — core/]
     stack[stack.py · ready_calc.py · change_id.py]
     status[annotated_stack.py · gerrit_change_status.py · attention.py · comment_chains.py]
-    config[config.py · git_state.py · upstream_interactive.py]
+    config[config.py · git_state.py · upstream.py · upstream_interactive.py]
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
     push_core[push.py · push_reviewers.py · gerrit_show.py]
+    ci[ci_content_service.py · ci_jenkins.py · ci_http.py · ci_findings.py]
   end
 
   subgraph gerrit [Gerrit integration — core/gerrit/]
@@ -59,15 +74,28 @@ flowchart TB
     rest[rest.py]
     cache[cache.py · paths.py]
     view[change_view.py]
+    events[event_stream.py · event_source.py]
   end
 
   subgraph external [External systems]
     git_repo[(Local git repo)]
     gerrit_api[(Gerrit REST API)]
+    gerrit_ssh[(Gerrit event stream · ssh)]
     sqlite[(SQLite cache)]
+    ci_server[(CI server · Jenkins API and logs)]
   end
 
   ger --> commands
+  ger --> serve_cmd
+  serve_cmd -- starts --> httpd
+  vscode -- starts ger serve --> serve_cmd
+  vscode -- HTTP + token --> httpd
+  httpd --> api --> endpoints
+  endpoints --> core
+  endpoints --> render
+  events --> gerrit_ssh
+  events -- invalidates --> cache
+  events -- raises --> activity
   commands --> common
   commands --> core
   commands --> presentation
@@ -76,6 +104,7 @@ flowchart TB
   service --> cache
   rest --> gerrit_api
   cache --> sqlite
+  ci --> ci_server
   stack --> git
   config --> git
   git --> git_repo
@@ -86,9 +115,18 @@ flowchart TB
 | **Entry** | `cli_ger.py` | Lazy command dispatch, global `--refresh` → `GER_CACHE_REFRESH` |
 | **CLI** | `cli_*.py`, `cli_common.py`, `cli_style.py` | Argparse, exit codes, stderr/stdout UX, logging/color init |
 | **Presentation** | `render/`, `summary_highlight.py`, push/rebase helpers | Column layout, ANSI tokens, interactive push prompt, `GIT_SEQUENCE_EDITOR` wrappers |
+| **Service** | `server/` | A peer of the CLI layer: HTTP in, core call, JSON out. Imports core, `render/` JSON builders and `cli_common.failure_exit`; nothing imports it but `cli_serve.py` |
 | **Core** | `core/` (except `core/gerrit/`) | Stack math, config, Change-Id rules, status model, git subprocess wrapper |
 | **Gerrit integration** | `core/gerrit/` | REST HTTP, caching, batch fetch, changeish resolution, `GerritService` |
-| **External** | git, Gerrit server, `~/.cache/ger/` SQLite | Persistent state and I/O |
+| **External** | git, Gerrit server, CI server (Jenkins), `~/.cache/ger/` SQLite | Persistent state and I/O |
+
+**Two ways into core, one model.** A command is a process that lives for one run and calls core
+directly. The **local service** (`ger serve`, the daemon) is a long-running process, one per
+checkout, started by its client; it calls the same core functions, once per request. Neither
+goes through the other: a command never needs a running service, and both read the same
+per-host Gerrit cache, so they give the same answers. Details:
+[the local service](#11-the-local-service-ger-serve); where this is going:
+[target architecture](#target-architecture).
 
 ### Rules
 
@@ -99,7 +137,7 @@ Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which
 - `render/` does not import `cli_*`.
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
-- One owner per concept: git runs through `core/git_run.py`, commit rows are read by `core/stack.py`, and `HttpGerritRest` is built by `GerritService.from_cwd` plus the few owners the test names.
+- One owner per concept: git runs through `core/git_run.py` (ssh, for the event stream, only in `core/gerrit/event_source.py`), commit rows are read by `core/stack.py`, `HttpGerritRest` is built by `GerritService` (on first use) plus the few owners the test names, and a `GerritService` only by `RunContext.open`.
 - Every command builds its runtime with `init_cli_runtime` and wraps its body in `run_cli_command`. `cli_bash_completion.py` is exempt: it runs from shell startup and must not load `core/`.
 - Modules stay at or under 400 lines. Larger ones are pinned at their size and only shrink; so do counts of `# pylint: disable=too-many-*`.
 
@@ -123,11 +161,11 @@ sequenceDiagram
     ger->>ger: GER_CACHE_REFRESH=1
   end
   ger->>cmd: lazy import + main(args)
-  cmd->>common: init_cli_runtime (logging, color, Settings)
+  cmd->>common: init_cli_runtime (logging, color, run context)
   cmd->>common: run_cli_command (errors → exit codes)
 ```
 
-Every command module owns its argparse schema, builds its runtime with `init_cli_runtime`, and wraps its body in `run_cli_command` — the only place errors map to exit codes ([spec/exit-codes.md](spec/exit-codes.md)).
+Every command module owns its argparse schema, builds its runtime with `init_cli_runtime` — which returns the **run context** (`core/run_context.py`: its repository — cwd, `Settings`, worktree, **working branch** — and the Gerrit service) and is the one place `ger --refresh` is read — and wraps its body in `run_cli_command` — the only place errors map to exit codes ([spec/exit-codes.md](spec/exit-codes.md)).
 
 ---
 
@@ -154,9 +192,9 @@ flowchart LR
 
 `config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list --show-scope`, then passes it down; there is no process-wide cache and nothing to invalidate. Values answer with `get`; the winning file scope answers with `scope` (`local` / `global` / …). Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
 
-`git_state.py` answers what the repository currently looks like — branch, HEAD, rebase state, upstream, and the Gerrit push destination. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
+`git_state.py` answers what the repository currently looks like — branch, HEAD, upstream, and the Gerrit push destination; `rebase_state.py`, one step above it, answers whether a rebase is underway and what that means for the next command. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
-`upstream_interactive.py` prompts the user when a branch lacks `@{upstream}` — used by log, push, edit, rebase, change-id, sha.
+`upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` prompts with that suggestion when a branch lacks `@{upstream}`: up front in log, push, edit, rebase, change-id, sha and `show --stack`, and for every command through `run_cli_command`, which asks when a `NeedsUpstreamError` (raised by `missing_upstream_error`, and by `resolve_stack_context` as `NoDestinationBranchError`) reaches it and runs the command again. `ger serve` offers the same suggestion through `GET /stack/upstream`.
 
 ---
 
@@ -212,7 +250,7 @@ sequenceDiagram
   Svc->>REST: batch project:P (change:I OR …) on miss
   REST-->>Svc: ChangeInfo JSON (all branches)
   Note over Svc: alias to target-branch triplets
-  Svc->>Status: build_log_commit per row
+  Svc->>Status: overlay_code_facts (one git batch), then build_log_commit per row
   Svc->>Status: parallel follow-ups (comments, checks, reviewers)
   Svc-->>CLI: list[LogCommit]
   CLI->>Attn: annotate_attention
@@ -221,11 +259,11 @@ sequenceDiagram
 
 **Shared pipeline:** `GerritService.fetch_gerrit_data` is the local-stack enrichment entry point used by `ger log`, `ger show`, and the rebase enricher. `GerritService.fetch_review_chains` is the query-driven sibling used by `ger inbox` — it must not resolve stack context.
 
-**Annotated stack:** `core/annotated_stack.py` composes the local stack, the overlay and attention. `annotate(rows, service=…, cwd=…)` serves callers that already have rows (`ger log`, `ger show`, the rebase enricher); `load_annotated_stack(cwd, rev_range, …)` serves callers that start from a revision range (`ger log`, `ger edit --first-attention-commit`). It neither prints nor prompts.
+**Annotated stack:** `core/annotated_stack.py` composes the local stack, the overlay and attention. `annotate(rows, service=…, cwd=…)` serves callers that already have rows (`ger log`, `ger show`, the rebase enricher); `load_annotated_stack(run, rev_range, …)` serves callers that start from a revision range (`ger log`, `ger edit --first-attention-commit`); with none it loads the run's local stack, the **rebasing stack** while a rebase is underway (`AnnotatedStack.rebase`), which `ger log` and `GET /stack` both show. It neither prints nor prompts.
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
-**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking); the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
+**Status model:** `gerrit_change_status.py` defines `LogCommit` and the patchset states. `attention.py` owns the **attention** verdict (`determine_attention()`, `ci_failed()`, chain-blocking) and how urgent each reason is (`REASON_SEVERITY`, `attention_severity()`, served as `severity` beside every `attention_reasons`); somebody's change that waits on your review is seen as yours to review (`as_your_review()`), not as its author's; the exit code, edit-attention walks, the trailing hints and the inbox all read `attention_reasons`, and render (and the VS Code extension) only maps reasons to text. `attention_cursor.py` / `edit_attention_walk.py` own the **attention cursor** and resume/next/first selection for `ger edit` / `show` / `sha`.
 
 **Rendering:** `render/commit_row.py` (full rows for log/show) and `render/status_fmt.py` (compact tokens for rebase todo lines) both consume `LogCommit`.
 
@@ -298,7 +336,7 @@ sequenceDiagram
   end
 ```
 
-`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)); the prompts it calls (`-i`, the options line, the save-reviewers question) live in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push.py`.
+`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)); the prompts it calls (`-i`, the options line, the save-reviewers question) live in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push_options.py`.
 
 ---
 
@@ -344,7 +382,55 @@ flowchart LR
 | `HttpGerritRest` | Talks to a real Gerrit over HTTP; credentials resolved at construction |
 | `ChangeStore` (`tests/change_store.py`) | Answers from ChangeInfo payloads, with stateful writes. Test-only — nothing in `src/` constructs one |
 
-Commands take a `gerrit` keyword argument and pass it to `GerritService.from_cwd(cwd, rest=…)`, the single construction path. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose), `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)), and `resolve_stack_changeish` (builds a client lazily so a purely local resolution never needs `gerrit.webUrl`).
+Commands take a `gerrit` keyword argument and pass it to `init_cli_runtime`; the run context's `gerrit` is the command's one service, and core functions that ask Gerrit take the run. `RunContext.open` is the single construction path: the rebase enricher, a process of its own, opens its run the same way. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
+
+---
+
+### 10. CI content (`ger ci`, `ger show --ci`)
+
+```mermaid
+flowchart LR
+  links[CiLink rows · overlay]
+  svc[core/ci_content_service.py]
+  prov[CI content providers · .ger/ci CONTENT_PROVIDERS · ci_jenkins]
+  find[core/ci_findings.py · finders by shape]
+  paths[core/ci_paths.py]
+  http[core/ci_http.py]
+  store[(ci_content store)]
+  render[render/ci_content.py]
+
+  links --> svc
+  svc --> store
+  svc --> prov
+  prov --> http
+  prov --> find
+  svc --> paths
+  svc --> render
+```
+
+A second, opt-in hop after the overlay: the overlay stops at **CI links**; `CiContentService` matches each link to a provider by URL, passes it `ger.ciCredential.<host>`, and turns what comes back into one `CiContent` (provenance, findings, optional body). The provider's cache verdict says what is safe to reuse; `CiContentStore` decides what it can afford to keep. Failures are recorded per link, never raised: `ger ci` turns them into exit `11`, `ger show` reports them inline. The store keeps findings as the log named them; `CiContentService` resolves their paths to the files of the commit that asks (`core/ci_paths.py`), so one build reads the same from any build agent. Design: [spec/ci-content.md](spec/ci-content.md).
+
+### 11. The local service (`ger serve`)
+
+```mermaid
+flowchart LR
+  client[VS Code extension · vscode/]
+  httpd[server/httpd.py · token, loopback, errors]
+  api[server/api.py · routes, per-request context]
+  ends[server/views.py · server/actions.py]
+  core[core/ · inbox, annotated stack, show, review checkout, reorder]
+  json[render/ JSON builders]
+
+  client --> httpd --> api --> ends
+  ends --> core
+  ends --> json
+```
+
+The long-running caller core was kept terminal-free for. An endpoint is a command without a terminal: it parses a request, calls the core function the matching command calls, and returns the JSON that command prints with `--json` (`render/show_json.py`, `render/review_json.py`). `GerApi.handle` is transport-free, so tests drive endpoints without a socket.
+
+Each request gets a fresh `Context` over its own **run context**: a new `Settings` snapshot and a new read of the repository, because it changes between requests; nothing process-wide needs clearing ([ADR-0014](adr/0014-memos-live-on-the-run.md)). `refresh=1` is the run's refresh flag. Requests are serialised because a request may move the working tree under another. Failures map to HTTP statuses through `cli_common.failure_exit`, so the error code a client sees is the exit code's name. Contract: [spec/commands/serve.md](spec/commands/serve.md).
+
+When it can, the service also follows Gerrit's **event stream** (`core/gerrit/event_stream.py`, over `core/gerrit/event_source.py`): one background reader applies each event to the Gerrit cache under the request lock (dropping that change's rows, ADR-0012) and raises the **activity sequence** (`server/activity.py`) that clients long-poll. Without it nothing changes but the sequence, which then never moves.
 
 ---
 
@@ -357,12 +443,17 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime`, `run_cli_command`, shared argparse groups, `print_resolution_note`, `confirm`, `run_interactive_rebase` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `print_resolution_note`, `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
+| `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
 | `cli_show.py` | `ger show` |
+| `cli_ci.py` | `ger ci` |
 | `cli_reply.py` | `ger reply` |
+| `cli_comment.py` | `ger comment` |
+| `cli_review.py` | `ger review` |
+| `cli_checkout.py` | `ger checkout`: the update question and what it says |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |
@@ -370,65 +461,121 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_resolve.py` | `ger resolve` |
 | `cli_sha.py` | `ger sha` |
 | `cli_changeid.py` | `ger change-id` |
+| `cli_serve.py` | `ger serve`: start the local service, print where it listens |
 | `cli_setup.py` | `ger setup` |
 | `cli_config.py` | `ger config`: temp-file key=value editor for ger settings |
 | `cli_cache.py` | `ger cache` |
 | `cli_fetch_api.py` | `ger fetch-api` (debug) |
 | `cli_bash_completion.py` | `ger bash-completion` |
+| `cli_vscode.py` | `ger vscode install`: put the bundled VS Code extension (or one built from the checkout) into the editor |
 
 ### Core domain (`core/`)
 
 | Module | Owns |
 |--------|------|
+| `core/run_context.py` | The **run context**: `RunContext` (the repository and the Gerrit service of one command run or one request; `run.cwd`, `run.settings`, `run.worktree` and `run.stack` read through them) |
+| `core/repository.py` | The repository a run works in, each answer read once for the run: `Repository` (its `worktree`, `working_branch`, `stack_branch`, `root` and **stack context**, `stack`) |
+| `core/votes.py` | The vote grammar (`CR+1`, `V=-1`): `parse_votes` for every command that votes |
+| `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE` |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
-| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR` |
-| `core/git_state.py` | Repository state: branch, HEAD, rebase, upstream, Gerrit push destination |
+| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension |
+| `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
+| `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
+| `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) and the one next step after a conflict (`conflict_next_step`) |
+| `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), and its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`) |
+| `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |
-| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_rewrite_rows`, ranges, merge-base |
+| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention |
-| `core/gerrit_change_status.py` | `LogCommit`, patchset status, merged equivalence |
+| `core/gerrit_change_status.py` | `LogCommit`, patchset status |
+| `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
-| `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries |
+| `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries and the attention cursor (`--cursor`, `--cursor-history`, `--set-cursor`) |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
+| `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
+| `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
+| `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
+| `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), and doing it (`apply_checkout`, rebasing the commits above an updated version) |
+| `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
+| `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
+| `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
+| `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
+| `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
+| `core/comment_write.py` | Writing your own comments: starting a chain (a Gerrit draft, a local draft or a note), editing and discarding one not yet published |
+| `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
 | `core/ci_links.py` | CI failure names and transformed build links |
-| `core/ci_strategy.py` | Loading CI link strategies from `.ger/ci/` |
+| `core/ci_strategy.py` | Loading CI link strategies and **CI content providers** from `.ger/ci/` |
+| `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding` and its severity, provenance, cache verdict), which warnings are collapsed (`collapse_warnings`), the `CiContentProvider` seam, and **introduced findings** (`introduced_fingerprints`) |
+| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape, finding paths resolved per commit |
+| `core/ci_content_store.py` | `CiContentStore`: size-bounded LRU store of immutable CI content, apart from the Gerrit cache |
+| `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`): the finder order, build-driver verdicts and the generic fallback |
+| `core/ci_log.py` | A CI log as clean lines (`clean_log_lines`: CI-system line prefixes removed), the workspace directories it names (`workspace_roots`), and what finders share: the `Finder` type, the path and level fragments |
+| `core/ci_findings_located.py` | Finder for one-line located diagnostics (`path:line: severity: msg`): ruff, pylint, mypy, gcc/clang, javac, scalac, tsc, rustfmt, the linker |
+| `core/ci_findings_blocks.py` | Finders for diagnostics printed as a block: rustc / clippy / ruff (`--> path:line:col`), Python tracebacks, CMake, eslint, npm |
+| `core/ci_findings_tests.py` | Finders for test runners: pytest, cargo test, GoogleTest, CTest, `node --test` — the failed test, located by its failure section |
+| `core/ci_findings_tests_jvm.py` | Finders for test runners that name a file without its directory: Surefire, Gradle, ScalaTest, Jest |
+| `core/ci_paths.py` | Resolving **CI finding** paths to the files of a commit (`tracked_paths`, `resolve_finding_paths`) |
+| `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
+| `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
+| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
-| `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes |
+| `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
-| `core/push.py` | Push plan and push refusal: prepare, revise, execute, refspec options |
-| `core/push_checks.py` | What a push looks at before it runs: the remote rebase check, what Gerrit already holds |
+| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
+| `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
+| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept) |
+| `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PickStop`, `PreviewUnavailable` |
+| `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
+| `core/push.py` | Push plan and push refusal: prepare, revise, execute |
+| `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
+| `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
+| `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, `OutdatedChange` (Gerrit has a newer patch set: nothing is set), and the warning when options reached nothing |
+| `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready prefix and boundary, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
-| `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing, and who a push asks for |
+| `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
+| `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |
+| `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`), the one command that rebases onto it, and where that rebase would stop (simulated on every call); what `--drop-merged-equivalent` drops: `upstream_moved`, `UpstreamMoved`, `merged_with_same_code` |
 | `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)
 
 | Module | Owns |
 |--------|------|
-| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError`, change-id path encoding, `parallel_map` |
+| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError` and `GerritUnavailableError` (Gerrit could not be asked at all), change-id path encoding, `parallel_map`, `self_account_id` |
 | `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth` |
-| `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe, `since:` delta |
+| `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
+| `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
 | `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
-| `core/gerrit/cache.py` | `GerritCache`: SQLite persistence keyed by triplet |
+| `core/gerrit/cache.py` | `GerritCache`: SQLite persistence of ChangeInfo keyed by triplet; the trust window (`load_changes`), `reconcile` (which rows are current, from freshness tokens), invalidation |
+| `core/gerrit/cache_follow_ups.py` | `FollowUpCache` (mixed into `GerritCache`): a change's comments and Checks rows, valid while its freshness token stands; `DEFAULT_CHANGE_TRUST_WINDOW_SECONDS` |
+| `core/gerrit/cache_facts.py` | `RememberedFacts` (mixed into `GerritCache`): host capabilities, the user's account id, settled commits, each with its lifetime |
+| `core/gerrit/cache_schema.py` | The cache's tables and `SCHEMA_VERSION`: a version change drops and recreates them, there are no migrations |
+| `core/gerrit/cache_rows.py` | What a cache row holds: the ChangeInfo fields the cache keys on, the comments context key, avatar stripping, follow-up payloads read back; `CacheInfo` (row counts) |
+| `core/gerrit/event_source.py` | Where the **event stream** comes from: the `EventSource` seam, `SshEventSource` (the one place ssh runs), `discover_ssh_target` (host, port, user from what ger already knows) |
+| `core/gerrit/event_stream.py` | Following the **event stream**: `EventStream` (one reader, reconnect, capped backoff, `StreamStatus`), `parse_event`, and what an event means (`apply_event`: drop that change's cached rows, ADR-0012) |
 | `core/gerrit/change_view.py` | `ChangeView`: one ChangeInfo payload parsed once (labels, revisions, parents, owner, votes, reviewers) |
-| `core/gerrit/change_resolution.py` | Changeish resolution, resolution notes |
-| `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), its memo, triplets |
+| `core/gerrit/change_resolution.py` | Changeish resolution: narrowing a changeish to one change, and to a local stack commit |
+| `core/gerrit/narrowing.py` | Change-Id narrowing (spec §3.1): `narrow_matches`, `resolution_from_change_rows` — picking one of a Change-Id's changes by push branch, without contacting Gerrit |
+| `core/gerrit/resolution.py` | The resolution model: `Resolution`, `SelectedChange`, `ChangeAmbiguousError`, resolution notes |
+| `core/gerrit/stack_context.py` | `StackContext` (project, target and push branch of a stack), resolving it, triplets. Kept per run (`Repository.stack`), never per process |
 | `core/gerrit/paths.py` | Cache DB path and host key |
 
 ### Presentation (`render/` and package root)
@@ -436,19 +583,40 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `render/commit_row.py` | Full commit line layout for log/show |
-| `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts |
+| `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts, and the hint words for attention reasons (`attention_hints` for `ger log`, `member_hints` for `ger inbox`) |
 | `render/comments.py` | Inline comment chains, human and Markdown |
+| `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
-| `render/show_json.py` | JSON payloads for ``ger show`` |
+| `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
+| `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
+| `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
+| `render/agent_runbook.py` | The agent runbook as Markdown (`runbook_markdown`) and JSON (`runbook_json`) |
+| `render/review_json.py` | JSON for **review chains** (`chain_json`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
+| `render/ci_content.py` | **CI content** projections: JSON, human and Markdown, grouped by CI link label |
+| `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns, and the highlighter for a branch's stack |
-| `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question, what it assigned |
+| `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question |
+| `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |
 | `push_options_history.py` | Push-options history per Gerrit host and project, and Up/Down recall |
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |
+| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_state.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
 | `bash_completion_generator.py` | Bash completion generated from live argparse definitions |
+
+### Local service (`server/`)
+
+| Module | Owns |
+|--------|------|
+| `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line) |
+| `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
+| `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
+| `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
+| `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
+| `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
+| `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 
 ---
 
@@ -459,8 +627,86 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 2. **Styling below the CLI.** `render/commit_row.py`, `render/comments.py`, `summary_highlight.py` and `push_input_prompt.py` import `cli_style.py`. Moving the ANSI helpers into `render/` makes presentation depend only downward. *Tracked by:* `test_render_does_not_import_cli`.
 3. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
-4. **Cache-clear hub.** `git_run.clear_git_cache` imports upward into `core/git_state.py` and `core/gerrit/stack_context.py` to clear caches it does not own. *Tracked by:* `test_substrate_stays_at_the_bottom`.
-5. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+4. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+
+---
+
+## Target architecture
+
+The long-term goal, agreed 2026-11-21. It describes where the code is going, not what it does
+today; the sections above describe today.
+
+**One engine with a typed application API. The commands, `ger serve`, the editor extension and
+agents are thin shells over the same operations.** The number of clients may grow, so the
+contract between engine and shell is worth keeping clean.
+
+### Principles
+
+1. **Operations live in core.** Every user-visible operation is one core function from a
+   request dataclass to a result dataclass. A command is *parse → call → render text*; an
+   endpoint is *parse → call → serialise*. Neither composes an answer from several core
+   modules, as `server/views.py`, `cli_log.py` and `cli_show.py` do today.
+2. **One contract, generated.** `--json` and HTTP serialise the same result types. The
+   TypeScript types of `vscode/` are generated from them, not mirrored by hand. The contract
+   is not presentation: the JSON builders (`render/show_json.py`, `render/review_json.py`,
+   the JSON half of `render/agent_runbook.py`) leave `render/`, which then only formats text
+   for a terminal. The service imports neither `render/` nor `cli_common.py`; today it needs
+   the first for those builders and for the Markdown of `ger show --ai`, and the second for
+   `failure_exit`.
+3. **Verdicts in core, words and icons in the shells.** What a state *is* (how a commit relates
+   to Gerrit, how urgent a chain is) is served as an enum. A shell only maps it to text or an icon.
+4. **A shell prompts; core never does.** An operation that needs answers from a person has
+   three steps:
+   1. Core serves the state: the plan, whether it is ready and why not, and the values on offer
+      (reviewer suggestions, history, validation).
+   2. The shell runs its own prompt loop. The loop may differ between a terminal and an editor;
+      the rules it shows come from core and are not repeated.
+   3. The shell sends one command with the final choices. Core prepares again from them and
+      executes, so no plan has to survive between two requests. The command names the head it
+      previewed, and core refuses when the stack moved since.
+
+   `ger push` is the first operation to take this shape
+   ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md) stands; the data behind its
+   prompts and the readiness verdict move into core).
+5. **Capability parity.** Every capability is reachable from the command line and from the
+   service. Parity is about what can be done, not about command names: reorder, squash and drop
+   are `ger rebase` on the command line and a drag in the editor. A capability offered by only
+   one shell is a written exception with a reason, agreed by the maintainer, in a guardrail of
+   `tests/test_architecture.py`. Known gaps today: push, vote and publish are not served; undo
+   and the conflict preview have no command.
+6. **State lives in git and the Gerrit cache, never in the process**
+   ([ADR-0014](adr/0014-memos-live-on-the-run.md)). The service gets faster through memos keyed
+   by object id, reads off the request lock and pushed events
+   ([commit-chain roadmap](plans/commit-chain-roadmap.md)), not through a model held in memory.
+7. **One stack-rewrite engine** with an operation log, as the
+   [commit-chain roadmap](plans/commit-chain-roadmap.md) describes.
+
+### Processes
+
+- **One service per checkout, started by its client.** No daemon shared between checkouts: it
+  would need discovery, a token on disk and a lifecycle of its own, it would run with the
+  environment (ssh agent, proxy, `PATH`) of whoever started it first, and WSL, dev containers
+  and ssh remotes each need their own anyway.
+- **Commands run in-process.** A command never depends on a running service. Both read the same
+  per-host Gerrit cache, so they give the same answers.
+
+### Later, when it is measured to matter
+
+**Services of one host coordinate through the cache database.** Today every editor window polls
+the listings and holds its own event-stream connection; only change details are shared, through
+the cache. Should that load become a problem, the services can share the rest without a new
+process:
+
+- A lease per host, a row in the cache database that its holder keeps renewing: only the holder
+  follows the event stream. When it exits the lease runs out and another service takes over; a
+  holder whose ssh fails gives the lease up.
+- Listings are cached with a short trust window, so the polls of several windows become about
+  one Gerrit request.
+- A shared activity counter in the database tells the other services to wake their clients.
+
+Events still only invalidate
+([ADR-0012](adr/0012-events-invalidate-never-populate.md)). Before building it, check how the
+cache behaves under several writers.
 
 ---
 

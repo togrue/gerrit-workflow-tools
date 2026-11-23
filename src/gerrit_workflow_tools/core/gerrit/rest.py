@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 from urllib.parse import quote, unquote
@@ -17,11 +19,52 @@ _T = TypeVar("_T")
 
 
 class GerritApiError(RuntimeError):
-    """Gerrit HTTP or JSON error."""
+    """Gerrit HTTP or JSON error, said on one line. An HTTP error ends in Gerrit's own reason."""
 
-    def __init__(self, message: str, *, status: int | None = None) -> None:
+    def __init__(self, message: str, *, status: int | None = None, reason: str | None = None) -> None:
         super().__init__(message)
         self.status = status
+        self.reason = reason
+        """What Gerrit's response body said (``x does not identify a registered user``), when it said."""
+
+
+class GerritUnavailableError(GerritApiError):
+    """Gerrit could not be asked at all: unreachable, or it rejected the credentials.
+
+    Unlike a per-change failure, this says nothing about any one change, so nothing may
+    read it as "not found" or "not pushed", and retrying change by change cannot help.
+    The message is the whole story, written for the user.
+    """
+
+
+def _error_texts(value: Any) -> list[str]:
+    """The ``error`` strings of a Gerrit JSON error body, the most specific ones.
+
+    ``ReviewResult`` has one per reviewer under a generic top-level one (``error adding reviewer``),
+    which is said only when nothing below it is.
+    """
+    if isinstance(value, dict):
+        nested = [text for item in value.values() for text in _error_texts(item)]
+        return nested or ([value["error"]] if isinstance(value.get("error"), str) else [])
+    if isinstance(value, list):
+        return [text for item in value for text in _error_texts(item)]
+    return []
+
+
+def gerrit_error_reason(body: str, status_phrase: str) -> str:
+    """Gerrit's own reason for a failed request, on one line: its response body, else *status_phrase*.
+
+    Gerrit says most errors in plain text (``nosuchuser does not identify a registered user``);
+    a JSON body says them in ``error`` fields.
+    """
+    text = body.strip().removeprefix(")]}'").strip()  # Gerrit's anti-XSSI prefix on JSON
+    if text[:1] in ("{", "["):
+        with contextlib.suppress(json.JSONDecodeError):
+            text = "; ".join(dict.fromkeys(_error_texts(json.loads(text))))
+    text = "; ".join(" ".join(line.split()) for line in text.splitlines() if line.strip())
+    if not text:
+        return status_phrase
+    return text if len(text) <= 300 else f"{text[:297]}..."
 
 
 def norm_change_id(change_id: str) -> str:
@@ -30,17 +73,40 @@ def norm_change_id(change_id: str) -> str:
 
 
 def change_id_for_gerrit_rest_path(change_id: str) -> str:
-    """
-    Return *change_id* for Gerrit ``changes/<id>/...`` URL segments.
+    """*change_id* as Gerrit spells it, for the Change-Id part of a triplet.
 
     Gerrit expects the canonical Change-Id with an uppercase ``I`` prefix; values
     taken from :func:`norm_change_id` use a lowercase ``i`` and yield HTTP 404 unless corrected.
+    Anything that is not a Change-Id passes through.
     """
 
     s = change_id.strip()
     if is_change_id(s):
         return "I" + s[1:].lower()
     return s
+
+
+class BareChangeIdError(RuntimeError):
+    """A bare Change-Id was about to become the ``{id}`` of a ``/changes/{id}`` request: a bug in ger.
+
+    Not a Gerrit failure and never mapped to an exit code: the caller should have narrowed the
+    Change-Id to a triplet first (:meth:`GerritService.cache_key`).
+    """
+
+
+def change_path_id(change_ref: str) -> str:
+    """*change_ref* as the ``{id}`` of a ``/changes/{id}`` request: a triplet, a Gerrit id or a number.
+
+    A bare Change-Id raises :class:`BareChangeIdError` before Gerrit is asked: Gerrit answers it
+    with 404 ("Multiple changes found") once the Change-Id is on a second branch (GitHub #31).
+    """
+    ref = change_ref.strip()
+    if "~" in ref or ref.isdigit():
+        return ref
+    raise BareChangeIdError(
+        f"internal error: bare Change-Id {ref!r} in a /changes/{{id}} request; "
+        "narrow it to a triplet (project~branch~Change-Id) or a change number first"
+    )
 
 
 def encode_gerrit_path_segment(segment: str | int) -> str:
@@ -118,8 +184,22 @@ class GerritRest(Protocol):
     def delete_draft(self, change_id: str, revision: int | str, draft_id: str) -> None:
         """Delete one of the caller's drafts."""
 
-    def publish_drafts(self, change_id: str, *, message: str | None = None) -> dict[str, Any]:
-        """Publish all the caller's drafts on every patchset, with an optional change message."""
+    def publish_drafts(
+        self,
+        change_id: str,
+        *,
+        message: str | None = None,
+        labels: Mapping[str, int] | None = None,
+        draft_ids: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Post a review: the caller's drafts, an optional message and votes.
+
+        *draft_ids* ``None`` publishes every draft on every patchset; a sequence publishes only
+        those drafts, and an empty one none (a message or vote alone).
+        """
+
+    def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
+        """Return RelatedChangesInfo: the relation chain of *revision*, newest first."""
 
     def get_checks(self, change_id: str) -> list[dict[str, Any]]:
         """Return Checks-plugin rows for the current revision."""
@@ -164,6 +244,15 @@ class GerritRest(Protocol):
         """Set or clear the private flag on a change."""
 
 
+def self_account_id(rest: GerritRest) -> int | None:
+    """The calling user's account id, or ``None`` when Gerrit will not say."""
+    try:
+        raw = rest.get_account("self").get("_account_id")
+    except GerritApiError:
+        return None
+    return raw if isinstance(raw, int) else None
+
+
 def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Return the single change from *rows* or raise :class:`GerritApiError` if none or ambiguous."""
     if not rows:
@@ -192,12 +281,20 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
     )
 
 
-# Options for batch stack queries and single-change resolution:
-# labels + submittable + revisions in one round trip (no separate /detail call).
+# The one detail shape of a change, for every query and for the cache: labels, submittable,
+# every revision, and the current commit with its parents (review chains follow them), in one
+# round trip (no separate /detail call). Never the diffstat: nothing reads Gerrit's line counts
+# (those shown come from git), and computing them makes Gerrit open the commits.
 LOG_QUERY_OPTIONS = (
+    "SKIP_DIFFSTAT",
     "DETAILED_LABELS",
     "DETAILED_ACCOUNTS",
     "SUBMITTABLE",
     "CURRENT_REVISION",
     "ALL_REVISIONS",
+    "CURRENT_COMMIT",
 )
+
+# What a request asks for when only the plain ChangeInfo is needed (a listing whose details
+# may already be cached, a lookup): the freshness token comes with every ChangeInfo.
+LIGHT_QUERY_OPTIONS = ("SKIP_DIFFSTAT",)

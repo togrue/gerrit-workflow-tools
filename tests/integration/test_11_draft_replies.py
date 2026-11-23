@@ -1,4 +1,4 @@
-"""Integration: ``ger reply`` drafts and publishing them, against a real Gerrit.
+"""Integration: ``ger reply`` drafts, editing drafts and publishing them, against a real Gerrit.
 
 ``ger`` runs as the dev user (the change owner); the admin plays the reviewer. Drafts are
 private until published, so the reviewer must not see a reply before it is published.
@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from gerrit_workflow_tools.cli_comment import main as ger_comment_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_reply import main as ger_reply_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
@@ -149,3 +150,94 @@ def test_push_keeps_or_publishes_drafts_with_the_new_patchset(
     published = _published_chain(gerrit_admin_session, change_id)
     assert published.resolved is True
     assert published.comments[-1].message == "Done"
+
+
+def test_an_edited_draft_stays_where_it_is(
+    tmp_path: Path,
+    gerrit_integration_context: Any,
+    gerrit_admin_session: GerritHttpSession,
+    gerrit_dev_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, change_id = _pushed_change_with_comment(
+        tmp_path, gerrit_integration_context, gerrit_admin_session, monkeypatch, "edit"
+    )
+    root = _root_id(repo, monkeypatch)
+
+    def by_id(draft_id: str) -> dict[str, Any]:
+        (draft,) = [row for row in _drafts(gerrit_dev_session, change_id) if row["id"] == draft_id]
+        return draft
+
+    def edit(draft_id: str, *args: str) -> dict[str, Any]:
+        code, out, err = run_cli(repo, ger_comment_main, ["--edit", draft_id, *args, "--json"], monkeypatch)
+        assert code == 0, err
+        return dict(json.loads(out))
+
+    # A chain you start, on a range: Gerrit keeps the range, the patchset and the open flag.
+    code, out, err = run_cli(repo, ger_comment_main, ["chain_0.txt:1.1-1.4", "-m", "why?", "--json"], monkeypatch)
+    assert code == 0, err
+    own = str(json.loads(out)["id"])
+    before = by_id(own)
+    assert before["range"], "the draft is on a range, which an edit could lose"
+    assert (edit(own, "-m", "why so?")["action"], edit(own, "-m", "why exactly?")["message"]) == ("updated", "why so?")
+    after = by_id(own)
+    assert after["message"] == "why exactly?"
+    for kept in ("range", "line", "patch_set", "unresolved"):
+        assert after.get(kept) == before.get(kept), kept
+    assert len(_drafts(gerrit_dev_session, change_id)) == 1, "the draft was updated, not doubled"
+
+    # A draft reply: it still answers the reviewer's comment.
+    code, _out, err = run_cli(repo, ger_reply_main, [root, "-m", "Will do"], monkeypatch)
+    assert code == 0, err
+    (reply,) = [row for row in _drafts(gerrit_dev_session, change_id) if row.get("in_reply_to") == root]
+    assert edit(reply["id"], "-m", "Renamed", "--resolved")["message"] == "Will do"
+    edited = by_id(reply["id"])
+    assert (edited["message"], edited["in_reply_to"], edited["unresolved"]) == ("Renamed", root, False)
+    assert (edited.get("line"), edited.get("patch_set")) == (reply.get("line"), reply.get("patch_set"))
+
+    # Still private, and a published comment is not yours to edit.
+    assert len(_published_chain(gerrit_admin_session, change_id).comments) == 1
+    code, _out, _err = run_cli(repo, ger_comment_main, ["--edit", root, "-m", "mine now"], monkeypatch)
+    assert code == 3
+    assert _published_chain(gerrit_admin_session, change_id).comments[0].message == "please rename this"
+
+    for draft_id in (own, reply["id"]):
+        code, _out, err = run_cli(repo, ger_comment_main, ["--discard", draft_id], monkeypatch)
+        assert code == 0, err
+    assert _drafts(gerrit_dev_session, change_id) == []
+
+
+def test_publish_only_named_drafts_and_a_message_alone(
+    tmp_path: Path,
+    gerrit_integration_context: Any,
+    gerrit_admin_session: GerritHttpSession,
+    gerrit_dev_session: GerritHttpSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--only`` publishes the named draft and keeps the others; ``-m`` alone on a named change is a note."""
+    repo, change_id = _pushed_change_with_comment(
+        tmp_path, gerrit_integration_context, gerrit_admin_session, monkeypatch, "only"
+    )
+    root = _root_id(repo, monkeypatch)
+    code, out, err = run_cli(repo, ger_reply_main, [root, "--done", "--json"], monkeypatch)
+    assert code == 0, err
+    reply_id = json.loads(out)["draft_id"]
+    code, _out, err = run_cli(repo, ger_comment_main, ["chain_0.txt:1", "-m", "my own note, not yet"], monkeypatch)
+    assert code == 0, err
+
+    code, _out, err = run_cli(repo, ger_reply_main, ["--publish", "--only", reply_id, "-y"], monkeypatch)
+    assert code == 0, err
+    assert [d["message"] for d in _drafts(gerrit_dev_session, change_id)] == ["my own note, not yet"]
+    assert [c.message for c in _published_chain(gerrit_admin_session, change_id).comments][-1] == "Done"
+
+    number = gerrit_admin_session.get_json(f"changes/{quote_change_id(change_id)}")["_number"]
+    code, _out, err = run_cli(
+        repo,
+        ger_reply_main,
+        ["--publish", f"change:{number}", "--keep-drafts", "-m", "a plain note", "-y"],
+        monkeypatch,
+    )
+    assert code == 0, err
+    messages = gerrit_admin_session.get_json(f"changes/{quote_change_id(change_id)}/messages")
+    assert any("a plain note" in m["message"] for m in messages)
+    assert [d["message"] for d in _drafts(gerrit_dev_session, change_id)] == ["my own note, not yet"]

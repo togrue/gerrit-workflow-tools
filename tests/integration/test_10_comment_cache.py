@@ -59,13 +59,13 @@ def test_ger_show_and_log_refresh_after_comment_resolve(
     )
 
     code_show, out_show, eshow = run_cli(repo, ger_show_main, ["--json", "--color", "never", "HEAD"], monkeypatch)
-    assert code_show == 1, eshow
+    assert code_show == 0, eshow
     shown = _json(out_show)
     assert shown.get("comments_unresolved") == 1
     assert any("please address this" in str(c.get("message")) for c in shown.get("comments") or [])
 
     code_log, out_log, elog = run_cli(repo, ger_log_main, ["--json", "--color", "never"], monkeypatch)
-    assert code_log == 1, elog
+    assert code_log == 0, elog
     logged = _json(out_log)
     tip = next(c for c in logged["commits"] if c.get("change_id") == shown.get("change_id"))
     assert tip["comments_unresolved"] == 1

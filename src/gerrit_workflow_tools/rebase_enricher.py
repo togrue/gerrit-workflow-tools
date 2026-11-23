@@ -8,17 +8,17 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import configure_logging
+from gerrit_workflow_tools.cli_common import refresh_requested
+from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    LogCommit,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_editor import resolve_git_editor, run_git_editor
 from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, read_commit_rows
+from gerrit_workflow_tools.core.upstream_moved import merged_with_same_code
 from gerrit_workflow_tools.render.status_fmt import (
     attention_text as _attention_text,
     code_review_token as _fmt_cr,
@@ -111,25 +111,16 @@ def _resolve_editor(cwd: Path, *, settings: Settings | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
-    text: str,
-    cwd: Path,
-    *,
-    gerrit: GerritRest | None = None,
-    settings: Settings | None = None,
-) -> str:
+def _enrich_todo(text: str, run: RunContext) -> str:  # pylint: disable=too-many-branches,too-many-locals
     """Rewrite rebase todo lines with Gerrit status annotations.
 
-    Returns the original *text* unchanged if Gerrit is not configured for this
-    repository (no ``gerrit.webUrl`` in git config).  Raises on Gerrit API errors
-    so the caller can attach a diagnostic comment and fall back gracefully.
-
-    A supplied *gerrit* implementation makes the config check moot: it already knows its
-    own web base, matching ``GerritService.from_cwd(rest=…)``.
+    Returns the original *text* unchanged if the run's service reaches no Gerrit (no
+    ``gerrit.webUrl`` and no client supplied). Raises on Gerrit API errors so the caller
+    can attach a diagnostic comment and fall back gracefully.
     """
-    settings = settings if settings is not None else Settings.from_cwd(cwd)
-    if gerrit is None and not settings.gerrit_web_url:
+    if not run.gerrit.configured:
         return text  # Not a Gerrit repository — pass through silently.
+    cwd = run.cwd
 
     lines = text.splitlines(keepends=True)
 
@@ -156,8 +147,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
     if not commit_inputs:
         return text
 
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    commits = annotate(commit_inputs, service=service, cwd=cwd)
+    commits = annotate(commit_inputs, service=run.gerrit, cwd=cwd).require_gerrit()
 
     # Build short_sha → LogCommit lookup.
     commit_by_sha: dict[str, LogCommit] = {c.short_sha: c for c in commits}
@@ -182,7 +172,7 @@ def _enrich_todo(  # pylint: disable=too-many-branches,too-many-locals
             if log_commit is not None:
                 newline = "\n" if line.endswith("\n") else ""
                 action = parts[0]
-                if drop_merged and log_commit.patchset_status == "merged-same" and log_commit.merged_equivalent is True:
+                if drop_merged and merged_with_same_code(log_commit):
                     if action == "pick":
                         action = "drop"
                     elif action == "p":
@@ -210,8 +200,10 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
         return 1
 
     todo = Path(args[1])
-    cwd = Path.cwd()
-    settings = Settings.from_cwd(cwd)
+    # Git starts this editor as its own process: it opens its own run, and `ger --refresh`
+    # reaches it through the environment the rebase was started with.
+    run = RunContext.open(Path.cwd(), gerrit=gerrit, refresh=refresh_requested())
+    cwd, settings = run.cwd, run.settings
 
     try:
         original_text = todo.read_text(encoding="utf-8", errors="replace")
@@ -222,7 +214,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
     # Attempt enrichment; on failure fall back to original text with a diagnostic comment.
     error_header: str | None = None
     try:
-        final_text = _enrich_todo(original_text, cwd, gerrit=gerrit, settings=settings)
+        final_text = _enrich_todo(original_text, run)
         logger.debug("rebase_enricher: todo enriched successfully")
     except (GerritApiError, GitError, ValueError, OSError) as e:
         logger.debug("rebase_enricher: enrichment failed: %s", e)

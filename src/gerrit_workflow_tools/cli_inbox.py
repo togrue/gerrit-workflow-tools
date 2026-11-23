@@ -1,4 +1,4 @@
-"""CLI for ``ger inbox``: open review chains waiting on you."""
+"""CLI for ``ger inbox``: open review chains waiting on you (*to review*) and your own (*outgoing*)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
-    add_json_arg,
+    add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
+    output_format,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_style import (
@@ -26,41 +27,24 @@ from gerrit_workflow_tools.cli_style import (
     format_link,
 )
 from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age, host_from_web_base
+from gerrit_workflow_tools.core.inbox import (
+    OUTGOING,
+    TO_REVIEW,
+    InboxSection,
+    load_inbox,
+    project_scope,
+    section_summary,
+)
+from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age, host_from_web_base
+from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
+from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
+from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
-DEFAULT_TO_REVIEW_QUERY = "is:open -is:wip -is:private -owner:self reviewer:self"
-DEFAULT_TO_REVIEW_ALL_QUERY = "is:open -owner:self reviewer:self"
-
-
-def build_to_review_query(
-    settings: Settings,
-    *,
-    projects: list[str],
-    include_unready: bool,
-) -> str:
-    """Section query for *to review*, with verified gate and project filters folded in."""
-    custom = settings.inbox_to_review_query
-    if custom:
-        base = custom
-    elif include_unready:
-        base = DEFAULT_TO_REVIEW_ALL_QUERY
-    else:
-        base = DEFAULT_TO_REVIEW_QUERY
-        if settings.inbox_require_verified:
-            base = f"{base} label:{settings.inbox_verified_label}+1"
-    names = list(projects) if projects else list(settings.inbox_projects)
-    if not names:
-        return base
-    if len(names) == 1:
-        return f"{base} project:{names[0]}"
-    inner = " OR ".join(f"project:{name}" for name in names)
-    return f"{base} ({inner})"
+_EMPTY = {TO_REVIEW: "(nothing to review)", OUTGOING: "(no open chains of yours)"}
 
 
 def _limit_value(raw: str) -> int:
@@ -72,34 +56,54 @@ def _limit_value(raw: str) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger inbox",
-        description="Open Gerrit review chains waiting on you (to-review overview).",
+        description=(
+            "Open Gerrit review chains: those waiting on your review (to review) and your own "
+            "(outgoing). Inside a clone, only that clone's project; --all for every project."
+        ),
     )
-    parser.add_argument(
+    section = parser.add_mutually_exclusive_group()
+    section.add_argument(
         "--to-review",
-        action="store_true",
-        help="Only the to-review section (default; the only section implemented so far).",
+        action="store_const",
+        const=TO_REVIEW,
+        dest="section",
+        help="Only the to-review section: chains waiting on your review.",
     )
-    parser.add_argument(
+    section.add_argument(
+        "--outgoing",
+        action="store_const",
+        const=OUTGOING,
+        dest="section",
+        help="Only the outgoing section: your own open chains.",
+    )
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument(
         "--project",
         action="append",
         default=[],
         metavar="P",
-        help="Restrict to a Gerrit project. Repeatable.",
+        help="Restrict to a Gerrit project. Repeatable. Default: the current clone's project.",
     )
-    parser.add_argument(
+    scope.add_argument(
         "--all",
         action="store_true",
+        dest="all_projects",
+        help="Every project on the host, not only the current clone's.",
+    )
+    parser.add_argument(
+        "--unready",
+        action="store_true",
         dest="include_unready",
-        help="Include chains filtered out as not ready (WIP, private, CI red).",
+        help="Include to-review chains filtered out as not ready (WIP, private, CI red).",
     )
     parser.add_argument(
         "--limit",
         type=_limit_value,
         default=None,
         metavar="N",
-        help="At most N chains.",
+        help="At most N chains per section.",
     )
-    add_json_arg(parser)
+    add_output_format_args(parser, ai_view="one plain line per chain")
     parser.add_argument(
         "--url",
         "--show-url",
@@ -120,45 +124,6 @@ def _build_parser() -> argparse.ArgumentParser:
         verbose_help="List every chain member, not only those with attention.",
     )
     return parser
-
-
-def _member_payload(member: ChainMember) -> dict[str, object]:
-    return {
-        "number": member.number,
-        "change_id": member.change_id,
-        "subject": member.subject,
-        "verified": member.verified,
-        "code_review": member.code_review,
-        "comments_unresolved": member.comments_unresolved,
-        "attention_reasons": list(member.attention_reasons),
-        "url": member.url,
-    }
-
-
-def _chain_json(chain: ReviewChain) -> dict[str, object]:
-    last_activity = chain.last_activity.isoformat().replace("+00:00", "Z") if chain.last_activity else None
-    return {
-        "key": chain.key,
-        "top": {
-            "number": chain.top.number,
-            "change_id": chain.top.change_id,
-            "subject": chain.top.subject,
-            "url": chain.top.url,
-        },
-        "project": chain.project,
-        "branch": chain.branch,
-        "owner": {"name": chain.owner_name, "email": chain.owner_email},
-        "depth": chain.depth,
-        "wait_age_seconds": chain.wait_age_seconds,
-        "unreviewed_age_seconds": chain.unreviewed_age_seconds,
-        "last_activity": last_activity,
-        "verified": chain.verified,
-        "code_review": chain.code_review,
-        "comments_unresolved": chain.comments_unresolved,
-        "attention_reasons": list(chain.attention_reasons),
-        "partial_chain": chain.partial_chain,
-        "members": [_member_payload(member) for member in chain.members],
-    }
 
 
 def _fmt_change_number(number: int) -> str:
@@ -185,17 +150,13 @@ def _hash_suffix(body: str) -> str:
     return f"{color_text('# ', ANSI_DIM)}{body}"
 
 
+_MEMBER_HINT_COLOR = {Attention.CI_FAILED: ANSI_RED}
+
+
 def _attention_note(reasons: tuple[str, ...], comments: int) -> str:
-    """Colored attention text, matching ``ger log`` trailing hints."""
-    if Attention.CI_FAILED in reasons:
-        return color_text("build failed", ANSI_RED)
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        noun = "comment" if comments == 1 else "comments"
-        text = f"{comments} unresolved {noun}" if comments else "unresolved comments"
-        return color_text(text, ANSI_YELLOW)
-    if Attention.REVIEW_ISSUES in reasons:
-        return color_text("negative vote", ANSI_YELLOW)
-    return ""
+    """The most urgent of :func:`member_hints`, coloured as ``ger log``'s trailing hints."""
+    hints = member_hints(reasons, comments)
+    return color_text(hints[0][1], _MEMBER_HINT_COLOR.get(hints[0][0], ANSI_YELLOW)) if hints else ""
 
 
 def _render_chain_line(
@@ -204,14 +165,17 @@ def _render_chain_line(
     highlighter: SummaryHighlighter,
     show_url: bool,
     verbose: bool,
+    outgoing: bool,
 ) -> None:
+    """One chain. An outgoing chain is yours: no unreviewed clock and no owner."""
     subject = highlighter.highlight(chain.top.subject)
+    waiting = "" if outgoing else f"{_fmt_unreviewed(chain.unreviewed_age_seconds)}  "
+    owner = "" if outgoing else f"{color_text(chain.owner_name, ANSI_DIM)}   "
     line = (
         f"{_fmt_change_number(chain.top.number)}  {color_text(f'{chain.depth}c', ANSI_DIM)}  "
         f"{_fmt_status(chain.verified, chain.code_review, chain.comments_unresolved)}  "
-        f"{_fmt_unreviewed(chain.unreviewed_age_seconds)}  "
-        f"{_fmt_activity(chain.wait_age_seconds)}  "
-        f"{color_text(chain.owner_name, ANSI_DIM)}   {_hash_suffix(subject)}"
+        f"{waiting}{_fmt_activity(chain.wait_age_seconds)}  "
+        f"{owner}{_hash_suffix(subject)}"
     )
     print(line)
     if show_url and chain.url:
@@ -230,33 +194,28 @@ def _render_chain_line(
         )
 
 
-def _summary(chains: list[ReviewChain]) -> dict[str, int]:
-    return {
-        "chains": len(chains),
-        "changes": sum(chain.depth for chain in chains),
-        "oldest_unreviewed_seconds": max((chain.unreviewed_age_seconds for chain in chains), default=0),
-        "oldest_wait_seconds": max((chain.wait_age_seconds for chain in chains), default=0),
-        "ci_failures": sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons),
-        "comments": sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons),
-    }
-
-
-def _render_text(
-    chains: list[ReviewChain],
+def _render_section(
+    section: InboxSection,
     *,
     highlighter: SummaryHighlighter,
     show_url: bool,
     verbose: bool,
 ) -> None:
-    heading = f"to review ({len(chains)})"
-    print(color_text(heading, f"{ANSI_BOLD}{ANSI_CYAN}"))
+    chains = section.chains
+    outgoing = section.name == OUTGOING
+    print(color_text(f"{SECTION_HEADINGS[section.name]} ({len(chains)})", f"{ANSI_BOLD}{ANSI_CYAN}"))
     if not chains:
-        print(color_text("(nothing to review)", ANSI_DIM))
+        print(color_text(_EMPTY[section.name], ANSI_DIM))
         return
     for chain in chains:
-        _render_chain_line(chain, highlighter=highlighter, show_url=show_url, verbose=verbose)
-    summary = _summary(chains)
+        _render_chain_line(chain, highlighter=highlighter, show_url=show_url, verbose=verbose, outgoing=outgoing)
+    summary = section_summary(chains)
     sep = color_text(" · ", ANSI_DIM)
+    oldest = (
+        color_stat("oldest act ", format_age(summary["oldest_wait_seconds"]), ANSI_DIM)
+        if outgoing
+        else color_stat("oldest unrevi ", format_age(summary["oldest_unreviewed_seconds"]), ANSI_YELLOW)
+    )
     parts = [
         color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"),
         " ",
@@ -266,7 +225,7 @@ def _render_text(
         color_text(str(summary["changes"]), ANSI_CYAN),
         color_text(" changes", ANSI_DIM),
         sep,
-        color_stat("oldest unrevi ", format_age(summary["oldest_unreviewed_seconds"]), ANSI_YELLOW),
+        oldest,
     ]
     if summary["ci_failures"]:
         parts.extend([sep, color_stat("CI ", summary["ci_failures"], ANSI_RED)])
@@ -274,6 +233,21 @@ def _render_text(
         parts.extend([sep, color_stat("comments ", summary["comments"], ANSI_YELLOW)])
     print()
     print("".join(parts))
+
+
+def _render_text(
+    sections: list[InboxSection],
+    *,
+    projects: list[str],
+    highlighter: SummaryHighlighter,
+    show_url: bool,
+    verbose: bool,
+) -> None:
+    scope = ", ".join(projects) if projects else "all projects"
+    print(color_text(f"project: {scope}", ANSI_DIM))
+    for section in sections:
+        print()
+        _render_section(section, highlighter=highlighter, show_url=show_url, verbose=verbose)
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -284,35 +258,51 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    cwd, settings, highlighter = init_cli_runtime(args)
-    service = GerritService.from_cwd(cwd, settings=settings, rest=gerrit)
-    query = build_to_review_query(
-        settings,
-        projects=list(args.project),
-        include_unready=bool(args.include_unready),
-    )
-    limit = args.limit if args.limit is not None else settings.inbox_limit
+    run, highlighter = init_cli_runtime(args, repository=False, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
+    service = run.gerrit
+    projects = project_scope(cwd, settings, projects=list(args.project), all_projects=bool(args.all_projects))
     now = datetime.now(timezone.utc)
-    chains = service.fetch_review_chains(query, now=now)
+    limit = args.limit if args.limit is not None else settings.inbox_limit
+    sections = load_inbox(
+        service,
+        now=now,
+        projects=projects,
+        all_projects=not projects,
+        include_unready=bool(args.include_unready),
+        limit=limit,
+        sections=(TO_REVIEW, OUTGOING) if args.section is None else (args.section,),
+    )
     if limit is not None:
-        chains = chains[: max(0, limit)]
-    if args.json_:
+        sections = [InboxSection(s.name, s.query, s.chains[: max(0, limit)]) for s in sections]
+    out_fmt = output_format(args)
+    if out_fmt == "ai":
+        print("\n".join(inbox_ai_lines(sections, projects=projects)))
+    elif out_fmt == "json":
         payload = {
             "host": host_from_web_base(service.web_base),
-            "generated": now.isoformat().replace("+00:00", "Z"),
+            "generated": iso_utc(now),
+            "projects": projects,
             "sections": [
                 {
-                    "name": "to-review",
-                    "query": query,
-                    "chains": [_chain_json(chain) for chain in chains],
+                    "name": section.name,
+                    "query": section.query,
+                    "summary": section_summary(section.chains),
+                    "chains": [chain_json(chain) for chain in section.chains],
                 }
+                for section in sections
             ],
-            "summary": _summary(chains),
         }
         print(json.dumps(payload, indent=2))
     else:
-        _render_text(chains, highlighter=highlighter, show_url=bool(args.url), verbose=bool(args.verbose))
-    return int(ExitCode.ATTENTION) if chains else int(ExitCode.OK)
+        _render_text(
+            sections,
+            projects=projects,
+            highlighter=highlighter,
+            show_url=bool(args.url),
+            verbose=bool(args.verbose),
+        )
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

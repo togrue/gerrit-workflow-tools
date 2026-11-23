@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import CHANGE_ID_RE
-from gerrit_workflow_tools.core.git_run import GitError, git, git_out
+from gerrit_workflow_tools.core.git_run import GitError, git_out
 
 
 # Gerrit Change-Id line value: I + 40 hex digits, either case. The grammar itself lives in
@@ -125,34 +125,8 @@ def generate_change_id_like_hook(committer_ident: str, refhash: str, message: st
     return f"I{digest}"
 
 
-def _commit_committer_ident(cwd: Path | str, commit_sha: str) -> str:
-    """Return ``Name <email> timestamp tz`` from a commit object."""
-    p = git("cat-file", "-p", commit_sha, cwd=cwd, check=False)
-    if p.returncode != 0:
-        raise GitError("git cat-file failed", stderr=p.stderr, returncode=p.returncode)
-    for line in p.stdout.splitlines():
-        if line.startswith("committer "):
-            return line[len("committer ") :].strip()
-    raise GitError("git cat-file missing committer header", stderr="", returncode=1)
-
-
-def _commit_parent_or_empty_tree(cwd: Path | str, commit_sha: str) -> str:
-    """Return first parent SHA when present, otherwise the empty tree hash."""
-    p = git("rev-parse", f"{commit_sha}^", cwd=cwd, check=False)
-    if p.returncode == 0:
-        return p.stdout.strip()
-    return EMPTY_TREE_HASH
-
-
-def generate_change_id_for_commit(cwd: Path | str, commit_sha: str, message: str) -> str:
-    """Generate a Gerrit-style Change-Id for *message* while rewriting *commit_sha*."""
-    committer_ident = _commit_committer_ident(cwd, commit_sha)
-    refhash = _commit_parent_or_empty_tree(cwd, commit_sha)
-    return generate_change_id_like_hook(committer_ident, refhash, message)
-
-
 def generate_change_id_from_idents(committer_ident: str, first_parent: str | None, message: str) -> str:
-    """Like :func:`generate_change_id_for_commit` but with already-known hook inputs (no git)."""
+    """A Gerrit-style Change-Id from the commit-msg hook's inputs, already read from the commit (no git)."""
     refhash = first_parent if first_parent else EMPTY_TREE_HASH
     return generate_change_id_like_hook(committer_ident, refhash, message)
 

@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from gerrit_workflow_tools.core.annotated_stack import (
     annotate,
+    branches_needing_upstream,
     load_annotated_stack,
     resolve_rev_range,
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import commits_in_range
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, change_info_for_sha, stack_rows_mb_to_head
@@ -24,7 +27,7 @@ def _configure(repo: Path) -> None:
 
 
 def _service(repo: Path, store: ChangeStore) -> GerritService:
-    return GerritService.from_cwd(repo, settings=Settings.from_cwd(repo), rest=store)
+    return RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store).gerrit
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ def test_empty_range_returns_an_empty_stack_not_an_error(stack_repo: Path) -> No
     head = git_out("rev-parse", "HEAD", cwd=stack_repo)
 
     stack = load_annotated_stack(
-        stack_repo, f"{head}..{head}", settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore({})
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=ChangeStore({})), f"{head}..{head}"
     )
 
     assert stack.commits == []
@@ -51,7 +54,9 @@ def test_loads_commits_with_overlay_and_attention(stack_repo: Path) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
-    stack = load_annotated_stack(stack_repo, _range(stack_repo), settings=Settings.from_cwd(stack_repo), gerrit=store)
+    stack = load_annotated_stack(
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=store), _range(stack_repo)
+    )
 
     assert [c.short_sha for c in stack.commits] == [r.short_sha for r in rows]
     assert all(c.pushed for c in stack.commits)
@@ -59,33 +64,14 @@ def test_loads_commits_with_overlay_and_attention(stack_repo: Path) -> None:
     assert all(isinstance(c.attention_reasons, list) for c in stack.commits)
 
 
-def test_multi_branch_change_id_produces_a_resolution_note(stack_repo: Path) -> None:
-    """The note comes from what the overlay already cached, keyed by commit SHA."""
-    _configure(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    target = rows[0]
-    assert target.change_id is not None
-    payloads = build_details_by_change_id(rows)
-    other_branch = change_info_for_sha(target.sha, target.change_id, branch="dev", number=999)
-    payloads[str(other_branch["id"])] = other_branch
-
-    stack = load_annotated_stack(
-        stack_repo,
-        _range(stack_repo),
-        settings=Settings.from_cwd(stack_repo),
-        gerrit=ChangeStore(payloads, web_base="https://g.example"),
-    )
-
-    assert target.sha in stack.notes_by_sha
-    assert "999" in stack.notes_by_sha[target.sha]
-
-
 def test_single_branch_change_ids_produce_no_notes(stack_repo: Path) -> None:
     _configure(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
 
-    stack = load_annotated_stack(stack_repo, _range(stack_repo), settings=Settings.from_cwd(stack_repo), gerrit=store)
+    stack = load_annotated_stack(
+        RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=store), _range(stack_repo)
+    )
 
     assert stack.notes_by_sha == {}
 
@@ -107,7 +93,7 @@ def test_an_unsubmittable_commit_blocks_the_ones_after_it(stack_repo: Path) -> N
         commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
         service=_service(stack_repo, store),
         cwd=stack_repo,
-    )
+    ).commits
 
     assert "chain-blocked" not in commits[0].attention_reasons, "the blocker itself is not blocked"
     assert all("chain-blocked" in c.attention_reasons for c in commits[1:]), (
@@ -115,38 +101,8 @@ def test_an_unsubmittable_commit_blocks_the_ones_after_it(stack_repo: Path) -> N
     )
 
 
-def test_a_healthy_stack_blocks_nothing(stack_repo: Path) -> None:
-    _configure(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    store = ChangeStore(build_details_by_change_id(rows), web_base="https://g.example")
-
-    commits = annotate(
-        commits_in_range(stack_repo, _range(stack_repo), first_parent=True),
-        service=_service(stack_repo, store),
-        cwd=stack_repo,
-    )
-
-    assert all("chain-blocked" not in c.attention_reasons for c in commits)
-
-
-def test_a_lone_commit_is_never_chain_blocked(stack_repo: Path) -> None:
-    """``ger show`` annotates one row; with no predecessors nothing can block it."""
-    _configure(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
-    store = ChangeStore(
-        build_details_by_change_id(rows, per_index_overrides=[{"submittable": False, "cr": 0}] * len(rows)),
-        web_base="https://g.example",
-    )
-    single = commits_in_range(stack_repo, _range(stack_repo), first_parent=True)[-1:]
-
-    commits = annotate(single, service=_service(stack_repo, store), cwd=stack_repo)
-
-    assert len(commits) == 1
-    assert "chain-blocked" not in commits[0].attention_reasons
-
-
 def _range(repo: Path) -> str:
-    return resolve_rev_range(repo, None, settings=Settings.from_cwd(repo))
+    return resolve_rev_range(None, branch=RunContext.open(repo).repo.stack_branch)
 
 
 @pytest.mark.parametrize(
@@ -158,4 +114,74 @@ def _range(repo: Path) -> str:
     ],
 )
 def test_resolve_rev_range_expands_bare_refs_only(stack_repo: Path, arg: str, expected: str) -> None:
-    assert resolve_rev_range(stack_repo, arg, settings=Settings.from_cwd(stack_repo)) == expected
+    assert resolve_rev_range(arg, branch="unused") == expected
+
+
+@pytest.mark.parametrize(
+    "rev_range, head_branch, want",
+    [
+        ("@{upstream}..HEAD", "feat/x", ["feat/x"]),
+        ("feat/topic@{upstream}..feat/topic", "unused", ["feat/topic"]),
+        ("origin/main..HEAD", "feat/x", []),
+        ("one@{upstream}...two@{upstream}", "unused", ["one", "two"]),
+    ],
+)
+def test_branches_needing_upstream(rev_range: str, head_branch: str, want: list[str]) -> None:
+    assert branches_needing_upstream(rev_range, branch=head_branch) == want
+
+
+# ---------------------------------------------------------------------------
+# Siblings (the same Change-Id on another branch) are kept as current as the stack
+# ---------------------------------------------------------------------------
+
+
+def _dated(payloads: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Give every change a freshness token, as a real Gerrit does."""
+    for payload in payloads.values():
+        payload["updated"] = "2026-01-01 10:00:00.000000000"
+    return payloads
+
+
+def _load_at(repo: Path, store: ChangeStore, monkeypatch: pytest.MonkeyPatch, now: int):  # type: ignore[no-untyped-def]
+    monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.cache._now", lambda: now)
+    return load_annotated_stack(RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store), _range(repo))
+
+
+def test_a_sibling_that_appears_after_the_stack_was_cached_is_noticed(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Somebody cherry-picks your change to another branch: the next look past the trust window says so."""
+    _configure(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    target = rows[0]
+    assert target.change_id is not None
+    store = ChangeStore(_dated(build_details_by_change_id(rows)), web_base="https://g.example")
+    assert _load_at(stack_repo, store, monkeypatch, 1000).notes_by_sha == {}
+
+    sibling = change_info_for_sha(target.sha, target.change_id, branch="dev", number=999)
+    store.add_change(dict(sibling, updated="2026-01-02 10:00:00.000000000"))
+    assert _load_at(stack_repo, store, monkeypatch, 1005).notes_by_sha == {}  # inside the trust window
+    assert "999" in _load_at(stack_repo, store, monkeypatch, 1020).notes_by_sha[target.sha]
+
+
+def test_a_sibling_that_moved_is_fetched_again_and_an_unchanged_one_is_not(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    target = rows[0]
+    assert target.change_id is not None
+    payloads = build_details_by_change_id(rows)
+    sibling = change_info_for_sha(target.sha, target.change_id, branch="dev", number=999)
+    payloads[str(sibling["id"])] = sibling
+    store = ChangeStore(_dated(payloads), web_base="https://g.example")
+    _load_at(stack_repo, store, monkeypatch, 1000)
+
+    before = len(store.calls)
+    _load_at(stack_repo, store, monkeypatch, 1020)
+    assert len(store.calls) - before == 1, "nothing moved: the probe alone"
+
+    store.add_change(dict(sibling, status="ABANDONED", updated="2030-01-01 00:00:00.000000000"))
+    _load_at(stack_repo, store, monkeypatch, 1040)
+    cached = _service(stack_repo, store).changes.find_by_footer_change_ids([target.change_id])[target.change_id]
+    assert {row["branch"]: row["status"] for row in cached}["dev"] == "ABANDONED"

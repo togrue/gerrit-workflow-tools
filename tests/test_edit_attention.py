@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.attention import (
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError, git
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
 
@@ -88,7 +89,7 @@ def test_first_attention_commit_ignores_merged_side_branches(merged_side_branch_
     store = ChangeStore(payloads, web_base="https://g.example")
 
     with pytest.raises(GitError, match="no commit needs edit attention"):
-        resolve_first_edit_attention_sha(repo, settings=Settings.from_cwd(repo), gerrit=store)
+        resolve_first_edit_attention_sha(RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store))
 
 
 def test_follow_merges_would_have_found_the_side_branch_commit(merged_side_branch_repo: Path) -> None:
@@ -105,13 +106,8 @@ def test_follow_merges_would_have_found_the_side_branch_commit(merged_side_branc
     payload = change_info_for_sha("0" * 40, cid, number=200, unresolved_comment_count=3)
     store = ChangeStore({str(payload["id"]): payload}, web_base="https://g.example")
 
-    stack = load_annotated_stack(
-        repo,
-        resolve_rev_range(repo, None, settings=Settings.from_cwd(repo)),
-        settings=Settings.from_cwd(repo),
-        first_parent=False,
-        gerrit=store,
-    )
+    run = RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store)
+    stack = load_annotated_stack(run, resolve_rev_range(None, branch=run.repo.stack_branch), first_parent=False)
 
     flagged = [c for c in stack.commits if c.comments_unresolved > 0]
     assert [c.change_id for c in flagged] == [cid]

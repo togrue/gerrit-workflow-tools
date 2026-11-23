@@ -7,10 +7,12 @@ import logging
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.cli_attention import resolve_in_stack
 from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
+    assume_yes,
     confirm,
     init_cli_runtime,
     run_cli_command,
@@ -19,37 +21,34 @@ from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git_out
-from gerrit_workflow_tools.core.git_state import (
-    checked_out_branch_name,
-    ger_push_mode,
-    is_detached_head,
-    resolve_working_branch,
-)
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode
 from gerrit_workflow_tools.core.push import (
     PushPlan,
     PushRefusal,
-    PushResult,
+    changes_nothing,
     execute,
     prepare,
     prepare_vanilla,
     publish_drafts_with,
     publishable_drafts,
     push_argv,
+    sent_commits,
 )
+from gerrit_workflow_tools.core.push_checks import resolve_push_branch
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
+from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
 from gerrit_workflow_tools.push_preview import (
     apply_interactive_line,
     ask_push_action,
-    commit_lines,
     confirm_with_options_line,
     options_line_available,
-    print_assignment_report,
     print_dry_run,
     print_gpush_preview,
     print_plan_status,
-    print_ready_boundary_notice,
     prompt_initial_options,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_summary_highlighter
@@ -85,12 +84,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "-y",
         "--yes",
         action="store_true",
-        help="Push without confirmation (required when stdin is not a terminal).",
+        help="Push without confirmation (required when stdin is not a terminal; GER_ASSUME_YES=1 sets it).",
     )
     parser.add_argument(
         "--publish-comments",
         action="store_true",
         help="Publish your drafts on the updated changes with the push (needed with -y; the prompt asks).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Push even over a patchset that was uploaded from elsewhere and is not in your history (diverged).",
     )
     parser.add_argument(
         "--all",
@@ -117,24 +121,29 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "How to apply reviewers when pushing: push (%%r= on ref), lazy (REST: add only where none), "
             "overwrite (REST: replace reviewers on each change; CC stays). Requires credentials for lazy/overwrite. "
-            "Topic/WIP/private always use magic ref options (see --topic / --wip / --private)."
+            "Changes Gerrit already has at that commit get topic/WIP/ready/private/reviewers over REST."
         ),
     )
     parser.add_argument(
         "--topic",
         metavar="NAME",
         default=None,
-        help="Gerrit change topic (magic ref %%topic=…; sent on push for every reviewer strategy).",
+        help="Gerrit change topic (magic ref %%topic=…; REST where Gerrit already has the commit).",
     )
-    parser.add_argument(
-        "--wip",
-        action="store_true",
-        help="Mark change(s) work-in-progress (magic ref %%wip; sent on push for every reviewer strategy).",
-    )
-    parser.add_argument(
-        "--private",
-        action="store_true",
-        help="Mark change(s) private (magic ref %%private; sent on push for every reviewer strategy).",
+    state, private = parser.add_mutually_exclusive_group(), parser.add_mutually_exclusive_group()
+    for group, flag, what in (
+        (state, "--wip", "work-in-progress (magic ref %%wip"),
+        (state, "--ready", "ready for review, the way back from --wip (magic ref %%ready"),
+        (private, "--private", "private (magic ref %%private"),
+        (private, "--no-private", "not private, the way back from --private (magic ref %%remove-private"),
+    ):
+        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
+    state.add_argument(
+        "--wip-from",
+        metavar="REV",
+        default=None,
+        help="Push the commits from REV up as work-in-progress and those below it ready (two pushes). "
+        "--all does this at the ready boundary by itself.",
     )
     add_verbose_and_debug_log_args(
         parser,
@@ -145,7 +154,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         metavar="REV",
-        help="Push only through this commit.",
+        help="Push only through this commit: a git rev, Change-Id, change:N or triplet in the local stack.",
     )
     return parser
 
@@ -157,81 +166,25 @@ def _gerrit_flags_set(args: argparse.Namespace) -> bool:
         or args.reviewers
         or args.topic is not None
         or args.wip
+        or args.wip_from
+        or args.ready
         or args.private
+        or args.no_private
         or args.reviewer_strategy is not None
     )
 
 
-def _emit_push_output(result: PushResult) -> None:
-    sys.stdout.flush()  # Git's stderr goes out unbuffered, so the preview has to land first.
-    for stream, text in ((sys.stdout, result.stdout), (sys.stderr, result.stderr)):
-        if not text:
-            continue
-        stream.write(text)
-        if not text.endswith("\n"):
-            stream.write("\n")
-        stream.flush()
+def _require_confirmable(args: argparse.Namespace) -> None:
+    if not (stdin_is_terminal() or args.yes):
+        raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
 
 
-def _finish_push(result: PushResult, plan: PushPlan | None) -> int:
-    _emit_push_output(result)
-    if result.error_message:
-        print(result.error_message, file=sys.stderr)
-    if result.reviewers is not None and plan is not None:
-        for issue in result.reviewers.issues:
-            print(f"{issue.level}: {issue.message}", file=sys.stderr)
-        if result.reviewers.outcomes:
-            print_assignment_report(plan, result.reviewers.outcomes)
-    if result.warning:
-        print(result.warning, file=sys.stderr)
-    return result.returncode
-
-
-def _print_refusal(
-    cwd: Path,
-    branch: str,
-    refusal: PushRefusal,
-    *,
-    first_parent: bool,
-    settings: Settings,
-) -> None:
-    for warning in refusal.warnings:
-        print(warning, file=sys.stderr)
-    if refusal.boundary is not None:
-        highlighter = branch_summary_highlighter(cwd, branch, first_parent=first_parent, settings=settings)
-        print_ready_boundary_notice(refusal.boundary, summary_highlighter=highlighter)
-    print(refusal.message, file=sys.stderr)
-
-
-def _refuses_non_interactive(args: argparse.Namespace) -> bool:
-    if stdin_is_terminal() or args.yes:
-        return False
-    print("error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt", file=sys.stderr)
-    return True
-
-
-def _resolve_push_branch(cwd: Path, branch_arg: str | None, *, settings: Settings) -> str:
-    """Return the local branch ``ger push`` operates on."""
-    if branch_arg:
-        try:
-            git_out("rev-parse", "--verify", branch_arg, cwd=cwd)
-        except GitError as exc:
-            raise UnknownRevisionError(f"branch {branch_arg!r} not found") from exc
-        return branch_arg
-    branch = resolve_working_branch(cwd, settings=settings)
-    if branch is None:
-        raise GitError(
-            "ger push requires a branch (detached HEAD with no local branch at this commit). "
-            "Check out a branch first, or pass --branch."
-        )
-    return branch
-
-
-def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, settings: Settings) -> int:
+def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: str) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
+    cwd, settings = run.cwd, run.settings
     if _gerrit_flags_set(args):
         print(
-            "warning: --until, --all, --reviewers, --topic, --wip, --private, "
+            "warning: --until, --all, --reviewers, --topic, --wip, --ready, --private, --no-private "
             "and --reviewer-strategy apply only to Gerrit push; ignoring.",
             file=sys.stderr,
         )
@@ -251,8 +204,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
         return 0
-    if _refuses_non_interactive(args):
-        return 1
+    _require_confirmable(args)
     if not args.yes:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
@@ -260,7 +212,7 @@ def _handle_vanilla_push(cwd: Path, args: argparse.Namespace, *, branch: str, se
             print("Push cancelled.", file=sys.stderr)
             return 1
     logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
-    return _finish_push(execute(cwd, cmd, settings=settings), None)
+    return finish_push(execute(run, cmd), None)
 
 
 def _confirm_gerrit_push(
@@ -273,6 +225,7 @@ def _confirm_gerrit_push(
 ) -> PushPlan | int:
     """Return the plan to execute, or an exit code when the command should stop."""
     stack_printed = False
+    drafts_defaulted = False
     while True:
         argv = push_argv(plan)
         logger.debug(
@@ -284,30 +237,35 @@ def _confirm_gerrit_push(
             argv[-1],
         )
         if not stack_printed:
-            print_gpush_preview(plan, commit_lines(plan, summary_highlighter), summary_highlighter=summary_highlighter)
+            print_gpush_preview(plan, summary_highlighter=summary_highlighter)
             stack_printed = True
         if args.dry_run:
             print_dry_run(plan)
             return 0
-        if _refuses_non_interactive(args):
-            return 1
+        _require_confirmable(args)
         if args.yes:
             if plan.credential_error:
                 print(plan.credential_error, file=sys.stderr)
                 return 1
             return plan
+        line = options_line_available()
+        drafts = publishable_drafts(plan)
+        if line and drafts and not drafts_defaulted:  # the line starts with publish-drafts unless config says no
+            drafts_defaulted = True
+            if settings.push_defaults["publish_drafts"]:
+                plan = publish_drafts_with(plan, True)
         print()
         print_plan_status(plan)
         print()
-        drafts = publishable_drafts(plan) if plan.options.publish_comments is False else 0
-        if not drafts and options_line_available():
-            revised = confirm_with_options_line(cwd, plan, args, settings=settings)
+        if line:
+            revised = confirm_with_options_line(cwd, plan, args, settings=settings, drafts=drafts)
             act = "push" if revised else "cancel"
             plan = revised or plan
         else:
-            act = ask_push_action(drafts)
-        if act == "push" and drafts:
-            plan = publish_drafts_with(plan, True)
+            asked = drafts if plan.options.publish_comments is False else 0
+            act = ask_push_action(asked, sends=bool(sent_commits(plan)))
+            if act == "push" and asked:
+                plan = publish_drafts_with(plan, True)
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
             return 0
@@ -322,47 +280,46 @@ def _confirm_gerrit_push(
         return plan
 
 
-def _push_gerrit(
-    cwd: Path,
-    args: argparse.Namespace,
-    *,
-    branch: str,
-    settings: Settings,
-    gerrit: GerritRest | None,
-) -> int:
+def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> int:
+    cwd, settings = run.cwd, run.settings
     defaults = settings.push_defaults
     first_parent = not args.follow_merges
     prepared = prepare(
-        cwd,
+        run,
         branch,
-        settings=settings,
-        gerrit=gerrit,
         all_commits=bool(args.all_),
         until=args.until,
+        until_sha=args.until and resolve_in_stack(run, args.until, branch=branch).sha,
         first_parent=first_parent,
         reviewer_flags=tuple(args.reviewers),
         strategy=args.reviewer_strategy,
         topic=args.topic,
         wip=bool(args.wip),
+        ready_for_review=bool(args.ready),
         private=bool(args.private),
+        remove_private=bool(args.no_private),
         no_rebase_check=bool(args.no_rebase_check),
         show_attributes=defaults["show_attributes"],
         update_last_pushed=defaults["last_pushed_branch"],
         publish_comments=bool(args.publish_comments),
+        force=bool(args.force),
+        wip_from=args.wip_from and resolve_in_stack(run, args.wip_from, branch=branch).sha,
     )
     if isinstance(prepared, PushRefusal):
-        _print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
+        print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
         return 1
     for warning in prepared.warnings:
         print(warning, file=sys.stderr)
     plan = prepared
     if args.i:
         plan = prompt_initial_options(cwd, plan, args, settings=settings)
+    if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
+        return finish_push(execute(run, plan), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed
-    code = _finish_push(execute(cwd, confirmed, settings=settings, gerrit=gerrit), confirmed)
+    code = finish_push(execute(run, confirmed), confirmed)
     if code == 0 and confirmed.options != prepared.options:
         from gerrit_workflow_tools.push_options_history import remember_push_options
 
@@ -378,7 +335,8 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
-    cwd, settings, _summary_highlighter = init_cli_runtime(args)
+    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    cwd, settings = run.cwd, run.settings
     logger.debug(
         "gpush cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
         "no_rebase_check=%s follow_merges=%s reviewer_strategy=%s",
@@ -396,30 +354,26 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     )
     if args.i and args.yes:
         parser.error("-i cannot be used with --yes (-y)")
+    args.yes = args.yes or (assume_yes() and not args.i)
     if args.publish_comments and publish_blocked():
         parser.error(f"--publish-comments is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     if args.i and not stdin_is_terminal():
-        print("error: -i requires an interactive terminal (stdin is not a TTY)", file=sys.stderr)
-        return 1
+        raise UsageError("-i requires an interactive terminal (stdin is not a TTY)")
 
-    detached = is_detached_head(cwd)
-    branch = _resolve_push_branch(cwd, args.branch, settings=settings)
+    detached = run.worktree.branch is None
+    branch = resolve_push_branch(run, args.branch)
     mode = ger_push_mode(cwd, branch, settings=settings)
     if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):
             return 1
         mode = ger_push_mode(cwd, branch, settings=settings)
-    if mode is None:
-        raise GitError(
-            "No push destination: set upstream to your Gerrit remote (`gerrit.remote`, often `origin`; "
-            "run `git fetch` first if the tracking branch is missing)."
-        )
+    if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
+        raise missing_upstream_error(branch, askable=False)
     if args.i and mode == "vanilla":
-        print("error: -i applies only to Gerrit push (upstream on gerrit.remote)", file=sys.stderr)
-        return 1
+        raise UsageError("-i applies only to Gerrit push (upstream on gerrit.remote)")
     if mode == "vanilla":
-        return _handle_vanilla_push(cwd, args, branch=branch, settings=settings)
-    return _push_gerrit(cwd, args, branch=branch, settings=settings, gerrit=gerrit)
+        return _handle_vanilla_push(run, args, branch=branch)
+    return _push_gerrit(run, args, branch=branch)
 
 
 if __name__ == "__main__":

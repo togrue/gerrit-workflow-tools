@@ -1,0 +1,139 @@
+# Workflows
+
+The three workflows `ger` exists for, step by step: the command that does each step, the
+VS Code command that does it, and the tests that cover it. A **gap** is a step nothing does
+yet. This is where to look first when you ask "can I do X?", and the place a new feature
+adds its row.
+
+**The rule:** anything the extension can do, the CLI can do too. The CLI may do more. Agents
+mostly use the CLI, so a feature that exists only in the extension does not exist for them.
+[Extension command parity](#extension-command-parity) lists every extension command with its
+CLI equivalent, and `tests/test_parity.py` keeps that table in step with
+`vscode/package.json` and the registered commands.
+
+Status words: **ships**, **partial** (see the linked spec), **gap** (nothing does it yet).
+
+## Seeing state
+
+| Step | CLI | Extension | Tests | Status |
+|------|-----|-----------|-------|--------|
+| Your local stack against Gerrit: votes, comments, CI, what needs attention | `ger log` | *Local stack* view | `tests/test_log.py`, `tests/test_annotated_stack.py` | ships |
+| Chains waiting on your review | `ger inbox` | *Review chains* view, *To review* | `tests/test_inbox.py` | ships |
+| Your own open chains across all branches | — | — | — | **gap**: `ger log` covers the working branch only; inbox's *waiting on others* section is [planned](spec/commands/inbox.md#sections) |
+| Why CI failed: findings from the CI logs | `ger ci`, `ger ci --stack`, `ger show --ci` | *CI* group in the *Change* view | `tests/test_ci.py`, `tests/test_ci_findings.py` | ships |
+| What is new since you last looked | — | *Mark All Activity as Seen* (kept in VS Code only) | — | **gap**: the [inbox watermark](spec/commands/inbox.md#inbox-watermark) is planned |
+
+## Review flow: someone else's chain
+
+| Step | CLI | Extension | Tests | Status |
+|------|-----|-----------|-------|--------|
+| Open the chain | `ger inbox`, `ger show CHANGEISH` | click a chain, *Show Change* | `tests/test_inbox.py`, `tests/test_show.py` | ships |
+| Check out one commit for review (in the review worktree by default) | `ger review CHANGEISH` | *Review Change* | `tests/test_review.py` | ships |
+| Walk up and down the chain | `ger review --next`, `ger review --prev` | click another chain member | `tests/test_review.py`, `tests/test_review_chain.py` | ships |
+| Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff* | `tests/test_review.py` | ships |
+| What changed since the patchset you reviewed | — | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_serve.py` | **gap** in the CLI |
+| Read the comment chains | `ger show --comments all` | editor comment threads, *Next Unresolved Comment* | `tests/test_show.py`, `tests/test_show_comments_render.py` | ships |
+| Read a reviewer's suggested edit (Gerrit fix suggestion or ```` ```suggestion ```` block) | `ger show` (`suggested_edits` in `--json`) | in the comment, editor thread and *Change* view | `tests/test_suggested_edits.py`, `tests/test_serve.py` | partial: shown, not applied |
+| Comment on a line or range | `ger comment PATH:LINE -m MSG` | "+" in the editor gutter, *Save Draft* | `tests/test_comment.py` | ships |
+| Reply to a chain | `ger reply CHAIN -m MSG`, `--done` | *Reply as Draft…*, *Reply Done and Resolve as Draft* | `tests/test_reply.py` | ships |
+| Send comments and vote | `ger review --vote CR+1 -m MSG` | runs in the terminal | `tests/test_review.py` | ships |
+| Leave the review | `ger review --done` | *Leave Review Checkout* | `tests/test_review.py` | ships |
+| An agent reviews: at most Code-Review+1, and says what it would really give | `GER_NO_PUBLISH=1` stops publishing altogether | — | — | **gap**: no agent vote policy in core |
+
+## Rework flow: your own chain
+
+| Step | CLI | Extension | Tests | Status |
+|------|-----|-----------|-------|--------|
+| Find the commits that need attention | `ger log`, `ger show --first-attention` | *Local stack* view, *Open the Most Important Change* | `tests/test_log.py`, `tests/test_attention_agreement.py` | ships |
+| Work on a change that exists only on Gerrit | `ger checkout CHANGEISH` (a `change-<n>` branch tracking the target branch) | *Check Out to Work On* | `tests/test_checkout.py` | ships |
+| Edit a commit: stop a rebase at it | `ger edit REV`, `ger edit --first-attention-commit`, `ger edit -n` | *Edit Commit Here* | `tests/test_edit.py`, `tests/test_edit_attention.py` | ships |
+| Rebase onto an upstream that moved on, its conflict previewed | `ger log` (the `next:` line), `ger rebase origin/main` | the *origin/main has N new commits* row, *Rebase onto origin/main* | `tests/test_upstream_moved.py`, `tests/test_serve.py` | ships |
+| Go on with a stopped rebase | `ger rebase --continue`, `ger rebase --abort`, `ger rebase --skip` | *Continue*, *Abort*, *Skip* on the *Local stack* banner, the conflicted files under it | `tests/test_rebase_go_on.py` | ships |
+| See the CI failures of this commit | `ger ci REV`, `ger show --ci REV` | *CI* group in the *Change* view | `tests/test_ci.py` | ships |
+| Diff the local commit against the patchset CI checked | — | — | — | **gap** |
+| Step to the next issue, comments and CI findings alike | `ger show -n` (next commit with attention) | *Next Unresolved Comment* (comments only) | `tests/test_attention_cursor.py` | partial: no single walk over comments and findings |
+| Reply to comments | `ger reply CHAIN -m MSG` | *Reply as Draft…*, editor threads | `tests/test_reply.py` | ships |
+| Add a private comment | `ger comment --note`, `ger comment --local` | *Save Private Note*, *Save Local Draft* | `tests/test_comment.py`, `tests/test_local_comments.py` | ships |
+| Add a comment from the keyboard or on a whole file | `ger comment PATH[:LINE]` | *Add Comment* (Ctrl+Alt+C, the editor's menus), *Comment on This File…* | `tests/test_comment.py` | ships |
+| Edit a comment you have not published | `ger comment --edit ID -m MSG` | *Edit Comment* in its editor thread, *Edit…* in the *Change* view | `tests/test_comment.py`, `tests/test_serve.py` | ships |
+| Remove a comment you have not published | `ger comment --discard`, `ger reply CHAIN --discard` | *Delete Comment…* in its editor thread, the trash in the *Change* view, *Discard* in the comment box | `tests/test_comment.py`, `tests/test_serve.py` | ships |
+| Fold a fix into a stack commit | `ger fix CHANGEISH` | — | `tests/test_fix.py` | ships |
+| Reorder, squash, drop | `ger rebase` (interactive), `ger edit --drop REV` | move, drag and drop, *Squash*, *Drop*, with a conflict preview and *Undo* | `tests/test_serve.py` | partial: no non-interactive CLI, no CLI preview or undo ([roadmap](plans/commit-chain-roadmap.md)) |
+| Push | `ger push` | *Push to Gerrit…* (runs in the terminal) | `tests/test_push.py` | ships |
+| Hand the stack to an agent | — | *Fix Stack with Agent…* (`GET /agent/runbook`) | `tests/test_serve.py` | **gap** in the CLI |
+| Keep a comment chain for yourself, away from the agent | — | *Keep for Me*, *Let the Agent Handle It* | `tests/test_serve.py` | **gap** in the CLI |
+
+## Local review flow
+
+The rework flow with the comments kept private: an agent walks the stack and writes notes,
+a human adds notes, an agent fixes them.
+
+| Step | CLI | Extension | Tests | Status |
+|------|-----|-----------|-------|--------|
+| Write private notes on stack commits | `ger comment --note` | *Save Private Note* | `tests/test_local_comments.py` | ships |
+| Notes follow their lines through rebases | re-anchoring in `ger show` | same | `tests/test_anchor_mapping.py` | ships |
+| Notes follow their commit through a squash or reorder | — | — | — | **gap**: [orphans](spec/commands/comment.md#later-slices) are planned |
+| Turn a local draft into a Gerrit draft | — | — | — | **gap**: [uploading](spec/commands/comment.md#later-slices) is planned |
+
+## Extension command parity
+
+Every command in `vscode/package.json`, with how to do the same from the command line.
+*UI only* is for what has no meaning outside an editor (moving the cursor, opening a view).
+A **gap** names the work that would close it.
+
+| Extension command | CLI | Note |
+|-------------------|-----|------|
+| `ger.refresh` | `ger log`, `ger inbox` | every command reads Gerrit within the trust window |
+| `ger.showLog` | UI only | the service's output channel |
+| `ger.reportIssue` | UI only | an anonymized report of what the views show, shown first, then copied for a GitHub issue or saved |
+| `ger.openHeadline` | `ger inbox`, `ger show --first-attention` | |
+| `ger.markSeen` | **gap** | inbox watermark |
+| `ger.openChange` | `ger show CHANGEISH` | |
+| `ger.openInGerrit` | `ger show CHANGEISH` | prints the Gerrit URL |
+| `ger.review` | `ger review CHANGEISH` | |
+| `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
+| `ger.stack.edit` | `ger edit REV` | |
+| `ger.reviewDone` | `ger review --done` | |
+| `ger.push` | `ger push` | |
+| `ger.rebase.continue` | `ger rebase --continue` | the button on the *Local stack* banner, also offered when you push during a rebase |
+| `ger.rebase.abort` | `ger rebase --abort` | |
+| `ger.rebase.skip` | `ger rebase --skip` | offered only where the rebase stopped on a conflict; asks first |
+| `ger.rebase.upstream` | `ger rebase <upstream>` | the button on *Local stack*'s row for an upstream that moved on; runs in the terminal |
+| `ger.setup` | `ger setup` | runs in a terminal; offered when the checkout lacks Gerrit settings |
+| `ger.installCli` | `ger vscode install` is the same step from the other side | installs the ger release with the extension's version, in a terminal (uv or pipx); offered when ger is not found |
+| `ger.stack.squash` | **gap** | `ger rebase` squashes interactively only |
+| `ger.stack.squashTakeMessage` | **gap** | `ger rebase` squashes interactively only |
+| `ger.stack.drop` | `ger edit --drop REV` | |
+| `ger.copyChangeId` | `ger change-id REV` | Review chains, Local stack, and the palette for the change shown |
+| `ger.copySha` | `ger sha CHANGEISH` | the local commit; for a change not in the stack, its current patch set's |
+| `ger.sortChains` | UI only | `ger inbox` prints chains by state |
+| `ger.openDiff` | UI only | `ger review --stage` shows the diff to git's own tools |
+| `ger.openLocation` | UI only | |
+| `ger.nextComment` | UI only | `ger show` lists every unresolved chain |
+| `ger.prevComment` | UI only | |
+| `ger.reply` | `ger reply CHAIN -m MSG` | |
+| `ger.replyDone` | `ger reply CHAIN --done` | |
+| `ger.thread.reply` | `ger reply CHAIN -m MSG --resolve` / `--unresolve` | Save in a thread's reply box, as its Resolved toggle says |
+| `ger.thread.cancel` | UI only | Cancel in a thread's reply box |
+| `ger.thread.markResolved` | `ger reply CHAIN --resolve` (with your draft there) | the Resolved toggle in a thread's header; with no draft yet it only sets what Save does |
+| `ger.thread.markUnresolved` | `ger reply CHAIN --unresolve` (with your draft there) | |
+| `ger.comment.saveDraft` | `ger comment PATH:LINE -m MSG` | |
+| `ger.comment.saveLocalDraft` | `ger comment --local PATH:LINE -m MSG` | |
+| `ger.comment.saveNote` | `ger comment --note PATH:LINE -m MSG` | |
+| `ger.comment.add` | `ger comment PATH:LINE -m MSG` | opens the comment box on the selected lines |
+| `ger.comment.cancelNew` | UI only | closes a comment box |
+| `ger.comment.file` | `ger comment PATH -m MSG` | |
+| `ger.comment.edit` | `ger comment --edit ID -m MSG` | turns your comment into a text box; *Save* writes it |
+| `ger.comment.save` | `ger comment --edit ID -m MSG` | |
+| `ger.comment.cancel` | UI only | |
+| `ger.comment.delete` | `ger comment --discard ID` | |
+| `ger.comment.discard` | `ger comment --discard ID` | Discard in the box of a comment you are editing; asks as `ger.comment.delete` does |
+| `ger.comment.escape` | UI only | Esc in a reply box: the focus steps back to the thread's comments |
+| `ger.comment.close` | UI only | Esc on a comment or in the editor: closes the open threads in view |
+| `ger.chain.edit` | `ger comment --edit ID -m MSG` | |
+| `ger.chain.delete` | `ger comment --discard ID` | |
+| `ger.setUpstream` | `ger log` | prompts for a missing upstream on a terminal |
+| `ger.agentBrief` | `ger show --ai --comments unresolved --ci --context REV` | for a change of someone else; on a stack commit it uses the runbook |
+| `ger.agentWalk` | **gap** | agent runbook, `GET /agent/runbook` only |
+| `ger.hold` | **gap** | holds, `POST /comments/hold` only |
+| `ger.release` | **gap** | holds, `POST /comments/hold` only |

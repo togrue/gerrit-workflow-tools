@@ -6,9 +6,14 @@ resolving ``in_reply_to`` links to find thread roots.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
+from gerrit_workflow_tools.core.suggested_edits import suggested_edits_from_raw
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.anchor_mapping import AnchorPlacement
 
 
 CommentSelection = Literal["unresolved", "all", "resolved"]
@@ -78,9 +83,10 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
     if isinstance(raw_author, dict):
         author_label = format_gerrit_account_label(raw_author)
     patch_set = comment.get("patch_set")
+    line = _comment_line(comment)
     return InlineComment(
         path=path,
-        line=_comment_line(comment),
+        line=line,
         message=raw_msg if isinstance(raw_msg, str) else "",
         comment_id=raw_id if isinstance(raw_id, str) else None,
         author=author_label,
@@ -88,6 +94,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
         patch_set=patch_set if isinstance(patch_set, int) else None,
         unresolved=comment.get("unresolved") is True,
         draft=draft,
+        suggested_edits=suggested_edits_from_raw(path, comment, start_line=_comment_start_line(comment), line=line),
     )
 
 
@@ -160,6 +167,34 @@ def build_comment_chains(
     return chains
 
 
+def select_chains(chains: list[CommentChain], comments: CommentSelection) -> list[CommentChain]:
+    """*chains* filtered by *comments* on their published state; ``all`` puts unresolved first."""
+    if comments == "all":
+        return [chain for chain in chains if not chain.resolved] + [chain for chain in chains if chain.resolved]
+    if comments == "resolved":
+        return [chain for chain in chains if chain.resolved]
+    return [chain for chain in chains if not chain.resolved]
+
+
+def local_comment_chain(comment_id: str, comment: InlineComment, anchor: AnchorPlacement) -> CommentChain:
+    """A note or local draft as a chain of its own, where *anchor* puts it: always a root, never a reply."""
+    return CommentChain(
+        root_id=comment_id,
+        path=anchor.shown.path,
+        line=anchor.shown.line,
+        comments=(comment,),
+        resolved=not comment.unresolved,
+        start_line=anchor.shown.start_line,
+        anchor=anchor,
+    )
+
+
+def merge_chains(gerrit: list[CommentChain], local: list[CommentChain]) -> list[CommentChain]:
+    """Gerrit and local chains in one list: by path and line, Gerrit's first at a location."""
+    merged = [*gerrit, *local]
+    return sorted(merged, key=lambda ch: (ch.resolved, ch.path, ch.line if ch.line is not None else -1, ch.local))
+
+
 def collect_comment_chains(
     file_map: dict[str, list[dict[str, Any]]],
     *,
@@ -172,12 +207,7 @@ def collect_comment_chains(
     resolved ones. That keeps the attention-bearing threads at the top.
     """
 
-    chains = build_comment_chains(file_map, drafts)
-    if comments == "all":
-        return [chain for chain in chains if not chain.resolved] + [chain for chain in chains if chain.resolved]
-    if comments == "resolved":
-        return [chain for chain in chains if chain.resolved]
-    return [chain for chain in chains if not chain.resolved]
+    return select_chains(build_comment_chains(file_map, drafts), comments)
 
 
 def collect_unresolved_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[CommentChain]:

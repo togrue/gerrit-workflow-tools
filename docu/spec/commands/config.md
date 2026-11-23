@@ -20,13 +20,13 @@ ger config
 
 Shared `--color`, `--hyperlinks`, and `--debug-log` flags apply.
 
-Non-interactive environments print an error and exit 1 (`ATTENTION`).
+Non-interactive environments print an error and exit `2` (`USAGE`), as every command does that needs a terminal it does not have.
 
 ---
 
 ## Editor file
 
-Sections, in order: General, `ger show`, `ger log`, `ger push`, `ger inbox`, `ger rebase`, `ger edit`. Commands with no settings are omitted. Branch-scoped keys appear under `ger push` when a working branch resolves.
+Sections, in order: General, `ger show`, `ger log`, `ger push`, `ger inbox`, `ger review`, `ger rebase`, `ger edit`, `ger serve`. Commands with no settings are omitted. Branch-scoped keys appear under `ger push` when a working branch resolves.
 
 Each setting is:
 
@@ -50,11 +50,11 @@ Editor: `GIT_EDITOR` → `core.editor` → `VISUAL` → `EDITOR` → `vi`. GUI e
 | Comment out a stored key | `git config --unset` at that scope |
 | Leave an active line unchanged (including an explicit stored default) | no write |
 
-Empty file after the editor exits → abort (`ATTENTION`). Parse errors → usage exit `2` with line numbers. Every catalog key must appear exactly once (active or commented).
+Empty file after the editor exits → abort (`REFUSED`). Parse errors → usage exit `2` with line numbers. Every catalog key must appear exactly once (active or commented).
 
 Resolution lives in `resolve_config_form` (`core/config_form.py`); file format in `render_config_editor_text` / `parse_config_editor_text` (`core/config_editor_file.py`). Scope comes from `Settings.scope` (`git config --list --show-scope`).
 
-`gerrit.editNextShow` (default off) is the `ger edit` flag that makes `ger edit --next` run `ger show` after a successful move. See [edit.md](edit.md) and [Configuration.md](../../Configuration.md#ger-edit).
+`ger.showAfterEdit` (default on) is the `ger edit` flag that makes `ger edit --next` and `--first-attention-commit` run `ger show` after a successful move. See [edit.md](edit.md) and [Configuration.md](../../Configuration.md#ger-edit).
 
 ---
 
@@ -63,7 +63,7 @@ Resolution lives in `resolve_config_form` (`core/config_form.py`); file format i
 | Code | Meaning |
 |------|---------|
 | `0` | Applied (or no changes) |
-| `1` | `ATTENTION` — not a TTY, empty file abort, or editor non-zero exit |
+| `1` | `REFUSED` — not a TTY, empty file abort, or editor non-zero exit |
 | `2` | Usage / parse error |
 | `7` | `GIT` — editor binary not found |
 
@@ -73,4 +73,4 @@ Resolution lives in `resolve_config_form` (`core/config_form.py`); file format i
 
 - [Configuration.md](../../Configuration.md) — key reference
 - [`ger setup`](setup.md) — first-run web URL, user, and token
-- [`ger edit`](edit.md) — `gerrit.editNextShow`
+- [`ger edit`](edit.md) — `ger.showAfterEdit`

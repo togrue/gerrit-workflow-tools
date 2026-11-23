@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.core.git_run import git
+from tests.change_store import tag_parallel_jobs
 from tests.fixtures import (
     configure_gerrit_target,
     finalize_git_template,
@@ -28,20 +29,14 @@ WEB_STACK_REPO_URL = "https://g.example"
 # Test repositories are thrown away, so git need not flush them to disk: on a real disk
 # (anything but a RAM-backed temp directory) the flushes are most of a commit's cost.
 _STUB_GLOBAL_GITCONFIG = "[user]\n\tname = Test\n\temail = test@example.com\n[core]\n\tfsync = none\n"
+_STUB_DIR_PREFIX = "gerrit-workflow-tools-test-gitconfig-"
 
 # Cumulative fixture setup seconds when GWT_TEST_PROFILE=1 (see pytest_fixture_setup).
 _FIXTURE_PROFILE_SECONDS: dict[str, float] = defaultdict(float)
 _FIXTURE_PROFILE_COUNTS: dict[str, int] = defaultdict(int)
 
-
-@pytest.fixture(autouse=True)
-def _clear_git_semantic_caches() -> Generator[None]:
-    """Process-lifetime Worktree / stack-context memos must not leak between tests."""
-    from gerrit_workflow_tools.core.git_run import clear_git_cache
-
-    clear_git_cache()
-    yield
-    clear_git_cache()
+# The stub global git config of this pytest process (see pytest_configure); None without isolation.
+_STUB_GLOBAL: Path | None = None
 
 
 @pytest.fixture(autouse=True)
@@ -58,8 +53,8 @@ def _reset_output_modes() -> Generator[None]:
     set_hyperlink_mode(False)
 
 
-def _git_config_isolation_enabled() -> bool:
-    return os.environ.get("GERRIT_WORKFLOW_TOOLS_NO_GIT_CONFIG_ISOLATION", "").lower() not in ("1", "true", "yes")
+def _is_xdist_worker(config: pytest.Config) -> bool:
+    return hasattr(config, "workerinput")
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -68,33 +63,37 @@ def pytest_configure(config: pytest.Config) -> None:
     The stub global file supplies only ``user.*`` so ``git commit`` works without per-call
     ``GIT_AUTHOR_*`` env. Production uses full ``git config --list`` (standard precedence);
     without this, tests would pick up the developer's ``gerrit.*`` keys and become flaky.
+
+    The stub lives in a directory of this process: two runs at once (two worktrees, two agents)
+    must not read each other's writes. Each test then gets its own copy of it
+    (``_isolate_git_global_config``), so what ``ger setup`` writes does not reach the next test.
     """
-    if not _git_config_isolation_enabled():
+    global _STUB_GLOBAL
+    if os.environ.get("GERRIT_WORKFLOW_TOOLS_NO_GIT_CONFIG_ISOLATION", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
         return
-    base = Path(tempfile.gettempdir()) / "gerrit-workflow-tools-test-gitconfig"
-    base.mkdir(parents=True, exist_ok=True)
+    inherited = os.environ.get("GIT_CONFIG_GLOBAL", "")
+    if _is_xdist_worker(config) and Path(inherited).parent.name.startswith(_STUB_DIR_PREFIX):
+        # The controller made the stub and exported it; it also removes it.
+        _STUB_GLOBAL = Path(inherited)
+        return
+    base = Path(tempfile.mkdtemp(prefix=_STUB_DIR_PREFIX))
     stub_global = base / "stub-global"
     stub_system = base / "stub-system"
-    _write_if_changed(stub_global, _STUB_GLOBAL_GITCONFIG)
-    _write_if_changed(stub_system, "")
+    stub_global.write_text(_STUB_GLOBAL_GITCONFIG, encoding="utf-8")
+    stub_system.write_text("", encoding="utf-8")
     os.environ.setdefault("GIT_CONFIG_GLOBAL", str(stub_global))
     os.environ.setdefault("GIT_CONFIG_SYSTEM", str(stub_system))
+    _STUB_GLOBAL = stub_global
 
 
-def _write_if_changed(path: Path, text: str) -> None:
-    """Write *text* unless *path* already holds it.
-
-    Every xdist worker runs ``pytest_configure``. Rewriting the stub in place would let a
-    git already running in another worker read it half-written, and lose ``user.*``.
-    """
-    try:
-        if path.read_text(encoding="utf-8") == text:
-            return
-    except OSError:
-        pass
-    partial = path.with_name(f"{path.name}.{os.getpid()}")
-    partial.write_text(text, encoding="utf-8")
-    os.replace(partial, path)
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove this process's stub git config directory."""
+    if _STUB_GLOBAL is not None and not _is_xdist_worker(config):
+        shutil.rmtree(_STUB_GLOBAL.parent, ignore_errors=True)
 
 
 def _test_profile_enabled() -> bool:
@@ -168,6 +167,16 @@ def _web_stack_repo_template(
 
 
 @pytest.fixture(scope="session")
+def _merged_side_branch_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("tpl_merged_side_branch")
+    repo = make_repo_with_merged_side_branch(root / "repo")
+    # A relative self-remote remains valid after the template is copied.
+    git("remote", "set-url", "origin", ".", cwd=repo)
+    finalize_git_template(repo)
+    return repo
+
+
+@pytest.fixture(scope="session")
 def _dup_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("tpl_dup")
     repo = make_repo_duplicate_change_id(root / "repo")
@@ -185,22 +194,6 @@ def _gcid_cli_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     repo = make_gcid_cli_repo(root / "repo")
     finalize_git_template(repo)
     return repo
-
-
-@pytest.fixture(scope="session")
-def _merged_side_branch_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    root = tmp_path_factory.mktemp("tpl_merged_side_branch")
-    repo = make_repo_with_merged_side_branch(root / "repo")
-    # A relative self-remote remains valid after the template is copied.
-    git("remote", "set-url", "origin", ".", cwd=repo)
-    finalize_git_template(repo)
-    return repo
-
-
-@pytest.fixture
-def merged_side_branch_repo(tmp_path: Path, _merged_side_branch_repo_template: Path) -> Path:
-    """Feature branch that merged a side branch (see ``make_repo_with_merged_side_branch``)."""
-    return _copy_git_repo(_merged_side_branch_repo_template, tmp_path / "r")
 
 
 @pytest.fixture
@@ -227,19 +220,10 @@ def web_stack_repo(tmp_path: Path, _web_stack_repo_template: Path) -> Path:
     return _copy_git_repo(_web_stack_repo_template, tmp_path / "stack")
 
 
-@pytest.fixture(autouse=True)
-def _isolate_global_gitconfig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Give each test its own global git config.
-
-    ``ger setup`` and the upstream prompt write ``gerrit.*`` keys with ``--global``. In the
-    session-wide stub those would reach every other test, including the ones running in
-    other xdist workers at that moment.
-    """
-    if not _git_config_isolation_enabled():
-        return
-    stub_global = tmp_path / "gitconfig-global"
-    stub_global.write_text(_STUB_GLOBAL_GITCONFIG, encoding="utf-8")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(stub_global))
+@pytest.fixture
+def merged_side_branch_repo(tmp_path: Path, _merged_side_branch_repo_template: Path) -> Path:
+    """Feature branch that merged a side branch (see ``make_repo_with_merged_side_branch``)."""
+    return _copy_git_repo(_merged_side_branch_repo_template, tmp_path / "r")
 
 
 @pytest.fixture(autouse=True)
@@ -247,6 +231,25 @@ def _isolate_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     """Keep Gerrit API cache rows from leaking between tests that share mock hosts."""
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+
+
+@pytest.fixture(autouse=True)
+def _isolate_git_global_config(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give each test its own copy of the stub global git config, so a test that writes to it
+    (``ger setup``, the recent upstreams) leaves the next test the stub as it was."""
+    if _STUB_GLOBAL is None or os.environ.get("GIT_CONFIG_GLOBAL") != str(_STUB_GLOBAL):
+        return
+    # Not in tmp_path, where a test's repository may be and would see an untracked file.
+    own = tmp_path_factory.mktemp("gitconfig") / "global"
+    shutil.copyfile(_STUB_GLOBAL, own)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(own))
+
+
+@pytest.fixture
+def parallel_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tag each ``parallel_map`` job's calls, so ``ChangeStore.ordered_calls`` can order them."""
+
+    tag_parallel_jobs(monkeypatch)
 
 
 @pytest.fixture
@@ -262,6 +265,7 @@ def run_cli(
     *,
     catch_sys_exit: bool = False,
     gerrit: object | None = None,
+    ci_http: object | None = None,
 ) -> tuple[int, str, str]:
     """Run a CLI main with cwd set; capture stdout and stderr.
 
@@ -270,7 +274,8 @@ def run_cli(
 
     Pass *gerrit* to hand the command a ``GerritRest`` implementation (usually a
     :class:`ChangeStore`) instead of letting it build an ``HttpGerritRest``. Commands that
-    take no ``gerrit`` parameter must not be given one.
+    take no ``gerrit`` parameter must not be given one. *ci_http* likewise hands ``ger ci`` /
+    ``ger show`` a fake CI HTTP seam.
     """
     import io
     import sys
@@ -280,7 +285,9 @@ def run_cli(
     err_buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", out_buf)
     monkeypatch.setattr(sys, "stderr", err_buf)
-    kwargs = {"gerrit": gerrit} if gerrit is not None else {}
+    kwargs: dict[str, object] = {"gerrit": gerrit} if gerrit is not None else {}
+    if ci_http is not None:
+        kwargs["ci_http"] = ci_http
     try:
         code = main_fn(list(argv), **kwargs)
     except SystemExit as e:

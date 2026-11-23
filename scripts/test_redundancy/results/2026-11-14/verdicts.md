@@ -1,0 +1,463 @@
+# Tier 4, ownership-aware verdicts
+
+- guarded by a non-candidate owner test: 1903 mutants
+- no owner kills it; a non-candidate bystander does: 335 mutants
+- needs a candidate owner test: 290 mutants
+- unowned; guarded: 82 mutants
+- only candidate bystanders kill it: 48 mutants
+- unowned; only candidates kill it: 4 mutants
+
+KEEP 100, MISPLACED 12, REMOVE 306, NO_KILLS 22
+
+## KEEP: the owner's only check
+
+- `tests/test_anchor_mapping.py::test_deleting_the_last_line_marks_it_outdated`: guards 2, e.g. core/anchor_mapping.py:111 `_above` cmp
+- `tests/test_anchor_mapping.py::test_map_lines[hunks0-5-5-expected0]`: guards 3, e.g. core/anchor_mapping.py:109 `_above` cmp
+- `tests/test_anchor_mapping.py::test_map_lines[hunks3-1-1-expected3]`: guards 2, e.g. core/anchor_mapping.py:98 `map_lines` incr
+- `tests/test_anchor_mapping.py::test_map_lines[hunks4-5-5-expected4]`: guards 2, e.g. core/anchor_mapping.py:96 `map_lines` addsub
+- `tests/test_annotated_stack.py::test_resolve_rev_range_expands_bare_refs_only[a...b-a...b]`: guards 1, e.g. core/annotated_stack.py:75 `resolve_rev_range` retnone
+- `tests/test_annotated_stack.py::test_resolve_rev_range_expands_bare_refs_only[bak-bak@{upstream}..bak]`: guards 2, e.g. core/annotated_stack.py:76 `resolve_rev_range` retnone
+- `tests/test_bash_completion.py::test_regenerated_bash_completion_matches_checked_in_file`: guards 95, e.g. bash_completion_generator.py:46 `_append_unique` delstmt
+- `tests/test_bash_completion.py::test_strip_marked_blocks_removes_block`: guards 4, e.g. cli_bash_completion.py:60 `_strip_marked_blocks` delstmt
+- `tests/test_change_resolution.py::test_git_rev_resolves_without_gerrit_query`: guards 5, e.g. core/gerrit/change_resolution.py:87 `local_commit_sha` retnone
+- `tests/test_change_resolution.py::test_resolve_triplet`: guards 2, e.g. core/gerrit/change_resolution.py:119 `_fetch_unique_row` retnone
+- `tests/test_change_view.py::test_label_value[label0-1]`: guards 1, e.g. core/gerrit/change_view.py:83 `_label_value` retnone
+- `tests/test_changeish.py::test_change_ref_number`: guards 1, e.g. core/changeish.py:222 `parse` incr
+- `tests/test_changeish.py::test_nested_project_url`: guards 2, e.g. core/changeish.py:95 `_url_target` retnone
+- `tests/test_checkout.py::test_a_change_lands_on_its_own_branch_tracking_its_target_branch`: guards 4, e.g. cli_checkout.py:114 `_report` negcond
+- `tests/test_ci.py::test_ci_second_run_is_served_from_the_store`: guards 1, e.g. core/ci_jenkins.py:71 `_read_build_state` negcond
+- `tests/test_ci_content.py::test_severity_is_not_part_of_the_fingerprint_and_old_entries_read_back`: guards 2, e.g. core/ci_content.py:46 `finding_fingerprint` retnone
+- `tests/test_ci_findings.py::test_pytest_collection_error`: guards 1, e.g. core/ci_findings_tests.py:84 `find_pytest` incr
+- `tests/test_ci_findings.py::test_pytest_failure_is_located_at_the_raising_frame`: guards 8, e.g. core/ci_findings_tests.py:51 `_pytest_sections` delstmt
+- `tests/test_ci_findings.py::test_pytest_short_traceback_uses_the_test_frame`: guards 1, e.g. core/ci_findings_tests.py:52 `_pytest_sections` cmp
+- `tests/test_ci_links.py::test_ci_pipelines_from_checks_overlays_strategy_urls`: guards 7, e.g. core/ci_links.py:69 `ci_pipelines_from_checks` delstmt
+- `tests/test_ci_links.py::test_format_ci_lines_outdated_uses_grey_at_verbose`: guards 2, e.g. render/commit_row.py:144 `_ci_state_color` negcond
+- `tests/test_ci_paths.py::test_a_lone_root_level_match_outside_any_known_workspace_is_not_ours`: guards 3, e.g. core/ci_paths.py:105 `resolve_paths` andor
+- `tests/test_ci_paths.py::test_findings_that_agree_on_a_workspace_vouch_for_a_root_level_file`: guards 1, e.g. core/ci_paths.py:109 `resolve_paths` incr
+- `tests/test_ci_paths.py::test_the_workspace_directory_is_stripped_whatever_it_is`: guards 1, e.g. core/ci_paths.py:84 `_tails` incr
+- `tests/test_cid.py::test_gcid_check_rejects_rev_or_range`: guards 1, e.g. cli_changeid.py:158 `_run` delstmt
+- `tests/test_cid.py::test_gcid_verbose`: guards 1, e.g. cli_changeid.py:190 `_build_parser` delstmt
+- `tests/test_cli_style.py::test_format_link_rejects_osc_in_url`: guards 2, e.g. cli_style.py:178 `format_link` andor
+- `tests/test_cli_style.py::test_init_hyperlink_mode_always_and_never`: guards 2, e.g. cli_style.py:158 `init_hyperlink_mode` flipbool
+- `tests/test_cli_style.py::test_init_hyperlink_mode_no_hyperlinks`: guards 3, e.g. cli_style.py:164 `init_hyperlink_mode` andor
+- `tests/test_cli_style.py::test_no_color_turns_auto_off_but_not_always[always-1-True]`: guards 1, e.g. cli_style.py:86 `init_color_mode` flipbool
+- `tests/test_cli_style.py::test_no_color_turns_auto_off_but_not_always[auto-1-False]`: guards 3, e.g. cli_style.py:85 `init_color_mode` cmp
+- `tests/test_cli_style.py::test_no_color_turns_auto_off_but_not_always[never-None-False]`: guards 1, e.g. cli_style.py:88 `init_color_mode` flipbool
+- `tests/test_comment_chains.py::test_build_comment_chains_groups_replies`: guards 1, e.g. core/comment_chains.py:88 `_inline_comment_from_raw` negcond
+- `tests/test_comment_chains.py::test_chain_comments_keep_patchset_and_own_flag`: guards 1, e.g. core/comment_chains.py:92 `_inline_comment_from_raw` negcond
+- `tests/test_comment_chains.py::test_collect_unresolved_includes_open_chain`: guards 1, e.g. core/comment_chains.py:25 `count_unresolved_in_file_map` dropnot
+- `tests/test_edit.py::test_reword_warning_says_how_to_keep_the_old_change`: guards 4, e.g. cli_edit.py:286 `_run_interactive_stack_rebase` cmp
+- `tests/test_event_stream.py::test_missing_and_ill_typed_fields_read_as_unknown`: guards 3, e.g. core/gerrit/event_stream.py:104 `_text` andor
+- `tests/test_event_stream.py::test_which_events_make_a_client_look_again[{"type": "comment-added", "change": {"project": "elsewhere", "branch": "main", "id": "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "number": 900, "owner": {"username": "alice"}}, "eventCreatedOn": 1}-False]`: guards 1, e.g. core/gerrit/event_stream.py:162 `apply_event` cmp
+- `tests/test_event_stream.py::test_which_events_make_a_client_look_again[{"type": "comment-added"}-False]`: guards 2, e.g. core/gerrit/event_stream.py:160 `apply_event` retnone
+- `tests/test_event_stream.py::test_which_events_make_a_client_look_again[{"type": "dropped-output"}-True]`: guards 2, e.g. core/gerrit/event_stream.py:156 `apply_event` retnone
+- `tests/test_fetch_api.py::test_fetch_api_prints_json`: guards 3, e.g. cli_fetch_api.py:67 `_run` delstmt
+- `tests/test_fix.py::test_fix_prints_the_new_commit`: guards 1, e.g. cli_fix.py:172 `_run` delstmt
+- `tests/test_fix.py::test_ger_fix_prompt_stages_on_yes`: guards 1, e.g. cli_fix.py:70 `_prompt_stage_modified_changes` delstmt
+- `tests/test_ger.py::test_ger_unknown_command`: guards 4, e.g. cli_ger.py:140 `_did_you_mean` negcond
+- `tests/test_gerrit_cache.py::test_invalidating_a_change_drops_it_under_every_key_it_is_stored_under`: guards 2, e.g. core/gerrit/cache_rows.py:50 `payload_number` retnone
+- `tests/test_gerrit_cache.py::test_load_checks_serves_cache_while_change_updated_is_unchanged`: guards 2, e.g. core/gerrit/cache_rows.py:69 `decode_checks` retnone
+- `tests/test_gerrit_cache.py::test_load_comments_context_key_does_not_share_rows`: guards 2, e.g. core/gerrit/cache_rows.py:62 `decode_comments` retnone
+- `tests/test_gerrit_cache.py::test_upsert_changes_strips_avatars`: guards 1, e.g. core/gerrit/cache_rows.py:23 `strip_avatars` negcond
+- `tests/test_gerrit_message_parsing.py::test_ci_pipelines_from_build_messages_outdated_fallback`: guards 6, e.g. core/gerrit_message_parsing.py:174 `_build_message_state` retnone
+- `tests/test_gerrit_project_id.py::test_resolve_gerrit_project_name_prefers_override`: guards 1, e.g. core/gerrit_project_id.py:46 `resolve_gerrit_project_name` retnone
+- `tests/test_gerrit_rest.py::test_ambiguous_query_says_when_the_list_is_cut_short`: guards 3, e.g. core/gerrit/rest.py:230 `pick_change_from_query_result` negcond
+- `tests/test_gerrit_rest.py::test_chunk_to_query_dedupes_same_change_id_across_branches`: guards 1, e.g. core/gerrit/change_queries.py:108 `_chunk_to_query` cmp
+- `tests/test_gerrit_rest.py::test_query_single_change_triplet_returns_one`: guards 1, e.g. core/gerrit/change_queries.py:67 `_batch_ref_query` andor
+- `tests/test_git_run.py::test_a_failed_lookup_keeps_the_others_cached`: guards 4, e.g. core/git_run.py:210 `git` retnone
+- `tests/test_git_run.py::test_mutating_commands_not_cached`: guards 6, e.g. core/git_run.py:98 `_invalidates_head_identity` incr
+- `tests/test_git_state.py::test_effective_gerrit_destination_branch_prefers_gerrit_target`: guards 2, e.g. core/git_state.py:259 `resolve_branch_for_branch_config` retnone
+- `tests/test_git_state.py::test_resolve_working_branch_prefers_checked_out_branch`: guards 1, e.g. core/git_state.py:174 `resolve_working_branch` retnone
+- `tests/test_local_comments.py::test_a_note_needs_no_gerrit_and_never_touches_the_index`: guards 1, e.g. cli_common.py:349 `init_cli_runtime` flipbool
+- `tests/test_log.py::test_log_names_the_unknown_side_of_a_range`: guards 6, e.g. core/changeish.py:177 `unresolved_rev_message` retnone
+- `tests/test_push.py::test_gpush_branch_flag_unknown_branch_errors`: guards 2, e.g. core/push_checks.py:37 `resolve_push_branch` delstmt
+- `tests/test_push.py::test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits`: guards 2, e.g. cli_common.py:208 `add_follow_merges_args` flipbool
+- `tests/test_push.py::test_gpush_interactive_requires_tty`: guards 1, e.g. cli_push.py:378 `_run` delstmt
+- `tests/test_push.py::test_gpush_refuses_while_a_rebase_is_underway`: guards 1, e.g. core/push.py:191 `prepare` delstmt
+- `tests/test_push.py::test_gpush_treats_windows_nul_as_non_interactive`: guards 2, e.g. cli_push.py:200 `_require_confirmable` delstmt
+- `tests/test_push_input_line.py::test_example_b_variants_all_yield_alice_bob_topic_abc[bob topic abc alice]`: guards 1, e.g. push_input_line.py:316 `parse` andor
+- `tests/test_push_input_line.py::test_minus_reviewer_removes_from_list`: guards 1, e.g. push_input_line.py:256 `parse` delstmt
+- `tests/test_push_input_line.py::test_minus_then_re_add`: guards 1, e.g. push_input_line.py:257 `parse` incr
+- `tests/test_push_input_line.py::test_strategy_keywords_set_strategy_last_one_wins`: guards 1, e.g. push_input_line.py:341 `parse` incr
+- `tests/test_push_input_prompt.py::test_history_path_uses_xdg_and_host`: guards 4, e.g. core/gerrit/paths.py:15 `gerrit_cache_host` andor
+- `tests/test_push_input_prompt.py::test_should_navigate_false_when_completions_active`: guards 3, e.g. push_input_prompt.py:162 `should_navigate_push_options_history` retnone
+- `tests/test_push_input_prompt.py::test_should_navigate_true_at_end_without_completions`: guards 1, e.g. push_input_prompt.py:162 `should_navigate_push_options_history` andor
+- `tests/test_push_reviewers.py::test_apply_reviewer_strategy_overwrite_removes_reviewers_and_keeps_cc`: guards 1, e.g. core/reviewer.py:114 `reviewer_accounts_from_change_info` andor
+- `tests/test_ready_calc.py::test_compute_ready_all_commits_ignores_stop_pattern`: guards 6, e.g. core/ready_calc.py:52 `earlier_boundary` cmp
+- `tests/test_rebase_enricher.py::test_cli_rebase_sets_sequence_editor_env`: guards 1, e.g. core/git_editor.py:16 `module_editor_command` retnone
+- `tests/test_reply.py::test_a_reply_without_a_state_flag_keeps_the_chain_open`: guards 1, e.g. cli_reply.py:117 `_message_and_flag` negcond
+- `tests/test_reply.py::test_dry_run_lists_drafts_and_publishes_nothing`: guards 3, e.g. cli_reply.py:257 `_publish` delstmt
+- `tests/test_reply.py::test_publish_with_yes_publishes_every_draft_on_the_stack`: guards 1, e.g. cli_reply.py:253 `_publish` cmp
+- `tests/test_resolve.py::test_resolve_not_found_exits_three`: guards 1, e.g. cli_resolve.py:81 `_run` delstmt
+- `tests/test_review.py::test_review_checks_the_change_out_staged_in_the_review_worktree`: guards 1, e.g. render/review_json.py:61 `review_state_json` cmp
+- `tests/test_review_chain.py::test_follow_up_parent_joins_the_queried_members`: guards 1, e.g. core/review_chain.py:308 `assemble_review_chains` cmp
+- `tests/test_review_chain.py::test_linear_chain_links_on_first_parent_and_picks_the_tip`: guards 9, e.g. core/review_chain.py:109 `member_unreviewed_since` retnone
+- `tests/test_review_chain.py::test_missing_parent_shas_are_the_ones_not_in_the_result`: guards 2, e.g. core/review_chain.py:90 `missing_parent_shas` retnone
+- `tests/test_review_chain.py::test_sorts_longest_unreviewed_first`: guards 1, e.g. core/review_chain.py:343 `assemble_review_chains` delstmt
+- `tests/test_reviewer_completion.py::test_format_gerrit_account_label_slug_only`: guards 4, e.g. core/reviewer.py:62 `format_gerrit_account_label` negcond
+- `tests/test_reviewer_completion.py::test_format_gerrit_account_label_username_and_name`: guards 2, e.g. core/reviewer.py:61 `format_gerrit_account_label` retnone
+- `tests/test_reviewer_completion.py::test_slug_prefers_nested_account`: guards 2, e.g. core/reviewer_completion.py:59 `slug_from_suggest_or_account_row` negcond
+- `tests/test_serve.py::test_http_maps_failures_to_statuses_and_shared_codes`: guards 2, e.g. server/httpd.py:63 `failure_response` cmp
+- `tests/test_serve.py::test_overview_shows_the_inbox_when_the_local_stack_cannot_be_read`: guards 1, e.g. core/stack.py:189 `_log_records` delstmt
+- `tests/test_setup.py::test_ger_setup_non_tty_reports_error`: guards 2, e.g. cli_setup.py:101 `_run_interactive_setup` delstmt
+- `tests/test_show.py::test_gshow_json_long_comment`: guards 1, e.g. render/show_json.py:29 `comment_json_payload` negcond
+- `tests/test_show.py::test_gshow_json_tells_published_state_from_state_after_publish`: guards 1, e.g. render/show_json.py:36 `comment_json_payload` negcond
+- `tests/test_show_comments_render.py::test_draft_reply_markdown_is_marked_unpublished`: guards 1, e.g. render/comments.py:256 `format_comment_chain_markdown` delstmt
+- `tests/test_show_comments_render.py::test_format_comment_chain_human_rounded_box`: guards 3, e.g. render/comments.py:173 `_box_content_rows` negcond
+- `tests/test_show_comments_render.py::test_format_comment_chain_markdown`: guards 3, e.g. render/comments.py:255 `format_comment_chain_markdown` negcond
+- `tests/test_show_comments_render.py::test_format_comment_chain_markdown_ignores_hyperlinks`: guards 1, e.g. render/comments.py:241 `format_comment_chain_markdown` delstmt
+- `tests/test_show_comments_render.py::test_format_comment_chain_markdown_resolved_marker`: guards 1, e.g. render/comments.py:236 `format_comment_chain_markdown` negcond
+- `tests/test_upstream_interactive.py::test_require_branch_upstream_non_tty_prints_hint`: guards 12, e.g. core/upstream.py:23 `missing_upstream_error` retnone
+- `tests/test_wrap.py::test_fit_header_keeps_the_tail`: guards 2, e.g. render/wrap.py:38 `fit_header` addsub
+- `tests/test_wrap.py::test_wrap_lines_keeps_leading_indent_with_the_first_word`: guards 3, e.g. render/wrap.py:60 `_wrap_one` delstmt
+- `tests/test_wrap.py::test_wrap_lines_slices_a_token_with_no_space`: guards 1, e.g. render/wrap.py:57 `_wrap_one` delstmt
+
+## MISPLACED: only check, outside the owner's file
+
+- `tests/test_call_budgets.py::test_fix_local_ref_makes_no_gerrit_calls`: guards 1, e.g. core/git_state.py:111 `git_dir` cmp (owner: tests/test_git_state.py)
+- `tests/test_ci_findings_tools.py::test_clippy_is_told_from_rustc_by_its_lint_name`: guards 2, e.g. core/ci_findings_blocks.py:21 `_block_end` cmp (owner: tests/test_ci_findings.py)
+- `tests/test_ci_findings_tools.py::test_pytest_parametrized_id_with_a_space`: guards 1, e.g. core/ci_findings_tests.py:78 `find_pytest` andor (owner: tests/test_ci_findings.py)
+- `tests/test_ci_findings_tools.py::test_scalatest_failure_with_a_duration`: guards 1, e.g. core/ci_findings_tests_jvm.py:154 `find_scalatest` incr (owner: tests/test_ci_findings.py)
+- `tests/test_config_form.py::test_render_comments_out_unset_and_shows_default`: guards 6, e.g. core/config_editor_file.py:43 `_default_label` retnone (owner: tests/test_config.py)
+- `tests/test_gerrit_unavailable.py::test_overlay_commands_show_local_state_and_report_gerrit_once[main-argv0]`: guards 1, e.g. cli_log.py:312 `_run` delstmt (owner: tests/test_log.py)
+- `tests/test_log.py::test_log_default_text_contains_commit_lines_and_summary`: guards 1, e.g. render/commit_row.py:70 `_status_sha_column` retnone (owner: tests/test_attention_agreement.py, tests/test_ci_links.py)
+- `tests/test_push_input_prompt.py::test_prepend_skips_when_identity_missing`: guards 1, e.g. push_options_history.py:51 `prepend_push_options_history` andor (owner: tests/test_push.py)
+- `tests/test_review_chain.py::test_parse_gerrit_time_strips_nanos_and_assumes_utc`: guards 2, e.g. core/gerrit/change_view.py:37 `parse_gerrit_time` negcond (owner: tests/test_change_view.py)
+- `tests/test_serve_events.py::test_an_injected_gerrit_without_an_event_source_never_tries_ssh`: guards 2, e.g. server/activity.py:104 `follow_events` cmp (owner: tests/test_serve.py)
+- `tests/test_settings_git_identity.py::test_resolve_stack_context_cache_is_keyed_by_settings_values`: guards 2, e.g. core/gerrit/stack_context.py:46 `_stack_branch_name` cmp (owner: tests/test_change_resolution.py, tests/test_change_resolution_consistency.py, tests/test_fetch_follow_ups.py, tests/test_gerrit_service_batch.py)
+- `tests/test_shared_refusals.py::test_unknown_command_suggests_the_close_one`: guards 2, e.g. cli_ger.py:140 `_did_you_mean` retnone (owner: tests/test_ger.py)
+
+## REMOVE
+
+- `tests/test_anchor_mapping.py::test_a_rename_is_found_by_blob_once_the_anchor_commit_is_gone`
+- `tests/test_anchor_mapping.py::test_an_edit_of_the_anchored_line_marks_it_outdated`
+- `tests/test_anchor_mapping.py::test_an_insertion_above_moves_the_line_and_keeps_its_text`
+- `tests/test_anchor_mapping.py::test_map_lines[hunks1-5-5-expected1]`
+- `tests/test_anchor_mapping.py::test_map_lines[hunks2-4-6-expected2]`
+- `tests/test_anchor_mapping.py::test_the_same_blob_is_not_moved`
+- `tests/test_anchor_mapping.py::test_user_diff_config_does_not_merge_hunks`
+- `tests/test_annotated_stack.py::test_a_healthy_stack_blocks_nothing`
+- `tests/test_annotated_stack.py::test_a_lone_commit_is_never_chain_blocked`
+- `tests/test_annotated_stack.py::test_a_sibling_that_moved_is_fetched_again_and_an_unchanged_one_is_not`
+- `tests/test_annotated_stack.py::test_loads_commits_with_overlay_and_attention`
+- `tests/test_annotated_stack.py::test_resolve_rev_range_expands_bare_refs_only[a..b-a..b]`
+- `tests/test_annotated_stack.py::test_single_branch_change_ids_produce_no_notes`
+- `tests/test_bash_completion.py::test_main_prints_source_only`
+- `tests/test_bash_completion.py::test_printed_line_is_valid_bash_that_runs_nothing_but_echo`
+- `tests/test_bash_completion.py::test_source_command_line_looks_like_source`
+- `tests/test_call_budgets.py::test_log_warm_second_run_no_reviewer_follow_ups`
+- `tests/test_call_budgets.py::test_log_warm_second_run_zero_rest_calls`
+- `tests/test_call_budgets.py::test_resolve_call_budget_for_change_id`
+- `tests/test_call_budgets.py::test_show_call_budget_on_head`
+- `tests/test_call_trace.py::test_format_call_trace_summary_aggregates_repeated_labels`
+- `tests/test_call_trace.py::test_format_call_trace_summary_normalizes_change_paths`
+- `tests/test_call_trace.py::test_gerrit_request_label_summarizes_batch_query`
+- `tests/test_change_resolution.py::test_resolve_stack_context_project_override`
+- `tests/test_change_resolution.py::test_triplet_build_parse_round_trip`
+- `tests/test_change_resolution_consistency.py::test_log_on_main_target_uses_main_triplet_not_dev`
+- `tests/test_change_resolution_consistency.py::test_log_resolution_notes_do_not_requery_per_change_id`
+- `tests/test_change_resolution_consistency.py::test_not_found_reads_the_same_in_every_command[edit-argv15-cannot resolve '99999': no commit by that name; did you mean change:99999?]`
+- `tests/test_change_resolution_consistency.py::test_not_found_reads_the_same_in_every_command[fix-argv14-cannot resolve '99999': no commit by that name; did you mean change:99999?]`
+- `tests/test_change_resolution_consistency.py::test_not_found_reads_the_same_in_every_command[push-argv16-cannot resolve '99999': no commit by that name; did you mean change:99999?]`
+- `tests/test_change_resolution_consistency.py::test_not_found_reads_the_same_in_every_command[resolve-argv6-cannot resolve 'I0000000000000000000000000000000000000000': no Gerrit change has that Change-Id]`
+- `tests/test_change_resolution_consistency.py::test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change[change-id]`
+- `tests/test_change_resolution_consistency.py::test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change[triplet]`
+- `tests/test_change_store.py::test_added_reviewers_are_visible_to_a_later_read`
+- `tests/test_change_view.py::test_first_parent_accepts_a_bare_sha`
+- `tests/test_change_view.py::test_label_value[garbage-None]`
+- `tests/test_change_view.py::test_unresolved_count_absent_is_none`
+- `tests/test_changeish.py::test_bare_number_is_a_git_rev_but_a_numeric_batch_ref`
+- `tests/test_changeish.py::test_change_number_prefix_does_not_validate_digits`
+- `tests/test_changeish.py::test_changeish_is_frozen`
+- `tests/test_changeish.py::test_explicit_prefix_beats_shape`
+- `tests/test_changeish.py::test_is_change_id_accepts_either_case[IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]`
+- `tests/test_changeish.py::test_is_change_id_accepts_either_case[IaF0aF0aF0aF0aF0aF0aF0aF0aF0aF0aF0aF0aF0b]`
+- `tests/test_changeish.py::test_is_change_id_accepts_either_case[Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]`
+- `tests/test_changeish.py::test_is_change_id_accepts_either_case[iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]`
+- `tests/test_changeish.py::test_parse_classifies[120045-git-rev]`
+- `tests/test_changeish.py::test_parse_classifies[HEAD-git-rev]`
+- `tests/test_changeish.py::test_parse_classifies[HEAD~2-git-rev]`
+- `tests/test_changeish.py::test_parse_classifies[Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-change-id]`
+- `tests/test_changeish.py::test_parse_classifies[a1b2c3d-git-rev]`
+- `tests/test_changeish.py::test_parse_classifies[change:120045-change-number]`
+- `tests/test_changeish.py::test_parse_classifies[cl:120045-change-number]`
+- `tests/test_changeish.py::test_parse_classifies[feature/x-git-rev]`
+- `tests/test_changeish.py::test_parse_classifies[https://gerrit.example.com/c/myproject/+/120045-url]`
+- `tests/test_changeish.py::test_parse_classifies[myproject~main~Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-triplet]`
+- `tests/test_changeish.py::test_parse_classifies[q:status:open-query]`
+- `tests/test_changeish.py::test_parse_classifies[refs/changes/45/120045/3-change-ref]`
+- `tests/test_changeish.py::test_parse_classifies[rev:120045-git-rev]`
+- `tests/test_changeish.py::test_parse_is_total_on_empty_input`
+- `tests/test_changeish.py::test_parse_round_trips_through_raw`
+- `tests/test_changeish.py::test_triplet_fields`
+- `tests/test_changeish.py::test_uppercase_change_id_classifies_as_change_id`
+- `tests/test_changeish.py::test_url_change_number[https://gerrit.example.com/c/myproject/+/120045-120045]`
+- `tests/test_changeish.py::test_url_change_number[https://gerrit.example.com/c/myproject/+/120045/2-120045]`
+- `tests/test_checkout.py::test_moving_to_an_older_patchset_says_moved`
+- `tests/test_ci.py::test_ci_json_is_the_contract`
+- `tests/test_ci_content.py::test_a_provider_that_raises_is_a_recorded_error`
+- `tests/test_ci_content.py::test_finished_numbered_build_may_cache_its_body`
+- `tests/test_ci_content.py::test_jenkins_build_urls[https://ci.example.org/jenkins/job/a/job/b/7/testReport/-https://ci.example.org/jenkins/job/a/job/b/7-True]`
+- `tests/test_ci_content.py::test_jenkins_build_urls[https://ci.example.org/job/Widget/55/-https://ci.example.org/job/Widget/55-True]`
+- `tests/test_ci_content.py::test_jenkins_build_urls[https://ci.example.org/job/Widget/55/console-https://ci.example.org/job/Widget/55-True]`
+- `tests/test_ci_content.py::test_jenkins_build_urls[https://ci.example.org/job/Widget/lastFailedBuild/console-https://ci.example.org/job/Widget/lastFailedBuild-False]`
+- `tests/test_ci_content.py::test_jenkins_does_not_claim_other_urls`
+- `tests/test_ci_content.py::test_refresh_bypasses_the_store`
+- `tests/test_ci_findings.py::test_ansi_and_jenkins_timestamps_are_stripped`
+- `tests/test_ci_findings.py::test_clean_log_has_no_findings`
+- `tests/test_ci_findings.py::test_generic_lines_outside_pytest_still_count_but_inside_do_not`
+- `tests/test_ci_findings_tools.py::test_eslint_file_path_with_a_space`
+- `tests/test_ci_findings_tools.py::test_javac_and_scalac_lines_behind_a_wrapper_tag_keep_the_compilers_own_severity`
+- `tests/test_ci_findings_tools.py::test_maven_paths_with_spaces_and_text_before_the_level_tag`
+- `tests/test_ci_findings_tools.py::test_sbt_scalac_without_a_column`
+- `tests/test_ci_links.py::test_apply_ci_strategy_filters_checks_first`
+- `tests/test_ci_links.py::test_failed_check_names_filters_failed_only`
+- `tests/test_ci_links.py::test_prefer_checks_links_drops_messages_when_checks_present`
+- `tests/test_ci_links.py::test_prefer_checks_links_keeps_messages_when_no_checks`
+- `tests/test_cid.py::test_extract_valid_change_id_accepts_uppercase_hex_and_lowercase_label`
+- `tests/test_cid.py::test_extract_valid_change_id_last_line_only`
+- `tests/test_cid.py::test_extract_valid_change_id_missing`
+- `tests/test_cid.py::test_extract_valid_change_id_not_on_last_line`
+- `tests/test_cid.py::test_gcid_change_id_not_last_line_exits_missing_change_id`
+- `tests/test_cid.py::test_gcid_check_rejects_change_id_arg`
+- `tests/test_cid.py::test_gcid_defaults_to_head`
+- `tests/test_cid.py::test_gcid_fix_allows_dirty_tree`
+- `tests/test_cid.py::test_gcid_fix_skips_commit_with_valid_last_line_change_id`
+- `tests/test_cid.py::test_gcid_invalid_ref`
+- `tests/test_cid.py::test_gcid_missing_change_id_exits_missing_change_id`
+- `tests/test_cid.py::test_gcid_range_two_commits_order`
+- `tests/test_cid.py::test_gcid_single_commit_range_syntax`
+- `tests/test_cid.py::test_gcid_start_at_remote_end_ref`
+- `tests/test_cid.py::test_gcid_start_at_remote_lists_stack_oldest_first`
+- `tests/test_cid.py::test_gcid_vv_logs_git_subprocess`
+- `tests/test_cli_style.py::test_format_link_off_returns_raw_url`
+- `tests/test_cli_style.py::test_format_link_on_wraps_label`
+- `tests/test_cli_style.py::test_init_hyperlink_mode_auto_non_tty`
+- `tests/test_cli_style.py::test_init_hyperlink_mode_force_off`
+- `tests/test_cli_style.py::test_terminal_supports_hyperlinks[environ0-True]`
+- `tests/test_cli_style.py::test_terminal_supports_hyperlinks[environ13-True]`
+- `tests/test_cli_style.py::test_terminal_supports_hyperlinks[environ16-False]`
+- `tests/test_cli_style.py::test_terminal_supports_hyperlinks[environ17-False]`
+- `tests/test_cli_style.py::test_terminal_supports_hyperlinks[environ7-False]`
+- `tests/test_comment.py::test_a_line_comment_on_head_is_an_unresolved_draft_on_its_patchset`
+- `tests/test_comment.py::test_a_whole_line_range_waits_for_the_file_to_close_it`
+- `tests/test_comment.py::test_locations_parse_to_gerrit_fields[./src/app.py:7-7-None]`
+- `tests/test_comment.py::test_locations_parse_to_gerrit_fields[src/app.py-None-None]`
+- `tests/test_comment.py::test_locations_parse_to_gerrit_fields[src/app.py:40.5-42.17-42-rng2]`
+- `tests/test_comment.py::test_locations_parse_to_gerrit_fields[src/app.py:42-42-None]`
+- `tests/test_comment.py::test_the_new_draft_shows_as_its_own_chain`
+- `tests/test_comment_chains.py::test_chain_without_drafts_has_no_draft_and_same_state_after_publish`
+- `tests/test_comment_chains.py::test_collect_unresolved_skips_resolved_chain_tail`
+- `tests/test_comment_chains.py::test_orphan_reply_becomes_own_chain`
+- `tests/test_config.py::test_branch_scoped_keys_preserve_branch_name_case`
+- `tests/test_config.py::test_from_cwd_is_a_snapshot_not_a_live_view`
+- `tests/test_config.py::test_values_are_stripped_and_blank_reads_as_unset`
+- `tests/test_config_form.py::test_sections_follow_command_order`
+- `tests/test_config_form.py::test_show_after_edit_is_bool_under_ger_edit_and_on_by_default`
+- `tests/test_edit.py::test_gedit_first_attention_commit_starts_rebase`
+- `tests/test_edit.py::test_gedit_help`
+- `tests/test_edit.py::test_gedit_says_where_it_stopped_and_what_comes_next`
+- `tests/test_edit.py::test_gedit_unknown_change_id_exits_not_found`
+- `tests/test_edit.py::test_greword_help`
+- `tests/test_edit.py::test_greword_warns_when_the_change_id_changes`
+- `tests/test_edit_attention.py::test_first_commit_needing_edit_attention_oldest_first`
+- `tests/test_event_stream.py::test_a_dropped_stream_reconnects_with_backoff_even_in_auto`
+- `tests/test_event_stream.py::test_an_event_line_is_reduced_to_what_decides_whether_it_matters`
+- `tests/test_event_stream.py::test_on_keeps_trying_and_says_so_until_it_connects`
+- `tests/test_event_stream.py::test_stop_ends_the_connection_and_returns_promptly`
+- `tests/test_event_stream.py::test_which_events_make_a_client_look_again[{"type": "comment-added", "change": {"project": "proj", "branch": "main", "id": "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "number": 900, "owner": {"username": "alice"}}, "eventCreatedOn": 1}-True]`
+- `tests/test_event_stream.py::test_which_events_make_a_client_look_again[{"type": "project-created", "projectName": "proj"}-False]`
+- `tests/test_event_stream.py::test_which_events_make_a_client_look_again[{"type": "reviewer-added", "change": {"project": "elsewhere", "branch": "main", "id": "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "number": 900, "owner": {"username": "alice"}}, "eventCreatedOn": 1, "reviewer": {"username": "Me"}}-True]`
+- `tests/test_extension_strategies.py::test_attention_strategy_override`
+- `tests/test_fetch_api.py::test_fetch_api_percent_encodes_spaces`
+- `tests/test_fetch_follow_ups.py::test_a_later_run_skips_checks_entirely_once_the_host_said_404`
+- `tests/test_fix.py::test_ger_fix_bare_integer_is_git_revision_not_change_number`
+- `tests/test_fix.py::test_ger_fix_change_id_needs_no_gerrit_config`
+- `tests/test_fix.py::test_ger_fix_commit_fixup_on_ref`
+- `tests/test_ger.py::test_ger_restack_alias_delegates`
+- `tests/test_ger.py::test_ger_stack_alias_delegates`
+- `tests/test_ger_registry.py::test_local_overrides_global`
+- `tests/test_gerrit_cache.py::test_a_clock_set_back_does_not_stretch_the_trust_window`
+- `tests/test_gerrit_cache.py::test_a_probe_that_confirms_a_row_starts_its_trust_window_again`
+- `tests/test_gerrit_cache.py::test_capability_expires_so_a_newly_installed_plugin_is_rediscovered`
+- `tests/test_gerrit_cache.py::test_capability_round_trips_and_starts_unknown`
+- `tests/test_gerrit_cache.py::test_change_cache_probes_after_trust_window`
+- `tests/test_gerrit_cache.py::test_change_cache_refetches_when_comment_counts_move_but_updated_does_not`
+- `tests/test_gerrit_cache.py::test_change_cache_refetches_when_meta_rev_id_moves_but_updated_does_not`
+- `tests/test_gerrit_cache.py::test_change_cache_refetches_when_updated_changes`
+- `tests/test_gerrit_cache.py::test_change_cache_skips_probe_inside_trust_window`
+- `tests/test_gerrit_cache.py::test_change_cache_stores_same_footer_change_id_on_different_branches_independently`
+- `tests/test_gerrit_cache.py::test_change_cache_treats_differently_cased_triplets_as_distinct`
+- `tests/test_gerrit_cache.py::test_load_comments_refetches_on_token_change_inside_trust_window`
+- `tests/test_gerrit_cache.py::test_load_comments_refetches_when_change_updated_moves`
+- `tests/test_gerrit_cache.py::test_load_comments_serves_cache_while_change_updated_is_unchanged`
+- `tests/test_gerrit_client_parallel.py::test_parallel_map_allows_none_results`
+- `tests/test_gerrit_client_parallel.py::test_parallel_map_preserves_input_order`
+- `tests/test_gerrit_message_parsing.py::test_ci_links_from_build_failed_messages_filters_to_current_revision`
+- `tests/test_gerrit_message_parsing.py::test_jenkins_build_url_from_text_build_started_inline`
+- `tests/test_gerrit_message_parsing.py::test_jenkins_build_url_from_text_nested_job_path`
+- `tests/test_gerrit_message_parsing.py::test_jenkins_job_url_to_console_appends_console`
+- `tests/test_gerrit_message_parsing.py::test_parse_change_message_kinds[Patch Set 1:\n\nBuild Started https://ci.example.org/job/Widget/job/Widget/12/-build_started-1-https://ci.example.org/job/Widget/job/Widget/12]`
+- `tests/test_gerrit_message_parsing.py::test_parse_change_message_kinds[Patch Set 2: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/job/Widget/55/ : FAILURE-build_failed-2-https://ci.example.org/job/Widget/job/Widget/55]`
+- `tests/test_gerrit_project_id.py::test_parse_project_name_from_remote_url[http://dev:secret@lenovo-pc:8081/it_v_abc-it_v_abc]`
+- `tests/test_gerrit_project_id.py::test_parse_project_name_from_remote_url[ssh://user@gerrit.example.com/a/group/proj.git-group/proj]`
+- `tests/test_gerrit_rest.py::test_a_stack_that_fits_is_one_chunk`
+- `tests/test_gerrit_rest.py::test_alias_batch_fetch_results_branch_aware_no_last_wins`
+- `tests/test_gerrit_rest.py::test_alias_batch_fetch_results_maps_compact_gerrit_id_to_requested_triplet`
+- `tests/test_gerrit_rest.py::test_alias_skips_other_branch_when_only_target_requested`
+- `tests/test_gerrit_rest.py::test_batch_load_empty_does_not_fallback_per_change`
+- `tests/test_gerrit_rest.py::test_batch_load_same_change_id_different_branches_no_overwrite`
+- `tests/test_gerrit_rest.py::test_batch_load_uses_chunked_queries_not_per_change`
+- `tests/test_gerrit_rest.py::test_case_sensitive_change_id_keys_in_batch`
+- `tests/test_gerrit_rest.py::test_chunk_to_query_groups_same_project_no_branch`
+- `tests/test_gerrit_rest.py::test_encode_gerrit_path_segment_does_not_double_encode`
+- `tests/test_gerrit_rest.py::test_encode_gerrit_path_segment_encodes_slashes_once`
+- `tests/test_gerrit_service_batch.py::test_batch_load_uses_gerrit_project_not_scp_port_prefix`
+- `tests/test_gerrit_service_batch.py::test_get_payloads_resolves_stack_context_once`
+- `tests/test_gerrit_unavailable.py::test_log_asks_a_down_gerrit_once_not_per_change`
+- `tests/test_git_run.py::test_cache_key_includes_env_override`
+- `tests/test_git_run.py::test_cache_respects_check_flag`
+- `tests/test_git_run.py::test_git_output_is_decoded_as_utf8_whatever_the_locale`
+- `tests/test_git_run.py::test_log_cached`
+- `tests/test_git_run.py::test_rev_parse_cached`
+- `tests/test_git_state.py::test_infer_nearest_remote_tracking_branch`
+- `tests/test_git_state.py::test_infer_nearest_remote_tracking_branch_only_searches_gerrit_remote`
+- `tests/test_git_state.py::test_resolve_rebase_onto_remote_ref`
+- `tests/test_inbox.py::test_a_listing_asked_again_is_one_light_query`
+- `tests/test_inbox.py::test_a_listing_fetches_details_only_for_the_change_that_moved`
+- `tests/test_inbox.py::test_all_and_project_do_not_combine`
+- `tests/test_inbox.py::test_follow_up_commit_query_fills_chain_parent`
+- `tests/test_inbox.py::test_inbox_help`
+- `tests/test_inbox.py::test_refresh_asks_for_everything_again`
+- `tests/test_local_comments.py::test_an_unpushed_commit_gets_a_local_draft`
+- `tests/test_log.py::test_determine_attention_missing_change_id`
+- `tests/test_log.py::test_determine_attention_no_reviewers_absent_when_assigned`
+- `tests/test_log.py::test_determine_attention_no_reviewers_when_empty`
+- `tests/test_log.py::test_determine_attention_not_pushed_when_change_id_present`
+- `tests/test_log.py::test_load_commits_in_range_default_first_parent_excludes_side_branch`
+- `tests/test_log.py::test_load_commits_in_range_follow_merges_includes_side_branch`
+- `tests/test_log.py::test_log_abandoned_strikes_summary`
+- `tests/test_log.py::test_log_help`
+- `tests/test_log.py::test_log_json_default_lists_all_commits`
+- `tests/test_log.py::test_log_missing_upstream_non_tty_prints_setup_hint`
+- `tests/test_log.py::test_log_rev_range_default_rebase_branch_uses_branch_upstream_range`
+- `tests/test_log.py::test_log_rev_range_explicit_ranges_are_forwarded_verbatim[a...b]`
+- `tests/test_log.py::test_log_rev_range_explicit_ranges_are_forwarded_verbatim[a..b]`
+- `tests/test_log.py::test_log_rev_range_follow_merges_omits_first_parent`
+- `tests/test_push.py::test_git_push_rejected_no_new_changes_detects_gerrit_message`
+- `tests/test_push.py::test_gpush_dry_run_does_not_call_input`
+- `tests/test_push.py::test_gpush_dry_run_normalizes_origin_main_to_refs_for_main`
+- `tests/test_push.py::test_gpush_dry_run_prints_commit_preview`
+- `tests/test_push.py::test_gpush_follow_merges_flag_lists_side_branch_commits`
+- `tests/test_push.py::test_gpush_help`
+- `tests/test_push.py::test_gpush_i_treats_windows_nul_as_non_interactive`
+- `tests/test_push.py::test_gpush_noninteractive_stdin_requires_yes`
+- `tests/test_push.py::test_gpush_noninteractive_yes_runs_push`
+- `tests/test_push.py::test_gpush_reviewers_append_to_refspec`
+- `tests/test_push.py::test_gpush_with_nothing_to_send_or_set_says_so_without_asking[argv1]`
+- `tests/test_push_drafts.py::test_yes_keeps_drafts_unless_asked`
+- `tests/test_push_input_line.py::test_canonical_empty_state_is_empty_string`
+- `tests/test_push_input_line.py::test_case_insensitive_keywords`
+- `tests/test_push_input_line.py::test_example_b_variants_all_yield_alice_bob_topic_abc[bob topic "abc" alice]`
+- `tests/test_push_input_line.py::test_example_b_variants_all_yield_alice_bob_topic_abc[bob topic=abc alice]`
+- `tests/test_push_input_line.py::test_example_b_variants_all_yield_alice_bob_topic_abc[topic=abc alice bob]`
+- `tests/test_push_input_line.py::test_keyword_wip_not_treated_as_reviewer_name`
+- `tests/test_push_input_line.py::test_spans_have_increasing_offsets`
+- `tests/test_push_input_line.py::test_tokenizer_offsets_match_substring`
+- `tests/test_push_input_prompt.py::test_history_is_scoped_per_project`
+- `tests/test_push_input_prompt.py::test_load_push_options_history_empty`
+- `tests/test_push_input_prompt.py::test_prepend_push_options_history_caps`
+- `tests/test_push_input_prompt.py::test_prepend_push_options_history_dedupes`
+- `tests/test_push_input_prompt.py::test_prepend_push_options_history_newest_first`
+- `tests/test_push_input_prompt.py::test_should_navigate_true_when_complete_state_empty`
+- `tests/test_push_input_prompt.py::test_should_navigate_with_the_cursor_anywhere_in_the_line`
+- `tests/test_push_plan.py::test_push_refspec_omits_reviewers_for_lazy`
+- `tests/test_push_reviewers.py::test_apply_reviewer_strategy_overwrite_keeps_cc_on_change_info_map`
+- `tests/test_push_reviewers.py::test_change_id_for_gerrit_rest_path_leaves_numeric_and_triplet_unchanged`
+- `tests/test_push_reviewers.py::test_change_id_for_gerrit_rest_path_uppercases_leading_i`
+- `tests/test_ready_calc.py::test_compute_ready_follow_merges_restores_all_parents_count`
+- `tests/test_ready_calc.py::test_compute_ready_stop_pattern_boundary_push_tip_before_block`
+- `tests/test_ready_calc.py::test_compute_ready_with_merged_side_branch_counts_only_first_parent_commits`
+- `tests/test_rebase_enricher.py::test_cli_rebase_does_not_require_the_base_to_be_in_the_stack`
+- `tests/test_rebase_enricher.py::test_enrich_todo_annotates_with_gerrit_status`
+- `tests/test_rebase_enricher.py::test_enrich_todo_passthrough_without_gerrit_url`
+- `tests/test_rebase_enricher.py::test_enrich_todo_preserves_action_and_sha`
+- `tests/test_rebase_enricher.py::test_enrich_todo_preserves_comment_and_blank_lines`
+- `tests/test_rebase_enricher.py::test_resolve_editor_falls_back_to_git_editor`
+- `tests/test_rebase_enricher.py::test_resolve_editor_prefers_grebase_editor`
+- `tests/test_reply.py::test_any_comment_names_the_chain_and_the_reply_answers_the_newest`
+- `tests/test_reply.py::test_ger_show_reads_back_what_ger_reply_wrote`
+- `tests/test_reply.py::test_publish_passes_the_change_message`
+- `tests/test_resolve.py::test_resolve_git_rev_with_gerrit_footer`
+- `tests/test_resolve.py::test_resolve_json_shape`
+- `tests/test_resolve.py::test_resolve_usage_missing_changeish`
+- `tests/test_resolve_stack_commit.py::test_require_in_stack_allows_a_stack_commit`
+- `tests/test_resolve_stack_commit.py::test_resolve_ambiguous_change_id`
+- `tests/test_resolve_stack_commit.py::test_resolve_by_change_id`
+- `tests/test_resolve_stack_commit.py::test_resolve_by_short_sha`
+- `tests/test_resolve_stack_commit.py::test_resolve_change_id_case_insensitive`
+- `tests/test_resolve_stack_commit.py::test_resolve_unknown_change_id`
+- `tests/test_resolve_stack_commit.py::test_without_require_in_stack_any_commit_resolves`
+- `tests/test_review.py::test_naming_a_change_to_review_reads_it_from_gerrit_once`
+- `tests/test_review.py::test_without_a_terminal_the_review_worktree_is_used_and_nothing_is_saved`
+- `tests/test_review_chain.py::test_unmatched_parent_sha_flags_partial_chain`
+- `tests/test_reviewer_catalog.py::test_complete_prefix_does_not_block_on_rest`
+- `tests/test_reviewer_catalog.py::test_complete_prefix_uses_suggest_query_with_change_id`
+- `tests/test_reviewer_list.py::test_reviewer_accounts_from_flat_reviewer_list`
+- `tests/test_serve.py::test_http_answers_only_with_the_token_on_a_loopback_host`
+- `tests/test_serve.py::test_http_skips_a_read_its_caller_called_off_while_it_queued`
+- `tests/test_settings_git_identity.py::test_checkout_invalidates_worktree_memo`
+- `tests/test_settings_git_identity.py::test_config_read_keeps_stack_context_cache`
+- `tests/test_settings_git_identity.py::test_configured_upstream_abbrev_from_refs_heads_merge`
+- `tests/test_settings_git_identity.py::test_configured_upstream_abbrev_local_dot_remote_returns_none`
+- `tests/test_settings_git_identity.py::test_configured_upstream_abbrev_nonstandard_merge_returns_none`
+- `tests/test_settings_git_identity.py::test_resolve_stack_context_memoized`
+- `tests/test_settings_git_identity.py::test_worktree_memo_survives_non_cacheable_git`
+- `tests/test_setup.py::test_ger_setup_treats_windows_nul_as_non_interactive`
+- `tests/test_setup.py::test_validate_web_url_accepts_https_base`
+- `tests/test_sha.py::test_gsha_help`
+- `tests/test_shared_refusals.py::test_a_missing_upstream_reads_the_same_in_log_and_push[main-argv0]`
+- `tests/test_shared_refusals.py::test_a_missing_upstream_reads_the_same_in_log_and_push[main-argv1]`
+- `tests/test_shared_refusals.py::test_a_missing_upstream_reads_the_same_in_log_and_push[main-argv2]`
+- `tests/test_show.py::test_gshow_help`
+- `tests/test_show.py::test_gshow_json_change_id_narrowing_includes_resolution`
+- `tests/test_show.py::test_gshow_json_format_mutex`
+- `tests/test_show.py::test_gshow_json_numeric_change_mocked`
+- `tests/test_show.py::test_gshow_json_unpushed_local_commit`
+- `tests/test_show_comments_render.py::test_format_comment_chain_human_box_border_is_yellow`
+- `tests/test_show_comments_render.py::test_format_comment_chain_human_resolved_marker_without_color`
+- `tests/test_stack_commits.py::test_commits_in_range_are_commit_objects_with_change_ids`
+- `tests/test_stack_commits.py::test_upstream_tip_aligns_with_merge_base_target_sha`
+- `tests/test_upstream_interactive.py::test_ensure_branch_upstream_interactive_non_tty_skips_prompt`
+- `tests/test_upstream_interactive.py::test_missing_upstream_without_a_console_reports_instead_of_prompting`
+- `tests/test_vscode_install.py::test_a_failed_build_installs_nothing_and_is_the_commands_exit_code`
+- `tests/test_vscode_install.py::test_editor_option_names_another_editor`
+- `tests/test_vscode_install.py::test_the_editors_exit_code_is_the_commands`
+- `tests/test_wrap.py::test_markdown_comments_stay_unwrapped`
+- `tests/test_wrap.py::test_wrap_lines_preserves_existing_newlines`
+
+## NO_KILLS
+
+- `tests/test_change_store.py::test_comments_reject_ambiguous_bare_change_id`
+- `tests/test_change_store.py::test_get_change_unknown_raises_gerrit_api_error`
+- `tests/test_changeish.py::test_is_change_id_rejects_wrong_length_or_charset[Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]`
+- `tests/test_changeish.py::test_is_change_id_rejects_wrong_length_or_charset[Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]`
+- `tests/test_changeish.py::test_is_change_id_rejects_wrong_length_or_charset[Ibad]`
+- `tests/test_changeish.py::test_is_change_id_rejects_wrong_length_or_charset[]`
+- `tests/test_changeish.py::test_is_change_id_rejects_wrong_length_or_charset[xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]`
+- `tests/test_ci_links.py::test_apply_ci_strategy_does_not_materialize_lazy_messages`
+- `tests/test_config.py::test_blank_value_has_no_scope`
+- `tests/test_config.py::test_flag_accepts_git_truthy_spellings`
+- `tests/test_config.py::test_gerrit_remote_defaults_to_origin`
+- `tests/test_config.py::test_keys_are_canonicalized_like_git_config_list`
+- `tests/test_config.py::test_scripts_dir_defaults_and_override`
+- `tests/test_event_stream.py::test_garbage_and_partial_lines_are_not_events[]`
+- `tests/test_event_stream.py::test_garbage_and_partial_lines_are_not_events[not json]`
+- `tests/test_event_stream.py::test_garbage_and_partial_lines_are_not_events[{"type": "comment-added", "change": {"num]`
+- `tests/test_event_stream.py::test_off_never_connects`
+- `tests/test_event_stream.py::test_stop_during_backoff_returns_promptly`
+- `tests/test_push_input_prompt.py::test_history_cursor_edited_entry_becomes_the_current_line`
+- `tests/test_push_input_prompt.py::test_history_cursor_keeps_the_line_typed_before_recall`
+- `tests/test_push_input_prompt.py::test_history_cursor_without_entries_changes_nothing`
+- `tests/test_rebase_sequence_editor.py::test_sequence_editor_drop`
+

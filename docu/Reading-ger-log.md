@@ -10,6 +10,15 @@ One line per **local commit** in your stack (default range: `branch@{upstream}..
 
 At the bottom, a **summary** line counts ready commits and outstanding issues.
 
+When the **ready boundary** falls inside the stack, a plain line marks it, readable without
+colour (piped output, `NO_COLOR`):
+
+```text
+---- ready boundary: `ger push` sends the commits above ----
+```
+
+The commit right below it is the one `ger push` stops at.
+
 Exit code **1** means at least one commit still needs your attention; **0** means the stack looks clean from `ger`'s perspective.
 
 ---
@@ -51,6 +60,7 @@ Single letter: is this local commit aligned with Gerrit?
 | `m` | **Merged** (same content as merged change) | Often safe to drop or rebase away |
 | `!` | **Merged drift** — merged on server but local content diverged | Investigate; may need manual fix |
 | `?` | **Merged (equivalence unknown)** | Check Gerrit; rebase if unsure |
+| `~` | **Unknown** — Gerrit could not be asked (unreachable, credentials rejected); the last stderr line says why | Fix the connection or credentials (`ger setup`), then rerun |
 
 When a commit is **not pushed** (`-`), Verified / Code-Review / comment columns are blank — there is nothing on Gerrit to show. A commit marked `n` shows `v?` and `cr?`: the votes on Gerrit belong to the previous patch set, so they say nothing about this commit yet.
 
@@ -98,16 +108,20 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 
 | Hint | Meaning |
 |------|---------|
-| `missing Change-Id` | Commit message has no usable Change-Id footer (absent or malformed); JSON reason `missing-change-id` |
+| `missing Change-Id` | Commit message has no Change-Id footer; JSON reason `missing-change-id` |
+| `invalid Change-Id` | Commit message has a Change-Id footer whose value is not a valid Change-Id (`I` + 40 hex digits); JSON reason `invalid-change-id` |
+| `unsquashed fixup commit` | A `fixup!`/`squash!` commit with no Change-Id, the commit `ger push` stops at; squash it with `ger rebase --autosquash`. JSON reason `unsquashed-fixup` |
 | `not-pushed` | Commit not on Gerrit yet |
+| `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comment(s)` | Open review threads |
 | `no reviewers` | Change has no reviewers assigned |
 | `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
+| `diverged: Gerrit has a patchset you never had` | Ahead of Gerrit, but Gerrit's current patch set was uploaded from elsewhere (a web edit, another checkout) and is not in your history; JSON reason `diverged`. `ger push` refuses to replace it; `ger checkout <change> --update` merges it into your commit |
 | `outdated patchset` | Gerrit has a newer patch set than this commit |
 | `review issues` | A negative Code-Review vote |
 | `chain blocked` | An earlier commit in the stack keeps this one from being submitted |
-| `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review` |
+| `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review`. `ger push --ready` marks the changes ready again; the summary line counts them and says so |
 | `private` | Change is private on Gerrit. Information only, not an attention reason |
 | `submittable` | Gerrit reports submittable and no blocking issues above |
 | `abandoned` | Change abandoned on Gerrit |
@@ -142,6 +156,7 @@ summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4
 | `CI` | Count of commits with failed Verified / CI |
 | `comments` | Count of commits with unresolved comments |
 | `on-gerrit` | Count of commits that exist on Gerrit |
+| `WIP` | Count of work-in-progress changes; a `next:` line below says ``ready them with `ger push --ready` `` |
 
 Only non-zero categories after `ready` are shown.
 
@@ -151,8 +166,8 @@ Only non-zero categories after `ready` are shown.
 
 The **primary line is identical** to default `ger log` (including inline `Open in gerrit` when hyperlinks are on). Verbosity only adds indented continuation lines:
 
-- `-v`: `CI:` row listing all CI pipelines (failed in red, successful in green)
-- `-vv`: `CI:` row plus full `Change-Id:` line
+- `-v`: `CI:` row listing all CI pipelines (failed in red, successful in green), and a `Reviewers:` row naming who is on the change (`alice, bob (cc: carol)`)
+- `-vv`: the `-v` rows plus full `Change-Id:` line
 
 Use verbose mode when the compact line is not enough context.
 
@@ -167,6 +182,8 @@ ger log --json
 ```
 
 Each commit is one JSON object with fields such as `sha`, `patchset_status`, `verified`, `code_review`, `comments_unresolved`, `attention_reasons`, and `gerrit_url`. See [spec/commands/log.md](spec/commands/log.md#json-fields).
+
+For an agent, `ger log --ai` prints the same stack in words, one line per commit and none of the columns above: see [spec/commands/log.md](spec/commands/log.md#output---ai).
 
 ---
 

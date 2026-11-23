@@ -65,20 +65,40 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 | Key | Effect |
 |-----|--------|
 | `gerrit.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `gerrit.webUrl` and credentials). Default off when unset. |
+| `gerrit.pushPublishDrafts` | Default on: when you have drafts on the changes a push updates, the push options line starts with `publish-drafts`, so Enter pushes and publishes them. Set `false` to start it without, so Enter keeps them as drafts; typing `publish-drafts` still publishes. |
 | `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. |
 | `gerrit.push.remotePolicy` | Before push: fetch/check that `HEAD` is linear on the remote Gerrit target tip. Disable per-invocation with `ger push --no-rebase-check`. |
 
 ---
 
+## `ger review` — `ger.review*`
+
+| Key | Effect |
+|-----|--------|
+| `ger.reviewCheckout` | `worktree` (a reusable review worktree; the default) or `branch` (in the current checkout). When unset, `ger review` asks on first use and writes the answer to the local config; without a terminal it uses the worktree. |
+| `ger.reviewWorktree` | Path of the review worktree. Relative paths resolve from the main worktree's parent. Default: `<repository>-review` beside the main worktree. |
+| `ger.reviewStage` | Default on: stage the reviewed change's diff (HEAD at its parent). `false` checks the `change-<number>` branch out instead. |
+
+---
+
+## `ger show` and `ger ci` — CI content
+
+| Key | Effect |
+|-----|--------|
+| `ger.showCiContent` | When `true`, `ger show` fetches the CI logs behind failed **CI links** and attaches their **CI findings** (same as `--ci`; `--no-ci` overrides). Default off: fetching logs is expensive. |
+| `ger.ciCredential.<host>` | Secret a **CI content provider** sends to `<host>` (the link URL's hostname, lowercase, no port), e.g. `git config --global ger.ciCredential.ci.example.org bot:apitoken`. `user:token` is HTTP Basic (Jenkins API tokens); anything else is a Bearer token. Used by `ger ci` and `ger show --ci`. |
+
+---
+
 ## `ger inbox` — `inbox.*`
 
-Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbox.md).
+Host-scoped (no clone required); inside a clone it is narrowed to that clone's project unless `--all` is given. See [spec/commands/inbox.md](spec/commands/inbox.md).
 
 | Key | Effect |
 |-----|--------|
 | `inbox.requireVerified` | When `true` (default), the *to review* query requires `label:<verifiedLabel>+1`. |
 | `inbox.verifiedLabel` | CI label name for that gate (default `Verified`). |
-| `inbox.projects` | Default `--project` list, comma-separated. Unset means every project on the host. |
+| `inbox.projects` | Default `--project` list outside a clone, comma-separated. Unset means every project on the host. Inside a clone, the clone's own project is the default instead. |
 | `inbox.toReviewQuery` | Replace the *to review* query entirely (verified gate is then your problem). |
 | `inbox.limit` | Default `--limit` (positive integer). |
 
@@ -88,10 +108,31 @@ Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbo
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.editNextShow` | When `true`, `ger edit --next` runs `ger show` on the commit it moved to after that rebase exits 0. Unset is off: `--next` only moves. `ger reword --next` ignores this key. Show's attention exit does not replace a successful rebase; other show failures are returned as-is. |
+| `ger.showAfterEdit` | Default `true`: `ger edit --next` and `ger edit --first-attention-commit` run `ger show` on the commit they stopped at, after that rebase exits 0. `false`: they only move. `ger edit REV` and `ger reword` never show. Show's attention exit does not replace a successful rebase; other show failures are returned as-is. |
 | `ger.attentionCursorTtl` | Max age of a usable attention cursor (default `14d`). See [Attention cursor](#attention-cursor-ger-and-branch-local). |
 
 `ger config` shows these keys, and the rest of this page, in one screen. See [spec/commands/config.md](spec/commands/config.md).
+
+---
+
+## `ger serve` — `ger.eventStream*`
+
+Gerrit's **event stream** (`ssh … gerrit stream-events`), which `ger serve` follows so the
+editor refreshes when review activity happens. Optional: it needs ssh, a key Gerrit accepts and
+the *Stream Events* capability. Without it everything works as before, by polling. See
+[spec/commands/serve.md](spec/commands/serve.md#gerrits-event-stream).
+
+| Key | Effect |
+|-----|--------|
+| `ger.eventStream` | `auto` (default): try once at startup, quietly; when it never comes up, poll. `on`: keep retrying and log each failure (still polling meanwhile). `off`: never connect. `true`/`false` read as `on`/`off`. |
+| `ger.eventStreamHost` | ssh host of Gerrit. Default: the host of the `gerrit.remote` URL when it is an ssh URL, else the host of `gerrit.webUrl`. |
+| `ger.eventStreamPort` | ssh port. Default: the port in an ssh remote URL (none: ssh's own config decides), else Gerrit's `29418`. |
+| `ger.eventStreamUser` | ssh user. Default: the user in an ssh remote URL, else `gerrit.user`, else ssh's own config. |
+
+ssh runs non-interactively (`BatchMode=yes`, no tty, 10-second connect timeout): it never asks
+for a password or to accept a host key. Connect once by hand (`ssh -p 29418 you@host gerrit
+version`) to accept the host key, and make sure your account has the *Stream Events* global
+capability (or is an administrator).
 
 ---
 
@@ -113,6 +154,12 @@ Host-scoped (no clone required). See [spec/commands/inbox.md](spec/commands/inbo
 | `branch.<name>.gerAttentionCursor` / `…CursorAt` | See [Attention cursor](#attention-cursor-ger-and-branch-local). |
 
 Set via `git config` (or `set_branch_config` / attention-cursor helpers in `core/config_write.py`).
+
+---
+
+## Colour
+
+Every command that colours takes `--color WHEN` (`always` | `auto` | `never`, default `auto`), decided once per run for stdout and stderr (`cli_style.init_color_mode`). `auto` colours only a terminal, and not at all while the environment variable `NO_COLOR` is set to anything non-empty ([no-color.org](https://no-color.org/)). `--color=always` and `--color=never` win over both.
 
 ---
 
@@ -161,12 +208,12 @@ Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same 
 
 | Domain | Path segment | Role |
 |--------|--------------|------|
-| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. Built-in Jenkins parsing applies when no registry matches; `messages` may be lazily fetched — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md). |
+| CI links | `ci/` | Transform failed Checks / message URLs into `CiLink` rows. Callable: `extract_ci_links(*, project, checks, messages) -> list[CiLink]`. Built-in Jenkins parsing applies when no registry matches; `messages` may be lazily fetched — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md). Optionally also `CONTENT_PROVIDERS`: **CI content providers** for `ger ci` / `ger show --ci`, matched by URL rather than project — see [CI content providers](gerrit-ci-strategies.md#ci-content-providers). |
 | Ready boundary | `ready/` | Choose the pushable stack tip and non-pushable tail highlighting. Callable: `find_ready_boundary(*, commits, stop_pattern, overlay) -> BoundaryResult`. |
 | Attention | `attention/` | Override attention reasons (`STRATEGIES` / `get_strategy`) and optional chain blocking (`CHAIN_BLOCK_STRATEGIES` / `get_chain_block_strategy`). |
 | Reviewers | `reviewers/` | Default push reviewers when CLI/branch config does not. Callable: `default_reviewers(*, branch, commits, settings) -> list[str]`. |
 
-**Example (CI):** built-in behaviour needs no registry. Copy [`contrib/ger-ci-example/`](../contrib/ger-ci-example/) to `.ger/ci/` only for custom URL transforms — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md).
+**Example (CI):** built-in behaviour needs no registry. Copy [`example/hooks/ci/`](../example/hooks/ci/) to `.ger/ci/` only for custom URL transforms or a custom **CI content provider** — see [gerrit-ci-strategies.md](gerrit-ci-strategies.md) and [example/hooks/](../example/hooks/).
 
 With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` allows). JSON includes `ci_links` alongside `ci_failures` (names only).
 
@@ -176,4 +223,4 @@ With `ger log -v`, failed CI lines use these URLs (OSC 8 when `--hyperlinks` all
 
 - [SPEC.md](SPEC.md) — specification index
 - [`ger push`](spec/commands/push.md), [`ger log`](spec/commands/log.md) — command specs
-- [`contrib/ger-ci-example`](../contrib/ger-ci-example/) — sample Jenkins → console strategy
+- [`example/hooks/`](../example/hooks/) — copyable `.ger` registry examples (CI strategy + content provider)

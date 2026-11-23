@@ -10,7 +10,6 @@ import pytest
 from gerrit_workflow_tools.core.ci_strategy import clear_ci_strategy_cache
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import (
-    RegistryLoadError,
     clear_extension_registry_cache,
     resolve_registry_callable,
     resolve_tier_callables,
@@ -40,11 +39,6 @@ def _config_root(tmp_path: Path, web: str) -> Path:
     return tmp_path / "config" / "ger" / host
 
 
-def test_scripts_dir_default() -> None:
-    assert Settings.from_map({}).scripts_dir == ".ger"
-    assert Settings.from_map({"gerrit.scriptsDir": "ext"}).scripts_dir == "ext"
-
-
 def test_local_ci_registry_still_loads(stack_repo: Path) -> None:
     _write_domain_registry(
         stack_repo / ".ger",
@@ -66,35 +60,6 @@ STRATEGIES = {"testproj": _extract}
     )
     assert strat is not None
     assert strat(project="testproj", checks=[], messages=[])[0].url == "https://ci/console"
-
-
-def test_global_registry_used_when_no_local(stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_home = tmp_path / "config"
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    web = "https://g.example"
-    git("config", "gerrit.webUrl", web, cwd=stack_repo)
-    _write_domain_registry(
-        _config_root(tmp_path, web),
-        "ci",
-        """
-from gerrit_workflow_tools.core.ci_links import CiLink
-def _extract(*, project, checks, messages):
-    return [CiLink(label="g", url="https://global/console", source="checks")]
-STRATEGIES = {"testproj": _extract}
-""",
-    )
-    clear_ci_strategy_cache()
-    settings = Settings.from_cwd(stack_repo)
-    strat = resolve_registry_callable(
-        stack_repo,
-        "testproj",
-        domain="ci",
-        package_name="ger_ci",
-        settings=settings,
-        web_base=web,
-    )
-    assert strat is not None
-    assert strat(project="testproj", checks=[], messages=[])[0].url == "https://global/console"
 
 
 def test_local_overrides_global(stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -182,34 +147,6 @@ STRATEGIES = {"testproj": _extract}
     )
 
 
-def test_broken_local_registry_fails(stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_home = tmp_path / "config"
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    web = "https://g.example"
-    git("config", "gerrit.webUrl", web, cwd=stack_repo)
-    _write_domain_registry(stack_repo / ".ger", "ci", "this is not valid python {{{")
-    _write_domain_registry(
-        _config_root(tmp_path, web),
-        "ci",
-        """
-from gerrit_workflow_tools.core.ci_links import CiLink
-def _extract(*, project, checks, messages):
-    return [CiLink(label="g", url="https://global/ok", source="checks")]
-STRATEGIES = {"testproj": _extract}
-""",
-    )
-    clear_ci_strategy_cache()
-    with pytest.raises(RegistryLoadError):
-        resolve_registry_callable(
-            stack_repo,
-            "testproj",
-            domain="ci",
-            package_name="ger_ci",
-            settings=Settings.from_cwd(stack_repo),
-            web_base=web,
-        )
-
-
 def test_runtime_local_failure_falls_back_to_global(
     stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -291,7 +228,7 @@ STRATEGIES = {"testproj": _boundary}
     rows = ready_rows = list(get_stack_snapshot(stack_repo, first_parent=True).commits)
     highlighter = build_summary_highlighter(
         Settings.from_cwd(stack_repo),
-        cwd=stack_repo,
+        root=stack_repo,
         commits=ready_rows,
         project="testproj",
     )

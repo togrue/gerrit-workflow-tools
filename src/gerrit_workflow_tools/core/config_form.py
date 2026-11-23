@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 
-from gerrit_workflow_tools.core.config import EDIT_NEXT_SHOW_KEY, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import SHOW_AFTER_EDIT_KEY, ConfigScope, Settings
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
@@ -24,8 +24,10 @@ SECTION_TITLES: tuple[str, ...] = (
     "ger log",
     "ger push",
     "ger inbox",
+    "ger review",
     "ger rebase",
     "ger edit",
+    "ger serve",
 )
 
 
@@ -129,6 +131,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "120",
     ),
     _bool(
+        "ger.showCiContent",
+        "ger show",
+        "Fetch the CI logs behind failed CI links and attach their findings (same as --ci).",
+        default="false",
+    ),
+    _bool(
         "gerrit.logShowUrl",
         "ger log",
         "Include Gerrit URLs in text output even when hyperlinks are off.",
@@ -145,6 +153,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "ger push",
         "Include reviewer, WIP, and private preview on the push preview.",
         default="false",
+    ),
+    _bool(
+        "gerrit.pushPublishDrafts",
+        "ger push",
+        "With drafts on the pushed changes, start the push options line with publish-drafts.",
+        default="true",
     ),
     _bool(
         "gerrit.lastPushedBranch",
@@ -174,6 +188,22 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         SettingKind.TEXT,
         "",
     ),
+    _spec(
+        "ger.reviewCheckout",
+        "ger review",
+        "Check out reviews in a separate worktree, or on a branch in the current checkout.",
+        SettingKind.CHOICE,
+        "worktree",
+        ("worktree", "branch"),
+    ),
+    _spec(
+        "ger.reviewWorktree",
+        "ger review",
+        "Path of the review worktree. Empty: <repository>-review beside the main worktree.",
+        SettingKind.TEXT,
+        "",
+    ),
+    _bool("ger.reviewStage", "ger review", "Stage the reviewed change's diff (HEAD at its parent).", default="true"),
     _bool(
         "inbox.requireVerified",
         "ger inbox",
@@ -205,11 +235,40 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "14d",
     ),
     _bool(
-        EDIT_NEXT_SHOW_KEY,
+        SHOW_AFTER_EDIT_KEY,
         "ger edit",
-        "After ger edit --next moves to a commit and that rebase succeeds, run ger show on it. "
-        "Off means --next only moves.",
-        default="false",
+        "After ger edit --next or --first-attention-commit stops at a commit, run ger show on it. "
+        "Off means they only move.",
+        default="true",
+    ),
+    _spec(
+        "ger.eventStream",
+        "ger serve",
+        "Follow Gerrit's event stream over ssh: auto tries once quietly, on keeps trying and says so, off never.",
+        SettingKind.CHOICE,
+        "auto",
+        ("auto", "on", "off"),
+    ),
+    _spec(
+        "ger.eventStreamHost",
+        "ger serve",
+        "ssh host of Gerrit. Empty: from the remote or gerrit.webUrl.",
+        SettingKind.TEXT,
+        "",
+    ),
+    _spec(
+        "ger.eventStreamPort",
+        "ger serve",
+        "ssh port of Gerrit. Empty: from the remote, else 29418.",
+        SettingKind.INT,
+        "",
+    ),
+    _spec(
+        "ger.eventStreamUser",
+        "ger serve",
+        "ssh user on Gerrit. Empty: from the remote, else gerrit.user.",
+        SettingKind.TEXT,
+        "",
     ),
 )
 

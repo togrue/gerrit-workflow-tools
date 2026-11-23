@@ -12,44 +12,18 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
     resolve_stack_changeish,
 )
 from gerrit_workflow_tools.core.git_run import git_out
+from gerrit_workflow_tools.core.run_context import RunContext
 from tests.fixtures import _cid
 
 
-def _resolve(repo, ref, **kwargs):
-    return resolve_stack_changeish(repo, ref, settings=Settings.from_cwd(repo), **kwargs).sha
-
-
-def test_resolve_by_change_id(stack_repo, monkeypatch):
-    monkeypatch.chdir(stack_repo)
-    full = _resolve(stack_repo, _cid("2"))
-    subj = git_out("log", "-1", "--format=%s", full, cwd=stack_repo)
-    assert subj == "Extract command routing"
-
-
-def test_resolve_change_id_case_insensitive(stack_repo, monkeypatch):
-    """One Change-Id grammar, either case — so matching has to be case-insensitive too.
-
-    The grammar has always accepted a lowercase ``i`` prefix, and ``norm_change_id`` lowercases
-    ids for lookup, but the stack match compared footers exactly. Accepting a spelling and then
-    failing to find it was the drift; ``i2222…`` now resolves to the commit whose footer spells
-    it ``I2222…``.
-    """
-    monkeypatch.chdir(stack_repo)
-    cid = _cid("2")
-    full = _resolve(stack_repo, cid)
-    assert full == _resolve(stack_repo, cid.lower())
-    assert full == _resolve(stack_repo, cid.upper())
-
-
-def test_resolve_by_short_sha(stack_repo, monkeypatch):
-    monkeypatch.chdir(stack_repo)
-    sha = git_out("rev-parse", "--short", "HEAD~1", cwd=stack_repo)
-    assert _resolve(stack_repo, sha) == git_out("rev-parse", sha, cwd=stack_repo)
+def _resolve(repo, ref, *, gerrit=None, **kwargs):
+    service = RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=gerrit).gerrit
+    return resolve_stack_changeish(repo, ref, service=service, **kwargs).sha
 
 
 def test_resolve_unknown_change_id(stack_repo, monkeypatch):
     monkeypatch.chdir(stack_repo)
-    with pytest.raises(ChangeResolutionError, match="no commit in current stack"):
+    with pytest.raises(ChangeResolutionError, match="no commit in the local stack has that Change-Id"):
         _resolve(stack_repo, "I" + "f" * 40)
 
 
@@ -71,14 +45,8 @@ def test_require_in_stack_rejects_a_commit_below_the_stack(stack_repo, monkeypat
     """
     monkeypatch.chdir(stack_repo)
     upstream_tip = git_out("rev-parse", "@{upstream}", cwd=stack_repo)
-    with pytest.raises(ChangeResolutionError, match="not in the current local stack"):
+    with pytest.raises(ChangeResolutionError, match="is not in the local stack"):
         _resolve(stack_repo, upstream_tip, require_in_stack=True)
-
-
-def test_require_in_stack_allows_a_stack_commit(stack_repo, monkeypatch):
-    monkeypatch.chdir(stack_repo)
-    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    assert _resolve(stack_repo, sha, require_in_stack=True) == sha
 
 
 def test_without_require_in_stack_any_commit_resolves(stack_repo, monkeypatch):

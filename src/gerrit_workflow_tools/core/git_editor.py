@@ -1,13 +1,19 @@
-"""Resolve and run the user's git editor (``GIT_EDITOR`` / ``core.editor`` / …)."""
+"""Resolve and run the user's git editor (``GIT_EDITOR`` / ``core.editor`` / …), an editor's CLI and its build tools."""
 
 from __future__ import annotations
 
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+
+
+def module_editor_command(module: str) -> str:
+    """A ``GIT_SEQUENCE_EDITOR`` value that runs Python *module* with this interpreter."""
+    return f"{shlex.quote(sys.executable)} -m {module}"
 
 
 def resolve_git_editor(
@@ -58,3 +64,9 @@ def run_git_editor(
         return subprocess.run([*shlex.split(editor), str(path)], check=False).returncode
     except FileNotFoundError:
         raise FileNotFoundError(editor) from None
+
+
+def run_editor_cli(argv: list[str], cwd: Path | None = None) -> int:
+    """Run an editor's command-line program (``code --install-extension …``), or the tooling that
+    builds its extension (``npm``), in *cwd* on this terminal; return its exit code."""
+    return subprocess.run(argv, cwd=cwd, check=False).returncode

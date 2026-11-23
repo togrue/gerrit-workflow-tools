@@ -7,6 +7,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.bash_completion_generator import render_bash_completion_script
 
+
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "contrib" / "completion" / "ger.bash"
 

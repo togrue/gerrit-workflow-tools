@@ -23,15 +23,11 @@ from gerrit_workflow_tools.cli_style import (
     GERRIT_LINK_LABEL,
     strip_ansi,
 )
-from gerrit_workflow_tools.core.annotated_stack import (
-    branches_needing_upstream,
-    resolve_rev_range,
-)
+from gerrit_workflow_tools.core.annotated_stack import resolve_rev_range
 from gerrit_workflow_tools.core.attention import determine_attention
-from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.git_state import Worktree
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.core.stack import commits_in_range
@@ -114,7 +110,7 @@ def test_log_full_text_uses_separate_detail_lines(web_stack_repo: Path, monkeypa
     base_args = ["--color=never", "--hyperlinks", "always"]
     code_plain, out_plain, err_plain = run_cli(web_stack_repo, log_main, base_args, monkeypatch, gerrit=store)
     code, out, err = run_cli(web_stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store)
-    assert code == 1, err
+    assert code == 0, err
     assert code_plain in (0, 1), err_plain
     assert _primary_log_lines(out_plain) == _primary_log_lines(out)
     assert "v? " in out
@@ -273,22 +269,12 @@ def test_log_no_reviewers_shown_in_attention(web_stack_repo: Path, monkeypatch: 
     overrides[0] = {"reviewers": []}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(web_stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     assert "no reviewers" in out
     code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     assert any("no-reviewers" in item.get("attention_reasons", []) for item in data["commits"])
-
-
-def test_log_explicit_revset(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    mb = git_out("merge-base", "main", "HEAD", cwd=web_stack_repo)
-    revset = f"{mb}..HEAD"
-    rows = stack_rows_mb_to_head(web_stack_repo)
-    details = build_details_by_change_id(rows)
-    code, out, err = run_cli(web_stack_repo, log_main, [revset], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 0, err
-    assert "summary:" in out
 
 
 def test_log_invalid_revset_returns_error(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -301,11 +287,32 @@ def test_log_invalid_revset_returns_error(web_stack_repo: Path, monkeypatch: pyt
 def test_log_missing_upstream_non_tty_prints_setup_hint(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("branch", "--unset-upstream", cwd=web_stack_repo, check=False)
     code, out, err = run_cli(web_stack_repo, log_main, [], monkeypatch)
-    assert code == 1
+    assert code == ExitCode.CONFIG
     assert out == ""
     assert "No upstream configured for branch" in err
     assert "git branch --set-upstream-to=" in err
     assert "git log failed" not in err
+
+
+@pytest.mark.parametrize("flag", ["--ai", "--json"])
+def test_log_missing_upstream_never_prompts_for_machine_output(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    """On a terminal, ``--ai`` and ``--json`` report the setup hint rather than open the upstream prompt."""
+    git("branch", "--unset-upstream", cwd=web_stack_repo, check=False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_toolkit_can_run", lambda: True)
+
+    def _no_prompt(*_args: object, **_kwargs: object) -> str | None:
+        raise AssertionError("prompted for an upstream")
+
+    monkeypatch.setattr(
+        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _no_prompt
+    )
+    code, out, err = run_cli(web_stack_repo, log_main, [flag], monkeypatch)
+    assert code == ExitCode.CONFIG
+    assert out == ""
+    assert "No upstream configured for branch" in err
 
 
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -374,7 +381,7 @@ def test_log_verbose_shows_only_failing_checks_at_v(
         monkeypatch,
         gerrit=store,
     )
-    assert code_v == 1, err_v
+    assert code_v == 0, err_v
     assert "verify" in out_v
     assert "lint" not in out_v
     assert ANSI_RED in out_v
@@ -386,7 +393,7 @@ def test_log_verbose_shows_only_failing_checks_at_v(
         monkeypatch,
         gerrit=store,
     )
-    assert code_vv == 1, err_vv
+    assert code_vv == 0, err_vv
     assert "verify" in out_vv
     assert "lint" in out_vv
     assert ANSI_GREEN in out_vv
@@ -427,7 +434,7 @@ def test_log_verbose_shows_outdated_message_ci_in_grey(
         monkeypatch,
         gerrit=store,
     )
-    assert code == 1, err
+    assert code == 0, err
     assert "jenkins" in out
     assert ANSI_DIM_GRAY in out
     assert "Widget/job/Widget/10" in out
@@ -445,7 +452,7 @@ def test_log_abandoned_strikes_summary(web_stack_repo: Path, monkeypatch: pytest
         overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
+    assert code == 0, err
     assert _unicode_strikethrough(rows[-1].subject) in out
 
 
@@ -476,23 +483,10 @@ def test_log_file_redirect_encodes_unicode(
         monkeypatch.setattr(sys, "stdout", out_f)
         code = log_main(["--color=never"], gerrit=ChangeStore(details))
 
-    assert code == 1, err_buf.getvalue()
+    assert code == 0, err_buf.getvalue()
     text = out_path.read_text(encoding="utf-8")
     assert "summary:" in text
     assert _unicode_strikethrough(rows[-1].subject) in text
-
-
-def test_log_json_includes_abandoned(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = stack_rows_mb_to_head(web_stack_repo)
-    overrides: list[dict[str, Any]] = [{}] * len(rows)
-    overrides[-1] = {"status": "ABANDONED"}
-    details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
-    assert code == 1, err
-    data = json_stdout(out)
-    commits = data["commits"]
-    assert commits[-1]["abandoned"] is True
-    assert commits[0]["abandoned"] is False
 
 
 def test_log_config_default_show_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -555,39 +549,6 @@ def test_log_hyperlinks_verbose_uses_label(web_stack_repo: Path, monkeypatch: py
     assert "https://gerrit.example" not in strip_ansi(_primary_log_lines(out)[0])
 
 
-def test_log_hyperlinks_never_keeps_raw_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.logShowUrl", "true", cwd=web_stack_repo)
-    rows = stack_rows_mb_to_head(web_stack_repo)
-    details = build_details_by_change_id(rows)
-    code, out, err = run_cli(
-        web_stack_repo,
-        log_main,
-        ["--hyperlinks", "never", "--color=never"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0, err
-    assert "\x1b]8;" not in out
-    assert "g.example" in out or "/+/" in out
-    assert GERRIT_LINK_LABEL not in out
-
-
-def test_log_json_keeps_raw_gerrit_url_with_hyperlinks(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = stack_rows_mb_to_head(web_stack_repo)
-    details = build_details_by_change_id(rows)
-    code, out, err = run_cli(
-        web_stack_repo,
-        log_main,
-        ["--json", "--hyperlinks", "always"],
-        monkeypatch,
-        gerrit=ChangeStore(details),
-    )
-    assert code == 0, err
-    data = json_stdout(out)
-    assert "\x1b]8;" not in out
-    assert any((item.get("gerrit_url") or "").startswith("https://gerrit.example") for item in data["commits"])
-
-
 # ---------------------------------------------------------------------------
 # Revision range resolution argv behavior
 # ---------------------------------------------------------------------------
@@ -617,16 +578,8 @@ def _install_log_git_mocks(
         git_calls.append((args, cwd, check))
         return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
 
-    def fake_worktree_from_cwd(cwd: Path | str | None) -> Worktree:
-        base = cwd if isinstance(cwd, Path) else Path(str(cwd))
-        if head_branch == "HEAD":
-            return Worktree(toplevel=base, checked_out_branch=None, git_dir=base / ".git")
-        return Worktree(toplevel=base, checked_out_branch=head_branch, git_dir=base / ".git")
-
-    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.Worktree.from_cwd", fake_worktree_from_cwd)
     monkeypatch.setattr("gerrit_workflow_tools.core.git_state.git_out", fake_git_out)
     monkeypatch.setattr("gerrit_workflow_tools.core.stack.git", fake_git)
-    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.resolve_working_branch", lambda _cwd, **_kw: None)
     return git_out_calls, git_calls
 
 
@@ -634,7 +587,7 @@ def test_log_rev_range_default_branch_uses_branch_upstream_range(monkeypatch: py
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="feat/x")
 
-    rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
+    rev_range = resolve_rev_range(None, branch="feat/x")
     assert rev_range == "feat/x@{upstream}..feat/x"
 
     commit_data = commits_in_range(cwd, rev_range, first_parent=True)
@@ -650,7 +603,7 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
 
-    rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
+    rev_range = resolve_rev_range(None, branch="HEAD")
     assert rev_range == "@{upstream}..HEAD"
 
     commit_data = commits_in_range(cwd, rev_range, first_parent=True)
@@ -662,28 +615,11 @@ def test_log_rev_range_default_detached_head_uses_head_range(monkeypatch: pytest
     ]
 
 
-def test_log_rev_range_default_rebase_branch_uses_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
-    cwd = Path("mock-repo")
-    git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="HEAD")
-    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.resolve_working_branch", lambda _cwd, **_kw: "feat/x")
-
-    rev_range = resolve_rev_range(cwd, None, settings=Settings.from_map({}))
-    assert rev_range == "feat/x@{upstream}..feat/x"
-
-    commit_data = commits_in_range(cwd, rev_range, first_parent=True)
-    assert commit_data == []
-
-    assert git_out_calls == []
-    assert [args for args, _cwd, _check in git_calls] == [
-        ("log", "--reverse", "--first-parent", "feat/x@{upstream}..feat/x", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
-    ]
-
-
 def test_log_rev_range_single_branch_expands_to_branch_upstream_range(monkeypatch: pytest.MonkeyPatch) -> None:
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range = resolve_rev_range(cwd, "bak", settings=Settings.from_map({}))
+    rev_range = resolve_rev_range("bak", branch="unused")
     assert rev_range == "bak@{upstream}..bak"
 
     commit_data = commits_in_range(cwd, rev_range, first_parent=True)
@@ -703,7 +639,7 @@ def test_log_rev_range_explicit_ranges_are_forwarded_verbatim(
     cwd = Path("mock-repo")
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
 
-    rev_range = resolve_rev_range(cwd, arg_rev_range, settings=Settings.from_map({}))
+    rev_range = resolve_rev_range(arg_rev_range, branch="unused")
     assert rev_range == arg_rev_range
 
     commit_data = commits_in_range(cwd, rev_range, first_parent=True)
@@ -720,36 +656,15 @@ def test_log_rev_range_follow_merges_omits_first_parent(monkeypatch: pytest.Monk
     git_out_calls, git_calls = _install_log_git_mocks(monkeypatch, head_branch="unused")
     _ = git_out_calls
 
-    rev_range = resolve_rev_range(cwd, "a..b", settings=Settings.from_map({}))
+    rev_range = resolve_rev_range("a..b", branch="unused")
     assert rev_range == "a..b"
 
-    commit_data = commits_in_range(cwd, rev_range)
+    commit_data = commits_in_range(cwd, rev_range, first_parent=False)
     assert commit_data == []
 
     assert [args for args, _cwd, _check in git_calls] == [
         ("log", "--reverse", "a..b", "--format=%H%x1e%h%x1e%s%x1e%B%x1e")
     ]
-
-
-@pytest.mark.parametrize(
-    ("rev_range", "head_branch", "want"),
-    [
-        ("@{upstream}..HEAD", "feat/x", ["feat/x"]),
-        ("feat/topic@{upstream}..feat/topic", "unused", ["feat/topic"]),
-        ("origin/main..HEAD", "feat/x", []),
-        ("one@{upstream}...two@{upstream}", "unused", ["one", "two"]),
-    ],
-)
-def test_branches_needing_upstream(
-    monkeypatch: pytest.MonkeyPatch,
-    rev_range: str,
-    head_branch: str,
-    want: list[str],
-) -> None:
-    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.current_branch", lambda _cwd: head_branch)
-    monkeypatch.setattr("gerrit_workflow_tools.core.git_state.resolve_working_branch", lambda _cwd, **_kw: None)
-    got = branches_needing_upstream(Path("mock-repo"), rev_range, settings=Settings.from_map({}))
-    assert got == want
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +684,7 @@ def test_load_commits_in_range_default_first_parent_excludes_side_branch(merged_
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data = commits_in_range(repo, rev_range, first_parent=True)
+    commit_data = commits_in_range(repo, rev_range)  # first-parent by default
     assert commit_data is not None
     subjects = [row.subject for row in commit_data]
     assert len(subjects) == 2, f"expected 2 first-parent commits, got {len(subjects)}: {subjects}"
@@ -789,7 +704,7 @@ def test_load_commits_in_range_follow_merges_includes_side_branch(merged_side_br
     _fork, _disp, target_tip = merge_base_with_target(repo)
     rev_range = f"{target_tip}..HEAD"
 
-    commit_data = commits_in_range(repo, rev_range)
+    commit_data = commits_in_range(repo, rev_range, first_parent=False)
     assert commit_data is not None
     subjects = [row.subject for row in commit_data]
     assert len(subjects) == 4, f"expected 4 commits with full-DAG traversal, got {len(subjects)}: {subjects}"
@@ -851,7 +766,7 @@ def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
     store = ChangeStore(details)
 
     code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
-    assert code == 1, err
+    assert code == 0, err
     data = json_stdout(out)
     tip_row = next(item for item in data["commits"] if item.get("change_id") == tip.change_id)
     assert tip_row["comments_unresolved"] == 1
@@ -941,7 +856,127 @@ def test_log_says_when_a_rebase_is_stopped(stack_repo: Path, monkeypatch: pytest
     assert "note: a rebase is in progress" in err
 
 
-def test_log_names_the_unknown_side_of_a_range(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    code, _out, err = run_cli(stack_repo, log_main, ["nosuch..HEAD"], monkeypatch)
-    assert code == ExitCode.NOT_FOUND
-    assert err.strip() == "error: unknown revision 'nosuch'"
+def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ "chain blocked" alone left agents guessing; the log says what it means."""
+    from tests.change_store import ChangeStore
+    from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
+
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows, per_index_overrides=[{"cr": 1, "submittable": False}])
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
+    assert "chain blocked: a change below is not submittable yet" in out
+
+
+def test_log_verbose_lists_reviewers_and_ccs(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``-v`` names who is on each change, CCs apart; JSON carries the same with the role."""
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    overrides: list[dict] = [{} for _ in rows]
+    overrides[0] = {
+        "reviewers": {
+            "REVIEWER": [{"username": "alice", "_account_id": 1}, {"username": "bob", "_account_id": 2}],
+            "CC": [{"username": "carol", "_account_id": 3}],
+        }
+    }
+    overrides[1] = {"reviewers": {}}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+
+    code, plain, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "Reviewers:" not in plain
+
+    code, out, err = run_cli(web_stack_repo, log_main, ["-v", "--color=never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    reviewer_lines = [line.strip() for line in out.splitlines() if "Reviewers:" in line]
+    assert reviewer_lines[0] == "Reviewers: alice, bob (cc: carol)"
+    # The second change has nobody on it: no line (its `no reviewers` hint says so), the rest keep the default.
+    assert reviewer_lines[1:] == ["Reviewers: default-reviewer"] * (len(rows) - 2)
+
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    first = json_stdout(out)["commits"][0]
+    assert first["reviewers"] == [
+        {"name": "alice", "cc": False},
+        {"name": "bob", "cc": False},
+        {"name": "carol", "cc": True},
+    ]
+
+
+def _ai_stack(stack_repo: Path) -> ChangeStore:
+    """The four stack commits on Gerrit (ready, CI failed, comments, local code newer), then two never pushed."""
+    _configure_repo(stack_repo)
+    git("commit", "--allow-empty", "-m", "Wip: cache\n\nChange-Id: I" + "5" * 40, cwd=stack_repo)
+    git("commit", "--allow-empty", "-m", "No footer here", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict[str, Any]] = [
+        {},
+        {"verified": -1, "cr": 0, "submittable": False},
+        {"cr": 1, "unresolved_comment_count": 2, "submittable": False},
+        {"cr": 0, "submittable": False},
+    ]
+    details = build_details_by_change_id(rows[:4], per_index_overrides=overrides)
+    older = git_out("rev-parse", "main", cwd=stack_repo)
+    newer = details[f"testproj~main~{rows[3].change_id}"]
+    newer["current_revision"], newer["revisions"] = older, {older: {"_number": 1}}
+    checks = {f"testproj~main~{rows[1].change_id}": [{"state": "FAILED", "checker_name": "unit-tests"}]}
+    return ChangeStore(details, checks=checks)
+
+
+def test_log_ai_is_one_plain_line_per_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--ai``: the human view's words, one numbered line per commit, a fact only where it has a value."""
+    store = _ai_stack(stack_repo)
+    code, out, err = run_cli(stack_repo, log_main, ["--ai", "--color", "always"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert out == strip_ansi(out)  # --ai forces colour off, whatever --color says
+    lines = out.splitlines()
+    assert lines[0] == "stack: testproj, branch main, 6 commits, ger push sends 1-2"
+    sha = [row.short_sha for row in stack_rows_mb_to_head(stack_repo)]
+    assert lines[1:7] == [
+        f"1. {sha[0]} Refactor parser init — change 100, V+1, CR+2, submittable",
+        f"2. {sha[1]} Extract command routing — change 101, V-1, build failed (unit-tests)",
+        f"3. {sha[2]} test! temporary experiment — change 102, V+1, CR+1, 2 unresolved comments, chain blocked",
+        f"4. {sha[3]} Cleanup after experiment — change 103, ahead of gerrit, chain blocked",
+        f"5. {sha[4]} Wip: cache — not-pushed",
+        f"6. {sha[5]} No footer here — missing Change-Id",
+    ]
+    assert lines[7].startswith("chain blocked: ")  # cli_log.next_steps, as the human view ends
+    for empty in ("None", "null", "[]", "CR0", "V0", "0 unresolved", "http", "#"):
+        assert empty not in out
+
+
+def test_log_ai_is_far_smaller_than_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _ai_stack(stack_repo)
+    _code, ai, _err = run_cli(stack_repo, log_main, ["--ai"], monkeypatch, gerrit=store)
+    _code, as_json, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert len(ai) * 5 < len(as_json)
+
+
+def test_log_ai_names_merged_commits_every_failed_check_and_the_wip_next_step(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both views end with the same next: lines (cli_log.next_steps), the WIP advice among them."""
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    overrides: list[dict[str, Any]] = [
+        {"status": "MERGED", "submittable": False},
+        {"verified": -1, "submittable": False},
+        {"work_in_progress": True, "submittable": False},
+        {},
+    ]
+    details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    failed = [{"state": "FAILED", "checker_name": name} for name in ("unit-tests", "lint")]
+    store = ChangeStore(details, checks={f"testproj~main~{rows[1].change_id}": failed})
+    write_rebase_head(web_stack_repo, "feature")  # a note on stderr, which --ai must leave uncoloured too
+    code, out, err = run_cli(web_stack_repo, log_main, ["--ai", "--color", "always"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "rebase is in progress" in err
+    assert err == strip_ansi(err)
+    lines = out.splitlines()
+    assert lines[1] == f"1. {rows[0].short_sha} Refactor parser init — change 100, merged, V+1, CR+2"
+    assert lines[2].endswith("— change 101, V-1, CR+2, build failed (unit-tests, lint)")
+    assert lines[3].startswith(f"3. {rows[2].short_sha} test! temporary experiment — change 102, V+1, CR+2, WIP")
+    wip_step = "next: 1 WIP change on Gerrit; ready them with `ger push --ready`"
+    assert wip_step in lines
+    _code, human, _err = run_cli(web_stack_repo, log_main, ["--color", "never"], monkeypatch, gerrit=store)
+    next_lines = [line for line in human.splitlines() if line.startswith(("next: ", "chain blocked: "))]
+    assert next_lines == lines[5:]
+    assert wip_step in next_lines

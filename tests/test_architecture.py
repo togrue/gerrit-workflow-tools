@@ -129,11 +129,7 @@ def test_substrate_stays_at_the_bottom() -> None:
     _check(
         "core substrate imports upward",
         found,
-        {
-            # Backlog: "Cache-clear hub" — clear_git_cache reaches up to clear caches it does not own.
-            "core/git_run.py -> core/git_state.py": "cache-clear hub",
-            "core/git_run.py -> core/gerrit/stack_context.py": "cache-clear hub",
-        },
+        {},
         f"{', '.join(sorted(SUBSTRATE))} must not import anything above them.",
     )
 
@@ -216,6 +212,7 @@ CONCEPTS = [
         owners={
             "core/git_run.py": "runs git",
             "core/git_editor.py": "opens the user's editor (not git)",
+            "core/gerrit/event_source.py": "runs ssh for Gerrit's event stream (not git)",
         },
         fix="Run git through core/git_run.py; extend git_run if it lacks what you need.",
     ),
@@ -224,12 +221,17 @@ CONCEPTS = [
         pattern=r"HttpGerritRest(\.from_settings)?\(",
         owners={
             "core/gerrit/http_rest.py": "defines it",
-            "core/gerrit/service.py": "GerritService.from_cwd is the construction path",
-            "core/gerrit/change_resolution.py": "built lazily so local-only resolution never needs gerrit.webUrl",
+            "core/gerrit/service.py": "builds its client on first use",
             "cli_fetch_api.py": "GETs raw paths from the real server by purpose",
             "reviewer_catalog.py": "background worker in the push prompt (ADR-0006)",
         },
-        fix="Reach Gerrit through GerritService.from_cwd(...).",
+        fix="Reach Gerrit through the run context's service (run.gerrit).",
+    ),
+    Concept(
+        name="GerritService construction",
+        pattern=r"\bGerritService\(",
+        owners={"core/run_context.py": "one service per run, opened at the entry point"},
+        fix="Take the run context and use run.gerrit; a command gets its run from init_cli_runtime.",
     ),
     Concept(
         name="ChangeInfo field read",
@@ -239,7 +241,7 @@ CONCEPTS = [
     ),
     Concept(
         name="attention reason literal",
-        pattern=r"""["'](ci-failed|unresolved-comments|no-reviewers|missing-change-id|chain-blocked|review-issues|awaiting-review|not-pushed|ahead-of-gerrit|outdated-patchset)["']""",
+        pattern=r"""["'](ci-failed|unresolved-comments|no-reviewers|missing-change-id|invalid-change-id|chain-blocked|review-issues|awaiting-review|not-pushed|ahead-of-gerrit|outdated-patchset)["']""",
         owners={"core/attention.py": "decides attention and names its reasons"},
         fix="Use core.attention.Attention. Render maps attention_reasons to text; it never re-derives them.",
     ),
@@ -330,11 +332,7 @@ MAX_LINES = 400
 # Files already over MAX_LINES, pinned at their size. They may only shrink; lower the
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
-    "cli_push.py": 426,
-    "core/gerrit/cache.py": 684,
-    "core/gerrit/change_resolution.py": 460,
-    "core/gerrit/service.py": 404,
-    "push_input_line.py": 441,
+    "push_input_line.py": 435,
     "reviewer_catalog.py": 478,
 }
 
@@ -367,7 +365,6 @@ TOO_MANY_BASELINE = {
     "core/gerrit/change_view.py": 1,
     "core/gerrit/service.py": 1,
     "core/gerrit_change_status.py": 1,
-    "core/git_state.py": 1,
     "core/ready_calc.py": 1,
     "core/review_chain.py": 6,
     "push_input_line.py": 3,

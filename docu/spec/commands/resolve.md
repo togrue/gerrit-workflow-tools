@@ -13,7 +13,7 @@ Side-effect-free resolver: report what a **changeish** maps to in the current re
 ## Usage
 
 ```
-ger resolve <CHANGEISH> [--json]
+ger resolve <CHANGEISH> [--json | --ai]
 ```
 
 `CHANGEISH` — same shared grammar as every other resolving command (git ref, Change-Id, triplet, `change:<n>`, `refs/changes/…`, URL, `q:…`). Full rules: [change-and-commit-identifiers.md](../change-and-commit-identifiers.md).
@@ -28,12 +28,17 @@ An address that cannot be right exits `3`: a URL for another host or project, a 
 
 Stdout:
 
-- `local SHA: …` when the changeish maps to a commit in the working repo
+- `local SHA: …` when the changeish maps to a commit in the working repo: a git rev, or the **local stack** commit of the selected change (the one that pushes to it; a **sibling** on another branch has none)
 - `Gerrit change: #<n> <triplet> (branch …, status …)` when a Gerrit change was selected
 
 Stderr:
 
 - A dimmed **transparency note** when a bare Change-Id was narrowed (same text as other commands via `format_resolution_note`)
+- A dimmed note when the selected change is a **sibling** of the local stack commit carrying its Change-Id, which targets another branch (`format_local_sibling_note`; `local_sibling` in JSON)
+
+### `--ai`
+
+The text output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)); `--format ai` is the same.
 
 ### `--json`
 
@@ -61,8 +66,10 @@ Prints only the `resolution` object ([§5](../change-and-commit-identifiers.md#5
 |------|---------|
 | `0` | Resolved (including narrowed ambiguous Change-Ids that picked one change) |
 | `2` | Usage error (missing `CHANGEISH`, invalid flags) |
-| `3` | Gerrit API / git resolution error (not found, missing stack context, auth) |
+| `3` | Not found: the changeish resolves to nothing, or names an address that cannot be right |
 | `4` | Ambiguous — multiple matches survived narrowing; re-run with a triplet or `change:` number |
+| `5` | Gerrit answered badly or not at all (HTTP, auth, unreachable); never reported as `3` |
+| `6` | Required git configuration missing (`gerrit.webUrl`, credentials) |
 
 ---
 

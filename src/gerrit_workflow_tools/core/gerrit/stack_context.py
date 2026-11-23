@@ -7,16 +7,20 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
-from gerrit_workflow_tools.core.git_run import abs_cwd
 from gerrit_workflow_tools.core.git_state import (
     effective_gerrit_destination_branch,
     refs_for_push_branch_name,
     resolve_working_branch,
 )
+from gerrit_workflow_tools.core.upstream import NeedsUpstreamError, branch_has_upstream
 
 
 class ChangeResolutionError(RuntimeError):
     """Changeish could not be resolved (not found, invalid input, missing stack context)."""
+
+
+class NoDestinationBranchError(NeedsUpstreamError, ChangeResolutionError):
+    """The stack has no Gerrit destination because its branch has no upstream (and no ``gerritTarget``)."""
 
 
 @dataclass(frozen=True)
@@ -26,15 +30,6 @@ class StackContext:
     project: str
     target_branch: str
     push_branch: str
-
-
-# Keyed by the Settings *values*: id(settings) can be reused once a snapshot is freed.
-_STACK_CONTEXT_CACHE: dict[tuple[str, str, frozenset[tuple[str, str]]], StackContext] = {}
-
-
-def clear_stack_context_cache() -> None:
-    """Drop memoized :func:`resolve_stack_context` results (tests and :func:`clear_git_cache`)."""
-    _STACK_CONTEXT_CACHE.clear()
 
 
 def build_triplet(project: str, branch: str, change_id: str) -> str:
@@ -51,17 +46,6 @@ def _stack_branch_name(cwd: Path | str | None, branch: str | None, *, settings: 
     raise ChangeResolutionError("cannot determine working branch (detached HEAD with no branch context)")
 
 
-def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> StackContext:
-    """Resolve project, target branch, and push branch for the current stack."""
-    cache_key = (abs_cwd(cwd), branch or "", frozenset(settings.values.items()))
-    cached = _STACK_CONTEXT_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-    resolved = _resolve_stack_context_uncached(cwd, branch, settings=settings)
-    _STACK_CONTEXT_CACHE[cache_key] = resolved
-    return resolved
-
-
 def stack_project(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:
     """The stack context's project, else ``gerrit.project`` (for work that needs no push destination)."""
     try:
@@ -70,10 +54,11 @@ def stack_project(cwd: Path | str | None, branch: str | None = None, *, settings
         return settings.gerrit_project or ""
 
 
-def _resolve_stack_context_uncached(
-    cwd: Path | str | None, branch: str | None = None, *, settings: Settings
-) -> StackContext:
-    """Resolve stack context without memoization."""
+def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> StackContext:
+    """Resolve project, target branch, and push branch for the stack of *branch* (the working branch).
+
+    Asks git each time. A run asks once and keeps the answer: ``run.stack``.
+    """
     branch_name = _stack_branch_name(cwd, branch, settings=settings)
     project = resolve_gerrit_project_name(cwd, settings=settings)
     if not project:
@@ -86,12 +71,15 @@ def _resolve_stack_context_uncached(
     target = effective_gerrit_destination_branch(cwd, branch_name, settings=settings)
     if not target:
         remote = settings.gerrit_remote
-        raise ChangeResolutionError(
+        message = (
             f"No Gerrit destination branch for branch {branch_name!r}. "
             f"Set upstream to a branch on `{remote}` (`gerrit.remote`), "
             f"e.g. `git branch --set-upstream-to={remote}/<branch>`, "
             f"or configure `branch.{branch_name}.gerritTarget`."
         )
+        if branch_name != "HEAD" and not branch_has_upstream(cwd, branch_name):
+            raise NoDestinationBranchError(message, branch=branch_name)
+        raise ChangeResolutionError(message)
 
     push_branch = refs_for_push_branch_name(target, settings=settings)
     return StackContext(project=project, target_branch=target, push_branch=push_branch)

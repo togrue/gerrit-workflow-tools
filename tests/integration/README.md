@@ -1,8 +1,37 @@
 # Integration tests (Docker + Gerrit)
 
-These tests start the official image **`gerritcodereview/gerrit:3.10`**, create projects and accounts, then run **`ger push`**, **`ger log`**, **`ger show`**, and **`ger resolve`** against a real server. Draft replies (`ger reply`, publishing with `ger push`) are in **`test_11_draft_replies.py`**. Change-resolution coverage is in **`test_09_change_resolution.py`** (cross-branch Change-Id narrowing, live ``ger log --json`` overlay with compact ``project~number`` ids, batch query call budget, push→resolve/show JSON agreement).
+These tests start the official image **`gerritcodereview/gerrit:3.14.0-rc5-ubuntu24`** (or `GERRIT_IT_IMAGE`), create projects and accounts, then run `ger` commands against a real server. They cover what a real Gerrit decides and the in-memory `ChangeStore` of the unit tests cannot: relation chains, patchsets Gerrit makes itself, push rejections, permissions, HTTP failures, and one Change-Id on several branches.
 
-Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly.
+Gerrit's event stream over real ssh is **`test_19_event_stream.py`**: it uploads a throwaway ssh key (generated in a temp directory; your `~/.ssh` is neither read nor written) for two test accounts, checks that the one without the *Stream Events* capability is refused once and quietly, grants the capability to a temporary group for the other (and removes the grant afterwards), and follows its events. It needs OpenSSH (`ssh`, `ssh-keygen`) on `PATH` and the container's SSH port (`GERRIT_IT_HOST_PORT_SSH`) reachable from your machine; without OpenSSH it is skipped.
+
+Unit tests (`pytest` with default config) **ignore** this directory; run integration tests explicitly. CI runs them nightly and on demand (the *Integration tests* job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
+
+## What is covered where
+
+| File | Covers |
+|------|--------|
+| `test_00_smoke_http.py`, `test_02_seeding.py` | The container answers; seeded branches exist |
+| `test_03_push.py` | `ger push`: the ready boundary stops at a `wip` commit, `--all`, branches stay isolated |
+| `test_04_review_matrix.py` | Every Code-Review × Verified vote pair as `ger log` shows it |
+| `test_05_commands.py`, `test_07_command_smoke.py` | `ger log`, `ger show`, `ger push --dry-run` smoke |
+| `test_06_attention_labels.py` | `ger log` attention notes and JSON reasons per review state, chain blocking, abandoned |
+| `test_08_set_topic.py` | Setting and clearing a topic over REST |
+| `test_09_change_resolution.py` | `ger log` / `ger show` / `ger resolve` agree on cross-branch Change-Ids and after a push; batch query budget |
+| `test_10_comment_cache.py` | `ger show` / `ger log` see a comment resolved on Gerrit |
+| `test_11_draft_replies.py` | `ger reply` drafts; publishing or keeping them with `ger push` |
+| `test_12_review_and_comment.py` | `ger review` staging, chain walk and votes; `ger comment` |
+| `test_13_checkout.py` | `ger checkout` of a pushed change and its new patchset; one Change-Id on two branches |
+| `test_14_cross_branch_siblings.py` | One Change-Id on `main` and `dev`: `ger log` shows each branch its own change, votes and comments; a bare Change-Id is narrowed or refused (exit 4); triplet and `change:N` name either, and `ger show` of the other branch's sibling shows that change, not the local commit; `ger fix` by Change-Id, triplet or number; `ger push` renews only its branch's change; an abandoned or merged sibling leaves the other alone |
+| `test_15_change_states.py` | WIP and `--ready`; private with topic and reviewers; a web-editor patchset and a Gerrit rebase show as outdated and survive a push; pushes Gerrit rejects (abandoned change, no upload permission) exit non-zero with Gerrit's reason |
+| `test_16_rewrite_and_repush.py` | `ger push REV`, then the rest, then nothing to push; `ger fix` / `ger reword` / `ger edit` round trip renews only the touched change and those above, Change-Ids kept; a chain reworked with `ger rebase` / `ger edit` (reordered, squashed with `fixup` or `squash`, split, amended at its lowest commit) and pushed again: a new patchset exactly where a commit changed, Gerrit's relation chain in the local order with no member *NOT CURRENT*, `ger log --json` linked to each change; a squashed-away change stays open, `ger push` does not mention it, and Gerrit still lists it in lower members' relation chains; which Change-Id survives a `squash`; a partial push after amending the lowest commit leaves the chain *NOT CURRENT* (commits above `newer` in `ger log`) until the rest is pushed |
+| `test_17_gerrit_failures.py` | Wrong token (HTTP 401) and an unreachable host for `ger log`, `ger show`, `ger edit -n`, `ger push --dry-run`: one line, exit 5 (push preview: one warning, exit 0), local state shown |
+| `test_18_serve.py` | `ger serve` `/stack` and `/overview` agree with `ger log --json`; the outgoing chain comes from Gerrit's relation data |
+| `test_20_suggested_edits.py` | A comment with a ```` ```suggestion ```` block (the stored CommentInfo shape too), and one with `fix_suggestions` (needs the container's experiment flag), posted over REST, in `ger show --json` and human output |
+| `test_reviewer_strategies_rest.py` | `push` / `lazy` / `overwrite` reviewer strategies |
+
+### Writing a test here
+
+Build on `integration_helpers.py` (`prepare_topic_repo`, `push_sibling_changes`, `ger_push`, `ger_json`, `log_commits_by_change_id`, `current_patchset`, `assert_gerrit_agrees` and `related_changes` for a pushed chain, REST actions such as `submit_change`, `publish_web_edit`, `rebase_change_on_gerrit`), `repo_builder.py` and `gerrit_seed.py` rather than copying setup. Every clone gets its own `gerrit.webUrl`, user and token from the fixtures; never rely on global git configuration. A module-scoped fixture that runs `ger` must set its own `XDG_CACHE_HOME` (the per-test one does not exist yet), as `test_14_cross_branch_siblings.py` and `test_17_gerrit_failures.py` do. After changing state on Gerrit over REST, call `force_zero_change_trust_window(monkeypatch)` so `ger` does not answer from its cache.
 
 ## Prerequisites
 
@@ -37,8 +66,9 @@ Resolve `lenovo-pc` (DNS or `hosts`). From the pytest machine: `docker -H ssh://
 | `GERRIT_IT_PUBLIC_HOST` | `localhost` | Hostname **your git client** uses to reach Gerrit HTTP (use with SSH `-L` when the daemon is remote). |
 | `GERRIT_IT_HOST_PORT_HTTP` | `8080` | Published HTTP port on the Docker **host**. |
 | `GERRIT_IT_HOST_PORT_SSH` | `29418` | Host port mapped to the container’s Gerrit SSH (**29418/tcp** inside the image). **Must be free** on the Docker host—if another Gerrit already uses **29418**, set e.g. **`29419`**. |
-| `GERRIT_IT_IMAGE` | `gerritcodereview/gerrit:3.10` | Override Gerrit image. |
+| `GERRIT_IT_IMAGE` | `gerritcodereview/gerrit:3.14.0-rc5-ubuntu24` | Override Gerrit image. |
 | *(container default)* | `DEVELOPMENT_BECOME_ANY_ACCOUNT=true` | Set automatically for the test container to make admin/account bootstrap reliable on newer Gerrit images. |
+| *(container default)* | `[experiments] enabled` | `docker_gerrit.EXPERIMENTS` (`GerritBackendFeature__allow_fix_suggestions_in_comments`, so a human comment may carry `fix_suggestions`) is written to `gerrit.config` before the image's own entrypoint runs. A kept container started without them is recreated. |
 | `GERRIT_IT_KEEP_CONTAINER` | `0` | If `1`, the named container is left running after the run (faster reruns). |
 | `GERRIT_IT_HTTP_ADMIN_PASS` | *(unset)* | If set, used as the admin HTTP password when REST bootstrap works. |
 | `GERRIT_IT_RUN_ID` | *(random)* | Suffix for project names (stable ID when debugging). |
@@ -72,7 +102,7 @@ Tests use a fixed container name: **`gerrit-workflow-tools-integration`**. Remov
 
 First startup can take **2–4 minutes**. Use `GERRIT_IT_KEEP_CONTAINER=1` for repeated runs.
 
-With a warm container, a full run is typically **~3–4 minutes** (was ~6+ before batching the review matrix, caching the commit-msg hook, and skipping redundant `git fetch` after copying seed repos).
+With a warm container, a full run is typically **~5 minutes** (about 3.5 before files 14–18; was ~6+ before batching the review matrix, caching the commit-msg hook, and skipping redundant `git fetch` after copying seed repos).
 
 ### Profiling a run
 
