@@ -21,7 +21,6 @@ from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import change_info_for_sha
-from tests.fixtures import make_repo_with_merged_side_branch
 
 
 _COMMIT = LogCommit(
@@ -66,14 +65,14 @@ def test_first_commit_needing_edit_attention_oldest_first() -> None:
     assert picked is oldest
 
 
-def test_first_attention_commit_ignores_merged_side_branches(tmp_path: Path) -> None:
+def test_first_attention_commit_ignores_merged_side_branches(merged_side_branch_repo: Path) -> None:
     """``--first-attention-commit`` must see the same commits ``ger log`` does.
 
     Its help promises "same detection as ger log", and ger log walks the first-parent
     chain (Gerrit relation-chain semantics). A commit that is only reachable through a
     merge parent is not in the stack ger log shows, so edit must not select it either.
     """
-    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    repo = merged_side_branch_repo
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
     git("config", "gerrit.project", "testproj", cwd=repo)
 
@@ -93,13 +92,13 @@ def test_first_attention_commit_ignores_merged_side_branches(tmp_path: Path) -> 
         resolve_first_edit_attention_sha(RunContext.open(repo, settings=Settings.from_cwd(repo), gerrit=store))
 
 
-def test_follow_merges_would_have_found_the_side_branch_commit(tmp_path: Path) -> None:
+def test_follow_merges_would_have_found_the_side_branch_commit(merged_side_branch_repo: Path) -> None:
     """Counterpart to the above: the side commit *is* visible with full-DAG traversal.
 
     Pins that the previous test passes because of first-parent traversal, not because the
     payloads failed to signal attention.
     """
-    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    repo = merged_side_branch_repo
     git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
     git("config", "gerrit.project", "testproj", cwd=repo)
 

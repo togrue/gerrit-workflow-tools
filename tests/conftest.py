@@ -18,9 +18,18 @@ from tests.fixtures import (
     finalize_git_template,
     make_gcid_cli_repo,
     make_repo_duplicate_change_id,
+    make_repo_with_merged_side_branch,
     make_stack_repo,
 )
 
+
+# ``gerrit.webUrl`` of the ``web_stack_repo`` fixture.
+WEB_STACK_REPO_URL = "https://g.example"
+
+# Test repositories are thrown away, so git need not flush them to disk: on a real disk
+# (anything but a RAM-backed temp directory) the flushes are most of a commit's cost.
+_STUB_GLOBAL_GITCONFIG = "[user]\n\tname = Test\n\temail = test@example.com\n[core]\n\tfsync = none\n"
+_STUB_DIR_PREFIX = "gerrit-workflow-tools-test-gitconfig-"
 
 # Cumulative fixture setup seconds when GWT_TEST_PROFILE=1 (see pytest_fixture_setup).
 _FIXTURE_PROFILE_SECONDS: dict[str, float] = defaultdict(float)
@@ -31,12 +40,21 @@ _STUB_GLOBAL: Path | None = None
 
 
 @pytest.fixture(autouse=True)
-def _reset_hyperlink_mode() -> Generator[None]:
-    """Keep OSC 8 mode off unless a test enables it; avoid leaks into later tests."""
-    yield
-    from gerrit_workflow_tools.cli_style import set_hyperlink_mode
+def _reset_output_modes() -> Generator[None]:
+    """Keep colour and OSC 8 off unless a test enables them; avoid leaks into later tests.
 
+    A command run with ``--color=always`` leaves the mode set, and under xdist the next
+    test in that worker is not the next one in the file.
+    """
+    yield
+    from gerrit_workflow_tools.cli_style import set_color_mode, set_hyperlink_mode
+
+    set_color_mode(False)
     set_hyperlink_mode(False)
+
+
+def _is_xdist_worker(config: pytest.Config) -> bool:
+    return hasattr(config, "workerinput")
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -57,13 +75,15 @@ def pytest_configure(config: pytest.Config) -> None:
         "yes",
     ):
         return
-    base = Path(tempfile.mkdtemp(prefix="gerrit-workflow-tools-test-gitconfig-"))
+    inherited = os.environ.get("GIT_CONFIG_GLOBAL", "")
+    if _is_xdist_worker(config) and Path(inherited).parent.name.startswith(_STUB_DIR_PREFIX):
+        # The controller made the stub and exported it; it also removes it.
+        _STUB_GLOBAL = Path(inherited)
+        return
+    base = Path(tempfile.mkdtemp(prefix=_STUB_DIR_PREFIX))
     stub_global = base / "stub-global"
     stub_system = base / "stub-system"
-    stub_global.write_text(
-        "[user]\n\tname = Test\n\temail = test@example.com\n",
-        encoding="utf-8",
-    )
+    stub_global.write_text(_STUB_GLOBAL_GITCONFIG, encoding="utf-8")
     stub_system.write_text("", encoding="utf-8")
     os.environ.setdefault("GIT_CONFIG_GLOBAL", str(stub_global))
     os.environ.setdefault("GIT_CONFIG_SYSTEM", str(stub_system))
@@ -72,7 +92,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove this process's stub git config directory."""
-    if _STUB_GLOBAL is not None:
+    if _STUB_GLOBAL is not None and not _is_xdist_worker(config):
         shutil.rmtree(_STUB_GLOBAL.parent, ignore_errors=True)
 
 
@@ -136,6 +156,27 @@ def _configured_stack_repo_template(
 
 
 @pytest.fixture(scope="session")
+def _web_stack_repo_template(
+    tmp_path_factory: pytest.TempPathFactory,
+    _configured_stack_repo_template: Path,
+) -> Path:
+    root = tmp_path_factory.mktemp("tpl_stack_web")
+    repo = _copy_git_repo(_configured_stack_repo_template, root / "repo")
+    git("config", "gerrit.webUrl", WEB_STACK_REPO_URL, cwd=repo)
+    return repo
+
+
+@pytest.fixture(scope="session")
+def _merged_side_branch_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("tpl_merged_side_branch")
+    repo = make_repo_with_merged_side_branch(root / "repo")
+    # A relative self-remote remains valid after the template is copied.
+    git("remote", "set-url", "origin", ".", cwd=repo)
+    finalize_git_template(repo)
+    return repo
+
+
+@pytest.fixture(scope="session")
 def _dup_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("tpl_dup")
     repo = make_repo_duplicate_change_id(root / "repo")
@@ -171,6 +212,18 @@ def stack_repo_unconfigured(tmp_path: Path, _stack_repo_template: Path) -> Path:
 def stack_repo(tmp_path: Path, _configured_stack_repo_template: Path) -> Path:
     """Linear feature branch over main; third commit matches ^test!; upstream origin/main."""
     return _copy_git_repo(_configured_stack_repo_template, tmp_path / "stack")
+
+
+@pytest.fixture
+def web_stack_repo(tmp_path: Path, _web_stack_repo_template: Path) -> Path:
+    """``stack_repo`` with ``gerrit.webUrl`` set to :data:`WEB_STACK_REPO_URL`."""
+    return _copy_git_repo(_web_stack_repo_template, tmp_path / "stack")
+
+
+@pytest.fixture
+def merged_side_branch_repo(tmp_path: Path, _merged_side_branch_repo_template: Path) -> Path:
+    """Feature branch that merged a side branch (see ``make_repo_with_merged_side_branch``)."""
+    return _copy_git_repo(_merged_side_branch_repo_template, tmp_path / "r")
 
 
 @pytest.fixture(autouse=True)

@@ -36,6 +36,12 @@ from tests.integration.profile import format_report, phase, profiling_enabled, r
 logger = logging.getLogger(__name__)
 
 
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    """Run in-process: the unit suite's ``-n auto`` would start one Gerrit container per worker."""
+    return 0
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Apply gitignored ``local.env`` before collection (same keys as ``run_integration.py``)."""
     load_local_env_file(Path(__file__).resolve().parent / "local.env")
