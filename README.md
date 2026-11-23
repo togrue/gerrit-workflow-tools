@@ -47,7 +47,7 @@ Contributors use [uv](https://docs.astral.sh/uv/) (`uv sync`, `uv run pytest`). 
 
 ### Testing
 
-Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in).
+Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in). The unit suite runs on all cores (`pytest-xdist`); add `-n 0` to run in-process, for a debugger or a single test.
 
 ### Integration tests (optional)
 

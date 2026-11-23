@@ -98,15 +98,14 @@ def _make_linear_stack(root: Path, n: int) -> Path:
     return repo
 
 
-def test_log_call_budget_on_stack_repo(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_call_budget_on_stack_repo(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Cold ``ger log``: one project-scoped batch query, no bare change:I, ≪ N git calls."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     assert len(rows) >= 3
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
 
     assert code in (0, 1), err
     assert len(store.queries()) == 1, store.queries()
@@ -141,14 +140,13 @@ def test_log_git_and_rest_do_not_scale_with_stack_size(
     _assert_log_git_budget(run)
 
 
-def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_call_budget_on_head(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger show HEAD`` resolves one change — a handful of git + REST calls, not a stack storm."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
 
     assert code == 0, err
     # Resolution probe + detail query; no CI fetch without -v when Verified passes.
@@ -161,16 +159,15 @@ def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     )
 
 
-def test_resolve_call_budget_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_call_budget_for_change_id(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger resolve`` for one Change-Id: one query, O(1) git."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     cid = rows[0].change_id
     assert cid
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, resolve_main, [cid, "--json"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, resolve_main, [cid, "--json"], monkeypatch, gerrit=store)
 
     assert code == 0, err
     assert len(store.queries()) == 1
@@ -178,38 +175,36 @@ def test_resolve_call_budget_for_change_id(stack_repo: Path, monkeypatch: pytest
     assert run.call_count <= _RESOLVE_GIT_BUDGET, f"git subprocesses={run.call_count} budget={_RESOLVE_GIT_BUDGET}"
 
 
-def test_fix_local_ref_makes_no_gerrit_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fix_local_ref_makes_no_gerrit_calls(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger fix`` on a local stack ref never asks Gerrit (ADR-0003)."""
-    _configure_web(stack_repo)
-    (stack_repo / "a.txt").write_text("fix budget\n", encoding="utf-8")
-    git("add", "a.txt", cwd=stack_repo)
+    (web_stack_repo / "a.txt").write_text("fix budget\n", encoding="utf-8")
+    git("add", "a.txt", cwd=web_stack_repo)
     store = ChangeStore({})
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, fix_main, ["HEAD~1"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, fix_main, ["HEAD~1"], monkeypatch, gerrit=store)
 
     assert code == 0, err
     assert store.calls == []
     assert run.call_count <= _FIX_GIT_BUDGET, (
         f"git subprocesses={run.call_count} budget={_FIX_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
     )
-    assert git_out("log", "-1", "--format=%s", cwd=stack_repo).startswith("fixup! ")
+    assert git_out("log", "-1", "--format=%s", cwd=web_stack_repo).startswith("fixup! ")
 
 
-def test_log_warm_second_run_zero_rest_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_warm_second_run_zero_rest_calls(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Warm ``ger log`` inside the trust window makes no new Gerrit calls."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     after_first = len(store.calls)
     assert after_first >= 1, "cold run should populate cache via REST"
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     assert len(store.calls) == after_first, (
         f"warm run added REST calls: {[c.method for c in store.calls[after_first:]]}"
@@ -217,17 +212,16 @@ def test_log_warm_second_run_zero_rest_calls(stack_repo: Path, monkeypatch: pyte
     _assert_log_git_budget(run)
 
 
-def test_log_warm_second_run_no_reviewer_follow_ups(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_warm_second_run_no_reviewer_follow_ups(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Payloads with ``reviewers`` must not trigger ``list_change_reviewers`` on cold or warm run."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(build_details_by_change_id(rows))
 
-    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     assert store.calls_to("list_change_reviewers") == []
 
-    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     assert store.calls_to("list_change_reviewers") == []
 

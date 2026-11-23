@@ -41,7 +41,6 @@ from tests.cli_gerrit_mocks import (
     stack_rows_mb_to_head,
 )
 from tests.conftest import json_stdout, run_cli
-from tests.fixtures import make_repo_with_merged_side_branch
 from tests.helpers import force_zero_change_trust_window, write_rebase_head
 
 
@@ -63,21 +62,21 @@ def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_log_url_flag_exits_zero(
-    stack_repo: Path,
+    web_stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, _out, err = run_cli(stack_repo, log_main, ["--url"], monkeypatch, gerrit=ChangeStore(details))
+    code, _out, err = run_cli(web_stack_repo, log_main, ["--url"], monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), (code, err)
 
 
-def test_log_default_text_contains_commit_lines_and_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_default_text_contains_commit_lines_and_summary(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "summary:" in out
     assert "ready" in out and "/" in out
@@ -86,23 +85,21 @@ def test_log_default_text_contains_commit_lines_and_summary(stack_repo: Path, mo
         assert c.subject in out
 
 
-def test_log_highlights_warning_pattern_in_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_highlights_warning_pattern_in_summary(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     first_subject = rows[0].subject
-    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
-    git("config", "gerrit.warningPattern", first_subject, cwd=stack_repo)
+    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=web_stack_repo)
+    git("config", "gerrit.warningPattern", first_subject, cwd=web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, ["--color", "always"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--color", "always"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert ANSI_YELLOW in out
     assert first_subject in out
 
 
-def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_full_text_uses_separate_detail_lines(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``--verbose``: same primary row as default; ``CI:`` on continuation lines."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{} for _ in rows]
     overrides[0] = {"verified": -1, "submittable": False}
     overrides[1] = {"verified": 0, "cr": 0, "unresolved_comment_count": 2, "submittable": False}
@@ -115,8 +112,8 @@ def test_log_full_text_uses_separate_detail_lines(stack_repo: Path, monkeypatch:
         checks={f"testproj~main~{first_cid}": [{"state": "FAILED", "checker_name": "verify"}]},
     )
     base_args = ["--color=never", "--hyperlinks", "always"]
-    code_plain, out_plain, err_plain = run_cli(stack_repo, log_main, base_args, monkeypatch, gerrit=store)
-    code, out, err = run_cli(stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store)
+    code_plain, out_plain, err_plain = run_cli(web_stack_repo, log_main, base_args, monkeypatch, gerrit=store)
+    code, out, err = run_cli(web_stack_repo, log_main, [*base_args, "--verbose"], monkeypatch, gerrit=store)
     assert code == 1, err
     assert code_plain in (0, 1), err_plain
     assert _primary_log_lines(out_plain) == _primary_log_lines(out)
@@ -145,11 +142,10 @@ def _primary_log_lines(out: str) -> list[str]:
     return lines
 
 
-def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_json_default_lists_all_commits(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     data = json_stdout(out)
     assert "stack" in data
@@ -164,13 +160,12 @@ def test_log_json_default_lists_all_commits(stack_repo: Path, monkeypatch: pytes
         assert "change_id" in item
 
 
-def test_log_json_contract_required_keys_and_types(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_json_contract_required_keys_and_types(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Machine output contract: required keys and types per commit (see docu/spec/commands/log.md)."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo, log_main, ["--json", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
+        web_stack_repo, log_main, ["--json", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
     )
     assert code in (0, 1), err
     data = json_stdout(out)
@@ -272,44 +267,40 @@ def test_determine_attention_no_reviewers_absent_when_assigned() -> None:
     assert "no-reviewers" not in reasons
 
 
-def test_log_no_reviewers_shown_in_attention(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_no_reviewers_shown_in_attention(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{} for _ in rows]
     overrides[0] = {"reviewers": []}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    code, out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
     assert code == 1, err
     assert "no reviewers" in out
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 1, err
     data = json_stdout(out)
     assert any("no-reviewers" in item.get("attention_reasons", []) for item in data["commits"])
 
 
-def test_log_explicit_revset(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    mb = git_out("merge-base", "main", "HEAD", cwd=stack_repo)
+def test_log_explicit_revset(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mb = git_out("merge-base", "main", "HEAD", cwd=web_stack_repo)
     revset = f"{mb}..HEAD"
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, [revset], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, [revset], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "summary:" in out
 
 
-def test_log_invalid_revset_returns_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    code, out, err = run_cli(stack_repo, log_main, ["not-a-real-revision"], monkeypatch)
+def test_log_invalid_revset_returns_error(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, err = run_cli(web_stack_repo, log_main, ["not-a-real-revision"], monkeypatch)
     assert code == ExitCode.NOT_FOUND
     assert out == ""
     assert "error:" in err.lower()
 
 
-def test_log_missing_upstream_non_tty_prints_setup_hint(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    git("branch", "--unset-upstream", cwd=stack_repo, check=False)
-    code, out, err = run_cli(stack_repo, log_main, [], monkeypatch)
+def test_log_missing_upstream_non_tty_prints_setup_hint(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("branch", "--unset-upstream", cwd=web_stack_repo, check=False)
+    code, out, err = run_cli(web_stack_repo, log_main, [], monkeypatch)
     assert code == 1
     assert out == ""
     assert "No upstream configured for branch" in err
@@ -327,12 +318,11 @@ def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "error" in err.lower()
 
 
-def test_log_show_change_id_on_continuation_line(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_show_change_id_on_continuation_line(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo, log_main, ["--show-change-id", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
+        web_stack_repo, log_main, ["--show-change-id", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
     )
     assert code == 0, err
     cid = rows[0].change_id
@@ -342,11 +332,12 @@ def test_log_show_change_id_on_continuation_line(stack_repo: Path, monkeypatch: 
         assert cid not in line
 
 
-def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_verbose_twice_shows_change_id(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, ["-vv", "--color=never"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(
+        web_stack_repo, log_main, ["-vv", "--color=never"], monkeypatch, gerrit=ChangeStore(details)
+    )
     assert code == 0, err
     cid = rows[0].change_id
     assert cid
@@ -356,12 +347,11 @@ def test_log_verbose_twice_shows_change_id(stack_repo: Path, monkeypatch: pytest
 
 
 def test_log_verbose_shows_only_failing_checks_at_v(
-    stack_repo: Path,
+    web_stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``-v`` shows failed CI only; ``-vv`` also shows passing pipelines in green."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{} for _ in rows]
     overrides[0] = {"verified": -1, "submittable": False}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
@@ -378,7 +368,7 @@ def test_log_verbose_shows_only_failing_checks_at_v(
         },
     )
     code_v, out_v, err_v = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--verbose", "--color=always", "--hyperlinks=never"],
         monkeypatch,
@@ -390,7 +380,7 @@ def test_log_verbose_shows_only_failing_checks_at_v(
     assert ANSI_RED in out_v
 
     code_vv, out_vv, err_vv = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["-vv", "--color=always", "--hyperlinks=never"],
         monkeypatch,
@@ -403,12 +393,11 @@ def test_log_verbose_shows_only_failing_checks_at_v(
 
 
 def test_log_verbose_shows_outdated_message_ci_in_grey(
-    stack_repo: Path,
+    web_stack_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When current PS has no CI messages, ``-v`` shows older build links in grey."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{} for _ in rows]
     overrides[0] = {"verified": -1, "revision_number": 3, "submittable": False}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
@@ -432,7 +421,7 @@ def test_log_verbose_shows_outdated_message_ci_in_grey(
         },
     )
     code, out, err = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--verbose", "--color=always", "--hyperlinks=never"],
         monkeypatch,
@@ -448,15 +437,14 @@ def _unicode_strikethrough(s: str) -> str:
     return "".join(f"{c}\u0336" for c in s)
 
 
-def test_log_abandoned_strikes_summary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_abandoned_strikes_summary(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Abandoned Gerrit changes render the subject with strike-through (no TTY: combining chars)."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{}] * len(rows)
     if overrides:
         overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 1, err
     assert _unicode_strikethrough(rows[-1].subject) in out
 
@@ -494,13 +482,12 @@ def test_log_file_redirect_encodes_unicode(
     assert _unicode_strikethrough(rows[-1].subject) in text
 
 
-def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_json_includes_abandoned(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict[str, Any]] = [{}] * len(rows)
     overrides[-1] = {"status": "ABANDONED"}
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 1, err
     data = json_stdout(out)
     commits = data["commits"]
@@ -508,23 +495,21 @@ def test_log_json_includes_abandoned(stack_repo: Path, monkeypatch: pytest.Monke
     assert commits[0]["abandoned"] is False
 
 
-def test_log_config_default_show_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    git("config", "gerrit.logShowUrl", "true", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_config_default_show_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.logShowUrl", "true", cwd=web_stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
-    code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "g.example" in out or "/+/" in out
 
 
-def test_log_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_hyperlinks_always_shows_open_in_gerrit(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """OSC 8 terminals get a compact ``Open in gerrit`` link without ``--url``."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--hyperlinks", "always", "--color=never"],
         monkeypatch,
@@ -537,13 +522,12 @@ def test_log_hyperlinks_always_shows_open_in_gerrit(stack_repo: Path, monkeypatc
     assert "https://gerrit.example" not in visible
 
 
-def test_log_default_omits_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_default_omits_raw_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without hyperlinks or ``--url``, raw Gerrit addresses stay off (they are noisy)."""
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--hyperlinks", "never", "--color=never"],
         monkeypatch,
@@ -555,12 +539,11 @@ def test_log_default_omits_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyP
     assert GERRIT_LINK_LABEL not in out
 
 
-def test_log_hyperlinks_verbose_uses_label(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_hyperlinks_verbose_uses_label(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--verbose", "--hyperlinks", "always", "--color=never"],
         monkeypatch,
@@ -572,13 +555,12 @@ def test_log_hyperlinks_verbose_uses_label(stack_repo: Path, monkeypatch: pytest
     assert "https://gerrit.example" not in strip_ansi(_primary_log_lines(out)[0])
 
 
-def test_log_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    git("config", "gerrit.logShowUrl", "true", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_hyperlinks_never_keeps_raw_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "gerrit.logShowUrl", "true", cwd=web_stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--hyperlinks", "never", "--color=never"],
         monkeypatch,
@@ -590,12 +572,11 @@ def test_log_hyperlinks_never_keeps_raw_url(stack_repo: Path, monkeypatch: pytes
     assert GERRIT_LINK_LABEL not in out
 
 
-def test_log_json_keeps_raw_gerrit_url_with_hyperlinks(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_repo(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+def test_log_json_keeps_raw_gerrit_url_with_hyperlinks(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(
-        stack_repo,
+        web_stack_repo,
         log_main,
         ["--json", "--hyperlinks", "always"],
         monkeypatch,
@@ -776,13 +757,13 @@ def test_branches_needing_upstream(
 # ---------------------------------------------------------------------------
 
 
-def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_path: Path) -> None:
+def test_load_commits_in_range_default_first_parent_excludes_side_branch(merged_side_branch_repo: Path) -> None:
     """
     With ``first_parent=True`` the stack loader follows, matching
     Gerrit's relation-chain semantics.  Only the 2 first-parent commits are
     returned; the 2 side-branch commits are excluded.
     """
-    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    repo = merged_side_branch_repo
     from gerrit_workflow_tools.core.stack import merge_base_with_target
 
     _fork, _disp, target_tip = merge_base_with_target(repo)
@@ -797,12 +778,12 @@ def test_load_commits_in_range_default_first_parent_excludes_side_branch(tmp_pat
     assert not any("side commit" in s for s in subjects)
 
 
-def test_load_commits_in_range_follow_merges_includes_side_branch(tmp_path: Path) -> None:
+def test_load_commits_in_range_follow_merges_includes_side_branch(merged_side_branch_repo: Path) -> None:
     """
     With ``first_parent=False`` (i.e. ``--follow-merges``), all 4 commits are
     returned including the 2 side-branch commits.
     """
-    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    repo = merged_side_branch_repo
     from gerrit_workflow_tools.core.stack import merge_base_with_target
 
     _fork, _disp, target_tip = merge_base_with_target(repo)
@@ -855,11 +836,10 @@ def test_log_same_change_id_on_main_and_dev_shows_main_only(stack_repo: Path, mo
 
 
 def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _configure_repo(stack_repo)
     force_zero_change_trust_window(monkeypatch)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     tip = rows[-1]
     assert tip.change_id
@@ -870,7 +850,7 @@ def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
     payload["submittable"] = False
     store = ChangeStore(details)
 
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert code == 1, err
     data = json_stdout(out)
     tip_row = next(item for item in data["commits"] if item.get("change_id") == tip.change_id)
@@ -880,7 +860,7 @@ def test_log_picks_up_resolved_comment_count_when_updated_is_unchanged(
     payload["unresolved_comment_count"] = 0
     payload["submittable"] = True
 
-    code2, out2, err2 = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    code2, out2, err2 = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert code2 in (0, 1), err2
     data2 = json_stdout(out2)
     tip_row2 = next(item for item in data2["commits"] if item.get("change_id") == tip.change_id)

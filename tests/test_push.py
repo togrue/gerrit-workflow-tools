@@ -25,7 +25,6 @@ from gerrit_workflow_tools.push_options_history import load_push_options_history
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
-from tests.fixtures import make_repo_with_merged_side_branch
 from tests.helpers import ref_exists, write_rebase_head
 
 
@@ -1023,7 +1022,7 @@ def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypat
 
 
 def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
-    tmp_path: Path,
+    merged_side_branch_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -1032,7 +1031,7 @@ def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
     Only the two first-parent commits (local work + merge commit) should
     appear in the 'About to push commits:' output.
     """
-    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    repo = merged_side_branch_repo
     code, out, err = run_cli(repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
     assert code == 0, (out, err)
     assert "local work" in out
@@ -1042,11 +1041,11 @@ def test_gpush_dry_run_with_merged_side_branch_lists_only_first_parent_commits(
 
 
 def test_gpush_follow_merges_flag_lists_side_branch_commits(
-    tmp_path: Path,
+    merged_side_branch_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``--follow-merges`` must re-include side-branch commits in the push preview."""
-    repo = make_repo_with_merged_side_branch(tmp_path / "r")
+    repo = merged_side_branch_repo
     code, out, err = run_cli(repo, gpush_main, ["--dry-run", "--all", "--follow-merges"], monkeypatch)
     assert code == 0, (out, err)
     assert "side commit 1" in out

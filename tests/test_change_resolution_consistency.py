@@ -41,10 +41,9 @@ from tests.fixtures import _cid
     ],
 )
 def test_every_command_exits_the_same_way_on_an_unknown_revision(
-    main_fn: Callable[..., int], argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    main_fn: Callable[..., int], argv: list[str], web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    code, _out, _err = run_cli(stack_repo, main_fn, argv, monkeypatch)
+    code, _out, _err = run_cli(web_stack_repo, main_fn, argv, monkeypatch)
     assert code == ExitCode.NOT_FOUND
 
 
@@ -85,16 +84,17 @@ def _configure_dev_gerrit_target(repo: Path) -> None:
     git("update-ref", "refs/remotes/origin/dev", main_sha, cwd=repo)
 
 
-def test_resolve_and_show_json_agree_on_narrowed_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_and_show_json_agree_on_narrowed_change_id(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """``ger resolve --json`` and ``ger show --json`` emit the same ``resolution`` block."""
-    _configure_web(stack_repo)
     cid = _cid("a6")
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     details = _mock_dual_branch_details(change_id=cid, sha=sha)
     # One store for both commands: they must agree against identical Gerrit state.
     store = ChangeStore(details)
-    code_r, out_r, err_r = run_cli(stack_repo, resolve_main, ["--json", cid], monkeypatch, gerrit=store)
-    code_s, out_s, err_s = run_cli(stack_repo, gshow_main, ["--json", cid], monkeypatch, gerrit=store)
+    code_r, out_r, err_r = run_cli(web_stack_repo, resolve_main, ["--json", cid], monkeypatch, gerrit=store)
+    code_s, out_s, err_s = run_cli(web_stack_repo, gshow_main, ["--json", cid], monkeypatch, gerrit=store)
     assert code_r == 0, err_r
     assert code_s == 0, err_s
     resolve_block = json_stdout(out_r)["resolution"]
@@ -107,13 +107,12 @@ def test_resolve_and_show_json_agree_on_narrowed_change_id(stack_repo: Path, mon
     assert "119900" in err_s
 
 
-def test_log_on_main_target_uses_main_triplet_not_dev(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_on_main_target_uses_main_triplet_not_dev(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger log --json`` on a main-target stack overlays the main-branch Gerrit change."""
-    _configure_web(stack_repo)
-    sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~2", cwd=web_stack_repo)
     cid = _cid("2")
     details = _mock_dual_branch_details(change_id=cid, sha=sha, main_cr=2, dev_cr=-1)
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), err
     commits = json_stdout(out)["commits"]
     row = next(c for c in commits if c["change_id"] == cid)
@@ -125,14 +124,15 @@ def test_log_on_main_target_uses_main_triplet_not_dev(stack_repo: Path, monkeypa
     assert "119900" in row["resolution_note"]
 
 
-def test_log_resolution_notes_do_not_requery_per_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_resolution_notes_do_not_requery_per_change_id(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Notes must come from cache/batch payloads — no bare change:I storm after overlay."""
-    _configure_web(stack_repo)
-    sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~2", cwd=web_stack_repo)
     cid = _cid("2")
     details = _mock_dual_branch_details(change_id=cid, sha=sha)
     store = ChangeStore(details)
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     bare = [query for query in store.queries() if query.startswith("change:")]
     assert bare == [], f"unexpected per-Change-Id queries: {bare!r}"
@@ -140,14 +140,13 @@ def test_log_resolution_notes_do_not_requery_per_change_id(stack_repo: Path, mon
     assert "resolution_note" in row
 
 
-def test_log_on_dev_target_uses_dev_triplet_not_main(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_on_dev_target_uses_dev_triplet_not_main(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger log --json`` with ``branch.*.gerritTarget=dev`` overlays the dev-branch change."""
-    _configure_web(stack_repo)
-    _configure_dev_gerrit_target(stack_repo)
-    sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
+    _configure_dev_gerrit_target(web_stack_repo)
+    sha = git_out("rev-parse", "HEAD~2", cwd=web_stack_repo)
     cid = _cid("2")
     details = _mock_dual_branch_details(change_id=cid, sha=sha, main_cr=2, dev_cr=-1)
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(details))
     assert code in (0, 1), err
     commits = json_stdout(out)["commits"]
     row = next(c for c in commits if c["change_id"] == cid)
@@ -156,11 +155,10 @@ def test_log_on_dev_target_uses_dev_triplet_not_main(stack_repo: Path, monkeypat
     assert "/+/119900" in (row.get("gerrit_url") or "")
 
 
-def test_log_absent_when_change_only_on_other_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_absent_when_change_only_on_other_branch(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Target-branch overlay must not pick a Change-Id that exists only on another branch."""
-    _configure_web(stack_repo)
-    _configure_dev_gerrit_target(stack_repo)
-    sha = git_out("rev-parse", "HEAD~2", cwd=stack_repo)
+    _configure_dev_gerrit_target(web_stack_repo)
+    sha = git_out("rev-parse", "HEAD~2", cwd=web_stack_repo)
     cid = _cid("2")
     # Only main-branch row exists; stack target is dev → absent.
     main_only = {
@@ -168,7 +166,7 @@ def test_log_absent_when_change_only_on_other_branch(stack_repo: Path, monkeypat
             sha, cid, number=120100, branch="main", cr=2
         )
     }
-    code, out, err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(main_only))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=ChangeStore(main_only))
     assert code in (0, 1), err
     commits = json_stdout(out)["commits"]
     row = next(c for c in commits if c["change_id"] == cid)

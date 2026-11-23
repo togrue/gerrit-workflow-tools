@@ -20,7 +20,6 @@ from gerrit_workflow_tools.core.ci_links import (
 from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, extract_ci_links_via_registry
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
-from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_ci_lines
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
@@ -467,10 +466,9 @@ def test_service_ci_links_filter_by_current_revision(stack_repo: Path) -> None:
     assert matched.ci_pipelines[0].state == "FAILED"
 
 
-def test_log_json_includes_ci_links(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+def test_log_json_includes_ci_links(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write_registry(
-        stack_repo,
+        web_stack_repo,
         """
 from gerrit_workflow_tools.core.ci_links import CiLink
 
@@ -480,7 +478,7 @@ def _extract(*, project, checks, messages):
 STRATEGIES = {"testproj": _extract}
 """,
     )
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows, per_index_overrides=[{"verified": -1}] * len(rows))
     first_cid = rows[0].change_id
     assert first_cid
@@ -488,7 +486,7 @@ STRATEGIES = {"testproj": _extract}
         details,
         checks={f"testproj~main~{first_cid}": [{"state": "FAILED", "checker_name": "build"}]},
     )
-    code, out, err = run_cli(stack_repo, log_main, ["--json", "--color=never"], monkeypatch, gerrit=store)
+    code, out, err = run_cli(web_stack_repo, log_main, ["--json", "--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     data = json.loads(out)
     linked = [c for c in data["commits"] if c.get("ci_links")]

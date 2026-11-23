@@ -88,21 +88,20 @@ def test_ger_fix_all_flag(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert subj.startswith("fixup! ")
 
 
-def test_ger_fix_numeric_change_uses_gerrit_revision(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+def test_ger_fix_numeric_change_uses_gerrit_revision(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     # The change must carry the footer that is actually on that commit: a ChangeInfo whose
     # change_id disagrees with the commit it points at cannot occur in a real repository.
-    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", sha, cwd=stack_repo))
+    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", sha, cwd=web_stack_repo))
     assert cid
     ch = change_info_for_sha(sha, cid, number=4242)
     ch["revisions"][sha]["ref"] = "refs/changes/42/4242/1"
     details = {str(ch["id"]): ch}
-    (stack_repo / "b.txt").write_text("via gerrit\n", encoding="utf-8")
-    git("add", "b.txt", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:4242"], monkeypatch, gerrit=ChangeStore(details))
+    (web_stack_repo / "b.txt").write_text("via gerrit\n", encoding="utf-8")
+    git("add", "b.txt", cwd=web_stack_repo)
+    code, _out, err = run_cli(web_stack_repo, ger_fix_main, ["change:4242"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
+    subj = git_out("log", "-1", "--format=%s", cwd=web_stack_repo)
     assert subj.startswith("fixup! ")
 
 
@@ -118,17 +117,16 @@ def test_ger_fix_change_id_needs_no_gerrit_config(stack_repo: Path, monkeypatch:
     assert "gerrit.webUrl" not in err
 
 
-def test_ger_fix_change_not_on_stack_is_an_error(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ger_fix_change_not_on_stack_is_an_error(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Gerrit pointing at an object we do not have is a plain error now — no fetch (ADR-0003)."""
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
     missing = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     cid = "Icccccccccccccccccccccccccccccccccccccccc"
     ch = change_info_for_sha(missing, cid, number=7777)
     ch["revisions"][missing]["ref"] = "refs/changes/77/7777/3"
     details = {str(ch["id"]): ch}
-    (stack_repo / "c.txt").write_text("no fetch path\n", encoding="utf-8")
-    git("add", "c.txt", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, ger_fix_main, ["change:7777"], monkeypatch, gerrit=ChangeStore(details))
+    (web_stack_repo / "c.txt").write_text("no fetch path\n", encoding="utf-8")
+    git("add", "c.txt", cwd=web_stack_repo)
+    code, _out, err = run_cli(web_stack_repo, ger_fix_main, ["change:7777"], monkeypatch, gerrit=ChangeStore(details))
     assert code == ExitCode.NOT_FOUND
     assert "no commit in current stack" in err
     assert "fetch" not in err.lower()
@@ -163,16 +161,15 @@ def test_ger_fix_bare_integer_is_git_revision_not_change_number(
     assert "not a valid commit" in err.lower()
 
 
-def test_ger_fix_json_includes_resolution_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
-    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", sha, cwd=stack_repo))
+def test_ger_fix_json_includes_resolution_for_change_id(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
+    cid = extract_valid_change_id(git_out("log", "-1", "--format=%B", sha, cwd=web_stack_repo))
     assert cid
     ch = change_info_for_sha(sha, cid, number=5151)
     details = {str(ch["id"]): ch}
-    (stack_repo / "d.txt").write_text("json fix\n", encoding="utf-8")
-    git("add", "d.txt", cwd=stack_repo)
-    code, out, err = run_cli(stack_repo, ger_fix_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
+    (web_stack_repo / "d.txt").write_text("json fix\n", encoding="utf-8")
+    git("add", "d.txt", cwd=web_stack_repo)
+    code, out, err = run_cli(web_stack_repo, ger_fix_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     import json
 
