@@ -531,7 +531,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_paths.py` | Resolving **CI finding** paths to the files of a commit (`tracked_paths`, `resolve_finding_paths`) |
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
-| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it |
+| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |

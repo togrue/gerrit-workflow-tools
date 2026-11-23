@@ -147,7 +147,7 @@ Host-map style, not a single global Jenkins token key:
 
 (Migration from an ad-hoc `gerrit.jenkinstoken` in a personal git config is a setup detail, not a public key name.)
 
-The host is the link URL's hostname, lowercase and without port: `git config ger.ciCredential.ci.example.org bot:apitoken`. `user:token` is sent as HTTP Basic (Jenkins API tokens), anything else as a Bearer token.
+The host is the link URL's hostname, lowercase and without port: `git config ger.ciCredential.ci.example.org bot:apitoken`. `user:token` is sent as HTTP Basic (Jenkins API tokens), anything else as a Bearer token. The secret goes to that server only: a redirect to another scheme, host or port is followed without it.
 
 ---
 

@@ -13,6 +13,9 @@ time. When it fails, or has not connected within :data:`PREFERRED_ROUTE_TIMEOUT`
 forgotten and the race starts over. This memo is a hint, not an answer (ADR-0014): it is
 used only while the host still resolves to it, and each use checks it by connecting, so
 there is nothing to invalidate.
+
+:func:`urlopen` follows redirects, but a credential goes only to the origin it was sent to: a
+redirect to another scheme, host or port is followed without it (``Authorization``, ``Cookie``).
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ import time
 import urllib.request
 from collections.abc import Callable, Sequence
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 
 ATTEMPT_DELAY = 0.25
@@ -189,7 +193,37 @@ class _HTTPSHandler(urllib.request.HTTPSHandler):
         return self.do_open(_HTTPSConnection, req)
 
 
-_opener = urllib.request.build_opener(_HTTPHandler, _HTTPSHandler)
+CREDENTIAL_HEADERS = frozenset({"authorization", "proxy-authorization", "cookie"})
+"""Request headers that are for the origin they were sent to, and nobody else."""
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def origin(url: str) -> tuple[str, str, int | None]:
+    """``(scheme, host, port)`` of *url*, the default port spelled out: what a credential is scoped to."""
+    parts = urlsplit(url)
+    scheme = parts.scheme.lower()
+    return scheme, (parts.hostname or "").lower(), parts.port or _DEFAULT_PORTS.get(scheme)
+
+
+class _RedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follows redirects as urllib does, minus the credentials when the redirect leaves the origin.
+
+    urllib copies every request header onto the redirected request, so a server that redirects
+    elsewhere (an SSO front end, a log on other storage) would be handed the token for this one.
+    """
+
+    def redirect_request(
+        self, req: urllib.request.Request, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> urllib.request.Request | None:
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and origin(new.full_url) != origin(req.full_url):
+            for name in [name for name in new.headers if name.lower() in CREDENTIAL_HEADERS]:
+                del new.headers[name]
+        return new
+
+
+_opener = urllib.request.build_opener(_HTTPHandler, _HTTPSHandler, _RedirectHandler)
 
 
 def urlopen(request: str | urllib.request.Request, *, timeout: float) -> Any:

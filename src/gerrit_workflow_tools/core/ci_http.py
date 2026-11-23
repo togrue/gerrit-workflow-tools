@@ -72,7 +72,10 @@ def authorization_header(credential: str | None) -> dict[str, str]:
 
 
 class UrllibCiHttp:
-    """:class:`CiHttp` over :mod:`urllib` (follows redirects, accepts gzip, reports *progress*)."""
+    """:class:`CiHttp` over :mod:`urllib` (follows redirects, accepts gzip, reports *progress*).
+
+    A redirect to another origin is followed without the credential: see :mod:`http_connect`.
+    """
 
     def __init__(self, *, timeout: float = 120, progress: Progress | None = None) -> None:
         self.timeout = timeout
