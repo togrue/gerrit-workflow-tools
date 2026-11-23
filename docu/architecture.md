@@ -443,8 +443,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `print_resolution_note`, `confirm` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
+| `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
@@ -532,7 +533,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials |
-| `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries |
+| `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries; the local tier only when trusted |
+| `core/registry_trust.py` | Whether a project-local registry may run: `gerrit.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `source_digest` |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
@@ -599,6 +601,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |
+| `registry_trust_prompt.py` | `settle_registry_trust`: before a command runs, asks whether untrusted project registries may run, or warns that they will not |
 | `push_options_history.py` | Push-options history per Gerrit host and project, and Up/Down recall |
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |

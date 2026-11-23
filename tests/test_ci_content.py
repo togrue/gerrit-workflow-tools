@@ -23,6 +23,7 @@ from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cac
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
 from gerrit_workflow_tools.render.ci_content import ci_content_json, format_ci_section_human, format_ci_section_markdown
 from tests.ci_fakes import JENKINS, FakeCiHttp, jenkins_build
+from tests.fixtures import trust_local_registries
 
 
 LINK = CiLink(label="jenkins", url=f"{JENKINS}/console", source="message")
@@ -254,6 +255,7 @@ CONTENT_PROVIDERS = [Builds(), "not a provider"]
 """,
         encoding="utf-8",
     )
+    trust_local_registries(stack_repo)
     clear_extension_registry_cache()
     try:
         providers = load_ci_content_providers(stack_repo, settings=Settings.from_map({}))
@@ -304,6 +306,7 @@ def test_editing_a_registry_helper_parses_the_log_again(
 
     def fetch_in_a_new_process(mark: str) -> CiContent:
         _marked_registry(local, mark)
+        trust_local_registries(stack_repo)
         clear_extension_registry_cache()
         providers = load_ci_content_providers(stack_repo, settings=Settings.from_map({}), web_base=web_base)
         service = CiContentService(
@@ -331,6 +334,7 @@ def test_a_provider_defined_in_a_helper_module_keys_on_the_registry(stack_repo: 
         d.mkdir(parents=True, exist_ok=True)
         (d / "registry.py").write_text("from .provider import Builds\nCONTENT_PROVIDERS = [Builds()]\n", "utf-8")
         (d / "provider.py").write_text(_MARKED_PROVIDER.replace("from .marks import MARK", f"MARK = {mark!r}"), "utf-8")
+        trust_local_registries(stack_repo)
         clear_extension_registry_cache()
         providers = load_ci_content_providers(stack_repo, settings=Settings.from_map({}))
         service = CiContentService(
@@ -351,6 +355,7 @@ def test_a_provider_defined_in_a_helper_module_keys_on_the_registry(stack_repo: 
 def test_a_running_process_keys_on_the_registry_it_loaded(stack_repo: Path, tmp_path: Path) -> None:
     d = stack_repo / ".ger" / "ci"
     _marked_registry(d, "old: ")
+    trust_local_registries(stack_repo)
     clear_extension_registry_cache()
     try:
         [provider, _jenkins] = load_ci_content_providers(stack_repo, settings=Settings.from_map({}))

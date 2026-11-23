@@ -12,9 +12,9 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     changeish_help,
     init_cli_runtime,
-    print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.changeish import unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,

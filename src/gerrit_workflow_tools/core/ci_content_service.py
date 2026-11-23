@@ -30,9 +30,10 @@ from gerrit_workflow_tools.core.ci_http import CiHttp, Progress, UrllibCiHttp
 from gerrit_workflow_tools.core.ci_links import CiLink
 from gerrit_workflow_tools.core.ci_paths import resolve_finding_paths, tracked_paths
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.ger_registry import SOURCE_DIGEST, source_digest
+from gerrit_workflow_tools.core.ger_registry import SOURCE_DIGEST
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 from gerrit_workflow_tools.core.git_state import repo_toplevel
+from gerrit_workflow_tools.core.registry_trust import source_digest
 
 
 logger = logging.getLogger(__name__)

@@ -23,6 +23,7 @@ from gerrit_workflow_tools.core.review_chain import member_attention_reasons
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.render.commit_row import attention_tokens
 from gerrit_workflow_tools.render.status_fmt import attention_text
+from tests.fixtures import trust_local_registries
 
 
 _STABLE = LogCommit(
@@ -90,6 +91,7 @@ def test_project_strategy_decides_what_is_printed(stack_repo: Path) -> None:
         "def _waive_ci(*, commit, chain_blocked):\n    return ['unresolved-comments']\nSTRATEGIES = {'p': _waive_ci}\n",
         encoding="utf-8",
     )
+    trust_local_registries(stack_repo)
     clear_extension_registry_cache()
     clear_attention_strategy_cache()
 

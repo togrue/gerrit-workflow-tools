@@ -10,9 +10,9 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     changeish_help,
     init_cli_runtime,
-    print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref

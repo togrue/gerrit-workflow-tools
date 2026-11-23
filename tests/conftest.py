@@ -40,6 +40,19 @@ _STUB_GLOBAL: Path | None = None
 
 
 @pytest.fixture(autouse=True)
+def _isolate_xdg_config_home(
+    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Point ``$XDG_CONFIG_HOME`` at a directory of this test alone (made only when written).
+
+    Registry trust records and global registries live there: one test's trust must not reach
+    another, and none may reach the developer's own ``~/.config/ger``.
+    """
+    name = "".join(c if c.isalnum() else "_" for c in request.node.nodeid)[-80:]
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.getbasetemp() / "xdg-config" / name))
+
+
+@pytest.fixture(autouse=True)
 def _reset_output_modes() -> Generator[None]:
     """Keep colour and OSC 8 off unless a test enables them; avoid leaks into later tests.
 

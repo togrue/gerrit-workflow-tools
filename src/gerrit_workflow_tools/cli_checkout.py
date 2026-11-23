@@ -13,10 +13,9 @@ from gerrit_workflow_tools.cli_common import (
     changeish_help,
     confirm,
     init_cli_runtime,
-    print_note,
-    print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_note, print_resolution_note
 from gerrit_workflow_tools.core.change_checkout import (
     CheckoutAction,
     CheckoutPlan,

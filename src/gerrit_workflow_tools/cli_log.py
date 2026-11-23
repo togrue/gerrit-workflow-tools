@@ -16,9 +16,9 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     may_prompt,
     output_format,
-    print_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_note
 from gerrit_workflow_tools.cli_style import (
     ANSI_BOLD,
     ANSI_CYAN,

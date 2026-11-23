@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.ready_strategy import clear_ready_strategy_cache
 from gerrit_workflow_tools.core.stack import commits_in_range, get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.summary_highlight import build_summary_highlighter
+from tests.fixtures import trust_local_registries
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +51,7 @@ def _extract(*, project, checks, messages):
 STRATEGIES = {"testproj": _extract}
 """,
     )
+    trust_local_registries(stack_repo)
     clear_ci_strategy_cache()
     strat = resolve_registry_callable(
         stack_repo,
@@ -87,6 +89,7 @@ def _extract(*, project, checks, messages):
 STRATEGIES = {"testproj": _extract}
 """,
     )
+    trust_local_registries(stack_repo)
     clear_ci_strategy_cache()
     settings = Settings.from_cwd(stack_repo)
     strat = resolve_registry_callable(
@@ -113,6 +116,7 @@ def test_local_without_project_key_falls_through_to_global(
         "ci",
         "STRATEGIES = {'other': lambda **kw: []}",
     )
+    trust_local_registries(stack_repo)
     _write_domain_registry(
         _config_root(tmp_path, web),
         "ci",
@@ -164,6 +168,7 @@ def _boom(*, commits, stop_pattern, overlay=None):
 STRATEGIES = {"testproj": _boom}
 """,
     )
+    trust_local_registries(stack_repo)
     _write_domain_registry(
         _config_root(tmp_path, web),
         "ready",
@@ -197,6 +202,7 @@ def _boundary(*, commits, stop_pattern, overlay=None):
 STRATEGIES = {"testproj": _boundary}
 """,
     )
+    trust_local_registries(stack_repo)
     clear_ready_strategy_cache()
     git("config", "gerrit.project", "testproj", cwd=stack_repo)
     _fork, _display, target_tip = merge_base_with_target(stack_repo)
@@ -223,6 +229,7 @@ def _boundary(*, commits, stop_pattern, overlay=None):
 STRATEGIES = {"testproj": _boundary}
 """,
     )
+    trust_local_registries(stack_repo)
     clear_ready_strategy_cache()
     git("config", "gerrit.project", "testproj", cwd=stack_repo)
     rows = ready_rows = list(get_stack_snapshot(stack_repo, first_parent=True).commits)
