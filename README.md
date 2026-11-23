@@ -70,7 +70,7 @@ and to reorder the stack by drag and drop. API: [docu/spec/commands/serve.md](do
 
 ### Testing
 
-Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in). The extension has its own: `npm test` and `npm run e2e` in `vscode/` (the e2e run drives the real `ger serve` over a fake Gerrit).
+Quick start: `uv sync` then `uv run pytest -q` (unit only; integration tests are opt-in). The unit suite runs on all cores (`pytest-xdist`); add `-n 0` to run in-process, for a debugger or a single test. The extension has its own: `npm test` and `npm run e2e` in `vscode/` (the e2e run drives the real `ger serve` over a fake Gerrit).
 
 ### Integration tests (optional)
 

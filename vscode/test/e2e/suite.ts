@@ -447,7 +447,7 @@ export async function run(): Promise<void> {
     );
     const commit = api.changeView.diff?.commit ?? "";
     const newThread = { uri: fileUri(commit, "b.txt"), range: new vscode.Range(0, 0, 0, 0), dispose: () => undefined };
-    const save = api.changeView.shown?.new_comment === "local-draft" ? "ger.comment.saveLocalDraft" : "ger.comment.saveDraft";
+    const save = api.changeView.newComment === "local-draft" ? "ger.comment.saveLocalDraft" : "ger.comment.saveDraft";
     await press(
       `"+" on line 1 of b.txt in the diff › ${save === "ger.comment.saveDraft" ? "Save Draft" : "Save Local Draft"}`,
       "The comment is saved as a draft and appears as a thread marked as your draft; it is not counted as unresolved feedback.",
@@ -771,6 +771,34 @@ export async function run(): Promise<void> {
           await wait(10_500);
           await api.model.refresh({ background: true });
           assert.ok(await until(() => api.events.live), "the event stream is followed again");
+        },
+      );
+
+      // A ger of another release: its serve API has a major this extension does not speak.
+      const servedApi = process.env.GER_E2E_API ?? "";
+      fs.writeFileSync(servedApi, "2.0.0\n");
+      await note(
+        "ger serve restarts as a ger whose API is 2.0, while the extension needs 1.0",
+        "The views refuse it rather than break on it: Local stack and the Change view say ger speaks API 2.0 and the extension needs 1.0, and that the extension is what to update, with a button to install the ger that matches it; the status bar shows a warning.",
+        async () => {
+          api.model.restart();
+          await api.model.refresh();
+          assert.equal(api.model.state, "incompatible");
+          assert.equal(api.model.overview, undefined, "nothing from a service it cannot read");
+          await api.changeView.idle();
+        },
+      );
+      fs.rmSync(servedApi);
+      await note(
+        "ger is back at the matching release, and you press Retry",
+        "ger serve starts again, its API fits, and the views show the stack and the chains as before.",
+        async () => {
+          await vscode.commands.executeCommand("ger.refresh");
+          assert.equal(api.model.state, "ready");
+          await wait(10_500); // the stack's trust window, as above
+          await api.model.refresh({ background: true });
+          assert.ok(await until(() => api.events.live), "the event stream is followed again");
+          await api.changeView.idle();
         },
       );
     }

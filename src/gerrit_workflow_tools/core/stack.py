@@ -9,7 +9,14 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import GitError, git, git_out, is_unknown_revision, unknown_revision_error
+from gerrit_workflow_tools.core.git_run import (
+    GitError,
+    commit_sha_or_none,
+    git,
+    git_out,
+    is_unknown_revision,
+    unknown_revision_error,
+)
 from gerrit_workflow_tools.core.git_state import configured_upstream_abbrev, resolve_branch_for_branch_config
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 
@@ -313,6 +320,20 @@ def pinned_count(cwd: Path | str | None, commits: Sequence[Commit]) -> int:
 def pinned_below(shas: Sequence[str], merges: frozenset[str]) -> int:
     """:func:`pinned_count` for *shas* (oldest first) whose *merges* are already known: no git call."""
     return next((len(shas) - i for i, sha in enumerate(reversed(shas)) if sha in merges), 0)
+
+
+def rewrite_base(cwd: Path | str | None, snapshot: StackSnapshot, pinned: int) -> str:
+    """The commit a rewrite of the local stack replays onto: everything from it down stays as it is.
+
+    The newest merge when the lowest *pinned* commits (:func:`pinned_count`) stay put, else the
+    commit the stack sits on. That is not the upstream tip once the upstream has moved on:
+    replaying onto the tip would rebase the stack as well, which only ``ger rebase`` is asked to do.
+    """
+    if pinned:
+        return snapshot.commits[pinned - 1].sha
+    if not snapshot.commits:
+        return snapshot.upstream_tip
+    return commit_sha_or_none(cwd, f"{snapshot.commits[0].sha}^") or snapshot.upstream_tip
 
 
 UNSQUASHED_FIXUP_ADVICE = "squash it with `ger rebase --autosquash`"

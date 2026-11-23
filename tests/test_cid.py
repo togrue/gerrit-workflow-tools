@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import io
 import logging
+import shutil
 import sys
 from pathlib import Path
+
+import pytest
 
 from gerrit_workflow_tools.cli_changeid import main as gcid_main
 from gerrit_workflow_tools.cli_common import ExitCode
@@ -17,7 +20,7 @@ from gerrit_workflow_tools.core.change_id import (
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
-from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid
+from tests.fixtures import GCID_CLI_CHANGE_IDS, _cid, finalize_git_template
 
 
 # Tip / parent Change-Ids for :func:`tests.fixtures.make_gcid_cli_repo` (newest first in ``git log`` ranges).
@@ -118,6 +121,19 @@ def _make_stack_repo_for_fix(path: Path) -> Path:
     git("commit", "-m", f"third commit keep\n\nChange-Id: {keep}", cwd=path, env=env)
     git("branch", "--set-upstream-to", "main", "feature", cwd=path, env=env, check=False)
     return path
+
+
+@pytest.fixture(scope="session")
+def _fix_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    repo = _make_stack_repo_for_fix(tmp_path_factory.mktemp("tpl_gcid_fix") / "repo")
+    finalize_git_template(repo)
+    return repo
+
+
+@pytest.fixture
+def fix_repo(tmp_path: Path, _fix_repo_template: Path) -> Path:
+    """Stack whose commits lack a Change-Id, or carry one that is not the last line."""
+    return shutil.copytree(_fix_repo_template, tmp_path / "fix")
 
 
 def _stack_bodies(repo: Path) -> list[str]:
@@ -331,8 +347,8 @@ def test_gcid_string_that_is_not_change_id_tries_git(gcid_cli_repo, monkeypatch)
     assert out == ""
 
 
-def test_gcid_fix_assigns_missing_and_not_last_line(tmp_path, monkeypatch):
-    repo = _make_stack_repo_for_fix(tmp_path / "fix")
+def test_gcid_fix_assigns_missing_and_not_last_line(fix_repo, monkeypatch):
+    repo = fix_repo
     code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
     assert code == 0
     assert out == ""
@@ -355,8 +371,8 @@ def test_gcid_fix_assigns_missing_and_not_last_line(tmp_path, monkeypatch):
     assert check_err == ""
 
 
-def test_gcid_fix_skips_commit_with_valid_last_line_change_id(tmp_path, monkeypatch):
-    repo = _make_stack_repo_for_fix(tmp_path / "fix_skip")
+def test_gcid_fix_skips_commit_with_valid_last_line_change_id(fix_repo, monkeypatch):
+    repo = fix_repo
     before = _stack_bodies(repo)
     assert "Change-Id: I" + "f" * 40 in before[2]
 
@@ -379,8 +395,8 @@ def test_gcid_fix_rejects_check_combo(stack_repo, monkeypatch):
     assert "cannot be combined" in err
 
 
-def test_gcid_fix_allows_dirty_tree(tmp_path, monkeypatch):
-    repo = _make_stack_repo_for_fix(tmp_path / "fix_dirty")
+def test_gcid_fix_allows_dirty_tree(fix_repo, monkeypatch):
+    repo = fix_repo
     dirty = repo / "dirty.txt"
     dirty.write_text("dirty\n", encoding="utf-8")
     code, out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)

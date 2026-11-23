@@ -129,10 +129,9 @@ def _store(repo: Path) -> ChangeStore:
     return ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(repo)))
 
 
-def test_ger_log_says_it_in_text_and_json(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    store = _store(stack_repo)
-    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+def test_ger_log_says_it_in_text_and_json(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(web_stack_repo)
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     assert json.loads(out)["upstream"] == {
         "name": "origin/main",
         "behind": 0,
@@ -142,12 +141,12 @@ def test_ger_log_says_it_in_text_and_json(stack_repo: Path, monkeypatch: pytest.
         "reason": None,
         "dropped": [],
     }
-    _code, out, _err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert "new commit" not in out
 
-    _main_moves_on(stack_repo, {"c.txt": "c, from main\n"})
-    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
-    stopping = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    _main_moves_on(web_stack_repo, {"c.txt": "c, from main\n"})
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    stopping = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     assert json.loads(out)["upstream"] == {
         "name": "origin/main",
         "behind": 1,
@@ -157,26 +156,25 @@ def test_ger_log_says_it_in_text_and_json(stack_repo: Path, monkeypatch: pytest.
         "reason": None,
         "dropped": [],
     }
-    _code, out, _err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert (
         "next: origin/main has 1 new commit; rebase onto it with `ger rebase origin/main`; "
         '"test! temporary experiment" would conflict in c.txt'
     ) in out
-    _code, out, _err = run_cli(stack_repo, log_main, ["--json", "origin/main..feature"], monkeypatch, gerrit=store)
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--json", "origin/main..feature"], monkeypatch, gerrit=store)
     assert json.loads(out)["upstream"] is None, "an explicit range is no stack on the upstream"
 
 
 def test_ger_rebase_onto_the_upstream_is_the_rebase_previewed(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """``ger rebase origin/main`` (what the advice and the extension's button run) replays the stack onto it."""
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    tip = _main_moves_on(stack_repo, {"z.txt": "z\n"})
+    tip = _main_moves_on(web_stack_repo, {"z.txt": "z\n"})
     monkeypatch.setenv("GREBASE_EDITOR", "true")
-    code, _out, err = run_cli(stack_repo, rebase_main, ["origin/main"], monkeypatch, gerrit=_store(stack_repo))
+    code, _out, err = run_cli(web_stack_repo, rebase_main, ["origin/main"], monkeypatch, gerrit=_store(web_stack_repo))
     assert code == 0, err
-    assert git_out("merge-base", "HEAD", "origin/main", cwd=stack_repo) == tip
-    assert _moved(stack_repo) == UpstreamMoved("origin/main", 0)
+    assert git_out("merge-base", "HEAD", "origin/main", cwd=web_stack_repo) == tip
+    assert _moved(web_stack_repo) == UpstreamMoved("origin/main", 0)
 
 
 def _rebase_i(repo: Path, *, todo: str = "true") -> int:
@@ -280,27 +278,26 @@ def test_a_tag_named_like_the_branch_does_not_hide_how_far_the_upstream_moved(st
 
 
 def test_a_commit_merged_on_gerrit_is_dropped_by_the_one_rebase_ger_log_names(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Merged on Gerrit and upstream moved on: one command, which drops it, and a preview without it."""
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=[{"status": "MERGED"}]))
     # Gerrit merged it rebased: the same code, another patch than git's patch id would match.
-    _main_moves_on(stack_repo, {"a.txt": "file a.txt\n", "z.txt": "z\n"}, "Refactor parser init")
-    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    _main_moves_on(web_stack_repo, {"a.txt": "file a.txt\n", "z.txt": "z\n"}, "Refactor parser init")
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
     upstream = json.loads(out)["upstream"]
     assert upstream["argv"] == ["rebase", "origin/main", "--drop-merged-equivalent"]
     assert upstream["conflict"] is None, "without the merged commit nothing stops the rebase"
     assert upstream["dropped"] == [{"sha": rows[0].sha, "summary": "Refactor parser init"}]
-    _code, out, _err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    _code, out, _err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     commands = [line for line in out.splitlines() if "`ger rebase" in line]
     assert commands == [
         "next: origin/main has 1 new commit; rebase onto it with "
         "`ger rebase origin/main --drop-merged-equivalent`; 1 commit is already upstream and dropped"
     ], out
     # What that command runs: the todo with the merged commit dropped (as the enricher drops it), onto origin/main.
-    assert _rebase_i(stack_repo, todo=f"sed -i 's/^pick {rows[0].short_sha}/drop {rows[0].short_sha}/'") == 0
-    assert git_out("log", "--format=%s", "origin/main..HEAD", cwd=stack_repo).splitlines()[-1] == (
+    assert _rebase_i(web_stack_repo, todo=f"sed -i 's/^pick {rows[0].short_sha}/drop {rows[0].short_sha}/'") == 0
+    assert git_out("log", "--format=%s", "origin/main..HEAD", cwd=web_stack_repo).splitlines()[-1] == (
         "Extract command routing"
     )

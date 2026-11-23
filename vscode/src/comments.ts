@@ -201,19 +201,19 @@ export class CommentThreads implements vscode.Disposable {
     reply.thread.dispose();
   }
 
-  /** Ask for a comment on the whole file `file` of the shown change and save it: a draft where Gerrit has the commit, else a local draft. */
+  /** Ask for a comment on the whole file `file` of the version looked at and save it: a draft where Gerrit has that commit, else a local draft. */
   async commentOnFile(file: string): Promise<void> {
     const target = this.view.target;
     if (!target) {
       return;
     }
-    const state: NewCommentState = this.view.shown?.new_comment ?? "local-draft";
+    const state: NewCommentState = this.view.newComment ?? "local-draft";
     const text = await ui().input({ title: `Comment on ${file}`, prompt: FILE_PROMPT[state] });
     if (!text?.trim()) {
       return;
     }
     try {
-      await (await this.model.client()).newComment(target.rev, commentLocation(file), text.trim(), state);
+      await (await this.model.client()).newComment(target.rev, commentLocation(file), text.trim(), state, this.view.diff?.commit);
       ui().status(`$(check) ${SAVED[state]}`, 6000);
       await this.view.open();
     } catch (error) {
@@ -233,7 +233,8 @@ export class CommentThreads implements vscode.Disposable {
     const location = commentLocation(file, range && { start: range.start.line + 1, end: range.end.line + 1 });
     try {
       const client = await this.model.client();
-      await client.newComment(target.rev, location, text, state);
+      // The lines are those of the version looked at (`pathOf`), which the change alone does not name: an older patchset.
+      await client.newComment(target.rev, location, text, state, this.view.diff?.commit);
       this.boxes.delete(reply.thread);
       reply.thread.dispose(); // the saved chain comes back with the reload, in its place
       ui().status(`$(check) ${SAVED[state]}`, 6000);

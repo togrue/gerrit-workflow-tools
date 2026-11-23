@@ -179,3 +179,6 @@ def configure_gerrit_target(path: Path, target: str = "main") -> None:
 def finalize_git_template(path: Path) -> None:
     """Pack a completed test repository so per-test copies create fewer files."""
     git("gc", "--prune=now", cwd=path)
+    # Sample hooks are a third of a fresh repository's files and no test reads them.
+    for sample in (path / ".git" / "hooks").glob("*.sample"):
+        sample.unlink()

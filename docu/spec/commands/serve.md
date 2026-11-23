@@ -156,6 +156,25 @@ A refusal the client can do something about also carries `reason`, a word for it
 | `GERRIT` | 502 |
 | `CONFIG`, `GIT`, `INTERNAL` | 500 |
 
+## API version
+
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.0.0`); the URL
+prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
+
+| Bump | When |
+|------|------|
+| **major** | A breaking change: a field or endpoint removed or renamed, or its meaning changed. The prefix moves with it. |
+| **minor** | Fields or endpoints added; what was there means what it meant. |
+| **patch** | A fix that leaves the contract as it was. |
+
+The VS Code extension declares the API version it needs in one place,
+[`vscode/src/compat.ts`](../../../vscode/src/compat.ts), and checks `/health` once each time
+the service starts. A service with another major, or the same major and a lower minor, is
+refused: the views say which side to update and offer **Update ger**. The patch is ignored.
+When the API fits but ger's package version differs from the extension's, the extension only
+warns (and not at all for a dev or local version); it offers **Update ger** only when ger is
+the older one. Each comparison and its outcome goes to **ger: Show Log**.
+
 ---
 
 ## Read endpoints
@@ -164,8 +183,9 @@ All under `/api/v1`.
 
 ### `GET /health`
 
-`name`, `version`, `api`, `repo`, `branch`, `host`; `activity` (the activity sequence) and
-`events`: the event stream's `state`, `reason` and `source` (`ssh://user@host:port`, or `null`).
+`name`, `version` (ger's package version), `api` (the [API version](#api-version)), `repo`,
+`branch`, `host`; `activity` (the activity sequence) and `events`: the event stream's `state`,
+`reason` and `source` (`ssh://user@host:port`, or `null`).
 
 ### `GET /activity`
 
@@ -457,7 +477,7 @@ The **review state**, as `ger review --status --json`, under `review`; `null` wh
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
-| `/comments/new` | `rev`, `location`, `message`, optional `state`, `resolved` | `ger comment`: start a chain. `location` is `PATH`, `PATH:LINE`, `PATH:START-END` or `PATH:L.C-L.C`, lines from 1. `state`: `draft` (on Gerrit), `local-draft` or `note` (both only here); the default is a draft where Gerrit has the change, else a local draft. Answers `ger comment --json`. |
+| `/comments/new` | `rev`, `location`, `message`, optional `state`, `resolved`, `commit` | `ger comment`: start a chain. `location` is `PATH`, `PATH:LINE`, `PATH:START-END` or `PATH:L.C-L.C`, lines from 1. `state`: `draft` (on Gerrit), `local-draft` or `note` (both only here); the default is a draft where Gerrit has the change, else a local draft. `commit` (a commit id, as `/diff` answers it) is the version of the change whose lines were shown, when a viewer shows another one than `rev` names (an older patchset, or Gerrit's current one beside your rewritten commit): `location` is checked against it and the comment goes on it, a draft on that patchset by default. It is `NOT_FOUND` when it is neither the commit `rev` names nor a patchset Gerrit has of the change. Answers `ger comment --json`. |
 | `/comments/edit` | `rev`, `comment_id`, `message`, optional `resolved` | `ger comment --edit`: give one of your unpublished comments a new text: a **draft** on Gerrit (a chain you started or a reply), a **local draft** or a **note**. It stays where it is; without `resolved` it stays as open as it was. Answers `action` (`updated`), `state`, `id`, `change` and `message`: what it said before. A published comment, or an id that is not yours, is not found. |
 | `/comments/discard` | `rev`, `comment_id` | `ger comment --discard`: delete one of your unpublished comments. Answers the same, with `action` `discarded`: its text is not lost silently. |
 | `/comments/hold` | `root_id`, `held` | Put a comment chain on **hold**, or release it. Local: nothing goes to Gerrit. |
@@ -513,6 +533,11 @@ merge commit or a commit below it (git rebase cannot replay a merge, so the rewr
 top of it), or a commit does not apply in its new place. The last is found out before anything is touched, with the same
 simulation as `GET /stack/moves`, and the message names the commit and the files it
 conflicts in. Where git is too old for that, the rebase is tried and aborted.
+
+A rewrite replays the stack where it sits: onto the newest merge commit, else onto the commit
+the stack forked off its upstream at. An upstream that has moved on since is not rebased onto
+(that is `ger rebase`'s to do, which `GET /stack` offers as `upstream.argv`), and
+`GET /stack/moves` previews against the same commit.
 
 ---
 

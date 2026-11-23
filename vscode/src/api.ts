@@ -9,6 +9,9 @@ export interface Hello {
   pid: number;
 }
 
+/** `GET /health`: who answers. `api` is the serve API version, `MAJOR.MINOR.PATCH` (a bare number from an older ger). */
+export type Health = { name: string; version: string; api: string | number; repo: string | null; branch: string | null } & Activity;
+
 export interface ApiError {
   code: string;
   message: string;
@@ -529,7 +532,7 @@ export class GerClient {
     return payload;
   }
 
-  health(): Promise<{ name: string; version: string; api: number; repo: string | null; branch: string | null } & Activity> {
+  health(): Promise<Health> {
     return this.call("GET", "/health");
   }
 
@@ -595,9 +598,13 @@ export class GerClient {
     return this.call("GET", "/agent/runbook", { rev });
   }
 
-  /** Start a comment chain at `location` (`path`, `path:line`, `path:start-end`, lines from 1). */
-  newComment(rev: string, location: string, message: string, state: NewCommentState): Promise<{ state: NewCommentState; id: string | null }> {
-    return this.call("POST", "/comments/new", undefined, { rev, location, message, state });
+  /**
+   * Start a comment chain at `location` (`path`, `path:line`, `path:start-end`, lines from 1).
+   * `commit` is the version of the change whose lines were shown (`/diff`'s `commit`): the
+   * comment goes on it, which is not always the commit `rev` names (an older patchset).
+   */
+  newComment(rev: string, location: string, message: string, state: NewCommentState, commit?: string): Promise<{ state: NewCommentState; id: string | null }> {
+    return this.call("POST", "/comments/new", undefined, { rev, location, message, state, ...(commit ? { commit } : {}) });
   }
 
   /** Give one of your unpublished comments (a draft, a local draft or a note) a new text; `message` is what it said. */

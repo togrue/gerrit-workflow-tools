@@ -51,23 +51,21 @@ def _mock_details(*rows: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def test_resolve_git_rev_local_only(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_git_rev_local_only(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Init commit on main has no Change-Id; resolves local SHA only."""
-    _configure_resolve_repo(stack_repo)
-    sha = git_out("rev-parse", "main", cwd=stack_repo)
-    code, out, err = run_cli(stack_repo, resolve_main, ["main"], monkeypatch, gerrit=ChangeStore({}))
+    sha = git_out("rev-parse", "main", cwd=web_stack_repo)
+    code, out, err = run_cli(web_stack_repo, resolve_main, ["main"], monkeypatch, gerrit=ChangeStore({}))
     assert code == 0, err
     assert f"local SHA: {sha}" in out
     assert "Gerrit change:" not in out
 
 
-def test_resolve_git_rev_with_gerrit_footer(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
-    sha = git_out("rev-parse", "HEAD", cwd=stack_repo)
-    cid = head_change_id(stack_repo)
+def test_resolve_git_rev_with_gerrit_footer(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sha = git_out("rev-parse", "HEAD", cwd=web_stack_repo)
+    cid = head_change_id(web_stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=104)
     details = {str(ch["id"]): ch}
-    code, out, err = run_cli(stack_repo, resolve_main, ["HEAD"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, resolve_main, ["HEAD"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert f"local SHA: {sha}" in out
     assert "Gerrit change: #104" in out
@@ -88,49 +86,45 @@ def test_resolve_change_id_narrowed(stack_repo: Path, monkeypatch: pytest.Monkey
     assert "119870" in err
 
 
-def test_resolve_triplet(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_triplet(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_TRIPLET
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=120002)
     triplet = str(ch["id"])
     details = {triplet: ch}
-    code, out, err = run_cli(stack_repo, resolve_main, [triplet], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, resolve_main, [triplet], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert f"Gerrit change: #120002 {triplet}" in out
 
 
-def test_resolve_change_number(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_change_number(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_NUMBER
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=120003)
     details = {str(ch["id"]): ch}
-    code, out, err = run_cli(stack_repo, resolve_main, ["change:120003"], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, resolve_main, ["change:120003"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "Gerrit change: #120003" in out
 
 
-def test_resolve_change_ref(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_change_ref(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_REF
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=120004)
     details = {str(ch["id"]): ch}
     ref = "refs/changes/04/120004/1"
-    code, out, err = run_cli(stack_repo, resolve_main, [ref], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, resolve_main, [ref], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "Gerrit change: #120004" in out
 
 
-def test_resolve_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_URL
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=120005)
     details = {str(ch["id"]): ch}
     url = "https://g.example/c/testproj/+/120005"
-    code, out, err = run_cli(stack_repo, resolve_main, [url], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, resolve_main, [url], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "Gerrit change: #120005" in out
 
@@ -148,54 +142,50 @@ def test_resolve_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ],
 )
 def test_resolve_refuses_an_address_that_cannot_be_right(
-    changeish: str, message: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    changeish: str, message: str, web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _configure_resolve_repo(stack_repo)
-    ch = _detail(change_id=CID_URL, sha=git_out("rev-parse", "HEAD~1", cwd=stack_repo), number=120005)
+    ch = _detail(change_id=CID_URL, sha=git_out("rev-parse", "HEAD~1", cwd=web_stack_repo), number=120005)
     code, _out, err = run_cli(
-        stack_repo, resolve_main, [changeish], monkeypatch, gerrit=ChangeStore({str(ch["id"]): ch})
+        web_stack_repo, resolve_main, [changeish], monkeypatch, gerrit=ChangeStore({str(ch["id"]): ch})
     )
     assert code == ExitCode.NOT_FOUND
     assert message in err
 
 
 def test_resolve_reports_the_real_triplet_when_gerrit_sends_a_compact_id(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _configure_resolve_repo(stack_repo)
-    ch = _detail(change_id=CID_URL, sha=git_out("rev-parse", "HEAD~1", cwd=stack_repo), number=120005)
+    ch = _detail(change_id=CID_URL, sha=git_out("rev-parse", "HEAD~1", cwd=web_stack_repo), number=120005)
     triplet = str(ch["id"])
     ch["id"] = "testproj~120005"
 
     code, out, err = run_cli(
-        stack_repo, resolve_main, ["change:120005", "--json"], monkeypatch, gerrit=ChangeStore({triplet: ch})
+        web_stack_repo, resolve_main, ["change:120005", "--json"], monkeypatch, gerrit=ChangeStore({triplet: ch})
     )
 
     assert code == 0, err
     assert json_stdout(out)["resolution"]["selected"]["triplet"] == f"testproj~main~{CID_URL}"
 
 
-def test_resolve_query(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_query(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_QUERY
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     ch = _detail(change_id=cid, sha=sha, number=120006)
     details = {str(ch["id"]): ch}
     store = ChangeStore(details)
     store.stub_query("status:open", [ch])
-    code, out, err = run_cli(stack_repo, resolve_main, ["q:status:open"], monkeypatch, gerrit=store)
+    code, out, err = run_cli(web_stack_repo, resolve_main, ["q:status:open"], monkeypatch, gerrit=store)
     assert code == 0, err
     assert "Gerrit change: #120006" in out
 
 
-def test_resolve_json_shape(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_json_shape(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_JSON
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     main_row = _detail(change_id=cid, sha=sha, number=120045, branch="main")
     dev_row = _detail(change_id=cid, sha=sha, number=119870, branch="dev")
     details = _mock_details(main_row, dev_row)
-    code, out, err = run_cli(stack_repo, resolve_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
+    code, out, err = run_cli(web_stack_repo, resolve_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     data = json_stdout(out)
     assert set(data.keys()) == {"resolution"}
@@ -209,22 +199,20 @@ def test_resolve_json_shape(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -
     assert "note:" in err
 
 
-def test_resolve_ambiguous_exits_four(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_ambiguous_exits_four(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_AMBIG
-    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
     first = _detail(change_id=cid, sha=sha, number=120045, branch="main")
     second = _detail(change_id=cid, sha=sha, number=120046, branch="main")
     details = _mock_details(first, second)
-    code, _out, err = run_cli(stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore(details))
+    code, _out, err = run_cli(web_stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == ExitCode.AMBIGUOUS
     assert "ambiguous" in err.lower()
 
 
-def test_resolve_not_found_exits_three(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_resolve_repo(stack_repo)
+def test_resolve_not_found_exits_three(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = CID_MISSING
-    code, _out, err = run_cli(stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore({}))
+    code, _out, err = run_cli(web_stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore({}))
     assert code == ExitCode.NOT_FOUND
     assert "error:" in err.lower()
 

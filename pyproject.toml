@@ -20,6 +20,7 @@ dev = [
     "pre-commit>=3.0",
     "pylint>=4.0.5",
     "pytest>=7.0",
+    "pytest-xdist>=3.5",
     "ruff>=0.9",
 ]
 
@@ -52,7 +53,11 @@ include = ["src/gerrit_workflow_tools", "contrib/completion/ger.bash"]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
 # Integration tests (Docker + Gerrit) live under tests/integration; run explicitly (see tests/integration/README.md).
-addopts = "--ignore=tests/integration"
+# Nearly every test spawns git, which is slow on Windows, so the suite runs on all cores.
+# Pass `-n 0` to run in-process (one test, a debugger, a profile).
+addopts = "--ignore=tests/integration -n auto"
+# Keep only failed tests' directories: a run otherwise leaves ~700 repository copies behind.
+tmp_path_retention_policy = "failed"
 markers = [
     "integration: needs Docker + Gerrit (tests/integration)",
     "slow: intentionally slow unit fixtures",
@@ -130,10 +135,11 @@ ignore_names = [
     "pytest_configure",
     "pytest_fixture_setup",
     "pytest_sessionfinish",
+    "pytest_xdist_auto_num_workers",
     "_isolate_xdg_cache_home",
     "_clear_git_cache",
     "_profile_test_duration",
-    "_reset_hyperlink_mode",
+    "_reset_output_modes",
     "pytestmark",
     # pytest fixtures consumed via parameter name injection.
     "history_home",

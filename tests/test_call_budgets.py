@@ -96,15 +96,14 @@ def _make_linear_stack(root: Path, n: int) -> Path:
     return repo
 
 
-def test_log_call_budget_on_stack_repo(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_call_budget_on_stack_repo(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Cold ``ger log``: one project-scoped batch query, no bare change:I, ≪ N git calls."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     assert len(rows) >= 3
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
 
     assert code in (0, 1), err
     assert len(store.queries()) == 1, store.queries()
@@ -234,10 +233,9 @@ def test_log_rev_parse_does_not_scale_with_stack_size(
     assert len(large) == len(small) <= 2, rev_parses
 
 
-def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_call_budget_on_head(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger show HEAD`` resolves one change — a handful of git + REST calls, not a stack storm."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(
         build_details_by_change_id(rows),
         accounts={1000: {"_account_id": 1000, "username": "me", "name": "me"}},
@@ -245,7 +243,7 @@ def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     )
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
 
     assert code == 0, err
     # Resolution probe + detail query; no CI fetch without -v when Verified passes. Who you are is
@@ -260,23 +258,22 @@ def test_show_call_budget_on_head(stack_repo: Path, monkeypatch: pytest.MonkeyPa
         f"git subprocesses={run.call_count} budget={_SHOW_GIT_BUDGET}; args={[c.args[:4] for c in run.call_args_list]}"
     )
     before = len(store.calls)
-    code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
     assert code == 0, err
     assert [c.method for c in store.calls[before:] if c.method == "get_account"] == []
     # Your own change does not list you as a reviewer: the to-review query is not asked.
     assert not [q for q in store.queries() if "reviewer:self" in q]
 
 
-def test_resolve_call_budget_for_change_id(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_call_budget_for_change_id(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ger resolve`` for one Change-Id: one query, O(1) git."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     cid = rows[0].change_id
     assert cid
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, resolve_main, [cid, "--json"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, resolve_main, [cid, "--json"], monkeypatch, gerrit=store)
 
     assert code == 0, err
     assert len(store.queries()) == 1
@@ -328,38 +325,36 @@ def _fix_twice(stack_repo: Path, monkeypatch: pytest.MonkeyPatch, store: ChangeS
 
 @pytest.mark.parametrize("by_change_id", [False, True], ids=["local-ref", "change-id"])
 def test_fix_asks_gerrit_at_most_once_and_not_at_all_when_warm(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, by_change_id: bool
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch, by_change_id: bool
 ) -> None:
     """``ger fix`` resolves on the local stack (ADR-0003); only whether Gerrit closed the change is asked.
 
     One request with a cold cache, none inside the trust window.
     """
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     cid = rows[1].change_id
     assert cid
     store = ChangeStore(build_details_by_change_id(rows))
 
-    made = _fix_twice(stack_repo, monkeypatch, store, cid if by_change_id else rows[1].sha)
+    made = _fix_twice(web_stack_repo, monkeypatch, store, cid if by_change_id else rows[1].sha)
 
     assert made == [1, 0], store.calls
     assert [call.method for call in store.calls] == ["query_changes"]
 
 
-def test_log_warm_second_run_zero_rest_calls(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_warm_second_run_zero_rest_calls(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Warm ``ger log`` inside the trust window makes no new Gerrit calls."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(build_details_by_change_id(rows))
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     after_first = len(store.calls)
     assert after_first >= 1, "cold run should populate cache via REST"
 
     with _count_git() as run:
-        code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+        code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     assert len(store.calls) == after_first, (
         f"warm run added REST calls: {[c.method for c in store.calls[after_first:]]}"
@@ -367,17 +362,16 @@ def test_log_warm_second_run_zero_rest_calls(stack_repo: Path, monkeypatch: pyte
     _assert_log_git_budget(run)
 
 
-def test_log_warm_second_run_no_reviewer_follow_ups(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_warm_second_run_no_reviewer_follow_ups(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Payloads with ``reviewers`` must not trigger ``list_change_reviewers`` on cold or warm run."""
-    _configure_web(stack_repo)
-    rows = stack_rows_mb_to_head(stack_repo)
+    rows = stack_rows_mb_to_head(web_stack_repo)
     store = ChangeStore(build_details_by_change_id(rows))
 
-    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     assert store.calls_to("list_change_reviewers") == []
 
-    code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
     assert code in (0, 1), err
     assert store.calls_to("list_change_reviewers") == []
 
@@ -462,16 +456,15 @@ def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(
 
 
 def test_show_on_a_cold_cache_asks_for_the_change_once_in_full(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """With nothing cached for the Change-Id, the lookup asks for the details too: no second query for the stack.
 
     A light answer is only worth asking for when there is a cached row to hold it against.
     """
-    _configure_web(stack_repo)
-    store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(stack_repo)))
+    store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(web_stack_repo)))
 
-    code, _out, err = run_cli(stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
 
     assert code == 0, err
     (lookup,) = store.calls_to("query_changes")

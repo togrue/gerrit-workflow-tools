@@ -32,7 +32,13 @@ from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits, pinned_below, pinned_count
+from gerrit_workflow_tools.core.stack import (
+    get_stack_snapshot,
+    merge_commits,
+    pinned_below,
+    pinned_count,
+    rewrite_base,
+)
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.core.upstream_moved import merged_same, upstream_moved
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
@@ -50,7 +56,8 @@ from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = 1
+API_VERSION = "1.0.0"
+"""The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
 
@@ -171,7 +178,7 @@ def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
     snapshot = get_stack_snapshot(ctx.cwd, settings=ctx.settings)
     pinned = pinned_count(ctx.cwd, snapshot.commits)
     commits = snapshot.commits[pinned:]
-    base = snapshot.commits[pinned - 1].sha if pinned else snapshot.upstream_tip
+    base = rewrite_base(ctx.cwd, snapshot, pinned)
     answer: dict[str, Any] = {"head": commit_sha_or_none(ctx.cwd, "HEAD"), "available": True, "swaps": []}
     try:
         conflicts = swap_conflicts(ctx.cwd, base, commits)

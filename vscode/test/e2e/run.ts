@@ -113,7 +113,7 @@ function main(): number {
   // Gerrit's event stream for fake_ger.py: the suite appends an event, the fake reads it.
   const events = path.join(work, "events.jsonl");
   fs.writeFileSync(events, "");
-  const env: NodeJS.ProcessEnv = { ...hermetic, GER_E2E_OUT: report, GER_E2E_EVENTS: events, GER_E2E_DOWN: path.join(work, "down") };
+  const env: NodeJS.ProcessEnv = { ...hermetic, GER_E2E_OUT: report, GER_E2E_EVENTS: events, GER_E2E_DOWN: path.join(work, "down"), GER_E2E_API: path.join(work, "api") };
   const pictures = process.env.GER_E2E_PNG ? path.resolve(process.env.GER_E2E_PNG) : undefined;
   if (pictures) {
     // Port 0: Electron picks a free one and writes it to this file in the profile.

@@ -2,6 +2,7 @@
 // (package.json, viewsWelcome). No `vscode` import: unit-tested.
 
 import { GerApiError } from "./api";
+import { IncompatibleServe } from "./compat";
 import { ExecutableNotFound, ServeFailed } from "./server";
 
 export type GerState =
@@ -16,6 +17,8 @@ export type GerState =
   | "no-executable"
   /** The checkout lacks Gerrit settings (`gerrit.webUrl`, credentials): `ger setup` fixes it. */
   | "setup"
+  /** `ger serve` speaks an API version this extension cannot use: ger or the extension needs updating. */
+  | "incompatible"
   /** Anything else: `ger serve` crashed, or answered with a bug. Retry, or read the log. */
   | "failed";
 
@@ -23,6 +26,9 @@ export type GerState =
 export function failureState(error: unknown): GerState {
   if (error instanceof ExecutableNotFound) {
     return "no-executable";
+  }
+  if (error instanceof IncompatibleServe) {
+    return "incompatible";
   }
   const code = error instanceof GerApiError || error instanceof ServeFailed ? error.code : undefined;
   if (code === "CONFIG") {
@@ -45,13 +51,19 @@ export interface Waiting {
   link?: { label: string; command: string };
 }
 
-/** Why `what` (a view's content, as a noun phrase) is not shown in `state`; undefined when it is. */
-export function waitingFor(state: GerState, what: string): Waiting | undefined {
+/**
+ * Why `what` (a view's content, as a noun phrase) is not shown in `state`; undefined when it is.
+ * `incompatible`: the refusal, when that is the state; the view then says it and offers the fix.
+ */
+export function waitingFor(state: GerState, what: string, incompatible?: IncompatibleServe): Waiting | undefined {
   if (state === "ready") {
     return undefined;
   }
   if (state === "starting") {
     return { text: "Starting ger serve…" };
+  }
+  if (state === "incompatible" && incompatible) {
+    return { text: incompatible.message, link: { label: incompatible.gerOlder ? "Update ger" : "Install Matching ger", command: "ger.installCli" } };
   }
   return {
     text: `${what} shows here once ger runs. Review chains says what is missing and what to do next.`,
@@ -59,7 +71,7 @@ export function waitingFor(state: GerState, what: string): Waiting | undefined {
   };
 }
 
-/** States only you can end (install ger, run `ger setup`, trust the folder, open a repository): polling them again would only restart `ger serve` to fail again. */
+/** States only you can end (install or update ger, run `ger setup`, trust the folder, open a repository): polling them again would only restart `ger serve` to fail again. */
 export function waitsForYou(state: GerState): boolean {
-  return state === "no-executable" || state === "setup" || state === "untrusted" || state === "no-repo";
+  return state === "no-executable" || state === "setup" || state === "untrusted" || state === "no-repo" || state === "incompatible";
 }
