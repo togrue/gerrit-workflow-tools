@@ -189,6 +189,11 @@ class Settings:
         return self.get("gerrit.webUrl")
 
     @property
+    def gerrit_allow_insecure_http(self) -> bool:
+        """``gerrit.allowInsecureHttp``: accept an ``http://`` ``gerrit.webUrl`` (default off)."""
+        return self.flag("gerrit.allowInsecureHttp")
+
+    @property
     def gerrit_project(self) -> str | None:
         """``gerrit.project`` override, if set."""
         return self.get("gerrit.project")

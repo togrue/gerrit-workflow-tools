@@ -264,6 +264,9 @@ def configure_ger_git_repo(
 ) -> None:
     """Apply ``gerrit.*`` and branch upstream; clear config cache."""
     git("config", "gerrit.webUrl", web_base, cwd=repo)
+    if web_base.startswith("http://"):
+        # The test Gerrit container serves plain http; ger refuses that without the opt-in.
+        git("config", "gerrit.allowInsecureHttp", "true", cwd=repo)
     git("config", "gerrit.user", gerrit_user, cwd=repo)
     git("config", "gerrit.token", gerrit_secret, cwd=repo)
     git("config", "gerrit.remote", gerrit_remote, cwd=repo)
