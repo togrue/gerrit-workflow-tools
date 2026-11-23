@@ -32,6 +32,7 @@ __all__ = [
     "resolve_attention_query",
     "resolve_edit_attention_commit",
     "resolve_first_edit_attention_sha",
+    "stack_log_commit",
 ]
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -144,10 +145,14 @@ def describe_cursor_status(run: RunContext, *, branch: str | None) -> CursorStat
     )
 
 
+def stack_log_commit(run: RunContext, sha: str) -> LogCommit | None:
+    """The annotated stack's row for *sha*, Gerrit state overlaid; ``None`` when it is not on the stack."""
+    return next((c for c in load_edit_attention_stack(run).commits if c.sha == sha), None)
+
+
 def change_id_for_stack_sha(run: RunContext, sha: str) -> str | None:
     """Return the Change-Id of *sha* in the annotated stack, if present."""
-    stack_view = load_edit_attention_stack(run)
-    matched = next((c for c in stack_view.commits if c.sha == sha), None)
+    matched = stack_log_commit(run, sha)
     return matched.change_id if matched else None
 
 
