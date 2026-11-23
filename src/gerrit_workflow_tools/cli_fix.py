@@ -23,6 +23,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_ch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_underway
+from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.usage import UsageError
 
@@ -141,6 +142,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     logger.info("fixup target commit: %s", fixup_sha)
 
     print_stack_commit_notes(target)
+    commit = next(c for c in snapshot.commits if c.sha == target.sha)
+    if refusal := closed_change_refusal(run.gerrit, commit.valid_change_id, commit=commit.short_sha):
+        raise UsageError(refusal)
 
     if (
         not args.commit_all

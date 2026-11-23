@@ -113,6 +113,27 @@ class ChangeApi:
         service.cache.remember_carrying(change_id, rows)
         return rows
 
+    def on_push_branch(self, change_id: str) -> list[dict[str, Any]]:
+        """The changes carrying Change-Id *change_id* on the run's project and **push branch**.
+
+        At most one request: the push branch's change from the cache while it is inside the
+        trust window (a ``ger log`` a moment ago leaves it there), else :meth:`carrying`, which
+        keeps its own answer for the window too. Without a stack context it raises
+        ``ChangeResolutionError``, never a Gerrit request.
+        """
+        service = self._service
+        stack = service.stack_context()
+        if not service.refresh and not self._exact:
+            key = service.cache_key(change_id, stack)
+            known = service.cache.trusted_change(key, trust_window_seconds=service.trust_window_seconds)
+            if known is not None:
+                return [known]
+        return [
+            row
+            for row in self.carrying(change_id)
+            if row.get("project") == stack.project and row.get("branch") == stack.push_branch
+        ]
+
     def get(self, ref: str) -> dict[str, Any]:
         """The details of the one change *ref* names: a triplet, a Gerrit id or a number.
 

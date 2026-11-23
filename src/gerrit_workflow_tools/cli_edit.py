@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
     change_id_for_stack_sha,
     resolve_edit_attention_commit,
     resolve_first_edit_attention_sha,
+    stack_log_commit,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
@@ -41,9 +42,11 @@ from gerrit_workflow_tools.core.rebase_state import (
     rebase_in_progress,
     unmerged_paths,
 )
+from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
 
@@ -170,8 +173,12 @@ def _resolve_target(
     *,
     branch: str | None,
     action: str,
-) -> tuple[str, str | None, CursorAction]:
-    """Resolve the SHA to stop on, plus the Change-Id and action for the cursor move it earns."""
+) -> tuple[str, str | None, CursorAction, tuple[str | None, ...]]:
+    """Resolve the SHA to stop on, plus the Change-Id and action for the cursor move it earns.
+
+    Last, the Gerrit status the annotated stack already overlaid on that commit, so the
+    closed-change check needs no request of its own.
+    """
     rev_arg = args.rev
     after_change_id: str | None = None
 
@@ -190,7 +197,8 @@ def _resolve_target(
         mode = "resume"
     else:
         target_res = resolve_in_stack(run, rev_arg, branch=branch)
-        return target_res.sha, change_id_for_stack_sha(run, target_res.sha), "set"
+        row = stack_log_commit(run, target_res.sha)
+        return target_res.sha, row.change_id if row else None, "set", (row.change_status if row else None,)
 
     target, notes = resolve_edit_attention_commit(
         run, mode=mode, branch=branch, after_change_id=after_change_id, update_cursor=False
@@ -200,7 +208,7 @@ def _resolve_target(
     # Said before the editor opens: the walk chose this commit, not the user.
     why = attention_text(target) or "needs edit attention"
     print(f"{_VERBS[action]} {target.short_sha} {target.summary} ({_WALK[mode]}: {why})", file=sys.stderr)
-    return target.sha, target.change_id, mode
+    return target.sha, target.change_id, mode, (target.change_status,)
 
 
 _WALK_ON = "ger edit -n"
@@ -273,9 +281,14 @@ def _run_interactive_stack_rebase(
         if continued != 0:
             return continued
     require_history_rewrite(cwd)
-    full, cursor_change_id, cursor_action = _resolve_target(run, args, branch=branch, action=action)
-    rebase_fork, _, _ = merge_base_with_target(cwd, branch)
+    full, cursor_change_id, cursor_action, walked_status = _resolve_target(run, args, branch=branch, action=action)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
+    # Dropping a change Gerrit closed is just what to do with it; editing or rewording it is not.
+    if action != "drop" and (
+        refusal := closed_change_refusal(run.gerrit, cursor_change_id, commit=short, statuses=walked_status)
+    ):
+        raise UsageError(refusal)
+    rebase_fork, _, _ = merge_base_with_target(cwd, branch)
 
     change_ids_before = _stack_change_ids(cwd, branch) if action == "reword" else set()
     env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
