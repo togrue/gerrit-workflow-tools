@@ -9,6 +9,9 @@ export interface Hello {
   pid: number;
 }
 
+/** `GET /health`: who answers. `api` is the serve API version, `MAJOR.MINOR.PATCH` (a bare number from an older ger). */
+export type Health = { name: string; version: string; api: string | number; repo: string | null; branch: string | null } & Activity;
+
 export interface ApiError {
   code: string;
   message: string;
@@ -529,7 +532,7 @@ export class GerClient {
     return payload;
   }
 
-  health(): Promise<{ name: string; version: string; api: number; repo: string | null; branch: string | null } & Activity> {
+  health(): Promise<Health> {
     return this.call("GET", "/health");
   }
 

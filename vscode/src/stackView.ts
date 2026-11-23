@@ -39,7 +39,7 @@ export class StackView extends WebView<StackVm> {
   }
 
   vm(): StackVm {
-    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "Your local stack");
+    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "Your local stack", this.model.incompatible);
     const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper));
     return waiting ? { ...vm, waiting } : vm;
   }

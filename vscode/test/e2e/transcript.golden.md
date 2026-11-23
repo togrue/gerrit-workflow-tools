@@ -1227,6 +1227,83 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
+## Meanwhile: ger serve restarts as a ger whose API is 2.0, while the extension needs 1.0
+
+**Expect:** The views refuse it rather than break on it: Local stack and the Change view say ger speaks API 2.0 and the extension needs 1.0, and that the extension is what to update, with a button to install the ger that matches it; the status bar shows a warning.
+
+```
++ status bar | $(warning) Gerrit
++ state  | incompatible
++ events | (not said)
++ stack  | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
+- status bar | $(error) CI failed: 102
+- state  | ready
+- events | live
+- chains | CI failed on 102: Refactor parser init
+- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
+- chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
+- chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
+- chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- chains | To review — 1 chain
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+- stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+- stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+- stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
++ change | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
+- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
+- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+- change | Commit message — test! temporary experiment  (editable)
+- change | Showing — Local commit <sha> · Against its base commit
+- change | Files — 1 · +1 −0
+- change |   c.txt — added +1 −0
+- change | Comments — none
+```
+
+## Meanwhile: ger is back at the matching release, and you press Retry
+
+**Expect:** ger serve starts again, its API fits, and the views show the stack and the chains as before.
+
+```
+progress (notification): Restarting ger serve
+status bar message: $(check) Refreshed from Gerrit
++ status bar | $(error) CI failed: 102
++ state  | ready
++ events | live
++ chains | CI failed on 102: Refactor parser init
++ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
++ chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
++ chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
++ chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ chains | To review — 1 chain
++ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
++ stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
++ stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
++ stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
++ change | title: Change 103
++ change | CI failed — V-1 CR+2
++ change | Commit message — test! temporary experiment  (editable)
++ change | Showing — Local commit <sha> · Against its base commit
++ change | Files — 1 · +1 −0
++ change |   c.txt — added +1 −0
++ change | Comments — none
++ change | CI
++ change |   Widget #55 — 2 findings
++ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
++ change |     FAILURE — generic · also fails on the parent
+- status bar | $(warning) Gerrit
+- state  | incompatible
+- events | (not said)
+- stack  | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
+- change | title: Change 102
+- change | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
+```
+
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
 
 **Expect:** With no click and no poll, Review chains shows the new unresolved comment on 900 within a few seconds; nothing is said.
@@ -1257,15 +1334,7 @@ notification (warning): Still out of date: fake ger: down for this test
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | title: Change 103
-+ change | CI failed — V-1 CR+2
-- change | title: Change 102
-- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-+ change | CI
-+ change |   Widget #55 — 2 findings
-+ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
-+ change |     FAILURE — generic · also fails on the parent
+(no change)
 ```
 
 ## Meanwhile: you start ger edit's rebase on "test! temporary experiment", and it stops there

@@ -317,9 +317,12 @@ When something is missing, the *Review chains* view says what and offers the nex
 | Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** (a folder you add later starts ger without a reload) |
 | The program that runs ger was not found | **Install ger** (in a terminal, with uv or pipx), then **Retry**; or **Open Settings** on `ger.executable` when it is installed somewhere else |
 | This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
+| ger and this extension do not speak the same version of the `ger serve` API (the line above says which versions, and which to update) | **Install the Matching ger** (the release with the extension's version), then **Retry**; when ger is the newer one, updating the extension fixes it too |
 | `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
 
-*Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running.
+*Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running. For an API version they cannot use they say which versions instead, and offer **Update ger** (or, when ger is newer, **Install Matching ger**) themselves.
+
+When the API fits but ger's version differs from the extension's, everything works and a warning says so, once a session: with **Update ger** when ger is older, or a suggestion to update the extension when ger is newer, and **Don't Show Again** for that pair of versions. Dev and local builds are not compared. The log records each comparison and what you chose.
 
 A branch without an upstream still shows your review chains; *Local stack* offers to track one.
 
@@ -465,7 +468,8 @@ printed.
 | File | Role |
 |------|------|
 | `src/api.ts` | The API types and the HTTP client. No `vscode` import. |
-| `src/server.ts` | Starts and stops `ger serve`. No `vscode` import. |
+| `src/server.ts` | Starts and stops `ger serve`, and refuses one whose API version does not fit. No `vscode` import. |
+| `src/compat.ts` | The API version the extension needs (`REQUIRED_API`), and the rule for whether a served API and a package version fit. No `vscode` import, unit-tested. |
 | `src/format.ts` | Words, ages, urgency, activity tracking. Pure, unit-tested. |
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
@@ -478,7 +482,7 @@ printed.
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |
-| `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal. |
+| `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal; installing ger, and the warning when its version is not the extension's. |
 | `src/workspace.ts`, `src/state.ts` | Which checkout is served; the state the views' welcome texts follow (`ger.state`). |
 | `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
 | `src/poller.ts` | Background refresh from Gerrit: on a timer while focused, and on regaining focus. |

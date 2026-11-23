@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
+import { IncompatibleServe } from "./compat";
 import { GerProcess } from "./server";
 import { GerState, failureState, staleReason } from "./state";
 
@@ -57,6 +58,8 @@ export class Model implements vscode.Disposable {
    * does a failure when there is no overview yet.
    */
   stale: string | undefined;
+  /** Why `ger serve` was refused, while the state is `incompatible`: the views say which side to update. */
+  incompatible: IncompatibleServe | undefined;
   /** What the views can show; their welcome texts follow it as the `ger.state` context key. */
   state: GerState = "starting";
   /** Keys of chains with activity since they were last seen. */
@@ -134,6 +137,7 @@ export class Model implements vscode.Disposable {
       const first = this.overview === undefined;
       this.overview = await client.overview(fromGerrit);
       this.failure = undefined;
+      this.incompatible = undefined;
       this.stale = undefined;
       // Leave Review Checkout is offered only while there is one to leave.
       const review = await client.review().catch(() => null);
@@ -161,6 +165,7 @@ export class Model implements vscode.Disposable {
       } else {
         // What was shown may be wrong now: the views say what went wrong and what to do instead.
         this.failure = describeError(error);
+        this.incompatible = error instanceof IncompatibleServe ? error : undefined;
         this.stale = undefined;
         this.overview = undefined;
         await this.setState(state);
