@@ -6,8 +6,8 @@ it just because it is there (git does not clone hooks for the same reason). It r
 1. **The scripts dir is configured where a checkout cannot write.** ``gerrit.scriptsDir`` is set in
    the repository's own git config (local or worktree scope, or ``git -c``), which is never cloned;
    or it is set in global or system config and names a directory outside the work tree.
-2. **The user trusted these exact contents.** The :func:`source_digest` of the registry directory's
-   Python files is recorded in :func:`trust_store_path`. Any change to them changes the digest, so a
+2. **The user trusted these exact contents.** The :attr:`RegistrySource.digest` of the registry
+   directory's Python files is recorded in :func:`trust_store_path`. Any change to them changes the digest, so a
    changed registry needs trust again. Equal contents are trusted wherever they are (every worktree).
 
 Core only decides; it never asks. The CLI asks before a command runs (``registry_trust_prompt``)
@@ -21,11 +21,12 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import ConfigScope, Settings
+from gerrit_workflow_tools.core.config import ConfigError, ConfigScope, Settings
 from gerrit_workflow_tools.core.gerrit.paths import xdg_config_home
 
 
@@ -52,9 +53,69 @@ def source_digest(paths: Iterable[Path]) -> str:
     return digest.hexdigest()
 
 
-def registry_source_digest(domain_dir: Path) -> str:
-    """The :func:`source_digest` of every Python file under *domain_dir*: the code a load runs."""
-    return source_digest(p for p in domain_dir.rglob("*.py") if "__pycache__" not in p.parts)
+@dataclass(frozen=True)
+class RegistrySource:
+    """The Python sources of one registry directory, read once: what is hashed is what runs.
+
+    The loader (:mod:`gerrit_workflow_tools.core.ger_registry`) imports only from :attr:`files`, so
+    nothing it runs escapes :attr:`digest`: no ``__pycache__`` bytecode (an unchecked hash-based
+    ``.pyc`` would otherwise run in place of its source), and no file read after it was hashed.
+    """
+
+    directory: Path
+    files: Mapping[tuple[str, ...], bytes]
+    """Contents by path relative to :attr:`directory`, as parts (``("helpers", "x.py")``)."""
+
+    @cached_property
+    def digest(self) -> str:
+        """One SHA-256 over every relative path and its contents, in sorted order."""
+        digest = hashlib.sha256()
+        for parts in sorted(self.files):
+            digest.update("/".join(parts).encode("utf-8") + b"\0" + self.files[parts] + b"\0")
+        return digest.hexdigest()
+
+    def path(self, parts: tuple[str, ...]) -> Path:
+        return self.directory.joinpath(*parts)
+
+
+MAX_REGISTRY_FILES = 2000
+"""More ``*.py`` paths than this under one registry directory is refused: aliasing symlinks multiply
+paths, and a checked-out change must not be able to make ger walk without end."""
+
+
+class RegistryTooLargeError(ConfigError):
+    """A registry directory holds more than :data:`MAX_REGISTRY_FILES` Python files."""
+
+
+def read_registry_source(domain_dir: Path) -> RegistrySource:
+    """Read every ``*.py`` under *domain_dir*, ``__pycache__`` aside.
+
+    Symlinked directories are followed, as an import would follow them, under every name that
+    reaches them (``alias -> helpers`` keeps ``helpers`` too): a helper reached through a link is
+    part of the digest like any other. Only a directory that is its own ancestor (a cycle) is skipped.
+    """
+    files: dict[tuple[str, ...], bytes] = {}
+
+    def walk(directory: Path, prefix: tuple[str, ...], ancestors: frozenset[str]) -> None:
+        try:
+            entries = sorted(os.scandir(directory), key=lambda e: e.name)
+        except OSError:
+            return
+        for entry in entries:
+            if entry.is_dir():  # follows symlinks, as an import does
+                real = os.path.realpath(entry.path)
+                if entry.name != "__pycache__" and real not in ancestors:
+                    walk(Path(entry.path), (*prefix, entry.name), ancestors | {real})
+            elif entry.name.endswith(".py"):
+                if len(files) >= MAX_REGISTRY_FILES:
+                    raise RegistryTooLargeError(f"{domain_dir} holds over {MAX_REGISTRY_FILES} Python files")
+                try:
+                    files[(*prefix, entry.name)] = Path(entry.path).read_bytes()
+                except OSError:
+                    files[(*prefix, entry.name)] = b""
+
+    walk(domain_dir, (), frozenset({os.path.realpath(domain_dir)}))
+    return RegistrySource(domain_dir, files)
 
 
 def resolve_scripts_root(root: Path | None, scripts_dir: str) -> Path | None:
@@ -126,7 +187,7 @@ def _read_store() -> dict[str, dict[str, str]]:
 
 
 def digest_trusted(digest: str) -> bool:
-    """Whether the user trusted registry code with this :func:`registry_source_digest`."""
+    """Whether the user trusted registry code with this :attr:`RegistrySource.digest`."""
     return digest in _read_store()
 
 
@@ -160,7 +221,7 @@ def untrusted_local_registries(root: Path | None, settings: Settings) -> list[Lo
         domain_dir = local_domain_dir(root, settings.scripts_dir, domain)
         if domain_dir is None:
             continue
-        digest = registry_source_digest(domain_dir)
+        digest = read_registry_source(domain_dir).digest
         if not digest_trusted(digest):
             found.append(LocalRegistry(domain, domain_dir, digest))
     return found
