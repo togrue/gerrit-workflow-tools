@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     encode_gerrit_path_segment,
     gerrit_error_reason,
     resolve_gerrit_web_base,
+    strip_terminal_controls,
 )
 from gerrit_workflow_tools.core.http_connect import urlopen
 
@@ -191,7 +192,9 @@ class HttpGerritRest:
         if not raw.strip():
             return {}
         try:
-            parsed = json.loads(_strip_magic_json_prefix(raw))
+            # The one place Gerrit text enters: cleaned here, the cache, every dataclass and
+            # ``ger serve`` see only printable text.
+            parsed = strip_terminal_controls(json.loads(_strip_magic_json_prefix(raw)))
         except json.JSONDecodeError as e:
             raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
         if _LOG_RESPONSE_BODIES:

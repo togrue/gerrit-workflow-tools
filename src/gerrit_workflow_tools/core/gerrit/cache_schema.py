@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Sized
 
 
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "7"
 
 # Tables that hold what Gerrit said. `ger cache clear` empties these; ``meta`` stays.
 DATA_TABLES = ("checks", "comments", "changes", "missing_changes", "settled_commits")

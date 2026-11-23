@@ -558,8 +558,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError` and `GerritUnavailableError` (Gerrit could not be asked at all), change-id path encoding, `parallel_map`, `self_account_id` |
-| `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth` |
+| `core/gerrit/rest.py` | The `GerritRest` seam: the protocol, `GerritApiError` and `GerritUnavailableError` (Gerrit could not be asked at all), change-id path encoding, `parallel_map`, `self_account_id`, `strip_terminal_controls` (Gerrit text made safe to print) |
+| `core/gerrit/http_rest.py` | `HttpGerritRest`, the seam over HTTP, and `GerritAuth`; every response is passed through `strip_terminal_controls` as it is parsed |
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |

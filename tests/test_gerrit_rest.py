@@ -502,3 +502,48 @@ def test_a_triplet_gerrit_id_or_number_reaches_its_changes_url(ref: str) -> None
     client._request_json = record  # type: ignore[method-assign,assignment]
     client.get_messages(ref)
     assert paths == [f"changes/{encode_gerrit_path_segment(ref)}/messages"]
+
+
+def test_gerrit_text_reaches_core_without_terminal_control_characters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A commenter's escape sequences (OSC 52 clipboard write, a forged colour) never leave the seam.
+
+    CRLF and a lone CR become ``\\n``, so a Windows-typed comment keeps its lines and a CR cannot
+    overwrite one; ``\\t`` stays; C0, DEL and C1 controls go, in keys as well as values.
+    """
+    from gerrit_workflow_tools.core.gerrit import http_rest
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    payload = (
+        b')]}\'\n{"src/a\\u001b.py": [{"id": "c1", "author": {"name": "Mallory\\u009b2J"},'
+        b' "message": "LGTM\\u001b]52;c;cm0gLXJmIH4=\\u0007\\r\\nsee\\tline 2\\rhidden\\u007f\\u001b[31m"}]}'
+    )
+
+    class _Response(io.BytesIO):
+        def __enter__(self) -> _Response:
+            return self
+
+    monkeypatch.setattr(http_rest, "urlopen", lambda *_a, **_k: _Response(payload))
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+
+    comments = client.get_comments("p~main~I" + "a" * 40)
+
+    assert comments == {
+        "src/a.py": [
+            {"id": "c1", "author": {"name": "Mallory2J"}, "message": "LGTM]52;c;cm0gLXJmIH4=\nsee\tline 2\nhidden[31m"}
+        ]
+    }
+
+
+def test_gerrits_error_reason_carries_no_terminal_control_characters(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.core.gerrit import http_rest
+    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+
+    def _urlopen(request: Any, **_kwargs: object) -> Any:
+        body = io.BytesIO(b"\x1b]0;pwned\x07no such\x1b[2K change")
+        raise HTTPError(request.full_url, 404, "Not Found", {}, body)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(http_rest, "urlopen", _urlopen)
+    client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
+    with pytest.raises(GerritApiError) as caught:
+        client.get_messages("p~main~I" + "a" * 40)
+    assert caught.value.reason == "]0;pwnedno such[2K change"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
@@ -51,6 +52,28 @@ def _error_texts(value: Any) -> list[str]:
     return []
 
 
+_NEWLINE = re.compile(r"\r\n?")
+_TERMINAL_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def strip_terminal_controls(value: Any) -> Any:
+    """*value* with every string in it (keys too) safe to print: no terminal control characters.
+
+    Gerrit text is written by whoever can comment on a change or name their account, and an
+    escape sequence in it could hide or forge output, set the window title or write the
+    clipboard. Line breaks become ``\\n`` first (``\\r\\n`` and a lone ``\\r``, as Python's universal
+    newlines read them), so a CRLF message keeps its lines and a ``\\r`` cannot overwrite one.
+    Then every C0 control but ``\\n`` and ``\\t``, DEL and every C1 control is removed.
+    """
+    if isinstance(value, str):
+        return _TERMINAL_CONTROLS.sub("", _NEWLINE.sub("\n", value))
+    if isinstance(value, dict):
+        return {strip_terminal_controls(k): strip_terminal_controls(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [strip_terminal_controls(item) for item in value]
+    return value
+
+
 def gerrit_error_reason(body: str, status_phrase: str) -> str:
     """Gerrit's own reason for a failed request, on one line: its response body, else *status_phrase*.
 
@@ -61,7 +84,8 @@ def gerrit_error_reason(body: str, status_phrase: str) -> str:
     if text[:1] in ("{", "["):
         with contextlib.suppress(json.JSONDecodeError):
             text = "; ".join(dict.fromkeys(_error_texts(json.loads(text))))
-    text = "; ".join(" ".join(line.split()) for line in text.splitlines() if line.strip())
+    lines = strip_terminal_controls(text).splitlines()
+    text = "; ".join(" ".join(line.split()) for line in lines if line.strip())
     if not text:
         return status_phrase
     return text if len(text) <= 300 else f"{text[:297]}..."
@@ -143,7 +167,8 @@ class GerritRest(Protocol):
     :mod:`~gerrit_workflow_tools.core.gerrit.service` and the module-level helpers below,
     so an implementation only has to answer individual Gerrit questions.
 
-    Implementations return Gerrit payloads verbatim and raise :class:`GerritApiError` on
+    Implementations return Gerrit payloads verbatim but for :func:`strip_terminal_controls`,
+    which the HTTP implementation applies to every response as it is parsed, and raise :class:`GerritApiError` on
     failure; interpreting or filtering those payloads is the caller's job. There is
     deliberately no raw-path escape hatch (``get_json``) — that would make the set of
     things crossing this seam unbounded. ``cli_fetch_api`` uses a concrete
