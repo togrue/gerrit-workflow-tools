@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import ConfigScope, Settings
+from gerrit_workflow_tools.core.config import ConfigError, ConfigScope, Settings
 from gerrit_workflow_tools.core.gerrit.paths import xdg_config_home
 
 
@@ -78,28 +78,43 @@ class RegistrySource:
         return self.directory.joinpath(*parts)
 
 
+MAX_REGISTRY_FILES = 2000
+"""More ``*.py`` paths than this under one registry directory is refused: aliasing symlinks multiply
+paths, and a checked-out change must not be able to make ger walk without end."""
+
+
+class RegistryTooLargeError(ConfigError):
+    """A registry directory holds more than :data:`MAX_REGISTRY_FILES` Python files."""
+
+
 def read_registry_source(domain_dir: Path) -> RegistrySource:
     """Read every ``*.py`` under *domain_dir*, ``__pycache__`` aside.
 
-    Symlinked directories are followed, as an import would follow them, each real directory once:
-    a helper reached through a link is part of the digest like any other.
+    Symlinked directories are followed, as an import would follow them, under every name that
+    reaches them (``alias -> helpers`` keeps ``helpers`` too): a helper reached through a link is
+    part of the digest like any other. Only a directory that is its own ancestor (a cycle) is skipped.
     """
     files: dict[tuple[str, ...], bytes] = {}
-    seen: set[str] = set()
-    for current, dirs, names in os.walk(domain_dir, followlinks=True):
-        real = os.path.realpath(current)
-        if real in seen:
-            dirs[:] = []
-            continue
-        seen.add(real)
-        dirs[:] = sorted(d for d in dirs if d != "__pycache__")
-        prefix = Path(current).relative_to(domain_dir).parts
-        for name in names:
-            if name.endswith(".py"):
+
+    def walk(directory: Path, prefix: tuple[str, ...], ancestors: frozenset[str]) -> None:
+        try:
+            entries = sorted(os.scandir(directory), key=lambda e: e.name)
+        except OSError:
+            return
+        for entry in entries:
+            if entry.is_dir():  # follows symlinks, as an import does
+                real = os.path.realpath(entry.path)
+                if entry.name != "__pycache__" and real not in ancestors:
+                    walk(Path(entry.path), (*prefix, entry.name), ancestors | {real})
+            elif entry.name.endswith(".py"):
+                if len(files) >= MAX_REGISTRY_FILES:
+                    raise RegistryTooLargeError(f"{domain_dir} holds over {MAX_REGISTRY_FILES} Python files")
                 try:
-                    files[(*prefix, name)] = (Path(current) / name).read_bytes()
+                    files[(*prefix, entry.name)] = Path(entry.path).read_bytes()
                 except OSError:
-                    files[(*prefix, name)] = b""
+                    files[(*prefix, entry.name)] = b""
+
+    walk(domain_dir, (), frozenset({os.path.realpath(domain_dir)}))
     return RegistrySource(domain_dir, files)
 
 

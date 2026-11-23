@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.ger_registry import (
 )
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.registry_trust import (
+    RegistryTooLargeError,
     read_registry_source,
     trust_store_path,
     untrusted_local_registries,
@@ -192,6 +193,36 @@ def test_a_symlink_cycle_is_read_once(tmp_path: Path) -> None:
     _symlink_dir(d / "loop", d)
 
     assert list(read_registry_source(d).files) == [("registry.py",)]
+
+
+def test_an_alias_of_a_helper_directory_keeps_both_import_paths(stack_repo: Path, tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    d = _plant_registry(stack_repo, marker)
+    (d / "helpers").mkdir()
+    (d / "helpers" / "strategy.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _symlink_dir(d / "alias", d / "helpers")  # Sorts before "helpers": must not hide it.
+    registry = d / "registry.py"
+    registry.write_text(
+        "from .helpers.strategy import VALUE\nfrom .alias.strategy import VALUE as V2\n"
+        + registry.read_text(encoding="utf-8"),
+        "utf-8",
+    )
+    trust_local_registries(stack_repo)
+
+    assert {("alias", "strategy.py"), ("helpers", "strategy.py")} <= set(read_registry_source(d).files)
+    assert _resolve(stack_repo, Settings.from_map({})) is not None
+    assert marker.exists()
+
+
+def test_a_registry_with_too_many_files_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    d = tmp_path / "ready"
+    d.mkdir()
+    for i in range(3):
+        (d / f"m{i}.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr("gerrit_workflow_tools.core.registry_trust.MAX_REGISTRY_FILES", 2)
+
+    with pytest.raises(RegistryTooLargeError):
+        read_registry_source(d)
 
 
 def test_an_unreadable_trust_store_trusts_nothing(stack_repo: Path, tmp_path: Path) -> None:
