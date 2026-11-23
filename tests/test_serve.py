@@ -1065,6 +1065,38 @@ def test_new_comments_go_to_gerrit_as_drafts_or_stay_here_as_notes(stack_repo: P
     assert states == ["draft", "note"]
 
 
+def test_a_new_comment_goes_on_the_version_of_the_change_that_was_shown(stack_repo: Path) -> None:
+    store, keys, rows = _gerrit(stack_repo)
+    old = rows[3].sha
+    # The change is reworked here: Gerrit still has patchset 1, the commit HEAD names is new.
+    (stack_repo / "d.txt").write_text("reworked\nwith a second line\n", encoding="utf-8")
+    git("commit", "-qa", "--amend", "--no-edit", cwd=stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    assert _get(api, "/show", rev="HEAD")["commits"][0]["new_comment"] == "local-draft"
+
+    # A viewer showing patchset 1 says so: the draft is on patchset 1, its location checked against its lines.
+    shown = {"rev": "HEAD", "commit": old, "message": "Why?"}
+    draft = _post(api, "/comments/new", {**shown, "location": "d.txt:1"})
+    assert (draft["state"], draft["patch_set"], draft["commit"]) == ("draft", 1, old)
+    [call] = store.calls_to("put_draft")
+    assert call.args[:2] == (keys[3], 1)
+    with pytest.raises(BadRequest, match=r"past the end|line"):
+        _post(api, "/comments/new", {**shown, "location": "d.txt:2"})  # a line only the rework has
+    # A note on it is anchored to the patchset's lines too.
+    note = _post(api, "/comments/new", {**shown, "location": "d.txt:1", "state": "note"})
+    assert (note["state"], note["commit"]) == ("note", old)
+
+    # The commit rev names is fine to name; another change's commit, or anything that is not a commit id, is not.
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    own = _post(api, "/comments/new", {"rev": "HEAD", "commit": head, "location": "d.txt:2", "message": "x"})
+    assert (own["state"], own["commit"]) == ("local-draft", head)
+    with pytest.raises(ChangeResolutionError, match="is not a patchset of"):
+        _post(api, "/comments/new", {**shown, "commit": rows[0].sha, "location": "a.txt:1"})
+    with pytest.raises(BadRequest, match="commit must be a commit id"):
+        _post(api, "/comments/new", {**shown, "commit": "HEAD~1", "location": "d.txt:1"})
+    assert len(store.calls_to("put_draft")) == 1
+
+
 def test_a_commit_gerrit_does_not_have_gets_a_local_draft(stack_repo: Path) -> None:
     store, _keys, _rows = _gerrit(stack_repo)
     (stack_repo / "d.txt").write_text("reworked\n", encoding="utf-8")

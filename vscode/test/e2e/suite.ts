@@ -447,7 +447,7 @@ export async function run(): Promise<void> {
     );
     const commit = api.changeView.diff?.commit ?? "";
     const newThread = { uri: fileUri(commit, "b.txt"), range: new vscode.Range(0, 0, 0, 0), dispose: () => undefined };
-    const save = api.changeView.shown?.new_comment === "local-draft" ? "ger.comment.saveLocalDraft" : "ger.comment.saveDraft";
+    const save = api.changeView.newComment === "local-draft" ? "ger.comment.saveLocalDraft" : "ger.comment.saveDraft";
     await press(
       `"+" on line 1 of b.txt in the diff › ${save === "ger.comment.saveDraft" ? "Save Draft" : "Save Local Draft"}`,
       "The comment is saved as a draft and appears as a thread marked as your draft; it is not counted as unresolved feedback.",

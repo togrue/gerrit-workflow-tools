@@ -67,6 +67,21 @@ export class ChangeView extends WebView<ChangeVm> {
     return this.detail.diff;
   }
 
+  /**
+   * What a new comment on the version looked at becomes by default. Looking at another commit
+   * than the one `/show` resolved is looking at a patchset of the change: Gerrit has it, so a
+   * draft, whatever your own commit is. Else what `/show` says of the commit.
+   */
+  get newComment(): "draft" | "local-draft" | undefined {
+    const [shown, diff] = [this.shown, this.diff];
+    return shown && diff && diff.commit !== shown.sha ? "draft" : shown?.new_comment;
+  }
+
+  /** Which save button a new comment box offers: "Save Draft" or "Save Local Draft" (plus "Save Private Note"). */
+  private offerNewComment(): void {
+    void vscode.commands.executeCommand("setContext", "ger.newComment", this.newComment ?? "none");
+  }
+
   /** The review delta: for the mode chosen, or (someone's change) what is new since your review. */
   get delta(): Diff | undefined {
     return this.detail.delta;
@@ -162,8 +177,7 @@ export class ChangeView extends WebView<ChangeVm> {
       const commit = this.fetchCommit(client, target, together, signal).then(
         ([shown, files]) => {
           if (this.detail.arrive(token, "commit", shown) && (!together || this.detail.arrive(token, "base", files))) {
-            // Which save button a new comment box offers: "Save Draft" or "Save Local Draft" (plus "Save Private Note").
-            void vscode.commands.executeCommand("setContext", "ger.newComment", shown.new_comment ?? "none");
+            this.offerNewComment();
             this.render();
           }
         },
@@ -173,7 +187,12 @@ export class ChangeView extends WebView<ChangeVm> {
         ? undefined
         : this.baseDiff(client, target, token, signal)
             .catch(() => undefined)
-            .then((diff) => this.detail.arrive(token, "base", diff) && this.render());
+            .then((diff) => {
+              if (this.detail.arrive(token, "base", diff)) {
+                this.offerNewComment(); // the patchset looked at is known now
+                this.render();
+              }
+            });
       const delta = this.deltaDiff(client, target, signal)
         .catch(() => undefined)
         .then((diff) => this.detail.arrive(token, "delta", diff) && this.render());

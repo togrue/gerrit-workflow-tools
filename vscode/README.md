@@ -215,6 +215,9 @@ The commits above your upstream, newest first. One row per commit:
   - **Local draft**, when Gerrit does not (never pushed, or amended since): kept here, in
     `refs/ger/comments`, for when the commit is pushed;
   - **Private note**, always: kept here and never uploaded.
+
+  The comment goes on the version you are looking at: with another patchset chosen under
+  **Show**, it is a draft on that patchset, on the lines its diff shows.
 - **CI**: opened on demand (it downloads build logs: this change's and its parent's, not the rest
   of its chain). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
