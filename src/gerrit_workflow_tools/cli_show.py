@@ -17,9 +17,9 @@ from gerrit_workflow_tools.cli_common import (
     changeish_help,
     init_cli_runtime,
     output_format,
-    print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService

@@ -13,9 +13,9 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     init_cli_runtime,
     output_format,
-    print_resolution_note,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_RED, color_text
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.ci_content import BodyMode, CiContent, CiContentError

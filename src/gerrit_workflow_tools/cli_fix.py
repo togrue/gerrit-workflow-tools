@@ -16,9 +16,9 @@ from gerrit_workflow_tools.cli_common import (
     changeish_help,
     init_cli_runtime,
     may_prompt,
-    print_stack_commit_notes,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out

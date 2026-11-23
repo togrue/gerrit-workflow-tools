@@ -6,7 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import ExitCode, print_stack_commit_notes
+from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.core.annotated_stack import branches_needing_upstream, resolve_rev_range
 from gerrit_workflow_tools.core.attention_cursor import (
     EditAttentionMode,

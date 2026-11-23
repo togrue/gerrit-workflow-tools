@@ -22,8 +22,6 @@ from typing import TypeVar
 
 from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.cli_style import (
-    ANSI_DIM,
-    color_text,
     ensure_utf8_stdio,
     init_color_mode,
     init_hyperlink_mode,
@@ -34,14 +32,7 @@ from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
-from gerrit_workflow_tools.core.gerrit.change_resolution import (
-    ChangeAmbiguousError,
-    ChangeResolutionError,
-    Resolution,
-    StackCommit,
-    format_local_sibling_note,
-    format_resolution_note,
-)
+from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -171,26 +162,6 @@ def _report_failure(error: Exception) -> int:
     sys.stdout.flush()  # What the command did show comes first, the reason it stopped last.
     print(f"{prefix}: {error}" if prefix else str(error), file=sys.stderr)
     return int(code)
-
-
-def print_note(note: str | None) -> None:
-    """Print a transparency note, dimmed, on stderr so stdout stays machine-readable."""
-    if note:
-        print(color_text(note, ANSI_DIM), file=sys.stderr)
-
-
-def print_resolution_note(resolution: Resolution | None) -> None:
-    """Print how *resolution* narrowed, when Gerrit was consulted and it did, and any local sibling."""
-    if resolution is not None:
-        print_note(format_resolution_note(resolution))
-        print_note(format_local_sibling_note(resolution))
-
-
-def print_stack_commit_notes(target: StackCommit) -> None:
-    """:func:`print_resolution_note` for a changeish resolved to a stack commit."""
-    if target.resolution is not None:
-        print_note(format_resolution_note(target.resolution))
-    print_note(target.note)
 
 
 def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = None, on_eof: _T | None = None) -> _T:

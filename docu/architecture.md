@@ -443,8 +443,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `print_resolution_note`, `confirm` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm` |
 | `cli_style.py` | ANSI color and hyperlink helpers, UTF-8 stdio |
+| `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
