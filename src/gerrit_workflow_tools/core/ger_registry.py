@@ -14,10 +14,13 @@ When a callable raises at runtime, the next tier is tried, then built-in.
 
 from __future__ import annotations
 
+import importlib
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import logging
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -26,9 +29,10 @@ from typing import Any, TypeVar
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
 from gerrit_workflow_tools.core.registry_trust import (
+    RegistrySource,
     local_domain_dir,
     local_registry_trusted,
-    registry_source_digest,
+    read_registry_source,
     untrusted_hint,
 )
 
@@ -42,15 +46,75 @@ _UNTRUSTED: set[str] = set()
 """Cache keys of local registries refused this process: refused once, warned once."""
 
 TrustGate = Callable[[str], bool]
-"""Asked with a registry's :func:`registry_source_digest` before it first runs; ``False`` skips it."""
+"""Asked with the digest of a registry's source (``RegistrySource.digest``) before it first runs; ``False`` skips it."""
 
 SOURCE_DIGEST = "__ger_source_digest__"
 """Global a loaded ``registry.py``, and each helper module it imports, finds its directory's
-:func:`~gerrit_workflow_tools.core.registry_trust.registry_source_digest` under, taken as it loaded."""
+:attr:`~gerrit_workflow_tools.core.registry_trust.RegistrySource.digest` under, taken as it loaded."""
 
 
 class RegistryLoadError(ConfigError):
     """``registry.py`` exists but could not be imported."""
+
+
+class _SourceLoader(importlib.abc.Loader):
+    """Runs one module of a :class:`RegistrySource` from the bytes that were hashed, never from disk."""
+
+    def __init__(self, source: RegistrySource, parts: tuple[str, ...] | None) -> None:
+        self._source = source
+        self._parts = parts  # None: a directory without ``__init__.py`` (a namespace package)
+
+    def create_module(self, spec: importlib.machinery.ModuleSpec) -> ModuleType | None:
+        return None
+
+    def exec_module(self, module: ModuleType) -> None:
+        setattr(module, SOURCE_DIGEST, self._source.digest)  # Before it runs: import-time code sees it too.
+        if self._parts is not None:
+            path = str(self._source.path(self._parts))
+            exec(compile(self._source.files[self._parts], path, "exec", dont_inherit=True), vars(module))
+
+
+class _RegistrySourceFinder(importlib.abc.MetaPathFinder):
+    """Finds ``<package>.<module>`` only in the :class:`RegistrySource` loaded for ``<package>``.
+
+    First on ``sys.meta_path`` and the package's ``__path__`` is empty, so no other finder, and no
+    ``.pyc``, can supply a module of a registry package.
+    """
+
+    def __init__(self) -> None:
+        self.sources: dict[str, RegistrySource] = {}
+
+    def find_spec(
+        self, fullname: str, path: Sequence[str] | None, target: ModuleType | None = None
+    ) -> importlib.machinery.ModuleSpec | None:
+        package, _, rest = fullname.partition(".")
+        source = self.sources.get(package)
+        if source is None or not rest:
+            return None
+        parts = tuple(rest.split("."))
+        module = (*parts[:-1], f"{parts[-1]}.py")
+        init = (*parts, "__init__.py")
+        if init in source.files:
+            return self._spec(fullname, source, init, package=True)
+        if module in source.files:
+            return self._spec(fullname, source, module, package=False)
+        if any(len(k) > len(parts) and k[: len(parts)] == parts for k in source.files):
+            return importlib.util.spec_from_loader(fullname, _SourceLoader(source, None), is_package=True)
+        return None
+
+    @staticmethod
+    def _spec(
+        fullname: str, source: RegistrySource, parts: tuple[str, ...], *, package: bool
+    ) -> importlib.machinery.ModuleSpec | None:
+        spec = importlib.util.spec_from_loader(
+            fullname, _SourceLoader(source, parts), origin=str(source.path(parts)), is_package=package
+        )
+        if spec is not None:
+            spec.has_location = True
+        return spec
+
+
+_FINDER = _RegistrySourceFinder()
 
 
 def global_domain_dir(web_base: str | None, domain: str) -> Path | None:
@@ -110,39 +174,28 @@ def _load_registry_module(domain_dir: Path, package_name: str, trust: TrustGate 
         _MODULE_CACHE[cache_key] = None
         return None
 
-    # Taken before it runs, helpers beside it included: what describes the code this process runs.
-    digest = registry_source_digest(domain_dir)
-    if trust is not None and not trust(digest):
+    # Read once, before anything runs: the digest trusted is of exactly the code that runs.
+    source = read_registry_source(domain_dir)
+    if trust is not None and not trust(source.digest):
         _UNTRUSTED.add(cache_key)
         logger.warning("not running untrusted %s; %s", registry, untrusted_hint())
         return None
 
+    if _FINDER not in sys.meta_path:
+        sys.meta_path.insert(0, _FINDER)
+    _FINDER.sources[package_name] = source
+    for name in [n for n in sys.modules if n.startswith(f"{package_name}.")]:
+        del sys.modules[name]  # Helpers of another load of this package: import them from this source.
     pkg = sys.modules.setdefault(package_name, ModuleType(package_name))
-    pkg.__path__ = [str(domain_dir)]  # type: ignore[attr-defined]
+    pkg.__path__ = []  # type: ignore[attr-defined]
 
     module_name = f"{package_name}.registry"
-    if module_name in sys.modules:
-        del sys.modules[module_name]
-
-    spec = importlib.util.spec_from_file_location(module_name, registry)
-    if spec is None or spec.loader is None:
-        _MODULE_CACHE[cache_key] = None
-        raise RegistryLoadError(f"failed to load strategy registry {registry}")
-    module = importlib.util.module_from_spec(spec)
-    setattr(module, SOURCE_DIGEST, digest)
-    already_loaded = set(sys.modules)
-    sys.modules[module_name] = module
     try:
-        spec.loader.exec_module(module)
+        module = importlib.import_module(module_name)
     except Exception as exc:
         sys.modules.pop(module_name, None)
         _MODULE_CACHE[cache_key] = None
         raise RegistryLoadError(f"failed to load strategy registry {registry}: {exc}") from exc
-    # A helper the registry imports carries the digest too: code defined there finds it in its globals.
-    for name in set(sys.modules) - already_loaded:
-        helper = sys.modules[name]
-        if name.startswith(f"{package_name}.") and SOURCE_DIGEST not in vars(helper):
-            setattr(helper, SOURCE_DIGEST, digest)
     _MODULE_CACHE[cache_key] = module
     return module
 

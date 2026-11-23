@@ -6,8 +6,8 @@ it just because it is there (git does not clone hooks for the same reason). It r
 1. **The scripts dir is configured where a checkout cannot write.** ``gerrit.scriptsDir`` is set in
    the repository's own git config (local or worktree scope, or ``git -c``), which is never cloned;
    or it is set in global or system config and names a directory outside the work tree.
-2. **The user trusted these exact contents.** The :func:`source_digest` of the registry directory's
-   Python files is recorded in :func:`trust_store_path`. Any change to them changes the digest, so a
+2. **The user trusted these exact contents.** The :attr:`RegistrySource.digest` of the registry
+   directory's Python files is recorded in :func:`trust_store_path`. Any change to them changes the digest, so a
    changed registry needs trust again. Equal contents are trusted wherever they are (every worktree).
 
 Core only decides; it never asks. The CLI asks before a command runs (``registry_trust_prompt``)
@@ -21,8 +21,9 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import ConfigScope, Settings
@@ -52,9 +53,54 @@ def source_digest(paths: Iterable[Path]) -> str:
     return digest.hexdigest()
 
 
-def registry_source_digest(domain_dir: Path) -> str:
-    """The :func:`source_digest` of every Python file under *domain_dir*: the code a load runs."""
-    return source_digest(p for p in domain_dir.rglob("*.py") if "__pycache__" not in p.parts)
+@dataclass(frozen=True)
+class RegistrySource:
+    """The Python sources of one registry directory, read once: what is hashed is what runs.
+
+    The loader (:mod:`gerrit_workflow_tools.core.ger_registry`) imports only from :attr:`files`, so
+    nothing it runs escapes :attr:`digest`: no ``__pycache__`` bytecode (an unchecked hash-based
+    ``.pyc`` would otherwise run in place of its source), and no file read after it was hashed.
+    """
+
+    directory: Path
+    files: Mapping[tuple[str, ...], bytes]
+    """Contents by path relative to :attr:`directory`, as parts (``("helpers", "x.py")``)."""
+
+    @cached_property
+    def digest(self) -> str:
+        """One SHA-256 over every relative path and its contents, in sorted order."""
+        digest = hashlib.sha256()
+        for parts in sorted(self.files):
+            digest.update("/".join(parts).encode("utf-8") + b"\0" + self.files[parts] + b"\0")
+        return digest.hexdigest()
+
+    def path(self, parts: tuple[str, ...]) -> Path:
+        return self.directory.joinpath(*parts)
+
+
+def read_registry_source(domain_dir: Path) -> RegistrySource:
+    """Read every ``*.py`` under *domain_dir*, ``__pycache__`` aside.
+
+    Symlinked directories are followed, as an import would follow them, each real directory once:
+    a helper reached through a link is part of the digest like any other.
+    """
+    files: dict[tuple[str, ...], bytes] = {}
+    seen: set[str] = set()
+    for current, dirs, names in os.walk(domain_dir, followlinks=True):
+        real = os.path.realpath(current)
+        if real in seen:
+            dirs[:] = []
+            continue
+        seen.add(real)
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+        prefix = Path(current).relative_to(domain_dir).parts
+        for name in names:
+            if name.endswith(".py"):
+                try:
+                    files[(*prefix, name)] = (Path(current) / name).read_bytes()
+                except OSError:
+                    files[(*prefix, name)] = b""
+    return RegistrySource(domain_dir, files)
 
 
 def resolve_scripts_root(root: Path | None, scripts_dir: str) -> Path | None:
@@ -126,7 +172,7 @@ def _read_store() -> dict[str, dict[str, str]]:
 
 
 def digest_trusted(digest: str) -> bool:
-    """Whether the user trusted registry code with this :func:`registry_source_digest`."""
+    """Whether the user trusted registry code with this :attr:`RegistrySource.digest`."""
     return digest in _read_store()
 
 
@@ -160,7 +206,7 @@ def untrusted_local_registries(root: Path | None, settings: Settings) -> list[Lo
         domain_dir = local_domain_dir(root, settings.scripts_dir, domain)
         if domain_dir is None:
             continue
-        digest = registry_source_digest(domain_dir)
+        digest = read_registry_source(domain_dir).digest
         if not digest_trusted(digest):
             found.append(LocalRegistry(domain, domain_dir, digest))
     return found

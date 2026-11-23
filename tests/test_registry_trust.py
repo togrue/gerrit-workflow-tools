@@ -6,6 +6,9 @@ checks whether the project's code ran at all, not only whether its strategy was 
 
 from __future__ import annotations
 
+import importlib.util
+import marshal
+import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,9 +17,17 @@ import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.core.config import ConfigScope, Settings
-from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cache, resolve_registry_callable
+from gerrit_workflow_tools.core.ger_registry import (
+    RegistryLoadError,
+    clear_extension_registry_cache,
+    resolve_registry_callable,
+)
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.registry_trust import trust_store_path, untrusted_local_registries
+from gerrit_workflow_tools.core.registry_trust import (
+    read_registry_source,
+    trust_store_path,
+    untrusted_local_registries,
+)
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
@@ -106,6 +117,81 @@ def test_the_same_contents_are_trusted_in_another_worktree(stack_repo: Path, tmp
     _plant_registry(other, marker)
 
     assert untrusted_local_registries(other, Settings.from_map({})) == []
+
+
+# --- what runs is what was hashed ------------------------------------------------------------
+
+
+def _payload(marker: Path) -> bytes:
+    """Bytecode that writes *marker*: what a change could plant beside trusted source."""
+    code = compile(f"from pathlib import Path\nPath({str(marker)!r}).write_text('payload')\n", "x.py", "exec")
+    unchecked_hash_based = (0b01).to_bytes(4, "little")  # PEP 552: Python never compares it with the source.
+    return importlib.util.MAGIC_NUMBER + unchecked_hash_based + b"\0" * 8 + marshal.dumps(code)
+
+
+def test_planted_bytecode_does_not_run_in_place_of_trusted_source(stack_repo: Path, tmp_path: Path) -> None:
+    marker, payload = tmp_path / "ran", tmp_path / "payload"
+    d = _plant_registry(stack_repo, marker)
+    registry = d / "registry.py"
+    registry.write_text("from .helper import VALUE\n" + registry.read_text(encoding="utf-8"), encoding="utf-8")
+    trust_local_registries(stack_repo)
+    for source in (registry, d / "helper.py"):
+        cached = Path(importlib.util.cache_from_source(str(source)))
+        cached.parent.mkdir(exist_ok=True)
+        cached.write_bytes(_payload(payload))
+
+    assert untrusted_local_registries(stack_repo, Settings.from_map({})) == []
+    assert _resolve(stack_repo, Settings.from_map({})) is not None
+    assert marker.exists()
+    assert not payload.exists()
+
+
+def test_a_helper_with_only_bytecode_is_not_importable(stack_repo: Path, tmp_path: Path) -> None:
+    payload = tmp_path / "payload"
+    d = _plant_registry(stack_repo, tmp_path / "ran")
+    (d / "registry.py").write_text("from . import ghost\n", encoding="utf-8")
+    (d / "ghost.pyc").write_bytes(_payload(payload))
+    trust_local_registries(stack_repo)
+
+    with pytest.raises(RegistryLoadError):
+        _resolve(stack_repo, Settings.from_map({}))
+    assert not payload.exists()
+
+
+def _symlink_dir(link: Path, target: Path) -> None:
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"no directory symlinks here: {exc}")
+
+
+def test_a_helper_reached_through_a_symlinked_directory_is_part_of_the_digest(stack_repo: Path, tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    d = _plant_registry(stack_repo, marker)
+    shared = stack_repo / "shared"
+    shared.mkdir()
+    (shared / "strategy.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _symlink_dir(d / "helpers", shared)
+    registry = d / "registry.py"
+    registry.write_text("from .helpers.strategy import VALUE\n" + registry.read_text(encoding="utf-8"), "utf-8")
+    trust_local_registries(stack_repo)
+    assert _resolve(stack_repo, Settings.from_map({})) is not None
+
+    marker.unlink()
+    (shared / "strategy.py").write_text("VALUE = 2\n", encoding="utf-8")
+    clear_extension_registry_cache()
+    assert [r.path for r in untrusted_local_registries(stack_repo, Settings.from_map({}))] == [registry]
+    assert _resolve(stack_repo, Settings.from_map({})) is None
+    assert not marker.exists()
+
+
+def test_a_symlink_cycle_is_read_once(tmp_path: Path) -> None:
+    d = tmp_path / "ready"
+    d.mkdir()
+    (d / "registry.py").write_text("X = 1\n", encoding="utf-8")
+    _symlink_dir(d / "loop", d)
+
+    assert list(read_registry_source(d).files) == [("registry.py",)]
 
 
 def test_an_unreadable_trust_store_trusts_nothing(stack_repo: Path, tmp_path: Path) -> None:
