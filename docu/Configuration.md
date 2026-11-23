@@ -11,7 +11,8 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | Key | Purpose |
 |-----|---------|
 | `gerrit.remote` | Remote name for `git push` to Gerrit (default: `origin`). |
-| `gerrit.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). |
+| `gerrit.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). Must start with `https://`: every REST call carries the Basic-auth credentials, so a plain `http://` URL is refused with a config error unless `gerrit.allowInsecureHttp` is set. |
+| `gerrit.allowInsecureHttp` | When `true`, accept an `http://` `gerrit.webUrl` (credentials then travel in cleartext). Default off. Only for a local test Gerrit, such as the one in `testenv/` or the integration tests. |
 | `gerrit.user` | Username for HTTP Basic auth to the REST API. |
 | `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
 | `gerrit.stopPattern` | Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` applies. If unset, built-in default: `^(?:dropme!|todo\b|test!|wip\b)` (case-insensitive). Override with `git config gerrit.stopPattern '…'`. |

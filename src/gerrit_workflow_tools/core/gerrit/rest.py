@@ -8,7 +8,7 @@ import logging
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 
 from gerrit_workflow_tools.core.changeish import is_change_id
 from gerrit_workflow_tools.core.config import ConfigError, Settings
@@ -268,11 +268,20 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
     """
     Gerrit HTTPS base for the REST API and web links.
 
-    Requires ``gerrit.webUrl`` in git config (no inference from remotes).
+    Requires ``gerrit.webUrl`` in git config (no inference from remotes). Every REST call
+    carries Basic-auth credentials, so a non-``https`` URL is refused unless
+    ``gerrit.allowInsecureHttp`` is set.
     """
     override = settings.gerrit_web_url
     if override:
         base = override.rstrip("/")
+        scheme = urlsplit(base).scheme.lower()
+        if scheme != "https" and not (scheme == "http" and settings.gerrit_allow_insecure_http):
+            raise ConfigError(
+                f"gerrit.webUrl must use https:// (got {base!r}): credentials go with every request. "
+                "For a local test Gerrit on plain http, opt in with "
+                "`git config gerrit.allowInsecureHttp true`"
+            )
         logger.debug("resolve_gerrit_web_base: gerrit.webUrl -> %s", base)
         return base
     raise ConfigError(

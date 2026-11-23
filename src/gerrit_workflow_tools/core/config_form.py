@@ -94,6 +94,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         SettingKind.TEXT,
         "",
     ),
+    _bool(
+        "gerrit.allowInsecureHttp",
+        "General",
+        "Accept an http:// webUrl; credentials then travel in cleartext. Only for a local test Gerrit.",
+        default="false",
+    ),
     _spec("gerrit.user", "General", "Username for HTTP Basic auth to the REST API.", SettingKind.TEXT, ""),
     _spec(
         "gerrit.project",
