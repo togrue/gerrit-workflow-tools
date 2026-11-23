@@ -161,3 +161,21 @@ def test_fix_asks_once_and_then_answers_from_the_cache(
         assert code == ExitCode.USAGE, err
         assert MERGED in err
     assert [call.method for call in store.calls] == ["query_changes"]
+
+
+def test_fix_of_a_fixup_asks_about_the_original_change(
+    stack_repo: Path, rows: list[Commit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fixup has no Change-Id of its own; the new fixup names the original, so its change decides."""
+    (stack_repo / "a.txt").write_text("first fix\n", encoding="utf-8")
+    git("add", "a.txt", cwd=stack_repo)
+    git("commit", "-q", "--fixup", rows[0].sha, cwd=stack_repo)
+    fixup = git_out("rev-parse", "HEAD", cwd=stack_repo)
+
+    (stack_repo / "a.txt").write_text("second fix\n", encoding="utf-8")
+    git("add", "a.txt", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, fix_main, [fixup], monkeypatch, gerrit=_store(rows, "MERGED"))
+
+    assert code == ExitCode.USAGE, err
+    assert f"error: {rows[0].short_sha} {MERGED}" in err
+    assert git_out("rev-parse", "HEAD", cwd=stack_repo) == fixup

@@ -142,7 +142,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     logger.info("fixup target commit: %s", fixup_sha)
 
     print_stack_commit_notes(target)
-    commit = next(c for c in snapshot.commits if c.sha == target.sha)
+    # The commit the fixup will name: past a fixup of a fixup, the original's change is the one to ask about.
+    commit = next(c for c in snapshot.commits if c.sha == fixup_sha)
     if refusal := closed_change_refusal(run.gerrit, commit.valid_change_id, commit=commit.short_sha):
         raise UsageError(refusal)
 
