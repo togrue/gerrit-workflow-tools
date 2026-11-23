@@ -18,7 +18,7 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `gerrit.warningPattern` | Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, `ger show`, and `ger inbox` when color output is enabled. If unset, built-in default: `(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))`. Stop-pattern highlighting takes precedence when both match the same text span. Override with `git config gerrit.warningPattern '…'`. |
 | `gerrit.wrapWidth` | Max visible width for `ger show` commit-message lines and comment-box text (default `120`). Comment bodies and context lines break on spaces and tabs; a token with no space is sliced. An over-long path header keeps its tail (the filename). The chain URL is not wrapped. Unset, blank, or a value below 1 uses 120. |
 | `gerrit.project` | **Gerrit project name** for change resolution and REST calls (e.g. `mygroup/myrepo`). When unset, parsed from the `gerrit.remote` URL. Set this when the remote URL does not encode the project path Gerrit expects, or when you use a mirror/fork whose URL differs from the server project name. Required input for building **triplets** (`project~branch~Change-Id`) used by `ger log`, `ger show`, `ger push`, `ger fix`, and `ger resolve`. |
-| `gerrit.scriptsDir` | Project-local root for extension registries (default: `.ger`). Relative paths resolve from the repository toplevel; absolute paths are allowed. Domain scripts live at `<scriptsDir>/<domain>/registry.py` (e.g. `ci`, `ready`, `attention`, `inbox`, `reviewers`). When present, a local registry **replaces** the global cache-dir copy for that domain. |
+| `gerrit.scriptsDir` | Project-local root for extension registries (default: `.ger`). Relative paths resolve from the repository toplevel; absolute paths are allowed. Domain scripts live at `<scriptsDir>/<domain>/registry.py` (e.g. `ci`, `ready`, `attention`, `reviewers`). When present, a local registry **replaces** the global cache-dir copy for that domain. Setting it in the repository's own config (`git config gerrit.scriptsDir .ger`) also **trusts** the registries there; see [Trusting project registries](#trusting-project-registries). |
 
 ---
 
@@ -198,11 +198,24 @@ Team- or user-owned Python registries customize CI links, ready boundaries, atte
 2. **Global** — `$XDG_CONFIG_HOME/ger/<host>/<domain>/registry.py` (default `~/.config/ger/<host>/`)
 3. **Built-in** — hardcoded defaults (subject stop pattern, attention thresholds, etc.)
 
+The project-local tier runs only when trusted; an untrusted one is skipped, as if absent. See [Trusting project registries](#trusting-project-registries).
+
 Per tier: if `registry.py` exists but fails to import, the command **fails** (no silent fallback). If the file loads but has no entry for `gerrit.project`, the next tier is tried. If a callable **raises at runtime**, the next tier is tried, then built-in.
 
 Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same ready-boundary rules as push (not a separate stop-pattern regex). `gerrit.warningPattern` still controls yellow warning highlights.
 
 `ger cache info` prints the global scripts root (`~/.config/ger/<host>/`) next to the SQLite cache path.
+
+### Trusting project registries
+
+A `registry.py` is Python that ger imports, so it runs as you and can read everything you can, `gerrit.token` included. A project-local one arrives with the work tree: a change you check out to review, or a repository you clone, can add `.ger/ci/registry.py`. Git does not clone hooks for this reason, and ger does not run a project-local registry just because it is there. It runs when one of these holds:
+
+1. **`gerrit.scriptsDir` is set where a checkout cannot write.** In the repository's own config (`git config gerrit.scriptsDir .ger`: `.git/config` is never cloned), a worktree's config, or `git -c`. Set in global or system config, it trusts only a directory outside the work tree (an absolute path to your own scripts); a relative or in-tree path there would trust every repository you open.
+2. **You said you trust its contents.** Otherwise, before a command runs, ger shows the path and asks `Trust it and run it?` (default no). A yes records a SHA-256 digest of every `*.py` file in that registry directory (`registry.py` and the helpers it imports) in `$XDG_CONFIG_HOME/ger/trusted-registries.json` (default `~/.config/ger/`). The same contents are then trusted wherever they appear, every worktree of the project included. Any edit changes the digest, so ger asks again before running a changed registry.
+
+Without a terminal, or with `--json` / `--ai`, ger does not ask: it skips the untrusted registry, falls back to the global tier and built-in behaviour, and prints `warning: not running untrusted <path>` with how to trust it. `GER_ASSUME_YES` does not answer this question: an agent must not trust a checked-out change's code for you. A declined registry is asked about again on the next run. `ger serve` asks, or warns, once when it starts; trust given later takes effect when it restarts.
+
+The global tier (`~/.config/ger/<host>/`) is yours and always runs. To revoke trust, delete the entry, or the file.
 
 ### Domains
 

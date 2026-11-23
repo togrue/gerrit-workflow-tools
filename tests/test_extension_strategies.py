@@ -14,12 +14,14 @@ from gerrit_workflow_tools.core.ger_registry import clear_extension_registry_cac
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.reviewers_strategy import clear_reviewers_strategy_cache, default_reviewers_via_registry
 from gerrit_workflow_tools.core.stack import Commit
+from tests.fixtures import trust_local_registries
 
 
 def _write_registry(repo: Path, domain: str, body: str) -> None:
     d = repo / ".ger" / domain
     d.mkdir(parents=True, exist_ok=True)
     (d / "registry.py").write_text(body, encoding="utf-8")
+    trust_local_registries(repo)
     clear_extension_registry_cache()
 
 

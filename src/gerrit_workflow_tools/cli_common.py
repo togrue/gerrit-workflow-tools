@@ -39,6 +39,7 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
 from gerrit_workflow_tools.core.upstream_interactive import ask_for_needed_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.registry_trust_prompt import settle_registry_trust
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 
@@ -354,7 +355,8 @@ def init_cli_runtime(
     This is where a command's :class:`Settings` snapshot is taken: once, at the entry
     point, from a single ``git config --list --show-scope``. Everything below receives it as an
     argument rather than reading configuration again. *gerrit* replaces the configured host
-    (tests); ``ger --refresh`` reaches the run's service from here.
+    (tests); ``ger --refresh`` reaches the run's service from here. Before the command runs, the
+    user is asked whether this project's untrusted ``registry.py`` files may run.
     """
 
     ensure_utf8_stdio()
@@ -368,4 +370,5 @@ def init_cli_runtime(
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")
     run = RunContext.open(cwd, settings=settings, gerrit=gerrit, refresh=refresh_requested())
+    settle_registry_trust(run, confirm=confirm if may_prompt(args) else None)
     return run, build_summary_highlighter(settings)

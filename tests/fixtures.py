@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.registry_trust import record_trust, untrusted_local_registries
 
 
 def _cid(seed: str) -> str:
@@ -182,3 +184,9 @@ def finalize_git_template(path: Path) -> None:
     # Sample hooks are a third of a fresh repository's files and no test reads them.
     for sample in (path / ".git" / "hooks").glob("*.sample"):
         sample.unlink()
+
+
+def trust_local_registries(repo: Path) -> None:
+    """Trust every registry under ``<repo>/.ger`` as it is now, as answering yes to ger's question would."""
+    for registry in untrusted_local_registries(repo, Settings.from_map({})):
+        record_trust(registry)

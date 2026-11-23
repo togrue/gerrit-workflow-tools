@@ -24,6 +24,7 @@ from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_c
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
+from tests.fixtures import trust_local_registries
 
 
 def test_failed_check_names_filters_failed_only() -> None:
@@ -98,6 +99,7 @@ def _write_registry(repo: Path, body: str) -> None:
     ci_dir = repo / ".ger" / "ci"
     ci_dir.mkdir(parents=True)
     (ci_dir / "registry.py").write_text(body, encoding="utf-8")
+    trust_local_registries(repo)
     clear_ci_strategy_cache()
 
 
