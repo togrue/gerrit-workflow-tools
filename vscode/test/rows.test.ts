@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
+import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm, joinChangeId, splitChangeId } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
@@ -269,7 +269,7 @@ test("without an upstream the stack offers one to track; while ger is not runnin
 
 test("the change view shows the message, the files with their line counts, and what is compared", () => {
   const vm = changeVm(state());
-  assert.deepEqual(vm.message, { key: shown().change_id, text: "Extract routing\n\nChange-Id: I1", author: "Me <me@example.com>", readOnly: "" });
+  assert.deepEqual(vm.message, { key: shown().change_id, text: "Extract routing", changeId: "I1", author: "Me <me@example.com>", readOnly: "", plain: false });
   assert.deepEqual(vm.files?.rows.map((row) => [row.name, row.dir, row.state, row.added, row.deleted]), [["route.py", "src", "modified", 12, 3], ["logo.png", "", "added", null, null]]);
   assert.deepEqual([vm.files?.added, vm.files?.deleted], [12, 3]);
   assert.deepEqual(changeLines(vm), [
@@ -379,6 +379,42 @@ test("a review delta names the two versions, and says when there is nothing to s
   const hint = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, to_patch_set: 3 } }) })).hint;
   assert.deepEqual(hint, { text: "Since your review: patchset 2 → 3 · 2 files", show: true });
   assert.equal(changeVm(state({ delta: diff({ since }) })).hint, undefined, "your own commit has no review of yours to compare with");
+});
+
+test("the Change-Id trailer is out of the message box, the other trailers stay, and Apply puts it back as the last one", () => {
+  const id = "I0123456789abcdef0123456789abcdef01234567";
+  assert.deepEqual(splitChangeId(`Fix it\n\nBecause.\n\nBug: 12\nChange-Id: ${id}\nSigned-off-by: Me <me@example.com>\n`), {
+    text: "Fix it\n\nBecause.\n\nBug: 12\nSigned-off-by: Me <me@example.com>",
+    changeId: id,
+  });
+  assert.deepEqual(splitChangeId(`Fix it\n\nChange-Id: ${id}`), { text: "Fix it", changeId: id }, "a one-line subject is one line");
+  assert.deepEqual(splitChangeId("Fix it\n\nWhy."), { text: "Fix it\n\nWhy.", changeId: "" }, "no Change-Id: the message as it is");
+  assert.equal(splitChangeId(`Fix it\n\nChange-Id: ${id} is mentioned here\n`).changeId, "", "only a trailer line is one");
+
+  assert.equal(joinChangeId("Fix it", id), `Fix it\n\nChange-Id: ${id}`);
+  assert.equal(joinChangeId("Fix it\n\nBug: 12\nSigned-off-by: Me <me@example.com>\n", id), `Fix it\n\nBug: 12\nSigned-off-by: Me <me@example.com>\nChange-Id: ${id}`, "the last trailer");
+  assert.equal(joinChangeId("Fix it\n\nfixes: the bug, for real", id), `Fix it\n\nfixes: the bug, for real\nChange-Id: ${id}`);
+  assert.equal(joinChangeId("Fix: it", id), `Fix: it\n\nChange-Id: ${id}`, "a subject that looks like a trailer is still the subject");
+  assert.equal(joinChangeId("Fix it", ""), "Fix it", "a commit without a Change-Id gets none");
+  for (const message of [`Fix it\n\nChange-Id: ${id}`, `Fix it\n\nBug: 12\nChange-Id: ${id}`]) {
+    assert.equal(joinChangeId(splitChangeId(message).text, id), message, "split and joined, the message is what it was");
+  }
+});
+
+test("a Change-Id typed into the message box is ignored: the commit keeps its own", () => {
+  const id = "I0123456789abcdef0123456789abcdef01234567";
+  const typed = "Iffffffffffffffffffffffffffffffffffffffff";
+  assert.equal(joinChangeId(`Fix it\n\nChange-Id: ${typed}`, id), `Fix it\n\nChange-Id: ${id}`);
+  assert.equal(joinChangeId(`Fix it\n\nBug: 12\nchange-id: ${typed}\nSigned-off-by: Me`, id), `Fix it\n\nBug: 12\nSigned-off-by: Me\nChange-Id: ${id}`);
+});
+
+test("a message that cannot be reworded here is plain text; one held by a rebase stays a box with the reason", () => {
+  for (const readOnly of [READ_ONLY.remote, READ_ONLY.patchset]) {
+    assert.equal(changeVm(state({ readOnly })).message?.plain, true, readOnly);
+    assert.equal(changeVm(state({ readOnly, base: undefined, loading: { commit: false, base: true, delta: false, ready: false } })).loading?.plain, true, "its place too");
+  }
+  assert.equal(changeVm(state({ readOnly: READ_ONLY.rebase })).message?.plain, false);
+  assert.equal(changeVm(state()).message?.plain, false);
 });
 
 test("the commit message is read-only with the reason, and comment chains say what can be done with them", () => {

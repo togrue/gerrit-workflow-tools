@@ -350,6 +350,28 @@ button.twist:hover {
   color: var(--vscode-descriptionForeground);
 }
 
+/* A message that cannot be reworded here (change.js plainBlock): text, aligned with the box's. */
+.message-text {
+  margin: 0 12px;
+  padding: 4px 7px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* The Change-Id trailer, out of the message (change.js changeIdLine): quiet, selectable, not editable. */
+.change-id {
+  margin: 2px 12px 0;
+  padding: 0 7px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 11px;
+  user-select: text;
+}
+
 .message-bar {
   display: flex;
   align-items: center;

@@ -80,7 +80,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
   assert.equal(vm.head?.text, "Unresolved comments");
   assert.deepEqual(vm.head?.badges, badges(commit).filter(Boolean), "the badges the row wears");
   assert.equal(vm.message, undefined);
-  assert.deepEqual(vm.loading, { message: true, readOnly: "" }, "the message block's place, its read-only note included");
+  assert.deepEqual(vm.loading, { message: true, readOnly: "", plain: false }, "the message block's place, its read-only note included");
   assert.deepEqual([vm.files?.note, vm.comments?.summary], ["loading…", "loading…"]);
   assert.equal(vm.key, commit.change_id, "the page keeps what you opened per change from the first frame on");
   assert.deepEqual(changeLines(vm), [
@@ -123,7 +123,7 @@ test("each answer fills in its part as it comes: the commit with its files first
   assert.ok(detail.arrive(token, "commit", answer(commit)));
   assert.ok(detail.arrive(token, "base", files("Extract routing")));
   const vm = drawn(detail);
-  assert.equal(vm.message?.text, "Extract routing\n\nChange-Id: I1");
+  assert.equal(vm.message?.text, "Extract routing");
   assert.equal(vm.loading, undefined, "the message is drawn: no placeholder");
   assert.deepEqual([vm.files?.summary, vm.comments?.summary, vm.comments?.threads.map((t) => t.id)], ["1 file", "1 unresolved of 1", ["c1"]]);
   assert.deepEqual(detail.loading(), { commit: false, base: false, delta: true, ready: true }, "the delta has not come yet");
@@ -161,10 +161,10 @@ test("a reload keeps what is shown until its answers replace it", () => {
   detail.arrive(token, "base", files("Extract routing"));
   detail.arrive(token, "delta", undefined);
   const again = detail.select(target(commit), true);
-  assert.equal(drawn(detail).message?.text, "Extract routing\n\nChange-Id: I1", "no loading frame in between");
+  assert.equal(drawn(detail).message?.text, "Extract routing", "no loading frame in between");
   assert.equal(detail.loading(), undefined);
   assert.ok(detail.arrive(again, "base", files("Extract routing, reworded")));
-  assert.equal(drawn(detail).message?.text, "Extract routing, reworded\n\nChange-Id: I1");
+  assert.equal(drawn(detail).message?.text, "Extract routing, reworded");
 });
 
 test("clicking the change already shown keeps what is drawn: a new target naming the same change draws no loading frame", () => {
@@ -178,7 +178,7 @@ test("clicking the change already shown keeps what is drawn: a new target naming
   assert.ok(sameChange(target(commit), target(commit)));
   detail.select(target(commit), false);
   const vm = drawn(detail);
-  assert.equal(vm.message?.text, "Extract routing\n\nChange-Id: I1", "the message stays drawn");
+  assert.equal(vm.message?.text, "Extract routing", "the message stays drawn");
   assert.equal(vm.loading, undefined);
 
   // Another change, or the same change seen from the other side (Gerrit's, not your commit), starts over.
@@ -219,12 +219,12 @@ test("answers out of order: the review delta before the commit fills in its hint
   assert.ok(detail.arrive(token, "delta", delta));
   let vm = drawn(detail, { version: "current" });
   assert.equal(vm.hint?.text, "Since your review: patchset 1 → 2 · 1 file");
-  assert.deepEqual([vm.loading, vm.comments?.summary, vm.head?.text], [{ message: true, readOnly: "" }, "loading…", "Loading…"]);
+  assert.deepEqual([vm.loading, vm.comments?.summary, vm.head?.text], [{ message: true, readOnly: "", plain: false }, "loading…", "Loading…"]);
   const shown: ShownCommit = { ...memberStatus(member), submittable: true, local_commit: false, comment_chains: [] };
   assert.ok(detail.arrive(token, "commit", shown));
   assert.ok(detail.arrive(token, "base", files("Add cache")));
   vm = drawn(detail, { version: "current" });
-  assert.deepEqual([vm.loading, vm.message?.text, vm.head?.text, vm.hint?.show], [undefined, "Add cache\n\nChange-Id: I1", "Ready to submit", true]);
+  assert.deepEqual([vm.loading, vm.message?.text, vm.head?.text, vm.hint?.show], [undefined, "Add cache", "Ready to submit", true]);
   assert.equal(detail.loading(), undefined);
 });
 

@@ -17,7 +17,7 @@ test("a snapshot is read back as it was written, view models included", () => {
   // What JSON cannot carry (a key that is undefined) is not in the file either.
   assert.deepEqual(read, JSON.parse(JSON.stringify(written)));
   assert.equal(read.stack?.rows[0].summary, "One");
-  assert.equal(read.change?.message?.text, "Extract routing\n\nChange-Id: I1");
+  assert.equal(read.change?.message?.text, "Extract routing");
 });
 
 test("keys a snapshot does not know are left out, and a view that is not there is null", () => {

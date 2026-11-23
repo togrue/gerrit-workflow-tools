@@ -264,7 +264,7 @@ const CHANGE: Shape = {
   /** An error as git or Gerrit worded it. */
   problem: TEXT,
   key: KEY,
-  loading: { message: KEEP, readOnly: READ_ONLY_WORDS },
+  loading: { message: KEEP, readOnly: READ_ONLY_WORDS, plain: KEEP },
   head: {
     icon: ICON,
     tone: TONE,
@@ -285,7 +285,7 @@ const CHANGE: Shape = {
       detail: ours([...Object.values(SYNC_WORDS), "comments and CI below are about Gerrit's version"]),
     },
   ],
-  message: { key: KEY, text: TEXT, author: PERSON, readOnly: READ_ONLY_WORDS },
+  message: { key: KEY, text: TEXT, changeId: CHANGE_ID, author: PERSON, readOnly: READ_ONLY_WORDS, plain: KEEP },
   versions: { options: [{ value: VERSION, label: VERSION_LABEL, disabled: KEEP }], selected: VERSION },
   modes: { options: [{ value: MODE, label: ours([...Object.values(MODES), `${MODES.reviewed} (you have not reviewed it)`]), disabled: KEEP }], selected: MODE },
   hint: {
