@@ -21,6 +21,7 @@ from gerrit_workflow_tools.core.comment_anchor import (
     repository_path,
 )
 from gerrit_workflow_tools.core.comment_target import CommentTarget
+from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -115,7 +116,7 @@ class ChangedComment:
 
 
 def _where(path: str, line: int | None) -> str:
-    return path if line is None else f"{path}:{line}"
+    return printable_path(path) if line is None else f"{printable_path(path)}:{line}"
 
 
 def _not_yours(target: CommentTarget, comment_id: str) -> ChangeResolutionError:

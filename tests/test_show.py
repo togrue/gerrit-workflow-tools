@@ -763,6 +763,28 @@ def test_gshow_human_shows_comment_author(web_stack_repo: Path, monkeypatch: pyt
     assert "╭─ epsilon.txt:908" in out
 
 
+def test_gshow_prints_a_control_character_in_a_file_path_escaped(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path is the file's identity, so it reaches core as Gerrit sent it; printing escapes it."""
+    ch = _detail_ok(change_id="I" + "b" * 40, sha="abc12345678901234567890123456789012345678", cr_value=2, number=42)
+    ch["unresolved_comment_count"] = 1
+    odd = "src/a\x1b]0;pwned\x07.py"
+    comment = {"id": "c1", "line": 3, "message": "look", "unresolved": True, "author": {"username": "m"}}
+    store = ChangeStore({str(ch["id"]): ch}, web_base="https://g.example")
+    store.set_comments(str(ch["id"]), {odd: [comment]})
+
+    code, out, _err = run_cli(web_stack_repo, gshow_main, ["--color=never", "change:42"], monkeypatch, gerrit=store)
+    assert code == 0
+    assert "\x1b" not in out and "\x07" not in out
+    assert "src/a\\x1b]0;pwned\\x07.py:3" in out
+
+    code, out, _err = run_cli(web_stack_repo, gshow_main, ["--json", "change:42"], monkeypatch, gerrit=store)
+    assert code == 0
+    assert "\x1b" not in out  # JSON escapes it, and a client gets the real path
+    assert json_stdout(out)["comments"][0]["path"] == odd
+
+
 def test_gshow_json_includes_comment_author(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     sha = "abc12345678901234567890123456789012345678"

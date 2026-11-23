@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import repo_toplevel
@@ -71,12 +72,12 @@ class CommentLocation:
 
     def describe(self) -> str:
         """``path``, ``path:line`` or ``path:start-end``, as ``ger show`` prints a chain."""
-        start = self.start_line
+        start, path = self.start_line, printable_path(self.path)
         if self.line is None:
-            return self.path
+            return path
         if start is not None and start != self.line:
-            return f"{self.path}:{start}-{self.line}"
-        return f"{self.path}:{self.line}"
+            return f"{path}:{start}-{self.line}"
+        return f"{path}:{self.line}"
 
 
 @dataclass(frozen=True)
@@ -205,11 +206,13 @@ def fit_to_file(location: CommentLocation, lines: list[str] | None, *, commit: s
     commit is not local), an open-ended range ends at the start of the next line instead.
     """
     if lines is None:
-        raise ChangeResolutionError(f"{location.path} is not in commit {commit[:12]}")
+        raise ChangeResolutionError(f"{printable_path(location.path)} is not in commit {commit[:12]}")
     count = len(lines)
     for line in (location.start_line, location.line):
         if line is not None and line > count:
-            raise LocationError(f"{location.describe()}: {location.path} has {count} line(s) in {commit[:12]}")
+            raise LocationError(
+                f"{location.describe()}: {printable_path(location.path)} has {count} line(s) in {commit[:12]}"
+            )
     rng = location.range
     if rng is None:
         return location

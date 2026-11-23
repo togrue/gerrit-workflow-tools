@@ -71,6 +71,21 @@ def test_human_output_says_where_the_draft_went(web_stack_repo: Path, monkeypatc
     assert "/comment/c-root/" in out
 
 
+def test_a_reply_goes_to_the_file_gerrit_named_even_with_a_control_character_in_its_path(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, key = _store_with_open_chain(web_stack_repo)
+    odd = "f\x1b.py"
+    store.set_comments(key, {odd: store.get_comments(key)["f.py"]})
+    code, out, _err = run_cli(
+        web_stack_repo, reply_main, ["c-root", "--done", "--color=never"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.OK
+    assert "draft reply on f\\x1b.py:3 (patchset 1)" in out
+    (draft,) = _drafts(store, key)
+    assert draft["path"] == odd
+
+
 def test_a_reply_without_a_state_flag_keeps_the_chain_open(
     web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
