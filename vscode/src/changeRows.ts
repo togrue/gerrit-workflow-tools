@@ -156,12 +156,17 @@ export interface ChangeVm {
   problem?: string;
   /** Which change is drawn (its Change-Id, else its commit): the page keeps what you opened and typed per change. */
   key?: string;
-  /** What is on its way: the page holds the commit message's place, its read-only note (as `message.readOnly` will say) included. */
-  loading?: { message: boolean; readOnly: string };
+  /** What is on its way: the page holds the commit message's place, its read-only note and plainness (as `message` will say) included. */
+  loading?: { message: boolean; readOnly: string; plain: boolean };
   /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). `actions`: the way on from a rebase stopped here, as Local stack's banner offers it. */
   head?: Icon & { text: string; detail: string; badges: Badge[]; actions?: StackAction[] };
   notes?: (Icon & { text: string; detail: string })[];
-  message?: { key: string; text: string; author: string; readOnly: string };
+  /**
+   * `text` without the Change-Id footer, which `changeId` names (empty when there is none): the page
+   * shows it read-only under the message, and core puts it back on Apply (`keep_change_id`). `plain`: a message
+   * that cannot be reworded here at all (someone's change, a patchset on Gerrit), drawn as text, not a box.
+   */
+  message?: { key: string; text: string; changeId: string; author: string; readOnly: string; plain: boolean };
   versions?: { options: Option[]; selected: string };
   modes?: { options: Option[]; selected: Mode };
   /** Someone's change you reviewed before: what is new, one click away. */
@@ -188,6 +193,11 @@ export const READ_ONLY = {
 };
 
 export const LOADING = "loading…";
+
+/** Never reworded here: a box would only say so. A rebase underway passes; the message stays a box. */
+function isPlain(readOnly: string): boolean {
+  return readOnly === READ_ONLY.remote || readOnly === READ_ONLY.patchset;
+}
 
 /** The Change view of the commit a rebase stopped at before applying it. */
 export const STOPPED_WORDS = {
@@ -421,7 +431,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const unsure = !words && !commit.submittable && loading?.commit && !loading.ready;
   return {
     key: commit.change_id ?? commit.sha ?? "",
-    loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly } : undefined,
+    loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly, plain: isPlain(state.readOnly) } : undefined,
     head: {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
@@ -432,7 +442,15 @@ export function changeVm(state: ChangeState): ChangeVm {
     conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
     notes,
     message: state.base?.message
-      ? { key: commit.change_id ?? commit.sha ?? "", text: state.base.message, author: state.base.author ?? "", readOnly: state.readOnly }
+      ? {
+          key: commit.change_id ?? commit.sha ?? "",
+          // Core takes the Change-Id footer out (`/diff`'s `message_text`) and puts it back on Apply.
+          text: state.base.message_text ?? state.base.message,
+          changeId: state.base.change_id ?? "",
+          author: state.base.author ?? "",
+          readOnly: state.readOnly,
+          plain: isPlain(state.readOnly),
+        }
       : undefined,
     versions: versions(state),
     modes: modes(state),

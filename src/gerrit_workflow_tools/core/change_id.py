@@ -22,6 +22,8 @@ CHANGE_ID_VALUE_RE = CHANGE_ID_RE
 # Judging the value is validate_change_id_value's job, not the regex's.
 CHANGE_ID_FOOTER_RE = re.compile(r"^Change-Id:\s*(\S+)\s*$", re.IGNORECASE)
 CHANGE_ID_ANY_LINE_RE = re.compile(r"^\s*Change-Id:\s*\S+\s*$", re.IGNORECASE)
+# A line of a trailer block (``Token: value``), as git interpret-trailers reads one.
+TRAILER_LINE_RE = re.compile(r"^[A-Za-z0-9-]+:\s")
 EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
@@ -95,6 +97,36 @@ def change_id_of_rev(cwd: Path | str | None, rev: str) -> str | None:
         return extract_valid_change_id(git_out("log", "-1", "--format=%B", rev, cwd=cwd))
     except GitError:
         return None
+
+
+def split_change_id_footer(msg: str) -> tuple[str, str | None]:
+    """*msg* without its valid Change-Id footer, and that Change-Id; ``(msg, None)`` without one.
+
+    The footer is the last non-empty line, as :func:`extract_valid_change_id` reads it. Trailing
+    whitespace goes, and :func:`append_change_id_trailer` puts the footer back where it was. A
+    malformed footer stays in the text: nothing would put it back.
+    """
+    change_id = extract_valid_change_id(msg)
+    if change_id is None:
+        return msg, None
+    return "\n".join(msg.rstrip().splitlines()[:-1]).rstrip(), change_id
+
+
+def append_change_id_trailer(msg: str, change_id: str) -> str:
+    """*msg* with ``Change-Id: <change_id>`` as its last trailer, without a trailing newline.
+
+    It joins the last paragraph when that is a trailer block (``Bug: 12``, ``Signed-off-by: …``)
+    and not the subject; otherwise it is a paragraph of its own. The inverse of
+    :func:`split_change_id_footer`.
+    """
+    text = msg.rstrip()
+    if not text:
+        return f"Change-Id: {change_id}"
+    paragraphs = text.split("\n\n")
+    last = paragraphs[-1].splitlines()
+    trailers = len(paragraphs) > 1 and all(TRAILER_LINE_RE.match(line) for line in last)
+    gap = "\n" if trailers else "\n\n"
+    return f"{text}{gap}Change-Id: {change_id}"
 
 
 def strip_change_id_lines(msg: str) -> str:

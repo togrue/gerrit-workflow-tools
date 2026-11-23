@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ChangeVm, changeVm } from "../src/changeRows";
+import { ChangeVm, READ_ONLY, changeVm } from "../src/changeRows";
 import { FakeElement, fakePage } from "./fakePage";
 import { chain, comment, state } from "./fixtures";
 
@@ -72,4 +72,27 @@ test("stopped by a rebase on a conflict, the Change view's buttons run the rebas
   assert.equal(file.textContent, "src/d.txtconflicted");
   file.click();
   assert.deepEqual(posted.at(-1), { type: "conflict", path: "src/d.txt" }, "as the banner's row posts it: the extension opens the merge editor");
+});
+
+test("your commit's message is a box without the Change-Id, which shows read-only under it; Apply posts the text as typed", () => {
+  const { root, posted } = changePage(changeVm(state()));
+  const box = root.all((element) => element.tagName === "TEXTAREA" && element.className === "message")[0];
+  assert.equal(box.value, "Extract routing", "a one-line subject is one line");
+  const changeId = root.all(byClass("change-id"))[0];
+  assert.deepEqual([changeId.textContent, changeId.hidden], ["Change-Id: I1", false]);
+  box.value = "Extract the routing";
+  box.dispatch("input");
+  button(root, "Apply").click();
+  assert.deepEqual(posted.at(-1), { type: "message", text: "Extract the routing" }, "the extension puts the Change-Id back on");
+});
+
+test("a message that cannot be reworded is plain text: no box, no note saying so, its Change-Id still under it", () => {
+  for (const readOnly of [READ_ONLY.remote, READ_ONLY.patchset]) {
+    const { root } = changePage(changeVm(state({ local: false, readOnly })));
+    const block = root.all(byClass("message-block"))[0];
+    assert.equal(block.all((element) => element.tagName === "TEXTAREA").length, 0, readOnly);
+    assert.equal(block.all(byClass("message-text"))[0].textContent, "Extract routing");
+    assert.equal(block.all(byClass("change-id"))[0].textContent, "Change-Id: I1");
+    assert.ok(!block.textContent.includes(readOnly), "no note");
+  }
 });

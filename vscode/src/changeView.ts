@@ -435,6 +435,7 @@ export class ChangeView extends WebView<ChangeVm> {
     this.post({ type: "discarded", id: arg.chain.root_id, deleted: deleted === true });
   }
 
+  /** Apply in the message box: `text` as the box holds it, without the Change-Id, which core keeps. */
   private async applyMessage(text: string): Promise<void> {
     const [target, key] = [this.target, this.shown?.change_id ?? this.shown?.sha];
     if (!target || this.readOnly()) {

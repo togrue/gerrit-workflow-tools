@@ -12,8 +12,10 @@ from gerrit_workflow_tools.cli_changeid import main as gcid_main
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.core.change_id import (
     CHANGE_ID_FOOTER_RE,
+    append_change_id_trailer,
     extract_valid_change_id,
     parse_change_id_footer,
+    split_change_id_footer,
 )
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.conftest import run_cli
@@ -417,3 +419,34 @@ def test_gcid_empty_range_says_so_on_stderr(gcid_cli_repo, monkeypatch):
     assert code == 0
     assert out == ""
     assert "(no commits in range)" in err
+
+
+_CID = "I0123456789abcdef0123456789abcdef01234567"
+
+
+def test_split_change_id_footer_takes_the_footer_out_and_append_puts_it_back_as_the_last_trailer() -> None:
+    assert split_change_id_footer(f"Fix it\n\nChange-Id: {_CID}\n") == ("Fix it", _CID)
+    assert split_change_id_footer(f"Fix it\n\nBug: 12\nSigned-off-by: Me\nChange-Id: {_CID}") == (
+        "Fix it\n\nBug: 12\nSigned-off-by: Me",
+        _CID,
+    )
+    # Not the last line, or malformed: no footer to take out, the message as it is.
+    assert split_change_id_footer(f"Fix it\n\nChange-Id: {_CID}\nSigned-off-by: Me") == (
+        f"Fix it\n\nChange-Id: {_CID}\nSigned-off-by: Me",
+        None,
+    )
+    assert split_change_id_footer("Fix it\n\nChange-Id: garbage") == ("Fix it\n\nChange-Id: garbage", None)
+
+    assert append_change_id_trailer("Fix it", _CID) == f"Fix it\n\nChange-Id: {_CID}"
+    assert append_change_id_trailer("Fix: it\n", _CID) == f"Fix: it\n\nChange-Id: {_CID}", "the subject is no trailer"
+    assert (
+        append_change_id_trailer("Fix it\n\nWhy: because, really.", _CID)
+        == f"Fix it\n\nWhy: because, really.\nChange-Id: {_CID}"
+    )
+    assert (
+        append_change_id_trailer("Fix it\n\nWhy it matters.", _CID) == f"Fix it\n\nWhy it matters.\n\nChange-Id: {_CID}"
+    )
+    for message in (f"Fix it\n\nChange-Id: {_CID}", f"Fix it\n\nBody.\n\nBug: 12\nChange-Id: {_CID}"):
+        text, change_id = split_change_id_footer(message)
+        assert change_id is not None
+        assert append_change_id_trailer(text, change_id) == message

@@ -146,10 +146,14 @@ def reword(ctx: Context, req: Request) -> dict[str, Any]:
     """Give the local stack commit ``rev`` the commit message ``message``; answers the new stack.
 
     Only the message changes: uncommitted changes stay where they are. A message without the
-    commit's **Change-Id** keeps it. ``previous_head`` is what ``/stack/undo`` takes back.
+    commit's **Change-Id** keeps it; with ``keep_change_id``, a Change-Id typed into ``message``
+    is dropped and the commit keeps its own. ``previous_head`` is what ``/stack/undo`` takes back.
     """
     rev = safe_rev(req.body_field("rev", str, required=True))
-    done = reword_commit(ctx.cwd, rev, req.body_field("message", str, required=True), settings=ctx.settings)
+    keep = bool(req.body_field("keep_change_id", bool))
+    done = reword_commit(
+        ctx.cwd, rev, req.body_field("message", str, required=True), settings=ctx.settings, keep_change_id=keep
+    )
     return {**views.stack(ctx, Request()), "previous_head": done.previous_head}
 
 
