@@ -147,6 +147,11 @@
       },
       {
         "view": "ger.overview",
+        "contents": "ger and this extension do not speak the same version of the `ger serve` API, so nothing can be shown. The line above says which one to update.\n[Install the Matching ger](command:ger.installCli)\n[Retry](command:ger.refresh)\n[Show Log](command:ger.showLog)",
+        "when": "ger.state == incompatible"
+      },
+      {
+        "view": "ger.overview",
         "contents": "`ger serve` stopped or failed. The log says why.\n[Retry](command:ger.refresh)\n[Show Log](command:ger.showLog)",
         "when": "ger.state == failed"
       }
@@ -222,7 +227,7 @@
         { "command": "ger.rebase.skip", "when": "ger.ready && ger.rebasing && ger.rebaseSkippable" },
         { "command": "ger.rebase.upstream", "when": "ger.ready && !ger.rebasing" },
         { "command": "ger.setup", "when": "ger.state != no-repo" },
-        { "command": "ger.installCli", "when": "ger.state == no-executable" },
+        { "command": "ger.installCli", "when": "ger.state == no-executable || ger.state == incompatible" },
         { "command": "ger.nextComment", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.prevComment", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.setUpstream", "when": "ger.ready" },

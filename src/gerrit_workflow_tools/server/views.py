@@ -56,7 +56,8 @@ from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = 1
+API_VERSION = "1.0.0"
+"""The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
 

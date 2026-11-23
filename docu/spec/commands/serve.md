@@ -156,6 +156,25 @@ A refusal the client can do something about also carries `reason`, a word for it
 | `GERRIT` | 502 |
 | `CONFIG`, `GIT`, `INTERNAL` | 500 |
 
+## API version
+
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.0.0`); the URL
+prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
+
+| Bump | When |
+|------|------|
+| **major** | A breaking change: a field or endpoint removed or renamed, or its meaning changed. The prefix moves with it. |
+| **minor** | Fields or endpoints added; what was there means what it meant. |
+| **patch** | A fix that leaves the contract as it was. |
+
+The VS Code extension declares the API version it needs in one place,
+[`vscode/src/compat.ts`](../../../vscode/src/compat.ts), and checks `/health` once each time
+the service starts. A service with another major, or the same major and a lower minor, is
+refused: the views say which side to update and offer **Update ger**. The patch is ignored.
+When the API fits but ger's package version differs from the extension's, the extension only
+warns (and not at all for a dev or local version); it offers **Update ger** only when ger is
+the older one. Each comparison and its outcome goes to **ger: Show Log**.
+
 ---
 
 ## Read endpoints
@@ -164,8 +183,9 @@ All under `/api/v1`.
 
 ### `GET /health`
 
-`name`, `version`, `api`, `repo`, `branch`, `host`; `activity` (the activity sequence) and
-`events`: the event stream's `state`, `reason` and `source` (`ssh://user@host:port`, or `null`).
+`name`, `version` (ger's package version), `api` (the [API version](#api-version)), `repo`,
+`branch`, `host`; `activity` (the activity sequence) and `events`: the event stream's `state`,
+`reason` and `source` (`ssh://user@host:port`, or `null`).
 
 ### `GET /activity`
 

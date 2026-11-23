@@ -12,7 +12,7 @@ import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { gerProgram, installGer, runInTerminal } from "./launch";
+import { gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
@@ -100,7 +100,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const note = repoNote(choice);
   log.appendLine(note ?? `Repository: ${repo}`);
   void vscode.commands.executeCommand("setContext", "ger.state", "starting");
-  const model = new Model(new GerProcess(repo, gerProgram, (line) => log.appendLine(line)), context.workspaceState, repo);
+  const logLine = (line: string) => log.appendLine(line);
+  const skew = versionSkewWarner(repo, context.extension.packageJSON, context.globalState, logLine);
+  const model = new Model(new GerProcess(repo, gerProgram, logLine, skew), context.workspaceState, repo);
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model);
@@ -115,6 +117,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   model.onDidChange(() => {
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.description = model.stale ? "out of date" : undefined;
+    // Over the welcome text, which cannot say which versions: this can.
+    overviewTree.message = model.incompatible?.message;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
   let pausedLogged = false;

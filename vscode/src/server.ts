@@ -3,8 +3,9 @@
 
 import { ChildProcess, spawn } from "node:child_process";
 
-import { GerClient, Hello } from "./api";
+import { GerClient, Health, Hello } from "./api";
 import { shellCommandLine, spawnable } from "./commandLine";
+import { REQUIRED_API, apiProblem } from "./compat";
 
 const STARTUP_TIMEOUT_MS = 20_000;
 
@@ -36,6 +37,8 @@ export class GerProcess {
     /** The program and leading arguments that run ger, from `ger.executable`. */
     private readonly program: () => string[],
     private readonly log: (line: string) => void,
+    /** Told what answered, once per start, when its API fits: the package versions are compared there. */
+    private readonly onServed: (health: Health) => void = () => undefined,
   ) {}
 
   /** The client of the running service; starts the service when it is not running. */
@@ -97,7 +100,7 @@ export class GerProcess {
         settled = true;
         clearTimeout(timer);
         this.log(`ger serve is listening on ${first.url} for ${first.repo}`);
-        resolve(new GerClient(first));
+        resolve(this.checked(new GerClient(first)));
       });
       child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
         err += chunk;
@@ -115,6 +118,26 @@ export class GerProcess {
         fail(new ServeFailed(err.trim() || `${shown} exited with code ${code}`));
       });
     });
+  }
+
+  /** `client` once its API is one this extension can use; else the service stops and the reason is the error. */
+  private async checked(client: GerClient): Promise<GerClient> {
+    let health: Health;
+    try {
+      health = await client.health();
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
+    const problem = apiProblem(health.api, REQUIRED_API);
+    this.log(`ger ${health.version} speaks API ${health.api}; the extension needs ${REQUIRED_API}: ${problem ? "refused" : "compatible"}`);
+    if (problem) {
+      this.log(problem.message);
+      this.stop();
+      throw problem;
+    }
+    this.onServed(health);
+    return client;
   }
 
   /** Stop the service; the next `client()` starts a new one. */

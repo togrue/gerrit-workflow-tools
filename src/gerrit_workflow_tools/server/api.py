@@ -19,7 +19,7 @@ from gerrit_workflow_tools.server.activity import Activity
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
 
-PREFIX = f"/api/v{views.API_VERSION}"
+PREFIX = f"/api/v{views.API_VERSION.split('.')[0]}"
 
 Endpoint = Callable[[Context, Request], dict[str, Any]]
 
