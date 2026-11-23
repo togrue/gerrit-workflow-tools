@@ -195,7 +195,10 @@ const FILES = [
 ];
 
 const theChange = (extra: Partial<ShownCommit> = {}): ShownCommit => shown({ ...pushed(SUBJECT), ...extra });
-const itsDiff = (extra: Parameters<typeof diff>[0] = {}) => diff({ message: MESSAGE, author: "Dana Dietrich <dana@example.org>", files: FILES, ...extra });
+/** As /diff serves it: the box's text without the Change-Id footer, which comes beside it. */
+const [MESSAGE_TEXT, CHANGE_ID] = [MESSAGE.slice(0, MESSAGE.lastIndexOf("\n")), MESSAGE.slice(MESSAGE.lastIndexOf(" ") + 1)];
+const itsDiff = (extra: Parameters<typeof diff>[0] = {}) =>
+  diff({ message: MESSAGE, message_text: MESSAGE_TEXT, change_id: CHANGE_ID, author: "Dana Dietrich <dana@example.org>", files: FILES, ...extra });
 const FIVE = { ...patchsets, number: 48211, current: 5, reviewed: 2, patchsets: [1, 2, 3, 4, 5].map((number) => ({ number, commit: String(number).repeat(40), created: null })) };
 
 /** The Change view of a commit of your stack with everything arrived, unless `extra` says otherwise. */

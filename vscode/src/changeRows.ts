@@ -162,8 +162,8 @@ export interface ChangeVm {
   head?: Icon & { text: string; detail: string; badges: Badge[]; actions?: StackAction[] };
   notes?: (Icon & { text: string; detail: string })[];
   /**
-   * `text` without the Change-Id trailer, which `changeId` names (empty when there is none): the page
-   * shows it read-only under the message, and Apply puts it back (`joinChangeId`). `plain`: a message
+   * `text` without the Change-Id footer, which `changeId` names (empty when there is none): the page
+   * shows it read-only under the message, and core puts it back on Apply (`keep_change_id`). `plain`: a message
    * that cannot be reworded here at all (someone's change, a patchset on Gerrit), drawn as text, not a box.
    */
   message?: { key: string; text: string; changeId: string; author: string; readOnly: string; plain: boolean };
@@ -197,59 +197,6 @@ export const LOADING = "loading…";
 /** Never reworded here: a box would only say so. A rebase underway passes; the message stays a box. */
 function isPlain(readOnly: string): boolean {
   return readOnly === READ_ONLY.remote || readOnly === READ_ONLY.patchset;
-}
-
-/** A `Change-Id:` line, as core's `CHANGE_ID_ANY_LINE_RE` takes one. */
-const CHANGE_ID_LINE = /^\s*Change-Id:\s*(\S+)\s*$/i;
-/** A line of a trailer block: `Token: value`. */
-const TRAILER_LINE = /^[A-Za-z0-9-]+:\s/;
-
-/** The message as lines without its trailing blank ones, and where its last paragraph (the trailers, if any) starts. */
-function lastParagraph(message: string): { lines: string[]; start: number } {
-  const lines = message.replace(/\s+$/, "").split("\n");
-  let start = lines.length;
-  while (start > 0 && lines[start - 1].trim() !== "") {
-    start--;
-  }
-  return { lines, start };
-}
-
-/**
- * The commit message as the box shows it: its Change-Id trailer taken out of the last paragraph
- * (the trailers), the other trailers left as they are. `changeId` is the last one there; empty when none.
- */
-export function splitChangeId(message: string): { text: string; changeId: string } {
-  const { lines, start } = lastParagraph(message);
-  let changeId = "";
-  const footer = lines.slice(start).filter((line) => {
-    const match = CHANGE_ID_LINE.exec(line);
-    changeId = match ? match[1] : changeId;
-    return !match;
-  });
-  if (!changeId) {
-    return { text: message, changeId };
-  }
-  const text = [...lines.slice(0, start), ...footer].join("\n").replace(/\s+$/, "");
-  return { text, changeId };
-}
-
-/**
- * What Apply writes: the text typed, with the commit's Change-Id put back as the last trailer. A
- * Change-Id typed into the trailers is dropped: the commit keeps its own. Without one, the text as typed.
- */
-export function joinChangeId(text: string, changeId: string): string {
-  if (!changeId) {
-    return text;
-  }
-  const { lines, start } = lastParagraph(text);
-  const footer = lines.slice(start).filter((line) => !CHANGE_ID_LINE.test(line));
-  const kept = [...lines.slice(0, start), ...footer].join("\n").replace(/\s+$/, "");
-  if (!kept) {
-    return `Change-Id: ${changeId}`;
-  }
-  // Onto the trailers when the last paragraph is trailers (not the subject): else a paragraph of its own.
-  const trailers = footer.length > 0 && start > 0 && footer.every((line) => TRAILER_LINE.test(line));
-  return `${kept}${trailers ? "\n" : "\n\n"}Change-Id: ${changeId}`;
 }
 
 /** The Change view of the commit a rebase stopped at before applying it. */
@@ -497,7 +444,9 @@ export function changeVm(state: ChangeState): ChangeVm {
     message: state.base?.message
       ? {
           key: commit.change_id ?? commit.sha ?? "",
-          ...splitChangeId(state.base.message),
+          // Core takes the Change-Id footer out (`/diff`'s `message_text`) and puts it back on Apply.
+          text: state.base.message_text ?? state.base.message,
+          changeId: state.base.change_id ?? "",
           author: state.base.author ?? "",
           readOnly: state.readOnly,
           plain: isPlain(state.readOnly),

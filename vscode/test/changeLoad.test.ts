@@ -59,6 +59,8 @@ function files(subject: string): Diff {
     commit: "c".repeat(40),
     base: "b".repeat(40),
     message: `${subject}\n\nChange-Id: I1`,
+    message_text: subject,
+    change_id: "I1",
     author: "Me <me@example.com>",
     local_commit: true,
     files: [{ path: "a.py", status: "M", old_path: null, insertions: 2, deletions: 1 }],

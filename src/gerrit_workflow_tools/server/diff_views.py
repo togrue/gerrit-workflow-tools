@@ -9,6 +9,7 @@ import re
 from dataclasses import asdict
 from typing import Any
 
+from gerrit_workflow_tools.core.change_id import split_change_id_footer
 from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, file_text, show_commit_diff
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
@@ -92,11 +93,14 @@ def commit_files(
             fetch_patchset(ctx.cwd, ctx.settings.gerrit_remote, found)
         sha, subject = found.commit, subject or found.subject
     shown = show_commit_diff(ctx.cwd, sha)
+    message_text, change_id = split_change_id_footer(shown.meta.body)
     return {
         "commit": shown.diff.commit,
         "base": shown.diff.base,
         "subject": subject,
         "message": shown.meta.body,
+        "message_text": message_text,
+        "change_id": change_id,
         "author": shown.meta.author_line,
         "local_commit": is_local,
         "files": [asdict(change) for change in shown.diff.files],

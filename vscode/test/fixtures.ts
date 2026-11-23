@@ -82,6 +82,9 @@ export function diff(extra: Partial<Diff> = {}): Diff {
     commit: "c".repeat(40),
     base: "b".repeat(40),
     message: "Extract routing\n\nChange-Id: I1",
+    // As /diff serves it: the message without its Change-Id footer. A message given is served whole.
+    message_text: extra.message ?? "Extract routing",
+    change_id: extra.message === undefined ? "I1" : null,
     author: "Me <me@example.com>",
     local_commit: true,
     files: [

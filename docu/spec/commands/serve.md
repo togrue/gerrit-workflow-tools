@@ -407,7 +407,9 @@ What is compared can be chosen:
 (`local_commit` is then true). `since.identical` is true when both sides are the same commit: a local
 commit that is the patchset it is compared with. A patchset is compared with an older one only; a local commit
 with any patchset Gerrit has. Without `since`, the answer also carries the commit's `message`
-(the whole commit message) and `author`.
+(the whole commit message), `message_text` (the message without its Change-Id footer, for an
+editor to show), `change_id` (that footer's Change-Id, `null` without a valid one; `message_text`
+is then the whole message) and `author`.
 
 ### `GET /patchsets?rev=<changeish>`
 
@@ -462,7 +464,7 @@ The **review state**, as `ger review --status --json`, under `review`; `null` wh
 | `/comments/discard` | `rev`, `comment_id` | `ger comment --discard`: delete one of your unpublished comments. Answers the same, with `action` `discarded`: its text is not lost silently. |
 | `/comments/hold` | `root_id`, `held` | Put a comment chain on **hold**, or release it. Local: nothing goes to Gerrit. |
 | `/stack/rewrite` | `steps`, oldest first; optional `autostash` | Reorder, fold or drop commits of the local stack. Answers the new `/stack` plus `previous_head` and `stash_kept`. |
-| `/stack/reword` | `rev`, `message` | Give one commit of the local stack a new commit message. Answers the new `/stack` plus `previous_head`. |
+| `/stack/reword` | `rev`, `message`, `keep_change_id` | Give one commit of the local stack a new commit message. Answers the new `/stack` plus `previous_head`. |
 | `/stack/undo` | `head`, `previous_head` | Take that rewrite or reword back. |
 | `/stack/upstream` | `upstream` (a remote-tracking branch, `origin/main`) | Set it as the working branch's upstream, and remember it for next time. Answers `branch` and `upstream`. |
 
@@ -496,9 +498,11 @@ they edit went with a dropped commit), git leaves them in `git stash` and the an
 `/stack/reword` changes a message and nothing else: every tree stays, the commits from the
 reworded one up are recreated on their new parents, and the index and the worktree are not
 touched — so uncommitted changes are no obstacle and nothing can conflict. A message that
-lost the commit's **Change-Id** footer gets it back; one that names another Change-Id is
-taken as written. It is `REFUSED` for an empty message, a commit outside the stack, a rebase
-in progress or a detached HEAD.
+lost the commit's **Change-Id** footer gets it back, as the last trailer; one that names another
+Change-Id is taken as written. With `keep_change_id: true` (a `message` edited as `/diff`'s
+`message_text`), every `Change-Id:` line in it is dropped and the commit keeps its own. It is
+`REFUSED` for an empty message (one that was only a Change-Id included), a commit outside the
+stack, a rebase in progress or a detached HEAD.
 
 A rewrite is `REFUSED`, with the branch exactly as it was, when the worktree has uncommitted
 changes (and no `autostash`: `reason` is `uncommitted-changes`), a submodule is staged at another

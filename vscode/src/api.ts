@@ -401,6 +401,9 @@ export interface Diff {
   subject?: string;
   /** The whole commit message, and `Name <email>`; not in a review delta. */
   message?: string;
+  /** `message` without its Change-Id footer, for the box; `change_id` is that footer's (null without a valid one). */
+  message_text?: string;
+  change_id?: string | null;
   author?: string;
   local_commit: boolean;
   files: FileChange[];
@@ -636,7 +639,7 @@ export class GerClient {
 
   /** Give one commit of the local stack a new commit message. Nothing else changes. */
   reword(rev: string, message: string): Promise<Rewritten> {
-    return this.call("POST", "/stack/reword", undefined, { rev, message });
+    return this.call("POST", "/stack/reword", undefined, { rev, message, keep_change_id: true });
   }
 
   /** Take a rewrite back, while the branch is still where it left it. */

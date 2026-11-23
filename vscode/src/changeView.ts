@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours, joinChangeId } from "./changeRows";
+import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -435,18 +435,14 @@ export class ChangeView extends WebView<ChangeVm> {
     this.post({ type: "discarded", id: arg.chain.root_id, deleted: deleted === true });
   }
 
-  /**
-   * Apply in the message box: `text` as the box holds it, without the Change-Id. The commit's own
-   * Change-Id goes back on as the last trailer; one typed into the box is ignored.
-   */
+  /** Apply in the message box: `text` as the box holds it, without the Change-Id, which core keeps. */
   private async applyMessage(text: string): Promise<void> {
     const [target, key] = [this.target, this.shown?.change_id ?? this.shown?.sha];
-    const message = this.vm().message;
-    if (!target || !message || this.readOnly()) {
+    if (!target || this.readOnly()) {
       return;
     }
     // The page keeps what you typed until it is the commit's message.
-    await this.reword(target.rev, joinChangeId(text, message.changeId), () => this.post({ type: "applied", key }));
+    await this.reword(target.rev, text, () => this.post({ type: "applied", key }));
   }
 
   // --- CI ---------------------------------------------------------------------------
