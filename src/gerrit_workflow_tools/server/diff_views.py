@@ -5,7 +5,6 @@ Spec: docu/spec/commands/serve.md.
 
 from __future__ import annotations
 
-import re
 from dataclasses import asdict
 from typing import Any
 
@@ -15,16 +14,13 @@ from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.review_delta import last_reviewed_patch_set, load_review_delta
 from gerrit_workflow_tools.render.review_json import iso_utc
-from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
-
-
-_OBJECT_ID = re.compile(r"[0-9a-f]{7,40}")
+from gerrit_workflow_tools.server.request import OBJECT_ID, BadRequest, Context, Request, safe_rev
 
 
 def _review_delta(ctx: Context, req: Request, rev: str) -> dict[str, Any]:
     raw = req.one("since")
     local = req.one("local")
-    if local is not None and (not _OBJECT_ID.fullmatch(local) or (local := commit_sha_or_none(ctx.cwd, local)) is None):
+    if local is not None and (not OBJECT_ID.fullmatch(local) or (local := commit_sha_or_none(ctx.cwd, local)) is None):
         raise BadRequest("local must be the id of a commit here")
     delta = load_review_delta(
         ctx.service,
@@ -124,7 +120,7 @@ def patchsets(ctx: Context, req: Request) -> dict[str, Any]:
 def file(ctx: Context, req: Request) -> dict[str, Any]:
     """Text of ``path`` at commit ``rev`` (an object id from ``/diff``); ``content`` is ``null`` when absent."""
     rev, path = req.one("rev") or "", req.one("path") or ""
-    if not _OBJECT_ID.fullmatch(rev):
+    if not OBJECT_ID.fullmatch(rev):
         raise BadRequest("rev must be a commit id, as /diff returns it")
     if not path or path.startswith(("-", "/")) or "\0" in path:
         raise BadRequest("path is missing or not a repository path")

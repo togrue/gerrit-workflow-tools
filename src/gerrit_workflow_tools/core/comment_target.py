@@ -105,3 +105,21 @@ def target_for_commit(
         patch_set=patch_set,
         change_url=view.url(service.web_base) if view is not None else None,
     )
+
+
+def target_at_commit(service: GerritService, cwd: Path | str, target: CommentTarget, commit: str) -> CommentTarget:
+    """*target*'s change at the version *commit*: the commit a viewer showed, whose lines the location counts in.
+
+    A viewer can show another version of the change than the one its changeish names: an older
+    patchset, or Gerrit's current one beside your rewritten commit. The comment belongs to the
+    version shown. *commit* must be here, and be the target's own commit or a patchset Gerrit has.
+    """
+    sha = commit_sha_or_none(cwd, commit)
+    if sha is None:
+        raise ChangeResolutionError(f"no commit {commit[:12]} here to comment on")
+    if sha == target.commit:
+        return target
+    at = target_for_commit(service, target.key, target.change_id, sha)
+    if at.patch_set is None:
+        raise ChangeResolutionError(f"commit {sha[:12]} is not a patchset of {target.key}")
+    return at

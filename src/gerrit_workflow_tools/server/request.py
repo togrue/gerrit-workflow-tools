@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,10 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server.activity import Activity
+
+
+OBJECT_ID = re.compile(r"[0-9a-f]{7,40}")
+"""A commit id as the client got it from an answer (``/diff``'s ``commit``): never a ref or a changeish."""
 
 
 class BadRequest(ValueError):

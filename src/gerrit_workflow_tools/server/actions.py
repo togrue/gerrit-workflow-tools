@@ -12,7 +12,7 @@ from typing import Any
 from gerrit_workflow_tools.core.agent_runbook import set_hold
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_anchor import LocationError
-from gerrit_workflow_tools.core.comment_target import resolve_comment_target
+from gerrit_workflow_tools.core.comment_target import resolve_comment_target, target_at_commit
 from gerrit_workflow_tools.core.comment_write import (
     default_state,
     discard_comment,
@@ -38,7 +38,7 @@ from gerrit_workflow_tools.core.upstream import set_branch_upstream
 from gerrit_workflow_tools.render.review_json import review_state_json
 from gerrit_workflow_tools.render.show_json import changed_comment_json, written_comment_json
 from gerrit_workflow_tools.server import views
-from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
+from gerrit_workflow_tools.server.request import OBJECT_ID, BadRequest, Context, Request, safe_rev
 
 
 _REVIEW_MODES = ("worktree", "branch")
@@ -183,6 +183,8 @@ def new_comment(ctx: Context, req: Request) -> dict[str, Any]:
     Body: ``rev`` (the change), ``location`` (``PATH``, ``PATH:LINE``, ``PATH:START-END`` or
     ``PATH:L.C-L.C``, lines from 1), ``message``, and optional ``state`` (default as
     ``ger comment``: a draft where Gerrit has the change, else a local draft) and ``resolved``.
+    Optional ``commit`` is the version of the change the lines were shown in (the ``commit`` of
+    ``/diff``): another patchset than the one ``rev`` names. The comment goes on that version.
     """
     rev = safe_rev(req.body_field("rev", str, required=True))
     message = req.body_field("message", str, required=True).strip()
@@ -193,6 +195,11 @@ def new_comment(ctx: Context, req: Request) -> dict[str, Any]:
         raise BadRequest(f"state must be one of {', '.join(_NEW_COMMENT_STATES)}")
     branch = ctx.run.repo.working_branch
     target = resolve_comment_target(ctx.service, ctx.cwd, rev, branch=branch)
+    commit = req.body_field("commit", str)
+    if commit is not None:
+        if not OBJECT_ID.fullmatch(commit):
+            raise BadRequest("commit must be a commit id, as /diff returns it")
+        target = target_at_commit(ctx.service, ctx.cwd, target, commit)
     try:
         location = locate(ctx.cwd, req.body_field("location", str, required=True), target)
     except LocationError as error:

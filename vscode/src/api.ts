@@ -595,9 +595,13 @@ export class GerClient {
     return this.call("GET", "/agent/runbook", { rev });
   }
 
-  /** Start a comment chain at `location` (`path`, `path:line`, `path:start-end`, lines from 1). */
-  newComment(rev: string, location: string, message: string, state: NewCommentState): Promise<{ state: NewCommentState; id: string | null }> {
-    return this.call("POST", "/comments/new", undefined, { rev, location, message, state });
+  /**
+   * Start a comment chain at `location` (`path`, `path:line`, `path:start-end`, lines from 1).
+   * `commit` is the version of the change whose lines were shown (`/diff`'s `commit`): the
+   * comment goes on it, which is not always the commit `rev` names (an older patchset).
+   */
+  newComment(rev: string, location: string, message: string, state: NewCommentState, commit?: string): Promise<{ state: NewCommentState; id: string | null }> {
+    return this.call("POST", "/comments/new", undefined, { rev, location, message, state, ...(commit ? { commit } : {}) });
   }
 
   /** Give one of your unpublished comments (a draft, a local draft or a note) a new text; `message` is what it said. */
