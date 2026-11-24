@@ -1406,7 +1406,7 @@ def _outdated_line(row: Commit, number: int) -> str:
 
 
 def _bottom_web_edited(stack_repo: Path) -> tuple[list[Commit], dict[str, dict[str, Any]]]:
-    """The ready prefix on Gerrit at older patchsets, the bottom one then edited on the web (outdated)."""
+    """The commits below the ready boundary on Gerrit at older patchsets; the bottom one then edited on the web."""
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     details = at_older_patchsets(build_details_by_change_id(rows), stack_repo)
     web_edit(next(iter(details.values())), rows[0].sha)

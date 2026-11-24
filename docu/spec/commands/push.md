@@ -6,7 +6,7 @@
 | **Module** | `cli_push.py` prompts and prints; `core/push.py` prepares, revises, and executes |
 | **Requires** | Gerrit mode: target resolution, Change-Ids; attribute preview / REST strategies need `ger.webUrl` + credentials |
 
-Push the **ready prefix** of the local stack to Gerrit (`refs/for/<target>`), or run plain **`git push`** in **vanilla** mode when upstream is not on `ger.remote`.
+Push the commits of the local stack below the **ready boundary** to Gerrit (`refs/for/<target>`), or run plain **`git push`** in **vanilla** mode when upstream is not on `ger.remote`.
 
 ---
 

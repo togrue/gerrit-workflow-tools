@@ -25,7 +25,7 @@ class _Tty:
 
 
 def _pushed(stack_repo: Path, *, updated: bool = True) -> tuple[ChangeStore, list[Commit], list[str]]:
-    """The ready prefix (two commits) on Gerrit, with an older patchset unless *updated* is False."""
+    """The two commits below the ready boundary on Gerrit, with an older patchset unless *updated* is False."""
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id(rows)
     if updated:

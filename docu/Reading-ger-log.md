@@ -198,5 +198,5 @@ For an agent, `ger log --ai` prints the same stack in words, one line per commit
 
 - [Getting-Started.md](Getting-Started.md) — first-run setup
 - [spec/commands/show.md](spec/commands/show.md) — deep dive on one change
-- [spec/commands/push.md](spec/commands/push.md) — pushing the ready prefix
+- [spec/commands/push.md](spec/commands/push.md) — pushing the commits below the ready boundary
 - [spec/commands/edit.md](spec/commands/edit.md) — jump to first commit needing attention (`--first-attention-commit`)

@@ -142,7 +142,7 @@ ger push --dry-run       # preview what would be pushed
 ```text
 ger log              → see what needs attention
 ger show <ref>       → read comments and votes on one change
-ger push             → push the ready prefix of your stack
+ger push             → push the commits below the ready boundary
 ger edit / ger rebase → rework commits in the middle of the stack
 ger checkout <change> → work on a change from Gerrit, on a branch tracking its target
 ger ci               → why CI failed, from the CI logs
