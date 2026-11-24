@@ -5,13 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
-    add_verbose_and_debug_log_args,
-    changeish_help,
-    init_cli_runtime,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_args import add_verbose_and_debug_log_args, changeish_help
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish

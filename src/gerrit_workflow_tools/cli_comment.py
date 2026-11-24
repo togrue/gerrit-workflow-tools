@@ -6,17 +6,15 @@ import argparse
 import json
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_change_option,
     add_color_args,
     add_message_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
     read_message,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_anchor import CommentLocation, LocationError
 from gerrit_workflow_tools.core.comment_chains import ChainRefError, parse_chain_ref

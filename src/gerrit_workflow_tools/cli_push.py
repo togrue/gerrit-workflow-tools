@@ -6,14 +6,9 @@ import argparse
 import logging
 import sys
 
+from gerrit_workflow_tools.cli_args import add_color_args, add_follow_merges_args, add_verbose_and_debug_log_args
 from gerrit_workflow_tools.cli_attention import resolve_in_stack
-from gerrit_workflow_tools.cli_common import (
-    add_color_args,
-    add_follow_merges_args,
-    add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest

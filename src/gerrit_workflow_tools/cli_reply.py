@@ -7,17 +7,14 @@ import json
 import sys
 from dataclasses import dataclass
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_change_option,
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    confirm_publish,
-    init_cli_runtime,
     read_message,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, confirm_publish, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.comment_chains import ChainRef, ChainRefError, find_chains, parse_chain_ref

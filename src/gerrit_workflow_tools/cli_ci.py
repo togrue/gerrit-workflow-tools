@@ -6,15 +6,13 @@ import argparse
 import json
 import sys
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
     output_format,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.annotated_targets import annotate_targets, local_stack_or_none
 from gerrit_workflow_tools.core.attention import Attention

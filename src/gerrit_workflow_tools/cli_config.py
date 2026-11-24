@@ -7,13 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
-    add_color_args,
-    add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_args import add_color_args, add_verbose_and_debug_log_args
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.config_editor_file import (
     ParseError,
     parse_config_editor_text,

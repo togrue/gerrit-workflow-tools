@@ -127,9 +127,9 @@ it as follows.
   `ger review --vote`) — a bare integer **is** the change number: nobody checks out or
   reviews a commit by an all-digit SHA, and neither is `c<n>`: git is not asked. One
   rule decides it, `changeish.as_change_only`: `gerrit_patchset.resolve_change` applies it to
-  the positionals, `cli_common.add_change_option` to every `--change`.
+  the positionals, `cli_args.add_change_option` to every `--change`.
   Every command's help says which of the two its argument is, from one shared wording
-  (`cli_common.changeish_help`).
+  (`cli_args.changeish_help`).
 - **Not found reads the same everywhere**: `cannot resolve '<input>': <what is missing>`, with
   exactly these endings, all from `core/changeish.py` (exit `3`):
 

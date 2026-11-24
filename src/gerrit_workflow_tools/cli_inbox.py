@@ -7,15 +7,13 @@ import json
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
     output_format,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, load_inbox, project_scope
 from gerrit_workflow_tools.core.review_chain import host_from_web_base

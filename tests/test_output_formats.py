@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.bash_completion_generator import _parser_builders
-from gerrit_workflow_tools.cli_common import output_format
+from gerrit_workflow_tools.cli_args import output_format
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_sha import main as sha_main
 from gerrit_workflow_tools.cli_show import main as show_main

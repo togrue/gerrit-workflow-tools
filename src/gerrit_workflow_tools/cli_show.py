@@ -9,17 +9,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
     changeish_help,
-    init_cli_runtime,
     output_format,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.annotated_targets import local_stack_or_none
 from gerrit_workflow_tools.core.attention import Attention

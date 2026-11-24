@@ -9,14 +9,8 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import (
-    add_output_format_args,
-    add_verbose_and_debug_log_args,
-    changeish_help,
-    init_cli_runtime,
-    may_prompt,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_args import add_output_format_args, add_verbose_and_debug_log_args, changeish_help
+from gerrit_workflow_tools.cli_common import init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.cli_terminal import ask_choice
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish

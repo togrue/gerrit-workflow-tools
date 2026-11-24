@@ -113,7 +113,7 @@ flowchart TB
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
 | **Entry** | `cli_ger.py` | Lazy command dispatch, global `--refresh` → `GER_CACHE_REFRESH` |
-| **CLI** | `cli_*.py`, `cli_common.py` | Argparse, exit codes, stderr/stdout UX, logging/color init |
+| **CLI** | `cli_*.py`, `cli_common.py`, `cli_args.py` | Argparse, exit codes, stderr/stdout UX, logging/color init |
 | **Presentation** | `render/`, `summary_highlight.py`, push/rebase helpers | Column layout, ANSI color and hyperlinks (`render/style.py`), interactive push prompt, `GIT_SEQUENCE_EDITOR` wrappers |
 | **Service** | `server/` | A peer of the CLI layer: HTTP in, core call, JSON out. Imports core, `render/` JSON builders and `cli_common.failure_exit`; nothing imports it but `cli_serve.py` |
 | **Core** | `core/` (except `core/gerrit/`) | Stack math, config, Change-Id rules, status model, git subprocess wrapper |
@@ -443,7 +443,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), `may_prompt` (whether a command may ask), `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
+| `cli_args.py` | The argparse groups several commands share, one definition per flag, and the help-text style: `add_output_format_args` (`--json` / `--format` / `--ai`, read back by `output_format`), `add_message_args` (`-m` / `-F`, read back by `read_message`), `add_change_option`, `changeish_help`, `add_color_args`, `add_verbose_and_debug_log_args`, `add_follow_merges_args` |
 | `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
 | `cli_terminal.py` | Asking at the terminal: whether the CLI can ask (`stdin_is_terminal`, `prompt_toolkit_can_run`: Windows `NUL` is no console; `assume_yes`: `GER_ASSUME_YES`) and the plain questions every prompt's reply is parsed by (`ask_choice`, `confirm`) |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |

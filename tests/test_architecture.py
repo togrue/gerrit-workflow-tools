@@ -185,6 +185,33 @@ def test_no_private_names_imported_across_modules() -> None:
     )
 
 
+def test_argument_groups_come_from_cli_args() -> None:
+    """The shared argparse groups have one home, cli_args.py; cli_common.py is the runtime."""
+    defined = {
+        node.name
+        for node in ast.parse(SOURCES["cli_args.py"]).body
+        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
+    }
+    found = {
+        f"{i.importer} -> {i.name}"
+        for i in IMPORTS
+        if i.target == "cli_common.py" and i.name in defined and i.importer != "cli_common.py"
+    }
+    _check(
+        "argument group imported from cli_common.py",
+        found,
+        {
+            # cli_review.py was off-limits in the pass that moved them; cli_common re-exports them until then.
+            "cli_review.py -> add_change_option": "backlog 4",
+            "cli_review.py -> add_color_args": "backlog 4",
+            "cli_review.py -> add_output_format_args": "backlog 4",
+            "cli_review.py -> add_verbose_and_debug_log_args": "backlog 4",
+            "cli_review.py -> changeish_help": "backlog 4",
+        },
+        "Import argument groups from cli_args.py. When this list is empty, delete the re-export in cli_common.py.",
+    )
+
+
 # --- One owner per concept ---------------------------------------------------------
 
 
@@ -570,7 +597,7 @@ def _style_problems(text: str) -> list[str]:
 
 
 def test_help_text_style() -> None:
-    """The style in the cli_common.py docstring: sentence case, a final period, plain text.
+    """The style in the cli_args.py docstring: sentence case, a final period, plain text.
 
     ``--help`` is printed as is, so RST markup shows up as literal backticks and asterisks.
     """
@@ -589,5 +616,5 @@ def test_help_text_style() -> None:
             "push --reviewers: no final period": "backlog 4",
             "vscode action: starts lower case": "backlog 4",
         },
-        "Sentence case, end with a period, `single backticks` at most (cli_common.py docstring).",
+        "Sentence case, end with a period, `single backticks` at most (cli_args.py docstring).",
     )

@@ -54,15 +54,9 @@ import logging
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.cli_args import add_color_args, add_output_format_args, add_verbose_and_debug_log_args
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, resolve_attention_query_or_exit
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
-    add_color_args,
-    add_output_format_args,
-    add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.core.changeish import no_commit_with_change_id_message
 from gerrit_workflow_tools.core.git_state import current_branch

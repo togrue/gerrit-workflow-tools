@@ -23,7 +23,7 @@ Each command spec lists its **implementation module** (e.g. `cli_log.py`) so rev
 
 - **Entry:** `ger <command> [options]` — see `cli_ger.py` for the authoritative command list.
 - **`ger --help`** — lists every registered command once, in sections: *daily commands* (`log`, `show`, `edit` / `reword` on one line, `fix`, `inbox`, `push`, `rebase`, `reply`, `review`, `checkout`, `comment`, `ci`), *setup* (`setup`, `config`, `vscode`, `bash-completion`) and *scripting and agents* (`resolve`, `sha`, `change-id`, `fetch-api`, `serve`, `cache`); then the *common tasks* index (job → command) and notes on running without a terminal. The sections are `_SECTIONS` in `cli_ger.py`.
-- **`ger --refresh`** — sets `GER_CACHE_REFRESH=1` for the invoked command (bypass stale Gerrit cache reads). It may stand anywhere on the line (`ger log --refresh`), and every command that reads Gerrit lists it in its `--help` (`cli_common.add_verbose_and_debug_log_args`; not `config`, `cache` or `fetch-api`, which have no cache to bypass).
+- **`ger --refresh`** — sets `GER_CACHE_REFRESH=1` for the invoked command (bypass stale Gerrit cache reads). It may stand anywhere on the line (`ger log --refresh`), and every command that reads Gerrit lists it in its `--help` (`cli_args.add_verbose_and_debug_log_args`; not `config`, `cache` or `fetch-api`, which have no cache to bypass).
 - **`GER_ASSUME_YES=1`** — answers every confirmation as `-y` does (`ger push`, `ger reply --publish`, `ger review --vote`), for agent sandboxes and scripts that have no terminal. It decides nothing a prompt would not ask: drafts still need `--publish-comments` to go out with a push, a diverged change still needs `--force`, and `GER_NO_PUBLISH` still blocks publishing.
 - **`ger --version`** (`-V`) — prints `ger <version>` and exits `0`.
 - **Aliases** (not shown in `ger --help`): `changeid` → `change-id`; `restack` / `stack` → `rebase`.
@@ -31,7 +31,7 @@ Each command spec lists its **implementation module** (e.g. `cli_log.py`) so rev
 
 ### Output formats
 
-Every command that prints something worth parsing takes one shared group, `cli_common.add_output_format_args`: `--json`, `--format`, `--ai`, mutually exclusive. `tests/test_output_formats.py` pins that a command with `--json` has the other two.
+Every command that prints something worth parsing takes one shared group, `cli_args.add_output_format_args`: `--json`, `--format`, `--ai`, mutually exclusive. `tests/test_output_formats.py` pins that a command with `--json` has the other two.
 
 | Format | Flag | Meaning |
 |--------|------|---------|

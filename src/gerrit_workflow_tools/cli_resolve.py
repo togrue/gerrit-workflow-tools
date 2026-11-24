@@ -5,15 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
     changeish_help,
-    init_cli_runtime,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.changeish import change_label, unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import (

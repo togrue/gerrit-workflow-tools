@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import argparse
 
-from gerrit_workflow_tools.cli_common import (
-    add_color_args,
-    add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_args import add_color_args, add_verbose_and_debug_log_args
+from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base

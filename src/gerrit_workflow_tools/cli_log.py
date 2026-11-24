@@ -6,18 +6,15 @@ import argparse
 import json
 import logging
 
-from gerrit_workflow_tools.cli_attention import require_stack_upstream
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_follow_merges_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    may_prompt,
     output_format,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_attention import require_stack_upstream
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_note
 from gerrit_workflow_tools.core.annotated_stack import load_stack_overview, resolve_rev_range
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
