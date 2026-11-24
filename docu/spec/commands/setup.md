@@ -44,7 +44,9 @@ stops with nothing saved, exit `1`.
   every request: fine for a test Gerrit on your own machine or network, not for a real one`) and
   allowed only on a yes to `Allow plain http for http://lenovo-pc:8081 (ger.allowInsecureHttp true)?
   [y/N]`, the one question setup asks that is not a value: it decides where a secret goes. A no asks
-  for the URL again, `https://` offered.
+  for the URL again (`Not over plain http, then: give the server's https:// URL.`), `https://`
+  offered. An https URL on a port that speaks plain http says so: `Gerrit unreachable at
+  lenovo-pc:8081 (it does not speak https on that port: an http:// server?)`.
 - **The credentials are checked** with one `GET /accounts/self` through the service of a run opened on
   the values as they would be saved (`gerrit_setup.run_with`, `signed_in`), before anything is
   written. Accepted: `Signed in as Alice Reviewer <alice@example.com> on https://gerrit.example.com`.

@@ -98,6 +98,7 @@ def _ask_url(session: Any, settings: Settings, start: _Values) -> tuple[str, boo
         print(f"{INSECURE_HTTP}.", file=sys.stderr)
         if confirm(f"Allow plain http for {url} ({_INSECURE} true)?", default=False):
             return url, True
+        print("Not over plain http, then: give the server's https:// URL.", file=sys.stderr)
         default = "https://" + url.removeprefix("http://")
 
 

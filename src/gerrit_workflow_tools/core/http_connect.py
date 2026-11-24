@@ -25,6 +25,7 @@ import http.client
 import os
 import selectors
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -241,6 +242,8 @@ def why_unreachable(error: OSError) -> str:
         return "timed out"
     if isinstance(reason, socket.gaierror):
         return "unknown host"
+    if isinstance(reason, ssl.SSLError) and getattr(reason, "reason", None) == "WRONG_VERSION_NUMBER":
+        return "it does not speak https on that port: an http:// server?"
     if isinstance(reason, OSError) and reason.strerror:
         return reason.strerror
     return str(reason)
