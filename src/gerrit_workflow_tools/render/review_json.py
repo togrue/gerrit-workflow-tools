@@ -54,6 +54,7 @@ def chain_json(chain: ReviewChain) -> dict[str, object]:
         "wait_age_seconds": chain.wait_age_seconds,
         "unreviewed_age_seconds": chain.unreviewed_age_seconds,
         "last_activity": iso_utc(chain.last_activity),
+        "last_activity_yours": chain.last_activity_yours,
         "verified": chain.verified,
         "code_review": chain.code_review,
         "comments_unresolved": chain.comments_unresolved,

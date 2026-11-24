@@ -69,6 +69,8 @@ export interface Chain {
   wait_age_seconds: number;
   unreviewed_age_seconds: number;
   last_activity: string | null;
+  /** That last activity was yours (your upload or your vote, as Gerrit tells it): not news. */
+  last_activity_yours?: boolean;
   verified: number | null;
   code_review: number | null;
   comments_unresolved: number;

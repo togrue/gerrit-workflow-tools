@@ -67,7 +67,7 @@ Rendered as `3d`, `4h`. It is the sort key — longest without your review first
 
 ### Wait age / last activity
 
-Time since the last activity on the chain: `now − max(updated)` over members. Rendered as `act 4h`. JSON also carries `last_activity` as an ISO-8601 UTC timestamp.
+Time since the last activity on the chain: `now − max(updated)` over members. Rendered as `act 4h`. JSON also carries `last_activity` as an ISO-8601 UTC timestamp, and `last_activity_yours`: that last update was a patchset you uploaded or a vote you gave (Gerrit's change data does not say whose a comment was).
 
 ### Inbox watermark
 

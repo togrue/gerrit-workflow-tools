@@ -110,6 +110,7 @@ class Revision:
     created: datetime | None
     committer_date: datetime | None
     first_parent: str | None
+    uploader_account_id: int | None = None
 
 
 def _revision(raw: Mapping[str, Any]) -> Revision:
@@ -130,6 +131,7 @@ def _revision(raw: Mapping[str, Any]) -> Revision:
         created=parse_gerrit_time(raw.get("created")),
         committer_date=committer_date,
         first_parent=first_parent,
+        uploader_account_id=_account_id(raw.get("uploader")),
     )
 
 
@@ -324,6 +326,18 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             permitted_votes=_permitted_votes(payload.get("permitted_labels")),
             label_meanings=_label_meanings(labels),
         )
+
+    def updated_by(self, account_id: int | None) -> bool:
+        """Whether *account_id* made the change's last update, as far as the ChangeInfo tells:
+        a patchset it uploaded, or a vote it gave, at that moment. A comment alone does not tell.
+        """
+        updated = parse_gerrit_time(self.updated)
+        if account_id is None or updated is None:
+            return False
+        moments = [rev.created for rev in self.revisions.values() if rev.uploader_account_id == account_id]
+        votes = (*self.code_review_votes, *(vote for votes in self.label_votes.values() for vote in votes))
+        moments += [vote.date for vote in votes if vote.account_id == account_id]
+        return any(moment is not None and abs((updated - moment).total_seconds()) < 1 for moment in moments)
 
     def owned_by(self, account_id: int | None) -> bool:
         """Whether the account *account_id* (``GerritService.self_account_id``: you) owns this change."""

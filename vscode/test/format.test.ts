@@ -177,6 +177,16 @@ test("activity is what moved since the chain was last seen", () => {
   assert.deepEqual(Object.keys(rememberSeen(overview(chain("b", "x")), marked)), ["b"]);
 });
 
+test("your own push or vote is not news, and counts as seen", () => {
+  const first = overview(chain("a", "2026-11-09T10:00:00Z"));
+  const seen = rememberSeen(first, {});
+  const pushed = overview({ ...chain("a", "2026-11-09T12:00:00Z"), last_activity_yours: true });
+  const after = rememberSeen(pushed, seen);
+  assert.equal(chainsWithActivity(pushed, after).size, 0, "your push rings no bell");
+  const reviewed = overview(chain("a", "2026-11-09T13:00:00Z"));
+  assert.deepEqual([...chainsWithActivity(reviewed, rememberSeen(reviewed, after))], ["a"], "a reviewer after it does");
+});
+
 test("a new comment's location is the file, a line or a range, lines from 1", () => {
   assert.equal(commentLocation("a.py"), "a.py");
   assert.equal(commentLocation("a.py", { start: 4, end: 4 }), "a.py:4");

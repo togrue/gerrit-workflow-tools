@@ -258,6 +258,26 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
     assert overview["local"]["summary"]["commits"] == 4
 
 
+def test_your_own_push_or_vote_is_the_chains_last_activity_and_no_news(stack_repo: Path) -> None:
+    """Whose the last update was, as far as Gerrit tells: a patchset you uploaded, a vote you gave."""
+
+    def last_activity_yours(update: dict[str, Any]) -> bool:
+        store, keys, rows = _gerrit(stack_repo)
+        top = store._changes[keys[3]]  # pylint: disable=protected-access
+        top["updated"] = "2026-11-10 09:00:00.000000000"
+        top["revisions"][rows[3].sha].update(created=top["updated"], uploader={"_account_id": 1000})
+        top.update(update)
+        [chain] = _get(GerApi(stack_repo, gerrit=store), "/overview", refresh="1")["sections"][1]["chains"]
+        return bool(chain["last_activity_yours"])
+
+    assert last_activity_yours({}), "your push"
+    reviewed = {"_account_id": 2000, "value": 1, "date": "2026-11-10 10:00:00.000000000"}
+    later = {"updated": reviewed["date"], "labels": {"Code-Review": {"value": 1, "all": [reviewed]}}}
+    assert not last_activity_yours(later), "a reviewer's vote after it is news"
+    assert last_activity_yours({**later, "labels": {"Code-Review": {"value": 1, "all": [{**reviewed, "_account_id": 1000}]}}})
+    assert not last_activity_yours({"updated": "2026-11-10 11:00:00.000000000"}), "a comment by anyone: Gerrit does not say whose"
+
+
 def test_failed_ci_is_the_headline_only_on_the_local_stacks_chain(stack_repo: Path) -> None:
     store, _keys, _rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {"verified": -1}, {}])
     git("reset", "-q", "--hard", "main", cwd=stack_repo)  # the chain is no longer the one you work on

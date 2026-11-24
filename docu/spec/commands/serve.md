@@ -225,7 +225,10 @@ is shown: a branch without an upstream still shows your inbox. A failed `local` 
 `needs_upstream`: `true` when the branch has no upstream, which `POST /stack/upstream` fixes.
 
 *Activity* is the client's to track: every chain carries `last_activity`, and a client that
-remembers what it showed last knows which chains moved.
+remembers what it showed last knows which chains moved. `last_activity_yours` says that last
+update was yours, as far as Gerrit's change data tells (a patchset you uploaded, a vote you
+gave, at that moment): your own push is no news to you. A comment does not tell whose it was,
+so it always counts as news.
 
 ### `GET /stack`
 
