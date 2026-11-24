@@ -30,13 +30,13 @@ from gerrit_workflow_tools.core.gerrit.resolution import (
     format_resolution_note,
     local_sibling_note,
     shadowed_change_note,
+    single_query_match,
 )
 from gerrit_workflow_tools.core.gerrit.rest import (
     LIGHT_QUERY_OPTIONS,
     GerritApiError,
     GerritRest,
     GerritUnavailableError,
-    pick_change_from_query_result,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
@@ -107,14 +107,6 @@ def _fetch_change_row(get_change: Callable[[str], dict[str, Any]], change_key: s
         raise ChangeResolutionError(unresolved_change_message(raw)) from e
 
 
-def _fetch_single_from_query(client: GerritRest, query: str) -> dict[str, Any]:
-    rows = client.query_changes(query, options=list(LIGHT_QUERY_OPTIONS))
-    try:
-        return pick_change_from_query_result(rows)
-    except GerritApiError as e:
-        raise ChangeResolutionError(str(e)) from e
-
-
 def _fetch_unique_row(
     parsed: Changeish, client: GerritRest, get_change: Callable[[str], dict[str, Any]], *, web_base: str | None
 ) -> dict[str, Any]:
@@ -131,7 +123,7 @@ def _fetch_unique_row(
     if parsed.kind == "query":
         if not parsed.query:
             raise ChangeResolutionError("empty Gerrit query")
-        return _fetch_single_from_query(client, parsed.query)
+        return single_query_match(client.query_changes(parsed.query, options=list(LIGHT_QUERY_OPTIONS)), parsed.raw)
 
     number = parsed.number
     if parsed.kind == "change-number" and not (number and number.isdigit() and int(number) > 0):

@@ -79,7 +79,7 @@ dense row and is accepted back by every command that takes a changeish (`change_
 | `cl:<n>` | alias for `change:<n>` | Short form for interactive use ("changelist"). Optional. |
 | `#<n>` | alias for `change:<n>` | How Gerrit's UI and many tools print a change. Quote it in a shell: an unquoted `#` starts a comment. |
 | `c<n>` (no colon) | `change:<n>` unless a commit has that name | How `ger` prints a change ([§1.1.1](#111-how-ger-prints-a-change-c120045)). |
-| `q:<query>` | Raw Gerrit search | Power/agent use. Must resolve to a single change unless the command is inherently multi-result. |
+| `q:<query>` | Raw Gerrit search | Power/agent use. Must resolve to a single change unless the command is inherently multi-result: several matches exit `4` and list each as `cN (triplet, status)`, none exits `3` (`resolution.single_query_match`). |
 | `rev:<gitrev>` / `git:<gitrev>` | Force git interpretation | Escape hatch for the rare case where a ref name collides with a prefix or looks like a Change-Id. |
 
 Triplets, Change-Ids, `refs/changes/…`, and URLs are **self-identifying** and need

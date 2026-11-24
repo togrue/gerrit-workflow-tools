@@ -123,6 +123,17 @@ class Resolution:
         return out
 
 
+def single_query_match(rows: list[dict[str, Any]], raw: str) -> dict[str, Any]:
+    """The one change a ``q:`` query matched. None is not found; several are ambiguous, listed."""
+    if not rows:
+        raise ChangeResolutionError(f"cannot resolve {raw!r}: no Gerrit change matches")
+    if len(rows) > 1:
+        more = "+" if rows[-1].get("_more_changes") else ""
+        alternatives = [SelectedChange.from_change_row(row) for row in rows]
+        raise ChangeAmbiguousError(f"ambiguous change query ({len(rows)}{more} matches)", alternatives=alternatives)
+    return rows[0]
+
+
 def shadowed_change_note(raw: str, sha: str) -> str:
     """One line: *raw* named commit *sha*, though it is also written like a change number."""
     return f"note: {raw!r} is commit {abbreviated_sha(sha)} here; for the Gerrit change write change:{raw.lstrip('cC')}"

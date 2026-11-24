@@ -660,3 +660,21 @@ def test_a_commit_named_like_a_change_wins_and_the_note_says_how_to_name_the_cha
     assert code == 0, err
     assert json_stdout(out)["resolution"]["local_sha"] == sha
     assert f"note: 'c7' is commit {sha[:7]}" in err and "write change:7" in err
+
+
+@pytest.mark.parametrize("main_fn", [gshow_main, resolve_main])
+def test_an_ambiguous_query_exits_4_and_lists_each_candidate(
+    main_fn: Callable[..., int], web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """docu/spec/exit-codes.md: 4 AMBIGUOUS, candidates as ``cN (triplet, status)``, as for a Change-Id."""
+    sha = git_out("rev-parse", "HEAD~1", cwd=web_stack_repo)
+    first = change_info_for_sha(sha, _cid("a1"), number=2049, branch="main")
+    second = change_info_for_sha(sha, _cid("a2"), number=2048, branch="main")
+    store = ChangeStore({str(first["id"]): first, str(second["id"]): second})
+    store.stub_query("topic:x", [first, second])
+    code, _out, err = run_cli(web_stack_repo, main_fn, ["q:topic:x"], monkeypatch, gerrit=store)
+    assert code == ExitCode.AMBIGUOUS
+    assert "ambiguous change query (2 matches): c2049 (" in err and f"~main~{_cid('a2')}, NEW)" in err
+    store.stub_query("topic:none", [])
+    code, _out, err = run_cli(web_stack_repo, main_fn, ["q:topic:none"], monkeypatch, gerrit=store)
+    assert (code, err.strip()) == (ExitCode.NOT_FOUND, "error: cannot resolve 'q:topic:none': no Gerrit change matches")
