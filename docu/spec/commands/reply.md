@@ -105,7 +105,7 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 - `--only ID` (repeatable) publishes just those drafts: the draft's own id, or any comment id of its chain (the `CHAIN` that `ger reply` answered); your other drafts stay drafts. An id that is none of your drafts on the targets exits `3` before anything is sent. This is how an agent sends its own answers without publishing a draft the human keeps for later.
 - `--keep-drafts` publishes no draft at all: only the `-m` message and `--vote` votes go out, with every draft kept. What an agent uses for a change-level note on a change where the human has drafts pending.
-- `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`) votes with the review.
+- `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`: a bare `+1` is `Code-Review+1`) votes with the review.
 - `-m MSG` is the change message. On a change you **named** as `REV`, `-m` or `--vote` alone posts even with no draft to publish: a change-level note or a vote, with every draft kept (Gerrit's `drafts: KEEP`). With no `REV` it never goes to every change of the stack: only changes that have drafts to publish get it.
 
 `ger review --vote` is the reviewer-flow spelling of the same review POST (`GerritComments.publish_drafts`): it publishes every draft on the change under review.

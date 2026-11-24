@@ -53,7 +53,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force]\n"
             "       ger review (--next | --prev) [--stage | --no-stage] [--force]\n"
             "       ger review (--stage | --unstage | --status | --done)\n"
-            "       ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y]"
+            "       ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG] [--dry-run] [-y]"
         ),
         description=(
             "Check a change out to review it, with its diff staged so every git tool shows what it changed. "
@@ -81,11 +81,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--vote",
         action="append",
         default=None,
-        metavar="LABEL=N",
+        metavar="VOTE",
         help=f"{VOTE_HELP} Publishes all your drafts on the change; to publish only some, or to post a "
         "message without a vote: ger reply --publish.",
     )
-    add_change_option(vote, "With --vote: vote on this change.")
+    add_change_option(vote, "With --vote: vote on this change; repeat for more.", repeatable=True)
+    vote.add_argument(
+        "--chain", action="store_true", help="With --vote: vote on every open change of the chain under review."
+    )
     vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
     vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
     vote.add_argument(
@@ -99,8 +102,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     opens = args.changeish is not None or args.next or args.prev
-    if args.vote is None and (args.change or args.message or args.dry_run or args.yes):
-        p.error("--change, -m, --dry-run and -y belong to --vote")
+    if args.vote is None and (args.change or args.chain or args.message or args.dry_run or args.yes):
+        p.error("--change, --chain, -m, --dry-run and -y belong to --vote")
+    if args.change and args.chain:
+        p.error("vote on the chain under review (--chain) or on the changes you name (--change), not both")
     if args.vote is not None and (opens or args.status or args.done or args.stage is not None):
         p.error("--vote acts on the change being reviewed; give it on its own")
     if args.changeish is not None and (args.next or args.prev or args.status or args.done):

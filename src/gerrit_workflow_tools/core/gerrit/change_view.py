@@ -166,6 +166,15 @@ def _label_votes(labels: Mapping[str, Any]) -> dict[str, tuple[Vote, ...]]:
     return out
 
 
+def _permitted_votes(raw: object) -> dict[str, tuple[int, ...]]:
+    """``permitted_labels`` (``DETAILED_LABELS``): the values you may vote, per label."""
+    permitted: dict[str, tuple[int, ...]] = {}
+    for label, values in (raw if isinstance(raw, dict) else {}).items():
+        numbers = [int(v) for v in values if isinstance(v, str) and v.strip().lstrip("+-").isdigit()]
+        permitted[str(label)] = tuple(sorted(numbers))
+    return permitted
+
+
 def _attention_set(raw: object) -> dict[int, datetime | None]:
     """``last_update`` per account id, from the key or from the entry's account."""
     out: dict[int, datetime | None] = {}
@@ -233,6 +242,8 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     work_in_progress: bool = False
     private: bool = False
     topic: str | None = None
+    permitted_votes: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
+    """What you may vote, per label (``permitted_labels``); empty when Gerrit did not say."""
 
     def contradicts(self, parsed: Changeish) -> str | None:
         """Why this change is not the one *parsed* addressed, or ``None`` when it is."""
@@ -289,6 +300,7 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             work_in_progress=payload.get("work_in_progress") is True,
             private=payload.get("is_private") is True,
             topic=_str(payload.get("topic")) or None,
+            permitted_votes=_permitted_votes(payload.get("permitted_labels")),
         )
 
     @property

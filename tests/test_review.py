@@ -378,3 +378,102 @@ def test_a_detached_head_outside_a_review_still_says_check_out_your_branch(
     git("switch", "-q", "--detach", shas[0], cwd=worktree)  # HEAD moved off the review's parent
     code, _out, err = run_cli(worktree, log_main, [], monkeypatch, gerrit=store)
     assert code == ExitCode.USAGE and "HEAD is detached and no local branch points at it" in err
+
+
+def _permit(store: ChangeStore, key: str, **labels: list[str]) -> None:
+    """Gerrit's ``permitted_labels`` for the caller on *key* (``Code_Review`` for ``Code-Review``)."""
+    row = store._changes[key]  # pylint: disable=protected-access
+    row["permitted_labels"] = {label.replace("_", "-"): values for label, values in labels.items()}
+
+
+def _draft(store: ChangeStore, key: str, message: str) -> None:
+    store.set_drafts(key, {"c.txt": [{"id": f"d-{message}", "line": 1, "message": message, "patch_set": 1}]})
+
+
+def test_a_bare_plus_one_is_a_code_review_vote(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _keys, _shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "published 0 draft(s) and Code-Review+1 on 102" in out
+    code, _out, err = run_cli(
+        stack_repo, reply_main, ["--publish", "101", "--vote", "-1", "-y"], monkeypatch, gerrit=store
+    )
+    assert code == ExitCode.OK, err
+    assert [call.kwargs["labels"] for call in store.calls_to("publish_drafts")] == [
+        {"Code-Review": 1},
+        {"Code-Review": -1},
+    ]
+
+
+def test_vote_on_the_chain_lists_each_change_with_its_drafts_and_votes_on_each(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One command finishes a chain: every open change of it, the drafts of each listed first."""
+    store, keys, _shas = gerrit
+    _draft(store, keys[0], "base nit")
+    _draft(store, keys[3], "top nit")
+    _review(stack_repo, store, ["101"], monkeypatch)
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "--dry-run", "-m", "lgtm"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert [line.split(":")[0] for line in out.splitlines() if line.startswith("change ")] == [
+        f'change {n} "{subject}"' for n, subject in zip(range(100, 104), _subjects(store, keys), strict=True)
+    ]
+    assert '  c.txt:1: "base nit"' in out and '  c.txt:1: "top nit"' in out and "  message: lgtm" in out
+    assert store.calls_to("publish_drafts") == []
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "-y", "-m", "lgtm"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert [call.args[0] for call in store.calls_to("publish_drafts")] == keys
+    assert "published 1 draft(s) and Code-Review+1 on 103" in out
+
+
+def test_vote_on_several_named_changes_votes_on_each(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, _shas = gerrit
+    code, out, err = _review(
+        stack_repo, store, ["--vote", "CR+1", "--change", "100", "--change", "101", "-y", "--json"], monkeypatch
+    )
+    assert code == ExitCode.OK, err
+    assert [row["change"] for row in json_stdout(out)["changes"]] == keys[:2]
+    assert [call.args[0] for call in store.calls_to("publish_drafts")] == keys[:2]
+
+
+def test_a_vote_outside_the_label_range_stops_even_a_dry_run(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, _shas = gerrit
+    for key in keys:
+        _permit(store, key, Code_Review=["-1", " 0", "+1"])
+    _review(stack_repo, store, ["102"], monkeypatch)
+    code, _out, err = _review(stack_repo, store, ["--vote", "CR+3", "--dry-run"], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert "change 102 does not take Code-Review+3 (you may give -1, 0, +1)" in err
+
+
+def test_a_chain_vote_skips_the_changes_that_do_not_take_it_and_says_so(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, _shas = gerrit
+    for key in keys:
+        _permit(store, key, Code_Review=["-2", "-1", " 0", "+1", "+2"])
+    _permit(store, keys[0], Code_Review=["-1", " 0", "+1"])
+    _review(stack_repo, store, ["102"], monkeypatch)
+    code, out, err = _review(stack_repo, store, ["--vote", "+2", "--chain", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "skipped change 100" in out and "Code-Review+2 (you may give -1, 0, +1)" in out
+    assert [call.args[0] for call in store.calls_to("publish_drafts")] == keys[1:]
+
+
+def test_chain_and_change_together_are_a_usage_error(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _keys, _shas = gerrit
+    assert _review(stack_repo, store, ["--vote", "+1", "--chain", "--change", "100"], monkeypatch)[0] == ExitCode.USAGE
+    assert _review(stack_repo, store, ["--chain"], monkeypatch)[0] == ExitCode.USAGE
+
+
+def _subjects(store: ChangeStore, keys: list[str]) -> list[str]:
+    return [store.get_change(key)["subject"] for key in keys]

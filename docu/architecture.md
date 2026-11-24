@@ -476,7 +476,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `core/run_context.py` | The **run context**: `RunContext` (the repository and the Gerrit service of one command run or one request; `run.cwd`, `run.settings`, `run.worktree` and `run.stack` read through them) |
 | `core/repository.py` | The repository a run works in, each answer read once for the run: `Repository` (its `worktree`, `working_branch`, `stack_branch`, `root` and **stack context**, `stack`) |
-| `core/votes.py` | The vote grammar (`CR+1`, `V=-1`): `parse_votes` for every command that votes |
+| `core/votes.py` | The vote grammar (`+1` for Code-Review, `CR+1`, `V=-1`): `parse_votes` for every command that votes, `format_votes`, and `votes_ruled_out` against a change's `ChangeView.permitted_votes` |
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE`; `Refusal`: ger will not go on without the user's decision (`ReviewRefusal`, `CheckoutRefusal`, `ReorderRefusal`), exit `REFUSED`, HTTP 409 |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
@@ -509,7 +509,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
-| `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
+| `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`) and the changes a vote goes to (`changes_by_number`, `vote_targets`: drafts and ruled-out votes per change) |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), and doing it (`apply_checkout`, rebasing the commits above an updated version) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved; how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
@@ -567,7 +567,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
-| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
+| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache; which changes hold drafts of yours (`drafted_changes`, one `has:draft` query) |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence of ChangeInfo keyed by triplet; the trust window (`load_changes`), `reconcile` (which rows are current, from freshness tokens), invalidation |
 | `core/gerrit/cache_follow_ups.py` | `FollowUpCache` (mixed into `GerritCache`): a change's comments and Checks rows, valid while its freshness token stands; `DEFAULT_CHANGE_TRUST_WINDOW_SECONDS` |
 | `core/gerrit/cache_facts.py` | `RememberedFacts` (mixed into `GerritCache`): host capabilities, the user's account id, settled commits, each with its lifetime |

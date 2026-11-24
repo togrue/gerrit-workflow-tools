@@ -19,7 +19,8 @@ ger inbox                   -> chains waiting on you
 ger review 1234             -> change 1234 checked out in the review worktree, its diff staged
   ...read it in the IDE; ger comment src/app.py:42 -m "..."...
 ger review --next           -> the next change up the chain
-ger review --vote CR+1      -> "Publish 3 drafts and Code-Review+1 on 1235? [y/N]"
+ger review --vote +1        -> "Publish 3 draft(s) and Code-Review+1 on 1235? [y/N]"
+ger review --vote +1 --chain  -> the same for every change of the chain, in one go
 ger review --done           -> back to how things were
 ```
 
@@ -32,7 +33,7 @@ ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in
 ger review (--next | --prev) [--stage | --no-stage] [--force] [--json | --ai]
 ger review (--stage | --unstage) [--json | --ai]
 ger review --status [--json | --ai]
-ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json | --ai]
+ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG] [--dry-run] [-y] [--json | --ai]
 ger review --done [--force] [--json | --ai]
 ```
 
@@ -96,11 +97,21 @@ At either end of the chain, `ger review` exits `10`, the code scripts already lo
 
 ## Voting and publishing
 
-`--vote LABEL=N` (also `LABEL+N`, `LABEL-N`) votes on the change being reviewed, or on `--change CHANGEISH`. `CR` is short for `Code-Review` and `V` for `Verified`. Several `--vote`s may be given.
+`--vote +1` votes Code-Review (a bare `+N` or `-N` is always `Code-Review`); `--vote LABEL=N` (also `LABEL+N`, `LABEL-N`) votes another label. `CR` is short for `Code-Review` and `V` for `Verified`. Several `--vote`s may be given. The grammar is `core/votes.py`'s, shared with `ger reply --publish --vote`.
 
-One REST call publishes **all your drafts on the change** (every patchset, as the web UI's *Send* does), the votes, and the `-m` message. Before it, ger lists the drafts and the votes and asks `Publish N drafts and Code-Review+1 on <change>? [y/N]`. `-y` skips the question and is required without a terminal: without one (or with `--json` / `--ai`) it exits `2` with the message `ger reply --publish` gives, `no prompt to answer (non-interactive, --json or --ai): pass -y to publish` (`cli_common.confirm_publish`). `--dry-run` only lists.
+What it votes on:
 
-You vote on the patchset you reviewed. When Gerrit's current patchset is newer, `ger review --vote` exits `1` and says so, and you run `ger review` again to see the new patchset first.
+| | |
+|--|--|
+| (default) | The change being reviewed |
+| `--chain` | Every open change of the chain under review (Gerrit's related changes of the reviewed patchset), base first: a reviewed chain is finished in one command |
+| `--change CHANGEISH` | That change; repeat it to vote on several (`--change 2078 --change 2079`). Not with `--chain` |
+
+Before anything is sent, the changes are read from Gerrit in one light query (one read per `--change`), and your drafts with one `has:draft` query over them; a change's chains are fetched only when it holds drafts. A vote Gerrit does not let you give on a change (outside its `permitted_labels`, when the change data has them) is named with what you may give: `change 2142 does not take Code-Review+3 (you may give -2, -1, 0, +1, +2)`. With `--chain`, such a change is skipped and listed as `skipped change N "subject": …`; when no change takes the vote, the command exits `2`, also under `--dry-run`.
+
+One REST call per change publishes **all your drafts on it** (every patchset, as the web UI's *Send* does), the votes, and the `-m` message. Before it, ger lists each change with its drafts and the votes, then the message (`  message: …`), and asks `Publish N draft(s) and Code-Review+1 on 2141, 2142? [y/N]`. Each change sent prints `published N draft(s) and Code-Review+1 on <number>`. `-y` skips the question and is required without a terminal: without one (or with `--json` / `--ai`) it exits `2` with the message `ger reply --publish` gives, `no prompt to answer (non-interactive, --json or --ai): pass -y to publish` (`cli_common.confirm_publish`). `--dry-run` only lists.
+
+You vote on the patchset you reviewed. When Gerrit's current patchset of the change under review is newer, `ger review --vote` exits `1` and says so, and you run `ger review` again to see the new patchset first.
 
 With **GER_NO_PUBLISH=1** set, `--vote` exits `2` without contacting Gerrit, the same guard as `ger reply --publish`.
 
@@ -135,7 +146,7 @@ When you have reviewed an older patchset of the change (posted a vote, comment o
 
 **`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 
-**JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta.
+**JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta. `--vote --json`: for one change `{change, drafts, labels, message, status}` (`status` is `published` or `dry-run`); with `--chain` or several `--change`, `{changes: [those], skipped: [{change, ruled_out}]}`.
 
 ---
 

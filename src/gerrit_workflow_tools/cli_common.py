@@ -256,15 +256,18 @@ def changeish_help(what: str, *, change_only: bool = False) -> str:
     return f"{what}: a git revision (<n> and c<n> too, else the change), {_CHANGEISH_FORMS}."
 
 
-def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str) -> None:
+def add_change_option(
+    parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str, *, repeatable: bool = False
+) -> None:
     """Register ``--change CHANGEISH``: it only ever names a Gerrit change, so a bare number is one.
 
     One registration for every command, so ``--change 692`` means change 692 everywhere.
-    """
+    *repeatable* collects every ``--change`` in a list (``None`` without one)."""
     parser.add_argument(
         "--change",
         metavar="CHANGEISH",
         default=None,
+        action="append" if repeatable else "store",
         type=as_change_only,
         help=f"{help_text} A change number, {_CHANGEISH_FORMS}.",
     )
