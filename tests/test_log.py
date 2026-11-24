@@ -937,7 +937,7 @@ def test_log_ai_is_one_plain_line_per_commit(stack_repo: Path, monkeypatch: pyte
         f"5. {sha[4]} Wip: cache — not-pushed",
         f"6. {sha[5]} No footer here — missing Change-Id",
     ]
-    assert lines[7].startswith("chain blocked: ")  # cli_log.next_steps, as the human view ends
+    assert lines[7].startswith("chain blocked: ")  # stack_log.next_steps, as the human view ends
     for empty in ("None", "null", "[]", "CR0", "V0", "0 unresolved", "http", "#"):
         assert empty not in out
 
@@ -952,7 +952,7 @@ def test_log_ai_is_far_smaller_than_json(stack_repo: Path, monkeypatch: pytest.M
 def test_log_ai_names_merged_commits_every_failed_check_and_the_wip_next_step(
     web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Both views end with the same next: lines (cli_log.next_steps), the WIP advice among them."""
+    """Both views end with the same next: lines (stack_log.next_steps), the WIP advice among them."""
     rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict[str, Any]] = [
         {"status": "MERGED", "submittable": False},
