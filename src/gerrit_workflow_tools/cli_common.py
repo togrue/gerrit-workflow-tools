@@ -225,11 +225,8 @@ def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
         "--follow-merges",
         action="store_true",
         default=False,
-        help=(
-            "Traverse all commit parents (including merge commits) instead of "
-            "only the first-parent chain. By default only the first-parent chain "
-            "is shown, matching Gerrit's relation-chain semantics."
-        ),
+        help="Traverse all commit parents (including merge commits) instead of only the first-parent chain. "
+        "By default only the first-parent chain is shown, matching Gerrit's relation-chain semantics.",
     )
 
 
@@ -299,20 +296,8 @@ def may_prompt(args: argparse.Namespace) -> bool:
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Register shared color-output and hyperlink flags."""
-    parser.add_argument(
-        "--color",
-        choices=("always", "auto", "never"),
-        default="auto",
-        metavar="WHEN",
-        help=HELP_COLOR,
-    )
-    parser.add_argument(
-        "--hyperlinks",
-        choices=("always", "auto", "never"),
-        default="auto",
-        metavar="WHEN",
-        help=HELP_HYPERLINKS,
-    )
+    for flag, help_text in (("--color", HELP_COLOR), ("--hyperlinks", HELP_HYPERLINKS)):
+        parser.add_argument(flag, choices=("always", "auto", "never"), default="auto", metavar="WHEN", help=help_text)
 
 
 def add_verbose_and_debug_log_args(
