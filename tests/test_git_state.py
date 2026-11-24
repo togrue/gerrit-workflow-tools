@@ -39,6 +39,13 @@ def test_resolve_working_branch_prefers_rebase_branch_over_points_at_head(stack_
     assert resolve_working_branch(stack_repo, settings=Settings.from_cwd(stack_repo)) == "rebasing"
 
 
+def test_a_branch_checked_out_in_another_worktree_is_still_the_working_branch(stack_repo: Path) -> None:
+    """``git branch --points-at`` marks it ``+ feature``; that is the branch, not its name."""
+    other = stack_repo.parent / "other"
+    git("worktree", "add", "-q", "--detach", str(other), "feature", cwd=stack_repo)
+    assert resolve_working_branch(other, settings=Settings.from_cwd(other)) == "feature"
+
+
 def test_resolve_rebase_onto_remote_ref(stack_repo: Path) -> None:
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
     assert resolve_rebase_onto_remote_ref(stack_repo, settings=Settings.from_cwd(stack_repo)) == "origin/main"

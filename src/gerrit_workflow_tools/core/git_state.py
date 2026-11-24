@@ -177,16 +177,12 @@ def is_bookkeeping_branch(name: str) -> bool:
 
 
 def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
-    p = git("branch", "--points-at", "HEAD", cwd=cwd, check=False)
+    # for-each-ref, not `git branch`: that marks a branch checked out in another worktree `+ name`.
+    p = git("for-each-ref", "--points-at", "HEAD", "--format=%(refname:short)", "refs/heads/", cwd=cwd, check=False)
     if p.returncode != 0:
         return []
-    names: list[str] = []
-    for line in (p.stdout or "").splitlines():
-        name = line.strip().lstrip("* ").strip()
-        if not name or name.startswith("(") or is_bookkeeping_branch(name):
-            continue
-        names.append(name)
-    return names
+    names = (line.strip() for line in (p.stdout or "").splitlines())
+    return [name for name in names if name and not is_bookkeeping_branch(name)]
 
 
 def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: Settings) -> tuple[int, int, str]:
