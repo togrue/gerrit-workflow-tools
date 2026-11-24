@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.checkout_text import checkout_lines
+from gerrit_workflow_tools.render.wrap import say
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -101,7 +102,10 @@ def _ask_update(args: argparse.Namespace, plan: CheckoutPlan) -> CheckoutAction:
 
 
 def _report(plan: CheckoutPlan, result: CheckoutResult, url: str | None) -> None:
-    print("\n".join(checkout_lines(plan, result, url)))
+    first, *rest = checkout_lines(plan, result, url)
+    say(first, file=sys.stdout)
+    for line in rest:
+        print(line)
     if result.moved_from:
         print(
             f"moved {result.branch} off commits Gerrit does not have; its old tip was {result.moved_from}",

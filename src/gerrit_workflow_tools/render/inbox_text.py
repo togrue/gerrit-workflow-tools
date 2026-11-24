@@ -6,6 +6,8 @@ ages and names. On a terminal the subject is cut to fit the width; piped, nothin
 
 from __future__ import annotations
 
+import sys
+
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, needs_author, section_summary
@@ -27,6 +29,7 @@ from gerrit_workflow_tools.render.style import (
     terminal_columns,
     visible_len,
 )
+from gerrit_workflow_tools.render.wrap import say
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -222,7 +225,7 @@ def _render_section(
     print()
     print(_summary(chains, outgoing=outgoing))
     if not outgoing:
-        print(color_text(_review_hint(chains[0]), ANSI_DIM))
+        say(_review_hint(chains[0]), file=sys.stdout, dim=True)
 
 
 def _review_hint(chain: ReviewChain) -> str:

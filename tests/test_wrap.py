@@ -89,3 +89,23 @@ def test_markdown_comments_stay_unwrapped() -> None:
     chain = _chain(message=message, path="f.py")
     joined = "\n".join(format_comment_chain_markdown(chain, "https://g.example/c/1"))
     assert f"> {message}" in joined
+
+
+def test_a_next_line_breaks_between_words_never_inside_a_command_or_a_step() -> None:
+    from gerrit_workflow_tools.render.wrap import note_lines
+
+    line = "next: resolve the conflicts in calc/trig.py, `git add` them, then `ger rebase --continue` to finish"
+    assert note_lines(line, None) == [line], "piped: one line"
+    wrapped = note_lines(line, 40)
+    assert all(len(part) <= 40 for part in wrapped)
+    assert " ".join(part.strip() for part in wrapped) == line
+    assert all(part.startswith("      ") for part in wrapped[1:]), "indented under the text after next:"
+    assert any("`ger rebase --continue`" in part for part in wrapped)
+    steps = "next: cd ../pg-review · ger comment PATH:LINE -m … · ger review --next"
+    assert note_lines(steps, 40) == [
+        "next: cd ../pg-review ·",
+        "      ger comment PATH:LINE -m … ·",
+        "      ger review --next",
+    ]
+    other = 'updated change-12 from patchset 1 to change 12 patchset 3 "a long subject", rebased 2 commits above it'
+    assert [part[:2] for part in note_lines(other, 50)[1:]] == ["  "] * (len(note_lines(other, 50)) - 1)

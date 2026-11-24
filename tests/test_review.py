@@ -522,15 +522,10 @@ def test_review_says_how_to_get_there_and_what_to_run_next(
 ) -> None:
     store, _keys, _shas = gerrit
     _, out, _ = _review(stack_repo, store, ["102"], monkeypatch)
-    assert out.splitlines()[-1] == (
-        "next: cd ../stack-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · "
-        "ger review --next · ger review --vote +1"
-    )
+    # Below the top: comment and walk on; only the steps that fit where you are.
+    assert out.splitlines()[-1] == "next: cd ../stack-review · ger comment PATH:LINE -m … · ger review --next"
     _, out, _ = _review(_worktree(stack_repo), store, ["--next"], monkeypatch)  # the top: vote, then done
-    assert out.splitlines()[-1] == (
-        "next: ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --vote +1 --chain · "
-        "ger review --done"
-    )
+    assert out.splitlines()[-1] == "next: ger review --vote +1 --chain · ger review --done"
 
 
 def test_done_warns_about_drafts_left_unpublished_and_still_finishes(
@@ -576,4 +571,4 @@ def test_a_single_change_review_offers_no_walk(
     store, keys, _shas = gerrit
     store.set_related(keys[1], [])  # no relation chain: a change of its own
     _, out, _ = _review(stack_repo, store, ["101"], monkeypatch)
-    assert out.splitlines()[-1].endswith("ger reply ID -m … · ger review --vote +1 · ger review --done")
+    assert out.splitlines()[-1].endswith(" · ger review --vote +1 · ger review --done")

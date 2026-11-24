@@ -45,6 +45,7 @@ from gerrit_workflow_tools.core.votes import VOTE_HELP
 from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
 from gerrit_workflow_tools.render.style import shown_path
+from gerrit_workflow_tools.render.wrap import say
 from gerrit_workflow_tools.review_vote import vote
 
 
@@ -170,17 +171,17 @@ def _delta_lines(delta: ReviewDelta) -> list[str]:
 
 
 def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
-    """The commands of the review loop from here: get to the worktree, read, comment, answer, walk, vote."""
+    """The steps of the review loop that fit where you are, two or three: get to the worktree; below
+    the top of a chain, comment and walk on; at the top (or a single change), vote and finish."""
     worktree = Path(state.worktree)
     here = cwd.resolve()
     steps = (
         [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {shown_path(worktree, cwd)}"]
     )
-    steps += ["ger show", "ger comment PATH:LINE -m …", "ger reply ID -m …"]
     if chain is not None and chain[-1:] in ([state.number], []):  # the top, or no chain: nowhere to walk
         steps += ["ger review --vote +1" + (" --chain" if len(chain) > 1 else ""), "ger review --done"]
     else:
-        steps += ["ger review --next", "ger review --vote +1"]
+        steps += ["ger comment PATH:LINE -m …", "ger review --next"]
     return "next: " + " · ".join(steps)
 
 
@@ -214,7 +215,7 @@ def _emit_state(
     for line in _delta_lines(delta) if delta else ():
         print(line)
     if hint:
-        print(hint)
+        say(hint, file=sys.stdout)
 
 
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:

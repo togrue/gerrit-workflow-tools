@@ -1,4 +1,4 @@
-"""Word wrap for terminal prose.
+"""Word wrap for terminal prose, and :func:`say`, which prints a ``next:`` or closing line wrapped so.
 
 Breaks on spaces and tabs. A token with no whitespace is sliced into
 ``width``-sized pieces. The width is a character count of the text itself.
@@ -6,7 +6,13 @@ Breaks on spaces and tabs. A token with no whitespace is sliced into
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import sys
+from typing import TextIO
+
+from gerrit_workflow_tools.render.style import ANSI_DIM, color_text
 
 
 # Stands in for a space inside a `command` while wrapping, so a command is never broken.
@@ -42,6 +48,45 @@ def wrap_hanging(text: str, width: int, *, indent: int) -> list[str]:
     if rest:
         lines += [" " * indent + line for line in _wrap_one(rest, max(width - indent, 1))]
     return [line.replace(_KEPT_SPACE, " ") for line in lines]
+
+
+_NEXT = "next: "
+_STEPS = " · "
+_NOTE_INDENT = 2
+
+
+def note_lines(line: str, width: int | None) -> list[str]:
+    """A ``next:`` or closing line as ger prints it on a terminal *width* wide; as it is for ``None`` (piped).
+
+    Broken between words, never inside a `command` in backticks nor inside one step of a
+    `` · ``-separated list of them; what follows ``next: `` is indented under its text, any
+    other line's by two spaces.
+    """
+    if not width or len(line) <= width:
+        return [line]
+    indent = len(_NEXT) if line.startswith(_NEXT) else _NOTE_INDENT
+    if _STEPS in line:
+        line = _STEPS.join(step.replace(" ", _KEPT_SPACE) for step in line.split(_STEPS))
+        line = line.replace(_NEXT.replace(" ", _KEPT_SPACE), _NEXT, 1)
+    return wrap_hanging(line, width, indent=indent)
+
+
+def stream_columns(stream: TextIO) -> int | None:
+    """The columns of the terminal *stream* writes to; ``None`` when it is piped or redirected."""
+    if not getattr(stream, "isatty", lambda: False)():
+        return None
+    try:
+        return os.get_terminal_size(stream.fileno()).columns
+    except (OSError, ValueError, AttributeError):
+        return shutil.get_terminal_size().columns
+
+
+def say(line: str, *, file: TextIO | None = None, dim: bool = False) -> None:
+    """Print a ``next:`` or closing line (stderr unless *file*): on a terminal wrapped by :func:`note_lines`,
+    never mid-word; piped, one line as it is. Every such line goes through here, so all wrap alike."""
+    stream = file if file is not None else sys.stderr
+    for part in note_lines(line, stream_columns(stream)):
+        print(color_text(part, ANSI_DIM) if dim else part, file=stream)
 
 
 def fit_header(text: str, width: int) -> str:

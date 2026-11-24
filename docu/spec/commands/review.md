@@ -142,10 +142,10 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
   https://host/c/proj/+/1234
   since your review of patchset 2: src/router.py (+12 -3), tests/test_router.py (+20 -0)
     git diff 1a2b3c4d5e6f 9f8e7d6c5b4a
-next: cd ../proj-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --next · ger review --vote +1
+next: cd ../proj-review · ger comment PATH:LINE -m … · ger review --next
 ```
 
-The last line names the next commands of the loop: `next: cd ../proj-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --next · ger review --vote +1`. The `cd` (to the review worktree, relative when shorter) only when you are not in it; at the top of the chain `--next` gives way to `ger review --vote +1 --chain` (just `--vote +1` for a single change) and `ger review --done`. `--status` ends with the same line.
+The last line names the two or three steps of the loop that fit where you are: below the top of a chain, `ger comment PATH:LINE -m … · ger review --next`; at its top, `ger review --vote +1 --chain · ger review --done` (just `--vote +1` for a single change). The `cd` (to the review worktree, relative when shorter) comes first only when you are not in it. `--status` ends with the same line. On a terminal it wraps between steps ([SPEC.md](../../SPEC.md#output-formats)).
 
 When you have reviewed an older patchset of the change (posted a vote, comment or reply on it), the two lines before it say what changed since: the **review delta** (`core/review_delta.py`, the one the VS Code extension shows), narrowed to the files either patchset touched when it was rebased, and the `git diff` that shows it. Nothing is said for patchset 1 or a patchset you already reviewed, and a failure to compute it never fails the review.
 

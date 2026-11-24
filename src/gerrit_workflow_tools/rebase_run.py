@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
+from gerrit_workflow_tools.render.wrap import say
 
 
 def require_history_rewrite(cwd: Path) -> None:
@@ -162,10 +163,8 @@ def print_stop(cwd: Path, walk_on: str | None) -> bool:
         return False
     if progress.current:
         conflict = " (conflict)" if progress.stop is RebaseStop.CONFLICT else ""
-        print(
-            f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}{conflict}", file=sys.stderr
-        )
-    print(f"next: {stop_next_step(progress, walk_on=walk_on)}", file=sys.stderr)
+        say(f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}{conflict}")
+    say(f"next: {stop_next_step(progress, walk_on=walk_on)}")
     return True
 
 
@@ -183,14 +182,14 @@ def print_dropped(
     once the rebase finished when it is *still_underway*.
     """
     change = f"; its change {dropped.change_number} stays open on Gerrit" if dropped.change_number else ""
-    print(f"dropped {dropped.short_sha} {dropped.subject}{change}", file=sys.stderr)
+    say(f"dropped {dropped.short_sha} {dropped.subject}{change}")
     if undo == "reset" and previous_head:
         back = f"git reset --keep {previous_head}"
     elif still_underway:
         back = f"once the rebase is finished, git cherry-pick {dropped.short_sha} (or {ABORT} now)"
     else:
         back = f"git cherry-pick {dropped.short_sha}"
-    print(f"to get it back: {back}", file=sys.stderr)
+    say(f"to get it back: {back}")
 
 
 def print_outcome(
@@ -207,13 +206,13 @@ def print_outcome(
     """
     for dropped in outcome.dropped:
         print_dropped(dropped, undo=undo, previous_head=previous_head)
-    print(f"{done}: {outcome_text(outcome)}", file=sys.stderr)
+    say(f"{done}: {outcome_text(outcome)}")
     if walk_on:
         return
     if outcome.fixups_left:
-        print(f"next: {UNSQUASHED_FIXUP_ADVICE}", file=sys.stderr)
+        say(f"next: {UNSQUASHED_FIXUP_ADVICE}")
     elif outcome.rewritten or outcome.dropped:
-        print("next: `ger push` uploads the stack as it is now", file=sys.stderr)
+        say("next: `ger push` uploads the stack as it is now")
 
 
 def outcome_text(outcome: RewriteOutcome) -> str:

@@ -31,7 +31,7 @@ from gerrit_workflow_tools.render.style import (
     color_text,
     visible_len,
 )
-from gerrit_workflow_tools.render.wrap import wrap_hanging
+from gerrit_workflow_tools.render.wrap import note_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -103,7 +103,7 @@ def footer_lines(lines: list[str], *, width: int | None) -> list[str]:
     """The ``next:`` and other closing lines, dim; wrapped at word boundaries to fit *width*."""
     out: list[str] = []
     for line in lines:
-        parts = wrap_hanging(line, width, indent=6 if line.startswith("next: ") else 2) if width else [line]
+        parts = note_lines(line, width)
         out.extend(color_text(part, ANSI_DIM) for part in parts)
     return out
 

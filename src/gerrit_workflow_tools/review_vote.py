@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.review_target import VoteTarget, plan_vote, revi
 from gerrit_workflow_tools.core.votes import format_votes, parse_votes
 from gerrit_workflow_tools.render.comments import format_pending_drafts
 from gerrit_workflow_tools.render.review_json import sent_vote_json
+from gerrit_workflow_tools.render.wrap import say
 
 
 def _heading(target: VoteTarget, voted: str) -> str:
@@ -63,5 +64,5 @@ def vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritSe
         answer = sent_vote_json(plan, "dry-run" if args.dry_run else "published")
         print(json.dumps(answer["changes"][0] if len(plan.targets) == 1 else answer, indent=2))
     elif state is not None and not args.dry_run:
-        print("next: ger review --done" if args.chain else "next: ger review --next · ger review --done")
+        say("next: ger review --done" if args.chain else "next: ger review --next · ger review --done", file=sys.stdout)
     return int(ExitCode.OK)

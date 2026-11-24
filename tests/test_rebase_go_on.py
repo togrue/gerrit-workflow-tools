@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -545,3 +547,26 @@ def test_ger_rebase_refuses_exactly_what_ger_serve_leaves_out_and_says_why_alike
     assert isinstance(actions, list)
     assert sorted(refused) == sorted(a.value for a in RebaseAction if a.value not in actions)
     assert refused == served["refused"]
+
+
+class _Terminal(io.StringIO):
+    """stderr as a terminal: ``say`` takes its width from ``COLUMNS``."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_on_a_terminal_the_next_step_wraps_between_words(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """At 60 columns no line is longer, none breaks inside a word, and piped it is one line (above)."""
+    _move_upstream_over_c_txt(stack_repo)
+    monkeypatch.setenv("GREBASE_EDITOR", "true")
+    monkeypatch.setenv("COLUMNS", "60")
+    monkeypatch.chdir(stack_repo)
+    terminal = _Terminal()
+    monkeypatch.setattr(sys, "stderr", terminal)
+    rebase_main(["--onto-remote"], gerrit=ChangeStore({}))
+    lines = terminal.getvalue().splitlines()
+    assert lines and all(len(line) <= 60 for line in lines), lines
+    said = " ".join(line.strip() for line in lines)
+    assert "`ger rebase --continue` to finish" in said and "`ger rebase --abort` goes back" in said
+    assert [line[:6] for line in lines[2:]] == ["      "] * len(lines[2:]), "the rest indented under next:'s text"

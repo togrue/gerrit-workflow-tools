@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import sys
-
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     Resolution,
     StackCommit,
     format_local_sibling_note,
     format_resolution_note,
 )
-from gerrit_workflow_tools.render.style import ANSI_DIM, color_text
+from gerrit_workflow_tools.render.wrap import say
 
 
 def print_note(note: str | None) -> None:
     """Print a transparency note, dimmed, on stderr so stdout stays machine-readable."""
     if note:
-        print(color_text(note, ANSI_DIM), file=sys.stderr)
+        say(note, dim=True)
 
 
 def print_resolution_note(resolution: Resolution | None) -> None:

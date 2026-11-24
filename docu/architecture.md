@@ -599,7 +599,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments.py` | Inline comment chains in the terminal (boxes), and the words both views share (`chain_location`, `draft_label`, `chain_url`, `drafts_elsewhere`) |
 | `render/comments_markdown.py` | Inline comment chains as Markdown: `ger show --ai` and the agent runbook (`format_comment_chain_markdown`, `format_unresolved_section_markdown`) |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
-| `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
+| `render/wrap.py` | Word wrap for terminal prose: `ger show`'s comment boxes and commit message, and every `next:` or closing line (`note_lines`; `say` prints one, wrapped on a terminal, one line when piped) |
 | `render/checkout_text.py` | What `ger checkout` says once it checked a change out (`checkout_lines`) |
 | `render/show_text.py` | `ger show`'s human text for one commit (`commit_lines`), the brief one of a multi-commit view (`brief_commit_lines`) and the line between them (`commit_separator`) |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
