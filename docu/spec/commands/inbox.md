@@ -94,7 +94,7 @@ The *to review* section has `label:Verified+1` appended when `ger.inboxRequireVe
 
 A chain appears in **to review** if any member matches; the chain is then fetched whole (via assembly), so members you are not a reviewer on still appear as context.
 
-Within *to review*, chains sort by **unreviewed age**, oldest first (longest waiting for you). Ties break on wait age, then change number. Within *outgoing*, what you must act on comes first — failed CI, then unresolved comments, then a negative vote — then the latest activity.
+Within *to review*, chains sort by **unreviewed age**, oldest first (longest waiting for you). Ties break on wait age, then change number. Within *outgoing*, what you must act on comes first — failed CI, then unresolved comments, then a negative vote, then WIP — then the latest activity.
 
 ---
 
@@ -106,7 +106,7 @@ Within *to review*, chains sort by **unreviewed age**, oldest first (longest wai
 | `--outgoing` | Only the *outgoing* section (your own chains) |
 | `--project P` | Restrict to a Gerrit project; repeatable. Default: see [project scope](#project-scope) |
 | `--all` | Every project on the host, not only the current clone's |
-| `--unready` | Include *to review* chains filtered out as not ready (WIP, private, CI red) |
+| `--unready` | Include *to review* chains filtered out as not ready (WIP, private, CI red); the heading says how many there are |
 | `--limit N` | At most N chains per section. N must be positive |
 | `--json` | Machine-readable output (see [JSON](#json)) |
 | `--ai`, `--format {human,ai}` | `ai`: one plain line per chain for a model to read (see [Output (`--ai`)](#output---ai)) |
@@ -122,49 +122,57 @@ Planned, not in this slice: `--since-last`, `--watch`, `--forget`, `--sort`, `--
 
 ## Output (text)
 
-One line per chain; indented lines only for members that individually need something. Status tokens are the **same vocabulary as `ger log`** — patchset column omitted, since a chain has no local commit to align with.
+One line per chain, its columns padded to the widest of the section so rows line up; indented lines only for members that individually need something. Status tokens are the **same vocabulary as `ger log`** — patchset column omitted, since a chain has no local commit to align with. Rendered by `render/inbox_text.py`.
 
 ```text
 project: myproject
 
-to review (3)
-c4321  5c  v+1 cr0       unrevi 3d  act 4h  alice   # feat: rate limiter
+to review (3; 1 not ready, --unready shows it)
+c4321  5 changes  worst v+1 cr0       waiting 3d, active 4h  alice  # feat: rate limiter
   https://gerrit.example.com/c/myproject/+/4321
-c4400  1c  v+1 cr+1 com  unrevi 1d  act 1d  bob     # fix: retry backoff
+c4400  1 change         v+1 cr+1 com  waiting 1d             bob    # fix: retry backoff
   https://gerrit.example.com/c/myproject/+/4400
-c4380  9c  v-1 cr0       unrevi 6d  act 6d  carol   # refactor: split scheduler
+c4380  9 changes  worst v-1 cr0       waiting 6d             carol  # refactor: split scheduler
   https://gerrit.example.com/c/myproject/+/4380
-   └ c4376  v-1      # build failed
-   └ c4379  cr0 com  # 2 unresolved comments
+  └ c4376  v-1 cr0       # build failed
+  └ c4379  v+1 cr0  com  # 2 unresolved comments
 
-summary: 3 chains · 15 changes · oldest unrevi 6d · CI 1 · comments 1
+summary: 3 chains · 15 changes · longest wait 6d · build failed 1 · comments 1
+next: ger review c4317 (base of c4321's chain), then --next
 
-outgoing (1)
-c4410  2c  v-1 cr0  act 2h  # feat: quota headers
+outgoing (5; 1 needs you)
+c4410  2 changes  worst v-1 cr0       active 2h  # feat: quota headers
   https://gerrit.example.com/c/myproject/+/4410
-   └ c4409  v-1      # build failed
+  └ c4409  v-1 cr0       # build failed
++ 4 chains wait on reviewers or CI (-v lists them)
 
-summary: 1 chains · 2 changes · oldest act 2h · CI 1
+summary: 5 chains · 9 changes · most idle 2d · build failed 1
 ```
 
-An *outgoing* line is yours: it has no `unrevi` clock and no owner.
+An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `ger log`'s `# WIP` / `# private` marks when a member is WIP or private.
 
 | Column | Meaning |
 |--------|---------|
-| `c<n>` | Chain top's Gerrit change number |
-| `<n>c` | Chain depth (member count) |
-| `v…` / `cr…` / `com` | Worst label across members; `com` when any member has unresolved comments. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
-| `unrevi` | Unreviewed age — how long the chain has waited for you |
-| `act` | Wait age — last activity on any member |
-| owner | Chain-top owner |
-| `# subject` | Chain top's subject, highlighted per `ger.warningPattern` |
+| `c<n>` | Chain top's Gerrit change number, as every changeish argument takes it back |
+| `N changes` | Chain depth (member count) |
+| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst label across members (not the top's own); the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
+| `waiting` | Unreviewed age — how long the chain has waited for you (*to review*); `, active …` follows when the wait age (last activity) reads differently |
+| `active` | Wait age — last activity on any member (*outgoing*) |
+| owner | Chain-top owner, cut at 18 characters |
+| `# subject` | Chain top's subject, highlighted per `ger.warningPattern`. On a terminal it is cut with `…` to the width, one column spare; with less than 12 columns left it goes on a line of its own. Piped, nothing is cut |
 | URL | Gerrit page for the **chain top** (default on) |
 
-**Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote. A healthy chain stays one line plus its URL.
+**The heading** counts the chains shown. *To review* adds the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any: one more query beside it, asked only for the text view and never with `--unready` or a custom `ger.inboxToReviewQuery`. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
+
+**Outgoing folds the quiet chains**: those waiting only on reviewers or CI become one dim line, `+ N chains wait on reviewers or CI (-v lists them)`. They sort after the ones that need you. `--json` and `--ai` list every chain.
+
+**Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
+
+**The footer** of *to review* names the command that starts on the longest-waiting chain where review begins, its base: `next: ger review c4317 (base of c4321's chain), then --next` (`ger review` checks out the change named, so the top would start at the end).
 
 **Empty sections** print a dim `(nothing to review)` / `(no open chains of yours)` rather than vanishing, so the output shape is stable.
 
-`-v` lists every member, not only those with attention.
+`-v` lists every member of a chain of several changes, and every outgoing chain.
 
 ### Colors
 
@@ -175,8 +183,8 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
 | Identity | `c<n>`, heading, summary counts | cyan (SHA color) |
 | Status | `v…` / `cr…` / `com` | same as `ger log` (`v+1` green, `v-1` red, `cr+2` green, `cr-1` yellow, …) |
 | Waiting on you | unreviewed age, unresolved-comment notes | yellow |
-| CI / build | `build failed`, summary `CI` | red |
-| Context | depth `Nc`, `unrevi`/`act` labels, activity age, owner, `#`, URL, empty-section hint | dim |
+| CI / build | `build failed`, summary `build failed` count | red |
+| Context | `N changes`, `worst`, `waiting`/`active` labels, activity age, owner, `#`, URL, folded-chains line, empty-section hint | dim |
 
 `--hyperlinks` shortens the chain-top URL the same way as `ger log`.
 

@@ -38,6 +38,8 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     attention_reasons: tuple[str, ...]
     sha: str | None = None
     """The commit of the current patch set, when Gerrit sent it."""
+    work_in_progress: bool = False
+    private: bool = False
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,16 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     attention_reasons: tuple[str, ...]
     partial_chain: bool
     url: str | None
+
+    @property
+    def work_in_progress(self) -> bool:
+        """Whether a member is WIP: nobody reviews the chain until you mark it ready."""
+        return any(member.work_in_progress for member in self.members)
+
+    @property
+    def private(self) -> bool:
+        """Whether a member is private."""
+        return any(member.private for member in self.members)
 
 
 def format_age(seconds: int) -> str:
@@ -150,6 +162,8 @@ def _to_member(change: ChangeView, web_base: str) -> ChainMember | None:
         url=change.url(web_base),
         attention_reasons=member_attention_reasons(change),
         sha=change.current_revision,
+        work_in_progress=change.work_in_progress,
+        private=change.private,
     )
 
 

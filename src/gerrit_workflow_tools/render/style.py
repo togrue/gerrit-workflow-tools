@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import shutil
 import sys
 from collections.abc import Mapping
 
@@ -149,6 +150,13 @@ def _env_flag(env: Mapping[str, str], name: str) -> str:
 
 def _stdout_is_tty() -> bool:
     return bool(getattr(sys.stdout, "isatty", lambda: False)())
+
+
+def terminal_columns() -> int | None:
+    """The terminal's width when stdout is one; ``None`` when piped, where nothing is cut to fit."""
+    if not _stdout_is_tty():
+        return None
+    return shutil.get_terminal_size().columns
 
 
 def init_hyperlink_mode(*, hyperlinks: str = "auto") -> bool:

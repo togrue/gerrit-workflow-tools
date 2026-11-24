@@ -1,118 +1,163 @@
-"""``ger inbox``'s human text: one row per review chain, by inbox section, then a summary."""
+"""``ger inbox``'s human text: one row per review chain, by inbox section, then a summary.
+
+Rows are cells padded to the widest of their column in the section, so they line up whatever the
+ages and names. On a terminal the subject is cut to fit the width; piped, nothing is cut.
+"""
 
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, section_summary
-from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age
+from gerrit_workflow_tools.core.changeish import change_label
+from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, needs_author, section_summary
+from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.render.style import (
     ANSI_BOLD,
     ANSI_CYAN,
     ANSI_DIM,
+    ANSI_DIM_GRAY,
     ANSI_RED,
     ANSI_YELLOW,
     color_short_sha,
     color_stat,
     color_text,
     format_link,
+    terminal_columns,
+    visible_len,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
 _EMPTY = {TO_REVIEW: "(nothing to review)", OUTGOING: "(no open chains of yours)"}
+_OWNER_WIDTH = 18
+_MIN_SUBJECT = 12
+"""Narrower than this, a cut subject says too little: the row wraps instead."""
 
 
 def _fmt_change_number(number: int) -> str:
-    """Identity of a chain or member — same cyan as ``ger log`` SHAs."""
-    return color_short_sha(f"c{number}")
+    """Identity of a chain or member, as every changeish argument takes it back; ``ger log``'s SHA cyan."""
+    return color_short_sha(change_label(number))
 
 
-def _fmt_status(verified: int | None, code_review: int | None, comments: int) -> str:
+def _fmt_votes(verified: int | None, code_review: int | None, comments: int) -> str:
     """Verified / Code-Review / comments tokens — same palette as ``ger log``."""
     return f"{fmt_verified(verified)} {fmt_code_review(code_review)} {fmt_comments(comments)}"
 
 
-def _fmt_unreviewed(seconds: int) -> str:
-    """Waiting-on-you clock: dim label, yellow age (attention)."""
-    return f"{color_text('unrevi', ANSI_DIM)} {color_text(format_age(seconds), ANSI_YELLOW)}"
+def _fmt_chain_votes(chain: ReviewChain) -> str:
+    """The chain's votes; over several changes, the worst of each, said so (not the top's own)."""
+    votes = _fmt_votes(chain.verified, chain.code_review, chain.comments_unresolved)
+    return f"{color_text('worst', ANSI_DIM)} {votes}" if chain.depth > 1 else votes
 
 
-def _fmt_activity(seconds: int) -> str:
-    """Last-activity clock: dim label and age (context, not attention)."""
-    return f"{color_text('act', ANSI_DIM)} {color_text(format_age(seconds), ANSI_DIM)}"
+def _fmt_size(depth: int) -> str:
+    return color_text(f"{depth} change{'s' if depth != 1 else ''}", ANSI_DIM)
 
 
-def _hash_suffix(body: str) -> str:
-    return f"{color_text('# ', ANSI_DIM)}{body}"
+def _fmt_age(label: str, seconds: int, color: str) -> str:
+    return f"{color_text(label, ANSI_DIM)} {color_text(format_age(seconds), color)}"
+
+
+def _fmt_owner(name: str) -> str:
+    shown = name if len(name) <= _OWNER_WIDTH else f"{name[: _OWNER_WIDTH - 1]}…"
+    return color_text(shown, ANSI_DIM)
 
 
 _MEMBER_HINT_COLOR = {Attention.CI_FAILED: ANSI_RED}
 
 
-def _attention_note(reasons: tuple[str, ...], comments: int) -> str:
+def _attention_note(member: ChainMember) -> str:
     """The most urgent of :func:`member_hints`, coloured as ``ger log``'s trailing hints."""
-    hints = member_hints(reasons, comments)
+    hints = member_hints(member.attention_reasons, member.comments_unresolved)
     return color_text(hints[0][1], _MEMBER_HINT_COLOR.get(hints[0][0], ANSI_YELLOW)) if hints else ""
 
 
-def _render_chain_line(
-    chain: ReviewChain,
-    *,
-    highlighter: SummaryHighlighter,
-    show_url: bool,
-    verbose: bool,
-    outgoing: bool,
-) -> None:
-    """One chain. An outgoing chain is yours: no unreviewed clock and no owner."""
-    subject = highlighter.highlight(chain.top.subject)
-    waiting = "" if outgoing else f"{_fmt_unreviewed(chain.unreviewed_age_seconds)}  "
-    owner = "" if outgoing else f"{color_text(chain.owner_name, ANSI_DIM)}   "
-    line = (
-        f"{_fmt_change_number(chain.top.number)}  {color_text(f'{chain.depth}c', ANSI_DIM)}  "
-        f"{_fmt_status(chain.verified, chain.code_review, chain.comments_unresolved)}  "
-        f"{waiting}{_fmt_activity(chain.wait_age_seconds)}  "
-        f"{owner}{_hash_suffix(subject)}"
-    )
-    print(line)
-    if show_url and chain.url:
-        print(f"  {color_text(format_link(chain.url), ANSI_DIM)}")
+def _marks(work_in_progress: bool, private: bool) -> str:
+    """``ger log``'s WIP and private hints, as a trailing ``# …``."""
+    words = [color_text("WIP", ANSI_YELLOW)] * work_in_progress + [color_text("private", ANSI_DIM_GRAY)] * private
+    return f"  {color_text('# ', ANSI_DIM)}{', '.join(words)}" if words else ""
+
+
+_VOTES = 2
+"""The votes cell, right-aligned: a single change's tokens sit under the ``worst`` ones of a chain."""
+
+
+def _pad(cells: list[str], widths: list[int]) -> str:
+    def fit(i: int, cell: str) -> str:
+        gap = " " * (widths[i] - visible_len(cell))
+        return gap + cell if i == _VOTES else cell + gap
+
+    return "  ".join(fit(i, cell) for i, cell in enumerate(cells))
+
+
+_INDENT = "  "
+
+
+def _subject(text: str, *, used: int, columns: int | None, highlighter: SummaryHighlighter) -> str:
+    """``# subject``, cut with ``…`` to what *columns* leave after *used* visible characters (one
+    spare, so a terminal never wraps). Too little room: on a line of its own below, cut to fit there."""
+    room = None if columns is None else columns - used - 3
+    if room is not None and room < _MIN_SUBJECT:
+        return "\n" + _INDENT + _subject(text, used=len(_INDENT), columns=columns, highlighter=highlighter)
+    if room is not None and len(text) > room:
+        text = f"{text[: room - 1]}…"
+    return f"{color_text('# ', ANSI_DIM)}{highlighter.highlight(text)}"
+
+
+def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
+    """The aligned part of a chain's row. An outgoing chain is yours: no waiting clock and no owner."""
+    cells = [_fmt_change_number(chain.top.number), _fmt_size(chain.depth), _fmt_chain_votes(chain)]
+    if outgoing:
+        return [*cells, _fmt_age("active", chain.wait_age_seconds, ANSI_DIM)]
+    waiting = _fmt_age("waiting", chain.unreviewed_age_seconds, ANSI_YELLOW)
+    # Last activity only when it says more than the waiting clock: touched since, or not since long before.
+    if format_age(chain.wait_age_seconds) != format_age(chain.unreviewed_age_seconds):
+        waiting += f"{color_text(',', ANSI_DIM)} {_fmt_age('active', chain.wait_age_seconds, ANSI_DIM)}"
+    return [*cells, waiting, _fmt_owner(chain.owner_name)]
+
+
+def _member_lines(
+    chain: ReviewChain, *, verbose: bool, columns: int | None, highlighter: SummaryHighlighter
+) -> list[str]:
+    """The members below a chain's row: those with attention, every one with *verbose*."""
+    lines: list[str] = []
     for member in chain.members:
-        if member.number == chain.top.number and not verbose:
+        # A single change's own row says it all; a chain's row says the worst, so the member says which.
+        if chain.depth == 1 or not (verbose or member.attention_reasons):
             continue
-        if not verbose and not member.attention_reasons:
-            continue
-        note = _attention_note(member.attention_reasons, member.comments_unresolved)
-        suffix_body = note if note else highlighter.highlight(member.subject)
-        print(
-            f"{color_text('   └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  "
-            f"{_fmt_status(member.verified, member.code_review, member.comments_unresolved)}  "
-            f"{_hash_suffix(suffix_body)}"
+        head = (
+            f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  "
+            f"{_fmt_votes(member.verified, member.code_review, member.comments_unresolved)}  "
         )
+        note = _attention_note(member)
+        if note:
+            lines.append(f"{head}{color_text('# ', ANSI_DIM)}{note}")
+            continue
+        marks = _marks(member.work_in_progress, member.private)
+        used = visible_len(head) + visible_len(marks)
+        lines.append(head + _subject(member.subject, used=used, columns=columns, highlighter=highlighter) + marks)
+    return lines
 
 
-def _render_section(
-    section: InboxSection,
-    *,
-    highlighter: SummaryHighlighter,
-    show_url: bool,
-    verbose: bool,
-) -> None:
-    chains = section.chains
-    outgoing = section.name == OUTGOING
-    print(color_text(f"{SECTION_HEADINGS[section.name]} ({len(chains)})", f"{ANSI_BOLD}{ANSI_CYAN}"))
-    if not chains:
-        print(color_text(_EMPTY[section.name], ANSI_DIM))
-        return
-    for chain in chains:
-        _render_chain_line(chain, highlighter=highlighter, show_url=show_url, verbose=verbose, outgoing=outgoing)
+def _heading(section: InboxSection, shown: list[ReviewChain]) -> str:
+    """``to review (3; 1 not ready, --unready shows it)``, ``outgoing (22; 5 need you)``."""
+    notes: list[str] = []
+    if section.not_ready:
+        notes.append(f"{section.not_ready} not ready, --unready shows {'it' if section.not_ready == 1 else 'them'}")
+    if section.name == OUTGOING and section.chains:
+        notes.append(f"{len(shown) or 'none'} need{'s' if len(shown) == 1 else ''} you")
+    count = f"{len(section.chains)}{'; ' + '; '.join(notes) if notes else ''}"
+    return color_text(f"{SECTION_HEADINGS[section.name]} ({count})", f"{ANSI_BOLD}{ANSI_CYAN}")
+
+
+def _summary(chains: list[ReviewChain], *, outgoing: bool) -> str:
     summary = section_summary(chains)
     sep = color_text(" · ", ANSI_DIM)
     oldest = (
-        color_stat("oldest act ", format_age(summary["oldest_wait_seconds"]), ANSI_DIM)
+        color_stat("most idle ", format_age(summary["oldest_wait_seconds"]), ANSI_DIM)
         if outgoing
-        else color_stat("oldest unrevi ", format_age(summary["oldest_unreviewed_seconds"]), ANSI_YELLOW)
+        else color_stat("longest wait ", format_age(summary["oldest_unreviewed_seconds"]), ANSI_YELLOW)
     )
     parts = [
         color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"),
@@ -126,11 +171,55 @@ def _render_section(
         oldest,
     ]
     if summary["ci_failures"]:
-        parts.extend([sep, color_stat("CI ", summary["ci_failures"], ANSI_RED)])
+        parts.extend([sep, color_stat("build failed ", summary["ci_failures"], ANSI_RED)])
     if summary["comments"]:
         parts.extend([sep, color_stat("comments ", summary["comments"], ANSI_YELLOW)])
+    return "".join(parts)
+
+
+def _render_section(
+    section: InboxSection,
+    *,
+    highlighter: SummaryHighlighter,
+    show_url: bool,
+    verbose: bool,
+    columns: int | None,
+) -> None:
+    chains = section.chains
+    outgoing = section.name == OUTGOING
+    # Your chains that only wait on reviewers or CI fold into one line; -v (and --json, --ai) list them.
+    shown = [chain for chain in chains if verbose or not outgoing or needs_author(chain)]
+    print(_heading(section, [chain for chain in chains if not outgoing or needs_author(chain)]))
+    if not chains:
+        print(color_text(_EMPTY[section.name], ANSI_DIM))
+        return
+    rows = [_chain_cells(chain, outgoing=outgoing) for chain in shown]
+    widths = [max(visible_len(row[i]) for row in rows) for i in range(len(rows[0]))] if rows else []
+    for chain, cells in zip(shown, rows, strict=True):
+        head = _pad(cells, widths) + "  "
+        marks = _marks(chain.work_in_progress, chain.private) if outgoing else ""
+        used = visible_len(head) + visible_len(marks)
+        print(head + _subject(chain.top.subject, used=used, columns=columns, highlighter=highlighter) + marks)
+        if show_url and chain.url:
+            print(f"{_INDENT}{color_text(format_link(chain.url), ANSI_DIM)}")
+        for line in _member_lines(chain, verbose=verbose, columns=columns, highlighter=highlighter):
+            print(line)
+    if folded := len(chains) - len(shown):
+        lead = "+ " if shown else ""
+        those = "chain waits" if folded == 1 else "chains wait"
+        print(color_text(f"{lead}{folded} {those} on reviewers or CI (-v lists them)", ANSI_DIM))
     print()
-    print("".join(parts))
+    print(_summary(chains, outgoing=outgoing))
+    if not outgoing:
+        print(color_text(_review_hint(chains[0]), ANSI_DIM))
+
+
+def _review_hint(chain: ReviewChain) -> str:
+    """The command that starts on the chain waiting longest: at its base, where review begins."""
+    base = chain.members[0].number
+    if chain.depth == 1:
+        return f"next: ger review {change_label(base)}"
+    return f"next: ger review {change_label(base)} (base of {change_label(chain.top.number)}'s chain), then --next"
 
 
 def render_inbox_text(
@@ -141,8 +230,10 @@ def render_inbox_text(
     show_url: bool,
     verbose: bool,
 ) -> None:
+    """Print the inbox *sections* for a human: rows aligned, subjects cut to a terminal's width."""
     scope = ", ".join(projects) if projects else "all projects"
     print(color_text(f"project: {scope}", ANSI_DIM))
+    columns = terminal_columns()
     for section in sections:
         print()
-        _render_section(section, highlighter=highlighter, show_url=show_url, verbose=verbose)
+        _render_section(section, highlighter=highlighter, show_url=show_url, verbose=verbose, columns=columns)

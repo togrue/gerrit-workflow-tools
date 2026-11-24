@@ -46,6 +46,9 @@ class InboxSection:
     name: str
     query: str
     chains: list[ReviewChain]
+    not_ready: int | None = None
+    """*To review* chains its query leaves out as not ready (WIP, private, no ``Verified``), that
+    ``--unready`` shows; ``None`` when not counted."""
 
 
 @dataclass(frozen=True)
@@ -180,9 +183,17 @@ def _touches(chain: ReviewChain, change_ids: Collection[str]) -> bool:
 
 
 def _urgency(chain: ReviewChain) -> int:
-    """Position of the chain's most urgent reason in the headline order; past the end when it has none."""
+    """Position of the chain's most urgent reason in the headline order; then a WIP chain (yours
+    to mark ready); past the end when it has neither."""
     ranks = [i for i, reason in enumerate(_HEADLINE_ORDER) if reason in chain.attention_reasons]
-    return min(ranks, default=len(_HEADLINE_ORDER))
+    wip = [len(_HEADLINE_ORDER)] if chain.work_in_progress else []
+    return min(ranks + wip, default=len(_HEADLINE_ORDER) + 1)
+
+
+def needs_author(chain: ReviewChain) -> bool:
+    """Whether an outgoing chain waits on its author: failed CI, unresolved comments, a negative
+    vote, or WIP. Any other waits on reviewers or CI."""
+    return _urgency(chain) <= len(_HEADLINE_ORDER)
 
 
 def load_inbox(
@@ -194,9 +205,13 @@ def load_inbox(
     include_unready: bool = False,
     limit: int | None = None,
     sections: Sequence[str] = (TO_REVIEW, OUTGOING),
+    count_not_ready: bool = False,
 ) -> list[InboxSection]:
     """The wanted inbox *sections*, queried in parallel: *to review*, then *outgoing* (your open
     chains). A section not wanted is not asked for.
+
+    *count_not_ready* also asks, beside them, for the *to review* chains its built-in query leaves
+    out as not ready (:attr:`InboxSection.not_ready`); never with ``--unready`` or a custom query.
 
     Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
     inbox order (longest unreviewed first) and honours *limit*, else ``ger.inboxLimit``.
@@ -212,15 +227,34 @@ def load_inbox(
     queries = {name: build() for name, build in every.items() if name in sections}
     if not queries:
         return []
+    counted = count_not_ready and TO_REVIEW in queries and not include_unready and not settings.inbox_to_review_query
+    asked = (
+        {**queries, _UNREADY: build_to_review_query(settings, projects=names, include_unready=True)}
+        if counted
+        else queries
+    )
     account = service.self_account_id()
     fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
-    fetched = dict(zip(queries, parallel_map(partial(fetch, query) for query in queries.values()), strict=True))
+    fetched = dict(zip(asked, parallel_map(partial(fetch, query) for query in asked.values()), strict=True))
+    not_ready = _not_ready(fetched.pop(_UNREADY), fetched[TO_REVIEW]) if counted else None
     cap = limit if limit is not None else settings.inbox_limit
     if cap is not None and TO_REVIEW in fetched:
         fetched[TO_REVIEW] = fetched[TO_REVIEW][: max(0, cap)]
     if OUTGOING in fetched:
         fetched[OUTGOING].sort(key=lambda chain: (_urgency(chain), chain.wait_age_seconds, chain.top.number))
-    return [InboxSection(name, queries[name], chains) for name, chains in fetched.items()]
+    return [
+        InboxSection(name, queries[name], chains, not_ready if name == TO_REVIEW else None)
+        for name, chains in fetched.items()
+    ]
+
+
+_UNREADY = "unready"
+
+
+def _not_ready(every: list[ReviewChain], ready: list[ReviewChain]) -> int:
+    """How many of *every* chain share no change with the *ready* ones."""
+    shown = {member.number for chain in ready for member in chain.members}
+    return sum(1 for chain in every if not any(member.number in shown for member in chain.members))
 
 
 def pick_headline(

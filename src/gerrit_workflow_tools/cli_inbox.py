@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from gerrit_workflow_tools.cli_common import (
@@ -16,7 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, load_inbox, project_scope
+from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, load_inbox, project_scope
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.inbox_text import render_inbox_text
@@ -98,7 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_color_args(parser)
     add_verbose_and_debug_log_args(
         parser,
-        verbose_help="List every chain member, not only those with attention.",
+        verbose_help="List every outgoing chain and every chain member, not only those that need you.",
     )
     return parser
 
@@ -126,9 +127,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         include_unready=bool(args.include_unready),
         limit=limit,
         sections=(TO_REVIEW, OUTGOING) if args.section is None else (args.section,),
+        count_not_ready=output_format(args) == "human",
     )
     if limit is not None:
-        sections = [InboxSection(s.name, s.query, s.chains[: max(0, limit)]) for s in sections]
+        sections = [replace(s, chains=s.chains[: max(0, limit)]) for s in sections]
     out_fmt = output_format(args)
     if out_fmt == "ai":
         print("\n".join(inbox_ai_lines(sections, projects=projects)))

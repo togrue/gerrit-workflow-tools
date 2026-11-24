@@ -141,8 +141,9 @@ def test_to_review_shows_unreviewed_age_activity_and_top_url(
     assert code == int(ExitCode.OK), err
     assert "to review (1)" in out
     assert "c4321" in out
-    assert "2c" in out
-    assert "unrevi" in out
+    assert "2 changes" in out
+    assert "worst v+1" in out  # the chain's worst votes, said so: not the top's own
+    assert re.search(r"waiting \d+d, active \d+d", out)
     assert "act" in out
     assert "alice" in out
     assert "feat: rate limiter" in out
@@ -307,12 +308,12 @@ def test_inbox_colorizes_identity_status_wait_and_context(
     assert code == int(ExitCode.OK), err
     assert _painted(f"{ANSI_BOLD}{ANSI_CYAN}", "to review (1)") in out
     assert _painted(ANSI_CYAN, "c4400") in out
-    assert _painted(ANSI_DIM, "1c") in out
+    assert _painted(ANSI_DIM, "1 change") in out
     assert _painted(ANSI_GREEN, "v+1") in out
     assert _painted(ANSI_LIGHT_GREEN, "cr+1") in out
     assert _painted(ANSI_YELLOW, "com") in out
-    assert _painted(ANSI_DIM, "unrevi") in out
-    assert _painted(ANSI_DIM, "act") in out
+    assert _painted(ANSI_DIM, "waiting") in out
+    assert _painted(ANSI_DIM, "active") in out
     assert _painted(ANSI_DIM, "bob") in out
     assert _painted(ANSI_DIM, "https://gerrit.example.com/c/myproject/+/4400") in out
     assert _painted(f"{ANSI_BOLD}{ANSI_CYAN}", "summary:") in out
@@ -353,7 +354,7 @@ def test_inbox_colorizes_attention_notes_like_log(
     assert code == int(ExitCode.OK), err
     assert _painted(ANSI_RED, "v-1") in out
     assert _painted(ANSI_RED, "build failed") in out
-    assert _painted(ANSI_DIM, "CI ") in out
+    assert _painted(ANSI_DIM, "build failed ") in out
     assert _painted(ANSI_RED, "1") in out  # summary CI count
     assert "\x1b[" not in strip_ansi(out)
 
@@ -592,10 +593,11 @@ def test_all_drops_the_project_filter(tmp_path: Path, monkeypatch: pytest.Monkey
     clone = _in_clone(tmp_path, "myproject")
     store = _store(_mine(8, "myproject"), _mine(9, "elsewhere"), stub=[])
     store.stub_query(DEFAULT_OUTGOING_QUERY, [_mine(8, "myproject"), _mine(9, "elsewhere")])
-    code, out, err = run_cli(clone, inbox_main, ["--all", "--outgoing", "--color=never"], monkeypatch, gerrit=store)
+    argv = ["--all", "--outgoing", "-v", "--color=never"]
+    code, out, err = run_cli(clone, inbox_main, argv, monkeypatch, gerrit=store)
     assert code == int(ExitCode.OK), err
     assert "project: all projects" in out
-    assert "outgoing (2)" in out
+    assert "outgoing (2; none need you)" in out
     assert "to review" not in out
     assert "mine in elsewhere" in out
     assert TO_REVIEW_QUERY not in store.queries()
@@ -663,3 +665,93 @@ def test_inbox_ai_is_far_smaller_than_json(tmp_path: Path, monkeypatch: pytest.M
     _code, ai, _err = run_cli(tmp_path, inbox_main, ["--ai"], monkeypatch, gerrit=_ai_inbox())
     _code, as_json, _err = run_cli(tmp_path, inbox_main, ["--json"], monkeypatch, gerrit=_ai_inbox())
     assert len(ai) * 5 < len(as_json)
+
+
+# --- Rows a new user reads at a glance ---------------------------------------------
+
+
+def _subject_columns(out: str) -> set[int]:
+    return {line.index("# ") for line in out.splitlines() if line.startswith("c4")}
+
+
+def test_rows_line_up_whatever_the_owner_and_ages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [
+        _change(
+            number=4401, sha="a1", parent="origin", subject="one", owner="al", updated="2026-08-18 08:00:00.000000000"
+        ),
+        _change(
+            number=4402,
+            sha="a2",
+            parent="origin",
+            subject="two",
+            owner="Bartholomew Reviewer",
+            updated="2026-01-18 08:00:00.000000000",
+            attention_since="2026-08-18 07:00:00.000000000",
+        ),
+    ]
+    code, out, err = run_cli(tmp_path, inbox_main, ["--color=never", "--no-url"], monkeypatch, gerrit=_store(*rows))
+    assert code == int(ExitCode.OK), err
+    assert len(_subject_columns(out)) == 1, out
+
+
+def test_a_terminal_cuts_the_subject_to_fit_and_a_pipe_never_does(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    subject = "docs: " + "a very long subject " * 6
+    row = _change(number=4410, sha="t1", parent="origin", subject=subject, updated="2026-08-18 08:00:00.000000000")
+    code, out, _err = run_cli(tmp_path, inbox_main, ["--color=never", "--no-url"], monkeypatch, gerrit=_store(row))
+    assert code == int(ExitCode.OK) and subject in out
+    monkeypatch.setattr("gerrit_workflow_tools.render.inbox_text.terminal_columns", lambda: 100)
+    code, out, _err = run_cli(tmp_path, inbox_main, ["--color=never", "--no-url"], monkeypatch, gerrit=_store(row))
+    [line] = [line for line in out.splitlines() if line.startswith("c4410")]
+    assert line.endswith("…") and len(line) < 100
+
+
+def test_to_review_says_how_many_chains_it_leaves_out_as_not_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready = _change(number=4420, sha="r1", parent="origin", subject="ready", updated="2026-08-18 08:00:00.000000000")
+    unready = _change(
+        number=4421, sha="r2", parent="origin", subject="no CI yet", updated="2026-08-18 08:00:00.000000000"
+    )
+    store = _store(ready, unready, stub=[ready])
+    store.stub_query(
+        build_to_review_query(Settings.from_cwd(tmp_path), projects=[], include_unready=True), [ready, unready]
+    )
+    code, out, err = run_cli(tmp_path, inbox_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    assert "to review (1; 1 not ready, --unready shows it)" in out
+    assert "no CI yet" not in out
+
+
+def test_outgoing_lists_what_needs_you_first_and_folds_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    quiet = _mine(4430, "myproject")
+    failed = {**_mine(4431, "myproject"), "subject": "red build"}
+    failed["labels"] = {"Verified": {"value": -1, "all": [{"value": -1}]}, "Code-Review": {"value": 0, "all": []}}
+    wip = {**_mine(4432, "myproject"), "subject": "half done", "work_in_progress": True}
+    private = {**_mine(4433, "myproject"), "subject": "secret", "is_private": True, "work_in_progress": True}
+    store = _store(quiet, failed, wip, private, stub=[])
+    store.stub_query(DEFAULT_OUTGOING_QUERY, [quiet, failed, wip, private])
+    code, out, err = run_cli(tmp_path, inbox_main, ["--outgoing", "--color=never"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    assert "outgoing (4; 3 need you)" in out
+    rows = [line for line in out.splitlines() if line.startswith("c4")]
+    assert rows[0].startswith("c4431")  # failed CI first
+    assert any(r.startswith("c4432") and r.endswith("# half done  # WIP") for r in rows)
+    assert any(r.endswith("# secret  # WIP, private") for r in rows)
+    assert "mine in myproject" not in out
+    assert "+ 1 chain waits on reviewers or CI (-v lists them)" in out
+    code, out, err = run_cli(tmp_path, inbox_main, ["--outgoing", "-v", "--color=never"], monkeypatch, gerrit=store)
+    assert "mine in myproject" in out and "-v lists" not in out
+
+
+def test_the_footer_names_the_command_that_starts_the_longest_waiting_chain_at_its_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = _change(number=4440, sha="b1", parent="origin", subject="base", updated="2026-08-18 08:00:00.000000000")
+    top = _change(number=4441, sha="b2", parent="b1", subject="top", updated="2026-08-18 08:00:00.000000000")
+    code, out, err = run_cli(tmp_path, inbox_main, ["--color=never"], monkeypatch, gerrit=_store(base, top))
+    assert code == int(ExitCode.OK), err
+    assert "next: ger review c4440 (base of c4441's chain), then --next" in out
