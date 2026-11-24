@@ -6,7 +6,6 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -27,10 +26,10 @@ from gerrit_workflow_tools.core.comment_chains import ChainRef, ChainRefError, f
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, ChainMatch, DraftReply, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
-from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import (
@@ -172,16 +171,22 @@ class _Change:
     summary: str
 
 
-def _gerrit_changes(
-    service: GerritService, cwd: Path, revs: list[str], *, branch: str | None
-) -> tuple[list[_Change], str]:
+def _gerrit_changes(run: RunContext, revs: list[str], *, branch: str | None) -> tuple[list[_Change], str]:
     """The Gerrit changes *revs* name, else the local stack, else (no branch, e.g. detached) HEAD.
 
     Also returns a phrase naming where they came from, for messages.
     """
+    service, cwd = run.gerrit, run.cwd
     stack = not revs and branch is not None
     targets = resolve_show_targets(
-        cwd, revs, service.rest, settings=service.settings, stack=stack, branch=branch, changes=service.changes
+        cwd,
+        revs,
+        service.rest,
+        settings=service.settings,
+        stack=stack,
+        branch=branch,
+        changes=service.changes,
+        head=run.repo.head,
     )
     commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
     found: dict[str, _Change] = {}
@@ -199,12 +204,10 @@ def _chain_line(match: ChainMatch) -> str:
     return f"  {match.chain.root_id}  {chain_location(match.chain)}  {words}"
 
 
-def _find(
-    service: GerritService, cwd: Path, ref: ChainRef, *, change: str | None, branch: str | None
-) -> tuple[ChainMatch, str | None]:
+def _find(run: RunContext, ref: ChainRef, *, change: str | None, branch: str | None) -> tuple[ChainMatch, str | None]:
     """The one chain *ref* names, and the web URL of its change. Not one: say which there are."""
-    changes, where = _gerrit_changes(service, cwd, [change] if change else [], branch=branch)
-    chains = service.comments.chains_on({c.key: c.freshness for c in changes})
+    changes, where = _gerrit_changes(run, [change] if change else [], branch=branch)
+    chains = run.gerrit.comments.chains_on({c.key: c.freshness for c in changes})
     matches = find_chains(chains, ref, lambda match: match.chain)
     if len(matches) > 1:
         listed = "\n".join(_chain_line(m) for m in matches)
@@ -268,9 +271,7 @@ def _confirmed(args: argparse.Namespace, what: str) -> bool:
     return confirm(f"Publish {what}?", default=False)
 
 
-def _publish(
-    args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path, branch: str | None
-) -> int:
+def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> int:
     """List what goes out on the targets, confirm, and post it change by change.
 
     Your drafts (all, or ``--only`` ones), ``--vote`` votes and the ``-m`` message. A change
@@ -281,7 +282,8 @@ def _publish(
     if args.keep_drafts and args.only:
         raise UsageError("--keep-drafts publishes no drafts; it cannot be combined with --only")
     # Publishing acts on Gerrit changes, so a bare number names one (as for --change).
-    changes, where = _gerrit_changes(service, cwd, [as_change_only(t) for t in args.targets], branch=branch)
+    service = run.gerrit
+    changes, where = _gerrit_changes(run, [as_change_only(t) for t in args.targets], branch=branch)
     freshness = {c.key: c.freshness for c in changes}
     with_drafts = {} if args.keep_drafts else service.comments.drafts_to_publish(freshness, args.only, where=where)
     message = "\n\n".join(args.message) if args.message else None
@@ -357,8 +359,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     service = run.gerrit
     if args.publish:
-        return _publish(args, p, service, cwd, branch)
-    match, change_url = _find(service, cwd, ref, change=change, branch=branch)
+        return _publish(args, run, branch)
+    match, change_url = _find(run, ref, change=change, branch=branch)
     url = gerrit_inline_comment_url(change_url, match.chain.root_id)
     if args.discard:
         removed = service.comments.discard_reply(match.change, match.chain)

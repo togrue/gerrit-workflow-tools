@@ -57,6 +57,8 @@ Two **review checkout** modes, set by `ger.reviewCheckout`:
 
 The change is fetched from `ger.remote` by its `refs/changes/…` ref and checked out on a branch named **`change-<number>`**. The branch's upstream is set to the change's target branch on `ger.remote` when that remote-tracking ref exists. That makes the review chain below the change the **local stack** there: `ger log` and `ger show --stack` work as they do on your own branches.
 
+They do while the change is staged too. HEAD is then detached at the change's parent, and the review's `change-<number>` branch is the **working branch** (`Worktree.working_branch`, from the review state): `ger log`, `ger show`, `ger show --stack`, `ger ci` and `ger reply` see the chain up to and including the change under review, and `ger show` with no REV shows the change itself (`Repository.head`: what HEAD stands for). Once HEAD is moved off the parent, a detached HEAD is again just that (`HEAD is detached and no local branch points at it …`).
+
 A `change-<number>` branch that already exists is moved to the fetched patchset, unless it has commits the patchset does not have (you started reworking it). Then `ger review` exits `1` and names them; `--force` moves the branch anyway, and the old tip is printed.
 
 ### Leaving the checkout clean

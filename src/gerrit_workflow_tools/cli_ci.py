@@ -155,14 +155,22 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         return int(ExitCode.REFUSED)
 
     service = run.gerrit
+    head = run.repo.head
     targets = resolve_show_targets(
-        cwd, args.revs, service.rest, settings=settings, stack=args.stack, branch=branch, changes=service.changes
+        cwd,
+        args.revs,
+        service.rest,
+        settings=settings,
+        stack=args.stack,
+        branch=branch,
+        changes=service.changes,
+        head=head,
     )
     if not targets:
         raise ChangeResolutionError("no commits to inspect")
     for resolved in targets:
         print_resolution_note(resolved.resolution)
-    snap = local_stack_or_none(cwd, branch, settings=settings)
+    snap = local_stack_or_none(cwd, branch, settings=settings, head=head)
     annotated = annotate_targets(
         [t.row for t in targets],
         service=service,

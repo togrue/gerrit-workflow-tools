@@ -92,9 +92,7 @@ def _state_path(worktree: Path | str) -> Path | None:
     return repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None
 
 
-def load_state(worktree: Path | str) -> ReviewState | None:
-    """The review state of *worktree*, or ``None`` when nothing is being reviewed there."""
-    path = _state_path(worktree)
+def _read_state(path: Path | None) -> ReviewState | None:
     if path is None or not path.is_file():
         return None
     try:
@@ -102,6 +100,27 @@ def load_state(worktree: Path | str) -> ReviewState | None:
         return ReviewState(**{**raw, "change": GerritPatchset(**raw["change"])})
     except (ValueError, TypeError, KeyError):
         return None
+
+
+def load_state(worktree: Path | str) -> ReviewState | None:
+    """The review state of *worktree*, or ``None`` when nothing is being reviewed there."""
+    return _read_state(_state_path(worktree))
+
+
+def staged_review_branch(repo_dir: Path | None, cwd: Path | str | None) -> str | None:
+    """The reviewed change's ``change-<number>`` branch while its staged review sits at its parent.
+
+    Staged, HEAD is detached at the change's parent and the branch is on the change itself: the
+    branch is the one being worked on, and its tip is what HEAD stands for (``Repository.head``).
+    ``None`` when no review is staged in the worktree of *repo_dir* (its git dir), or HEAD or the
+    branch moved away. Costs no git call when nothing is being reviewed.
+    """
+    state = _read_state(repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None)
+    if state is None or not state.staged:
+        return None
+    p = git("rev-parse", "HEAD", f"{state.commit}^", f"refs/heads/{state.branch}", cwd=cwd, check=False)
+    shas = p.stdout.split() if p.returncode == 0 else []
+    return state.branch if len(shas) == 3 and shas[0] == shas[1] and shas[2] == state.commit else None
 
 
 def save_state(state: ReviewState) -> None:

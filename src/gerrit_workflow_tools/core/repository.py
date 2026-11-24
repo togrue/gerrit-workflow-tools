@@ -38,6 +38,12 @@ class Repository:
         """The branch the run works on, also on a detached HEAD (:meth:`Worktree.working_branch`)."""
         return self.worktree.working_branch(settings=self.settings)
 
+    @cached_property
+    def head(self) -> str:
+        """The revision HEAD stands for: in a staged review, HEAD sits at the parent and this is the
+        reviewed change's ``change-<number>`` branch, the top of the stack shown; else ``HEAD``."""
+        return self.worktree.staged_review_branch() or "HEAD"
+
     @property
     def stack_branch(self) -> str:
         """The branch whose upstream defines the stack: the working branch, else ``HEAD``."""

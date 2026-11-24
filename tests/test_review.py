@@ -7,9 +7,13 @@ from typing import Any
 
 import pytest
 
+from gerrit_workflow_tools.cli_ci import main as ci_main
 from gerrit_workflow_tools.cli_comment import main as comment_main
 from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.cli_log import main as log_main
+from gerrit_workflow_tools.cli_reply import main as reply_main
 from gerrit_workflow_tools.cli_review import main as review_main
+from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.change_store import ChangeStore
@@ -327,3 +331,41 @@ def test_review_says_what_changed_since_your_last_review(
     assert code == ExitCode.OK, err
     assert "since your review of patchset 1: " in out and "late.txt" in out
     assert f"git diff {shas[2][:12]} {ps2[:12]}" in out
+
+
+def test_log_show_and_reply_read_the_chain_under_review_while_staged(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Staged, HEAD sits detached at the parent: the review's change-<n> branch is the working branch."""
+    store, keys, shas = gerrit
+    root = {"id": "c-root", "line": 1, "message": "why?", "unresolved": True, "patch_set": 1}
+    store.set_comments(keys[2], {"c.txt": [{**root, "updated": "2024-01-01 10:00:00"}]})
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    assert _head(worktree) == shas[1]
+    code, out, err = run_cli(worktree, log_main, ["--json"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert [c["sha"] for c in json_stdout(out)["commits"]] == shas[:3]
+    code, out, err = run_cli(worktree, show_main, ["--json"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert json_stdout(out)["sha"] == shas[2]
+    code, out, err = run_cli(worktree, show_main, ["--stack", "--json"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert [c["sha"] for c in json_stdout(out)["commits"]] == shas[:3]
+    code, _out, err = run_cli(worktree, ci_main, [], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    for target in (["c-root"], ["c-root", "--change", "102"], [f"{WEB}/c/testproj/+/102/comment/c-root/"]):
+        code, _out, err = run_cli(worktree, reply_main, [*target, "-m", "because"], monkeypatch, gerrit=store)
+        assert code == ExitCode.OK, (target, err)
+    assert [d["message"] for rows in store.list_drafts(keys[2]).values() for d in rows] == ["because"]
+
+
+def test_a_detached_head_outside_a_review_still_says_check_out_your_branch(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _keys, shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    git("switch", "-q", "--detach", shas[0], cwd=worktree)  # HEAD moved off the review's parent
+    code, _out, err = run_cli(worktree, log_main, [], monkeypatch, gerrit=store)
+    assert code == ExitCode.USAGE and "HEAD is detached and no local branch points at it" in err

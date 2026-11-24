@@ -98,12 +98,19 @@ class Worktree:
             return branch.removeprefix("refs/heads/") or None if branch.startswith("refs/heads/") else None
         return None
 
+    def staged_review_branch(self) -> str | None:
+        """The ``change-<number>`` branch of a review staged here, HEAD at its parent (``ger review``)."""
+        from gerrit_workflow_tools.core.review_checkout import staged_review_branch
+
+        return staged_review_branch(self.repository_dir, self.cwd)
+
     def working_branch(self, *, settings: Settings) -> str | None:
         """Branch whose mode and ``branch.<name>.*`` config apply while HEAD may be detached.
 
         The checked-out branch when there is one. During a rebase, the branch git is
         rebasing, and ``None`` for a detached HEAD's rebase. Otherwise on a detached HEAD, a local
-        branch that points at ``HEAD`` (preferring a Gerrit upstream, then any upstream).
+        branch that points at ``HEAD`` (preferring a Gerrit upstream, then any upstream), except
+        in a staged review: the reviewed change's branch, whose parent HEAD sits at.
         """
         checked = self.branch
         if checked:
@@ -115,6 +122,9 @@ class Worktree:
             # A detached HEAD's rebase: HEAD moves with it, so a branch that happens to point at
             # it now is not the one being worked on. There is none.
             return None
+        reviewed = self.staged_review_branch()
+        if reviewed:
+            return reviewed
         candidates = _branches_pointing_at_head(self.cwd)
         if not candidates:
             return None
