@@ -186,8 +186,18 @@ def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: 
     does a submodule's own state, which switching and rebasing leave alone. A submodule change
     ``git stash`` does not save stops it with its own message (:func:`submodule_refusal`).
     """
-    base = state.commit if state is not None and state.staged else "HEAD"
+    staged = state is not None and state.staged
+    base = state.commit if state is not None and staged else "HEAD"
     changes = tracked_changes(worktree, base)
+    if changes.files and staged:
+        # git stash would take the staged change under review with them, and a commit commit it.
+        files = " ".join(_shell_word(path) for path in changes.files)
+        raise UsageError(
+            f"your working tree has changes to tracked files on top of the staged review ({', '.join(changes.files)}): "
+            f"keep them as a patch and put the change back, `git diff {base[:12]} -- {files} > review-edits.patch && "
+            f"git restore --source={base[:12]} --staged --worktree -- {files}` (`git apply review-edits.patch` "
+            f"brings them back), then run {rerun} again"
+        )
     if changes.files:
         raise UsageError(
             f"your working tree has changes to tracked files ({', '.join(changes.files)}): "
@@ -195,6 +205,11 @@ def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: 
         )
     if refusal := submodule_refusal(worktree, base, rerun=rerun, changes=changes):
         raise UsageError(refusal)
+
+
+def _shell_word(path: str) -> str:
+    """*path* as one word for a shell: quoted when it holds anything but plain path characters."""
+    return path if all(c.isalnum() or c in "/._-+" for c in path) else "'" + path.replace("'", "'\\''") + "'"
 
 
 def _commits_not_in(worktree: Path | str, tip: str, *bases: str) -> list[str]:

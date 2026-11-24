@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -127,9 +128,27 @@ def test_your_edits_stop_a_switch_and_are_kept(
     worktree = _worktree(stack_repo)
     (worktree / "c.txt").write_text("my fix\n", encoding="utf-8")
     code, _, err = _review(stack_repo, store, ["--next"], monkeypatch)
-    assert code == ExitCode.USAGE and "changes to tracked files (c.txt)" in err
+    assert code == ExitCode.USAGE and "changes to tracked files on top of the staged review (c.txt)" in err
     assert (worktree / "c.txt").read_text(encoding="utf-8") == "my fix\n"
     assert _review(stack_repo, store, ["--done"], monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_the_advice_for_edits_in_a_staged_review_keeps_them_and_the_review(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not git stash: that would take the staged change under review with the edits."""
+    store, _keys, shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    (worktree / "c.txt").write_text("my fix\n", encoding="utf-8")
+    code, _, err = _review(worktree, store, ["--done"], monkeypatch)
+    assert code == ExitCode.USAGE and "git stash" not in err
+    advice = err.split("put the change back, `")[1].split("`")[0]
+    subprocess.run(advice, shell=True, cwd=worktree, check=True)
+    assert git_out("diff", "--cached", "--name-only", cwd=worktree) == "c.txt" and _head(worktree) == shas[1]
+    assert _review(worktree, store, ["--done"], monkeypatch)[0] == ExitCode.OK
+    git("apply", "review-edits.patch", cwd=worktree)
+    assert (worktree / "c.txt").read_text(encoding="utf-8") == "my fix\n"
 
 
 def test_a_change_branch_with_your_commits_is_not_moved_without_force(
