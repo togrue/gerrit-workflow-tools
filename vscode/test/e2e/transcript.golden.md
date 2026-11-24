@@ -529,10 +529,11 @@ status bar message: $(check) Left to the agent
 
 ```
 input box: Reply to Alice Reviewer — b.txt:1
-    prompt: Saved as a draft on Gerrit. Drafts are published with `ger push` or `ger review --vote`.
+    prompt: Saved as a draft on Gerrit, visible only to you: your next push publishes it.
     placeholder: Please rename this.
     → typed "Renamed it." and pressed Enter
-status bar message: $(check) Draft saved. Publish it with ger push.
+notification (info): Draft saved, visible only to you: your next push publishes it.  [Publish Drafts…]
+    → dismissed
 --- on screen:
 + change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
@@ -545,11 +546,11 @@ status bar message: $(check) Draft saved. Publish it with ger push.
 
 ```
 input box: Edit your draft reply — b.txt:1
-    prompt: Saved as a draft on Gerrit. Drafts are published with `ger push` or `ger review --vote`.
+    prompt: Saved as a draft on Gerrit, visible only to you: your next push publishes it.
     placeholder: Renamed it.
     already filled in: "Renamed it."
     → changed it to "Renamed it to route()." and pressed Enter
-status bar message: $(check) Draft updated. Publish it with ger push.
+status bar message: $(check) Draft updated, visible only to you: your next push publishes it.
 --- on screen:
 + change |     you — [draft] Renamed it to route().
 - change |     you — [draft] Renamed it.
@@ -560,7 +561,7 @@ status bar message: $(check) Draft updated. Publish it with ger push.
 **Expect:** A "Done" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.
 
 ```
-status bar message: $(check) Draft saved, resolving the comment. Publish it with ger push.
+status bar message: $(check) Draft saved, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
 + change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 + change |     you — [draft] Done
@@ -572,7 +573,7 @@ status bar message: $(check) Draft saved, resolving the comment. Publish it with
 **Expect:** Your draft stays as you wrote it and now resolves the thread.
 
 ```
-status bar message: $(check) Draft updated, resolving the comment. Publish it with ger push.
+status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
 + change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
@@ -583,7 +584,7 @@ status bar message: $(check) Draft updated, resolving the comment. Publish it wi
 **Expect:** The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.
 
 ```
-status bar message: $(check) Draft saved, resolving the comment. Publish it with ger push.
+status bar message: $(check) Draft saved, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
 + change |   Looks good overall. — whole change · Alice Reviewer · 1 reply  [resolved]
 + change |     you — [draft] Added a test for the parser.
@@ -606,7 +607,7 @@ status bar message: $(check) Draft saved, resolving the comment. Publish it with
 **Expect:** What you type is added to your draft reply there, after what it already says, and it still resolves the comment; the status bar says the draft was updated.
 
 ```
-status bar message: $(check) Draft updated, resolving the comment. Publish it with ger push.
+status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
 (no change)
 ```
@@ -616,7 +617,7 @@ status bar message: $(check) Draft updated, resolving the comment. Publish it wi
 **Expect:** Your draft there is saved again at once, now leaving the comment unresolved; the status bar says so.
 
 ```
-status bar message: $(check) Draft updated, leaving the comment unresolved. Publish it with ger push.
+status bar message: $(check) Draft updated, leaving the comment unresolved, visible only to you: your next push publishes it.
 --- on screen:
 + change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
@@ -627,7 +628,7 @@ status bar message: $(check) Draft updated, leaving the comment unresolved. Publ
 **Expect:** Your draft resolves the comment again, as before.
 
 ```
-status bar message: $(check) Draft updated, resolving the comment. Publish it with ger push.
+status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
 + change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
@@ -638,7 +639,7 @@ status bar message: $(check) Draft updated, resolving the comment. Publish it wi
 **Expect:** The comment is saved as a draft and appears as a thread marked as your draft; it is not counted as unresolved feedback.
 
 ```
-status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
 + change | Comments — 2 unresolved of 3 · 1 of yours, not published
 - change | Comments — 2 unresolved of 3
@@ -733,7 +734,7 @@ notification (info): These are not the lines of "Extract command routing", the c
 **Expect:** A comment box opens on that line with the same Save buttons as the "+" in the gutter; saving it adds your comment to the change.
 
 ```
-status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
 + change | Comments — 2 unresolved of 3 · 2 of yours, not published
 - change | Comments — 2 unresolved of 3 · 1 of yours, not published
@@ -760,7 +761,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 input box: Comment on b.txt
     prompt: About the whole file. Saved as a draft on Gerrit, visible only to you until it is published.
     → typed "This file needs a header." and pressed Enter
-status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
 + change | Comments — 2 unresolved of 3 · 3 of yours, not published
 + change |   This file needs a header. — your draft · b.txt  [yours]
@@ -2607,7 +2608,8 @@ change | (the commit shown is none)
 **Expect:** The draft is saved on Gerrit and shows as yours in the Change view. Only you see it until it is published, and as it is not your change, ger push would not publish it: the notification offers Vote and Publish.
 
 ```
-status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+notification (info): Draft saved on Gerrit, visible only to you: Vote and Publish sends it.  [Vote and Publish…]
+    → dismissed
 --- on screen:
 + change | Comments — 2 unresolved of 2 · 1 of yours, not published
 - change | Comments — 2 unresolved of 2

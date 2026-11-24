@@ -201,8 +201,8 @@ The commits above your upstream, newest first. One row per commit:
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
-  editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later by
-  `ger push` or *Vote and Publish…* (`ger review --vote`). A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
+  editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
+  on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
@@ -214,7 +214,9 @@ The commits above your upstream, newest first. One row per commit:
   as **Suggested fix**, where it applies and the new text. It is shown, not applied.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
   the shown commit is HEAD — and click **+**. Save it as:
-  - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published;
+  - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published.
+    The first draft on a change says what publishes it, with a button that does it now: on your own
+    commit your next push (**Publish Drafts…**), on anyone else's **Vote and Publish…**;
   - **Local draft**, when Gerrit does not (never pushed, or amended since): kept here, in
     `refs/ger/comments`, for when the commit is pushed;
   - **Private note**, always: kept here and never uploaded.
