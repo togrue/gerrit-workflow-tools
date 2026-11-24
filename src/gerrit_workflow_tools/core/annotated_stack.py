@@ -64,6 +64,9 @@ class AnnotatedStack:
     blocker: LogCommit | None = None
     """The commit that holds the chain back (:attr:`LogCommit.blocks_chain`), which may be one
     below :attr:`commits` when they were judged in the local stack (``core/annotated_targets.py``)."""
+    around: list[LogCommit] = field(default_factory=list)
+    """The local stack :attr:`commits` were judged within (``core/annotated_targets.py``), annotated
+    as well; empty when they were judged on their own."""
 
     def __bool__(self) -> bool:
         return bool(self.commits)

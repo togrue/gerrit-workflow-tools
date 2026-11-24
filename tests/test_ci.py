@@ -104,7 +104,7 @@ def test_ci_fetch_failure_is_hard(stack_repo: Path, monkeypatch: pytest.MonkeyPa
     )
     assert code == ExitCode.CI_CONTENT
     assert "error: HTTP 404" in out, "what could be shown is still shown"
-    assert "ci error: could not fetch CI content for 1 link(s)" in err
+    assert err.strip() == "ci error: the CI log could not be fetched (see above)"
 
 
 def test_ci_without_failed_links_is_ok(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,8 +166,8 @@ def test_show_ci_fetch_failure_is_soft(stack_repo: Path, monkeypatch: pytest.Mon
         ci_http=FakeCiHttp({}),
     )
     assert code == int(ExitCode.OK), err
-    assert f"jenkins  {JENKINS}  (log: {CONSOLE})" in out
-    assert "error: HTTP 404" in out
+    assert f"jenkins  {JENKINS}\n" in out  # the log it could not read is named once, on the error line
+    assert "error: HTTP 404" in out and f"; open {CONSOLE}" in out
 
 
 def test_show_and_ci_report_the_same_findings(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -182,3 +182,35 @@ def test_show_and_ci_report_the_same_findings(stack_repo: Path, monkeypatch: pyt
     from_ci = _json(ci_out)["commits"][0]["ci_content"][0]["findings"]
     from_show = _json(show_out)["ci_content"][0]["findings"]
     assert from_ci == from_show
+
+
+def test_ci_says_why_a_request_failed_in_words_once(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host that cannot be found reads as such, not as a Python repr, and is reported once."""
+    import socket
+    from urllib.error import URLError
+
+    from gerrit_workflow_tools.core import ci_http
+
+    def unreachable(*_args: object, **_kwargs: object) -> None:
+        raise URLError(socket.gaierror(-2, "Name or service not known"))
+
+    monkeypatch.setattr(ci_http, "urlopen", unreachable)
+    code, out, err = run_cli(stack_repo, ci_main, ["--color=never"], monkeypatch, gerrit=_store(stack_repo))
+    assert code == ExitCode.CI_CONTENT
+    assert "error: could not reach ci.example.org: host not found; open " in out
+    assert "gaierror" not in out + err
+    assert err.strip() == "ci error: the CI log could not be fetched (see above)"
+
+
+def test_ci_on_head_points_at_the_commit_below_whose_ci_failed(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HEAD has no failed CI link, the commit below it has: say which, and how to look, with its subject."""
+    store = _store(stack_repo)
+    git("commit", "--allow-empty", "-m", f"Above the failure\n\nChange-Id: I{'9' * 40}", cwd=stack_repo)
+    failed_sha = stack_rows_mb_to_head(stack_repo)[-2].short_sha
+    code, out, err = run_cli(stack_repo, ci_main, ["--color=never"], monkeypatch, gerrit=store, ci_http=FakeCiHttp({}))
+    assert code == ExitCode.OK, err
+    lines = out.splitlines()
+    assert lines[1] == "    Above the failure"
+    assert lines[-1] == f"{failed_sha} below has failed CI: `ger ci {failed_sha}`, or `ger ci --stack`"

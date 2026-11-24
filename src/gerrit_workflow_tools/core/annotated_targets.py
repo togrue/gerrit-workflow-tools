@@ -78,4 +78,6 @@ def annotate_targets(
     commits = [judged.commits[position[r.sha]] if r.sha in position else after[i] for i, r in enumerate(rows)]
     unavailable = judged.gerrit_unavailable or (rest.gerrit_unavailable if rest else None)
     blocker = judged.blocker or (rest.blocker if rest else None)
-    return AnnotatedStack(commits=commits, rows=list(rows), gerrit_unavailable=unavailable, blocker=blocker)
+    return AnnotatedStack(
+        commits=commits, rows=list(rows), gerrit_unavailable=unavailable, blocker=blocker, around=judged.commits
+    )

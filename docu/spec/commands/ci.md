@@ -40,7 +40,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 
 ## Output
 
-**Human:** per target, the `ger show` headline, then per link `label  build-url  (log: log-url)  (build, cached, log truncated)`: the build URL exactly as the CI message or Checks row gave it (what to quote when naming the build), and the log URL ger derived and read when that is another one and one line per finding: `tool  path:line[:col]  message`, with pytest's `E` lines indented beneath. Errors come first; warnings below them are one line, `N warnings not listed (ger ci --warnings lists them)`, unless `--warnings` is given or no error explains the failure ([severity](../ci-content.md#severity)). A target without failed links prints `(no failed CI links)`, `(not on Gerrit)`, or names the failed checks that had no link.
+**Human:** per target, the `ger show` headline and the commit's subject on the line below it, then per link `label  build-url  (log: log-url)  (build, cached, log truncated)`: the build URL exactly as the CI message or Checks row gave it (what to quote when naming the build), and the log URL ger derived and read when that is another one and one line per finding: `tool  path:line[:col]  message`, with pytest's `E` lines indented beneath. Errors come first; warnings below them are one line, `N warnings not listed (ger ci --warnings lists them)`, unless `--warnings` is given or no error explains the failure ([severity](../ci-content.md#severity)). A target without failed links prints `(no failed CI links)`, `(not on Gerrit)`, or names the failed checks that had no link. When none of the targets has a failed link but another commit of the local stack failed CI (by default only `HEAD` is shown), a last dim line says which and how to look: `11ad86d below has failed CI: `ger ci 11ad86d`, or `ger ci --stack``.
 
 **Markdown (`--ai`):** `## <sha> — <subject>`, `### CI findings`, `#### <label>` per label, a bullet per finding, warnings as a count like the human output; a fenced log with `-v` / `--full`.
 
@@ -74,11 +74,11 @@ With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_line
 
 ## Behavior
 
-1. Resolve targets (`resolve_show_targets`), overlay Gerrit state (`annotate`).
+1. Resolve targets (`resolve_show_targets`), overlay Gerrit state (`annotate_targets`: a stack commit within its whole stack, as `ger show` does).
 2. `CiContentService` fetches every link of every target in parallel through the matching **CI content provider** and the CI-content store ([caching](../ci-content.md#caching)).
 3. Print everything that was fetched, including the error of any link that was not.
 
-**Fetch failure is hard:** when any link cannot be fetched or parsed, the output still shows every result, then `ger ci` exits `11` with `ci error: could not fetch CI content for N link(s): …` on stderr.
+**Fetch failure is hard:** when any link cannot be fetched or parsed, the output still shows every result, then `ger ci` exits `11`. Each link that could not be read says why once, in words, under its build URL, with the log to open by hand: `error: could not reach ci.example.invalid: host not found; open http://ci.example.invalid/job/p/934/console` (`host not found`, `connection refused`, `timed out`, `TLS failed (…)`, `<host> answered HTTP 404 Not Found`). The last line on stderr only counts them: `ci error: the CI log could not be fetched (see above)`, `ci error: 2 of 3 CI logs could not be fetched (see above)`.
 
 `ger --refresh ci` bypasses the CI-content store as well as the Gerrit cache.
 

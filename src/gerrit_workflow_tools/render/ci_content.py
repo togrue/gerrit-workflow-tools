@@ -75,9 +75,11 @@ def format_ci_section_human(
     for label, group in group_by_label(contents):
         for content in group:
             note = provenance_note(content)
-            lines.append(f"{indent}{label}  {_build_and_log(content)}" + (f"  ({note})" if note else ""))
+            # A link that could not be read names its log once, on the error line, to open by hand.
+            shown = content.link.build_url if content.failed else _build_and_log(content)
+            lines.append(f"{indent}{label}  {shown}" + (f"  ({note})" if note else ""))
             if content.failed:
-                lines.append(f"{indent}  error: {content.provenance.error}")
+                lines.append(f"{indent}  error: {content.provenance.error}; open {content.link.url}")
                 continue
             if not content.findings:
                 lines.append(f"{indent}  (no findings)")

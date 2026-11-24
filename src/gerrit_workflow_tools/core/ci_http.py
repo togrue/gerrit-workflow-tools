@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import base64
 import logging
+import socket
+import ssl
 import time
 import zlib
 from collections.abc import Callable, Mapping
@@ -31,6 +33,21 @@ CHUNK_BYTES = 256 * 1024
 
 Progress = Callable[[str, int], None]
 """``(url, bytes received so far)``, called as a response body arrives (on the fetching thread)."""
+
+
+def _in_words(reason: object) -> str:
+    """Why a request failed, as a person says it: not a Python repr."""
+    if isinstance(reason, socket.gaierror):
+        return "host not found"
+    if isinstance(reason, ConnectionRefusedError):
+        return "connection refused"
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "timed out"
+    if isinstance(reason, ssl.SSLError):
+        return f"TLS failed ({reason.reason or reason})"
+    if isinstance(reason, OSError) and reason.strerror:
+        return reason.strerror[0].lower() + reason.strerror[1:]
+    return str(reason) or type(reason).__name__
 
 
 class CiHttpError(Exception):
@@ -94,11 +111,11 @@ class UrllibCiHttp:
                 raw = self._read(url, resp, max_bytes, gzipped=gzipped)
                 final = resp.geturl() or url
         except HTTPError as e:
-            raise CiHttpError(f"HTTP {e.code} for {url}: {e.reason}", status=e.code) from e
+            raise CiHttpError(f"{urlparse(url).netloc} answered HTTP {e.code} {e.reason}", status=e.code) from e
         except URLError as e:
-            raise CiHttpError(f"request to {url} failed: {e.reason!r}") from e
+            raise CiHttpError(f"could not reach {urlparse(url).netloc}: {_in_words(e.reason)}") from e
         except (OSError, zlib.error) as e:
-            raise CiHttpError(f"request to {url} failed: {e}") from e
+            raise CiHttpError(f"could not read from {urlparse(url).netloc}: {_in_words(e)}") from e
         finally:
             record_call("ci", f"GET {urlparse(url).netloc}", time.perf_counter() - t0)
         truncated = len(raw) > max_bytes
