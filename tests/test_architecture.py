@@ -458,7 +458,6 @@ def test_commands_exit_with_exit_code_members() -> None:
             "cli_ger.py": "import-light",
             "cli_attention.py": "backlog 3",
             "cli_cache.py": "backlog 3",
-            "cli_changeid.py": "backlog 3",
             "cli_fetch_api.py": "backlog 3",
             "cli_fix.py": "backlog 3",
             "cli_push.py": "backlog 3",

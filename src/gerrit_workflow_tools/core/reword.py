@@ -14,15 +14,24 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from gerrit_workflow_tools.core.change_id import (
+    append_change_id_footer,
     append_change_id_trailer,
     extract_valid_change_id,
+    generate_change_id_from_idents,
     strip_change_id_lines,
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import current_branch
+from gerrit_workflow_tools.core.rebase_state import am_in_progress, rebase_in_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackRewrite, refuse_unless_on_the_branch
-from gerrit_workflow_tools.core.stack import RewriteCommit, get_stack_snapshot, read_rewrite_rows
+from gerrit_workflow_tools.core.stack import (
+    RewriteCommit,
+    get_stack_snapshot,
+    read_rewrite_rows,
+    rev_spec_stack_base_to_end,
+)
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 def _commit_tree(cwd: Path | str, tree: str, parents: Sequence[str], message: str, ident_env: dict[str, str]) -> str:
@@ -126,3 +135,32 @@ def message_to_edit(body: str, commit: str) -> str:
 def message_from_edit(text: str) -> str:
     """The message an editor left: comment lines (``#``) out, as git's default cleanup does."""
     return "\n".join(line for line in text.splitlines() if not line.startswith("#")).strip()
+
+
+def add_missing_change_ids(cwd: Path, rev: str) -> list[RewriteCommit]:
+    """Give every commit of ``upstream_tip..rev`` without a valid Change-Id footer one, as the hook would.
+
+    ``ger change-id --fix``: a message-only rewrite, so uncommitted changes are fine; a merge,
+    rebase or ``git am`` underway is a :class:`UsageError`. Returns the commits that got one.
+    """
+    if commit_sha_or_none(cwd, "MERGE_HEAD"):
+        raise UsageError("--fix cannot run during an in-progress merge")
+    if rebase_in_progress(cwd):
+        raise UsageError("--fix cannot run during an in-progress rebase")
+    if am_in_progress(cwd):
+        raise UsageError("--fix cannot run during an in-progress `git am`")
+    rows = read_rewrite_rows(cwd, rev_spec_stack_base_to_end(cwd, rev))
+    needs_fix = [c for c in rows if not extract_valid_change_id(c.body)]
+    messages: dict[str, str] = {}
+    for commit in needs_fix:
+        base_msg = strip_change_id_lines(commit.body)
+        first_parent = commit.parents[0] if commit.parents else None
+        cid = generate_change_id_from_idents(commit.committer_ident, first_parent, base_msg)
+        messages[commit.sha] = append_change_id_footer(base_msg, cid)
+    new_head = rewrite_messages(cwd, rows, messages)
+    if new_head is not None:
+        try:
+            move_head(cwd, new_head)
+        except GitError as error:
+            raise GitError(f"--fix failed: {error.stderr or error}") from error
+    return needs_fix

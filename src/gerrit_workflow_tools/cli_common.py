@@ -27,6 +27,7 @@ from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import format_call_trace_summary
+from gerrit_workflow_tools.core.change_id import ChangeIdIssuesError, DuplicateChangeIdError
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
@@ -85,10 +86,12 @@ class ExitCode(IntEnum):
 
 
 # Ordered longest-subclass-first: ChangeAmbiguousError, MissingChangeIdError and NoWorkingBranchError derive from
-# ChangeResolutionError,
+# ChangeResolutionError, DuplicateChangeIdError from ChangeIdIssuesError,
 # and ConfigError from ValueError, so the more specific entry has to be matched first.
 _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeAmbiguousError, ExitCode.AMBIGUOUS, "error"),
+    (DuplicateChangeIdError, ExitCode.DUPLICATE_CHANGE_ID, "error"),
+    (ChangeIdIssuesError, ExitCode.MISSING_CHANGE_ID, "error"),
     (MissingChangeIdError, ExitCode.MISSING_CHANGE_ID, "error"),
     (NoWorkingBranchError, ExitCode.USAGE, "error"),
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),

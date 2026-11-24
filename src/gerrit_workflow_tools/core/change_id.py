@@ -62,6 +62,28 @@ class IssueSeverity(str, Enum):
     WARNING = "warning"
 
 
+class ChangeIdIssuesError(Exception):
+    """Local commits whose Change-Id is missing or malformed (``MISSING_CHANGE_ID``); one line per issue.
+
+    Raised through :func:`change_id_issues_error`, which picks :class:`DuplicateChangeIdError`
+    when the first issue is a duplicate: the exit code is the first issue's.
+    """
+
+    def __init__(self, message: str, issues: Sequence[ChangeIdIssue]) -> None:
+        super().__init__(message)
+        self.issues = list(issues)
+
+
+class DuplicateChangeIdError(ChangeIdIssuesError):
+    """The same Change-Id on more than one local commit (``DUPLICATE_CHANGE_ID``)."""
+
+
+def change_id_issues_error(issues: Sequence[ChangeIdIssue], message: str) -> ChangeIdIssuesError:
+    """The error *issues* are worth, saying *message*: a duplicate first is a duplicate, else a missing one."""
+    duplicate = bool(issues) and issues[0].kind == ChangeIdIssueKind.DUPLICATE
+    return (DuplicateChangeIdError if duplicate else ChangeIdIssuesError)(message, issues)
+
+
 def parse_change_id_footer(msg: str) -> str | None:
     """Return the raw Change-Id footer value from the last non-empty line of *msg*.
 
@@ -179,8 +201,8 @@ def classify_issues(
     items: Iterable[ChangeIdRow],
     *,
     strict: bool = True,
-) -> tuple[list[ChangeIdIssue], int]:
-    """Scan commit Change-Ids for missing, malformed, or duplicate values; return issues and a worst exit code."""
+) -> list[ChangeIdIssue]:
+    """Scan commit Change-Ids for missing, malformed, or duplicate values, in *items* order."""
     issues: list[ChangeIdIssue] = []
     seen: dict[str, str] = {}
     for item in items:
@@ -222,15 +244,8 @@ def classify_issues(
             )
         else:
             seen[c] = short_sha
-    exit_code = 0
-    for issue in issues:
-        if issue.severity == IssueSeverity.ERROR:
-            exit_code = 2
-            break
-        if issue.severity == IssueSeverity.WARNING and exit_code < 2:
-            exit_code = 1
     assert all(i.kind for i in issues), "each issue must set kind"
-    return issues, exit_code
+    return issues
 
 
 def first_change_id_boundary(
@@ -247,7 +262,7 @@ def first_change_id_boundary(
     if not rows:
         return None, "no Change-Id issues"
     sha_to_idx = {row.sha: i for i, row in enumerate(rows)}
-    issues, _exit = classify_issues(rows, strict=strict)
+    issues = classify_issues(rows, strict=strict)
     for issue in issues:
         if issue.severity != IssueSeverity.ERROR:
             continue

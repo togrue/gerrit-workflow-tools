@@ -1,66 +1,46 @@
 """CLI for inspecting and validating commit Change-Ids."""
 
+from __future__ import annotations
+
 import argparse
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_args import add_color_args, add_verbose_and_debug_log_args
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
-from gerrit_workflow_tools.core.change_id import (
-    ChangeIdIssueKind,
-    ChangeIdRow,
-    append_change_id_footer,
-    classify_issues,
-    extract_valid_change_id,
-    generate_change_id_from_idents,
-    strip_change_id_lines,
-)
+from gerrit_workflow_tools.core.change_id import ChangeIdRow, change_id_issues_error, classify_issues
 from gerrit_workflow_tools.core.changeish import is_change_id
-from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none
+from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.git_state import current_branch
-from gerrit_workflow_tools.core.rebase_state import am_in_progress, rebase_in_progress
-from gerrit_workflow_tools.core.reword import move_head, rewrite_messages
-from gerrit_workflow_tools.core.stack import (
-    Commit,
-    read_commit_rows,
-    read_rewrite_rows,
-    rev_spec_stack_base_to_end,
-)
+from gerrit_workflow_tools.core.reword import add_missing_change_ids
+from gerrit_workflow_tools.core.stack import Commit, read_commit_rows, rev_spec_stack_base_to_end
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.render.style import color_short_sha
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
-class ChangeIdError(Exception):
-    """Custom exception for Change-Id processing errors."""
+def _audit_change_ids(commits: Iterable[Commit], *, print_valid: bool = False) -> None:
+    """Raise the shared Change-Id error naming every missing, malformed or duplicate Change-Id.
 
-    def __init__(self, message: str, code: int = 1):
-        super().__init__(message)
-        self.code = code
-
-
-def _audit_change_ids(commits: Iterable[Commit], *, valid: Callable[[Commit], None] | None = None) -> None:
-    """Raise :class:`ChangeIdError` naming every missing, malformed or duplicate Change-Id.
-
-    One line per issue in *commits* order; the exit code is the first issue's. *valid* is called
-    first with each commit that has none, in order.
+    One ``error:`` line per issue in *commits* order; the exit code is the first issue's. With
+    *print_valid*, each commit that has none is printed first, in order.
     """
     commits = list(commits)
-    issues, _exit = classify_issues(ChangeIdRow(c.sha, c.short_sha, c.change_id) for c in commits)
+    issues = classify_issues(ChangeIdRow(c.sha, c.short_sha, c.change_id) for c in commits)
     flagged = {i.sha for i in issues}
-    for commit in commits:
-        if valid is not None and commit.sha not in flagged:
-            valid(commit)
+    if print_valid:
+        for commit in commits:
+            if commit.sha not in flagged:
+                print(commit.change_id)
     if issues:
-        duplicate = issues[0].kind == ChangeIdIssueKind.DUPLICATE
-        raise ChangeIdError(
-            "\n".join(f"error: commit {color_short_sha(i.short_sha)}: {i.detail}" for i in issues),
-            code=int(ExitCode.DUPLICATE_CHANGE_ID if duplicate else ExitCode.MISSING_CHANGE_ID),
-        )
+        # run_cli_command prefixes the first line with "error: "; the others get theirs here.
+        lines = [f"commit {color_short_sha(i.short_sha)}: {i.detail}" for i in issues]
+        raise change_id_issues_error(issues, "\nerror: ".join(lines))
 
 
-def check_stack_change_ids(cwd) -> int:
-    """Raise :class:`ChangeIdError` when the current stack has missing/invalid/duplicate Change-Ids.
+def check_stack_change_ids(cwd: Path) -> int:
+    """Raise the shared Change-Id error when the current stack has missing/invalid/duplicate Change-Ids.
 
     Always scans ``upstream_tip..HEAD`` (the full local stack), oldest first, and names every issue.
     Returns how many commits it checked.
@@ -78,7 +58,7 @@ def _rev_arg(arg: str) -> str:
     return rev
 
 
-def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
+def print_change_ids_for_range(cwd: Path, input_arg: str, use_remote: bool) -> None:
     """Print Change-Ids for one commit or a revision range resolved from user input."""
     rev = _rev_arg(input_arg)
     if use_remote:
@@ -90,44 +70,7 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
     if not rows:
         print("(no commits in range)", file=sys.stderr)
     # Every commit is reported, as --check reports it: the good ones printed, then each problem.
-    _audit_change_ids(rows, valid=lambda row: print(row.change_id))
-
-
-def _ensure_safe_for_fix(cwd: Path) -> None:
-    """Block --fix during merge/rebase; uncommitted changes are fine (message-only rewrite)."""
-    if commit_sha_or_none(cwd, "MERGE_HEAD"):
-        raise ChangeIdError("error: --fix cannot run during an in-progress merge", code=int(ExitCode.USAGE))
-    if rebase_in_progress(cwd):
-        raise ChangeIdError("error: --fix cannot run during an in-progress rebase", code=int(ExitCode.USAGE))
-    if am_in_progress(cwd):
-        raise ChangeIdError("error: --fix cannot run during an in-progress `git am`", code=int(ExitCode.USAGE))
-
-
-def fix_change_ids_for_stack(cwd: Path, input_arg: str) -> None:
-    """Rewrite stack commit messages, assigning Change-Ids where missing on the last line."""
-    if is_change_id(input_arg):
-        raise ChangeIdError("error: --fix needs a commit or range, not a Change-Id", code=int(ExitCode.USAGE))
-
-    _ensure_safe_for_fix(cwd)
-    rows = read_rewrite_rows(cwd, rev_spec_stack_base_to_end(cwd, _rev_arg(input_arg)))
-    needs_fix = [c for c in rows if not extract_valid_change_id(c.body)]
-    if not needs_fix:
-        return
-
-    messages: dict[str, str] = {}
-    for idx, commit in enumerate(needs_fix, start=1):
-        print(f'{idx}/{len(needs_fix)} Fixed "{commit.subject}"', file=sys.stderr, flush=True)
-        base_msg = strip_change_id_lines(commit.body)
-        first_parent = commit.parents[0] if commit.parents else None
-        cid = generate_change_id_from_idents(commit.committer_ident, first_parent, base_msg)
-        messages[commit.sha] = append_change_id_footer(base_msg, cid)
-
-    new_head = rewrite_messages(cwd, rows, messages)
-    assert new_head is not None
-    try:
-        move_head(cwd, new_head)
-    except GitError as error:
-        raise ChangeIdError(f"error: --fix failed: {error.stderr or error}", code=int(ExitCode.GIT)) from error
+    _audit_change_ids(rows, print_valid=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -142,44 +85,31 @@ def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
     run = init_cli_runtime(args)
     cwd, settings = run.cwd, run.settings
-
     input_arg = args.rev_or_range or "HEAD"
 
-    try:
-        needs_stack_upstream = bool(args.start_at_remote or args.check or args.fix)
-        if needs_stack_upstream:
-            branch = current_branch(cwd)
-            if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
-                return 1
-
-        if args.fix and args.check:
-            raise ChangeIdError("error: --fix cannot be combined with --check", code=int(ExitCode.USAGE))
-
-        if args.fix:
-            fix_change_ids_for_stack(cwd, input_arg)
-            return 0
-
-        if args.check:
-            if args.rev_or_range is not None:
-                raise ChangeIdError(
-                    "error: --check always scans the full current stack; do not pass REV_OR_RANGE",
-                    code=int(ExitCode.USAGE),
-                )
-            checked = check_stack_change_ids(cwd)
-            if sys.stdout.isatty():
-                print(f"{checked} commit{'' if checked == 1 else 's'}, all Change-Ids valid")
-            return 0
-
+    if args.start_at_remote or args.check or args.fix:
+        branch = current_branch(cwd)
+        if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
+            return int(ExitCode.REFUSED)
+    if args.fix and args.check:
+        raise UsageError("--fix cannot be combined with --check")
+    if args.fix:
         if is_change_id(input_arg):
-            print(input_arg)
-            return 0
-
+            raise UsageError("--fix needs a commit or range, not a Change-Id")
+        fixed = add_missing_change_ids(cwd, _rev_arg(input_arg))
+        for idx, commit in enumerate(fixed, start=1):
+            print(f'{idx}/{len(fixed)} Fixed "{commit.subject}"', file=sys.stderr, flush=True)
+    elif args.check:
+        if args.rev_or_range is not None:
+            raise UsageError("--check always scans the full current stack; do not pass REV_OR_RANGE")
+        checked = check_stack_change_ids(cwd)
+        if sys.stdout.isatty():
+            print(f"{checked} commit{'' if checked == 1 else 's'}, all Change-Ids valid")
+    elif is_change_id(input_arg):
+        print(input_arg)
+    else:
         print_change_ids_for_range(cwd, input_arg, args.start_at_remote)
-        return 0
-
-    except ChangeIdError as err:
-        print(str(err), file=sys.stderr)
-        return err.code
+    return int(ExitCode.OK)
 
 
 def _build_parser() -> argparse.ArgumentParser:
