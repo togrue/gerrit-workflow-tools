@@ -216,7 +216,7 @@ def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | N
     print(_save(values, global_config=global_config, cwd=cwd), file=sys.stderr)
     _hook(checked, skip=args.no_hook)
     print("next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you", file=sys.stderr)
-    return 0
+    return int(ExitCode.OK)
 
 
 def _build_parser() -> argparse.ArgumentParser:

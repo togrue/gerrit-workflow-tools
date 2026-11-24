@@ -10,7 +10,7 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import require_prompt
+from gerrit_workflow_tools.cli_common import ExitCode, require_prompt
 from gerrit_workflow_tools.cli_terminal import ask_choice, confirm, prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
@@ -269,7 +269,7 @@ def confirm_gerrit_push(
             print_dry_run(plan)
             if unknown := unknown_plan_reviewers(run, plan):
                 raise UsageError(_no_account(unknown))
-            return 0
+            return int(ExitCode.OK)
         if not args.yes:
             require_prompt(args, instead="-y to push")
         if args.yes:
@@ -279,7 +279,7 @@ def confirm_gerrit_push(
             print_plan_status(plan)  # what is sent with it, drafts included, as the prompt would have shown
             if plan.credential_error:
                 print(plan.credential_error, file=sys.stderr)
-                return 1
+                return int(ExitCode.REFUSED)
             return plan
         line = options_line_available()
         drafts = publishable_drafts(plan)
@@ -304,7 +304,7 @@ def confirm_gerrit_push(
                 continue
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
-            return 0
+            return int(ExitCode.OK)
         if act == "reviewers":
             revised = apply_interactive_line(run.cwd, plan, args, settings=settings, save=False)
             if revised is not None:

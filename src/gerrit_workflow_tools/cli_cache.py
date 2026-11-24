@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from gerrit_workflow_tools.cli_args import add_color_args, add_verbose_and_debug_log_args
-from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base
@@ -41,7 +41,7 @@ def _run(argv: list[str] | None) -> int:
         cache.clear()
         print(f"cleared Gerrit cache for {cache.host}: {cache.path}")
         print(f"cleared {ci_store.clear()} CI content entries: {ci_store.root}")
-        return 0
+        return int(ExitCode.OK)
     from gerrit_workflow_tools.core.gerrit.paths import gerrit_config_dir
 
     info = cache.info()
@@ -53,7 +53,7 @@ def _run(argv: list[str] | None) -> int:
     print(f"comments: {info.comments}")
     print(f"checks: {info.checks}")
     print(f"ci content: {ci_store.count()} ({ci_store.root})")
-    return 0
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

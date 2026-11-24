@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_args import add_output_format_args, add_verbose_and_debug_log_args, changeish_help
-from gerrit_workflow_tools.cli_common import init_cli_runtime, may_prompt, run_cli_command
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.cli_terminal import ask_choice
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
@@ -162,7 +162,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     cp = git(*cmd, cwd=cwd, check=False)
     if cp.returncode != 0:
         print(cp.stderr.strip() or cp.stdout.strip() or "git commit failed", file=sys.stderr)
-        return cp.returncode or 1
+        return cp.returncode  # git's own code, as for every child process (exit-codes.md)
 
     if args.json_:
         payload: dict[str, object] = {"fixup_sha": fixup_sha}
@@ -175,7 +175,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         rebasing = rebase_underway(run.worktree.repository_dir)
         first = "finish the rebase (`ger rebase --continue`), then " if rebasing else ""
         print(f"next: {first}{UNSQUASHED_FIXUP_ADVICE}", file=sys.stderr)
-    return 0
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

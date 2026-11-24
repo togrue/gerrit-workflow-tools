@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_args import (
     add_yes_arg,
 )
 from gerrit_workflow_tools.cli_attention import resolve_in_stack
-from gerrit_workflow_tools.cli_common import init_cli_runtime, require_prompt, run_cli_command
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, require_prompt, run_cli_command
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -167,20 +167,20 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
     )
     if isinstance(prepared, PushRefusal):
         print(prepared.message, file=sys.stderr)
-        return 1
+        return int(ExitCode.REFUSED)
     cmd = prepared
     logger.debug("ger push vanilla: %s", cmd)
     if args.dry_run:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
-        return 0
+        return int(ExitCode.OK)
     if not args.yes:
         require_prompt(args, instead="-y to push")
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
         if not confirm("Do you want to run `git push`?", default=True):
             print("Push cancelled.", file=sys.stderr)
-            return 1
+            return int(ExitCode.REFUSED)  # a vanilla push; a Gerrit push's cancel exits OK (push.md)
     logger.debug("ger push vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
     return finish_push(execute(run, cmd), None)
 
@@ -212,13 +212,13 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
     )
     if isinstance(prepared, PushRefusal):
         print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
-        return 1
+        return int(ExitCode.REFUSED)
     for warning in prepared.warnings:
         print(warning, file=sys.stderr)
     asked = prompt_initial_options(cwd, prepared, args, settings=settings) if args.i else prepared
     if asked is None:
         print("Push cancelled.", file=sys.stderr)
-        return 0
+        return int(ExitCode.OK)
     plan = asked
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
@@ -273,7 +273,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     mode = ger_push_mode(cwd, branch, settings=settings)
     if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):
-            return 1
+            return int(ExitCode.REFUSED)
         mode = ger_push_mode(cwd, branch, settings=settings)
     if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
         raise missing_upstream_error(branch, askable=False)
