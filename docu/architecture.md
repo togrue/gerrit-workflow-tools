@@ -590,6 +590,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
+| `render/inbox_text.py` | `ger inbox`'s human text: a row per review chain by inbox section, and each section's summary (`render_inbox_text`) |
 | `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
 | `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
 | `render/agent_runbook.py` | The agent runbook as Markdown (`runbook_markdown`) and JSON (`runbook_json`) |
