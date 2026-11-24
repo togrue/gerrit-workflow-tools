@@ -137,7 +137,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.go_on:
         if args.rev or args.onto_remote or args.no_onto_remote or args.drop_merged_equivalent or args.autosquash:
             p.error(f"--{args.go_on} goes on with the rebase underway: it takes no REV and no other option")
-        return go_on_with_rebase(cwd, RebaseAction(args.go_on))
+        return go_on_with_rebase(run, RebaseAction(args.go_on))
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 
@@ -179,7 +179,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
     autosquash = True if args.autosquash else None
-    return run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
+    return run_interactive_rebase(run, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
 
 
 if __name__ == "__main__":

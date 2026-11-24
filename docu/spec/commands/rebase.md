@@ -116,6 +116,37 @@ editor. The refusals name the same commands (`ger rebase --skip goes on from HEA
 every history-moving command a rebase underway stops (`a rebase is already in progress; finish it
 (`ger rebase --continue`) or `ger rebase --abort` first`).
 
+### After a rebase finishes
+
+Git's `Successfully rebased and updated refs/heads/…` is not the last line. Every ger-started
+rebase that finishes (`ger rebase [REV]`, `--autosquash`, `--continue`, `--skip`, `ger edit`,
+`ger reword`, `ger edit -n`) ends with ger's own, against the local stack before it (the stack at
+`HEAD` when ger started the rebase, or at the rebase's `orig-head` for `--continue` / `--skip`);
+`core/rewrite_outcome.py` tells it as data, `rebase_run.print_outcome` says it:
+
+```text
+dropped 6c07cc8 trig: add tan(); its change 2116 stays open on Gerrit
+to get it back: git cherry-pick 6c07cc8
+rebase finished: dropped 1 commit; rewrote 1 commit, now ahead of Gerrit
+next: `ger push` uploads the stack as it is now
+```
+
+- Each commit the stack lost, unless squashed (a `fixup!` whose commit was rewritten) or already in
+  the upstream it was rebased onto, is **dropped**: named with its change when the cache has it
+  open on Gerrit (dropping abandons nothing), and the way to get it back, `git cherry-pick <sha>`.
+  `--skip` that stops on a further conflict says so at once, with `once the rebase is finished,
+  git cherry-pick <sha> (or `ger rebase --abort` now)`. Nothing is asked first: the drop is said
+  and can be taken back.
+- `rebase finished:` counts the commits rewritten (new ids) and, of them, how many are now ahead
+  of Gerrit and how many not on Gerrit yet; fixups squashed; commits left out as already upstream.
+  `nothing changed, the local stack is as it was (3 commits)` when it changed nothing. Whether a
+  change is on Gerrit comes from the cache a `ger log` or the todo's annotations left, never from a
+  request: a change's existence does not go stale the way its votes do. Without `ger.webUrl` the
+  Gerrit part is left out.
+- `next:` is `` `ger push` uploads the stack as it is now`` when anything changed, `squash it with
+  `ger rebase --autosquash`` while a fixup is left in the stack (`ger push` would stop at it), and
+  nothing during an attention walk, whose next stop is the next step.
+
 ---
 
 ## Configuration

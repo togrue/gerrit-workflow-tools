@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -469,7 +470,8 @@ def test_the_walk_ending_after_a_continued_rebase_is_no_error(
 
     assert code == ExitCode.NO_EDIT_ATTENTION
     assert err.rstrip().endswith(
-        "rebase finished\nno commit needs edit attention (unresolved comments or build failed)"
+        "rebase finished: nothing changed, the local stack is as it was (4 commits)\n"
+        "no commit needs edit attention (unresolved comments or build failed)"
     )
     assert "error:" not in err
 
@@ -484,8 +486,12 @@ def test_drop_says_what_it_dropped_and_how_to_get_it_back(
     code, _out, err = run_cli(web_stack_repo, gedit_main, ["--drop", rows[-1].sha], monkeypatch, gerrit=store)
 
     assert code == 0, err
-    assert f"dropped {rows[-1].short_sha} {rows[-1].subject}" in err
-    undo = err.split("to get it back: ")[1].split()
+    # Its change on Gerrit, from the overlay the target was found by: dropping it abandons nothing.
+    assert re.search(
+        rf"^dropped {rows[-1].short_sha} {re.escape(rows[-1].subject)}; its change \d+ stays open", err, re.M
+    )
+    assert "rebase finished: dropped 1 commit; the other 3 commits as they were\n" in err
+    undo = err.split("to get it back: ")[1].splitlines()[0].split()
     git(*undo[1:], cwd=web_stack_repo)
     assert git_out("rev-parse", "HEAD", cwd=web_stack_repo) == before
 

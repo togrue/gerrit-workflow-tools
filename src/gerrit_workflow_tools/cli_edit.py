@@ -213,7 +213,7 @@ _VERBS = {"edit": "editing", "reword": "rewording", "drop": "dropping"}
 _WALK = {"first": "oldest needing attention", "next": "next needing attention", "resume": "attention walk"}
 
 
-def _continue_stopped_rebase(cwd: Path) -> int:
+def _continue_stopped_rebase(run: RunContext) -> int:
     """Finish the rebase a previous edit left stopped.
 
     Returns 0 when that rebase is done. Git's own code when ``--continue`` fails; refused first, as
@@ -221,11 +221,10 @@ def _continue_stopped_rebase(cwd: Path) -> int:
     ``ExitCode.GIT`` when git exited 0 but a rebase is still underway, so a new one
     cannot start.
     """
+    cwd = run.cwd
     print("continuing the rebase", file=sys.stderr)
-    code = go_on_with_rebase(cwd, RebaseAction.CONTINUE, walk_on=_WALK_ON)
+    code = go_on_with_rebase(run, RebaseAction.CONTINUE, walk_on=_WALK_ON)  # says `rebase finished: …`
     if not rebase_in_progress(cwd):
-        if code == 0:
-            print("rebase finished", file=sys.stderr)
         return code
     if code == 0:
         print("rebase is still in progress; `ger edit -n` to continue it", file=sys.stderr)
@@ -274,7 +273,7 @@ def _run_interactive_stack_rebase(
     )
 
     if rebase_in_progress(cwd) and default_action == "edit" and args.next_attention:
-        continued = _continue_stopped_rebase(cwd)
+        continued = _continue_stopped_rebase(run)
         if continued != 0:
             return continued
     require_history_rewrite(cwd)
@@ -295,11 +294,12 @@ def _run_interactive_stack_rebase(
         env["GEDIT_DEBUG_LOG"] = "1"
     logger.debug("ger edit rebasing onto %s to stop at %s", rebase_fork[:8], short)
     returncode = run_interactive_rebase(
-        cwd,
+        run,
         rebase_fork,
         sequence_editor="rebase_sequence_editor",
         env=env,
         walk_on=_WALK_ON if cursor_change_id and cursor_action != "set" else None,
+        undo="reset" if action == "drop" else "cherry-pick",  # a drop changed nothing else: reset takes it back
     )
     # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
@@ -307,11 +307,6 @@ def _run_interactive_stack_rebase(
     if returncode == 0 and rebase_in_progress(cwd):
         if row and (hint := attention_stop_hint(row.attention_reasons)):
             print(hint, file=sys.stderr)
-    elif returncode == 0 and action == "drop":
-        print(f"dropped {git_out('log', '-1', '--format=%h %s', full, cwd=cwd)}", file=sys.stderr)
-        print(
-            f"to get it back: git reset --keep {git_out('rev-parse', '--short', 'ORIG_HEAD', cwd=cwd)}", file=sys.stderr
-        )
     elif returncode == 0:
         for lost in sorted(change_ids_before - _stack_change_ids(cwd, branch)):
             print(
