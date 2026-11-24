@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.comment_chains import ChainRef, ChainRefError, f
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, ChainMatch, DraftReply, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
@@ -33,6 +34,7 @@ from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import (
     chain_location,
     draft_transition,
+    drafts_elsewhere,
     drafts_in,
     first_line,
     format_pending_drafts,
@@ -290,6 +292,10 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
                 print(f"  + {extras}")
         if not posts:
             print(f"no drafts to publish on {where}")
+    # Nothing here, and nothing named: say where your drafts are instead (one has:draft query).
+    elsewhere = _drafts_elsewhere(service, changes) if not posts and not args.targets else []
+    if elsewhere and not args.json_:
+        print(f"  {drafts_elsewhere(dict.fromkeys(elsewhere))}")
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
     what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
     if posts and not args.dry_run and not confirm_publish(args, what):
@@ -321,8 +327,14 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
                 print(f"gerrit error: {change.key}: {error}", file=sys.stderr)
         results.append(row)
     if args.json_:
-        print(json.dumps({"changes": results}, indent=2))
+        print(json.dumps({"changes": results, **({"drafts_elsewhere": elsewhere} if elsewhere else {})}, indent=2))
     return int(ExitCode.GERRIT) if failed else int(ExitCode.OK)
+
+
+def _drafts_elsewhere(service: GerritService, changes: list[_Change]) -> list[int]:
+    """Your changes beyond *changes* that hold drafts of yours, by number."""
+    here = {change.key for change in changes}
+    return [view.number for view in service.comments.drafted_changes() if view.number and view.key not in here]
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:

@@ -567,7 +567,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
-| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache; which changes hold drafts of yours (`drafted_changes`, one `has:draft` query) |
+| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache; which changes hold drafts of yours (`drafted_changes`, one `has:draft` query; `draft_counts`) |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence of ChangeInfo keyed by triplet; the trust window (`load_changes`), `reconcile` (which rows are current, from freshness tokens), invalidation |
 | `core/gerrit/cache_follow_ups.py` | `FollowUpCache` (mixed into `GerritCache`): a change's comments and Checks rows, valid while its freshness token stands; `DEFAULT_CHANGE_TRUST_WINDOW_SECONDS` |
 | `core/gerrit/cache_facts.py` | `RememberedFacts` (mixed into `GerritCache`): host capabilities, the user's account id, settled commits, each with its lifetime |
@@ -589,7 +589,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/commit_row.py` | Full commit line layout for log/show |
 | `render/stack_log.py` | `ger log`'s text view: the rows with the ready boundary line (`row_lines`), the summary line (`summary_line`), the core's next steps in words (`next_steps`) and the rebase note (`rebase_note`) |
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts, and the hint words for attention reasons (`attention_hints` for `ger log`, `member_hints` for `ger inbox`) |
-| `render/comments.py` | Inline comment chains in the terminal (boxes), and the words both views share (`chain_location`, `draft_label`, `chain_url`) |
+| `render/comments.py` | Inline comment chains in the terminal (boxes), and the words both views share (`chain_location`, `draft_label`, `chain_url`, `drafts_elsewhere`) |
 | `render/comments_markdown.py` | Inline comment chains as Markdown: `ger show --ai` and the agent runbook (`format_comment_chain_markdown`, `format_unresolved_section_markdown`) |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |

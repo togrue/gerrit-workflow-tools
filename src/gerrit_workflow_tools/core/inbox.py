@@ -8,11 +8,12 @@ A rebase underway in the clone leads the headline; the caller hands it in
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 from gerrit_workflow_tools.core.attention import Attention, Severity, attention_severity
 from gerrit_workflow_tools.core.config import Settings
@@ -49,6 +50,8 @@ class InboxSection:
     not_ready: int | None = None
     """*To review* chains its query leaves out as not ready (WIP, private, no ``Verified``), that
     ``--unready`` shows; ``None`` when not counted."""
+    drafted: frozenset[int] = frozenset()
+    """The section's changes that hold drafts of yours (asked with ``with_drafts``)."""
 
 
 @dataclass(frozen=True)
@@ -206,12 +209,15 @@ def load_inbox(
     limit: int | None = None,
     sections: Sequence[str] = (TO_REVIEW, OUTGOING),
     count_not_ready: bool = False,
+    with_drafts: bool = False,
 ) -> list[InboxSection]:
     """The wanted inbox *sections*, queried in parallel: *to review*, then *outgoing* (your open
     chains). A section not wanted is not asked for.
 
     *count_not_ready* also asks, beside them, for the *to review* chains its built-in query leaves
     out as not ready (:attr:`InboxSection.not_ready`); never with ``--unready`` or a custom query.
+    *with_drafts* asks, beside them, which changes hold drafts of yours (one light ``has:draft``
+    query, :attr:`InboxSection.drafted`).
 
     Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
     inbox order (longest unreviewed first) and honours *limit*, else ``ger.inboxLimit``.
@@ -235,7 +241,12 @@ def load_inbox(
     )
     account = service.self_account_id()
     fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
-    fetched = dict(zip(asked, parallel_map(partial(fetch, query) for query in asked.values()), strict=True))
+    jobs: list[Callable[[], Any]] = [partial(fetch, query) for query in asked.values()]
+    if with_drafts:  # beside the sections, not after them: no wait added
+        jobs.append(partial(service.comments.drafted_changes, None, n=100))
+    answers = parallel_map(jobs)
+    drafted = frozenset(view.number for view in answers.pop()) if with_drafts else frozenset()
+    fetched: dict[str, list[ReviewChain]] = dict(zip(asked, answers, strict=True))
     not_ready = _not_ready(fetched.pop(_UNREADY), fetched[TO_REVIEW]) if counted else None
     cap = limit if limit is not None else settings.inbox_limit
     if cap is not None and TO_REVIEW in fetched:
@@ -243,7 +254,13 @@ def load_inbox(
     if OUTGOING in fetched:
         fetched[OUTGOING].sort(key=lambda chain: (_urgency(chain), chain.wait_age_seconds, chain.top.number))
     return [
-        InboxSection(name, queries[name], chains, not_ready if name == TO_REVIEW else None)
+        InboxSection(
+            name,
+            queries[name],
+            chains,
+            not_ready if name == TO_REVIEW else None,
+            frozenset(m.number for chain in chains for m in chain.members if m.number in drafted),
+        )
         for name, chains in fetched.items()
     ]
 

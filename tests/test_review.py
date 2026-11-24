@@ -505,3 +505,24 @@ def test_review_says_how_to_get_there_and_what_to_run_next(
         "next: ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --vote +1 --chain · "
         "ger review --done"
     )
+
+
+def test_done_warns_about_drafts_left_unpublished_and_still_finishes(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, _shas = gerrit
+    _review(stack_repo, store, ["101"], monkeypatch)
+    _review(stack_repo, store, ["--next"], monkeypatch)
+    _draft(store, keys[1], "left behind")
+    code, out, err = _review(stack_repo, store, ["--done"], monkeypatch)
+    assert code == ExitCode.OK and "done reviewing 102" in out
+    assert "warning: 1 unpublished draft on c101: ger reply --publish c101" in err
+    # From your own checkout, a publish with nothing on the local stack says where they are.
+    git("switch", "-q", "--detach", "main", cwd=stack_repo)
+    git("switch", "-q", "-c", "other", "--track", "origin/main", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, reply_main, ["--publish", "--dry-run"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert out.splitlines() == [
+        "no drafts to publish on the local stack",
+        "  unpublished drafts on c101: ger reply --publish c101",
+    ]

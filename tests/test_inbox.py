@@ -755,3 +755,18 @@ def test_the_footer_names_the_command_that_starts_the_longest_waiting_chain_at_i
     code, out, err = run_cli(tmp_path, inbox_main, ["--color=never"], monkeypatch, gerrit=_store(base, top))
     assert code == int(ExitCode.OK), err
     assert "next: ger review c4441 --bottom, then --next" in out
+
+
+def test_a_chain_holding_drafts_of_yours_says_so_with_one_query(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Drafts nobody sees until published: the row names the change they are on (one has:draft query)."""
+    base = _change(number=4450, sha="d1", parent="origin", subject="base", updated="2026-08-18 08:00:00.000000000")
+    top = _change(number=4451, sha="d2", parent="d1", subject="top", updated="2026-08-18 08:00:00.000000000")
+    store = _store(base, top)
+    store.set_drafts(str(base["id"]), {"a.py": [{"id": "d", "line": 1, "message": "hm", "patch_set": 1}]})
+    code, out, err = run_cli(tmp_path, inbox_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    [row] = [line for line in out.splitlines() if line.startswith("c4451")]
+    assert row.endswith("# top  # drafts of yours on c4450")
+    assert [q for q in store.queries() if "has:draft" in q] == ["has:draft"]

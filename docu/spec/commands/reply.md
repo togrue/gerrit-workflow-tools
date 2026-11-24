@@ -116,6 +116,8 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 | `--dry-run` | List what would be published and exit `0`. Allowed under the publish guard |
 | `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json` or `--ai`, which never prompt |
 
+With no `REV` and no draft on the local stack, it says where your drafts are instead, from one `has:draft` query over your changes (at most 25): `no drafts to publish on the local stack`, then `  unpublished drafts on c2142: ger reply --publish c2142` (`drafts_elsewhere` in `--json`). A review left with `ger review --done` warns the same way.
+
 Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
 
 Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
@@ -209,6 +211,7 @@ DELETE /changes/{id}/revisions/{ps}/drafts/{draft-id}          discard
 POST   /changes/{id}/revisions/current/review                  publish:
          {"drafts": "PUBLISH_ALL_REVISIONS", "message": optional}
 GET    /changes/?q=has:draft+(change:N+OR+...)                 which pushed changes have drafts
+GET    /changes/?q=has:draft                                   which of your changes have drafts (nothing on the stack)
 ```
 
 The comment GET today already returns the published `patch_set`. The model keeps it: `InlineComment` gains its patchset and a draft flag, and `build_comment_chains` takes the drafts file map next to the published one. That keeps chain assembly in its one owner, `core/comment_chains.py`, so there is no second threading pass for drafts.

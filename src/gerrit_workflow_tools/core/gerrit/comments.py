@@ -117,6 +117,13 @@ class CommentApi:
         rows = self._service.rest.query_changes(f"has:draft{among}", n=limit, options=list(LIGHT_QUERY_OPTIONS))
         return [ChangeView.from_payload(row) for row in dict_rows(rows)]
 
+    def draft_counts(self, numbers: Sequence[int]) -> dict[int, int]:
+        """How many drafts of yours each of *numbers* holds, those with none left out: the
+        ``has:draft`` query, then a drafts GET only where it found some."""
+        found = [view for view in self.drafted_changes(numbers) if view.number is not None]
+        counts = {view.number: sum(map(len, self.get_drafts(view.key).values())) for view in found}
+        return {number: counts[number] for number in numbers if counts.get(number)}
+
     def chains_with_drafts(self, change_id: str, *, change_updated: str | None = None) -> list[CommentChain]:
         """The chains of *change_id* that hold a draft of yours: what a publish would send."""
         chains = self.get_chains(change_id, change_updated=change_updated, comments="all")

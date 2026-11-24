@@ -21,13 +21,14 @@ from gerrit_workflow_tools.cli_common import (
     may_prompt,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.review_checkout import (
+    BRANCH_PREFIX,
     CheckoutOptions,
     ReviewMode,
     ReviewState,
@@ -42,6 +43,7 @@ from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_del
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.votes import VOTE_HELP
+from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
 from gerrit_workflow_tools.review_vote import vote
 
@@ -250,6 +252,22 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     return int(ExitCode.OK)
 
 
+def _drafts_left(run: RunContext, state: ReviewState) -> dict[int, int]:
+    """Your unpublished drafts on the changes this review visited; nobody sees them until published.
+
+    A warning, never a reason to stop: without Gerrit, or when it fails, there are none to tell.
+    """
+    numbers = [
+        int(b.removeprefix(BRANCH_PREFIX)) for b in state.created_branches if b.removeprefix(BRANCH_PREFIX).isdigit()
+    ]
+    if not run.gerrit.configured:
+        return {}
+    try:
+        return run.gerrit.comments.draft_counts(sorted(set(numbers) | {state.number}))
+    except (GerritApiError, ConfigError):
+        return {}
+
+
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Check out, stage, walk, vote on or leave a review."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit))
@@ -275,12 +293,16 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
         if state is None:
             raise ReviewUsageError("no review going on here")
         deleted, kept = close_review(state)
+        left = _drafts_left(run, state)
         if args.json_:
-            print(json.dumps({"done": state.number, "deleted": deleted, "kept": kept}, indent=2))
+            payload = {"done": state.number, "deleted": deleted, "kept": kept, "drafts": left}
+            print(json.dumps(payload, indent=2))
         else:
             print(f"done reviewing {state.number}; deleted {', '.join(deleted) or 'no branches'}")
             for branch in kept:
                 print(f"  kept {branch}: it has commits of yours")
+        if left and not args.json_:
+            print(f"warning: {drafts_elsewhere(left)}", file=sys.stderr)
         return int(ExitCode.OK)
     if args.vote is None and args.changeish is None and not args.next and not args.prev:
         if state is None:

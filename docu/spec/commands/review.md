@@ -127,7 +127,7 @@ What is being reviewed is recorded per worktree in `<git dir>/ger/review.json`: 
 
 `--status` prints it. With no review going on, `--status` exits `0` and says so.
 
-`--done` unstages, deletes the `change-<number>` branches the review created (keeping any with commits of yours, which it names), and forgets the review state. In place, it switches back to the remembered branch. The review worktree itself is kept for the next review.
+`--done` unstages, deletes the `change-<number>` branches the review created (keeping any with commits of yours, which it names), and forgets the review state. In place, it switches back to the remembered branch. The review worktree itself is kept for the next review. Drafts of yours still unpublished on the changes the review visited are not lost, but nobody sees them: `--done` warns on stderr, `warning: 1 unpublished draft on c2076: ger reply --publish c2076`, and finishes anyway (one `has:draft` query over those changes, then a drafts GET only where it found some; nothing is said when Gerrit cannot be asked). `--json` lists them as `drafts` (`{number: count}`).
 
 ---
 

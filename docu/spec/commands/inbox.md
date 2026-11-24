@@ -160,6 +160,7 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 | `active` | Wait age — last activity on any member (*outgoing*) |
 | owner | Chain-top owner, cut at 18 characters |
 | `# subject` | Chain top's subject, highlighted per `ger.warningPattern`. On a terminal it is cut with `…` to the width, one column spare; with less than 12 columns left it goes on a line of its own. Piped, nothing is cut |
+| `# drafts of yours on c<n>` | Members holding drafts of yours: nobody sees them until you publish (`ger reply --publish c<n>`). One light `has:draft` query beside the section queries, text view only (`InboxSection.drafted`) |
 | URL | Gerrit page for the **chain top** (default on) |
 
 **The heading** counts the chains shown. *To review* adds the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any: one more query beside it, asked only for the text view and never with `--unready` or a custom `ger.inboxToReviewQuery`. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
