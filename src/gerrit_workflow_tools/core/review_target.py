@@ -1,21 +1,26 @@
 """What a review acts on: the review chain it walks (Gerrit's related changes of the reviewed
-patchset) and the changes a vote goes to.
+patchset), the changes a vote goes to, and the vote itself: planned, then sent.
 
 Which patchset a review checks out is :mod:`~gerrit_workflow_tools.core.gerrit_patchset`'s;
-:mod:`~gerrit_workflow_tools.core.review_checkout` only runs git.
+:mod:`~gerrit_workflow_tools.core.review_checkout` only runs git. ``ger review --vote`` and
+``ger serve``'s ``/vote`` both plan with :func:`plan_vote` and send with :func:`send_vote`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
-from gerrit_workflow_tools.core.review_checkout import chain_numbers
+from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
+from gerrit_workflow_tools.core.review_checkout import ReviewState, ReviewUsageError, chain_numbers, find_review
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import votes_ruled_out
 
 
@@ -73,3 +78,89 @@ def vote_targets(service: GerritService, changes: Sequence[ChangeView], votes: M
         )
         for change in changes
     ]
+
+
+def vote_changes(
+    service: GerritService, cwd: Path, named: Sequence[str], *, chain: bool
+) -> tuple[list[ChangeView], ReviewState | None]:
+    """The changes to vote on, as Gerrit has them now, and the review whose patchset the vote must match.
+
+    The changes *named* (changeishes), each read once; else the change under review here. With
+    *chain*, every open change of the review chain of the one change named, or of the change under
+    review.
+    """
+    if named:
+        views = [resolve_change(service, cwd, changeish).view for changeish in named]
+        if not chain:
+            return views, None
+        if len(views) != 1:
+            raise UsageError("a chain vote names one change: the chain is the one it sits in")
+        numbers = related_chain_numbers(service, views[0].key)
+        return (changes_by_number(service, numbers) if len(numbers) > 1 else views), None
+    state = find_review(cwd, service.settings)
+    if state is None:
+        raise ReviewUsageError("no review going on here: name the change with --change")
+    numbers = (related_chain_numbers(service, state.key, state.patch_set) or [state.number]) if chain else []
+    return changes_by_number(service, numbers or [state.number]), state
+
+
+def review_moved(changes: Sequence[ChangeView], state: ReviewState | None) -> str | None:
+    """Why the vote would miss what you read: Gerrit's patchset of the change under review is newer."""
+    current = next((c.current_revision_number for c in changes if state and c.number == state.number), None)
+    if state is None or current is None or current == state.patch_set:
+        return None
+    number = state.number
+    return f"change {number} is at patchset {current}, you reviewed {state.patch_set}: run ger review {number} first"
+
+
+@dataclass(frozen=True)
+class VotePlan:
+    """What a vote sends: per change your drafts and the votes, the message on each; nothing sent yet."""
+
+    targets: tuple[VoteTarget, ...]
+    votes: Mapping[str, int] = field(default_factory=dict)
+    """Empty: your drafts (and the message) go out without a vote."""
+    message: str | None = None
+
+    @property
+    def takes(self) -> list[VoteTarget]:
+        """The changes that take every vote: those it is sent to."""
+        return [t for t in self.targets if not t.ruled_out]
+
+    @property
+    def skipped(self) -> list[VoteTarget]:
+        """The changes that rule a vote out: nothing is sent to them."""
+        return [t for t in self.targets if t.ruled_out]
+
+    @property
+    def draft_count(self) -> int:
+        """How many drafts of yours go out, over every change it is sent to."""
+        return sum(t.draft_count for t in self.takes)
+
+
+def plan_vote(
+    service: GerritService, changes: Sequence[ChangeView], votes: Mapping[str, int], message: str | None = None
+) -> VotePlan:
+    """The plan of a vote with *votes* and *message* on *changes*; :class:`UsageError` when no change takes it."""
+    plan = VotePlan(tuple(vote_targets(service, changes, votes)), dict(votes), message or None)
+    if votes and not plan.takes:
+        raise UsageError("; ".join(f"change {t.number} does not take {', '.join(t.ruled_out)}" for t in plan.skipped))
+    return plan
+
+
+def send_vote(
+    service: GerritService, plan: VotePlan, *, sent: Callable[[VoteTarget], None] = lambda _target: None
+) -> list[VoteTarget]:
+    """Publish *plan*: your drafts, its votes and message on each change that takes them; one REST call each.
+
+    *sent* hears of each change once it went out. Refused (:class:`UsageError`) while
+    :data:`PUBLISH_GUARD_ENV` is set, and when there is nothing to send.
+    """
+    if publish_blocked():
+        raise UsageError(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
+    if not plan.votes and not plan.message and not plan.draft_count:
+        raise UsageError("nothing to publish: no drafts of yours, no vote and no message")
+    for target in plan.takes:
+        service.comments.publish_drafts(target.change.key, message=plan.message, labels=plan.votes)
+        sent(target)
+    return plan.takes

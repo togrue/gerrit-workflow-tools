@@ -510,7 +510,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
-| `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`) and the changes a vote goes to (`changes_by_number`, `vote_targets`: drafts and ruled-out votes per change) |
+| `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`), the changes a vote goes to (`vote_changes`, `changes_by_number`, `vote_targets`: drafts and ruled-out votes per change), and the vote: `plan_vote` (a `VotePlan`), `send_vote`. `ger review --vote` and `ger serve` share both |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
@@ -605,7 +605,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/style.py` | ANSI color and hyperlink helpers, the run's color and hyperlink mode, UTF-8 stdio |
 | `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns: the run's highlighter (`run_summary_highlighter`) and the one for a branch's stack |
-| `review_vote.py` | What `ger review --vote` lists, asks and sends (`vote`): your drafts and the votes, per change |
+| `review_vote.py` | What `ger review --vote` lists and asks (`vote`): your drafts and the votes, per change; core plans and sends |
 | `push_preview.py` | What `ger push` shows before it pushes: commit list, boundary notice, status line, the dry run |
 | `push_confirm.py` | What `ger push` asks: the confirm loop (ADR-0008), the push-options line, the Y/n/r question, `-i`, saving reviewers |
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |
