@@ -9,6 +9,7 @@ const WORDS: Record<string, string> = {
   "unsquashed-fixup": "unsquashed fixup commit",
   "gerrit-unknown": "Gerrit state unknown",
   "unresolved-comments": "unresolved comments",
+  "awaiting-reply": "comments wait on a reply",
   "review-issues": "negative vote",
   "not-pushed": "not pushed",
   "ahead-of-gerrit": "local changes not pushed",

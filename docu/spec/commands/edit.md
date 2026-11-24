@@ -54,7 +54,7 @@ Bare `ger edit` (**resume**):
 2. No usable cursor → oldest edit-attention commit; set cursor.
 3. Cursor still has edit attention → stop there; refresh `touchedAt`.
 4. Cursor no longer has edit attention → next tip-ward; advance cursor.
-5. None left → `no commit needs edit attention…`, exit `10`. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows that rebase's closing line (`rebase finished: …`, [rebase.md](rebase.md#after-a-rebase-finishes)), with no `next:`: the walk is the next step.
+5. None left → `no commit needs edit attention…`, exit `10`, then a line for each kind of commit the walk passed over that `ger log` still marks: `2 commits have a negative vote: ger show 33e6b1b`, `1 commit has comments waiting on a reply: ger show 4583d2f` (the first of them). A negative vote with nothing to answer is not edit attention: the reviewer may say why only in a message, or keep the vote until a new patchset, and stopping there on every walk would cost a step each time; naming it once at the end costs a line. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows that rebase's closing line (`rebase finished: …`, [rebase.md](rebase.md#after-a-rebase-finishes)), with no `next:`: the walk is the next step.
 
 Before the editor opens, a walk-chosen target is announced on stderr, e.g. `rewording 89d87be Add feature 3 (next needing attention: 1 unresolved comment)`. An explicit `REV` is not announced: you named it.
 

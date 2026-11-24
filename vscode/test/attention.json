@@ -13,6 +13,7 @@
   "not-pushed": "pending",
   "ahead-of-gerrit": "pending",
   "awaiting-review": "pending",
+  "awaiting-reply": "pending",
   "no-reviewers": "pending",
   "waiting-on-you": "pending",
   "chain-blocked": "pending",

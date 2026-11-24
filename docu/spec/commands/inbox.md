@@ -236,6 +236,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
           "last_activity": "2026-08-18T08:00:00Z",
           "verified": -1, "code_review": 0,
           "comments_unresolved": 2,
+          "comments_awaiting_reply": 0,
           "attention_reasons": ["ci-failed", "unresolved-comments"],
           "severity": "error",
           "partial_chain": false,
@@ -253,7 +254,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
 
 A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it).
 
-`attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments`, and `review-issues` — there is no local patchset to align. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
+`attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments` (a comment chain waits on you), `awaiting-reply` (every one waits on the other side: your published comment is its last word) and `review-issues` — there is no local patchset to align. `comments_awaiting_reply` beside `comments_unresolved` counts those waiting on the other side; telling them apart reads each commented change's comments once, from the cache while the change has not moved. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
 
 ---
 

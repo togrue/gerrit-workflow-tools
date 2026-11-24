@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from gerrit_workflow_tools.core.attention import Attention, blocking_reason
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW
+from gerrit_workflow_tools.core.review_chain import ChainMember
 from gerrit_workflow_tools.core.words import counted
 
 
@@ -24,7 +27,7 @@ PATCHSET_TOKENS: dict[PatchsetStatus, tuple[str, str]] = {
 VOTE_LEGEND = (
     ("v+1 v-1 v?", "Verified vote (? none yet)"),
     ("cr+2 … cr-2 cr?", "Code-Review vote (? none yet)"),
-    ("com", "unresolved comments"),
+    ("com", "unresolved comments (dim: all wait on the other side)"),
 )
 
 
@@ -97,9 +100,34 @@ _TERMINAL_TEXT = (
 )
 
 
-def unresolved_comments_text(count: int) -> str:
-    """``1 unresolved comment`` / ``3 unresolved comments``."""
-    return counted(count, "unresolved comment")
+REVIEWER, AUTHOR = "reviewer", "author"
+"""Who the other side of a comment chain is: the reviewer of your change, the author of one you review."""
+
+
+def other_side(reasons: Collection[str]) -> str:
+    """The other side of a change's comment chains: its author when it waits on your review, else its reviewer."""
+    return AUTHOR if Attention.WAITING_ON_YOU in reasons else REVIEWER
+
+
+def unresolved_comments_text(count: int, awaiting: int = 0, *, side: str = REVIEWER) -> str:
+    """*count* unresolved comment chains, *awaiting* of them waiting on the other side (*side*).
+
+    ``3 unresolved comments``; ``1 of 3 comments to answer`` (the others wait on the other side);
+    ``2 comments wait on the reviewer``.
+    """
+    yours = count - awaiting
+    if not awaiting:
+        return counted(count, "unresolved comment")
+    waiting = f"{'waits' if awaiting == 1 else 'wait'} on the {side}"
+    if not yours:
+        return f"{counted(awaiting, 'comment')} {waiting}"
+    return f"{yours} of {count} comments to answer"
+
+
+def comments_text(commit: LogCommit) -> str:
+    """:func:`unresolved_comments_text` of *commit*, whose turn said apart."""
+    side = other_side(commit.attention_reasons)
+    return unresolved_comments_text(commit.comments_unresolved, commit.comments_awaiting_reply, side=side)
 
 
 SECTION_HEADINGS = {TO_REVIEW: "to review", OUTGOING: "outgoing"}
@@ -139,8 +167,8 @@ def blocking_text(commit: LogCommit) -> tuple[str, str]:
     reason = blocking_reason(commit)
     if reason is None:
         return NOT_SUBMITTABLE, "not submittable"
-    if reason == Attention.UNRESOLVED_COMMENTS:
-        return reason, unresolved_comments_text(commit.comments_unresolved)
+    if reason in (Attention.UNRESOLVED_COMMENTS, Attention.AWAITING_REPLY):
+        return reason, comments_text(commit)
     return reason, _BLOCKING_TEXT[reason]
 
 
@@ -165,8 +193,9 @@ def attention_hints(commit: LogCommit) -> list[tuple[str, str]]:
         hints.append((PRIVATE, "private"))
     if Attention.CI_FAILED in reasons:
         hints.append((Attention.CI_FAILED, "build failed"))
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        hints.append((Attention.UNRESOLVED_COMMENTS, unresolved_comments_text(commit.comments_unresolved)))
+    for reason in (Attention.UNRESOLVED_COMMENTS, Attention.AWAITING_REPLY):
+        if reason in reasons:
+            hints.append((reason, comments_text(commit)))
     if Attention.NO_REVIEWERS in reasons:
         hints.append((Attention.NO_REVIEWERS, "no reviewers"))
     if commit.submittable and not hints:
@@ -179,14 +208,20 @@ def attention_hints(commit: LogCommit) -> list[tuple[str, str]]:
     return hints
 
 
-def member_hints(reasons: tuple[str, ...], comments: int) -> list[tuple[str, str]]:
-    """``ger inbox``'s hints for one **review chain** member as (reason, text), most urgent first."""
+def member_hints(member: ChainMember, *, side: str = REVIEWER) -> list[tuple[str, str]]:
+    """``ger inbox``'s hints for one **review chain** member as (reason, text), most urgent first.
+
+    *side* is who the other side of its comment chains is: the reviewer of yours, the author of one you review.
+    """
+    reasons, comments = member.attention_reasons, member.comments_unresolved
     hints: list[tuple[str, str]] = []
     if Attention.CI_FAILED in reasons:
         hints.append((Attention.CI_FAILED, "build failed"))
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        text = unresolved_comments_text(comments) if comments else "unresolved comments"
-        hints.append((Attention.UNRESOLVED_COMMENTS, text))
+    if Attention.UNRESOLVED_COMMENTS in reasons and not comments:
+        hints.append((Attention.UNRESOLVED_COMMENTS, "unresolved comments"))
+    elif Attention.UNRESOLVED_COMMENTS in reasons or Attention.AWAITING_REPLY in reasons:
+        reason = Attention.UNRESOLVED_COMMENTS if Attention.UNRESOLVED_COMMENTS in reasons else Attention.AWAITING_REPLY
+        hints.append((reason, unresolved_comments_text(comments, member.comments_awaiting_reply, side=side)))
     if Attention.REVIEW_ISSUES in reasons:
         hints.append((Attention.REVIEW_ISSUES, "negative vote"))
     return hints
@@ -206,8 +241,8 @@ def attention_text(commit: LogCommit) -> str:
         parts.append("private")
     if Attention.CI_FAILED in reasons:
         parts.append(f"CI failed: {commit.ci_failures[0]}" if commit.ci_failures else "build failed")
-    if Attention.UNRESOLVED_COMMENTS in reasons:
-        parts.append(unresolved_comments_text(commit.comments_unresolved))
+    if Attention.UNRESOLVED_COMMENTS in reasons or Attention.AWAITING_REPLY in reasons:
+        parts.append(comments_text(commit))
     if not parts and commit.submittable:
         return "submittable"
     return ", ".join(parts)

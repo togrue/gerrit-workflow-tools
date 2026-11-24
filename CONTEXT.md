@@ -87,7 +87,7 @@ The **local stack** after the **Gerrit overlay** and **attention** have been app
 _Avoid_: stack view, review stack, enriched commits
 
 **Attention**:
-The verdict that a commit needs the author's action — unresolved comments, failed CI, missing Code-Review +2, or a blocked position in the chain. Shown, not an exit code: `ger log` exits `0` either way ([exit codes](docu/spec/exit-codes.md#attention-is-not-failure)). A subset (**edit attention**: unresolved comments or failed CI) drives the attention walk.
+The verdict that a commit needs the author's action — unresolved comments, failed CI, missing Code-Review +2, or a blocked position in the chain. Shown, not an exit code: `ger log` exits `0` either way ([exit codes](docu/spec/exit-codes.md#attention-is-not-failure)). A subset (**edit attention**: unresolved comments waiting on you, or failed CI) drives the attention walk.
 _Avoid_: needs work, flagged, blocked
 
 **Attention cursor**:
@@ -191,6 +191,10 @@ _Avoid_: interdiff, patchset diff (unqualified), what's new
 **Agent runbook**:
 The **attention walk** written down as work an agent can do unattended: per commit needing edit attention, the comment chains to address and the **CI findings** to fix there, with the rules (amend in place, reply as draft, never publish). Inherited findings and **holds** are named but excluded.
 _Avoid_: agent prompt, brief (for the whole walk), task list
+
+**Turn**:
+Whose move an unresolved comment chain waits on, decided by its last *published* comment: somebody else's makes it **yours** (a **draft to publish** when your answer is a Gerrit draft), yours makes it **theirs**. "You" is the account `ger` runs as. A commit whose unresolved chains are all theirs is *awaiting a reply*: still unresolved for Gerrit, but no attention of yours.
+_Avoid_: needs reply, pending comment, answered (for a chain still unresolved)
 
 **Hold**:
 A comment chain you keep for yourself because it needs a decision, not a fix. The **agent runbook** lists it as left for a human. Local to the repository; not a **comment state** and not Gerrit state.

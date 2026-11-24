@@ -46,6 +46,9 @@ class Attention:  # pylint: disable=too-few-public-methods
     REVIEW_ISSUES = "review-issues"
     AWAITING_REVIEW = "awaiting-review"
     UNRESOLVED_COMMENTS = "unresolved-comments"
+    """Unresolved comment chains, at least one waiting on you: somebody else spoke last."""
+    AWAITING_REPLY = "awaiting-reply"
+    """Unresolved comment chains, every one waiting on the other side: your comment is the last word."""
     WAITING_ON_YOU = "waiting-on-you"
     """Somebody else's change asks for your review: the *to review* section's query matches it."""
     WIP = "wip"
@@ -98,6 +101,7 @@ REASON_SEVERITY: dict[str, Severity] = {
     Attention.NOT_PUSHED: Severity.PENDING,
     Attention.AHEAD_OF_GERRIT: Severity.PENDING,
     Attention.AWAITING_REVIEW: Severity.PENDING,
+    Attention.AWAITING_REPLY: Severity.PENDING,
     Attention.NO_REVIEWERS: Severity.PENDING,
     Attention.WAITING_ON_YOU: Severity.PENDING,
     Attention.CHAIN_BLOCKED: Severity.PENDING,
@@ -121,6 +125,17 @@ def attention_severity(reasons: Sequence[str]) -> Severity:
 def ci_failed(verified: int | None, ci_failures: Sequence[str] = ()) -> bool:
     """A failed build: any failed Checks run, or a negative ``Verified`` vote."""
     return bool(ci_failures) or (verified is not None and verified <= -1)
+
+
+def comment_reason(unresolved: int, awaiting_reply: int) -> str | None:
+    """What *unresolved* comment chains ask, *awaiting_reply* of them waiting on the other side.
+
+    Unresolved comments while any one is yours to answer; awaiting a reply when every one is
+    the other side's; ``None`` without any. The count stays Gerrit's either way.
+    """
+    if unresolved > awaiting_reply:
+        return Attention.UNRESOLVED_COMMENTS
+    return Attention.AWAITING_REPLY if unresolved else None
 
 
 _MERGED_REASON = {
@@ -172,8 +187,8 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
         reasons.append(Attention.REVIEW_ISSUES)
     if commit.code_review != 2 and not commit.wip:
         reasons.append(Attention.AWAITING_REVIEW)
-    if commit.comments_unresolved > 0:
-        reasons.append(Attention.UNRESOLVED_COMMENTS)
+    if comments := comment_reason(commit.comments_unresolved, commit.comments_awaiting_reply):
+        reasons.append(comments)
     if chain_blocked:
         reasons.append(Attention.CHAIN_BLOCKED)
     return reasons
@@ -208,6 +223,7 @@ _BLOCKING_ORDER = (
     Attention.CI_FAILED,
     Attention.REVIEW_ISSUES,
     Attention.UNRESOLVED_COMMENTS,
+    Attention.AWAITING_REPLY,
     Attention.WIP,
     Attention.NO_REVIEWERS,
     Attention.AWAITING_REVIEW,

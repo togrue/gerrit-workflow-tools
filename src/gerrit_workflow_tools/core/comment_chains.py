@@ -1,18 +1,19 @@
-"""Gerrit comment chain threading and resolution logic.
+"""Gerrit comment chain threading and resolution logic, and whose turn a chain is.
 
 Groups raw Gerrit file-map comment dicts into :class:`CommentChain` objects,
-resolving ``in_reply_to`` links to find thread roots.
+resolving ``in_reply_to`` links to find thread roots. :func:`chain_turn` is the one verdict
+on whose turn an unresolved chain is; attention counts it (:func:`unresolved_chain_counts`).
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from urllib.parse import unquote
 
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
+from gerrit_workflow_tools.core.gerrit_change_status import ChainTurn, CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.suggested_edits import suggested_edits_from_raw
 
 
@@ -24,10 +25,28 @@ CommentSelection = Literal["unresolved", "all", "resolved"]
 COMMENT_SELECTIONS: tuple[CommentSelection, ...] = ("unresolved", "all", "resolved")
 
 
-def count_unresolved_in_file_map(file_map: dict[str, list[dict[str, Any]]]) -> int:
-    """Count unresolved comment chains (not raw comments) in a Gerrit file map."""
+def chain_turn(chain: CommentChain, me: int | None) -> ChainTurn | None:
+    """Whose turn *chain* is, *me* being your account id; ``None`` when *me* is not known.
 
-    return sum(1 for chain in build_comment_chains(file_map) if not chain.resolved)
+    Published comments decide: when your own is the last word, the chain waits on the other side,
+    drafts of yours or not. Otherwise it waits on you, to publish your answer when it is a draft.
+    """
+    if me is None:
+        return None
+    published = [c for c in chain.comments if not c.draft]
+    if published and published[-1].author_account_id == me:
+        return ChainTurn.THEIRS
+    return ChainTurn.DRAFT if chain.draft is not None else ChainTurn.YOURS
+
+
+def unresolved_chain_counts(file_map: dict[str, list[dict[str, Any]]], me: int | None) -> tuple[int, int]:
+    """(unresolved chains, those of them waiting on the other side) in a Gerrit file map.
+
+    The first is the fact Gerrit counts; the second is what :func:`chain_turn` calls
+    :attr:`ChainTurn.THEIRS`, none when *me* is not known.
+    """
+    unresolved = [chain for chain in build_comment_chains(file_map, me=me) if not chain.resolved]
+    return len(unresolved), sum(1 for chain in unresolved if chain.turn is ChainTurn.THEIRS)
 
 
 def _comment_line(c: dict[str, Any]) -> int | None:
@@ -85,8 +104,11 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
     raw_id = comment.get("id")
     author_label: str | None = None
     raw_author = comment.get("author")
+    author_id: int | None = None
     if isinstance(raw_author, dict):
         author_label = format_gerrit_account_label(raw_author)
+        raw_author_id = raw_author.get("_account_id")
+        author_id = raw_author_id if isinstance(raw_author_id, int) else None
     patch_set = comment.get("patch_set")
     line = _comment_line(comment)
     return InlineComment(
@@ -95,6 +117,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
         message=raw_msg if isinstance(raw_msg, str) else "",
         comment_id=raw_id if isinstance(raw_id, str) else None,
         author=author_label,
+        author_account_id=author_id,
         context_lines=_context_lines_from_raw(comment),
         patch_set=patch_set if isinstance(patch_set, int) else None,
         unresolved=comment.get("unresolved") is True,
@@ -107,13 +130,15 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
 def build_comment_chains(
     file_map: dict[str, list[dict[str, Any]]],
     drafts: dict[str, list[dict[str, Any]]] | None = None,
+    *,
+    me: int | None = None,
 ) -> list[CommentChain]:
     """Group Gerrit file-map comments into chains keyed by thread root.
 
     *drafts* (``GET …/drafts``) join the chain they reply to and sort after every
     published comment: publishing stamps them last, so they decide the state you will
     publish. ``resolved`` stays the published state. A chain of drafts only is your own
-    unpublished comment.
+    unpublished comment. With *me*, your account id, each chain says whose turn it is.
     """
 
     by_id: dict[str, tuple[str, dict[str, Any]]] = {}
@@ -157,17 +182,16 @@ def build_comment_chains(
         items.sort(key=lambda pair: (is_draft(pair[1]), _comment_sort_key(pair[1])))
         published = [c for _, c in items if not is_draft(c)]
         root_path, root_comment = by_id[root_id]
-        chains.append(
-            CommentChain(
-                root_id=root_id,
-                path=root_path,
-                line=_comment_line(root_comment),
-                comments=tuple(_inline_comment_from_raw(p, c, draft=is_draft(c)) for p, c in items),
-                resolved=_chain_resolved_from_raw(published or [c for _, c in items]),
-                start_line=_comment_start_line(root_comment),
-                on_parent=root_comment.get("side") == "PARENT",
-            )
+        chain = CommentChain(
+            root_id=root_id,
+            path=root_path,
+            line=_comment_line(root_comment),
+            comments=tuple(_inline_comment_from_raw(p, c, draft=is_draft(c)) for p, c in items),
+            resolved=_chain_resolved_from_raw(published or [c for _, c in items]),
+            start_line=_comment_start_line(root_comment),
+            on_parent=root_comment.get("side") == "PARENT",
         )
+        chains.append(replace(chain, turn=chain_turn(chain, me)))
 
     chains.sort(key=lambda ch: (ch.path, ch.line if ch.line is not None else -1))
     return chains
@@ -206,14 +230,15 @@ def collect_comment_chains(
     *,
     comments: CommentSelection = "unresolved",
     drafts: dict[str, list[dict[str, Any]]] | None = None,
+    me: int | None = None,
 ) -> list[CommentChain]:
-    """Return comment chains filtered by *comments*, on their published state.
+    """Return comment chains filtered by *comments*, on their published state; with *me*, each with its turn.
 
     ``all`` lists unresolved chains first (path/line order within each group), then
     resolved ones. That keeps the attention-bearing threads at the top.
     """
 
-    return select_chains(build_comment_chains(file_map, drafts), comments)
+    return select_chains(build_comment_chains(file_map, drafts, me=me), comments)
 
 
 _COMMENT_URL_RE = re.compile(r"/comment/([^/?#]+)")

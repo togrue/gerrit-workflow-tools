@@ -11,11 +11,12 @@ Pure functions over :class:`ChangeView` values, so unit tests drive them from
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlparse
 
-from gerrit_workflow_tools.core.attention import Attention, ci_failed
+from gerrit_workflow_tools.core.attention import Attention, ci_failed, comment_reason
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 
 
@@ -42,6 +43,9 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     private: bool = False
     updated_by_you: bool = False
     """Your upload or your vote is its last update (:meth:`ChangeView.updated_by`): no news for you."""
+    comments_awaiting_reply: int = 0
+    """Of :attr:`comments_unresolved`, the chains whose last published comment is yours: they wait
+    on the other side (``ChainTurn.THEIRS``)."""
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,8 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     url: str | None
     last_activity_yours: bool = False
     """The member updated last was updated by you (your push, your vote): not news to you."""
+    comments_awaiting_reply: int = 0
+    """Of :attr:`comments_unresolved`, the chains that wait on the other side, over all members."""
 
     @property
     def work_in_progress(self) -> bool:
@@ -131,13 +137,17 @@ def member_unreviewed_since(change: ChangeView, self_account_id: int | None) -> 
     return None
 
 
-def member_attention_reasons(change: ChangeView) -> tuple[str, ...]:
-    """Inbox member reasons — CI, comments, negative vote. No local patchset states."""
+def member_attention_reasons(change: ChangeView, awaiting_reply: int = 0) -> tuple[str, ...]:
+    """Inbox member reasons — CI, comments, negative vote. No local patchset states.
+
+    *awaiting_reply* of its unresolved comment chains wait on the other side
+    (:func:`~gerrit_workflow_tools.core.attention.comment_reason` decides as for a commit).
+    """
     reasons: list[str] = []
     if ci_failed(change.verified):
         reasons.append(Attention.CI_FAILED)
-    if change.unresolved_comments:
-        reasons.append(Attention.UNRESOLVED_COMMENTS)
+    if comments := comment_reason(change.unresolved_comments or 0, awaiting_reply):
+        reasons.append(comments)
     if change.code_review is not None and change.code_review < 0:
         reasons.append(Attention.REVIEW_ISSUES)
     return tuple(reasons)
@@ -148,7 +158,9 @@ def _worst_label(values: list[int | None]) -> int | None:
     return min(known) if known else None
 
 
-def _to_member(change: ChangeView, web_base: str, self_account_id: int | None = None) -> ChainMember | None:
+def _to_member(
+    change: ChangeView, web_base: str, self_account_id: int | None = None, awaiting_reply: int = 0
+) -> ChainMember | None:
     if change.number is None:
         return None
     return ChainMember(
@@ -164,11 +176,12 @@ def _to_member(change: ChangeView, web_base: str, self_account_id: int | None = 
         comments_unresolved=change.unresolved_comments or 0,
         updated=parse_gerrit_time(change.updated),
         url=change.url(web_base),
-        attention_reasons=member_attention_reasons(change),
+        attention_reasons=member_attention_reasons(change, awaiting_reply),
         sha=change.current_revision,
         work_in_progress=change.work_in_progress,
         private=change.private,
         updated_by_you=change.updated_by(self_account_id),
+        comments_awaiting_reply=awaiting_reply,
     )
 
 
@@ -272,11 +285,14 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     now: datetime,
     self_account_id: int | None,
     unmatched: set[str],
+    awaiting_reply: Mapping[str, int],
 ) -> ReviewChain | None:
     """Build one ReviewChain from a connected component, or None if it has no numbers."""
     ordered_ids = _order_members(component, payloads, sha_to_id)
     members = [
-        member for member_id in ordered_ids if (member := _to_member(payloads[member_id], web_base, self_account_id))
+        member
+        for member_id in ordered_ids
+        if (member := _to_member(payloads[member_id], web_base, self_account_id, awaiting_reply.get(member_id, 0)))
     ]
     if not members:
         return None
@@ -303,6 +319,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         verified=_worst_label([member.verified for member in members]),
         code_review=_worst_label([member.code_review for member in members]),
         comments_unresolved=sum(member.comments_unresolved for member in members),
+        comments_awaiting_reply=sum(member.comments_awaiting_reply for member in members),
         attention_reasons=tuple(dict.fromkeys(reason for member in members for reason in member.attention_reasons)),
         partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in component),
         url=top_member.url,
@@ -318,6 +335,7 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     now: datetime,
     self_account_id: int | None,
     follow_up_unmatched: set[str] | None = None,
+    awaiting_reply: Mapping[str, int] | None = None,
 ) -> list[ReviewChain]:
     """Assemble review chains from a query result plus optional parent follow-up rows.
 
@@ -325,7 +343,8 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     follow-up row — those extra open changes are context. Merged/abandoned
     follow-up rows are ignored (they are the ground the chain sits on).
     *follow_up_unmatched* are parent SHAs that a follow-up returned for a
-    non-current revision: the chain is then flagged ``partial_chain``.
+    non-current revision: the chain is then flagged ``partial_chain``. *awaiting_reply* says, by
+    change key, how many of its unresolved comment chains wait on the other side.
     """
     queried_ids = {change.key for change in queried if change.key}
     open_follow_up = [change for change in follow_up if change.is_open and change.key not in queried_ids]
@@ -360,6 +379,7 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
             now=now,
             self_account_id=self_account_id,
             unmatched=unmatched,
+            awaiting_reply=awaiting_reply or {},
         )
         if chain is not None:
             chains.append(chain)

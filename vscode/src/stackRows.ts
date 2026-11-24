@@ -88,6 +88,15 @@ export function reviewerWords(reviewers: readonly Reviewer[] | undefined): strin
  * Comments, review vote, CI vote, in that order; a slot with nothing to say is null. The Change view shows them too.
  * The review slot without a vote says when nobody is assigned to review (core's `no-reviewers`).
  */
+/** `2 unresolved comments`; `1 of 2 comments to answer`; `2 comments wait on a reply`. */
+function commentsTitle(count: number, awaiting: number): string {
+  const waits = `${awaiting === 1 ? "waits" : "wait"} on a reply`;
+  if (!awaiting) {
+    return `${count} unresolved comment${count === 1 ? "" : "s"}`;
+  }
+  return awaiting === count ? `${count} comment${count === 1 ? "" : "s"} ${waits}` : `${count - awaiting} of ${count} comments to answer`;
+}
+
 export function badges(commit: CommitStatus): (Badge | null)[] {
   const last = commit.last_pushed_votes;
   const stale = Boolean(last && (last.verified !== null || last.code_review !== null));
@@ -99,15 +108,17 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
   const verdicts = commit.ci_links.map((link) => link.verdict).filter(Boolean);
   const unstable = verdicts.length > 0 && verdicts.every((verdict) => verdict === "unstable");
   const count = commit.comments_unresolved;
+  const awaiting = Math.min(commit.comments_awaiting_reply ?? 0, count);
   const who = reviewerWords(commit.reviewers);
   return [
     count > 0
       ? {
           kind: "comments",
-          icon: "comment-unresolved",
-          tone: "warn",
+          // Every one waits on the other side (core's `awaiting-reply`): a plain bubble, nothing for you to do.
+          icon: awaiting < count ? "comment-unresolved" : "comment",
+          tone: awaiting < count ? "warn" : "plain",
           text: String(count),
-          title: `${count} unresolved comment${count === 1 ? "" : "s"}`,
+          title: commentsTitle(count, awaiting),
           stale: false,
         }
       : null,

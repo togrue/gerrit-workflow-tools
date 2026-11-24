@@ -100,6 +100,8 @@ Aggregated **Code-Review** label vote.
 | `com` | At least one **unresolved** review comment thread |
 | (blank) | No unresolved comments |
 
+`com` is yellow while a comment chain waits on you, and dim when every one waits on the other side: your published comment is its last word.
+
 Use `ger show <ref>` for the full comment threads.
 
 ---
@@ -116,7 +118,8 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `not pushed` | Commit not on Gerrit yet |
 | `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |
-| `N unresolved comments` | Open review threads (`1 unresolved comment`) |
+| `N unresolved comments` | Open review threads where somebody else spoke last: your turn (`1 unresolved comment`). Threads whose last published comment is yours are counted apart: `1 of 2 comments to answer`, the other waits on the reviewer |
+| `N comments wait on the reviewer` | Every open thread ends with your published comment: the reviewer's turn (`on the author` on somebody's change you review). JSON reason `awaiting-reply`, severity `pending`; `ger edit` does not stop here, and the inbox does not count it as needing you |
 | `no reviewers` | Change has no reviewers assigned |
 | `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
 | `diverged from Gerrit` | Ahead of Gerrit, but Gerrit's current patch set was uploaded from elsewhere (a web edit, another checkout) and is not in your history; JSON reason `diverged`. `ger push` refuses to replace it; `ger checkout <change> --update` merges it into your commit |
@@ -162,7 +165,8 @@ chain blocked by 1a2b3c4 (build failed)
 | `held back` | Commits at or above the ready boundary, which `ger push` leaves out |
 | `merged` / `abandoned` | Changes Gerrit merged or abandoned |
 | `failed CI` | Commits with failed Verified / CI |
-| `commits with comments` (`1 commit with comments`) | Commits with unresolved comments (the row's hint counts the threads) |
+| `commits with comments` (`1 commit with comments`) | Commits with unresolved comments waiting on you (the row's hint counts the threads) |
+| `awaiting reply` (`1 awaiting reply`) | Commits whose unresolved comments all wait on the other side |
 | `WIP` | Work-in-progress changes; a `next:` line says ``ready them with `ger push --ready` `` (`--all --ready` when one sits above the ready boundary) |
 
 Only counts above zero are shown. The `next:` lines below it name the command for each state the stack is in (an abandoned change, commits to upload, the upstream moved on, …), and the last line names the commit that blocks the chain, if one does.

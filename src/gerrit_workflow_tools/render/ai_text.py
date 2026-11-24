@@ -15,6 +15,8 @@ from gerrit_workflow_tools.core.inbox import OUTGOING, InboxSection
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.status_fmt import (
+    AUTHOR,
+    REVIEWER,
     SECTION_HEADINGS,
     attention_hints,
     code_review_token,
@@ -78,7 +80,7 @@ def _chain_facts(chain: ReviewChain, *, outgoing: bool) -> list[str]:
     facts.append(f"last activity {format_age(chain.wait_age_seconds)}")
     facts += vote_words(chain.verified, chain.code_review)
     for member in chain.members:
-        hints = member_hints(member.attention_reasons, member.comments_unresolved)
+        hints = member_hints(member, side=REVIEWER if outgoing else AUTHOR)
         if hints:
             facts.append(f"{member.number}: {' and '.join(text for _key, text in hints)}")
     return facts

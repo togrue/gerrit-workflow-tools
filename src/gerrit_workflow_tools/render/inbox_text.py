@@ -12,7 +12,7 @@ from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, 
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
-from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
+from gerrit_workflow_tools.render.status_fmt import AUTHOR, REVIEWER, SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.render.style import (
     ANSI_BOLD,
     ANSI_CYAN,
@@ -41,14 +41,15 @@ def _fmt_change_number(number: int) -> str:
     return color_short_sha(change_label(number))
 
 
-def _fmt_votes(verified: int | None, code_review: int | None, comments: int) -> str:
+def _fmt_votes(item: ReviewChain | ChainMember) -> str:
     """Verified / Code-Review / comments tokens — same palette as ``ger log``."""
-    return f"{fmt_verified(verified)} {fmt_code_review(code_review)} {fmt_comments(comments)}"
+    comments = fmt_comments(item.comments_unresolved, item.comments_awaiting_reply)
+    return f"{fmt_verified(item.verified)} {fmt_code_review(item.code_review)} {comments}"
 
 
 def _fmt_chain_votes(chain: ReviewChain) -> str:
     """The chain's votes; over several changes, the worst of each, said so (not the top's own)."""
-    votes = _fmt_votes(chain.verified, chain.code_review, chain.comments_unresolved)
+    votes = _fmt_votes(chain)
     return f"{color_text('worst', ANSI_DIM)} {votes}" if chain.depth > 1 else votes
 
 
@@ -68,9 +69,9 @@ def _fmt_owner(name: str) -> str:
 _MEMBER_HINT_COLOR = {Attention.CI_FAILED: ANSI_RED}
 
 
-def _attention_note(member: ChainMember) -> str:
+def _attention_note(member: ChainMember, *, outgoing: bool) -> str:
     """The most urgent of :func:`member_hints`, coloured as ``ger log``'s trailing hints."""
-    hints = member_hints(member.attention_reasons, member.comments_unresolved)
+    hints = member_hints(member, side=REVIEWER if outgoing else AUTHOR)
     return color_text(hints[0][1], _MEMBER_HINT_COLOR.get(hints[0][0], ANSI_YELLOW)) if hints else ""
 
 
@@ -129,7 +130,7 @@ def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
 
 
 def _member_lines(
-    chain: ReviewChain, *, verbose: bool, columns: int | None, highlighter: SummaryHighlighter
+    chain: ReviewChain, *, verbose: bool, outgoing: bool, columns: int | None, highlighter: SummaryHighlighter
 ) -> list[str]:
     """The members below a chain's row: those with attention, every one with *verbose*."""
     lines: list[str] = []
@@ -137,11 +138,8 @@ def _member_lines(
         # A single change's own row says it all; a chain's row says the worst, so the member says which.
         if chain.depth == 1 or not (verbose or member.attention_reasons):
             continue
-        head = (
-            f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  "
-            f"{_fmt_votes(member.verified, member.code_review, member.comments_unresolved)}  "
-        )
-        note = _attention_note(member)
+        head = f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  {_fmt_votes(member)}  "
+        note = _attention_note(member, outgoing=outgoing)
         if note:
             lines.append(f"{head}{color_text('# ', ANSI_DIM)}{note}")
             continue
@@ -215,7 +213,7 @@ def _render_section(
         print(head + _subject(chain.top.subject, used=used, columns=columns, highlighter=highlighter) + marks)
         if show_url and chain.url:
             print(f"{_INDENT}{color_text(format_link(chain.url), ANSI_DIM)}")
-        for line in _member_lines(chain, verbose=verbose, columns=columns, highlighter=highlighter):
+        for line in _member_lines(chain, verbose=verbose, outgoing=outgoing, columns=columns, highlighter=highlighter):
             print(line)
     if folded := len(chains) - len(shown):
         lead = "+ " if shown else ""

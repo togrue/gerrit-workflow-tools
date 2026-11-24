@@ -105,10 +105,10 @@ def fmt_code_review(cr: int | None) -> str:
     return color_text(tok, _CODE_REVIEW_COLOR.get(tok, ANSI_DIM))
 
 
-def fmt_comments(count: int) -> str:
-    """Three-char comment indicator with ANSI color."""
+def fmt_comments(count: int, awaiting: int = 0) -> str:
+    """Three-char comment indicator with ANSI color: dim when every one of them waits on the other side."""
     tok = comments_token(count)
-    return color_text(tok, ANSI_YELLOW if count > 0 else ANSI_DIM)
+    return color_text(tok, ANSI_YELLOW if count > awaiting else ANSI_DIM)
 
 
 def primary_line_prefix(commit: LogCommit) -> str:
@@ -118,7 +118,7 @@ def primary_line_prefix(commit: LogCommit) -> str:
     if commit.pushed:
         verified = fmt_verified(commit.verified)
         cr = fmt_code_review(commit.code_review)
-        comments = fmt_comments(commit.comments_unresolved)
+        comments = fmt_comments(commit.comments_unresolved, commit.comments_awaiting_reply)
     else:
         verified = "   "
         cr = "    "
@@ -347,7 +347,7 @@ def show_headline(commit: LogCommit) -> str:
         parts += [color_text(v.strip(), _VERIFIED_COLOR.get(v, ANSI_DIM))]
         parts += [color_text(cr.strip(), _CODE_REVIEW_COLOR.get(cr, ANSI_DIM))]
         if commit.comments_unresolved > 0:
-            parts.append(fmt_comments(commit.comments_unresolved))
+            parts.append(fmt_comments(commit.comments_unresolved, commit.comments_awaiting_reply))
     base = " ".join(parts)
     suffix = attention_suffix(commit)
     return f"{base}  {suffix}" if suffix else base
