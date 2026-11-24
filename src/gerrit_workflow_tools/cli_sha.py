@@ -1,5 +1,5 @@
 """
-``ger sha`` — resolve a commit SHA from a Gerrit Change-Id in the current commit chain
+``ger sha`` — resolve a commit SHA from a Gerrit Change-Id in the local stack
 
 USAGE
     ger sha [--range REV_RANGE] [--all] [--short | --subject] [--json | --ai] CHANGE_ID
@@ -41,11 +41,9 @@ DEFAULT RANGE
       3. configured default target branch merge-base..HEAD
 
 EXIT STATUS
-    0  one match found
-    1  usage error / invalid Change-Id
-    2  no matching commit found
-    3  multiple matching commits found
-    4  git/repository error
+    The codes every ger command shares (cli_common.ExitCode, docu/spec/exit-codes.md):
+    0 one match, 2 (USAGE) an invalid Change-Id, 3 (NOT_FOUND) no matching commit,
+    8 (DUPLICATE_CHANGE_ID) several matching commits (all printed under --all).
 """
 
 from __future__ import annotations

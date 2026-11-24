@@ -200,7 +200,7 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
         print(prepared.message, file=sys.stderr)
         return 1
     cmd = prepared
-    logger.debug("gpush vanilla: %s", cmd)
+    logger.debug("ger push vanilla: %s", cmd)
     if args.dry_run:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
@@ -212,7 +212,7 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
         if not confirm("Do you want to run `git push`?", default=True):
             print("Push cancelled.", file=sys.stderr)
             return 1
-    logger.debug("gpush vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
+    logger.debug("ger push vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
     return finish_push(execute(run, cmd), None)
 
 
@@ -230,7 +230,7 @@ def _confirm_gerrit_push(
     while True:
         argv = push_argv(plan)
         logger.debug(
-            "gpush resolved: remote=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
+            "ger push resolved: remote=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
             plan.remote,
             plan.push_branch,
             plan.options.reviewers,
@@ -339,7 +339,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     logger.debug(
-        "gpush cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
+        "ger push cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "
         "no_rebase_check=%s follow_merges=%s reviewer_strategy=%s",
         cwd,
         args.branch,

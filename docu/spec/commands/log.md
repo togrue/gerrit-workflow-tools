@@ -6,7 +6,7 @@
 | **Module** | `src/gerrit_workflow_tools/cli_log.py` |
 | **Requires** | `ger.webUrl`, credentials |
 
-Compact overview of the local commit chain vs Gerrit (CI, votes, unresolved comment counts, patchset alignment). Answers: *what needs attention next?*
+Compact overview of the local stack vs Gerrit (CI, votes, unresolved comment counts, patchset alignment). Answers: *what needs attention next?*
 
 ---
 

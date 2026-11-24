@@ -19,7 +19,7 @@ colour (piped output, `NO_COLOR`):
 
 The commit right below it is the one `ger push` stops at.
 
-Exit code **1** means at least one commit still needs your attention; **0** means the stack looks clean from `ger`'s perspective.
+`ger log` exits **0** whether or not a commit needs your attention: the attention is in the output (`--json` for scripts), not the exit code. A non-zero exit means `ger log` could not do what was asked ([exit codes](spec/exit-codes.md)).
 
 ---
 
@@ -32,10 +32,10 @@ Exit code **1** means at least one commit still needs your attention; **0** mean
 Example (columns spaced for readability; actual output aligns columns across rows):
 
 ```text
-a1b2c3d4 p  v+1 cr+2 com  # Add widget API               # submittable
-e5f6g7h8 n  v+1 cr0      # Fix edge case in parser        # not-pushed
-i9j0k1l2 p  v-1 cr+1 com  # Handle timeout                 # build failed, 1 unresolved comment
-m3n4o5p6 -       com      # WIP: experiment                # not-pushed
+a1b2c3d4 p  v+1 cr+2      # Add widget API               # submittable
+e5f6g7h8 n  v?  cr?       # Fix edge case in parser      # ahead of gerrit
+i9j0k1l2 p  v-1 cr+1 com  # Handle timeout               # build failed, 1 unresolved comment
+m3n4o5p6 -                # WIP: experiment              # not-pushed
 ```
 
 When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the primary line. The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `ger.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
@@ -74,8 +74,8 @@ Aggregated **Verified** label vote on the current patch set.
 |-------|---------|
 | `v+1` | Verified +1 (CI/build passed) |
 | `v-1` | Verified −1 (CI/build failed) |
-| `v0` | Verified 0 (neutral / no +1 yet) |
-| `v?` | Unknown or not applicable |
+| `v0` | A Verified 0 that Gerrit reports while some vote is not 0 (rare) |
+| `v?` | No Verified vote yet on this patch set; on an `n` commit, the votes are on the previous patch set |
 
 With `-v` / `--verbose`, CI pipeline names appear on indented `CI:` lines below the commit. Failed pipelines are red, successful ones green. When the repo provides a **CI strategy** under `.ger/ci/` (see [Configuration.md](Configuration.md#domains)), pipeline names become clickable links on one line when hyperlinks are on; otherwise each pipeline is shown as `label url` on its own line.
 
@@ -87,9 +87,9 @@ Aggregated **Code-Review** label vote.
 |-------|---------|
 | `cr+2` | Approved (+2) |
 | `cr+1` | Looks good (+1) |
-| `cr0` | No score / 0 |
+| `cr0` | A Code-Review 0 that Gerrit reports while some vote is not 0 (rare) |
 | `cr-1` / `cr-2` | Negative review |
-| `cr?` | Unknown |
+| `cr?` | No Code-Review vote yet on this patch set; on an `n` commit, the votes are on the previous patch set |
 
 ### Comments (`com` or blank)
 

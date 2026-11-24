@@ -275,7 +275,9 @@ def prepare(
         held = push_ready(run, branch, all_commits=False, until=until, until_sha=until_sha, first_parent=first_parent)
         wip_from = held.boundary_sha
     if not ready.push_tip_sha or not ready.push_range:
-        return PushRefusal("error: nothing to push (empty ready prefix)", boundary=boundary, warnings=warnings)
+        return PushRefusal(
+            "error: nothing to push (no commit below the ready boundary)", boundary=boundary, warnings=warnings
+        )
     try:
         commits = commits_in_range(cwd, ready.push_range, first_parent=first_parent)
         existing = check_existing_changes(run, commits)

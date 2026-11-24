@@ -268,7 +268,7 @@ def _run_interactive_stack_rebase(
 
     action = args.action_override or default_action
     logger.debug(
-        "gedit cwd=%s rev_arg=%r first=%s next=%s action=%s",
+        "ger edit cwd=%s rev_arg=%r first=%s next=%s action=%s",
         cwd,
         args.rev,
         args.first_attention_commit,
@@ -294,7 +294,7 @@ def _run_interactive_stack_rebase(
     env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
     if args.debug_log:
         env["GEDIT_DEBUG_LOG"] = "1"
-    logger.debug("gedit rebasing onto %s to stop at %s", rebase_fork[:8], short)
+    logger.debug("ger edit rebasing onto %s to stop at %s", rebase_fork[:8], short)
     returncode = run_interactive_rebase(
         cwd,
         rebase_fork,

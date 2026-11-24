@@ -37,7 +37,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_comment:main",
     ),
     "config": (
-        "Full-screen editor for ger settings, grouped by command.",
+        "Edit ger settings in your git editor, as a key=value file grouped by command.",
         "gerrit_workflow_tools.cli_config:main",
     ),
     "change-id": ("Print or validate Change-Ids for commits or ranges.", "gerrit_workflow_tools.cli_changeid:main"),
@@ -53,10 +53,13 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_inbox:main",
     ),
     "log": (
-        "Overview of the local commit chain vs Gerrit (CI, votes, comments).",
+        "Overview of the local stack vs Gerrit (CI, votes, comments).",
         "gerrit_workflow_tools.cli_log:main",
     ),
-    "push": ("Push the ready prefix or full stack to Gerrit.", "gerrit_workflow_tools.cli_push:main"),
+    "push": (
+        "Push the local stack up to its ready boundary, or all of it, to Gerrit.",
+        "gerrit_workflow_tools.cli_push:main",
+    ),
     "rebase": ("Interactive rebase with Gerrit status annotations.", "gerrit_workflow_tools.cli_rebase:main"),
     "reply": (
         "Answer a comment chain with a draft reply (published with ger push).",

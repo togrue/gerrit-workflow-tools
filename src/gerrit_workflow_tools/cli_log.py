@@ -137,7 +137,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger log``."""
     parser = argparse.ArgumentParser(
         prog="ger log",
-        description="Compact, actionable overview of the local commit chain vs Gerrit.",
+        description="Compact, actionable overview of the local stack vs Gerrit.",
     )
     add_output_format_args(parser, ai_view="one plain line per commit")
     add_color_args(parser)

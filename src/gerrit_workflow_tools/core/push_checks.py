@@ -296,7 +296,7 @@ def push_ready(
     until_sha: str | None,
     first_parent: bool,
 ) -> ReadyResult:
-    """The ready prefix of *branch* as ``ger push`` sees it: stop pattern, ready strategy, Change-Ids."""
+    """What of *branch* is below its ready boundary, as ``ger push`` finds it (stop pattern, strategy, Change-Ids)."""
     cwd, settings = run.cwd, run.settings
     project = settings.gerrit_project or ""
     with contextlib.suppress(Exception):

@@ -145,7 +145,7 @@ After success, optional `lastPush/<branch>` marker (`ger.lastPushedBranch`, defa
 | Code | Meaning |
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
-| `1` | Nothing to push (empty ready prefix), a **diverged** change or a commit above an **outdated** one without `--force`, or you declined the upstream prompt |
+| `1` | Nothing to push (no commit below the ready boundary), a **diverged** change or a commit above an **outdated** one without `--force`, or you declined the upstream prompt |
 | `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
 | `4` | `REV` names a Change-Id that more than one stack commit carries |

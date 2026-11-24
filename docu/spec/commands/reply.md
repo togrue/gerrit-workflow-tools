@@ -31,7 +31,7 @@ ger show --json                    -> its open chains, with their root ids (--ai
 ger reply <id> --done              -> draft "Done", resolving the chain
 ger reply <id> -F -                -> draft a longer answer from stdin; the chain stays open
 ger edit -n                        -> continue the rebase, stop at the next commit;
-                                      exit 7 when none is left
+                                      exit 10 (NO_EDIT_ATTENTION) when none is left
 ger push                           -> push options line "publish-drafts": Enter pushes and publishes
 ```
 
