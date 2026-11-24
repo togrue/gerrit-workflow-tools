@@ -182,26 +182,21 @@ def test_a_push_gerrit_rejects_exits_nonzero_with_gerrits_reason(
     assert "[remote rejected]" in err and "prohibited" in err.lower(), err
 
 
-def test_an_unknown_reviewer_says_gerrits_reason_once(
+def test_an_unknown_reviewer_stops_the_push_before_anything_is_sent(
     tmp_path: Path,
     gerrit_integration_context: GerritIntegrationContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Changes Gerrit already has get reviewers over REST: its 400 body is the reason, said once."""
+    """Gerrit is asked about the reviewer first (GET /accounts/{name}): no REST set, no git push, exit 2."""
     repo, _branch, _triplets = _pushed_stack(gerrit_integration_context, tmp_path, monkeypatch, "nosuch")
     nobody = f"nosuch_{secrets.token_hex(3)}"
     argv = ["--yes", "--no-rebase-check", "--reviewers", nobody]
+    refused = f"error: Gerrit has no account `{nobody}`; nothing was pushed or set"
 
-    code, out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
-    errors = [line for line in err.splitlines() if line.startswith("error: could not set")]
-    reason = f"Account '{nobody}' not found; {nobody} does not identify a registered user or group"
-    assert code == 5, err
-    assert len(errors) == 1 and f"r={nobody} on 2 commits" in errors[0], err
-    assert errors[0].endswith(f"Gerrit HTTP 400: {reason}"), err
-    assert "warning:" not in err and "nothing to push" not in out, (out, err)
-
-    # A new commit carries the reviewer as %r=: git push relays Gerrit's own refusal, ger says it in one line.
-    build_linear_chain(repo, ["nosuch new"])
-    code, _out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
-    assert code == 1 and "[remote rejected]" in err, err  # git push's exit code passes through
-    assert err.rstrip().splitlines()[-1] == f"error: Gerrit rejected the push: {reason}", err
+    # Changes Gerrit already has would get the reviewer over REST; a new commit would carry it as %r=.
+    for build in (None, ["nosuch new"]):
+        if build:
+            build_linear_chain(repo, build)
+        code, _out, err = run_ger(repo, ger_push_main, argv, monkeypatch)
+        assert code == 2, err
+        assert refused in err and "could not set" not in err and "[remote rejected]" not in err, err
