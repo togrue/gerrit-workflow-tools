@@ -162,6 +162,8 @@ export class Model implements vscode.Disposable {
       if (state === "failed" && this.overview) {
         // A hiccup, whoever asked: what was shown is still the best there is. Say it is old; the next refresh that works clears it.
         this.stale = staleReason(error);
+        // Not known now whether a review checkout is open: no Leave offered on an old answer.
+        await vscode.commands.executeCommand("setContext", "ger.reviewOpen", false);
       } else {
         // What was shown may be wrong now: the views say what went wrong and what to do instead.
         this.failure = describeError(error);

@@ -61,6 +61,7 @@ export async function review(model: Model, target: ChangeTarget | undefined): Pr
     }
   } catch (error) {
     void ui().message("warning", `Not checked out for review: ${describeError(error)}`, {}, []);
+    void model.refresh(); // a checkout that failed half-way may have left a review, or none: the menus follow
   }
 }
 
@@ -70,6 +71,7 @@ export async function leaveReview(model: Model): Promise<void> {
     const client = await model.client();
     if (!(await client.review())) {
       void ui().message("info", "No review checkout is open here.", {}, []);
+      void model.refresh(); // what offered it was out of date: the menus follow what is there now
       return;
     }
     const done = await client.reviewDone();
