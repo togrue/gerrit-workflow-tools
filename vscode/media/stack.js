@@ -146,6 +146,14 @@
         post("command", { command: button.dataset.command, args: [{ sha: selection.rowOf(row.dataset.key).sha }] });
       }
     });
+    // "l", as in Gerrit's web UI: the copy menu for the selected rows, a second letter picks what to copy.
+    element.addEventListener("keydown", (event) => {
+      const rows = selection.selectedRows();
+      if (event.key === "l" && !event.ctrlKey && !event.metaKey && !event.altKey && rows.length) {
+        event.preventDefault();
+        post("command", { command: "ger.copy", args: [{ sha: rows[0].sha, shas: rows.map((r) => r.sha) }] });
+      }
+    });
     element.addEventListener("dragstart", (event) => {
       const row = event.target.closest(".row");
       if (!row || vm.frozen) {

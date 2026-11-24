@@ -440,6 +440,15 @@
     }
   }
 
+  // "l", as in Gerrit's web UI: the copy menu for the change shown, unless you are typing.
+  document.addEventListener("keydown", (event) => {
+    const typing = ["TEXTAREA", "INPUT", "SELECT"].includes(event.target.tagName) || event.target.isContentEditable;
+    if (event.key === "l" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      post("command", { command: "ger.copy" });
+    }
+  });
+
   // Rows act on Enter and Space, and the arrow keys walk them, as in a tree.
   document.addEventListener("keydown", (event) => {
     const row = event.target.closest && event.target.closest(".item");

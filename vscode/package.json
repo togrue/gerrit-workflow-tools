@@ -178,6 +178,7 @@
       { "command": "ger.stack.squash", "title": "Squash into Commit Below", "category": "ger" },
       { "command": "ger.stack.squashTakeMessage", "title": "Squash into Commit Below, Keeping This Message", "category": "ger" },
       { "command": "ger.stack.drop", "title": "Drop Commit…", "category": "ger" },
+      { "command": "ger.copy", "title": "Copy…", "category": "ger" },
       { "command": "ger.copyChangeId", "title": "Copy Change-Id", "category": "ger" },
       { "command": "ger.copySha", "title": "Copy SHA", "category": "ger" },
       { "command": "ger.sortChains", "title": "Sort Chains…", "category": "ger", "icon": "$(sort-precedence)" },
@@ -239,6 +240,7 @@
         { "command": "ger.stack.squash", "when": "false" },
         { "command": "ger.stack.squashTakeMessage", "when": "false" },
         { "command": "ger.stack.drop", "when": "false" },
+        { "command": "ger.copy", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.copyChangeId", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.copySha", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.sortChains", "when": "ger.ready" },
@@ -316,6 +318,7 @@
         { "command": "ger.stack.squash", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@1" },
         { "command": "ger.stack.squashTakeMessage", "when": "webviewId == ger.stack && webviewSection == commit && gerSquash && !gerMulti", "group": "2_stack@2" },
         { "command": "ger.stack.drop", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "2_stack@3" },
+        { "command": "ger.copy", "when": "webviewId == ger.stack && webviewSection == commit", "group": "9_copy@0" },
         { "command": "ger.copyChangeId", "when": "webviewId == ger.stack && webviewSection == commit && gerChangeId", "group": "9_copy@1" },
         { "command": "ger.copySha", "when": "webviewId == ger.stack && webviewSection == commit", "group": "9_copy@2" }
       ],

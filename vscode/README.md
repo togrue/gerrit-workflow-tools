@@ -81,8 +81,12 @@ The commits above your upstream, newest first. One row per commit:
   edit went with a dropped commit), they stay in `git stash` and you are told.
 - Context menu: **Edit Commit Here**, **Open in Gerrit**, **Hand to Agent…**, **Squash into the
   commit below** (keeping either message — never both, so there is always exactly one
-  Change-Id), **Drop**, **Copy Change-Id** and **Copy SHA** (of every selected row, one
-  per line). Every rewrite offers **Undo** right after.
+  Change-Id), **Drop**, **Copy…**, **Copy Change-Id** and **Copy SHA** (of every selected row, one
+  per line: Change-Ids newest first as shown, SHAs oldest first, ready for `git cherry-pick`).
+  Every rewrite offers **Undo** right after.
+- **`l`**, as in Gerrit's web UI, opens the copy menu for the selected rows (and, in the Change
+  view, for the change shown); a second letter copies at once: `n` number, `u` URL, `t` title and
+  URL, `r` URL and title, `m` Markdown, `d` Change-Id, `s` SHA.
 - **During a rebase** (a `ger edit`, a conflict) the view shows the stack as the rebase has it
   so far, as `ger log` does: the commits it replayed, and the one it stopped at once applied,
   as they are now (an amend shows at once, with its new id and HEAD); a **marker** on the

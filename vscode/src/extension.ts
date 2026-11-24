@@ -9,9 +9,10 @@ import { ChangeView, Location, ThreadArg } from "./changeView";
 import { DiffTabs, FILE_SCHEME } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
+import { copyAs, copyMenu } from "./copy";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
-import { plural } from "./format";
+import { formatOf, plural } from "./format";
 import { gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
@@ -170,17 +171,11 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   changeView.showThread = (chain) => threads.show(chain);
   changeView.replyWith = (chain, text, resolved) => threads.replyWith(chain, text, resolved);
 
-  /** Copy the Change-Ids or the SHAs of what a command was invoked on: one per line, newest first. */
-  const copyIds = async (arg: unknown, what: "changeId" | "sha") => {
+  /** What a copy command was invoked on: the selected stack rows (newest first), else the one change. */
+  const copyTargets = (arg: unknown): ChangeTarget[] => {
     const fromStack = stackView.targets(arg as CommitArg);
-    const one = fromStack.length ? [] : [targetOf(arg)];
-    const values = [...fromStack, ...one].map((target) => target?.[what]).filter((value): value is string => Boolean(value));
-    if (!values.length) {
-      return;
-    }
-    await ui().copy(values.join("\n"));
-    const noun = what === "sha" ? "SHA" : "Change-Id";
-    feedback(`Copied ${values.length === 1 ? `${noun} ${values[0].slice(0, 12)}…` : `${values.length} ${noun}s`}`);
+    const one = targetOf(arg);
+    return fromStack.length ? fromStack : one ? [one] : [];
   };
 
   const setHold = async (arg: unknown, held: boolean) => {
@@ -256,8 +251,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.stack.squash": (arg: CommitArg) => stackView.fold(arg, false),
     "ger.stack.squashTakeMessage": (arg: CommitArg) => stackView.fold(arg, true),
     "ger.stack.drop": (arg: CommitArg) => stackView.drop(arg),
-    "ger.copyChangeId": (arg: unknown) => copyIds(arg, "changeId"),
-    "ger.copySha": (arg: unknown) => copyIds(arg, "sha"),
+    "ger.copyChangeId": (arg: unknown) => copyAs(copyTargets(arg), formatOf("d")),
+    "ger.copySha": (arg: unknown) => copyAs(copyTargets(arg), formatOf("s")),
+    "ger.copy": (arg: unknown) => copyMenu(copyTargets(arg)),
     "ger.sortChains": () => overviewView.chooseSort(),
     "ger.openDiff": (file: FileChange, diff?: Diff) => changeView.openDiff(file, diff),
     "ger.openLocation": (location: Location) => changeView.openLocation(location),
